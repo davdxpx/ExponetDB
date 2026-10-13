@@ -1,12 +1,20 @@
 import * as z from 'zod'
 import {
   ClusterIdSchema,
+  CursorSchema,
   JobIdSchema,
   JsonValueSchema,
+  limitSchema,
+  NodeIdSchema,
+  ObservationSourceSchema,
   OperationIdSchema,
+  openEnum,
+  pageSchema,
+  ServerIdSchema,
   Sha256DigestSchema,
   TimestampSchema,
   untrustedJson,
+  untrustedText,
 } from '../common.ts'
 import {
   ConfigChangeSchema,
@@ -82,6 +90,142 @@ export const NodeObservationQuerySchema = z.strictObject({
 export const NodeObservationListSchema = z
   .strictObject({ items: z.array(NodeObservationSchema).max(500) })
   .meta({ id: 'NodeObservationList' })
+
+// ----- Wave 8: job history and the agent PKI's certificates (read-only) -----
+
+export const NodeJobSchema = z
+  .object({
+    id: JobIdSchema,
+    nodeId: NodeIdSchema,
+    operationId: OperationIdSchema,
+    capability: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/)
+      .max(80)
+      .meta({ description: 'The capability name; its major version is `capabilityMajor`.' }),
+    capabilityMajor: z.int().min(1),
+    state: openEnum(
+      ['pending', 'dispatched', 'running', 'completed', 'expired', 'canceled', 'outcome_unknown'],
+      'Where the job is: completed (the node reported a result), expired or canceled (it did not run to completion), outcome_unknown (it ran and nobody can say how it ended).',
+    ),
+    createdAt: TimestampSchema,
+    startedAt: TimestampSchema.nullable(),
+    finishedAt: TimestampSchema.nullable().meta({
+      description:
+        'When the node completed the job; for a job that ended another way, when its state last changed; null while it is open.',
+    }),
+    outcome: openEnum(
+      ['succeeded', 'failed', 'rejected', 'canceled'],
+      "What the node reported; null until a result arrives. The node's word, trusted only when `resultVerified` is true.",
+    ).nullable(),
+    resultVerified: z.boolean().nullable().meta({
+      description:
+        "Whether the worker verified the node's signature on the result: true, false, or null while it has not judged (or there is no result yet).",
+    }),
+  })
+  .meta({
+    id: 'NodeJob',
+    description:
+      "A job of a node (control-plane.md §7): never the envelope, the arguments, the node's completion or any signature.",
+  })
+
+export const NodeJobListQuerySchema = z.strictObject({
+  limit: limitSchema(200, 50).optional(),
+  cursor: CursorSchema.optional(),
+})
+
+export const NodeJobListSchema = pageSchema(NodeJobSchema).meta({ id: 'NodeJobList' })
+
+export const NodeCertificateAuthoritySchema = z
+  .object({
+    role: openEnum(
+      ['root_ca', 'issuing_ca', 'gateway_server_ca', 'postgres_ca'],
+      "root_ca and issuing_ca sign node certificates, gateway_server_ca signs the gateway's TLS certificate, postgres_ca signs PostgreSQL server certificates (OD-17).",
+    ),
+    subjectCommonName: untrustedText(128, 'Common name of the certificate subject.'),
+    notBefore: TimestampSchema,
+    notAfter: TimestampSchema,
+    fingerprint: Sha256DigestSchema.meta({
+      description: 'SHA-256 of the DER encoding of the certificate.',
+    }),
+  })
+  .meta({ id: 'NodeCertificateAuthority' })
+
+export const NodeCertificatesSchema = z
+  .object({
+    authorities: z.array(NodeCertificateAuthoritySchema).max(8),
+    notRecorded: z
+      .array(
+        z.object({
+          role: openEnum(
+            ['root_ca', 'issuing_ca', 'gateway_server_ca', 'postgres_ca'],
+            'A certificate authority the Control Store does not hold yet.',
+          ),
+          reason: openEnum(['not_initialized'], 'Why it is not listed.'),
+        }),
+      )
+      .max(8),
+    nodes: z
+      .array(
+        z.object({
+          nodeId: NodeIdSchema,
+          serverId: ServerIdSchema,
+          state: openEnum(
+            [
+              'pending_binding',
+              'active',
+              'degraded',
+              'binding_failed',
+              'revoked',
+              'decommissioned',
+            ],
+            "The node's lifecycle state in the registry (not the inferred `offline`).",
+          ),
+          certificateExpiresAt: TimestampSchema.meta({
+            description:
+              "Expiry of the node's client certificate as recorded at enrollment or renewal.",
+          }),
+          serverCertificates: z
+            .array(
+              z.object({
+                localName: untrustedText(128, "The instance's local name as the agent reports it."),
+                expiresAt: TimestampSchema,
+              }),
+            )
+            .max(32)
+            .meta({
+              description:
+                'Expiry of the PostgreSQL server certificates the agent reported with its last heartbeat (source: the node, `agent_reported`).',
+            }),
+        }),
+      )
+      .max(1000),
+    nodesTruncated: z.boolean(),
+    notKnown: z
+      .array(
+        z.object({
+          subject: openEnum(
+            ['gateway_leaf', 'external_server_certificates'],
+            'What this release cannot report.',
+          ),
+          reason: openEnum(
+            ['in_memory_only', 'not_probed'],
+            'gateway_leaf: the gateway mints its TLS certificate in memory for 72 hours and records nothing; external_server_certificates: ExponetDB does not connect to external clusters to read their certificates.',
+          ),
+        }),
+      )
+      .max(4),
+    source: ObservationSourceSchema.meta({
+      description:
+        'live: read from the Control Store in this request. The expiry of a server certificate inside `nodes` is what the node last reported; the certificate expiry of a node is what it was issued.',
+    }),
+    observedAt: TimestampSchema,
+  })
+  .meta({
+    id: 'NodeCertificates',
+    description:
+      "Certificates of the agent PKI and the PostgreSQL CA with their validity, and the expiry of each node's certificate; never key material or a certificate itself.",
+  })
 
 /** A role step a plan may carry: never `set_password` (a verifier is never in a plan). */
 const PlannedRoleStepSchema = RoleStepSchema.refine((step) => step.op !== 'set_password', {
@@ -185,4 +329,6 @@ export type NodeObservation = z.infer<typeof NodeObservationSchema>
 export type NodePlanRequest = z.infer<typeof NodePlanRequestSchema>
 export type NodeChange = z.infer<typeof NodeChangeSchema>
 export type NodeConfigUpdateRequest = z.infer<typeof NodeConfigUpdateRequestSchema>
+export type NodeJob = z.infer<typeof NodeJobSchema>
+export type NodeCertificates = z.infer<typeof NodeCertificatesSchema>
 export type InspectableCapability = z.infer<typeof InspectableCapabilitySchema>

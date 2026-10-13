@@ -6340,6 +6340,134 @@
       "title": "Revoke an API key",
       "verification": "required",
       "wave": "3B"
+    },
+    {
+      "basis": "health.md §6, §9; resources.md \"Sessions, locks, performance\"; reads observation.health_samples",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "target.health.history.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "diagnostics.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "diagnostics.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Get the sampled health history of a target",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "control-plane.md §7; resources.md \"Nodes\"",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "node.job.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "nodes.read"
+      },
+      "subject": "node",
+      "tierSemantics": "none",
+      "title": "List recent jobs of a node",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "control-plane.md §3, §9.5; resources.md \"Nodes\"",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "node.certificate.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "nodes.read"
+      },
+      "subject": "node",
+      "tierSemantics": "none",
+      "title": "List the agent PKI certificates and the certificate expiry of nodes",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "audit.md §4; resources.md \"Audit\"",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "audit.chain.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "audit.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "audit.read"
+      },
+      "subject": "audit",
+      "tierSemantics": "none",
+      "title": "Get the audit chain state and verify it from the latest checkpoint",
+      "verification": "none",
+      "wave": "8"
     }
   ],
   "authRoutes": [

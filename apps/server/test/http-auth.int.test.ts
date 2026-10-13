@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { Application } from '@exponetdb/application'
 import { bootstrapOwner, totpCodeAt } from '@exponetdb/auth'
 import { SoftAuthenticator } from '@exponetdb/auth/testing'
 import { type MigratedTestDatabase, migratedTestDatabase } from '@exponetdb/control-store/testing'
@@ -34,6 +35,7 @@ let stores: {
   worker: ReturnType<MigratedTestDatabase['store']>
 }
 let keyring: Keyring
+let application: Application
 
 beforeAll(async () => {
   db = await migratedTestDatabase('exdb_it_http_auth')
@@ -63,6 +65,7 @@ beforeAll(async () => {
     { store: stores.serve, keyring: parsed.value },
     { clock: systemClock },
   )
+  application = access.application
   expect((await access.roleCatalogCheck.run()).status).toBe('pass')
   expect((await access.scopeCatalogCheck.run()).status).toBe('pass')
   webDir = await mkdtemp(join(tmpdir(), 'exdb-web-'))
@@ -993,6 +996,22 @@ describe('OAuth over HTTP (Wave 3B)', () => {
     expect(active.length).toBeGreaterThan(0)
     expect(active[0].client.clientId).toBe('exponetdb-cli')
     expect(JSON.stringify(listed.body)).not.toMatch(/ex(at|rt|ac)_/)
+    // Wave 8: a grant that no request has used reads "none recorded"; one request later, the minute
+    // and the class of the use, on the person's list and on the administrator's.
+    const mine = active.find((g: { id: string }) => g.id === active[0].id)
+    expect(mine).toMatchObject({ lastUsedAt: null, lastUseClass: null })
+    expect((await bearer(tokens.access_token, '/api/v1/installation')).status).toBe(200)
+    await application.settled()
+    const used = await browser.call('GET', '/api/v1/me/grants')
+    const seen = used.body.items.find((g: { id: string }) => g.id === mine.id)
+    expect(seen.lastUseClass).toBe('rest')
+    expect(seen.lastUsedAt).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:00\.000000Z$/)
+    expect(Math.abs(Date.now() - Date.parse(seen.lastUsedAt))).toBeLessThan(5 * 60_000)
+    const admin = await browser.call('GET', `/api/v1/grants?identity=${owner.identityId}`)
+    expect(admin.body.items.find((g: { id: string }) => g.id === mine.id)).toMatchObject({
+      lastUsedAt: seen.lastUsedAt,
+      lastUseClass: 'rest',
+    })
     for (const grant of active) {
       const revoked = await browser.call('POST', `/api/v1/me/grants/${grant.id}/revoke`, {})
       expect(revoked.body).toEqual({ revoked: true })

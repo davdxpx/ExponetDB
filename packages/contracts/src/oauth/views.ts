@@ -126,6 +126,16 @@ export type OAuthClientView = z.infer<typeof OAuthClientViewSchema>
 
 export const GrantStateSchema = z.enum(['active', 'revoked', 'expired']).meta({ id: 'GrantState' })
 
+/**
+ * How a grant was last used (Wave 7 decision 10): an MCP tool's rate class or
+ * `rest` for a call to `/api/v1`. Mirrors `GRANT_USE_CLASSES` of
+ * `@exponetdb/auth` (a test keeps the two equal).
+ */
+export const GRANT_USE_CLASS_VALUES = ['read', 'plan', 'apply', 'data', 'rest'] as const
+export const GrantUseClassSchema = z
+  .enum(GRANT_USE_CLASS_VALUES)
+  .meta({ id: 'GrantUseClass', description: 'How a grant was last used.' })
+
 export const GrantViewSchema = z
   .object({
     id: GrantIdSchema,
@@ -143,6 +153,13 @@ export const GrantViewSchema = z
     revokedAt: TimestampSchema.nullable(),
     revokeReason: z.string().max(64).nullable(),
     lastTokenAt: TimestampSchema.nullable(),
+    lastUsedAt: TimestampSchema.nullable().optional().meta({
+      description:
+        'Wave 8, additive: the minute of the last request the grant authenticated (a token of this grant presented to `/api/v1` or `/mcp`), as the Control Store recorded it; at most one write a minute. null: no use is recorded, which is not proof that the grant was never used (the record began with its deployment and a background write can be lost). A data basis for "last used", never an input to a decision.',
+    }),
+    lastUseClass: GrantUseClassSchema.nullable().optional().meta({
+      description: 'Wave 8, additive: how the last recorded use came in; null with `lastUsedAt`.',
+    }),
   })
   .meta({ id: 'Grant' })
 export type GrantView = z.infer<typeof GrantViewSchema>

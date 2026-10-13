@@ -1,4 +1,10 @@
-import { AUTH_ROUTES, actionDefinition, isActionId, ROUTE_LIST } from '@exponetdb/contracts'
+import {
+  AUTH_ROUTES,
+  actionDefinition,
+  isActionId,
+  MCP_TOOL_LIST,
+  ROUTE_LIST,
+} from '@exponetdb/contracts'
 import { expectOk, parseId } from '@exponetdb/kernel'
 import { describe, expect, it } from 'vitest'
 import { HANDLERS, servedRoutes } from '../src/interfaces/http/api.ts'
@@ -35,7 +41,7 @@ describe('served routes', () => {
   })
 })
 
-describe('served routes (Wave 4 to 7)', () => {
+describe('served routes (Wave 2 and 4 to 8)', () => {
   it('serves every Wave 4 route of the contract and no route of a later wave', () => {
     const wave4 = ROUTE_LIST.filter(
       (r) => isActionId(r.action) && actionDefinition(r.action).wave === '4',
@@ -50,7 +56,7 @@ describe('served routes (Wave 4 to 7)', () => {
         .map(({ route }) => actionDefinition(route.action).wave),
     )
     for (const wave of servedWaves) {
-      expect(['2', '3A', '3B', '4', '5', '6', '7'], `wave ${wave}`).toContain(wave)
+      expect(['2', '3A', '3B', '4', '5', '6', '7', '8'], `wave ${wave}`).toContain(wave)
     }
   })
 
@@ -92,6 +98,7 @@ describe('served routes (Wave 4 to 7)', () => {
       'getBundle',
       'getBundleFile',
       'getImportReport',
+      'getMigrationStream',
       'getStepUp',
       'getTargetMigration',
       'getTargetMigrations',
@@ -117,6 +124,64 @@ describe('served routes (Wave 4 to 7)', () => {
       .map(({ route }) => route.operationId)
       .sort()
     expect(served).toEqual(['cancelQuery', 'explainQuery', 'runQuery'])
+  })
+
+  it('serves exactly the Wave 2 routes: the installation, its health (since Wave 8), plans, operations and the audit search', () => {
+    const served = servedRoutes()
+      .filter(
+        ({ route }) => isActionId(route.action) && actionDefinition(route.action).wave === '2',
+      )
+      .map(({ route }) => route.operationId)
+      .sort()
+    expect(served).toEqual([
+      'applyPlan',
+      'getInstallation',
+      'getInstallationHealth',
+      'getOperation',
+      'getPlan',
+      'listOperations',
+      'searchAuditEvents',
+      'withdrawPlan',
+    ])
+  })
+
+  it('serves exactly the Wave 8 reads of the Web App (order §9), each with a handler and none of them an MCP tool', () => {
+    const served = servedRoutes()
+      .filter(
+        ({ route }) => isActionId(route.action) && actionDefinition(route.action).wave === '8',
+      )
+      .map(({ route }) => route.operationId)
+      .sort()
+    expect(served).toEqual([
+      'getAuditChain',
+      'getTargetHealthHistory',
+      'listNodeCertificates',
+      'listNodeJobs',
+    ])
+    for (const { route } of servedRoutes()) {
+      if (isActionId(route.action) && actionDefinition(route.action).wave === '8') {
+        expect(actionDefinition(route.action).clientKinds, route.operationId).not.toContain('mcp')
+        expect(
+          MCP_TOOL_LIST.some((t) => t.action === route.action),
+          route.operationId,
+        ).toBe(false)
+      }
+    }
+  })
+
+  it('leaves exactly the Wave 9 routes and the ledger reconciliation plan unserved', () => {
+    const served = new Set(servedRoutes().map(({ route }) => route.operationId))
+    expect(
+      ROUTE_LIST.filter((r) => !served.has(r.operationId))
+        .map((r) => r.operationId)
+        .sort(),
+    ).toEqual([
+      'getQueryStats',
+      'getTableStats',
+      'listClusterBackups',
+      'planLedgerReconcile',
+      'runAdvisors',
+    ])
   })
 })
 

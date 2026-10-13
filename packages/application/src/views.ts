@@ -2,7 +2,9 @@ import {
   type ActionClassName,
   type Actor,
   isActionId,
+  type OperationRead,
   type OperationView,
+  type PlanRead,
   type PlanView,
   type PolicyRuleResult,
 } from '@exponetdb/contracts'
@@ -16,7 +18,7 @@ import type { PlanRecord } from '@exponetdb/operations'
  * plan (secrets never enter plan content), and the content and analysis of
  * Wave 3A access plans are shown as `change`.
  */
-export type { OperationView, PlanView }
+export type { OperationRead, OperationView, PlanRead, PlanView }
 
 type ActionClass = ActionClassName
 
@@ -172,6 +174,64 @@ function policyRulesOf(policy: JsonValue | undefined): PolicyRuleResult[] {
     })
   }
   return out.slice(0, 128)
+}
+
+/**
+ * Kinds whose verification an operator may run again: their verify step
+ * re-runs the rows that errored or never ran (operations-engine.md §4.1).
+ */
+export const VERIFICATION_RETRY_KINDS: ReadonlySet<string> = new Set([
+  'migration.apply',
+  'migration.resume',
+])
+
+/**
+ * Whether `POST /operations/{id}/retry-verification` passes the rules about
+ * the operation itself: it needs attention after a change that was applied
+ * (or applied in part) and whose verification errored or never finished, and
+ * it is a kind that can verify again. The one place the rule lives: the
+ * retry use case and the `retryable` flag of the read call this. The plan
+ * kind's apply permission is a separate check of that call.
+ */
+export function verificationRetryable(operation: {
+  readonly kind: string
+  readonly state: string
+  readonly applyOutcome: string
+  readonly verificationOutcome: string
+}): boolean {
+  return (
+    operation.state === 'needs_attention' &&
+    VERIFICATION_RETRY_KINDS.has(operation.kind) &&
+    (operation.applyOutcome === 'applied' || operation.applyOutcome === 'partially_applied') &&
+    (operation.verificationOutcome === 'pending' || operation.verificationOutcome === 'error')
+  )
+}
+
+/** The operation as the REST reads show it: with whether a verification retry would pass the operation's rules. */
+export function operationRead(view: OperationView): OperationRead {
+  return { ...view, retryable: view.planId !== null && verificationRetryable(view) }
+}
+
+/** The operation of each plan among `planIds` (at most one per plan: `plan_id` is unique). */
+export async function operationsOfPlans(
+  q: Queryable,
+  planIds: readonly string[],
+): Promise<Map<string, string>> {
+  if (planIds.length === 0) return new Map()
+  const { rows } = await q.query(
+    'application.plan.operations',
+    'SELECT plan_id, operation_id FROM operations.operations WHERE plan_id = ANY($1::text[])',
+    [[...planIds]],
+  )
+  return new Map(rows.map((r) => [r.text('plan_id'), r.text('operation_id')]))
+}
+
+/** The plan as the REST reads show it: with the operation that applied it, if any. */
+export function planRead(view: PlanView, operationId: string | undefined): PlanRead {
+  return {
+    ...view,
+    operationId: operationId !== undefined && isId('op', operationId) ? operationId : null,
+  }
 }
 
 export async function operationView(

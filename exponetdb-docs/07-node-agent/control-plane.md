@@ -190,6 +190,8 @@ source, never deciding an operation.
 | `POST /nodes/{nodeId}/revoke`, `/decommission` | `node.revoke.plan`, `node.decommission.plan`; `plan.apply` runs `node.revoke`, `node.decommission` (high, re-authentication 300 s) |
 | `POST /nodes/{nodeId}/inspections` | `node.inspect` (low: planned and accepted in one call, run by the worker; §9.2) |
 | `GET /nodes/{nodeId}/observations` | `node.get` (the latest node-signed observations, §9.2) |
+| `GET /nodes/{nodeId}/jobs` | `node.job.list` (Wave 8, REST only; `nodes.read`) the node's recent jobs from `nodes.jobs`, newest first: id, operation, capability, state, times, the reported outcome and whether the worker verified the node's signature on it. Never the signed envelope, the arguments or their hash, the node's completion or a signature |
+| `GET /nodes/certificates` | `node.certificate.list` (Wave 8, REST only; `nodes.read`, installation-wide) the facts of the agent PKI's root, issuing and gateway server CA and of the PostgreSQL CA (subject, validity, SHA-256 fingerprint), the client certificate expiry of every node that can still connect and the server certificate expiries its agent last reported. The gateway's own TLS certificate (§3: in memory, 72 hours) and external servers' certificates are not known to the store and are named in the answer (`notKnown`), not guessed |
 | `POST /nodes/{nodeId}/plans` | `node.plan` (a record); `plan.apply` runs the `postgres.*` kind (§9.3) |
 | `POST /clusters/{clusterId}/credentials/{role}/rotate` | `credential.rotate.plan` (a record, human only); `plan.apply` runs `credential.rotate` (§9.7) |
 | `POST /nodes/{nodeId}/config-updates` | `node.config.update.plan` (a record, human only); `plan.apply` runs `node.config.update` (high, re-authentication 300 s; §9.8) |

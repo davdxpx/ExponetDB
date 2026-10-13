@@ -190,6 +190,24 @@ consumers set a stable `application_name` per process role
   as 50, `truncated: false`).
 - Gaps in history carry a cause (`control_plane_down`, `target_unreachable`,
   `node_offline`, `sampler_lagging`) and are drawn as gaps.
+  **[OBSERVED]** (2026-10-13, Wave 8 server batch S1;
+  `packages/diagnostics/src/health-history.ts`, `GET /targets/{id}/health/history`)
+  The gaps are derived when the history is read, never stored, from the
+  interval without a sample (longer than 30 seconds, twice the sampling
+  period) and the process heartbeats that cover it (`control.process_heartbeats`,
+  complete for the last 24 hours): `control_plane_down` when no worker
+  heartbeat covered the interval (`reason` `no_live_process` when serve was
+  not alive either, `no_live_worker` when it was), `sampler_lagging` when a
+  worker was alive and wrote no sample, and `unknown` with `heartbeats_pruned`
+  when the interval lies before the heartbeats still held. A stretch shorter
+  than the threshold is absorbed by its neighbor, so a worker that came up
+  seconds before its first sample does not split an outage. `target_unreachable`
+  is not a gap: a failed sample is a sample and shows as the state of its
+  bucket. `node_offline` is not derived: a node keeps only its current state,
+  so a past interval cannot be attributed to it; the answer does not guess it.
+  Nothing before the first retained sample, nothing in a target that is only
+  registered, and nothing after a decommissioned target stopped being sampled
+  is a gap.
 
 ## 7. Diagnosing without adding load
 
@@ -210,6 +228,22 @@ consumers set a stable `application_name` per process role
 | Samplers | lag between scheduled and actual sample time | lag > 2 intervals |
 | Gateway | agent connections, last claim time | no agent connected while nodes are enrolled |
 | Keyring | keys loaded for the role | missing active key |
+
+**[OBSERVED]** (2026-10-13, Wave 8 server batch S1;
+`packages/application/src/installation-health.ts`, `GET /installation/health`)
+The table is served for people who hold `nodes.read` as `components` with a
+state (`operational`, `degraded`, `down`), the source and time of the
+observation, machine-coded `reasons` and `values` (counts and ages): Control
+Store (serve's own readiness checks), workers, maintenance tasks and samplers
+(failing, overdue, lagging, from the task table), data-read workers, gateway
+(its heartbeat and the nodes' heartbeats), keyring (the loaded keyring against
+the store) and the audit chain (head, checkpoints, export progress, the
+outcome of the verification tasks). What the release cannot observe is listed
+in `unobserved` with a reason and never counted as operational: the gateway
+while no node is enrolled and no gateway runs (`not_applicable`), a task
+family no worker has registered (`never_registered`). The gateway's own TLS
+certificate is minted in memory and recorded nowhere, so its expiry is not
+known (`GET /nodes/certificates` says so).
 
 `/healthz/live` and `/healthz/ready` expose only up/down publicly.
 **[DECIDED]** (Wave 2) Their public body is the status and the request id,
@@ -243,6 +277,7 @@ one the read is `CAPABILITY_UNAVAILABLE`, never an empty result
 | Surface | Content |
 |---|---|
 | REST `GET /targets/{id}/health` | state, conditions, probes per endpoint, sources, timestamps |
+| REST `GET /targets/{id}/health/history?from&to` (Wave 8) | sampled history: buckets with the worst state and the count of each state, and gaps with a derived cause ([§6](#6-failed-reads-and-gaps)); REST only |
 | REST `GET /targets/{id}/sessions` (Wave 4) | live: client backends of the target's database (filters: state, minimum age, application), statements always redacted with a digest of the redaction, capped with `truncated`, the ExponetDB operation behind an `exponetdb/…` application name |
 | REST `GET /targets/{id}/locks` (Wave 4) | live: waiting sessions with the pids blocking them (`pg_blocking_pids`), lock mode and relation; detection only, nothing is terminated |
 | MCP `target_health` | same, compact; untrusted fields (application names, statement text) labeled. **[OBSERVED]** (2026-10-13) Served since Wave 7 through the same use case as the REST route; state, conditions and probes keep their `source` and `observedAt`, and its contract text says a failed read is an error, never a healthy state (`packages/contracts/src/mcp/tools.ts`; parity with REST in `apps/server/test/mcp.int.test.ts`) |

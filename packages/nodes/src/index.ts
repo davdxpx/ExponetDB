@@ -35,6 +35,19 @@ export {
 export { NodeError, refusalOf } from './errors.ts'
 export { AgentGateway, type AgentGatewayDeps, type Presented } from './gateway.ts'
 export {
+  type AgentConnections,
+  agentConnections,
+  type CertificateFacts,
+  type CertificateRole,
+  type CertificatesRead,
+  certificateFacts,
+  listNodeJobs,
+  type NodeCertificateRead,
+  type NodeJobPage,
+  type NodeJobRead,
+  readCertificates,
+} from './history.ts'
+export {
   argsHashOf,
   type CreatedJob,
   createJob,

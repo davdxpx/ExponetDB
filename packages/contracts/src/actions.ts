@@ -156,6 +156,12 @@ export interface ActionDefinition {
 
 const ALL: readonly ClientKind[] = CLIENT_KINDS
 const HUMAN: readonly ClientKind[] = HUMAN_SESSION_CLIENT_KINDS
+/**
+ * Wave 8 (order §9): reads that exist for the Web App and for REST clients and
+ * are no MCP tool. An MCP client never holds the REST audience (G3B), and the
+ * action says so as well, so a tool cannot be bound to it by accident.
+ */
+const REST_ONLY: readonly ClientKind[] = ['web', 'cli', 'ci']
 const fixed = (c: ActionClass): ClassRule => ({ kind: 'fixed', class: c })
 const byTier = (nonprod: ActionClass, prod: ActionClass): ClassRule => ({
   kind: 'by_tier',
@@ -1620,6 +1626,46 @@ export const ACTIONS = {
     basis: OAUTH_DOC,
   }),
   'api_key.revoke': inlineAccess('Revoke an API key', { wave: '3B', basis: OAUTH_DOC }),
+  // ----- Wave 8 (order §9): reads for the Web App; none of them is an MCP tool -----
+  // Wave 8 (order §9): the sampled history of one target, downsampled, with its gaps and their cause.
+  'target.health.history.get': read(
+    'Get the sampled health history of a target',
+    'target',
+    'diagnostics.read',
+    {
+      clientKinds: REST_ONLY,
+      wave: '8',
+      basis:
+        'health.md §6, §9; resources.md "Sessions, locks, performance"; reads observation.health_samples',
+    },
+  ),
+  // Wave 8 (order §9): recent jobs of one node and the PKI's certificates; never an envelope, a completion or key material.
+  'node.job.list': read('List recent jobs of a node', 'node', 'nodes.read', {
+    clientKinds: REST_ONLY,
+    wave: '8',
+    basis: 'control-plane.md §7; resources.md "Nodes"',
+  }),
+  'node.certificate.list': read(
+    'List the agent PKI certificates and the certificate expiry of nodes',
+    'node',
+    'nodes.read',
+    {
+      clientKinds: REST_ONLY,
+      wave: '8',
+      basis: 'control-plane.md §3, §9.5; resources.md "Nodes"',
+    },
+  ),
+  // Wave 8 (order §9): the chain head, the checkpoints, the export state and a bounded verification on request.
+  'audit.chain.get': read(
+    'Get the audit chain state and verify it from the latest checkpoint',
+    'audit',
+    'audit.read',
+    {
+      clientKinds: REST_ONLY,
+      wave: '8',
+      basis: 'audit.md §4; resources.md "Audit"',
+    },
+  ),
 } as const satisfies Record<string, ActionDefinition>
 
 export type ActionId = keyof typeof ACTIONS

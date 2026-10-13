@@ -25,7 +25,13 @@ import {
   NODE_OPERATION_KINDS,
   nodeKinds,
 } from '@exponetdb/nodes'
-import { describeError, fail, type HealthCheck, pass } from '@exponetdb/observability'
+import {
+  describeError,
+  fail,
+  type HealthCheck,
+  pass,
+  type Readiness,
+} from '@exponetdb/observability'
 import {
   type DispatchAdmission,
   KindRegistry,
@@ -43,6 +49,7 @@ import {
   VERIFYING_KINDS,
 } from '@exponetdb/policy'
 import { registryChains } from '@exponetdb/registry'
+import { keyringStatus } from '@exponetdb/secrets'
 import { BUILD } from '../config/build-info.ts'
 import type { AuthOperatorConfig, ServeConfig } from '../config/env.ts'
 import {
@@ -105,7 +112,7 @@ export interface AccessComposition {
 
 export function composeAccess(
   config: ServeConfig,
-  services: Pick<RoleServices, 'store' | 'keyring'>,
+  services: Pick<RoleServices, 'store' | 'keyring'> & { readonly readiness?: Readiness },
   runtime: Pick<Runtime, 'clock'> & { readonly logger?: Runtime['logger'] },
   /** Tests only: a notification channel (no channel is configured in production, OD-21). */
   testing: { readonly channel?: NotificationChannel } = {},
@@ -161,6 +168,18 @@ export function composeAccess(
       observation: { store: services.store, connector, installationId: config.installationId },
       // Node and cluster plans are re-checked with the tier the registry derives now (F2).
       accept: { policy, kinds, systemActor: SERVE_OPERATION_ACTOR, liveSubject: livePolicySubject },
+    },
+    // `GET /installation/health` (Wave 8): this process's own readiness and its keyring against the store.
+    health: {
+      readiness: () =>
+        services.readiness?.latest() ?? {
+          evaluatedAt: new Date(runtime.clock.nowMs()).toISOString(),
+          checks: [],
+        },
+      keyring: async () => {
+        const status = await keyringStatus(services.store, services.keyring)
+        return { missing: status.missing.length, mismatched: status.mismatched.length }
+      },
     },
     installation: {
       version: BUILD.version,

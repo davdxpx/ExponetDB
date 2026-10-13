@@ -11,6 +11,8 @@ export {
   type DataReadWorkerOptions,
   LANE_GRACE_SECONDS,
   LANE_LIMITS,
+  type LiveDataReadWorkers,
+  liveDataReadWorkers,
   submitDataRead,
   WORKER_LIVE_SECONDS,
 } from './data-read/lane.ts'
@@ -83,6 +85,26 @@ export {
   targetHealthView,
   targetsToSample,
 } from './health.ts'
+export {
+  type AliveInterval,
+  causesOfGap,
+  chooseBucketSeconds,
+  GAP_THRESHOLD_SECONDS,
+  type GapCause,
+  HEALTH_STATES,
+  HEARTBEAT_HISTORY_MS,
+  type HealthHistory,
+  type HealthHistoryInput,
+  HISTORY_MAX_BUCKETS,
+  HISTORY_MAX_GAPS,
+  HISTORY_MAX_RANGE_MS,
+  type HistoryGap,
+  type HistoryState,
+  readHealthHistory,
+  SAMPLE_PERIOD_SECONDS,
+  type StateCounts,
+  worstState,
+} from './health-history.ts'
 export { checkIdentity, mismatchField, requireIdentity } from './identity.ts'
 export { type MigrationBaselineOutcome, MigrationBaselineStore } from './migration-baselines.ts'
 export { classesOfKind, displayIdent, objectKind, objectLabel, objectRef } from './objects.ts'

@@ -10,6 +10,7 @@ import type { Queryable, Row, Tx } from '@exponetdb/control-store'
 import {
   type GrantId,
   type IdentityId,
+  InvariantError,
   isId,
   newId,
   type OAuthClientId,
@@ -20,6 +21,7 @@ import type { AuthDeps } from '../deps.ts'
 import type { SessionContext } from '../sessions.ts'
 import { CLIENT_COLUMNS, clientFromRow, clientSummary } from './clients.ts'
 import { resourceUri } from './metadata.ts'
+import { GRANT_USE_CLASSES } from './usage.ts'
 
 /**
  * Grants (oauth.md §4, §6): the maximum authority an identity delegated to
@@ -119,6 +121,16 @@ export async function readGrant(
 const ts = (expr: string, alias: string) =>
   `to_char((${expr}) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS ${alias}`
 
+function useClassOf(value: string | null): GrantView['lastUseClass'] {
+  if (value === null) return null
+  const found = GRANT_USE_CLASSES.find((c) => c === value)
+  if (found === undefined) {
+    // The table's CHECK constraint makes this impossible: never invent a class.
+    throw new InvariantError('grant_use_class_unknown')
+  }
+  return found
+}
+
 /** Grants as views, newest first; with an identity, only that identity's. */
 export async function listGrantViews(
   q: Queryable,
@@ -138,8 +150,10 @@ export async function listGrantViews(
             g.revoke_reason,
             CASE WHEN g.state = 'revoked' THEN 'revoked'
                  WHEN g.expires_at <= clock_timestamp() THEN 'expired' ELSE 'active' END AS grant_state,
-            ${ts('(SELECT max(t.issued_at) FROM oauth.tokens t WHERE t.grant_id = g.grant_id)', 'last_token_at')}
+            ${ts('(SELECT max(t.issued_at) FROM oauth.tokens t WHERE t.grant_id = g.grant_id)', 'last_token_at')},
+            ${ts('u.last_used_at', 'last_used_at')}, u.use_class
        FROM oauth.grants g JOIN oauth.clients c ON c.client_id = g.client_id
+       LEFT JOIN oauth.grant_last_use u ON u.grant_id = g.grant_id
       WHERE ($1::text IS NULL OR g.identity_id = $1)
         AND ($2::text IS NULL OR g.grant_id = $2)
         AND ($3::text IS NULL
@@ -170,6 +184,9 @@ export async function listGrantViews(
       revokedAt: row.textOrNull('grant_revoked_at'),
       revokeReason: row.textOrNull('revoke_reason'),
       lastTokenAt: row.textOrNull('last_token_at'),
+      // The last recorded use (a data basis, never a decision input); null: none is recorded.
+      lastUsedAt: row.textOrNull('last_used_at'),
+      lastUseClass: useClassOf(row.textOrNull('use_class')),
     })
   }
   return out

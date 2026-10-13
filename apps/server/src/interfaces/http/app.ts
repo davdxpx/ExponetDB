@@ -1,10 +1,12 @@
 import {
+  buildOpenApi,
   buildProblem,
   type ErrorCode,
   MIGRATION_MANIFEST_SCHEMA_URL,
   migrationManifestJsonSchema,
   PROJECT_CONFIG_SCHEMA_URL,
   projectConfigJsonSchema,
+  REST_API_BASE_PATH,
 } from '@exponetdb/contracts'
 import type { Clock } from '@exponetdb/kernel'
 import {
@@ -146,6 +148,28 @@ const PUBLIC_SCHEMAS: Readonly<Record<string, () => Record<string, unknown>>> = 
 }
 
 /**
+ * The OpenAPI document of `/api/v1` (Wave 8): the contract the generator
+ * writes to `generated/openapi.json`, public like the schemas above (it
+ * describes shapes, never data). It lists every contracted operation, those
+ * of waves the release does not serve yet included (`x-exponetdb-wave`): a
+ * request to one of those answers `NOT_FOUND` until it is served.
+ */
+export const OPENAPI_PATH = `${REST_API_BASE_PATH}/openapi.json`
+export const OPENAPI_MEDIA_TYPE = 'application/vnd.oai.openapi+json;version=3.1.1'
+
+/**
+ * Built by the contracts' own function, the one the generator writes
+ * `generated/openapi.json` with (a test keeps the two equal): once, at the
+ * first request. The document does not change while the process runs, and
+ * `serve` never imports the generated file or the tooling.
+ */
+let openApiText: string | undefined
+function openApiBody(): string {
+  openApiText ??= JSON.stringify(buildOpenApi())
+  return openApiText
+}
+
+/**
  * The public listener of `serve`: probes, and with Wave 3A the Web App,
  * its `/auth` ceremonies and the `/api/v1` access resources; with Wave 3B
  * the OAuth authorization server (`/oauth/*`, `/.well-known/*`); with
@@ -160,6 +184,7 @@ export function createPublicApp(
     '/healthz/ready',
     ...(surface.mcp === undefined ? [] : [MCP_PATH]),
     ...(surface.api === undefined && surface.mcp === undefined ? [] : Object.keys(PUBLIC_SCHEMAS)),
+    ...(surface.api === undefined ? [] : [OPENAPI_PATH]),
   ]
   const app = base(deps, routes, 'public')
   if (surface.mcp !== undefined) {
@@ -177,6 +202,12 @@ export function createPublicApp(
         () => new Response(body, { headers: { 'content-type': 'application/schema+json' } }),
       )
     }
+  }
+  if (surface.api !== undefined) {
+    app.get(
+      OPENAPI_PATH,
+      () => new Response(openApiBody(), { headers: { 'content-type': OPENAPI_MEDIA_TYPE } }),
+    )
   }
   if (surface.web !== undefined) {
     mountWeb(app, surface.web)

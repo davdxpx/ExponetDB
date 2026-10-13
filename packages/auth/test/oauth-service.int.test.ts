@@ -1,6 +1,6 @@
 import { generateKeyPairSync, randomBytes } from 'node:crypto'
-import type { PublicJwk } from '@exponetdb/contracts'
-import { expectOk, type IdentityId, parseId } from '@exponetdb/kernel'
+import { GRANT_USE_CLASS_VALUES, GrantViewSchema, type PublicJwk } from '@exponetdb/contracts'
+import { expectOk, type GrantId, type IdentityId, parseId } from '@exponetdb/kernel'
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from 'jose'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -134,6 +134,37 @@ afterAll(async () => {
   await h?.db.drop()
 })
 
+/**
+ * Wave 8: when and how a grant was last used, as the grant view shows it. None
+ * recorded reads null (which is not "never used"), then the minute and the
+ * class, and the record never goes back.
+ */
+async function lastUse(grantId: GrantId) {
+  const read = async () =>
+    (await oauth.listGrantViews(h.deps.store, ORIGIN, { grantId, limit: 1 }))[0]
+  expect(await read()).toMatchObject({ lastUsedAt: null, lastUseClass: null })
+  await oauth.recordGrantUse(h.deps.store, grantId, 'rest', new Date('2026-10-13T10:07:42.500Z'))
+  expect(await read()).toMatchObject({
+    lastUsedAt: '2026-10-13T10:07:00.000000Z',
+    lastUseClass: 'rest',
+  })
+  // The same minute does not rewrite the row, an earlier one never moves it back.
+  await oauth.recordGrantUse(h.deps.store, grantId, 'read', new Date('2026-10-13T10:07:59Z'))
+  await oauth.recordGrantUse(h.deps.store, grantId, 'data', new Date('2026-10-13T10:01:00Z'))
+  expect(await read()).toMatchObject({
+    lastUsedAt: '2026-10-13T10:07:00.000000Z',
+    lastUseClass: 'rest',
+  })
+  await oauth.recordGrantUse(h.deps.store, grantId, 'apply', new Date('2026-10-13T10:08:00Z'))
+  expect(await read()).toMatchObject({
+    lastUsedAt: '2026-10-13T10:08:00.000000Z',
+    lastUseClass: 'apply',
+  })
+  // The view the API validates accepts it, and the contract keeps the classes the store keeps.
+  expect(GrantViewSchema.safeParse(await read()).success).toBe(true)
+  expect([...GRANT_USE_CLASS_VALUES]).toEqual([...oauth.GRANT_USE_CLASSES])
+}
+
 describe('service accounts (identity.md §5)', () => {
   it('creates a service identity with a responsible person and nothing else', async () => {
     serviceId = await change((tx, request) =>
@@ -247,6 +278,7 @@ describe('service accounts (identity.md §5)', () => {
       state: 'active',
       consentAt: null,
     })
+    await lastUse(grantId)
   })
 })
 

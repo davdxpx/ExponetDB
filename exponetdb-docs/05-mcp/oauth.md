@@ -334,7 +334,12 @@ nothing. It is a data basis only: Wave 8 shows "last used" on the
 Connected applications page and Wave 9 derives an "unused for 30 days"
 finding; it is never a log of requests (the audit and the request logs are)
 and never an input to a decision. A table of its own, so a use never locks
-the grant row that a refresh or a revocation takes.
+the grant row that a refresh or a revocation takes. **[OBSERVED]**
+(2026-10-13, Wave 8 server batch S1) `GET /me/grants` and `GET /grants`
+return it as the optional `lastUsedAt` and `lastUseClass` of the grant view
+(`packages/auth/src/oauth/grants.ts`, a left join: `null` means no use is
+recorded, not that the grant was never used, because the record began with
+its deployment and the background write can be lost).
 
 **Device flow and the CLI.** **[DECIDED]** (Wave 3B,
 `packages/auth/src/oauth/device.ts`, `apps/cli`.) The first-party CLI signs

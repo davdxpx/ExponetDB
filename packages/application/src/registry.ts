@@ -40,6 +40,7 @@ import type {
   SessionList,
   Target,
   TargetHealth,
+  TargetHealthHistory,
   TargetRegisterRequest,
   TargetStateChangeRequest,
   TargetSummary,
@@ -54,13 +55,17 @@ import {
   type FindingFilter,
   findingView,
   fingerprintTargets,
+  GAP_THRESHOLD_SECONDS,
+  HISTORY_MAX_RANGE_MS,
   healthSummary,
   listFindings,
   listSessions,
   lockGraph,
   openFindingCount,
+  readHealthHistory,
   readStatuses,
   runDriftCheck,
+  SAMPLE_PERIOD_SECONDS,
   type SessionFilter,
   type SnapshotDeps,
   schemaDiffView,
@@ -420,6 +425,61 @@ export class RegistryUseCases {
     const target = await this.#authorizedTarget('target.health.get', caller, ref)
     const statuses = await readStatuses(this.#h.store, [target.targetId])
     return targetHealthView(target, statuses.get(target.targetId))
+  }
+
+  /**
+   * `target.health.history.get` (Wave 8): the sampled history of one target,
+   * downsampled, with its gaps and their cause. The range defaults to the
+   * last 24 hours and is at most 60 days (the longest retention) back from
+   * now; a range that is not (`from` after `to`, in the future, older than
+   * that, longer than that) is `VALIDATION_FAILED`. An invisible or unknown
+   * target reads as not found, as for the latest health.
+   */
+  async targetHealthHistory(
+    caller: CallerLike,
+    ref: string,
+    range: { readonly from?: string | undefined; readonly to?: string | undefined },
+  ): Promise<TargetHealthHistory> {
+    const target = await this.#authorizedTarget('target.health.history.get', caller, ref)
+    const now = this.#h.clock.nowMs()
+    const to = range.to === undefined ? now : Date.parse(range.to)
+    const from = range.from === undefined ? to - 24 * 3_600_000 : Date.parse(range.from)
+    const invalid = (path: string, message: string) =>
+      new RegistryError('VALIDATION_FAILED', {
+        errors: [{ path, code: 'invalid_range', message }],
+      })
+    // A little slack for a clock that differs from the store's by seconds.
+    if (!Number.isFinite(from) || !Number.isFinite(to)) {
+      throw invalid('/from', 'Not a timestamp.')
+    }
+    if (to > now + 60_000) throw invalid('/to', 'The range ends in the future.')
+    if (from >= to) throw invalid('/from', 'The range starts at or after its end.')
+    if (to - from > HISTORY_MAX_RANGE_MS)
+      throw invalid('/from', 'The range is longer than 60 days.')
+    if (from < now - HISTORY_MAX_RANGE_MS - 60_000) {
+      throw invalid('/from', 'The range starts before the longest retention (60 days).')
+    }
+    const history = await readHealthHistory(this.#h.store, {
+      targetId: target.targetId,
+      state: target.state,
+      stateChangedAt: target.stateChangedAt,
+      from: new Date(from),
+      to: new Date(to),
+    })
+    return {
+      targetId: target.targetId as never,
+      from: history.from,
+      to: history.to,
+      bucketSeconds: history.bucketSeconds,
+      samplePeriodSeconds: SAMPLE_PERIOD_SECONDS,
+      gapThresholdSeconds: GAP_THRESHOLD_SECONDS,
+      firstSampleAt: history.firstSampleAt,
+      buckets: [...history.buckets],
+      gaps: [...history.gaps],
+      gapsTruncated: history.gapsTruncated,
+      source: 'sampled',
+      observedAt: history.observedAt,
+    }
   }
 
   async targetFindings(

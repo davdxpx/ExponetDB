@@ -18,7 +18,7 @@ MCP and REST expose the same application services.
 |---|---|
 | Base URL | `https://db.exponet.cloud/api/v1` |
 | Format | JSON (`application/json`), UTF-8; errors `application/problem+json` (RFC 9457 + ExponetDB `code`) |
-| Contract | OpenAPI 3.1, generated from Zod schemas in `packages/contracts`; published at `/api/v1/openapi.json` |
+| Contract | OpenAPI 3.1, generated from Zod schemas in `packages/contracts`; published at `/api/v1/openapi.json` (**[OBSERVED]** since Wave 8: served without credentials, media type `application/vnd.oai.openapi+json;version=3.1.1`, `Cache-Control: no-store`) |
 | Auth | `Authorization: Bearer <token>` (OAuth access token with audience `https://db.exponet.cloud/api`, or API key `exak_…`); Web App uses a session cookie + CSRF token (§6) |
 | IDs | prefixed ULIDs (`tgt_…`); targets also addressable by URL-encoded path (`/targets/reosa%2Fplatform%2Fproduction`) |
 | Time | RFC 3339 UTC with `Z` |

@@ -65,6 +65,7 @@ export {
   storedStream,
   submissionInput,
 } from './store.ts'
+export { evidenceOrder, projectStream, STREAM_BUNDLE_LIMIT } from './stream.ts'
 export {
   checkIdentity,
   type ExpectedIdentity,

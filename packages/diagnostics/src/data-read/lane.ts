@@ -32,6 +32,33 @@ const AEAD = 'aes-256-gcm'
 /** A worker whose heartbeat is older than this is not offered reads. */
 export const WORKER_LIVE_SECONDS = 30
 export const WORKER_HEARTBEAT_MS = 10_000
+
+export interface LiveDataReadWorkers {
+  readonly live: number
+  /** Age in seconds of the newest heartbeat among the live workers; null without one. */
+  readonly newestAgeSeconds: number | null
+}
+
+/**
+ * The workers that would be offered a data read now (installation health):
+ * a count and the age of the newest heartbeat, never a worker id or key.
+ */
+export async function liveDataReadWorkers(q: Queryable): Promise<LiveDataReadWorkers> {
+  const { rows } = await q.query(
+    'dataread.workers.live',
+    `SELECT count(*)::int AS live,
+            min(extract(epoch FROM clock_timestamp() - heartbeat_at))::float8 AS newest_age
+       FROM dataread.workers
+      WHERE heartbeat_at > clock_timestamp() - make_interval(secs => $1)`,
+    [WORKER_LIVE_SECONDS],
+  )
+  const row = rows[0]
+  const age = row?.json('newest_age')
+  return {
+    live: row?.int('live') ?? 0,
+    newestAgeSeconds: typeof age === 'number' ? age : null,
+  }
+}
 /**
  * Concurrent reads (owner decision 9): per grant (or person without one), per target, per
  * installation. Agents (OD-13 (a)) hold at most `agentTarget` of a target's and
