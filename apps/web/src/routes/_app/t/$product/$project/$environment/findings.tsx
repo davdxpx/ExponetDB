@@ -1,7 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { TargetSectionPage } from '../../../../../../features/target/section-page.tsx'
+import { FindingsPage } from '../../../../../../features/findings/findings-page.tsx'
+import { findingsSearch } from '../../../../../../features/findings/search.ts'
 
-/** `/t/<product>/<project>/<environment>/findings` */
+/** `/t/<product>/<project>/<environment>/findings[?severity=&state=&kind=]`: filters are allowlist values. */
 export const Route = createFileRoute('/_app/t/$product/$project/$environment/findings')({
-  component: () => <TargetSectionPage section="findings" />,
+  validateSearch: findingsSearch,
+  component: FindingsRoute,
 })
+
+function FindingsRoute() {
+  const search = Route.useSearch()
+  return <FindingsPage search={search} />
+}

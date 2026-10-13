@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { TargetSectionPage } from '../../../../../../features/target/section-page.tsx'
+import { ConfigurationPage } from '../../../../../../features/configuration/configuration-page.tsx'
 
 /** `/t/<product>/<project>/<environment>/configuration` */
 export const Route = createFileRoute('/_app/t/$product/$project/$environment/configuration')({
-  component: () => <TargetSectionPage section="configuration" />,
+  component: ConfigurationPage,
 })

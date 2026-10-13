@@ -403,7 +403,7 @@ describe('switching environment remounts the target outlet', () => {
     const world = new World()
     project(world)
     mountApp('/t/shop/platform/staging/migrations', world)
-    await screen.findByRole('heading', { level: 2, name: 'Migrations is not available yet' })
+    await screen.findByRole('heading', { level: 2, name: 'Ledger' })
     const before = document.querySelector('[data-slot="target-outlet"]')
     expect(before).not.toBeNull()
     const menu = await openSwitcher(user)
@@ -411,7 +411,7 @@ describe('switching environment remounts the target outlet', () => {
     await waitFor(() =>
       expect(document.querySelector('[data-slot="target-layout"]')).toBeInTheDocument(),
     )
-    await screen.findByRole('heading', { level: 2, name: 'Migrations is not available yet' })
+    await screen.findByRole('heading', { level: 2, name: 'Ledger' })
     const after = document.querySelector('[data-slot="target-outlet"]')
     expect(after).not.toBeNull()
     expect(after).not.toBe(before)
@@ -422,7 +422,7 @@ describe('switching environment remounts the target outlet', () => {
     const world = new World()
     project(world)
     const { queryClient } = mountApp('/t/shop/platform/staging/migrations', world)
-    await screen.findByRole('heading', { level: 2, name: 'Migrations is not available yet' })
+    await screen.findByRole('heading', { level: 2, name: 'Ledger' })
     const before = document.querySelector('[data-slot="target-outlet"]')
     await queryClient.refetchQueries({ queryKey: ['targets', 'detail', 'shop/platform/staging'] })
     expect(document.querySelector('[data-slot="target-outlet"]')).toBe(before)

@@ -20,6 +20,17 @@ function worldWithProject(): World {
   return world
 }
 
+/** The sections that have their own screen: they are no placeholder any more. */
+const BUILT_SECTIONS: readonly string[] = [
+  'overview',
+  'schema',
+  'migrations',
+  'configuration',
+  'findings',
+  'drift',
+  'activity',
+]
+
 const pageNotFound = () => screen.findByRole('heading', { level: 1, name: 'Page not found' })
 
 describe('route parameters: anything that is not a slug is "page not found" and asks for nothing', () => {
@@ -138,10 +149,10 @@ describe('a target page', () => {
     expect(router.state.location.pathname).toBe('/t/shop/platform/staging/migrations')
   })
 
-  // The overview and the schema browser are built (Phase 10); their tests are in test/target-overview and test/schema.
+  // Built sections (Phase 10) have their own tests in test/target-overview, test/schema and test/target-pages.
   it.each(
     TARGET_NAV.filter(
-      (item) => item.id !== 'overview' && item.id !== 'schema' && !item.requires.includes('wave9'),
+      (item) => !BUILT_SECTIONS.includes(item.id) && !item.requires.includes('wave9'),
     ),
   )('has a page for $label that says it is not built yet', async (item) => {
     const world = worldWithProject()
@@ -201,9 +212,7 @@ describe('a target read that does not succeed', () => {
 
     world.failures.clear()
     await user.click(screen.getByRole('button', { name: 'Try again' }))
-    expect(
-      await screen.findByRole('heading', { level: 2, name: 'Migrations is not available yet' }),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Ledger' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Could not read target' })).not.toBeInTheDocument()
   })
 
@@ -326,9 +335,7 @@ describe('pages that need the target to be reachable', () => {
     const world = worldWithProject()
     world.sample('shop/platform/staging', { state: 'unreachable' })
     mountApp('/t/shop/platform/staging/migrations', world)
-    expect(
-      await screen.findByRole('heading', { level: 2, name: 'Migrations is not available yet' }),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Ledger' })).toBeInTheDocument()
     expect(world.apiRequests.some((request) => request.endsWith('/health'))).toBe(false)
   })
 })
@@ -430,12 +437,12 @@ describe('accessibility of the layout', () => {
 
   it('has no axe violations on a nonproduction and a production target', async () => {
     mountApp('/t/shop/platform/staging/migrations', worldWithProject())
-    await screen.findByRole('heading', { level: 2, name: 'Migrations is not available yet' })
+    await screen.findByRole('heading', { level: 2, name: 'Ledger' })
     expect(await violations()).toEqual([])
     cleanup()
 
     mountApp('/t/shop/platform/production/migrations', worldWithProject())
-    await screen.findByRole('heading', { level: 2, name: 'Migrations is not available yet' })
+    await screen.findByRole('heading', { level: 2, name: 'Ledger' })
     await waitFor(() => expect(document.querySelector('[data-production-frame]')).not.toBeNull())
     expect(await violations()).toEqual([])
   })
