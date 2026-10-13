@@ -41,7 +41,10 @@ export interface ErrorDefinition {
    */
   readonly message: string
   readonly remediation?: string
-  /** Strict schema of `details`; absent means the code carries no details in v1. */
+  /**
+   * Strict schema of `details`; absent means the code carries no details in v1.
+   * A schema that accepts `undefined` (`.optional()`) makes the details optional.
+   */
   readonly details?: z.ZodType
 }
 
@@ -185,6 +188,27 @@ export const ERRORS = {
     retryable: false,
     title: 'Approval required',
     message: 'The plan needs a human approval before it can run.',
+  },
+  HUMAN_APPLY_REQUIRED: {
+    group: 'plans_and_operations',
+    status: 403,
+    retryable: false,
+    title: 'A person applies this plan',
+    message:
+      'The plan is critical: only a person applies it, through a Web App session or the CLI, with a fresh re-authentication.',
+    remediation:
+      'Tell your person what the plan does and give them its id. A plan is bound to the caller who made it, so they make it again themselves (for a rollback `exponetdb migration rollback <migration> --target <target>`), review it with `exponetdb plan show <planId>` and apply it with `exponetdb plan apply <planId>`. An agent cannot apply it.',
+    details: z.strictObject({ planId: PlanIdSchema }),
+  },
+  APPROVALS_PENDING_LIMIT: {
+    group: 'plans_and_operations',
+    status: 409,
+    retryable: false,
+    title: 'Too many operations wait for approval',
+    message:
+      'This caller already has 20 operations through this client that wait for a human approval; no further one is accepted until some are decided or canceled.',
+    remediation:
+      'Ask your person to decide the operations that wait (Web App, Approvals), or cancel the ones no longer needed (`operation_cancel`, `POST /operations/{operationId}/cancel`); then apply again. The plan stays active until it expires.',
   },
   REAUTH_REQUIRED: {
     group: 'plans_and_operations',
@@ -660,6 +684,8 @@ export const ERRORS = {
     retryable: false,
     title: 'Insufficient scope',
     message: 'The token lacks the scope this action needs.',
+    remediation:
+      'Reconnect the client and approve the scope named in requiredScope on the consent page; a client that cannot step up must be connected again with it.',
     details: z.strictObject({ requiredScope: ScopeSchema }),
   },
   PERMISSION_DENIED: {
@@ -1149,6 +1175,24 @@ export const ERRORS = {
     title: 'Query timeout',
     message: 'The statement timeout was reached.',
   },
+  QUERY_FAILED: {
+    group: 'queries_and_diagnostics',
+    status: 422,
+    retryable: false,
+    title: 'Query failed',
+    message:
+      'The statement failed on the target; only its SQLSTATE is returned (a server message can quote data).',
+    remediation: 'Look up the SQLSTATE, correct the statement and run it again.',
+    details: z.strictObject({ sqlstate: z.string().regex(/^[0-9A-Z]{5}$/) }),
+  },
+  QUERY_CANCELED: {
+    group: 'queries_and_diagnostics',
+    status: 409,
+    retryable: false,
+    title: 'Query canceled',
+    message: 'The query was canceled before it finished; no rows are returned.',
+    remediation: 'Run it again if you still need it, with a narrower statement or a lower row cap.',
+  },
   QUERY_RESULT_TOO_LARGE: {
     group: 'queries_and_diagnostics',
     status: 413,
@@ -1211,6 +1255,8 @@ export const ERRORS = {
     retryable: true,
     title: 'Rate limited',
     message: 'Too many requests. Retry after the time in Retry-After.',
+    // The same time as the Retry-After header of a REST answer, for MCP, which has no header.
+    details: z.strictObject({ retryAfterSeconds: z.int().positive() }).optional(),
   },
   CONTROL_PLANE_DEGRADED: {
     group: 'generic',

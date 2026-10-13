@@ -719,6 +719,16 @@ export class Authorizer {
         (g) => g.permission === permission && holds([g], permission, chain),
       )
       if (covering.length === 0) {
+        // A target the identity cannot even read answers like an unknown one (error-model.md
+        // §4, Wave 7 adversarial goal 18): its existence is not revealed outside the
+        // identity's role scopes. The audit keeps the true reason.
+        if (subject.kind === 'target' && !holds(admission.grants, 'targets.read', chain)) {
+          return {
+            allowed: false,
+            reason: 'scope',
+            error: new AuthError('TARGET_NOT_FOUND', { concealed: 'role_scope' }),
+          }
+        }
         return deny('scope', 'PERMISSION_DENIED')
       }
     }

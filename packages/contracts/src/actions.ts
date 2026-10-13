@@ -524,6 +524,13 @@ export const ACTIONS = {
     tierSemantics: 'subject',
     wave: '7',
   }),
+  // Wave 7 (ADR-0028): ends one's own running data read. Part of reading: it changes no
+  // record and no managed system, so the data.read scopes stay read scopes (G3B).
+  'query.cancel': read('Cancel an own running query', 'target', 'data.read', {
+    scope: tieredScope('data.read'),
+    tierSemantics: 'subject',
+    wave: '7',
+  }),
   'migration.lint': read('Lint migration bundles', 'project', 'migrations.read', { wave: '6' }),
   'migration.status.get': read('Get migration status of a target', 'target', 'migrations.read', {
     wave: '6',
@@ -1639,6 +1646,28 @@ export function isConsequential(id: ActionId): boolean {
   return ACTIONS[id].effect === 'consequential'
 }
 
+/**
+ * Whether a denial of this action is a security signal recorded in the
+ * audit as `authz.denied` (audit.md §2, Wave 7 order §18): applying any
+ * change or changing access, grants, keys and policies (consequential),
+ * planning one (`*.plan`), deciding one (approvals, break-glass), and
+ * reading data (`data.read`). Every other denial goes to the request log
+ * and a metric only. Ceremonies and protocol endpoints keep their own audit.
+ */
+export function isHighRiskAction(id: ActionId): boolean {
+  const a = ACTIONS[id]
+  if (a.permission.kind === 'public' || a.permission.kind === 'protocol') {
+    return false
+  }
+  return (
+    a.effect === 'consequential' ||
+    id.endsWith('.plan') ||
+    id.startsWith('approval.') ||
+    id === 'breakglass.activate' ||
+    (a.permission.kind === 'fixed' && a.permission.permission === 'data.read')
+  )
+}
+
 function scopesOfRule(rule: ScopeRule): readonly Scope[] {
   switch (rule.kind) {
     case 'fixed':
@@ -1669,6 +1698,27 @@ export const WRITE_SCOPES: ReadonlySet<Scope> = new Set(
 
 export function isWriteScope(scope: Scope): boolean {
   return WRITE_SCOPES.has(scope)
+}
+
+const EFFECT_RANK: Record<ActionEffect, number> = { read: 0, control_record: 1, consequential: 2 }
+
+/**
+ * What a scope lets a client do, for the consent page (Wave 7): the
+ * strongest effect of any registered action that needs it. `schema.read`
+ * records drift checks (`control_record`) and changes nothing, so it is
+ * shown as such; `isWriteScope` (any effect other than `read`) still
+ * decides the re-authentication of a consent. Derived from the action
+ * registry, never from the scope's name.
+ */
+export function scopeEffect(scope: Scope): ActionEffect {
+  let effect: ActionEffect = 'read'
+  for (const id of ACTION_IDS) {
+    const a: ActionDefinition = ACTIONS[id]
+    if (EFFECT_RANK[a.effect] > EFFECT_RANK[effect] && scopesOfRule(a.scope).includes(scope)) {
+      effect = a.effect
+    }
+  }
+  return effect
 }
 
 /**

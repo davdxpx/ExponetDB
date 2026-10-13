@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 7 note on MCP in §6 (2026-10-13, G7 not yet accepted) |
 | Applies to | Wave 6 (and every later operation that runs DDL on a target) |
 | Read before | [`planning-and-apply.md`](./planning-and-apply.md) |
 | Sources | PostgreSQL 17 docs: explicit locking §13.3.5 (https://www.postgresql.org/docs/17/explicit-locking.html), admin functions §9.28.10, `pg_locks` view; behavior re-verified on PostgreSQL 16.14 during the 2026-10-04 standards research |
@@ -161,6 +161,17 @@ target lock view and the `locks_list` MCP tool show ExponetDB advisory locks as
 - Operations that do not change structure (cancel/terminate, `ANALYZE`,
   `VACUUM` without `FULL`, `REFRESH MATERIALIZED VIEW CONCURRENTLY`) do not take
   the schema lock. They take nothing or their own domain.
+- **[OBSERVED]** (2026-10-13, Wave 7; G7 not yet accepted) The MCP tools change
+  none of these rules. `plan_apply` is accepted by the same use case as the
+  REST route and the worker takes the same Control Store domain and advisory
+  lock, so an agent's apply waits for, or is refused by, the lock like any
+  other (`MIGRATION_LOCK_TIMEOUT`, `waitingFor`). `operation_get` with
+  `waitSeconds` only observes. An agent's data read (`sql_query`,
+  `sql_explain`) runs in a read-only transaction under the `exponetdb_reader`
+  role, takes no schema lock and no advisory lock, and the read allowlist
+  refuses `pg_advisory_lock` and the like
+  (`packages/postgres/src/parser/allowlist.ts`). `locks_list` shows the lock
+  graph of a target to MCP clients (§5).
 - DDL performed outside ExponetDB is not serialized by ExponetDB. It is detected
   afterwards: the next plan or the periodic drift check sees a fingerprint that
   no ledger entry explains ([`../03-database-model/drift-detection.md`](../03-database-model/drift-detection.md)).

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Baseline (Wave 0), accepted 2026-10-05 |
-| Applies to | Wave 4 (introspection execution), Wave 7 (MCP `sql_query`), Wave 8 (SQL editor), Wave 9 (diagnostics) |
+| Applies to | Wave 4 (introspection execution), Wave 7 (MCP `sql_query`, implemented: §2.4), Wave 8 (SQL editor), Wave 9 (diagnostics) |
 | Read before | [`credentials-and-roles.md`](./credentials-and-roles.md), [`statement-redaction.md`](./statement-redaction.md), [`../08-auth-and-security/ai-agent-safety.md`](../08-auth-and-security/ai-agent-safety.md) |
 
 ExponetDB runs SQL on managed databases on four paths. They are separate by role,
@@ -45,8 +45,10 @@ is refused with `QUERY_NOT_READ_ONLY` and the hint to use a migration.
 ### 2.1 Admission
 
 1. The caller has `data.read:<tier>` for the target and the target allows data
-   reads (target setting `dataRead: enabled | humans_only | disabled`; default
-   for prod tier: `humans_only`, see [OD-13](../00-product/open-decisions.md#od-13-data-reads-by-ai-agents-on-production)).
+   reads (the setting of the policy rule `data.read`, mode `by_tier | enabled |
+   humans_only | disabled`; `by_tier`, the default, is `humans_only` for the
+   prod tier, see [OD-13](../00-product/open-decisions.md#od-13-data-reads-by-ai-agents-on-production)
+   and §2.4).
 2. The text is parsed with libpg_query for the target major. Exactly **one**
    statement is allowed per request.
 3. Allowed statement classes: `SELECT` (including `WITH` without data-modifying
@@ -61,7 +63,22 @@ is refused with `QUERY_NOT_READ_ONLY` and the hint to use a migration.
    same admission, and foreign tables are refused with
    `QUERY_CONSTRUCT_UNSUPPORTED`. As for verification, these checks are defense
    in depth, not a sandbox: `data.read` rests on permission, scope, tier, the
-   target's `dataRead` setting and the reader role's privileges.
+   setting of the policy rule `data.read` for the target (ADR-0028 calls it
+   `dataRead`) and the reader role's privileges.
+   **[DECIDED]** (Wave 7 review, 2026-10-13) The reader and the verifier are
+   members of `pg_read_all_data`, which PostgreSQL lets read every relation,
+   system catalogs included (observed: such a member reads
+   `pg_catalog.pg_authid` with its password verifiers). The parser therefore
+   refuses, by name and in every spelling (qualified, `TABLE`, in a join,
+   subquery, CTE or `EXPLAIN`; unqualified counts as `pg_catalog`), the
+   catalogs that hold secrets or sampled column values: `pg_authid`,
+   `pg_shadow`, `pg_user_mapping`, `pg_user_mappings`, `pg_subscription`,
+   `pg_db_role_setting`, `pg_statistic`, `pg_statistic_ext_data`,
+   `pg_stats`, `pg_stats_ext`, `pg_stats_ext_exprs`, and
+   `information_schema.user_mapping_options`, `user_mappings`,
+   `_pg_user_mappings` (`SECRET_CATALOG_RELATIONS` in
+   `packages/postgres/src/parser/admission.ts`; for `data.read` and
+   `verify.sql` alike).
    **[DECIDED]** (G4 correction, 2026-10-07) Calls and operators are also
    checked where the syntax hides them:
    - field selection `(expr).name` is refused as a whole: PostgreSQL turns it
@@ -152,6 +169,14 @@ ROLLBACK;
 - Values are returned as typed JSON with explicit handling for `bytea` (hex,
   capped), large text (capped with a `truncatedAt` marker), `vector` (dimension
   and first values only by default), timestamps (ISO 8601 UTC).
+  **[OBSERVED]** (2026-10-13, `packages/diagnostics/src/data-read/values.ts`)
+  JSON numbers are `int2`, `int4`, `oid`, `int8` within 2^53, finite
+  `float4`/`float8`; booleans are `bool`; `json`/`jsonb` are parsed (as text
+  when a number in them would not survive a double). Every other type
+  (`numeric`, `money`, `interval`, enums, ranges, composites, arrays) comes
+  back as PostgreSQL's own text form, capped like text: an array is its
+  literal (`{1,2}`, `{"a b",NULL}`), never a JSON array, and a client
+  parses it if it needs the elements.
 - **RLS annotation.** The reader has `BYPASSRLS`; results are complete. The
   result metadata names every relation in the statement that has RLS enabled, so
   that a human or agent understands that application users see less.
@@ -161,8 +186,9 @@ ROLLBACK;
   masks columns whose comment contains `[SENSITIVE]` in its table grid; ExponetDB
   makes it a server-side policy instead of a client-side display rule.
 - Execution happens in the `worker` (which alone holds the reader credential);
-  `serve` admits the query, forwards it on an internal request lane and waits up
-  to the statement timeout.
+  `serve` admits the query, forwards it on an internal request lane (ADR-0028:
+  sealed with HPKE in the Control Store) and waits up to the statement timeout
+  plus 30 s.
 - `application_name = 'exponetdb/query/<request id>'`; the request can be
   canceled by the caller (`sql_cancel`), which maps to `pg_cancel_backend` on
   that exact backend.
@@ -173,6 +199,95 @@ Every `data.read` call writes an audit event with: actor, client, target, the
 **normalized** statement (constants replaced, see redaction), a statement digest,
 row count, truncation, duration, and the masked-column list. Never the result
 values.
+
+### 2.4 Wave 7 implementation
+
+**[DECIDED]** (Wave 7 Phase 8, [ADR-0028](../01-architecture/adr/0028-data-read-lane.md);
+`packages/diagnostics/src/data-read/`, `packages/application/src/queries.ts`)
+
+- **Order of checks.** The central engine on the target the registry
+  resolved (`query.run`, `query.explain`, `query.cancel`; scope
+  `data.read:<tier>`); the policy rule `data.read` for this caller on this
+  target (an agent is every caller that is not a person in the Web App or
+  the first-party CLI; a refusal is `DATA_READ_NOT_PERMITTED`, audited as
+  `authz.denied` with reason `policy`); the caps of the caller class; the
+  parser admission on the target's major and the normalized statement in
+  `serve`; the lane to the worker; the admission again on the worker with
+  the target's own catalog (relation kinds, user code); execution.
+- **Caps.** Agents: 500 rows (default 100), 5 MiB, statement timeout 60 s,
+  no `EXPLAIN ANALYZE` (`QUERY_NOT_READ_ONLY`, refused in `serve` and
+  again in the worker). People: 5,000 rows (default 1,000), 5 MiB, 60 s.
+  The worker checks the caps of the caller class again on the request it
+  opened. The 5-minute human timeout of §2.2 is not offered yet.
+  **[DECIDED]** (Wave 7 review, 2026-10-13) The caps also bound the
+  worker's memory: rows are fetched 25 at a time with a running count of
+  the text received, and the fetch stops once it passes the byte cap (the
+  result is then truncated by bytes); a receive guard on the session's
+  socket closes the connection when more than twice the byte cap plus
+  1 MiB arrives for one read, so a single huge value (`repeat`,
+  `string_agg`) is never held whole: the read is `QUERY_RESULT_TOO_LARGE`.
+  A `verify.sql` check has the same guard at 4 MiB and then ends the
+  verification as an error (`receive_limit`), never as passed. A canceled
+  read is canceled again every 250 ms until it has ended (a cancel that
+  reaches the backend between statements is ignored by PostgreSQL), and a
+  read waiting for a connection slot stops waiting when it is canceled.
+  json and jsonb values with a number a JavaScript number cannot hold
+  exactly (more than 15 significant digits, an unsafe integer, an
+  overflowing exponent) come back as their text. Only an active or
+  suspended target is read.
+- **Execution.** A fresh `exponetdb_reader` session per read from the
+  worker's connector (`application_name` `exponetdb/query/<request id>`,
+  set again inside the transaction), at most 2 per cluster at once within
+  the worker's budget of 5; `BEGIN ISOLATION LEVEL REPEATABLE READ READ
+  ONLY`, `SELECT 1`, `SET LOCAL` statement, lock (1 s) and idle (30 s)
+  timeouts and, on PostgreSQL 17 and 18, `transaction_timeout`; a cursor
+  with bind parameters, `FETCH FORWARD <cap + 1>`, `ROLLBACK`, close.
+- **Values.** Typed by type oid (booleans, integers, `int8` as a number
+  when exact and as a string beyond 2^53, floats, `numeric` and other
+  exact types as strings, JSON parsed up to 64 KiB, `bytea` as
+  `{ hex, bytes, truncatedAt? }`, `vector` as `{ dimension, head }`,
+  timestamps as ISO 8601, text over 10,000 characters as
+  `{ value, truncatedAt, length }`); column types are their `format_type`
+  names (`bigint`, `uuid`).
+- **Masking.** The rule's parameter `sensitiveColumns` (patterns
+  `schema.table.column`, `*` within a part) names masked columns per
+  installation or per target; a column whose origin is such a column is
+  `null` with `masked: true`, and an expression column is masked whenever
+  the statement reads a table with a masked column. Masking applies to
+  every caller: an unmasked read (`data.read_sensitive`) has no action yet.
+  **[DECIDED]** (Wave 7 review, 2026-10-13) Masking guards the output only,
+  so a masked column may appear only as a bare column of the top-level
+  target list of a plain `SELECT`. Any other use is refused with
+  `QUERY_CONSTRUCT_UNSUPPORTED` before the statement runs, because the rows,
+  their order, their count or an error would answer for the value: a
+  predicate, an ordering (also by output name or position), a grouping, a
+  join (also `USING` and `NATURAL`), an expression, a window, a subquery, a
+  CTE, a set operation, `DISTINCT`, a whole-row reference, or `*` below the
+  top level (`sensitiveReference` in
+  `packages/postgres/src/parser/sensitive.ts`; the names of the masked
+  columns come from the relations the statement reads).
+  A comment-based marking (`[SENSITIVE]`) is not read.
+- **Refusals** carry only the details the error catalog defines (a
+  construct, a parse position, a SQLSTATE); a runtime error of the target
+  is `QUERY_FAILED` with its SQLSTATE only, never the server's message.
+- **Cancel.** A closed stream (MCP or HTTP) or `sql_cancel` /
+  `POST /targets/{target}/queries/{queryId}/cancel` with the `queryId` the
+  caller chose marks the read; the worker sends the protocol cancel of
+  exactly the session it opened for that read. A cancel reaches only the
+  same identity, client, grant and target; `finished` when none of the
+  caller's reads with that id runs.
+- **Audit.** The event `data.read` (phase `completed` or `failed`) carries
+  the kind, the `queryId`, the redacted statement (at most 256
+  characters) and the digest of the whole redacted text, the caller class,
+  the tool, the rows, truncation, duration, masked column names and the
+  number of RLS relations, or the error code and the admission's reason
+  (`statement_class`, `data_modifying`, `explain_analyze`): attempted
+  writes are recorded. It is written in its own transaction before the
+  result is returned; when it cannot be written the caller gets an error
+  and no rows. Refusals before the lane (bounds, no worker) are not
+  reads and are not audited as such.
+- **Not implemented in Wave 7:** the cost preflight of §2.1 item 5, the
+  5-minute human timeout, `data.read_sensitive`, `EXPLAIN` with `BUFFERS`.
 
 ## 3. EXPLAIN
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 Control Plane probes (§8) accepted with G2 on 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 Control Plane probes (§8) accepted with G2 on 2026-10-05; `/mcp` and readiness (§8) and the MCP surfaces (§9) noted on 2026-10-13 for Wave 7, G7 not yet accepted ([G7 record](../14-roadmap/gates/7.md)) |
 | Applies to | Wave 4 (target health), Wave 5 (node health), Wave 9 (backup and replication health), every UI and MCP surface that shows state |
 | Read before | [`../00-product/constitution.md` C-28, C-29](../00-product/constitution.md#part-v-truthfulness), [`../03-database-model/postgres-adapter.md`](../03-database-model/postgres-adapter.md), [`../01-architecture/failure-model.md`](../01-architecture/failure-model.md) |
 
@@ -221,6 +221,23 @@ default, [`deployment.md`](../12-operations/deployment.md)). The detailed
 Control Plane health is visible to authenticated users and in
 [`self-observability.md`](./self-observability.md).
 
+**[OBSERVED]** (2026-10-13, Wave 7; `apps/server/src/composition/access.ts`,
+`apps/server/src/interfaces/mcp/edge.ts`, `apps/server/test/mcp-protocol.test.ts`;
+G7 not yet accepted) `/mcp` is part of the `serve` role and has no readiness
+endpoint of its own. Its availability follows the same switch as `/api/v1`:
+while the stored role matrix or the scope catalog is not verified (the
+`role_catalog` and `scope_catalog` readiness checks), `POST /mcp` answers
+`503` with `Retry-After` and `CONTROL_PLANE_DEGRADED` after the `Origin` and
+`Host` checks and before the token is read. Refusals at the `/mcp` edge are
+counted by reason in `exdb_mcp_denied_total` (reason `degraded` included) and
+every request is one `mcp.request` log line
+([`self-observability.md`](./self-observability.md)); the image smoke
+(`tooling/smoke/roles.sh`) requires `401` with its challenge at `/mcp`. A data
+read by an agent also needs a live data-read worker (a heartbeat within 30
+seconds, [ADR-0028](../01-architecture/adr/0028-data-read-lane.md)); without
+one the read is `CAPABILITY_UNAVAILABLE`, never an empty result
+([`../01-architecture/failure-model.md`](../01-architecture/failure-model.md) F31).
+
 ## 9. Surfaces
 
 | Surface | Content |
@@ -228,7 +245,8 @@ Control Plane health is visible to authenticated users and in
 | REST `GET /targets/{id}/health` | state, conditions, probes per endpoint, sources, timestamps |
 | REST `GET /targets/{id}/sessions` (Wave 4) | live: client backends of the target's database (filters: state, minimum age, application), statements always redacted with a digest of the redaction, capped with `truncated`, the ExponetDB operation behind an `exponetdb/…` application name |
 | REST `GET /targets/{id}/locks` (Wave 4) | live: waiting sessions with the pids blocking them (`pg_blocking_pids`), lock mode and relation; detection only, nothing is terminated |
-| MCP `target_health` | same, compact; untrusted fields (application names, statement text) labeled |
+| MCP `target_health` | same, compact; untrusted fields (application names, statement text) labeled. **[OBSERVED]** (2026-10-13) Served since Wave 7 through the same use case as the REST route; state, conditions and probes keep their `source` and `observedAt`, and its contract text says a failed read is an error, never a healthy state (`packages/contracts/src/mcp/tools.ts`; parity with REST in `apps/server/test/mcp.int.test.ts`) |
+| MCP `sessions_list`, `locks_list` (Wave 7) | the same data as the two REST rows above; statements are redacted and at most 500 characters for MCP with `truncated` and the digest of the whole |
 | Web App target overview | three blocks in incident order (path, answers, stuck), then capacity, then history |
 | Status integration for consumers | read-only health summary per target for consumer status pages (for example REOSA's `/status/database` link-out, [`../13-integrations/reosa-integration.md`](../13-integrations/reosa-integration.md)) |
 

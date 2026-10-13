@@ -8,6 +8,8 @@ import {
   type OAuthResource,
   type Scope,
   scopeDefinition,
+  scopeEffect,
+  type TargetRestriction,
   type Tier,
 } from '@exponetdb/contracts'
 import { ControlStoreError, type Queryable, type Tx } from '@exponetdb/control-store'
@@ -128,6 +130,7 @@ export async function scopeOffers(
       available: grantable && held,
       reason: !grantable ? 'not_grantable' : !held ? 'not_held' : null,
       write: isWriteScope(scope),
+      effect: scopeEffect(scope),
       tier: def.tier,
       explicitConsent: def.explicitConsent,
       humanOnly: def.humanOnly,
@@ -164,6 +167,8 @@ export async function consentView(
     resourceUri: resourceUri(deps.config.publicOrigin, pending.resource),
     scopes: await scopeOffers(deps.store, session, pending.client.kind, pending.scopes),
     defaults: DEFAULT_RESTRICTIONS,
+    // The application adds the targets the person can see (the registry is not auth's).
+    targets: [],
     lifetimeDays: { default: OAUTH_LIMITS.grantDefaultDays, max: OAUTH_LIMITS.grantMaxDays },
     reauth: {
       fresh: freshProof(
@@ -181,6 +186,17 @@ export interface DelegationChoice {
   readonly tiers: readonly Tier[]
   readonly lifetimeDays: number
   readonly acknowledgeProduction?: true | undefined
+  /**
+   * Wave 7: only these targets; absent means every target of the tiers.
+   * The application checks that each one is a target the person can see,
+   * within the chosen tiers, before the choice reaches this module.
+   */
+  readonly targets?: TargetRestriction | undefined
+}
+
+/** The target restriction as the audit records it: `all` or the ids. */
+export function auditTargets(targets: TargetRestriction): string | string[] {
+  return targets.kind === 'all' ? 'all' : [...targets.targetIds]
 }
 
 /**
@@ -232,8 +248,15 @@ export async function checkChoice(
   if (elevated && !fresh) {
     throw new AuthError('REAUTH_REQUIRED')
   }
+  const targets = choice.targets ?? { kind: 'all' }
+  if (
+    targets.kind === 'list' &&
+    (targets.targetIds.length === 0 || new Set(targets.targetIds).size !== targets.targetIds.length)
+  ) {
+    throw new AuthError('VALIDATION_FAILED')
+  }
   return {
-    restrictions: { tiers, targets: { kind: 'all' } },
+    restrictions: { tiers, targets },
     reauthEventId: fresh ? session.reauthEventId : null,
   }
 }
@@ -350,7 +373,7 @@ export async function decideConsent(
         resource: pending.resource,
         scopes: [...body.scopes],
         tiers: [...restrictions.tiers],
-        targets: 'all',
+        targets: auditTargets(restrictions.targets),
         lifetimeDays: body.lifetimeDays,
         registration: pending.client.registration,
       },

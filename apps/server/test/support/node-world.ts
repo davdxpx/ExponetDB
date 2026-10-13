@@ -52,6 +52,14 @@ const PASSWORD = 'tangerine fjord radiator 42'
 
 export type Requester = (input: string, init: RequestInit) => Promise<Response> | Response
 
+export interface BrowserResponse {
+  readonly status: number
+  // biome-ignore lint/suspicious/noExplicitAny: a parsed JSON body, asserted by each test.
+  readonly body: any
+  readonly text: string
+  readonly headers: globalThis.Headers
+}
+
 export class Browser {
   readonly jar = new Map<string, string>()
   readonly request: Requester
@@ -59,7 +67,7 @@ export class Browser {
     this.request = request
   }
 
-  async call(method: string, path: string, body?: unknown) {
+  async call(method: string, path: string, body?: unknown): Promise<BrowserResponse> {
     const headers: Record<string, string> = { 'user-agent': UA }
     if (this.jar.size > 0) {
       headers['cookie'] = [...this.jar].map(([k, v]) => `${k}=${v}`).join('; ')
@@ -87,6 +95,7 @@ export class Browser {
       status: response.status,
       body: text.length === 0 ? undefined : JSON.parse(text),
       text,
+      headers: response.headers,
     }
   }
 }
@@ -109,8 +118,13 @@ export async function enrollOwner(db: MigratedTestDatabase, request: Requester):
     },
     { email: 'owner@example.test', reissue: false },
   )
+  return enrollFromLink(request, issued.link)
+}
+
+/** A person enrolled from an enrollment or invitation link: passkey, password, TOTP. */
+export async function enrollFromLink(request: Requester, link: string): Promise<Person> {
   const browser = new Browser(request)
-  const token = new URL(issued.link).hash.replace('#token=', '')
+  const token = new URL(link).hash.replace('#token=', '')
   expect((await browser.call('POST', '/auth/enrollment/redeem', { token })).status).toBe(200)
   const options = await browser.call('POST', '/auth/enrollment/passkey/options', {})
   const authenticator = new SoftAuthenticator(

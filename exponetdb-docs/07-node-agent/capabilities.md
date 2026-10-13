@@ -126,11 +126,12 @@ Promoting a restored scratch cluster to serve a target is a **placement move**
 ## 2. Plan/apply pattern for node operations
 
 ```
-node_plan(kind=postgres.config, changes={max_connections: 250, work_mem: '32MB'})
+node.plan  POST /nodes/{nodeId}/plans (REST or the CLI; never MCP, OD-29)
+           kind=postgres.config.apply, changes={max_connections: 250, work_mem: '32MB'}
    → control plane dispatches postgres.config.plan job (read-only) → analysis
    → plan: current/proposed per parameter, context (reload/restart), validity, conflicts,
            affected targets (all databases of the cluster) and tier (prod), policy decision
-plan_apply(pln_…) → approval (prod tier) → job postgres.config.apply (signed) → agent executes
+plan.apply POST /plans/{planId}/apply → approval (prod tier) → job postgres.config.apply (signed) → agent executes
    → verification job (config.inspect) → operation result → audit
    → if restart-context parameters changed and the plan included a restart step:
         postgres.restart job (separate exclusivity: takes every target's schema domain on the cluster)

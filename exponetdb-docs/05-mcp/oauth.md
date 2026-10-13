@@ -190,6 +190,21 @@ CIMD ids are portable by design.
   user may access, or a chosen subset, default: non-production only); the grant
   lifetime (default 30 days, maximum 90); explicit opt-in checkboxes for any
   production write scope.
+- **[DECIDED]** (Wave 7 order §16, minimal; `apps/web/src/pages/consent.ts`,
+  `Application.consentView`/`consent`.) The consent view lists the targets
+  the person can see (`targets`: id, path, tier; at most 200, from the
+  registry as this person); the page offers "every target of the chosen
+  kinds" (the default, `targets: { kind: 'all' }`) or "only the targets
+  checked below" (`targets: { kind: 'list', targetIds }`, at most 64). The
+  application checks each chosen target again (`target.get` by the engine
+  on the registry's subject, as this person) and that its tier is among the
+  chosen tiers; anything else is `VALIDATION_FAILED` on
+  `/targets/targetIds/<i>` and no grant is written. Each scope shows what
+  its strongest action does (`effect`: reads; records plans or checks,
+  changes nothing; changes), derived from the action contracts:
+  `schema.read` (drift checks record a result) is never shown as "changes".
+  The re-authentication rule still uses `write` (any effect other than a
+  read). `[OBSERVED]` in `mcp.int.test.ts` and `web-review.e2e.test.ts`.
 - The resulting **grant** stores: identity, client, scopes granted (subset of
   requested ∩ what the identity may delegate), target restrictions, tier
   restrictions, expiry, consent time, re-auth time.
@@ -257,6 +272,22 @@ applications" page revokes grants (all tokens of the grant die immediately).
 access token ends that token; a token of another client or an unknown
 value is answered with success and changes nothing; an API key is
 `unsupported_token_type` (it is revoked by an administrator).
+
+**Last use of a grant.** **[DECIDED]** (Wave 7 order §16, decision 10;
+bundle `grant-last-use`, `packages/auth/src/oauth/usage.ts`) Every
+authenticated request with an access token notes its grant's last use:
+`oauth.grant_last_use` holds one row per grant with the minute
+(`last_used_at`, truncated to the minute) and the class of the use (an MCP
+tool's rate class `read`, `plan`, `apply`, `data`, or `rest` for
+`/api/v1`). The upsert changes a row only when the stored minute is older,
+so a grant is written at most once a minute across processes; each serve
+process also skips the round trip within the minute. It runs in the
+background and never fails a request; an API key has no grant and records
+nothing. It is a data basis only: Wave 8 shows "last used" on the
+Connected applications page and Wave 9 derives an "unused for 30 days"
+finding; it is never a log of requests (the audit and the request logs are)
+and never an input to a decision. A table of its own, so a use never locks
+the grant row that a refresh or a revocation takes.
 
 **Device flow and the CLI.** **[DECIDED]** (Wave 3B,
 `packages/auth/src/oauth/device.ts`, `apps/cli`.) The first-party CLI signs

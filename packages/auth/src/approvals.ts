@@ -702,7 +702,10 @@ export async function releaseAfterCooling(
  */
 function changeOf(plan: PlanRecord): Pick<ApprovalQueueItem, 'change'> {
   const content = plan.body['content']
-  const reviewable = plan.kind.startsWith('access.') || plan.kind.startsWith('target.')
+  // Wave 7: migration and node plans as well (order §24); the review adds the statements.
+  const reviewable = ['access.', 'target.', 'migration.', 'node.'].some((p) =>
+    plan.kind.startsWith(p),
+  )
   if (!reviewable || content === undefined) {
     return {}
   }
@@ -735,7 +738,8 @@ export async function approvalQueue(
       !isId('op', operationId) ||
       !isId('pln', planId) ||
       !isActionId(kind) ||
-      (cls !== 'standard' && cls !== 'high' && cls !== 'critical') ||
+      // A low-class plan waits too: a verification run with consumer code, or an agent's on production.
+      (cls !== 'low' && cls !== 'standard' && cls !== 'high' && cls !== 'critical') ||
       (tier !== null && tier !== 'prod' && tier !== 'nonprod') ||
       (actorId !== null && !isId('idn', actorId)) ||
       (client !== 'web' &&

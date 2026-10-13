@@ -12,6 +12,7 @@ import {
   nodePkiInit,
   nodePkiJobKey,
   nodePkiPostgresCa,
+  rotateMcpKeyCommand,
   schemaStatus,
   writeSecretFile,
 } from '../composition/commands.ts'
@@ -61,6 +62,9 @@ Keyring:
   keyring generate --key-id <id> [--output <new file>]
   keyring add-key --input <file> --key-id <id> --output <new file>
   keyring status                  key ids and references (never key material)
+  keyring rotate-mcp-key --purpose <mcp.request_state_key|mcp.cursor_key>
+                                  a new version of an MCP installation key (login exdb_serve); serve seals
+                                  with it within 5 minutes, the version before it still opens
 
 Identity (inside the serve container, login exdb_serve):
   bootstrap owner --email <address> [--display-name <name>] [--reissue]
@@ -317,6 +321,16 @@ async function keyring(sub: string | undefined, rest: readonly string[], io: Io)
       const report = await keyringReport(config, commandRuntime(io, config.logLevel))
       json(io, report)
       return report.missing.length === 0 && report.mismatched.length === 0 ? 0 : 1
+    }
+    case 'rotate-mcp-key': {
+      const f = flags(rest, ['--purpose'])
+      const purpose = f.get('--purpose')
+      if (purpose !== 'mcp.request_state_key' && purpose !== 'mcp.cursor_key') {
+        throw new UsageError('--purpose')
+      }
+      const config = keyringCommandConfig(io.env)
+      json(io, await rotateMcpKeyCommand(config, commandRuntime(io, config.logLevel), purpose))
+      return 0
     }
     default:
       throw new UsageError(sub ?? 'keyring')

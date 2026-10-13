@@ -1,4 +1,4 @@
-import type { ConsentView, Scope, Tier } from '@exponetdb/contracts'
+import type { ConsentView, Scope, TargetRestriction, Tier } from '@exponetdb/contracts'
 import { call } from '../api.ts'
 import { field, formatTime, h, replace } from '../dom.ts'
 import { withReauth } from '../reauth.ts'
@@ -19,6 +19,14 @@ export interface Choice {
   readonly tiers: Tier[]
   readonly lifetimeDays: number
   readonly acknowledgeProduction?: true
+  readonly targets?: TargetRestriction
+}
+
+/** What a scope lets the application do, from the action contracts (never from its name). */
+const EFFECT_LABEL: Record<ConsentView['scopes'][number]['effect'], string> = {
+  read: 'reads',
+  control_record: 'records plans or checks, changes nothing',
+  consequential: 'changes',
 }
 
 export function consentForm(
@@ -43,9 +51,11 @@ export function consentForm(
         'span',
         {},
         h('code', {}, offer.scope),
-        offer.write
-          ? h('span', { class: 'badge' }, 'changes')
-          : h('span', { class: 'badge' }, 'reads'),
+        h(
+          'span',
+          { class: offer.effect === 'consequential' ? 'badge warn' : 'badge' },
+          EFFECT_LABEL[offer.effect],
+        ),
         offer.tier === 'prod' ? h('span', { class: 'badge warn' }, 'production') : null,
         offer.available
           ? null
@@ -78,14 +88,55 @@ export function consentForm(
       .filter((v): v is Scope => typeof v === 'string' && offered.some((o) => o.scope === v))
     const tiers = data.getAll('tier').filter((v): v is Tier => v === 'prod' || v === 'nonprod')
     const days = Number(field(f, 'days'))
+    const chosen = data
+      .getAll('target')
+      .filter((v): v is string => typeof v === 'string' && view.targets.some((t) => t.id === v))
+    const only = data.get('where') === 'list'
     await submit({
       decision,
       scopes,
       tiers,
       lifetimeDays: Number.isInteger(days) && days >= 1 ? days : view.lifetimeDays.default,
       ...(data.get('production') === 'yes' ? { acknowledgeProduction: true } : {}),
+      // Only these targets, when asked for; the server checks each one again.
+      ...(only && decision === 'allow'
+        ? { targets: { kind: 'list', targetIds: chosen } as TargetRestriction }
+        : {}),
     })
   }
+  const targetChoice =
+    view.targets.length === 0
+      ? null
+      : h(
+          'fieldset',
+          { id: 'consent-targets' },
+          h('legend', {}, 'Which targets'),
+          h(
+            'label',
+            { class: 'check' },
+            h('input', { type: 'radio', name: 'where', value: 'all', checked: true }),
+            h('span', {}, 'Every target of the chosen kinds above'),
+          ),
+          h(
+            'label',
+            { class: 'check' },
+            h('input', { type: 'radio', name: 'where', value: 'list' }),
+            h('span', {}, 'Only the targets checked below'),
+          ),
+          ...view.targets.map((t) =>
+            h(
+              'label',
+              { class: 'check' },
+              h('input', { type: 'checkbox', name: 'target', value: t.id }),
+              h(
+                'span',
+                {},
+                h('code', {}, t.path),
+                t.tier === 'prod' ? h('span', { class: 'badge warn' }, 'production') : null,
+              ),
+            ),
+          ),
+        )
   const allow = form(
     ui,
     { id: 'consent-form' },
@@ -109,6 +160,7 @@ export function consentForm(
         h('span', {}, 'I allow access to production. Changes there need a fresh confirmation.'),
       ),
     ),
+    targetChoice,
     h(
       'label',
       {},
@@ -130,9 +182,22 @@ export function consentForm(
     decide('deny'),
     h('button', { type: 'submit' }, 'Deny'),
   )
+  // The lethal trifecta (threat-model.md, Wave 7): production rows, text from elsewhere in
+  // the agent's context and the power to change. The server decides; this only says it.
+  const trifecta =
+    view.resource === 'mcp' &&
+    offered.some((o) => o.available && o.scope === 'data.read:prod') &&
+    offered.some((o) => o.available && o.effect === 'consequential')
   return h(
     'div',
     { class: 'consent' },
+    trifecta
+      ? h(
+          'p',
+          { class: 'banner warn', role: 'note', id: 'trifecta-warning' },
+          'This application asks to read production rows and to change databases. An agent that also reads text from elsewhere (a web page, a ticket, a database comment) could be steered to misuse both. Allow only what this task needs: production rows stay for people unless an administrator opens them, and production changes need your approval.',
+        )
+      : null,
     client.lookalike
       ? h(
           'p',

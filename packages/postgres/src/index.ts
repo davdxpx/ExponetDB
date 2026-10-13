@@ -1,4 +1,10 @@
 export {
+  type AdmittedRead,
+  isAdmittedRead,
+  type RawRead,
+  type ReadField,
+} from './admitted-read.ts'
+export {
   bootstrapScript,
   clusterBootstrapStatements,
   databaseBootstrapStatements,
@@ -135,6 +141,7 @@ export {
   requireActivityVisibility,
   type SessionNote,
 } from './probes.ts'
+export { admitReadOn } from './reads.ts'
 export { resolveRelationKinds, resolveUserCode } from './relations.ts'
 export {
   isReviewedStatement,

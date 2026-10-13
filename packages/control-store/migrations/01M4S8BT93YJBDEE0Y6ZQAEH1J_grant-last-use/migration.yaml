@@ -1,0 +1,21 @@
+schema: exponetdb.migration/v1
+id: 01M4S8BT93YJBDEE0Y6ZQAEH1J
+name: grant-last-use
+description: |
+  The last use of each OAuth grant (Wave 7 order §16, decision 10): one row
+  per grant with the minute it was last used and the class of that use, so
+  the Web App (Wave 8) can show "last used" and findings (Wave 9) can name a
+  grant unused for 30 days. A data basis only: at most one update a minute
+  per grant, never a log of requests (the audit and the request logs hold
+  those), never an input to an authorization decision. A table of its own,
+  so a use never locks the grant row a token refresh or a revocation takes.
+  Additive: one new table; no existing table, column or row changes.
+dependsOn:
+  - 01M4S5TDSB5ZXPJCBFKF8WRT5C
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

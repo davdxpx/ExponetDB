@@ -16,9 +16,14 @@
   works without a schema rollback.
 - A server binary refuses to start against a Control Store schema newer than it
   knows (no silent downgrade).
-- Upgrade order: `worker` pre-deploy runs migrations → `worker` → `gateway` →
-  `serve`. In-flight operations survive because workers stop at step boundaries
-  and reconcile on start ([`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md)).
+- Upgrade order: the separate one-shot Control Store migration resource
+  (`control-store migrate` with the `exdb_migrate` login) runs once first,
+  then `worker`, `serve` and `gateway` are deployed from the same image
+  digest; no runtime role holds the migration credential, and a role whose
+  schema is pending stays not ready
+  ([`deployment.md` §3, §6](./deployment.md#6-releases)). In-flight
+  operations survive because workers stop at step boundaries and reconcile
+  on start ([`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md)).
 - Plans created by the previous version stay valid only if their plan schema
   version is supported by the new one; otherwise they expire with
   `PLAN_STALE` (reason `engine_version`).

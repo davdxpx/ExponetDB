@@ -322,7 +322,7 @@
   },
   "noFoundations": ["tokens", "icons", "ui", "ui-patterns", "ui-data"],
   "runtimeDependencies": {
-    "$comment": "Runtime libraries that are restricted by layer. `allowedIn` lists the only workspace directories whose package.json may name the library; `forbidden` libraries may appear nowhere (no ORM, no second PostgreSQL driver: `pg` is the one driver, for the Control Store and, since Wave 4, for managed targets in packages/postgres; no server framework besides Hono, no UI runtime, MCP or WebSocket library before their wave).",
+    "$comment": "Runtime libraries that are restricted by layer. `allowedIn` lists the only workspace directories whose package.json may name the library; `forbidden` libraries may appear nowhere (no ORM, no second PostgreSQL driver: `pg` is the one driver, for the Control Store and, since Wave 4, for managed targets in packages/postgres; no server framework besides Hono, no UI runtime, no WebSocket library). MCP since Wave 7 (ADR-0027): the official server SDK only in apps/server, the client SDK only in packages/testkit; the v1 package @modelcontextprotocol/sdk stays forbidden.",
     "allowedIn": {
       "pg": ["packages/control-store", "packages/postgres", "packages/testkit"],
       "hono": ["apps/server"],
@@ -330,7 +330,13 @@
       "pg-cursor": ["packages/postgres"],
       "libpg-query-16": ["packages/postgres"],
       "libpg-query-17": ["packages/postgres"],
-      "libpg-query-18": ["packages/postgres"]
+      "libpg-query-18": ["packages/postgres"],
+      "@modelcontextprotocol/server": ["apps/server"],
+      "@modelcontextprotocol/client": ["packages/testkit"],
+      "@modelcontextprotocol/core": [],
+      "@modelcontextprotocol/hono": [],
+      "@modelcontextprotocol/node": [],
+      "@modelcontextprotocol/server-legacy": []
     },
     "forbidden": [
       "postgres",

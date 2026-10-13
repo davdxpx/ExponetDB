@@ -89,6 +89,29 @@ export class SoftAuthenticator {
     return b64(this.credentialId)
   }
 
+  /**
+   * The credential in the shape of the Chrome DevTools Protocol's
+   * `WebAuthn.addCredential` (standard base64): a browser test loads the same
+   * passkey into a virtual authenticator. Tests only.
+   */
+  forVirtualAuthenticator(rpId: string): {
+    readonly credentialId: string
+    readonly isResidentCredential: true
+    readonly rpId: string
+    readonly privateKey: string
+    readonly userHandle: string
+    readonly signCount: number
+  } {
+    return {
+      credentialId: Buffer.from(this.credentialId).toString('base64'),
+      isResidentCredential: true,
+      rpId,
+      privateKey: this.#key.export({ format: 'der', type: 'pkcs8' }).toString('base64'),
+      userHandle: Buffer.from(this.userHandle).toString('base64'),
+      signCount: this.counter,
+    }
+  }
+
   #clientData(kind: 'webauthn.create' | 'webauthn.get', input: CeremonyInput): string {
     return b64(
       Buffer.from(

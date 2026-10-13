@@ -610,6 +610,39 @@
       "effect": "read",
       "exclusivity": [],
       "humanOnly": false,
+      "id": "query.cancel",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "data.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "data.read"
+      },
+      "subject": "target",
+      "tierSemantics": "subject",
+      "title": "Cancel an own running query",
+      "verification": "none",
+      "wave": "7"
+    },
+    {
+      "basis": "resources.md, tool-catalog.md",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
       "id": "migration.lint",
       "mechanism": "none",
       "operationKind": false,
@@ -6859,6 +6892,44 @@
       "type": "https://db.exponet.cloud/errors/approval-required"
     },
     {
+      "code": "HUMAN_APPLY_REQUIRED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/HUMAN_APPLY_REQUIRED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "planId": {
+            "description": "Entity id `^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "planId"
+        ],
+        "type": "object"
+      },
+      "group": "plans_and_operations",
+      "message": "The plan is critical: only a person applies it, through a Web App session or the CLI, with a fresh re-authentication.",
+      "remediation": "Tell your person what the plan does and give them its id. A plan is bound to the caller who made it, so they make it again themselves (for a rollback `exponetdb migration rollback <migration> --target <target>`), review it with `exponetdb plan show <planId>` and apply it with `exponetdb plan apply <planId>`. An agent cannot apply it.",
+      "retryable": false,
+      "status": 403,
+      "title": "A person applies this plan",
+      "type": "https://db.exponet.cloud/errors/human-apply-required"
+    },
+    {
+      "code": "APPROVALS_PENDING_LIMIT",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "This caller already has 20 operations through this client that wait for a human approval; no further one is accepted until some are decided or canceled.",
+      "remediation": "Ask your person to decide the operations that wait (Web App, Approvals), or cancel the ones no longer needed (`operation_cancel`, `POST /operations/{operationId}/cancel`); then apply again. The plan stays active until it expires.",
+      "retryable": false,
+      "status": 409,
+      "title": "Too many operations wait for approval",
+      "type": "https://db.exponet.cloud/errors/approvals-pending-limit"
+    },
+    {
       "code": "REAUTH_REQUIRED",
       "details": null,
       "group": "plans_and_operations",
@@ -8106,6 +8177,7 @@
       },
       "group": "authentication_and_authorization",
       "message": "The token lacks the scope this action needs.",
+      "remediation": "Reconnect the client and approve the scope named in requiredScope on the consent page; a client that cannot step up must be connected again with it.",
       "retryable": false,
       "status": 403,
       "title": "Insufficient scope",
@@ -8875,6 +8947,43 @@
       "type": "https://db.exponet.cloud/errors/query-timeout"
     },
     {
+      "code": "QUERY_FAILED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/QUERY_FAILED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "sqlstate": {
+            "pattern": "^[0-9A-Z]{5}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sqlstate"
+        ],
+        "type": "object"
+      },
+      "group": "queries_and_diagnostics",
+      "message": "The statement failed on the target; only its SQLSTATE is returned (a server message can quote data).",
+      "remediation": "Look up the SQLSTATE, correct the statement and run it again.",
+      "retryable": false,
+      "status": 422,
+      "title": "Query failed",
+      "type": "https://db.exponet.cloud/errors/query-failed"
+    },
+    {
+      "code": "QUERY_CANCELED",
+      "details": null,
+      "group": "queries_and_diagnostics",
+      "message": "The query was canceled before it finished; no rows are returned.",
+      "remediation": "Run it again if you still need it, with a narrower statement or a lower row cap.",
+      "retryable": false,
+      "status": 409,
+      "title": "Query canceled",
+      "type": "https://db.exponet.cloud/errors/query-canceled"
+    },
+    {
       "code": "QUERY_RESULT_TOO_LARGE",
       "details": {
         "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
@@ -9041,7 +9150,23 @@
     },
     {
       "code": "RATE_LIMITED",
-      "details": null,
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/RATE_LIMITED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "retryAfterSeconds": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "retryAfterSeconds"
+        ],
+        "type": "object"
+      },
       "group": "generic",
       "message": "Too many requests. Retry after the time in Retry-After.",
       "retryable": true,

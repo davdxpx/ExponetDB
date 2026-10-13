@@ -70,6 +70,7 @@ export {
   redactStatement,
   redactStatementSync,
 } from './redact.ts'
+export { sensitiveReference } from './sensitive.ts'
 export {
   analyzeVerifyFile,
   declaredFunction,

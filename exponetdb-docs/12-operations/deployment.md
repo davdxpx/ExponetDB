@@ -58,6 +58,14 @@ separate Control Store roles. Same image, same release.
 the design is stateless (sessions in the Control Store), so scaling out later is
 configuration.
 
+**[DECIDED]** (Wave 7, owner decision 9) The rate limits and concurrency
+bounds of `/mcp` are **per process**: token buckets per grant, per identity
+and tool class, and the large-body slots live in the memory of `serve`; a
+restart resets them, and a second instance would double them. Nothing of
+them is stored in the Control Store. Scaling `serve` out therefore needs an
+edge limiter in front (Traefik, keyed on the grant), recorded as a
+condition of that change ([ADR-0027 §3](../01-architecture/adr/0027-mcp-protocol-layer.md)).
+
 ## 2. Configuration
 
 **[DECIDED]** (Wave 2) Each Coolify resource has its own environment; the
@@ -69,13 +77,14 @@ startup; problems name the variable and a reason, never a value.
 |---|---|---|
 | `EXPONETDB_CONTROL_STORE_URL` | every role and command, **each with its own login** | `exdb_serve`, `exdb_worker`, `exdb_gateway`; `exdb_migrate` for `control-store migrate`; `exdb_audit_maint` for `audit prune`; secret |
 | `EXPONETDB_INSTALLATION_ID` | serve, worker, gateway | printed by the first `control-store migrate`; must match the Control Store marker (else the role refuses to start) |
-| `EXPONETDB_KEYRING` or `EXPONETDB_KEYRING_FILE` | serve, worker, gateway, `keyring status`, `node-pki init` | exactly one; the file must not be readable by group or others ([`../08-auth-and-security/secrets.md` §2.2](../08-auth-and-security/secrets.md#22-keyring)); secret |
+| `EXPONETDB_KEYRING` or `EXPONETDB_KEYRING_FILE` | serve, worker, gateway, `keyring status`, `keyring rotate-mcp-key` (serve login), `node-pki init` | exactly one; the file must not be readable by group or others ([`../08-auth-and-security/secrets.md` §2.2](../08-auth-and-security/secrets.md#22-keyring)); secret |
 | `EXPONETDB_ROLE` | serve, worker, gateway (optional) | if set, must equal the command's role |
 | `EXPONETDB_LISTEN` | serve | default `0.0.0.0:8080`; probes only in Wave 2 |
 | `EXPONETDB_PUBLIC_URL` | serve (**required since Wave 3A**), `bootstrap owner`, `auth recover-owner` | the public origin only (`https://db.exponet.cloud`, no path): the Web App, the exact `Origin` check of every mutating request, the WebAuthn origin and the setup and recovery links; `http:` only on a loopback host; also the OAuth issuer from Wave 3B |
 | `EXPONETDB_WEBAUTHN_RP_ID` | serve, `bootstrap owner`, `auth recover-owner` (optional) | the WebAuthn relying-party ID: the host of `EXPONETDB_PUBLIC_URL` (default) or a parent domain of it; never taken from a request. Changing it later makes every registered passkey unusable |
 | `EXPONETDB_EGRESS_ADDRESSES` | serve (optional; needed before a `pg_hba` plan on an agent-managed cluster with active credentials) | up to 8 single IP addresses (comma separated, lowercase) from which `serve` and the worker connect to managed clusters; a `pg_hba` plan protects ExponetDB's own access from them ([control-plane.md §9.6](../07-node-agent/control-plane.md#96-verification-by-kind)). On `reos-01` that is the private address `10.8.2.2` (an owner setting; [ASSUMPTION] as in credentials-and-roles.md §7) |
 | `EXPONETDB_TRUSTED_PROXIES` | serve (optional) | up to 16 addresses or CIDRs (comma separated) of the reverse proxies whose `X-Forwarded-For` is believed; the client address is the right-most hop that is not a trusted proxy. Empty (default): the peer address is the client address. On `reos-01` this is the Traefik network of Coolify (an owner setting) |
+| `EXPONETDB_MCP_ALLOWED_ORIGINS` | serve (optional, Wave 7) | up to 8 exact HTTPS origins (comma separated; `http:` only on a loopback host; no path, no wildcard, never `null`) of browser-based MCP clients allowed to call `/mcp` besides the public origin. A request without `Origin` (a native client) is not affected; a request with any other `Origin` is `403`. Empty (default): only the public origin ([`../05-mcp/protocol-baseline.md` §5](../05-mcp/protocol-baseline.md#5-situation-http-status-json-rpc-code-body)) |
 | `EXPONETDB_INTERNAL_LISTEN` | serve, worker, gateway | default `127.0.0.1:9464`: `/healthz/detail`, `/metrics`; the container health probe asks it |
 | `EXPONETDB_SHUTDOWN_TIMEOUT_MS` | serve, worker, gateway | default 25000 |
 | `EXPONETDB_AUDIT_EXPORT_DIR` or `EXPONETDB_AUDIT_S3_*` | worker | checkpoint export sink: a directory (development) or S3-compatible storage (`ENDPOINT`, `REGION`, `BUCKET`, optional `PREFIX`, `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, optional `OBJECT_LOCK_MODE` and `OBJECT_LOCK_DAYS`); without one, worker readiness is degraded |
@@ -199,6 +208,39 @@ ExponetDB's responsibilities on the host, in order of introduction:
   No runtime resource receives the migration credential (§3).
 - Agent releases are separate artifacts with their own version and a
   compatibility range with the server ([`upgrades.md`](./upgrades.md)).
+
+## 6a. Rolling out `/mcp` (Wave 7; the owner's steps, not run by the Wave 7 work)
+
+**[DECIDED]** `/mcp` is served by `serve` from the same image; nothing new
+runs. What changes on `reos-01`:
+
+1. **Variables.** Only `EXPONETDB_MCP_ALLOWED_ORIGINS` is new and optional
+   (§2; empty is right for native clients such as Claude Code, Codex, Cursor
+   and VS Code). Every other Wave 7 number is a code default.
+2. **Control Store.** The additive Wave 7 bundles (`mcp-keys`,
+   `grant-last-use`, `data-read-lane`) run with the one-shot migration
+   resource first (§6).
+3. **Traefik router for the public host.** The application router already
+   carries `/mcp`. No path rewrite and no redirect to another host (a
+   redirect loses the `Authorization` header of Claude's cloud clients).
+   **[OBSERVED]** (Wave 7, Traefik 3.3.7) A compress middleware gzips the
+   event stream of `/mcp` and still delivers each event when it is sent; no
+   exclusion is needed for correctness. Keep the proxy's response timeouts
+   above 90 s (the server ends a request at 90 s with `504`) and do not
+   buffer responses.
+4. **Pre-checks from a public network** (the owner, after the rollout;
+   [`../05-mcp/owner-test-package.md`](../05-mcp/owner-test-package.md) §F):
+   `dig +short db.exponet.cloud A` names a routable IPv4 address;
+   `curl -sI https://db.exponet.cloud/mcp` is `405` with `Allow: POST` and no
+   `3xx`; an anonymous `POST /mcp` is `401` with `resource_metadata`; both
+   `/.well-known/oauth-protected-resource/mcp` and
+   `/.well-known/oauth-authorization-server` answer `200`; the MCP
+   Inspector lists the tools with a token.
+5. **Clients.** No third-party client is trusted at installation: each is
+   approved once by an administrator on **Admin → Clients**
+   (`/admin/clients`); see [`../05-mcp/client-matrix.md`](../05-mcp/client-matrix.md).
+6. **Keys.** The MCP keys are created on first use; rotation is
+   `exponetdb keyring rotate-mcp-key` (§2, runbook RB-15).
 
 ## 7. Later
 

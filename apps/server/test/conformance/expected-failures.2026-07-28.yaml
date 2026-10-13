@@ -1,0 +1,66 @@
+# Expected failures of the MCP conformance suite for the 2026-07-28
+# requirements (@modelcontextprotocol/conformance 0.2.0-alpha.12, run by
+# test/mcp-conformance.conformance.test.ts; protocol-baseline.md §6).
+# Each group names why the scenario or check cannot pass against ExponetDB.
+# None of them is a defect; an entry that starts to pass fails the run
+# (stale baseline) and is removed.
+server:
+  # Fixture tools of the suite's reference server (test_simple_text,
+  # test_image_content, ...): ExponetDB serves only its own catalog.
+  - tools-call-simple-text
+  - tools-call-image
+  - tools-call-audio
+  - tools-call-embedded-resource
+  - tools-call-mixed-content
+  - tools-call-error
+  - tools-call-with-progress
+  - json-schema-2020-12
+  # Fixture resources of the reference server (test://static-text,
+  # test://static-binary, a template). ExponetDB's resources are its guides
+  # and target summaries (order §23; no templates).
+  - resources-read-text
+  - resources-read-binary
+  - resources-templates-read
+  # No prompts in V1 (order §23; tool-catalog.md §11).
+  - prompts-list
+  - prompts-get-simple
+  - prompts-get-with-args
+  - prompts-get-embedded-resource
+  - prompts-get-with-image
+  - caching:sep-2549-prompts-list-caching-hints
+  # No completions (no prompts, no resource templates).
+  - completion-complete
+  # input_required rounds of the suite's fixture tools. ExponetDB's one round
+  # (plan_apply waiting for a human approval) is tested by its own suite.
+  - input-required-result-basic-elicitation
+  - input-required-result-basic-sampling
+  - input-required-result-basic-list-roots
+  - input-required-result-request-state
+  - input-required-result-multiple-input-requests
+  - input-required-result-multi-round
+  - input-required-result-non-tool-request
+  - input-required-result-result-type
+  - input-required-result-tampered-state
+  - input-required-result-capability-check
+  # Warnings (counted as failures under a baseline) of two scenarios that
+  # call fixture tools: the call answers -32602 "unknown tool".
+  - input-required-result-missing-input-response:sep-2322-missing-response-rerequests
+  - input-required-result-ignore-extra-params:sep-2322-ignore-unexpected-params
+  # Checks of server-stateless that need the suite's diagnostic tools
+  # (test_missing_capability, test_streaming_elicitation, test_logging_tool).
+  - server-stateless:sep-2575-server-rejects-undeclared-capability
+  - server-stateless:sep-2575-missing-capability-http-400
+  - server-stateless:sep-2575-http-server-no-independent-requests-on-stream
+  - server-stateless:sep-2575-server-no-log-without-loglevel
+  # x-mcp-header is not used (protocol-baseline.md §2); not scored for 2026-07-28.
+  - http-custom-header-server-validation
+  # The Tasks extension is not declared (owner decision 8); not scored.
+  - tasks-lifecycle
+  - tasks-capability-negotiation
+  - tasks-wire-fields
+  - tasks-request-state-removal
+  - tasks-mrtr-input
+  - tasks-request-headers
+  - tasks-dispatch-and-envelope
+  - tasks-required-task-error
+  - tasks-mrtr-composition

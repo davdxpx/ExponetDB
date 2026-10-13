@@ -138,7 +138,7 @@ grant could override.
 | `migration.lock-risk` | prod tier | require approval when severity ∈ {`high`, `critical`, `unknown`} | |
 | `migration.nontransactional` | prod tier, `transactional: false`; `migration.apply` and `migration.resume` | require approval + reauth | |
 | `migration.lint-errors` | all | deny (not overridable for `error` level lints marked `blocking`) | see analysis.md |
-| `migration.agent-production` | prod tier, actor client is an AI agent | require approval ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization), resolved: the human may approve the plan an agent proposed on their behalf) | default: approval required for every production apply initiated by an agent client, until the owner relaxes it to "only non-additive" |
+| `migration.agent-production` | prod tier, actor client is an AI agent; the SQL kinds and, since Wave 7 (rule version 2), `migration.verify` (a stored `verify.sql` reads production data) | require approval ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization), resolved: the human may approve the plan an agent proposed on their behalf) | default: approval required for every production apply initiated by an agent client, until the owner relaxes it to "only non-additive" |
 | ~~`migration.no-evidence-environment`~~ | withdrawn (Wave 6) | — | **[DECIDED]** no evidence bypass (C-15): a production target without an evidence target has no evidence and `migration.staging-evidence` denies; see [`../04-migrations/staging-production-policy.md` §1.1](../04-migrations/staging-production-policy.md#11-which-staging-counts) |
 | `migration.execution-role` | all | deny | every execution role alias maps (registry) to a usable `NOLOGIN` owner the migrator may `SET ROLE` into ([`../03-database-model/credentials-and-roles.md` §3](../03-database-model/credentials-and-roles.md#3-execution-roles-who-owns-application-objects)) |
 | `migration.fingerprint-lineage-legacy` | prod tier, imported legacy project | warn | the OD-14 (a) warning for imported legacy histories (the require part is `migration.fingerprint-lineage`) |
@@ -154,7 +154,9 @@ grant could override.
 runs reviewed bundle SQL (`migration.apply`, `migration.rollback`,
 `migration.resume`); the
 evidence, lineage, dependency and compatibility rules to `migration.apply`
-only.
+only. **[OBSERVED]** (2026-10-13, Wave 7; G7 not yet accepted)
+`migration.agent-production` (version 2) also applies to `migration.verify`
+([`../04-migrations/verification.md`](../04-migrations/verification.md#retrying-verification)).
 
 ### Connections
 
@@ -163,6 +165,32 @@ only.
 | `connections.no-superuser-terminate` | deny, not overridable | ExponetDB never terminates superuser backends or its own ledger-holding sessions |
 | `connections.prod-terminate-approval` | require | terminating a backend on prod tier from an agent client requires approval; human with re-auth may proceed |
 | `connections.replication-protect` | deny (break-glass) | never terminate walsender / replication or backup sessions |
+
+### Data reads
+
+| Rule id | Applies to | Severity | Default |
+|---|---|---|---|
+| `data.read` | `query.run`, `query.explain` | deny, not overridable | `mode: by_tier`, `sensitiveColumns: []` |
+
+**[DECIDED]** (Wave 7, [ADR-0028](../01-architecture/adr/0028-data-read-lane.md),
+[OD-13](../00-product/open-decisions.md#od-13-data-reads-by-ai-agents-on-production) option a; `packages/policy/src/catalog/data.ts`)
+Who may read rows of a target, as a rule setting in `policy.rule_settings`
+(installation → product → project → environment → target, the most
+specific wins; changed by a policy settings plan, the frozen registry
+untouched). `mode` is `by_tier` (people read every tier, agents only
+`nonprod`; an unknown tier counts as production), `enabled`, `humans_only`
+(agents read no rows) or `disabled` (nobody does). An agent is every caller
+that is not a person through the Web App or the first-party CLI: an MCP
+client, a service account, an API key, CI. No scope lifts the rule:
+`data.read:prod` on a `humans_only` target is still refused
+(`DATA_READ_NOT_PERMITTED`). `sensitiveColumns` lists patterns
+`schema.table.column` (`*` matches a name part, at most 256) whose values
+are masked for callers without `data.read_sensitive`, which no MCP client
+holds; the rule reports the effective list in its facts, so the read path
+masks with the setting the decision used. An invalid setting is `unknown`
+and refuses (fail closed). EXPLAIN without ANALYZE is under the rule too,
+because a plan can carry constants of rows; its expressions are redacted
+before they are returned ([`../03-database-model/sql-execution-security.md`](../03-database-model/sql-execution-security.md)).
 
 ### Node and cluster
 
@@ -313,6 +341,20 @@ level wins; a setting may set only parameters the rule declares, with the JSON
 type of the default, else the rule is `unknown` for that subject.
 Maintenance windows (`windows` facts) are **[PLANNED]** with the first rule that
 needs them.
+
+**[DECIDED]** (Wave 7, OD-13 (a)) A policy-settings plan
+(`POST /policy-settings/plans`, kind `access.policy_settings.update`)
+names the scope `installation` or, since Wave 7, `target` with a
+registered target's id; product, project and environment settings are not
+planned yet. For a target setting, the effective parameters before and
+after include what the target inherits from the installation, so
+`access.policy-safety` judges the change against what applies there. A
+rule may check its parameters beyond their JSON types (`checkParams`):
+`data.read` refuses an unknown mode or a malformed column pattern when the
+plan is made. `access.policy-safety` knows the direction of
+`approval.self-approval` and of `data.read` (`disabled` > `humans_only` >
+`by_tier` > `enabled`; removing a masked column loosens); any other change
+counts as lowering safety, which only an owner may plan.
 
 ## 6. Hooks
 

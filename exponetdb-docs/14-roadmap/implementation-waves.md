@@ -43,11 +43,11 @@ flowchart LR
 | 1 | Contracts that every later wave implements | none (G1 accepted 2026-10-05, [gate record](./gates/1.md)) |
 | 2 | Deployable skeleton with Control Store, audit, keyring, boundaries | none: authorized 2026-10-05; the OD-8 design for Wave 2 is settled, the legal retention setting stays open for Wave 9. G2 accepted 2026-10-05, deployment not proven yet ([gate record](./gates/2.md)) |
 | 3A | People sign in securely and the server decides who may do what to which subject | none: authorized 2026-10-05 with OD-9 resolved (option a); G3A accepted 2026-10-06 ([gate record](./gates/3a.md)) |
-| 3B | Delegated clients (OAuth, MCP clients, CLI, service accounts, API keys) get scoped access | none: authorized 2026-10-06 with OD-5 resolved (option a); in progress ([gate record](./gates/3b.md)) |
+| 3B | Delegated clients (OAuth, MCP clients, CLI, service accounts, API keys) get scoped access | none: authorized 2026-10-06 with OD-5 resolved (option a); G3B accepted 2026-10-06 ([gate record](./gates/3b.md)) |
 | 4 | Targets are registered and observed truthfully | none: G4 accepted 2026-10-07 under the owner's conditional delegation ([gate record](./gates/4.md)); external-cluster support is generic, using it for REOSA is OD-7, Wave 10 |
-| 5 | Node agent with capabilities, no shell | none: OD-17, OD-18 and OD-20 resolved 2026-10-07; authorized by the owner's Wave 5 order, starts from the G4 acceptance and freeze commit |
-| 6 | Migrations planned, applied, verified, with staging evidence | OD-6 (production provenance), OD-14, OD-15, OD-16 (OD-9, approvals, resolved 2026-10-05) |
-| 7 | AI agents work through MCP with the same engine | OD-13 |
+| 5 | Node agent with capabilities, no shell | none: OD-17, OD-18 and OD-20 resolved 2026-10-07; authorized by the owner's Wave 5 order; G5 accepted 2026-10-12 with items 2 and 4 waived ([gate record](./gates/5.md)) |
+| 6 | Migrations planned, applied, verified, with staging evidence | none: OD-6, OD-14, OD-15, OD-16 resolved 2026-10-12 by the owner's Wave 6 order (OD-9 resolved 2026-10-05); G6 accepted 2026-10-12 ([gate record](./gates/6.md)) |
+| 7 | AI agents work through MCP with the same engine | none: OD-13 and OD-29 resolved 2026-10-12 by the owner's Wave 7 order; built on a branch (`davdxpx/ExponetDB#16`, not merged), G7 awaits the owner ([gate record](./gates/7.md)) |
 | 8 | Web App on the design system | OD-1, OD-11 |
 | 9 | Backups proven by restores; diagnostics and advisors | OD-4, OD-8 (final legal retention setting) |
 | 10 | REOSA uses ExponetDB for its current databases | OD-7 |
@@ -156,7 +156,7 @@ Ordering rules between 3A, 3B and later waves:
 | Tests | fingerprint determinism across runs, sessions and PostgreSQL 16/17/18; plan-guard budget on a large catalog; hostile identifier fixtures; health failed-read tests; drift detection against fixtures |
 | Docs requirement | adapter coverage table per PostgreSQL version |
 | Abort criteria | fingerprints not deterministic across minor versions: narrow the canonical document before migrations depend on it |
-| State | **[OBSERVED]** (2026-10-07) authorized by the owner on 2026-10-06 together with the acceptance of G3B; implemented in `davdxpx/ExponetDB#8` (merge `e2efd04`); a fresh review before acceptance found defects, corrected in `davdxpx/ExponetDB#10` (merge `04b2e77`); **G4 accepted on 2026-10-07 under the owner's conditional delegation** (the Wave 5 order) on the verified baseline `04b2e7705df8047aa89f4c28670cfb75a4e11bea` ([gate record](./gates/4.md) §9, §10). `fp1` and the Wave 4 bundles `registry` and `observation` are frozen since then. The adapter coverage per major is the recorded differences of [`schema-fingerprints.md`](../03-database-model/schema-fingerprints.md) and the gate record §4a. OD-22 (registration authority by declared tier) open. G2 deployment evidence outstanding |
+| State | **[OBSERVED]** (2026-10-07) authorized by the owner on 2026-10-06 together with the acceptance of G3B; implemented in `davdxpx/ExponetDB#8` (merge `e2efd04`); a fresh review before acceptance found defects, corrected in `davdxpx/ExponetDB#10` (merge `04b2e77`); **G4 accepted on 2026-10-07 under the owner's conditional delegation** (the Wave 5 order) on the verified baseline `04b2e7705df8047aa89f4c28670cfb75a4e11bea` ([gate record](./gates/4.md) §9, §10). `fp1` and the Wave 4 bundles `registry` and `observation` are frozen since then. The adapter coverage per major is the recorded differences of [`schema-fingerprints.md`](../03-database-model/schema-fingerprints.md) and the gate record §4a. OD-22 (registration authority by declared tier) was open at G4 and decided on 2026-10-12 by the Wave 6 order for the new registry workflows (the declared-tier field on clusters is not implemented yet). G2 deployment evidence outstanding |
 
 ## Wave 5: Node agent
 
@@ -172,7 +172,7 @@ Ordering rules between 3A, 3B and later waves:
 | Tests | protocol contract tests (TS ↔ Go); mTLS tests; failure injection (agent crash mid-job, network partition, clock skew); real PostgreSQL on a VM for config/roles/hba/TLS |
 | Docs requirement | host installation and enrollment runbook; RB-13 |
 | Abort criteria | the helper needs broader privileges than documented: stop and revise the capability design |
-| State | **[OBSERVED]** (2026-10-08) authorized by the owner's Wave 5 order after the G4 acceptance; Phases 0 to 6 built in `davdxpx/ExponetDB#12` and independently reviewed, every finding fixed or recorded for the owner ([G5 record](./gates/5.md), [ADR-0024](../01-architecture/adr/0024-node-trust-model.md); OD-23, OD-24, OD-25 decided). **Implementation complete; G5 awaits the owner**: items 1, 3, 5, 6, 7 PASS; items 2 and 4 NOT PROVEN until the current head runs on a real systemd host (CI `node-pg`, blocked by a GitHub Actions runner outage since 2026-10-08, or the owner's VM). OD-26 and OD-27 open; Waves 6 to 9 not started |
+| State | **[OBSERVED]** (2026-10-08) authorized by the owner's Wave 5 order after the G4 acceptance; Phases 0 to 6 built in `davdxpx/ExponetDB#12` and independently reviewed, every finding fixed or recorded for the owner ([G5 record](./gates/5.md), [ADR-0024](../01-architecture/adr/0024-node-trust-model.md); OD-23, OD-24, OD-25 decided). Implementation complete; G5 then awaited the owner: items 1, 3, 5, 6, 7 PASS; items 2 and 4 NOT PROVEN until the current head runs on a real systemd host (CI `node-pg`, blocked by a GitHub Actions runner outage since 2026-10-08, or the owner's VM). **[OBSERVED]** (2026-10-12) The review findings F1 to F9 were corrected in `davdxpx/ExponetDB#13` (merge `2380451`); **G5 accepted by the owner on 2026-10-12** ([gate record](./gates/5.md) §11): items 2 and 4 are waived with the expiry "before a node agent is installed on, or enrolled for, any real host"; the bundles `nodes` and `node-gateway-admission` are frozen; OD-26 and OD-28 resolved, OD-27 open |
 
 ## Wave 6: Migration engine
 
@@ -188,14 +188,15 @@ Ordering rules between 3A, 3B and later waves:
 | Tests | the G1 golden vectors still pass unchanged (append-only; new corpus cases are added as vectors); DAG property tests; advisory-lock concurrency tests; stale plan tests; failure catalog E1 to E30; legacy import against the REOSA-shaped fixture; non-transactional bundles |
 | Docs requirement | authoring guide for humans and agents; RB-05 |
 | Abort criteria | lexical checksum normalization misclassifies a corpus case: `c1` stays frozen (it is a stored contract since G1); introduce `c2` via ADR before Wave 7 |
+| State | **[OBSERVED]** (2026-10-12) authorized by the owner's Wave 6 order, which adopted OD-6, OD-14, OD-15 and OD-16 (option a), OD-22 for the new registry workflows and OD-26 (c); implemented in `davdxpx/ExponetDB#14` (merge `c7e8bc7`); **G6 accepted by the owner on 2026-10-12** ([gate record](./gates/6.md) §10), with the failure cases E16, E18, E25 and the node part of criterion 14 waived with expiries; deployed on `reos-01` on 2026-10-12 ([record](../12-operations/deployments/2026-10-12-reos-01-wave6.md)). The Wave 6 Control Store bundles are frozen. CI has never run (not waived). Open: the declared-tier field on clusters (OD-22), OD-21, OD-27, G2 off-host deployment evidence |
 
 ## Wave 7: MCP
 
 | | |
 |---|---|
 | Goal | AI agents use ExponetDB through MCP with the same engine, scopes and policies as humans |
-| Non-goals | any tool that executes arbitrary SQL, approves plans or activates break-glass |
-| Dependencies | G3B and Wave 6 (a read-only tool slice may ship after Wave 4, but never before G3B); OD-13 |
+| Non-goals | any tool that executes writing or unadmitted SQL (`sql_query` and `sql_explain` run one statement that the data-read admission classifies as read-only, in a read-only transaction with caps; [ADR-0028](../01-architecture/adr/0028-data-read-lane.md)), approves plans, activates break-glass, or plans or applies a node change (OD-29 (c)) |
+| Dependencies | G3B and Wave 6 (a read-only tool slice may ship after Wave 4, but never before G3B); OD-13 and OD-29 (F9), both resolved 2026-10-12 by the owner's Wave 7 order |
 | Architecture docs | [`../05-mcp/architecture.md`](../05-mcp/architecture.md), [`../05-mcp/tool-catalog.md`](../05-mcp/tool-catalog.md), [`../05-mcp/oauth.md`](../05-mcp/oauth.md), [`../08-auth-and-security/ai-agent-safety.md`](../08-auth-and-security/ai-agent-safety.md) |
 | Deliverables | `/mcp` endpoint (Streamable HTTP, both protocol eras), tool catalog with output schemas and untrusted labels, URL elicitation for approvals, resource metadata, tested client configurations (Claude Code, Claude, Cursor, Codex, VS Code) |
 | Acceptance gate | G7 |
@@ -203,6 +204,7 @@ Ordering rules between 3A, 3B and later waves:
 | Tests | MCP contract tests per protocol version; tool I/O schema tests; replay of recorded agent sessions |
 | Docs requirement | per-client setup guides |
 | Abort criteria | a protocol version change breaks both eras: pin, document, fix before Wave 10 |
+| State | **[OBSERVED]** (2026-10-13) authorized by the owner's Wave 7 order on 2026-10-12, based on the acceptance branch `c701e2e`; its entry conditions are decided: OD-13 (a) and OD-29 (c) ([open decisions](../00-product/open-decisions.md#decisions-of-the-wave-7-order-2026-10-12)). Phases 1 to 11 done on a branch (`davdxpx/ExponetDB#16`, not merged); nothing deployed; **G7 awaits the owner**, with criterion 13 (real clients) `NOT PROVEN` and CI never run ([gate record](./gates/7.md)) |
 
 ## Wave 8: Web App and Supabase-reference adoption
 

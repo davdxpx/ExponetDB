@@ -9,6 +9,14 @@ export {
   lowersSafety,
 } from './catalog/access.ts'
 export {
+  DATA_READ_MODES,
+  DATA_RULES,
+  type DataReadMode,
+  dataRead,
+  SENSITIVE_COLUMN_PATTERN,
+} from './catalog/data.ts'
+export {
+  AGENT_PRODUCTION_KINDS,
   AUTOCOMMIT_KINDS,
   type EvidenceFact,
   type LineageFact,

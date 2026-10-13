@@ -29,10 +29,13 @@
     "secrets": "bun --conditions=@exponetdb/source tooling/checks/secrets.ts",
     "go:test": "cd agent/node && go vet ./... && go test -race -count=1 ./...",
     "smoke:image": "docker build -t exponetdb:local . && bash tooling/smoke/roles.sh exponetdb:local",
-    "verify": "bun run check && bun run typecheck && bun run test && bun run test:integration && bun run test:e2e && bun run build && bun run verify:generated && bun run golden:check && bun run golden:history origin/main && bun run golden:history 6e556f6b5a26ba141f600d38f612134af3600e49 && bun run boundaries && bun run secrets && bun run go:test",
+    "verify": "bun run check && bun run typecheck && bun run test && bun run test:integration && bun run test:e2e && bun run --cwd apps/server test:conformance && bun run build && bun run verify:generated && bun run golden:check && bun run golden:history origin/main && bun run golden:history 6e556f6b5a26ba141f600d38f612134af3600e49 && bun run boundaries && bun run secrets && bun run go:test",
     "golden:check": "bun --conditions=@exponetdb/source tooling/checks/golden-lock.ts",
     "golden:history": "bun --conditions=@exponetdb/source tooling/checks/golden-history.ts",
-    "golden:lock": "bun --conditions=@exponetdb/source tooling/checks/golden-lock.ts --append"
+    "golden:lock": "bun --conditions=@exponetdb/source tooling/checks/golden-lock.ts --append",
+    "mcp:conformance": "bun run --cwd apps/server test:conformance mcp-conformance",
+    "mcp:inspect": "bun run --cwd apps/server test:conformance mcp-inspector",
+    "mcp:evals": "bun run --cwd apps/server test:evals"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

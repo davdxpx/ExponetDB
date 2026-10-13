@@ -57,7 +57,7 @@ state directly.
 |---|---|---|
 | `POST /targets/{id}/queries` | run a read-only query | `data.read:<tier>` |
 | `POST /targets/{id}/explain` | EXPLAIN / EXPLAIN ANALYZE (read-only) | `data.read:<tier>` |
-| `DELETE /queries/{queryId}` | cancel own query | same as the query |
+| `POST /targets/{id}/queries/{queryId}/cancel` | cancel own running query (Wave 7: the caller names the query by the `qry_` id it chose; another caller's query reads as not found) | `data.read:<tier>`, same identity, client and grant as the query |
 
 ## Migrations
 
@@ -120,7 +120,7 @@ answers `REAUTH_REQUIRED`. A Web App session never names a receipt
 | `POST /approvals/{id}/approve`, `POST /approvals/{id}/reject` | decide the plan of the operation `{id}` awaiting approval (requires recent re-auth; body includes `planHash`, the acknowledgement of a self-approval and, from Wave 6 when required, the compatibility attestation) | `plans.approve` (Web App session only) |
 | `GET /operations`, `GET /operations/{id}` | operations, newest first; filters `target`, `kind`, `state`, `actor=self`; cursor pages. **[DECIDED]** Wave 6: an operation carries its `steps` (from the driver's events), `waitingFor` (a lock wait), `observedAt`, the monotonic `lastEventId` and the server's `nextAction`; a watcher polls this read (no SSE in V1) | same as `GET /plans/{id}` |
 | `GET /operations/{id}/events` | step events **[PLANNED]** (not served in Wave 6: `lastEventId` and `steps` on the operation carry what a watcher needs) | same |
-| `POST /operations/{id}/cancel` | cancel an operation that has not started (`awaiting_approval`, `queued`); `OPERATION_NOT_CANCELABLE` otherwise; a running operation is never interrupted (Wave 6) | the actor that applied the plan (same identity and client), with the plan kind's apply permission |
+| `POST /operations/{id}/cancel` | cancel an operation that has not started (`awaiting_approval`, `queued`); `OPERATION_NOT_CANCELABLE` otherwise; a running operation is never interrupted (Wave 6) | the actor that applied the plan (same identity, client kind and registered client; otherwise `PLAN_BINDING_ACTOR`), with the plan kind's apply permission |
 | `POST /operations/{id}/retry-verification` | verify again an operation that needs attention after an applied change whose verification errored or never finished (`needs_attention` to `verifying` by the worker; the change is never run again); `OPERATION_NOT_RETRYABLE` otherwise (Wave 6) | anyone with the plan kind's apply permission on the plan's subject |
 | `POST /break-glass-grants` | activate break-glass (human, re-auth, reason, rules, targets, duration) | `breakglass.activate` (Web App/CLI session only) |
 | `POST /break-glass-grants/{id}/review` | post-incident review | admin |
@@ -217,7 +217,13 @@ with an `Authorization` header is `AMBIGUOUS_CREDENTIALS`; two
 error="invalid_token", resource_metadata="…/.well-known/oauth-protected-resource/api"`;
 no credential at all is `401` with the `resource_metadata` challenge. A
 bearer credential is no ambient authority, so bearer requests need neither
-`Origin` nor the CSRF token. When the identity holds the permission but the
+`Origin` nor the CSRF token, and `/api/v1` does not check an `Origin` a
+bearer request sends. **[DECIDED]** (Wave 7) `/mcp` differs: it checks a
+present `Origin` before authentication and refuses one outside its
+allowlist with `403`; a request without `Origin` (a native client) passes
+and still needs a token
+([`../05-mcp/architecture.md` §3](../05-mcp/architecture.md#3-transport)).
+When the identity holds the permission but the
 token lacks the scope, the answer is `403 INSUFFICIENT_SCOPE` with
 `details.requiredScope` and `WWW-Authenticate: Bearer
 error="insufficient_scope", scope="…", resource_metadata="…"` (step-up). The
@@ -239,7 +245,7 @@ error="insufficient_scope", scope="…", resource_metadata="…"` (step-up). The
 | `GET /role-bindings` | role bindings, filter by identity and state | `access.read` |
 | `POST /role-bindings`, `DELETE /role-bindings/{bindingId}` | bind or unbind a role at a scope; the response is the plan with before, after and risk analysis | `access.manage` — plan |
 | `GET /policy-settings` | policy rules, defaults and configured revisions | `access.read` |
-| `POST /policy-settings/plans` | plan a rule parameter change (analysis tighter, weaker or unknown per parameter) | `policy.manage` — plan |
+| `POST /policy-settings/plans` | plan a rule parameter change for the installation or, since Wave 7, one target (analysis tighter, weaker or unknown per parameter) | `policy.manage` — plan |
 | `GET /me/grants` | connected applications of the caller: client (registration, trust), resource, scopes, restrictions, consent time, expiry, last token (Wave 3B) | self |
 | `POST /me/grants/{grantId}/revoke` | revoke an own grant: every access and refresh token of it stops at once (inline plan) | self |
 | `GET /grants` | grants of every identity, filter by identity and state | `access.read` |
@@ -262,7 +268,7 @@ error="insufficient_scope", scope="…", resource_metadata="…"` (step-up). The
 
 | Method & path | Purpose | Scope |
 |---|---|---|
-| `GET /audit-events` | search, newest first; filters `from`, `to`, `target`, `action`, `actor=self`, `result`; opaque cursor. **[DECIDED]** (served from Wave 6) actors stay pseudonymous; a change description, the request pseudonyms and the decision are not part of the read view; a stored event the view cannot vouch for answers `CONTROL_PLANE_DEGRADED`, never an invented row | `audit.read` at the installation, or covering the `target` for its events only |
+| `GET /audit-events` | search, newest first; filters `from`, `to`, `target`, `action`, `actor` (`self` or `any`), `result`, and since Wave 7 `client` (a `cli_` id) and `grant` (a `grt_` id); no plan or operation filter (an event names them in `refs`); opaque cursor. **[DECIDED]** (served from Wave 6) actors stay pseudonymous; a change description, the request pseudonyms and the decision are not part of the read view; a stored event the view cannot vouch for answers `CONTROL_PLANE_DEGRADED`, never an invented row | `audit.read` at the installation, or covering the `target` for its events only |
 | `GET /audit-events/chain` | chain head, last verified checkpoint | `audit.read` |
 
 ## Installation
@@ -278,8 +284,8 @@ error="insufficient_scope", scope="…", resource_metadata="…"` (step-up). The
 |---|---|---|
 | `/healthz/live` | process liveness | none |
 | `/healthz/ready` | readiness (Control Store, migrations at expected version, keys loaded for the role) | none; returns no details publicly |
-| `/.well-known/oauth-protected-resource[/mcp|/api]`, `/.well-known/oauth-authorization-server`, `/.well-known/openid-configuration` | discovery | none |
-| `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`, `/oauth/register` | OAuth AS | per spec |
+| `/.well-known/oauth-protected-resource/mcp`, `/.well-known/oauth-protected-resource/api`, `/.well-known/oauth-authorization-server` | discovery (RFC 9728, RFC 8414). **[DECIDED]** (G3B, D2) Not served: `/.well-known/openid-configuration` (ExponetDB issues no ID tokens) and a root `/.well-known/oauth-protected-resource` | none |
+| `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`, `/oauth/register`, `/oauth/device_authorization` | OAuth AS (the device endpoint: RFC 8628, first-party CLI only) | per spec |
 | `/mcp` | MCP | bearer |
 
 ## Example: plan a migration (OpenAPI fragment, documentation only)

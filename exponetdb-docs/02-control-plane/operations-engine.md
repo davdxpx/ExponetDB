@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 skeleton (§11) accepted with G2 on 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; Wave 2 skeleton (§11) accepted with G2 on 2026-10-05; plans and operations from MCP (§12) added on 2026-10-13, G7 not yet accepted ([G7 record](../14-roadmap/gates/7.md)) |
 | Applies to | Wave 2 (framework), every later wave that adds an operation kind |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md) Part II, [`policy-engine.md`](./policy-engine.md), [`error-model.md`](./error-model.md) |
 | Decision | [ADR-0011](../01-architecture/adr/0011-plan-apply-operations-engine.md) |
@@ -167,6 +167,15 @@ state: active
 `planHash` is shown to humans (shortened) in approvals and returned to agents,
 so that "the plan I reviewed" and "the plan that ran" are provably the same.
 
+**[OBSERVED]** (2026-10-13, `packages/operations/src/plans.ts`) The plans the
+engine stores bind the actor as `{kind, identityId}` and the client as
+`{kind, clientId}` (the client kind as recorded, see
+[`audit.md` §1](./audit.md#1-event-shape), and the registered OAuth client,
+`null` when there is none). The grant a
+delegated caller acted through is **not** part of the plan body or its hash;
+it is named in the audit events (`client.grantId`, §12). The sketch above
+shows the members, not their final fields.
+
 **[DECIDED]** Plan-hash construction (Wave 1 clarification; implemented in
 `packages/kernel`, independently in the Go conformance implementation, and
 pinned by golden vectors):
@@ -254,6 +263,10 @@ active ──actor withdraws──▶ withdrawn          (terminal)
 
 A plan is created even when the policy decision is `deny`: the caller gets the
 full explanation and the denial is auditable. A denied plan can never be applied.
+**[OBSERVED]** (2026-10-13, `packages/operations/src/accept.ts`) Applying one
+is `PLAN_DENIED` (HTTP 403, a tool error over MCP) for the plan's own actor and
+client, in the REST API, the CLI (exit 4) and MCP alike; it is never reported
+as `PLAN_STALE`. Another caller gets `PLAN_BINDING_ACTOR` first.
 
 ## 4. Operations
 
@@ -389,8 +402,11 @@ are specified in [`../07-node-agent/protocol.md`](../07-node-agent/protocol.md).
 1. **Plan id** (stored plans). `apply(planId)` is idempotent: the first accepted
    request consumes the plan and creates the operation (`operations.plan_id` is
    unique). A repeated request with the same plan id by the same actor and client
-   returns the existing operation with HTTP 200 / tool result `alreadyAccepted:
-   true`. Any other caller gets `PLAN_ALREADY_USED`.
+   returns the existing operation. Any other caller gets `PLAN_ALREADY_USED`.
+   **[OBSERVED]** (2026-10-13) The engine's `alreadyAccepted` flag is internal
+   (`packages/operations/src/accept.ts`): the REST route answers `202` with
+   the same operation view for a repeated call, and the MCP tool `plan_apply`
+   returns the same operation; neither carries the flag.
 2. **Precondition tokens** (inline plans). The request carries the observed
    identity of the object (for a cancel: `pid` + `backend_start` + `query_start`, so
    that a newer query of the same backend is never canceled; or a backup id
@@ -628,3 +644,65 @@ without product kinds; tests drive it with synthetic kinds.
   runs. Approvals, re-authentication, break-glass grants and node jobs are
   later waves.
 
+## 12. Plans and operations from MCP (Wave 7)
+
+**[OBSERVED]** (2026-10-13; `apps/server/test/mcp-plans.int.test.ts`,
+`packages/application/src/application.ts`, `packages/operations/src/accept.ts`,
+`packages/application/src/views.ts`; G7 not yet accepted,
+[G7 record §5.2d](../14-roadmap/gates/7.md#52d-phase-6-plan-tools-apply-operations-attribution))
+MCP is an interface over the same engine and the same plan kinds
+([`../05-mcp/tool-catalog.md`](../05-mcp/tool-catalog.md) §4, §5); its tools
+call the application use cases that REST calls.
+
+- **Plans created by MCP clients.** `migration_plan` (`migration.apply`) and
+  `migration_rollback_plan` (`migration.rollback`) are the only tools that
+  create plans; `migration_verify` starts a verification operation. No MCP
+  tool plans a node, access, registry or restore change
+  ([OD-29](../00-product/open-decisions.md#od-29-node-changes-by-machine-callers-through-mcp-g5-follow-up-f9)).
+  `breakGlassGrantId` is not an argument of any tool (the strict input
+  refuses it with `VALIDATION_FAILED`; break-glass stays human-only, §8).
+- **Attribution.** A plan or operation made through MCP names the person
+  (`actor.via: mcp`) and the registered client (`clientId`). The plan binds
+  the actor and the client kind and registered client only (§3.1); the grant
+  is recorded in the audit (`client.grantId` on `plan.created` and
+  `operation.accepted`), and the worker's events of the operation link to it
+  through `refs.operationId`. `audit_search` and `GET /audit-events` filter by
+  `client` and `grant`.
+- **`plan_apply` is idempotent in the plan id** (§5): a retry by the same
+  person through the same client returns the same operation. For an active
+  plan, another person or another client of the same person gets
+  `PLAN_BINDING_ACTOR`; once the plan is consumed, anyone but the applying
+  actor and client gets `PLAN_ALREADY_USED`. The tool takes only the plan id.
+- **Production by an agent.** The policy decision for a production plan made
+  by an agent is `require` (human approval) when the other rules pass:
+  `plan_apply` returns the
+  operation `awaiting_approval` with `approvalUrl`
+  (`<public origin>/approvals#operation=op_…`, [ADR-0029](../01-architecture/adr/0029-approval-link-from-mcp.md));
+  the agent hands the link to its person, who approves in the Web App; an
+  agent can never approve (§6). Nonprod plans need no approval.
+- **`PLAN_DENIED`** for a denied plan (production without staging evidence,
+  for instance): §3.4. The plan is returned with its explanation by
+  `migration_plan`, and applying it is refused.
+- **`HUMAN_APPLY_REQUIRED`** (HTTP 403, a tool error over MCP): a `critical`
+  plan (for example a `lossy` rollback on production) may be proposed by an
+  agent but is applied only by a person (CLI, or a Web App session for a
+  released cooling operation) with a fresh re-authentication. A plan is
+  bound to the caller who made it (§3.1), so the person cannot apply the
+  agent's plan id (`PLAN_BINDING_ACTOR`); they make the plan again (for a
+  rollback `exponetdb migration rollback <migration>`) and apply their own.
+  The error carries the plan id and says so. It is given only when the
+  class is the sole obstacle, and the refusal is audited as `authz.denied`
+  (engine reason `client_kind`).
+- **`operation_get` with `waitSeconds`** (at most 20) waits at most that long
+  for the next change of the state, apply outcome or verification outcome and
+  answers at once for a final state; it observes and never re-executes
+  anything. A dropped request never cancels an accepted operation.
+- **Cancel** (`operation_cancel`, `POST /operations/{id}/cancel`) is bound to
+  the applying actor: the identity, the client kind **and** the registered
+  client, as apply and withdraw are. Another client of the same person is
+  `PLAN_BINDING_ACTOR` (a defect found by the Annex B sweep of Wave 7 and
+  fixed in `application.ts`); an operation that has started is
+  `OPERATION_NOT_CANCELABLE`.
+- **Fail closed.** A plan whose audit event cannot be written is not made
+  (§11). `mcp-data.int.test.ts` revokes the audit insert grant: a data read
+  returns no rows and a plan fails.

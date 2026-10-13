@@ -161,13 +161,24 @@ export function errorCodeOf(error: unknown): ErrorCode {
   return 'INTERNAL'
 }
 
-function detailsOf(
+export function detailsOf(
   error: unknown,
   code: ErrorCode,
-  context: { readonly planId?: string },
+  context: { readonly planId?: string; readonly retryAfterSeconds?: number },
 ): unknown {
   if (!(error instanceof Error)) {
     return undefined
+  }
+  if (code === 'RATE_LIMITED') {
+    // The wait of the Retry-After header, also in the body (MCP has no header).
+    const after =
+      context.retryAfterSeconds ??
+      ('retryAfterSeconds' in error && typeof error.retryAfterSeconds === 'number'
+        ? error.retryAfterSeconds
+        : undefined)
+    if (after !== undefined) {
+      return { retryAfterSeconds: Math.max(1, Math.ceil(after)) }
+    }
   }
   if (code === 'PLAN_STALE' && 'changedBindings' in error && Array.isArray(error.changedBindings)) {
     return context.planId === undefined

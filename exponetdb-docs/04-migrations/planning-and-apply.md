@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; §8 updated on 2026-10-13 for the MCP tools of Wave 7 (G7 not yet accepted, [G7 record](../14-roadmap/gates/7.md)) |
 | Applies to | Wave 6 |
 | Read before | [`README.md`](./README.md), [`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md), [`migration-bundles.md`](./migration-bundles.md), [`dependency-graph.md`](./dependency-graph.md) |
 | Related | [`analysis.md`](./analysis.md), [`concurrency.md`](./concurrency.md), [`verification.md`](./verification.md), [`staging-production-policy.md`](./staging-production-policy.md) |
@@ -360,9 +360,22 @@ The default here is therefore a behavior change for REOSA and is called out in
 | Moment | REST | MCP |
 |---|---|---|
 | plan | `201` with plan body | `migration_plan` result: structured plan + short summary text |
-| apply accepted | `202` + `Location: /api/v1/operations/op_…` | `plan_apply` returns operation handle (`op_…`), state, and either "awaiting approval" with the approval URL or "queued" |
-| progress | `GET /operations/{id}` (events, current migration, statement index) | `operation_get(op_…)` tool; Tasks extension when the client declares it |
+| apply accepted | `202` with the operation (see the note below) | `plan_apply` returns operation handle (`op_…`), state, and either `awaiting_approval` with the `approvalUrl` (`<public origin>/approvals#operation=op_…`) or `queued`; a modern-era client that declared URL elicitation also gets the link as an elicitation |
+| progress | `GET /operations/{id}` (events, current migration, statement index) | `operation_get(op_…)`, optionally with `waitSeconds` (at most 20) to wait for the next change of state; the Tasks extension is not offered (owner decision 8, 2026-10-12) |
 | outcome | operation with `applyOutcome`, `verificationOutcome` per migration | same structure |
+
+**[OBSERVED]** (2026-10-13; `packages/contracts/src/rest/routes.ts`,
+`apps/server/src/interfaces/mcp/registry.ts`, `apps/server/test/mcp-plans.int.test.ts`;
+G7 not yet accepted) The REST route `applyPlan` answers `202` with the
+operation body, also for a repeated call; the server sends no `Location`
+header yet. The MCP tools call the same use cases as the REST routes
+(`planMigrations`, `applyPlan`, `getOperation`): the planning and apply
+algorithms of §3 and §4 and the locking rules of
+[`concurrency.md`](./concurrency.md) are unchanged by Wave 7. What differs by
+caller is only the policy input: an agent's production plan is decided
+`require` (approval in the Web App), a `critical` plan is applied by a person
+(`HUMAN_APPLY_REQUIRED` for an agent), and a denied plan is refused with
+`PLAN_DENIED` ([`../02-control-plane/operations-engine.md` §12](../02-control-plane/operations-engine.md#12-plans-and-operations-from-mcp-wave-7)).
 
 ## 9. Edge cases
 

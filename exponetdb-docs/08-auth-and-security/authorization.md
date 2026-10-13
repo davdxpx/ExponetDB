@@ -145,6 +145,22 @@ engine decides; the delegation can only take away.
   except reading the installation itself, passes only an unrestricted
   grant. A nonprod grant therefore cannot manage access or reach
   production through a container.
+- **Lists for restricted grants** **[DECIDED]** (Wave 7 order §22, the
+  recommendation adopted): an installation-wide read list shows a
+  restricted grant what it covers instead of refusing the whole list, and
+  never names anything else. `node.list` lists the nodes whose server the
+  grant covers (the server's derived tier; a server without a known tier
+  passes only an unrestricted grant); `audit.search` without a target lists
+  the events whose subject names a target the grant covers and whose audit
+  the identity may read (installation-wide events never); `operation.list`
+  and `plan.list` already decide each item. Each list examines at most
+  2 000 candidates per call and continues with its cursor. The same use
+  case serves REST and MCP, so a restricted CLI token or API key sees the
+  same filtered list. `migration.lint` (a project subject) stays refused to
+  a restricted grant, and `tools/list` does not offer it to one; an agent
+  lints through `migration_plan` on a target it covers. Tests:
+  `apps/server/test/mcp.int.test.ts` ("lists nodes and audit events of what
+  a restricted grant covers").
 - **No presence.** A delegated principal never has a fresh
   re-authentication, never reaches `self` actions (own sessions, factors,
   grants, consent) and never satisfies a policy `reauth` requirement;
@@ -289,7 +305,7 @@ matters ([C-24](../00-product/constitution.md#c-24-production-is-its-own-authori
 | `schema.read` | `schema.read` | yes | baseline |
 | `diagnostics.read` | `diagnostics.read` | yes | baseline; statements redacted |
 | `data.read:nonprod` | `data.read` | yes | |
-| `data.read:prod` | `data.read` | yes, but policy default `humans_only` on prod targets ([OD-13](../00-product/open-decisions.md#od-13-data-reads-by-ai-agents-on-production)) | |
+| `data.read:prod` | `data.read` | yes, but the default of the policy rule `data.read` (`by_tier`) is `humans_only` on prod targets ([OD-13](../00-product/open-decisions.md#od-13-data-reads-by-ai-agents-on-production)) | |
 | `migrations.read` | `migrations.read` | yes | |
 | `migrations.plan` | `migrations.plan` | yes | |
 | `migrations.apply:nonprod` | `migrations.apply` | yes | |

@@ -37,6 +37,8 @@ export {
   migrationDetail,
   migrationStatus,
   type ReadDeps,
+  type ReviewFile,
+  reviewFiles,
 } from './reads.ts'
 export { type Progress, readProgress } from './records.ts'
 export {

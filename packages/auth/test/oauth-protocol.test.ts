@@ -198,6 +198,22 @@ describe('bearer header (RFC 6750 §2.1)', () => {
     ).toBe(
       'Bearer error="insufficient_scope", resource_metadata="https://db.example.test/.well-known/oauth-protected-resource/api", scope="migrations.apply:nonprod"',
     )
+    // MCP: a first challenge names the baseline scopes; a step-up names held and needed ones.
+    expect(
+      oauth.bearerChallenge('https://db.example.test', 'mcp', {
+        scope: ['targets.read', 'schema.read', 'diagnostics.read'],
+      }),
+    ).toBe(
+      'Bearer resource_metadata="https://db.example.test/.well-known/oauth-protected-resource/mcp", scope="targets.read schema.read diagnostics.read"',
+    )
+    expect(
+      oauth.bearerChallenge('https://db.example.test', 'mcp', {
+        code: 'insufficient_scope',
+        scope: ['migrations.apply:nonprod', 'targets.read'],
+      }),
+    ).toBe(
+      'Bearer error="insufficient_scope", resource_metadata="https://db.example.test/.well-known/oauth-protected-resource/mcp", scope="migrations.apply:nonprod targets.read"',
+    )
   })
 })
 

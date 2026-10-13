@@ -1,5 +1,5 @@
 import { appendAuditEvent } from '@exponetdb/audit'
-import type { Tx } from '@exponetdb/control-store'
+import { EXDB_LOCK_NAMESPACE, lockKey2, type Tx } from '@exponetdb/control-store'
 import { type Clock, isJsonArray, isJsonObject, newId } from '@exponetdb/kernel'
 import type { Recheck, Requirement } from '@exponetdb/policy'
 import { auditActor, auditClient, type OperationActor, sameCaller } from './actors.ts'
@@ -120,6 +120,33 @@ async function invalidate(
   }
 }
 
+/**
+ * At most this many operations of one actor through one client wait for an
+ * approval at a time (Wave 7): a caller, an agent above all, cannot fill a
+ * person's approval queue. A further accept that would wait is
+ * `APPROVALS_PENDING_LIMIT`, and the plan stays active.
+ */
+export const MAX_PENDING_APPROVALS = 20
+
+async function pendingApprovalsFull(tx: Tx, actor: OperationActor): Promise<boolean> {
+  // Serializes the count per actor and client, so concurrent accepts cannot pass it together.
+  await tx.query('operations.approvals.lock', 'SELECT pg_advisory_xact_lock($1::int, $2::int)', [
+    EXDB_LOCK_NAMESPACE,
+    lockKey2(
+      `operations/approvals/${actor.kind}/${actor.identityId ?? ''}/${actor.client}/${actor.clientId ?? ''}`,
+    ),
+  ])
+  const { rows } = await tx.query(
+    'operations.approvals.pending',
+    `SELECT count(*)::int AS n FROM operations.operations
+      WHERE state = 'awaiting_approval' AND actor_kind = $1
+        AND actor_id IS NOT DISTINCT FROM $2 AND client_kind = $3
+        AND client_id IS NOT DISTINCT FROM $4`,
+    [actor.kind, actor.identityId, actor.client, actor.clientId],
+  )
+  return (rows[0]?.int('n') ?? 0) >= MAX_PENDING_APPROVALS
+}
+
 export async function acceptPlan(
   tx: Tx,
   request: AcceptRequest,
@@ -184,6 +211,9 @@ export async function acceptPlan(
     }
   }
   const awaitingApproval = requirements.some((r) => r.kind === 'approval')
+  if (awaitingApproval && (await pendingApprovalsFull(tx, request.actor))) {
+    return { status: 'refused', error: new OperationError('APPROVALS_PENDING_LIMIT') }
+  }
   await endPlan(tx, plan, 'consumed', request.actor, { clock: deps.clock })
   const operationId = newId('op', deps.clock.nowMs())
   const state = awaitingApproval ? 'awaiting_approval' : 'queued'

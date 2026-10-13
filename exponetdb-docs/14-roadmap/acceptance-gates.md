@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; the G7 entry updated on 2026-10-13 (in progress, awaits evidence and the owner) |
 | Read before | [`implementation-waves.md`](./implementation-waves.md), [`test-strategy.md`](./test-strategy.md) |
 
 A gate is passed when **every item has evidence** (a test run, a recorded
@@ -147,6 +147,20 @@ covered cases) with expiries; no security item is waived.
 - [x] **S** `down.sql` never runs automatically
 
 ### G7: MCP
+
+**[OBSERVED]** (2026-10-13) **In progress; awaits evidence and the owner.**
+Wave 7 was authorized on 2026-10-12 (the owner's Wave 7 order; OD-13 (a) and
+OD-29 (c) decided with it). Development and disposable tests only, nothing is
+deployed, and no box below is ticked: only the owner accepts G7. The gate
+record, [`gates/7.md`](./gates/7.md), holds the criteria of the order with
+their contract, implementation and evidence columns (§6), the evidence per
+phase (§5) and the limits (§8). It records, for example, the item "at least
+three real clients" as **NOT PROVEN** (one real client connected, no model
+run, no OAuth sign-in in a real client; the owner test package
+[`../05-mcp/owner-test-package.md`](../05-mcp/owner-test-package.md) is the
+guide) and "land on the plan review page" as partial by design (owner
+decision 5: the link opens the existing approvals page until Wave 8). The
+boxes below are the wave's gate wording and stay open.
 
 - [ ] Both protocol eras pass contract tests; tested with at least three real clients
 - [ ] Tool outputs match their schemas; untrusted fields labeled; caps enforced

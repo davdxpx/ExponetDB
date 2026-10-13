@@ -4,13 +4,18 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "Test infrastructure for managed targets (tests only, never imported by product code): the disposable PostgreSQL 16, 17 and 18 servers with TLS, fresh databases, hostile, REOSA-shaped and large-catalog fixtures, and a fault-injecting TLS proxy.",
+  "description": "Test infrastructure for managed targets (tests only, never imported by product code): the disposable PostgreSQL 16, 17 and 18 servers with TLS, fresh databases, hostile, REOSA-shaped and large-catalog fixtures, and a fault-injecting TLS proxy, and (subpath `./mcp`, Wave 7) the MCP reference client on the official SDK with the transcript recorder for replay tests.",
   "sideEffects": false,
   "exports": {
     ".": {
       "@exponetdb/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./mcp": {
+      "@exponetdb/source": "./src/mcp/index.ts",
+      "types": "./dist/mcp/index.d.ts",
+      "default": "./dist/mcp/index.js"
     }
   },
   "files": [
@@ -23,6 +28,7 @@
   },
   "dependencies": {
     "@exponetdb/kernel": "workspace:*",
+    "@modelcontextprotocol/client": "2.3.1",
     "pg": "8.23.1"
   },
   "devDependencies": {

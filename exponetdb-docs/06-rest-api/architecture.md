@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; §3 note, §7, §9 and §10 updated on 2026-10-13 for Wave 7 (G7 not yet accepted, [G7 record](../14-roadmap/gates/7.md)) |
 | Applies to | Wave 1 (contracts), Wave 2 (framework), every later wave (resources) |
 | Read before | [`../02-control-plane/error-model.md`](../02-control-plane/error-model.md), [`../01-architecture/versioning.md`](../01-architecture/versioning.md) |
 | Decision | [ADR-0018](../01-architecture/adr/0018-contracts-first.md) |
@@ -57,13 +57,19 @@ MCP and REST expose the same application services.
 |---|---|---|
 | Registry/access changes (admin) | `POST`/`PATCH`/`DELETE` on the resource, with `Idempotency-Key` | **creates a plan** when the change is consequential (most are): `201 Created` with the plan; applied via `POST /plans/{id}/apply`. Purely cosmetic changes (display names, labels) apply directly. |
 | Plans | `POST /targets/{id}/migrations/plans`, `POST /nodes/{id}/plans`, `POST /restores/plans`, … | `201` plan (including denied plans with `decision: deny`) |
-| Apply | `POST /plans/{id}/apply` | `202 Accepted` + `Location: /api/v1/operations/{op}` + operation body; `200` with the same body for a repeated call (idempotent) |
+| Apply | `POST /plans/{id}/apply` | `202 Accepted` + `Location: /api/v1/operations/{op}` + operation body; `200` with the same body for a repeated call (idempotent); see the **[OBSERVED]** note below |
 | Inline-plan actions | `POST /targets/{id}/sessions/{pid}/cancel` with precondition fields in the body | `200` result or `412 PRECONDITION_FAILED` |
 | Long-running status | `GET /operations/{id}` | state machine as in operations-engine.md |
 
 **[DECIDED]** No endpoint executes a consequential mutation without either a
 stored plan or an inline-plan precondition token (C-6). The contract test
 "every mutating route is registered as an action kind" enforces it.
+
+**[OBSERVED]** (2026-10-13; `packages/contracts/src/rest/routes.ts`
+`applyPlan`, `apps/server/src/interfaces/http/api.ts`) The apply route
+answers `202` with the operation body also for a repeated call, and the
+server sends neither a `Location` header nor `Idempotent-Replayed` (§4) yet.
+The rows above keep the Wave 0 decision; the answers are as observed here.
 
 ## 4. Idempotency
 
@@ -91,9 +97,23 @@ present (a request with both is rejected, to avoid ambiguous authorization).
 
 ## 7. Rate limits
 
-Per principal and per client: token bucket with defaults (reads 20/s burst 100;
-plans 2/s; applies 1/s; `data.read` 5/s). `429` with `Retry-After` and
-`RATE_LIMITED`. Separate, stricter limits for authentication endpoints.
+**[DECIDED]** (Wave 0, the defaults confirmed for `/mcp` by owner decision 9 of
+the Wave 7 order) Per principal and per client: token bucket with defaults
+(reads 20/s burst 100; plans 2/s; applies 1/s; `data.read` 5/s). `429` with
+`Retry-After` and `RATE_LIMITED`. Separate, stricter limits for authentication
+endpoints.
+
+**[OBSERVED]** (2026-10-13, Wave 7; G7 not yet accepted) These buckets are
+built for `/mcp` only: per grant and, at twice the rate, per identity, in the
+memory of `serve` (`apps/server/src/interfaces/mcp/rate-limit.ts`,
+`MCP_RATE_LIMITS` in `packages/contracts/src/mcp/protocol.ts`;
+[`../05-mcp/architecture.md`](../05-mcp/architecture.md) §3). `/api/v1` has no
+general per-principal bucket in the code. What it has: the failure limits of
+the authentication and OAuth endpoints
+([`../08-auth-and-security/identity.md`](../08-auth-and-security/identity.md) §9), and
+the concurrency bounds of the data-read lane, which the query routes (§10)
+share with `sql_query` (over a bound: `429 RATE_LIMITED` with `Retry-After`).
+**[PLANNED]** General REST buckets; no wave is assigned.
 
 ## 8. OpenAPI and SDK generation
 
@@ -110,3 +130,47 @@ plans 2/s; applies 1/s; `data.read` 5/s). `429` with `Retry-After` and
 changes are allowed with notice in the changelog. After GA: additive changes
 only; a breaking change creates `/api/v2` with at least 12 months of parallel
 support ([`../01-architecture/versioning.md`](../01-architecture/versioning.md)).
+
+**[OBSERVED]** (2026-10-13) **GA is not declared.** Wave 7 delivered a
+readiness report, not a declaration: [`ga-readiness.md`](./ga-readiness.md)
+lists what GA would cover (132 documented operations, 126 served), four criteria
+that are not met (documented surface equals served surface, a changelog, a CI
+run on the commit, off-host deployment evidence) and a recommendation to
+postpone. The owner decides at G7. Until then the pre-GA rule above applies,
+and Wave 7 changed four existing answers (a target outside the caller's role
+scope is `404 TARGET_NOT_FOUND`; every `404` leaves no earlier than 50 ms after
+the request began; applying a denied plan is `PLAN_DENIED`; cancelling an
+operation another client of the same person applied is `PLAN_BINDING_ACTOR`),
+as the report lists.
+
+## 10. Query routes (Wave 7)
+
+**[OBSERVED]** (2026-10-13; `packages/contracts/src/rest/routes.ts`,
+`packages/application/src/queries.ts`, `apps/server/test/mcp-data.int.test.ts`;
+G7 not yet accepted; [ADR-0028](../01-architecture/adr/0028-data-read-lane.md))
+
+| Operation | Route | Notes |
+|---|---|---|
+| `runQuery` (`query.run`) | `POST /targets/{target}/queries` | one read-only statement in a read-only transaction, with caps |
+| `explainQuery` (`query.explain`) | `POST /targets/{target}/explain` | `EXPLAIN` of one read-only statement; the plan is redacted; `ANALYZE` is refused for an agent |
+| `cancelQuery` (`query.cancel`) | `POST /targets/{target}/queries/{queryId}/cancel` | cancels one of the caller's own running reads (the same identity, client and grant) |
+
+They are the REST form of the MCP tools `sql_query`, `sql_explain` and
+`sql_cancel` and call the same use cases. All three are class `read`: no
+plan, no `Idempotency-Key`. They need the scope `data.read:<tier>` and pass the
+policy rule `data.read`: on a production target an agent (every caller that is
+not a person in the Web App or the first-party CLI,
+[`../08-auth-and-security/identity.md`](../08-auth-and-security/identity.md) §11) reads no rows by default,
+as `403 DATA_READ_NOT_PERMITTED`. Caps: 500 rows for an agent, 5 000 for a
+person, 5 MiB, 60 s. A result over a cap is returned capped with
+`truncated: true`. The refusal codes (`QUERY_NOT_READ_ONLY`,
+`QUERY_CONSTRUCT_UNSUPPORTED`, `QUERY_PARSE_ERROR`, `QUERY_FAILED`,
+`QUERY_TIMEOUT`, `QUERY_RESULT_TOO_LARGE`, `QUERY_CANCELED`,
+`DATA_READ_NOT_PERMITTED`, `RATE_LIMITED`, `CAPABILITY_UNAVAILABLE`) are the
+contract's `errors` of the routes; `CAPABILITY_UNAVAILABLE` means no
+data-read worker runs, never an empty result. Concurrent reads are bounded at
+2 per grant (or person), 3 per target and 8 per installation. Every read is
+audited as `data.read` with the normalized statement, never a value, and
+before the rows are returned: if the audit cannot be written, no rows are
+returned.
+

@@ -269,10 +269,24 @@ export class NodeUseCases {
     )
   }
 
+  /**
+   * `node.list`. A grant restricted to tiers or targets sees the nodes whose
+   * server it covers (the server's derived tier; a server without a known
+   * tier passes only an unrestricted grant), never a refusal of the whole
+   * list (authorization.md §1, Wave 7 decision). At most `SCAN_LIMIT` nodes
+   * are examined per call; the cursor continues the scan.
+   */
   async nodes(
     caller: CallerLike,
     request: PageRequest,
   ): Promise<{ items: Node[]; nextCursor: string | null }> {
+    const restriction = this.#h.restrictions(caller)
+    if (
+      restriction !== undefined &&
+      (restriction.targetIds !== undefined || (restriction.tiers?.length ?? 2) < 2)
+    ) {
+      return this.#visibleNodes(caller, request)
+    }
     await this.#h.authorize(this.#h.store, 'node.list', caller, { kind: 'installation' })
     const page = await listNodes(
       this.#h.store,
@@ -282,6 +296,43 @@ export class NodeUseCases {
     return {
       items: page.items.map((n) => NodeSchema.parse(n)),
       nextCursor: page.more && page.last !== null ? encodeCursor(page.last) : null,
+    }
+  }
+
+  async #visibleNodes(
+    caller: CallerLike,
+    request: PageRequest,
+  ): Promise<{ items: Node[]; nextCursor: string | null }> {
+    const SCAN_LIMIT = 2000
+    await this.#h.admit(this.#h.store, 'node.list', caller)
+    const decided = new Map<string, boolean>()
+    const items: Node[] = []
+    let after = decodeCursor(request.cursor)
+    let scanned = 0
+    for (;;) {
+      const page = await listNodes(
+        this.#h.store,
+        { after, limit: Math.min(200, SCAN_LIMIT - scanned) },
+        this.#h.clock.nowMs(),
+      )
+      for (const node of page.items) {
+        scanned++
+        let allowed = decided.get(node.serverId)
+        if (allowed === undefined) {
+          allowed = await this.#h.allowed(this.#h.store, 'node.list', caller, {
+            kind: 'server',
+            serverId: node.serverId,
+          })
+          decided.set(node.serverId, allowed)
+        }
+        if (allowed) items.push(NodeSchema.parse(node))
+        after = node.id
+        const more = page.more || node !== page.items[page.items.length - 1]
+        if (items.length === request.limit || scanned === SCAN_LIMIT) {
+          return { items, nextCursor: more ? encodeCursor(node.id) : null }
+        }
+      }
+      if (!page.more) return { items, nextCursor: null }
     }
   }
 

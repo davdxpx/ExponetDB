@@ -3,6 +3,7 @@ export {
   type AcceptRequest,
   type AcceptResult,
   acceptPlan,
+  MAX_PENDING_APPROVALS,
 } from './accept.ts'
 export { type OperationActor, sameCaller, WORKER_ACTOR } from './actors.ts'
 export {

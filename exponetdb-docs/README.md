@@ -14,8 +14,8 @@ request.
 
 ## What this baseline does not contain
 
-Wave 0 is documentation only. Deliberately **not** built yet, and not to be
-started before the owner accepts the Wave 0 gate:
+Wave 0 was documentation only. Deliberately **not** built in Wave 0, and not
+started before the owner accepted the Wave 0 gate (2026-10-05):
 
 - no packages, apps, workspace tooling or CI configuration;
 - no Control Plane server, REST API, MCP server or Web App;
@@ -29,6 +29,15 @@ started before the owner accepts the Wave 0 gate:
 
 Schemas, YAML, SQL and TypeScript snippets in these documents are illustrations
 of contracts and behavior, not implementations.
+
+**[OBSERVED]** (2026-10-13) The later waves built most of these parts: the
+Control Plane server, the REST API, the Web App, authentication and OAuth,
+the registry and PostgreSQL adapter, the node agent and gateway, the
+migration engine and CLI (G0 to G6 accepted), and the MCP server at `/mcp`
+(Wave 7, built on a branch, not merged; G7 awaits the owner). Backups and
+restore are Wave 9. The state of each wave is in
+[`14-roadmap/implementation-waves.md`](./14-roadmap/implementation-waves.md)
+and its gate record.
 
 ## Conventions
 
@@ -234,4 +243,10 @@ task in order. "Must" means the implementation will be reviewed against it.
 - [`gates/0.md`](./14-roadmap/gates/0.md): G0 gate record (accepted 2026-10-05)
 - [`gates/1.md`](./14-roadmap/gates/1.md): G1 gate record (accepted 2026-10-05)
 - [`gates/2.md`](./14-roadmap/gates/2.md): G2 gate record (accepted 2026-10-05; deployment not proven yet)
+- [`gates/3a.md`](./14-roadmap/gates/3a.md): G3A gate record (accepted 2026-10-06)
+- [`gates/3b.md`](./14-roadmap/gates/3b.md): G3B gate record (accepted 2026-10-06)
+- [`gates/4.md`](./14-roadmap/gates/4.md): G4 gate record (accepted 2026-10-07 under the owner's conditional delegation)
+- [`gates/5.md`](./14-roadmap/gates/5.md): G5 gate record (accepted 2026-10-12; items 2 and 4 waived with an expiry)
+- [`gates/6.md`](./14-roadmap/gates/6.md): G6 gate record (accepted 2026-10-12; parts of criteria 12 and 14 waived with expiries)
+- [`gates/7.md`](./14-roadmap/gates/7.md): G7 gate record (in progress; awaits evidence and the owner)
 - [`test-strategy.md`](./14-roadmap/test-strategy.md): test layers and matrix

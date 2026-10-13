@@ -27,7 +27,7 @@ import {
   NODE_OPERATION_KINDS,
   nodeKinds,
 } from '@exponetdb/nodes'
-import { fail, type HealthCheck, pass } from '@exponetdb/observability'
+import { describeError, fail, type HealthCheck, pass } from '@exponetdb/observability'
 import {
   type DispatchAdmission,
   KindRegistry,
@@ -36,6 +36,7 @@ import {
 } from '@exponetdb/operations'
 import {
   ACCESS_RULES,
+  DATA_RULES,
   MIGRATION_RULES,
   NODE_RULES,
   REGISTRY_RULES,
@@ -61,7 +62,14 @@ import { openStore, type Runtime } from './runtime.ts'
  * engine, the access policy rules and the use-case layer for `serve`; the
  * access operation kinds for the worker; the operator commands.
  */
-export const POLICY_RULES = [...ACCESS_RULES, ...REGISTRY_RULES, ...NODE_RULES, ...MIGRATION_RULES]
+export const POLICY_RULES = [
+  ...ACCESS_RULES,
+  ...REGISTRY_RULES,
+  ...NODE_RULES,
+  ...MIGRATION_RULES,
+  // Wave 7 (ADR-0028 §3): who reads rows, per target.
+  ...DATA_RULES,
+]
 
 /** Features this release serves (`GET /installation`); a feature is listed only when it works. */
 export const INSTALLATION_FEATURES: readonly string[] = [
@@ -77,6 +85,8 @@ export const INSTALLATION_FEATURES: readonly string[] = [
   'target_health',
   'schema_reads',
   'drift_checks',
+  // Wave 7: POST /mcp (both protocol eras), its read tools and resources.
+  'mcp',
 ]
 
 export function codeVersion(): string {
@@ -97,7 +107,7 @@ export interface AccessComposition {
 export function composeAccess(
   config: ServeConfig,
   services: Pick<RoleServices, 'store' | 'keyring'>,
-  runtime: Pick<Runtime, 'clock'>,
+  runtime: Pick<Runtime, 'clock'> & { readonly logger?: Runtime['logger'] },
   /** Tests only: a notification channel (no channel is configured in production, OD-21). */
   testing: { readonly channel?: NotificationChannel } = {},
 ): AccessComposition {
@@ -156,6 +166,8 @@ export function composeAccess(
     },
     // Client metadata documents go through the hardened fetcher only (oauth.md §7).
     oauth: { network: oauth.systemNetwork() },
+    // A denial's audit event is written after the denial (audit.md §2); a failure is logged.
+    onBackgroundError: (event, error) => runtime.logger?.error(event, { ...describeError(error) }),
   })
   let rolesVerified = false
   let scopesVerified = false

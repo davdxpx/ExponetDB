@@ -48,6 +48,7 @@ export const ID_PREFIXES = {
   stu: 'CLI step-up',
   imr: 'Legacy import report',
   vfy: 'Migration verification run',
+  qry: 'Data read (one read-only query of an agent or a person)',
   req: 'Request (correlation id, not a stored entity)',
 } as const
 
@@ -107,6 +108,7 @@ export type EnrollmentTokenId = EntityId<'ent'>
 export type StepUpId = EntityId<'stu'>
 export type ImportReportId = EntityId<'imr'>
 export type VerificationRunId = EntityId<'vfy'>
+export type QueryId = EntityId<'qry'>
 export type RequestId = EntityId<'req'>
 
 /**

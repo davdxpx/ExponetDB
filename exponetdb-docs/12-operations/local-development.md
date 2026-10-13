@@ -18,7 +18,7 @@ locally **without any access to REOSA or any production system**.
 | `serve`, `worker`, `gateway` | one dev process with all three roles (`exponetdb dev`), hot reload; roles can also be started separately to test isolation |
 | Node agent | **fake agent** from `packages/testkit` (implements the protocol, simulates capabilities with configurable latency and faults) or the real Go agent against a PostgreSQL container with the helper in a mock mode |
 | OAuth | the ExponetDB authorization server itself; a dev-only seeded owner with a known passkey replacement (TOTP secret printed on seed); loopback redirect for CLI and MCP clients |
-| MCP | `http://localhost:<port>/mcp`; the dev server allows `http://localhost` origins; an MCP inspector configuration is provided |
+| MCP | `http://localhost:<port>/mcp`; the dev server allows `http://localhost` origins; an MCP inspector configuration is provided. **[OBSERVED]** (Wave 7) the lab serves it, `exponetdb dev mcp-client` registers a lab client that the lab's owner approves once ([`../15-cli/lab.md`](../15-cli/lab.md) §5) |
 | Object storage | S3-compatible container (for backup engine tests) |
 
 Started by one command (`exponetdb dev up` wrapping a compose file), torn down
@@ -44,7 +44,10 @@ plan for what is not built yet.
 - product `demo` with environments `staging` (nonprod) and `production` (prod,
   evidence from staging), project `app`, targets on the local containers;
 - identities: one owner, one developer bound to nonprod, one viewer; one
-  service account; one pre-approved local MCP client;
+  service account; one pre-approved local MCP client (**[OBSERVED]**
+  Wave 7: `dev seed` does not exist; `exponetdb dev mcp-client` registers
+  the lab client, which the lab's owner approves like any client, since
+  nothing is pre-trusted: OD-5 (a));
 - a migration stream with ~20 bundles covering every class (additive,
   destructive, non-transactional, rewrite, data migration, security change);
 - a legacy-import fixture: a database with a hand-written migration history
@@ -127,7 +130,14 @@ The suites create ExponetDB's roles with the product bootstrap SQL
 databases from templates (`@exponetdb/testkit`: hostile metadata, the
 REOSA-shaped synthetic schema, the 2,000-table plan-guard catalog, the
 consumer-sized catalog of the fingerprint budget, and the fixtures of the
-`fp1` golden vectors, which assume the superuser `postgres`). Without the
+`fp1` golden vectors, which assume the superuser `postgres`). The roles'
+connection limits are cluster-wide production values (migrator 2,
+verifier 4: one installation's budget) while parallel suites are several
+installations on one server, so the suites that run the worker against a
+shared target server (`mcp-int-world`, `http-migrations`) take turns
+(`withClusterTurn`, a superuser advisory lock); without it a verification
+could see "too many connections" and end, truthfully, in `needs_attention`
+(Wave 7 observation). Without the
 variable the suites fail; they are never skipped.
 
 Building the image locally behind an intercepting proxy needs the proxy's
@@ -238,6 +248,7 @@ for the pinned `playwright-core` (an `apps/server` dev dependency):
 ```sh
 node apps/server/node_modules/playwright-core/cli.js install chromium   # once per version
 bun run test:e2e        # builds apps/web and apps/cli, then runs apps/server/test/*.e2e.test.ts
+                        # (Wave 7: the MCP approval round needs EXDB_TEST_TARGETS, see above)
 ```
 
 The suite starts the real `serve` role on `http://localhost:<port>` (a

@@ -457,6 +457,7 @@ describe('capability operations through the Go agent and the helper', () => {
       webauthnRpId: undefined,
       trustedProxies: [],
       egressAddresses: [],
+      mcpAllowedOrigins: [],
     }
     const logger = createLogger({ role: 'serve', level: 'warn', write: () => undefined })
     const access = composeAccess(

@@ -52,6 +52,7 @@ import {
   EnvironmentChangeRequestSchema,
   EnvironmentCreateRequestSchema,
   EnvironmentIdSchema,
+  type ExplainRequest,
   GrantIdSchema,
   GrantStateSchema,
   IdentityIdSchema,
@@ -86,6 +87,7 @@ import {
   ProjectChangeRequestSchema,
   ProjectCreateRequestSchema,
   ProjectIdSchema,
+  type QueryRequest,
   REST_API_BASE_PATH,
   RecoveryCodeInputSchema,
   RegistrationCredentialSchema,
@@ -116,6 +118,8 @@ import {
 import { isJsonObject, type RequestId, toJsonValue } from '@exponetdb/kernel'
 import { describeError, type Logger } from '@exponetdb/observability'
 import type { Context, Hono } from 'hono'
+import { existenceFloor } from '../existence.ts'
+import { authenticateBearer, authorizationHeaders } from './bearer.ts'
 import type { HttpEnv } from './env.ts'
 import {
   clearCookie,
@@ -562,6 +566,8 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         actor: actor === 'self' || actor === 'any' ? actor : undefined,
         result:
           status === 'succeeded' || status === 'failed' || status === 'denied' ? status : undefined,
+        client: optionalText(call.query, 'client'),
+        grant: optionalText(call.query, 'grant'),
         ...pageOf(call.query),
       }),
     )
@@ -640,6 +646,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
           tiers: body.tiers,
           lifetimeDays: body.lifetimeDays,
           acknowledgeProduction: body.acknowledgeProduction,
+          targets: body.targets,
         },
         call.oauthBinding,
       ),
@@ -663,6 +670,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         tiers: body.tiers,
         lifetimeDays: body.lifetimeDays,
         acknowledgeProduction: body.acknowledgeProduction,
+        targets: body.targets,
       }),
     )
   },
@@ -1322,6 +1330,26 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     value(await app.registry.schemaDiff(caller(call), SchemaDiffRequestSchema.parse(call.body))),
   runDriftCheck: async (app, call) =>
     value(await app.registry.runDriftCheck(caller(call), target(call))),
+  // ----- data reads (Wave 7, ADR-0028): the same use cases as sql_query, sql_explain, sql_cancel -----
+  runQuery: async (app, call) =>
+    value(
+      await app.queries.run(caller(call), target(call), call.body as QueryRequest, {
+        requestId: call.meta.requestId,
+        // A closed connection cancels the read on the worker.
+        signal: call.c.req.raw.signal,
+      }),
+    ),
+  explainQuery: async (app, call) =>
+    value(
+      await app.queries.explain(caller(call), target(call), call.body as ExplainRequest, {
+        requestId: call.meta.requestId,
+        signal: call.c.req.raw.signal,
+      }),
+    ),
+  cancelQuery: async (app, call) =>
+    value(
+      await app.queries.cancel(caller(call), target(call), String(field(call.params, 'queryId'))),
+    ),
   listSessions: async (app, call) => {
     const minAge = field(call.query, 'minAgeSeconds')
     const limit = field(call.query, 'limit')
@@ -1434,25 +1462,6 @@ async function readBody(c: Context<Env>, route: RouteContract): Promise<unknown>
 /** The browser-binding cookie of an OAuth authorization request (HttpOnly, `__Host-`). */
 export const OAUTH_BINDING_COOKIE = '__Host-exdb_oauth'
 
-/**
- * Every `Authorization` header of the request, as sent: two headers are
- * two credentials (refused), never merged into one.
- */
-function authorizationHeaders(c: Context<Env>): string[] {
-  const raw = c.env?.incoming?.rawHeaders
-  if (Array.isArray(raw)) {
-    const out: string[] = []
-    for (let i = 0; i + 1 < raw.length; i += 2) {
-      if (raw[i]?.toLowerCase() === 'authorization') {
-        out.push(raw[i + 1] ?? '')
-      }
-    }
-    return out
-  }
-  const merged = c.req.header('authorization')
-  return merged === undefined ? [] : [merged]
-}
-
 export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
   const challenge = (
     response: Response,
@@ -1480,7 +1489,7 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
     const publicCeremony = definition.permission.kind === 'public'
     const mutating = route.method !== 'get'
     const path = `${base}${honoPath(route.path)}`
-    app.on(route.method.toUpperCase(), path, async (c) => {
+    const serveRoute = async (c: Context<Env>): Promise<Response> => {
       const requestId = c.get('requestId')
       const fail = (error: unknown, retryAfterSeconds?: number) => {
         const planId = c.req.param('planId')
@@ -1505,15 +1514,13 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
           if (base === AUTH_BASE_PATH || publicCeremony) {
             return fail(new HttpRefusal('UNAUTHENTICATED'))
           }
-          const token = oauth.bearerValue(authorization)
-          const principal =
-            token === undefined || token === 'invalid'
-              ? undefined
-              : await deps.application.authenticateBearer(token, 'api')
-          if (principal === undefined) {
+          const authenticated = await authenticateBearer(deps.application, authorization, 'api')
+          if (authenticated.kind !== 'ok') {
             return challenge(fail(new HttpRefusal('UNAUTHENTICATED')), 'invalid_token')
           }
-          bearer = { kind: 'bearer', principal, resource: 'api' }
+          bearer = { kind: 'bearer', principal: authenticated.principal, resource: 'api' }
+          // The grant's last use (data basis only, decision 10): in the background.
+          deps.application.noteGrantUse(bearer, 'rest')
         }
         // A step-up receipt (ADR-0026) is named by a bearer request only; its bound use case redeems it.
         const stepUpHeader = c.req.header(STEP_UP_HEADER)
@@ -1650,8 +1657,22 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
             typeof required === 'string' && isScope(required) ? required : undefined,
           )
         }
-        return fail(error)
+        // A bound of the data-read lane names when to try again.
+        const retryAfter =
+          error instanceof Error &&
+          'retryAfterSeconds' in error &&
+          typeof error.retryAfterSeconds === 'number'
+            ? error.retryAfterSeconds
+            : undefined
+        return fail(error, retryAfter)
       }
+    }
+    app.on(route.method.toUpperCase(), path, async (c) => {
+      const started = performance.now()
+      const response = await serveRoute(c)
+      // One time class for "not there", concealed or real (existence.ts).
+      if (response.status === 404) await existenceFloor(started)
+      return response
     })
   }
 }

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters is not implemented yet: an open limit of the G6 acceptance); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters is not implemented yet: an open limit of the G6 acceptance); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -32,7 +32,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-10 | Future identity architecture | open | ExponetDB stays authorization server for its resources; federates login to the Exponet identity service later | later wave | yes |
 | OD-11 | Exponet brand input for the Web App | open | wait for Exponet brand basics; neutral placeholder tokens until then | Wave 8 | yes |
 | OD-12 | High availability and failover for managed clusters | open | no automated failover in V1; observe replication; revisit with a customer commitment | Wave 11 (stance), later | yes |
-| OD-13 | Data reads by AI agents on production | open | `humans_only` by default per production target | Wave 7 | yes |
+| OD-13 | Data reads by AI agents on production | **resolved 2026-10-12** | option (a): `dataRead: humans_only` by default per production target, `enabled` by default for nonprod, changed per target by an administrator; masking wherever reads are allowed; an agent is every non-human caller | (was Wave 7) | decided |
 | OD-14 | Strictness of fingerprint lineage for production | **resolved 2026-10-12** | warn for imported legacy projects, require approval after reconciliation | Wave 6 | yes |
 | OD-15 | Policy probes in verification | **resolved 2026-10-12** | not in V1; keep RLS behavior tests in consumer test suites | Wave 6 (scope), later | yes |
 | OD-16 | Shadow apply before production | **resolved 2026-10-12** | not in V1; staging is the shadow | Wave 6 (scope), later | yes |
@@ -45,9 +45,10 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-23 | Node trust model (Wave 5) | **resolved 2026-10-07** | option (a), ADR-0024 §1 to §3: job-signing keys anchored by the enrollment token; long-term node keys bound through the token secret and verified by the worker; node-signed results; secrets sealed with `ns1` (HPKE); Ed25519 agent PKI with EKU separation; PostgreSQL server CA held by the worker | (was Wave 5 phases 1 to 5) | decided |
 | OD-24 | Job identity and retries (Wave 5) | **resolved 2026-10-07** | option (a), ADR-0024 §4: one signed envelope executes at most once; a re-dispatch repeats the identical envelope; an operation retry is a new job with `attempt + 1` | (was Wave 5 phases 1, 2, 5) | decided |
 | OD-25 | Evidence environment for systemd (Wave 5) | **resolved 2026-10-07** | option (c): a privileged disposable Ubuntu 24.04 systemd container during development; a VM or self-hosted runner the owner provides for the G5 record (until then the systemd items may stay `NOT PROVEN`) | G5 items 2 to 4 (runner from the owner) | decided |
-| OD-26 | Who may read a plan or an operation (`read_of_kind`) | **resolved 2026-10-12** | (c): the kind's domain read permission, and `plans.approve` holders read every plan | `GET /plans/{id}`, `GET /operations/{id}`; Wave 8 screens | yes |
+| OD-26 | Who may read a plan or an operation (`read_of_kind`) | **resolved 2026-10-12** | (c) within the subject limits: the kind's domain read permission at a scope covering the subject, or `plans.approve` at a scope covering it; an id grants nothing | (was `GET /plans/{id}`, `GET /operations/{id}`; Wave 8 screens) | decided |
 | OD-27 | Moving the agent gateway to a new address | open | a gateway certificate naming the old and the new server name during the move, a `node-pki gateway` command that records the new address next to the old one, and `node.config.update` sending it to each node; the old name dropped once no live node uses it | the move to `exponet-01`; not Wave 5 | yes |
 | OD-28 | Node exports stored before the confidentiality correction (F1) | **resolved 2026-10-12** (G5 acceptance: nothing to do on this installation) | keep them quarantined (no reader serves them), rotate every credential a retired major may have exported, and scrub the stored bodies only by the owner-run procedure with provenance | nothing in Wave 5 (fail closed meanwhile); an owner action on installations that ran Wave 5 before the correction | yes |
+| OD-29 | Node changes by machine callers through MCP (G5 follow-up F9) | **resolved 2026-10-12** | option (c) for Wave 7: no MCP tool plans or applies a node change (`node_plan` is not listed); `nodes_list` and `node_status` read; REST and CLI unchanged | (was Wave 7 entry condition) | decided |
 
 ---
 
@@ -363,6 +364,13 @@ History:
 
 ## OD-13. Data reads by AI agents on production
 
+- **Status.** RESOLVED
+- **Decision date.** 2026-10-12
+- **Decision.** Option (a). Each target has the setting `dataRead: enabled | humans_only | disabled`, held as the per-target setting of the new policy rule `data.read` in `policy.rule_settings` (no change to a frozen registry bundle); the default is `humans_only` for production targets and `enabled` for nonprod targets, and an administrator changes it per target through a policy settings plan. An **agent** is every caller that is not a person acting through the Web App or the first-party CLI: an MCP client (client kind `mcp`), a service account, an API key, CI. A **human** is a Web App session or the CLI under a person's identity. On a target with `humans_only` an agent reads no rows, whatever scopes its grant holds (`data.read:prod` included); the REST route refuses the same way. For agents `EXPLAIN` runs without `ANALYZE` only. Caps: 500 rows, 5 MiB and a 60 s statement timeout for agents (5 000 rows for humans). Masking follows the project configuration and applies wherever reads are allowed.
+- **Source.** the owner's Wave 7 order ("ExponetDB — Wave 7: MCP-Server", 2026-10-12, issued as this session's implementation prompt), confirmed by the owner in the session on 2026-10-12 as an entry condition of Wave 7 ([G7 record §3](../14-roadmap/gates/7.md#3-owner-decisions-of-the-wave-7-order)).
+
+History:
+
 - **Question.** May AI agents read production rows?
 - **Why it matters.** Production contains personal data; agents can be steered by
   injected text and their outputs leave ExponetDB's control.
@@ -371,7 +379,6 @@ History:
 - **Recommendation.** (a), with masking applied wherever reads are allowed
   ([`../03-database-model/sql-execution-security.md`](../03-database-model/sql-execution-security.md)).
 - **Blocks.** Wave 7.
-- **Owner decision needed.** Yes.
 
 ## OD-14. Strictness of fingerprint lineage for production
 
@@ -704,8 +711,8 @@ History:
   it. (c) As (a), and `plans.approve` holders may read every plan.
 - **Recommendation.** (c): reads follow the domain, and approvers must see
   what they approve.
-- **Decision.** Open; for the owner. Until then the operation outcome is
-  visible in the Control Store and the audit chain only.
+- **State before the decision.** Open until 2026-10-12; until then the
+  operation outcome was visible in the Control Store and the audit chain only.
 
 ## OD-27. Moving the agent gateway to a new address
 
@@ -771,3 +778,42 @@ History:
   completion ([`capabilities.md` §6](../07-node-agent/capabilities.md#6-confidentiality-of-node-exports-wave-5-correction-f1)).
 - **Decision.** Resolved 2026-10-12 at the G5 acceptance: the owner adopted the recommendation. Nothing to do on the owner's installation, which ran Wave 5 only after the corrections ([deployment record](../12-operations/deployments/2026-10-12-reos-01-wave6.md)); where such rows exist the procedure above applies and they stay quarantined until then.
 
+## OD-29. Node changes by machine callers through MCP (G5 follow-up F9)
+
+- **Status.** RESOLVED
+- **Decision date.** 2026-10-12
+- **Decision.** Option (c) for Wave 7: no MCP tool plans or applies a node change. `node_plan` is not listed in `exponetdb.mcp/v1`; `nodes_list` and `node_status` (reads) are. REST and the CLI keep their Wave 5 behavior (service accounts with `nodes.plan` and `nodes.operate:nonprod` may plan and apply nonprod node changes there). A later wave that wants node planning over MCP brings this question back with option (a) or (b) and a policy rule.
+- **Source.** the owner's Wave 7 order (2026-10-12), confirmed by the owner in the session on 2026-10-12 as an entry condition of Wave 7 ([G7 record §3](../14-roadmap/gates/7.md#3-owner-decisions-of-the-wave-7-order)).
+
+History:
+
+- **Added.** 2026-10-12, from [G5 record §11.2](../14-roadmap/gates/5.md#11-acceptance-2026-10-12) item 16 (finding F9 of the Wave 5 correction order), an entry condition of Wave 7.
+- **Question.** May service accounts and MCP clients holding `nodes.plan` and
+  `nodes.operate:nonprod` plan and apply nonprod node changes (including
+  `pg_hba` and critical roles) without an approval?
+- **Options.** (a) yes, as implemented in Wave 5; (b) an approval for
+  critical classes on nonprod (a new policy rule); (c) never through MCP.
+- **Recommendation.** (c) for Wave 7.
+
+## Decisions of the Wave 7 order (2026-10-12)
+
+The owner's Wave 7 order listed fourteen proposed decisions that bind when the
+order is issued unchanged; the owner issued it unchanged and confirmed OD-13
+and F9 in the session. **[DECIDED]** 2026-10-12, source: the Wave 7 order
+([G7 record §3](../14-roadmap/gates/7.md#3-owner-decisions-of-the-wave-7-order)).
+OD-13 (decision 1) and OD-29 (decision 6, the F9 entry condition of Wave 7: no node planning through MCP) are above; the others:
+
+| # | Topic | Decision |
+|---|---|---|
+| 2 | Tool scope of Wave 7 | the tools of the Wave 7 part of `exponetdb.mcp/v1` ([`tool-catalog.md`](../05-mcp/tool-catalog.md)); the Wave 9 tools stay unlisted; `node_plan` follows OD-29 |
+| 3 | Protocol versions and the legacy promise | modern `2026-07-28`; legacy `2025-11-25` and `2025-06-18`; `2025-03-26` and `2024-11-05` are refused with the supported versions named. The specification sets no sunset date for a revision; ExponetDB's own promise (legacy removed no earlier than twelve months after an announcement and only after checking the client matrix) is the owner's and is stated so in [`versioning.md`](../01-architecture/versioning.md) |
+| 4 | Legacy session model | stateless: no `Mcp-Session-Id` is issued or returned; the approval link is always in the result for legacy clients; no legacy URL elicitation |
+| 5 | Approval link and the G7 wording | `approvalUrl` is `<public origin>/approvals#operation=op_…` (the existing page, ADR-0026); the gate wording "land on the plan review page" can only be met literally with Wave 8: the G7 record lists it as partial by design and the owner decides at G7 |
+| 7 | Redirect URIs with a custom scheme | no loosening of the Wave 3B rule (`https` or loopback `http`, exact match); a narrow mechanism is proposed to the owner and not built without a decision |
+| 8 | Tasks extension | not in Wave 7; the operation is the durable handle with polling |
+| 9 | Rate limits and bounds | token bucket per grant (per identity twice the rate), in process: reads 20/s (burst 100), plan creation 2/s (burst 5), apply 1/s (burst 2), data reads 5/s (burst 10); concurrent data reads at most 2 per grant, 3 per target, 8 overall; concurrent streams at most 4 per grant; header and body read 10 s and 30 s, a whole request 90 s; numbers in one configuration table, tested and documented |
+| 10 | Standing-access findings | producer in Wave 9, "last used" display in Wave 8; Wave 7 records the last use per grant only |
+| 11 | The target flag `protected` | removed from [`staging-production-policy.md`](../04-migrations/staging-production-policy.md); nonprod applies by agents need no approval (as implemented since Wave 6) |
+| 12 | Evals with a model | optional: the harness and tasks are delivered; the owner runs them with their own key; without model access the run is `NOT RUN` |
+| 13 | The acceptance branch | Wave 7 is based on `fix/g5-g6-acceptance-record` (`c701e2e`), which the owner pushed on 2026-10-12; its commits are not changed |
+| 14 | GA of `/api/v1` | not declared in Wave 7; a readiness report is delivered and the owner decides at G7 |

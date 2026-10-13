@@ -55,6 +55,7 @@ beforeAll(async () => {
     webauthnRpId: undefined,
     trustedProxies: [],
     egressAddresses: [],
+    mcpAllowedOrigins: [],
   }
   const access = composeAccess(
     config,

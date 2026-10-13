@@ -37,6 +37,8 @@ audit may not.
 | `actor` | `{kind: human, id: idn_…}` / `{kind: agent, client: cli_…, on_behalf_of: idn_…}` | ids only, no names or e-mail addresses |
 | `code` | `PLAN_STALE` | error codes from [`../02-control-plane/error-model.md`](../02-control-plane/error-model.md) |
 | `durationMs` | | |
+| `tool`, `toolVersion`, `catalogDigest`, `era`, `protocolVersion`, `rpcMethod`, `rpcCode`, `grantId`, `clientId` | `targets_list`, `1`, `sha256:…`, `modern`, `2026-07-28`, `tools/call` | one `mcp.request` line per `/mcp` request (Wave 7); shapes only, never arguments, results, client names or the token; a value outside its shape is dropped. A tool call names the tool's contract version, a `tools/list` the digest of the list it served, so a changed catalog is visible in the log (rug-pull detection, Wave 7 order §30) |
+| `reason` of `authz.denial_concealed` | `role_scope`, `target_restriction`, `tier_restriction` | a refusal that answered like an unknown object (error-model.md §4): REST and `/mcp` log the true reason with the request id and the route, never the requested path or id |
 
 Never logged: secrets, tokens (even hashed), connection strings with passwords,
 raw statement text (only redacted text and digests), PostgreSQL `DETAIL`, row
@@ -50,7 +52,9 @@ allowlist per event and a pattern denylist as a second line
 | Metric | Labels | Why |
 |---|---|---|
 | `exdb_http_requests_total`, `exdb_http_request_duration_seconds` | route template, method, status class, client kind | API health |
-| `exdb_mcp_tool_calls_total`, duration | tool, outcome code, client kind | agent behavior |
+| `exdb_mcp_requests_total` | era (`modern`, `legacy`, `none`), status class | MCP traffic by protocol era (when legacy can be retired) |
+| `exdb_mcp_tool_calls_total`, `exdb_mcp_tool_call_duration_seconds` | tool, outcome code (`ok` or the error code), era | agent behavior |
+| `exdb_mcp_denied_total` | reason (closed set: `origin`, `host`, `invalid_token`, `insufficient_scope`, `rate_limited`, `version`, …) | refusals at the `/mcp` edge |
 | `exdb_policy_decisions_total` | rule id, decision | which rules bite |
 | `exdb_operations_total` | kind, class, outcome | |
 | `exdb_operation_step_duration_seconds` | kind, step | slow steps |

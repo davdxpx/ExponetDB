@@ -31,7 +31,13 @@ import {
   planMigrationRollback,
   planMigrationVerify,
 } from '@exponetdb/migrations-engine'
-import { findTarget, getProject, RegistryError, type TargetRecord } from '@exponetdb/registry'
+import {
+  findTarget,
+  getProject,
+  getProjectByPath,
+  RegistryError,
+  type TargetRecord,
+} from '@exponetdb/registry'
 import type { CallerLike, Idempotency, RegistryHost } from './registry.ts'
 
 /**
@@ -106,14 +112,33 @@ export class MigrationUseCases {
     } as unknown as BundleIngestResult
   }
 
-  /** `migration.lint`: the shared linter on submitted bundles (read-only, offline facts). */
+  /**
+   * `migration.lint`: the shared linter on submitted bundles (read-only,
+   * offline facts). The project is a `prj_` id or a `<product>/<project>`
+   * path (MCP); a path is resolved here, and an unknown path answers like an
+   * unknown id.
+   */
   async lint(
     caller: CallerLike,
-    projectId: string,
+    projectRef: string,
     request: MigrationLintRequest,
   ): Promise<MigrationLintResult> {
+    const projectId = await this.#projectId(caller, projectRef)
     await this.#project('migration.lint', caller, projectId)
     return (await lintProject(this.#h.store, projectId, request)) as unknown as MigrationLintResult
+  }
+
+  async #projectId(caller: CallerLike, ref: string): Promise<string> {
+    const path = /^([a-z][a-z0-9-]{0,38})\/([a-z][a-z0-9-]{0,38})$/.exec(ref)
+    if (path === null) {
+      return ref
+    }
+    await this.#h.admit(this.#h.store, 'migration.lint', caller)
+    const project = await getProjectByPath(this.#h.store, path[1] ?? '', path[2] ?? '')
+    if (project === undefined) {
+      throw new RegistryError('NOT_FOUND')
+    }
+    return project.projectId
   }
 
   /** `migration.plan`: a stored, immutable plan bound to the live target (also when denied). */

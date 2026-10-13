@@ -241,6 +241,21 @@ export async function getProject(
   return row === undefined ? undefined : projectFrom(row)
 }
 
+/** The project with this product and project slug (`<product>/<project>`), if any. */
+export async function getProjectByPath(
+  q: Queryable,
+  productSlug: string,
+  projectSlug: string,
+): Promise<ProjectRecord | undefined> {
+  const { rows } = await q.query(
+    'registry.projects.get_by_path',
+    `SELECT ${PROJECT_COLUMNS} FROM ${PROJECT_FROM} WHERE pr.slug = $1 AND j.slug = $2`,
+    [productSlug, projectSlug],
+  )
+  const row = rows[0]
+  return row === undefined ? undefined : projectFrom(row)
+}
+
 // ----- servers and clusters -----
 
 const SERVER_COLUMNS = `s.server_id, s.display_name, s.provider, s.location, st.derived_tier`

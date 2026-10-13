@@ -1,4 +1,31 @@
 export { listSessions, lockGraph, type SessionFilter } from './activity.ts'
+export { executeDataRead, matchesColumn } from './data-read/executor.ts'
+export {
+  awaitDataRead,
+  cancelDataRead,
+  checkLaneRequest,
+  type DataReadOwner,
+  type DataReadSubmission,
+  type DataReadTicket,
+  DataReadWorker,
+  type DataReadWorkerOptions,
+  LANE_GRACE_SECONDS,
+  LANE_LIMITS,
+  submitDataRead,
+  WORKER_LIVE_SECONDS,
+} from './data-read/lane.ts'
+export {
+  admissionRefusal,
+  type DataReadOutcome,
+  type DataReadRequest,
+  dataReadText,
+  type QueryColumn,
+} from './data-read/outcome.ts'
+export {
+  AUDIT_STATEMENT_LENGTH,
+  type NormalizedStatement,
+  prepareDataRead,
+} from './data-read/prepare.ts'
 export {
   DOCUMENT_ENCODING,
   type DocumentHead,

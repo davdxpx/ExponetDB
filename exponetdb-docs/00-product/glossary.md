@@ -227,6 +227,17 @@ permissions, the token's scopes, the grant's target restrictions and policy.
 **OAuth client.** A registered application that obtains tokens (MCP client, CLI,
 CI). Id prefix `cli_`.
 
+**Client kind.** Two related sets. The client kinds of the authorization
+model are `web` (a Web App session), `cli` (the first-party CLI with a
+person's session), `mcp` (an MCP client acting for a person) and `ci` (a
+service account's client or API key); they decide which scopes and actions
+a caller may use (`CLIENT_KINDS` in `packages/contracts/src/scopes.ts`). The
+client kind recorded in audit events, plans and operations admits six
+values, `web`, `rest`, `mcp`, `cli`, `ci`, `system`: a caller is recorded
+with its authorization client kind, `system` is the Control Plane's own
+processes, and `rest` is admitted by the Wave 2 shape but recorded by no
+code path ([`../02-control-plane/audit.md` §1](../02-control-plane/audit.md#1-event-shape)).
+
 **Grant.** A consent record: identity X allowed client Y scopes Z, optionally
 restricted to targets. Tokens belong to grants. Revoking a grant revokes its
 tokens. A delegated grant comes from a person's consent; a machine grant is

@@ -25,6 +25,7 @@ import {
   PostgresVersionSchema,
   ProductIdSchema,
   ProjectIdSchema,
+  QueryIdSchema,
   SchemaFingerprintSchema,
   ServerIdSchema,
   SessionIdSchema,
@@ -658,11 +659,16 @@ export const QueryRequestSchema = z
       .max(5000)
       .optional()
       .meta({ description: 'At most the cap for the caller (500 for agents, 5000 for humans).' }),
+    queryId: QueryIdSchema.optional().meta({
+      description:
+        'Wave 7: a qry_ id the caller chooses, so a parallel cancel can name this query while it runs; assigned when absent.',
+    }),
   })
   .meta({ id: 'QueryRequest' })
 
 export const QueryResultSchema = z
   .object({
+    queryId: QueryIdSchema,
     columns: z.array(
       z.object({
         name: name(63, 'Column name.'),
@@ -683,16 +689,31 @@ export const QueryResultSchema = z
   })
   .meta({ id: 'QueryResult' })
 
+/** Wave 7: the answer to cancelling one's own data read. */
+export const QueryCancelResultSchema = z
+  .object({
+    queryId: QueryIdSchema,
+    outcome: z.enum(['canceled', 'finished']).meta({
+      description:
+        'canceled: the cancel reached the read while it ran (its caller gets QUERY_CANCELED unless it finished in that moment); finished: none of your reads with this id is running (it ended, or never started).',
+    }),
+  })
+  .meta({ id: 'QueryCancelResult' })
+
 export const ExplainRequestSchema = z
   .strictObject({
     sql: untrustedText(100_000, 'Exactly one read-only statement.').min(1),
     params: z.array(QueryParamSchema).max(100).default([]),
     analyze: z.boolean().default(false),
+    queryId: QueryIdSchema.optional().meta({
+      description: 'Wave 7: as for a query, a qry_ id the caller chooses to cancel it by.',
+    }),
   })
   .meta({ id: 'ExplainRequest' })
 
 export const ExplainResultSchema = z
   .object({
+    queryId: QueryIdSchema,
     plan: untrustedJson('EXPLAIN (FORMAT JSON) output, redacted.'),
     summary: z.object({
       totalCost: z.number(),
@@ -1007,6 +1028,10 @@ export const SessionSchema = z
       .object({
         redacted: name(16384, 'Redacted statement text.'),
         digest: Sha256DigestSchema.nullable(),
+        truncated: z.boolean().meta({
+          description:
+            'The redacted text was cut at its cap (2 000 characters for people, 500 for MCP clients); the digest is of the whole redacted text.',
+        }),
       })
       .nullable()
       .meta({
@@ -1311,6 +1336,20 @@ export const AuditEventSchema = z
       jobId: JobIdSchema.nullable(),
     }),
     reason: untrustedText(2000, 'Caller-supplied reason, recorded and never evaluated.').nullable(),
+    denial: z
+      .object({
+        action: z.string().regex(/^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/),
+        reason: z.string().regex(/^[a-z][a-z_]{0,31}$/),
+        tool: z
+          .string()
+          .regex(/^[a-z][a-z0-9_]{0,47}$/)
+          .nullable(),
+      })
+      .nullable()
+      .meta({
+        description:
+          'For `authz.denied` (a denied high-risk action): the denied action, the reason code and the MCP tool it came through; never an argument value. Null for every other event.',
+      }),
     result: z.object({
       status: z.enum(['succeeded', 'failed', 'denied']),
       errorCode: z
@@ -1385,6 +1424,11 @@ export type SchemaObject = z.infer<typeof SchemaObjectSchema>
 export type SchemaOverview = z.infer<typeof SchemaOverviewSchema>
 export type SchemaFingerprintResult = z.infer<typeof SchemaFingerprintDocumentSchema>
 export type SchemaDiff = z.infer<typeof SchemaDiffSchema>
+export type QueryRequest = z.input<typeof QueryRequestSchema>
+export type QueryResult = z.infer<typeof QueryResultSchema>
+export type ExplainRequest = z.input<typeof ExplainRequestSchema>
+export type ExplainResult = z.infer<typeof ExplainResultSchema>
+export type QueryCancelResult = z.infer<typeof QueryCancelResultSchema>
 export type VisibilityReport = z.infer<typeof VisibilityReportSchema>
 export type PlanView = z.infer<typeof PlanViewSchema>
 export type OperationView = z.infer<typeof OperationSchema>

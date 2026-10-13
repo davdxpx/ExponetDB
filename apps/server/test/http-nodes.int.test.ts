@@ -80,6 +80,7 @@ beforeAll(async () => {
     webauthnRpId: undefined,
     trustedProxies: [],
     egressAddresses: [],
+    mcpAllowedOrigins: [],
   }
   const logger = createLogger({ role: 'serve', level: 'debug', write: (l) => logs.push(l) })
   const access = composeAccess(config, { store: serve, keyring }, { clock: systemClock })
@@ -406,6 +407,43 @@ describe('node routes over REST', () => {
       capabilities: [{ name: 'agent.diagnostics', major: 2 }],
       host: { loadAverage1m: 0.5, memoryUsedBytes: 1024, diskUsedPercent: 25 },
     })
+
+    // A grant restricted to a tier sees the nodes whose server it covers, never a refusal of
+    // the whole list (authorization.md §1, Wave 7); this server hosts no target, so its tier is
+    // unknown and only an unrestricted grant sees its node.
+    const account = await owner.browser.call('POST', '/api/v1/service-accounts', {
+      displayName: 'Node reader',
+    })
+    const binding = await owner.browser.call('POST', '/api/v1/role-bindings', {
+      identityId: account.body.id,
+      roleId: 'viewer',
+      scope: { kind: 'global' },
+    })
+    expect(binding.status, binding.text).toBe(201)
+    await reauth()
+    expect((await apply(binding.body.id)).status).toBe(202)
+    await drive()
+    const keyFor = async (tiers: string[]) =>
+      (
+        await owner.browser.call('POST', `/api/v1/service-accounts/${account.body.id}/api-keys`, {
+          scopes: ['nodes.read'],
+          restrictions: { tiers, targets: { kind: 'all' } },
+          lifetimeDays: 1,
+        })
+      ).body.secret as string
+    const nodesWith = async (secret: string) => {
+      const r = await app.request(`${ORIGIN}/api/v1/nodes`, {
+        headers: { authorization: `Bearer ${secret}` },
+      })
+      return { status: r.status, body: JSON.parse(await r.text()) }
+    }
+    await reauth()
+    const restricted = await nodesWith(await keyFor(['nonprod']))
+    expect([restricted.status, restricted.body.items]).toEqual([200, []])
+    await reauth()
+    const everything = await nodesWith(await keyFor(['nonprod', 'prod']))
+    expect(everything.status).toBe(200)
+    expect(everything.body.items.map((n: { id: string }) => n.id)).toEqual([enrolled.nodeId])
 
     // One live node per server: a second enrollment plan is refused.
     const refused = await owner.browser.call('POST', `/api/v1/servers/${serverId}/nodes/enroll`, {})

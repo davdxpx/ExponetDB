@@ -38,6 +38,12 @@ through node agents. Three things must be visible everywhere:
 | **Audit** | `/audit` | audit search, chain verification status, export |
 | **Settings** | `/settings/products`, `/environments`, `/policies`, `/notifications`, `/installation` | registry structure, environment tiers and evidence chain, policy settings, notification channels, installation info |
 
+**[OBSERVED]** (2026-10-13, `apps/web/src/safe.ts`, `apps/web/src/shell.ts`)
+The **Access** routes above are the Wave 8 plan. Today OAuth and MCP clients are
+administered on **Clients** (`/admin/clients`) and service accounts on
+**Service accounts** (`/admin/service-accounts`); `/access/oauth-clients`
+does not exist yet.
+
 ### 2.2 Target level
 
 Route: `/t/<product>/<project>/<environment>/<section>` (target paths are
@@ -112,9 +118,10 @@ project), cancel (pid + `backend_start`), EXPLAIN (`FORMAT JSON`) with a plan
 viewer, result export with caps, untrusted-content handling for deep links
 (`?sql=` opens the editor but never runs).
 
-Production data reads follow the target's `dataRead` setting
-(`humans_only` by default for prod,
-[OD-13](../00-product/open-decisions.md#od-13-data-reads-by-ai-agents-on-production)).
+Production data reads follow the setting of the policy rule `data.read`
+for the target (its default `by_tier` is `humans_only` for prod,
+[OD-13](../00-product/open-decisions.md#od-13-data-reads-by-ai-agents-on-production),
+[`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md)); there is no separate target field.
 Sensitive columns are masked unless the person has `data.read_sensitive`.
 
 ## 5. Plans, approvals and confirmations in the UI
@@ -127,7 +134,25 @@ Sensitive columns are masked unless the person has `data.read_sensitive`.
 | Running | operation page with steps, live state, `applied` and `verified` as separate indicators; cancel where the operation allows it |
 | Outcome | success, failure with next actions (re-verify, plan recovery), `needs_attention` with a reconciliation checklist |
 
-MCP approval links (URL elicitation) land on the plan review page.
+MCP approval links (URL elicitation and the link in the tool result) land
+on the approvals page `/approvals#operation=op_…` until Wave 8 builds the
+plan review page; that page shows the plan review content (server-computed
+facts first, the plan's raw text as data) and keeps working as a redirect to
+the plan review page afterwards ([ADR-0029](../01-architecture/adr/0029-approval-link-from-mcp.md),
+owner decision 5 of the Wave 7 order). **[DECIDED]** 2026-10-12.
+**[OBSERVED]** (Wave 7 Phase 7) Built as decided: each card shows the
+review the server computed (`ApprovalQueueItem.review`): "What ExponetDB
+computed" (target and tier, kind and class, creator and client with the
+client's own name marked *name not verified*, policy decision with rules
+and requirements, staging evidence, the bound schema fingerprint, newest
+backup "not known" until Wave 9, expiry, the full plan hash with a copy
+button, and per migration compatibility, every statement with its line,
+lock and compatibility, drops, rewrite estimates, rollback, checksum), then
+"What the plan runs" (the stored files verbatim, numbered, as text only,
+with invisible and direction characters shown by code point and non-ASCII
+characters marked). A card for a plan an agent made carries a note that an
+agent proposed it and cannot approve. No new design system or navigation
+(Wave 8).
 
 **[DECIDED]** (Wave 6, [ADR-0026](../01-architecture/adr/0026-cli-step-up-browser-handoff.md))
 The **step-up page** (`/step-up#id=<stu_…>`) confirms a command a person

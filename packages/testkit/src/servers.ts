@@ -203,6 +203,30 @@ export async function createDatabase(s: TestServer, label: string): Promise<stri
   return name
 }
 
+/** The advisory lock of {@link withClusterTurn} (any constant no other suite uses). */
+const CLUSTER_TURN_LOCK = 7_270_001
+
+/**
+ * Runs `fn` while holding this cluster's worker turn: a session advisory
+ * lock on a superuser connection (which no role connection limit counts).
+ * The product's role connection limits are per cluster (migrator 2,
+ * verifier 4: one installation's budget), and parallel suites are several
+ * installations on one shared test cluster, so the suites that run the
+ * worker against it take turns instead of exhausting each other's budget.
+ */
+export async function withClusterTurn<T>(s: TestServer, fn: () => Promise<T>): Promise<T> {
+  return withSuperuser(s, 'postgres', async (c) => {
+    await c.query('SELECT pg_advisory_lock($1::bigint)', [CLUSTER_TURN_LOCK])
+    try {
+      return await fn()
+    } finally {
+      await c
+        .query('SELECT pg_advisory_unlock($1::bigint)', [CLUSTER_TURN_LOCK])
+        .catch(() => undefined)
+    }
+  })
+}
+
 /** Drops a test database, ending its sessions first. */
 export async function dropDatabase(s: TestServer, name: string): Promise<void> {
   if (!/^exdb_t_[a-z0-9_]+$/.test(name)) {

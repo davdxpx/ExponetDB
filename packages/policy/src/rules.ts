@@ -35,6 +35,12 @@ export interface Rule {
   readonly facts: readonly FactName[]
   /** Parameters and their defaults; settings may override known members only. */
   readonly defaults: JsonObject
+  /**
+   * Whether effective parameters are values the rule understands (beyond
+   * their JSON types): a settings plan with anything else is refused when
+   * it is made, not discovered as `unknown` at the next decision.
+   */
+  checkParams?(params: JsonObject): boolean
   /** What failing at `require` severity requires (also when the result is `unknown`). */
   requirements(params: JsonObject): readonly Requirement[]
   evaluate(input: RuleInput): RuleEvaluation

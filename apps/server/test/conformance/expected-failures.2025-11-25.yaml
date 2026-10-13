@@ -1,0 +1,46 @@
+# Expected failures of the MCP conformance suite for the 2025-11-25
+# requirements (@modelcontextprotocol/conformance 0.2.0-alpha.12, run by
+# test/mcp-conformance.conformance.test.ts; protocol-baseline.md §6).
+# Each group names why the scenario cannot pass against ExponetDB. None of
+# them is a defect; an entry that starts to pass fails the run (stale
+# baseline) and is removed.
+server:
+  # Fixture tools of the suite's reference server: ExponetDB serves only its
+  # own catalog.
+  - tools-call-simple-text
+  - tools-call-image
+  - tools-call-audio
+  - tools-call-embedded-resource
+  - tools-call-mixed-content
+  - tools-call-error
+  - tools-call-with-progress
+  - json-schema-2020-12
+  # Fixture tools that send sampling, elicitation or log messages on the
+  # stream: stateless legacy has no back channel and ExponetDB never asks a
+  # client's model (protocol-baseline.md L-14 to L-17, §2).
+  - tools-call-sampling
+  - tools-call-elicitation
+  - tools-call-with-logging
+  - elicitation-sep1034-defaults
+  - elicitation-sep1330-enums
+  # Logging is not offered (deprecated in 2026-07-28; protocol-baseline.md §2).
+  - logging-set-level
+  # Fixture resources of the reference server; no templates (order §23).
+  - resources-read-text
+  - resources-read-binary
+  - resources-templates-read
+  # Resource subscriptions are not offered (`subscribe: false`).
+  - resources-subscribe
+  - resources-unsubscribe
+  # No prompts in V1 (order §23).
+  - prompts-list
+  - prompts-get-simple
+  - prompts-get-with-args
+  - prompts-get-embedded-resource
+  - prompts-get-with-image
+  # No completions (no prompts, no resource templates).
+  - completion-complete
+  # A warning (counted as a failure under a baseline): stateless legacy issues
+  # no Mcp-Session-Id, so the multiple-streams-per-session check cannot apply
+  # (owner decision 4; protocol-baseline.md L-8).
+  - server-sse-multiple-streams:server-sse-multiple-streams-session

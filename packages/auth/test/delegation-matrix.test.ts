@@ -260,7 +260,12 @@ function expected(input: Input): Outcome {
     if (name === undefined || !isScope(name) || !isScopeGrantableTo(name, client)) return DENIED
     tiered = name
   }
-  if (!coversBinding(BINDINGS[input.binding], chain)) return DENIED
+  // A target the identity cannot read answers like an unknown one (error-model.md §4,
+  // Wave 7 goal 18); this store grants only the action's permission, so a binding that
+  // does not cover the target also does not let the identity read it.
+  if (!coversBinding(BINDINGS[input.binding], chain)) {
+    return { decision: 'deny', code: 'TARGET_NOT_FOUND' }
+  }
   if (tiered !== undefined && !held.includes(tiered)) {
     return { decision: 'deny', code: 'INSUFFICIENT_SCOPE', requiredScope: tiered }
   }

@@ -188,7 +188,23 @@ function credential(credentials: string, login: string): string {
 }
 
 function storeUrl(labId: string, login: string, password: string): string {
-  return `postgres://${login}:${encodeURIComponent(password)}@${containerName(labId, 'control')}:5432/exponetdb_control`
+  return controlStoreUrl(containerName(labId, 'control'), login, password)
+}
+
+/**
+ * The lab Control Store URL, built through the `URL` setters instead of a
+ * template: no source line spells a URL with credentials. The userinfo
+ * setters leave `%` as is, so login and password are percent-encoded first;
+ * `pg` decodes both with `decodeURIComponent`.
+ */
+function controlStoreUrl(host: string, login: string, password: string): string {
+  const url = new URL('postgres://localhost')
+  url.hostname = host
+  url.port = '5432'
+  url.pathname = '/exponetdb_control'
+  url.username = encodeURIComponent(login)
+  url.password = encodeURIComponent(password)
+  return url.href
 }
 
 // ----- readiness -----
@@ -926,6 +942,7 @@ export async function runningContainer(env: LabEnv, role: Role): Promise<string>
 }
 
 export {
+  controlStoreUrl,
   databaseReady,
   inspectContainer,
   owned as ownedContainer,

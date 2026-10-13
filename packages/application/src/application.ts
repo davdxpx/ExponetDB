@@ -62,9 +62,11 @@ import {
   totpLogin,
   totpReauth,
   touchSession,
+  unrestricted,
   withPolicy,
 } from '@exponetdb/auth'
 import {
+  type ActionId,
   type ApiKeyView,
   type ApprovalQueueItem,
   type ApprovalView,
@@ -86,6 +88,7 @@ import {
   type Installation,
   type InvitationResponse,
   isActionId,
+  isHighRiskAction,
   type Me,
   type OAuthClientView,
   type OAuthResource,
@@ -95,6 +98,7 @@ import {
   type PolicySettingsView,
   type ProtectedResourceMetadata,
   type PublicJwk,
+  REVIEW_SOURCE_MAX_CHARS,
   type ReauthResult,
   type RecoveryCodesView,
   type RegistrationCredential,
@@ -107,6 +111,7 @@ import {
   type SessionView,
   type SignedIn,
   type StepUpView,
+  type TargetRestriction,
   type Tier,
   type TokenResponse,
   type TotpSetup,
@@ -127,6 +132,7 @@ import {
   type SessionId,
   toJsonValue,
 } from '@exponetdb/kernel'
+import { type ReviewFile, reviewFiles } from '@exponetdb/migrations-engine'
 import {
   beginIdempotent,
   completeIdempotent,
@@ -151,6 +157,7 @@ import {
 import { BreakGlassUseCases } from './breakglass.ts'
 import { MigrationUseCases } from './migrations.ts'
 import { NodeUseCases } from './nodes.ts'
+import { QueryUseCases, type ReadParties } from './queries.ts'
 import {
   type RegistryHost,
   type RegistryServices,
@@ -202,6 +209,146 @@ export interface ApplicationDeps {
     readonly assertions?: oauth.ClientAssertionVerifier
     readonly grants?: oauth.ExtraGrants
   }
+  /** Reports a failed background write (a denial's audit event); never changes a decision. */
+  readonly onBackgroundError?: (event: string, error: unknown) => void
+}
+
+/**
+ * Denials of high-risk actions that are security signals (audit.md §2):
+ * missing permission, scope, client kind, resource or restriction, a
+ * human-only action by an agent, policy. A missing re-authentication, an
+ * unknown subject or an unauthenticated request is an ordinary refusal.
+ */
+const AUDITED_DENIALS: ReadonlySet<string> = new Set([
+  'client_kind',
+  'resource',
+  'delegated_scope',
+  'restriction',
+  'human_only',
+  'recovery_session',
+  'no_permission',
+  'not_self',
+  'scope',
+  'scope_client',
+  'tier_unknown',
+  'policy',
+])
+
+/**
+ * The bundle files a migration plan runs, as stored: `up.sql` and
+ * `verify.sql` for an apply or a resume, `down.sql` for a rollback, and
+ * `verify.sql` for a verification run again (it reads the target, so the
+ * person sees what it asks). At most 64 files.
+ */
+const REVIEW_FILES: Readonly<Record<string, readonly ReviewFile[]>> = {
+  'migration.apply': ['up.sql', 'verify.sql'],
+  'migration.resume': ['up.sql', 'verify.sql'],
+  'migration.rollback': ['down.sql'],
+  'migration.verify': ['verify.sql'],
+}
+
+async function reviewSources(
+  q: Queryable,
+  plan: PlanRecord,
+): Promise<NonNullable<ApprovalQueueItem['review']>['sources']> {
+  const files = REVIEW_FILES[plan.kind]
+  if (files === undefined) return []
+  const content = plan.body['content']
+  if (typeof content !== 'object' || content === null || Array.isArray(content)) return []
+  const c = content as Record<string, unknown>
+  const projectId = c['projectId']
+  if (typeof projectId !== 'string') return []
+  // A verification run names one migration; the other kinds list theirs.
+  const listed = plan.kind === 'migration.verify' ? [c] : c['migrations']
+  if (!Array.isArray(listed)) return []
+  const items: { migrationId: string; revision: number }[] = []
+  for (const item of listed.slice(0, 64)) {
+    const migrationId = (item as Record<string, unknown> | null)?.['migrationId']
+    const revision = (item as Record<string, unknown> | null)?.['revision']
+    if (typeof migrationId !== 'string' || typeof revision !== 'number') continue
+    items.push({ migrationId, revision })
+  }
+  const read = await reviewFiles(q, projectId, items, files)
+  return read.slice(0, 64).map((f) => {
+    const truncated = f.text.length > REVIEW_SOURCE_MAX_CHARS
+    return {
+      migrationId: f.migrationId as never,
+      revision: f.revision,
+      file: f.file,
+      text: truncated ? f.text.slice(0, REVIEW_SOURCE_MAX_CHARS) : f.text,
+      bytes: f.bytes,
+      truncated,
+    }
+  })
+}
+
+/** The audit event of a denied high-risk action (an audit event name, not a contract action). */
+const DENIAL_EVENT = 'authz.denied'
+
+/** The audit's actor and client of a denied caller (no argument values). */
+function denialParties(caller: Caller) {
+  if (caller.kind === 'session') {
+    return {
+      actor: {
+        kind: 'human' as const,
+        identityId: caller.session.identityId,
+        label: caller.session.label as never,
+      },
+      client: { clientId: null, kind: 'web' as const, sessionId: caller.session.sessionId },
+    }
+  }
+  const { principal } = caller
+  const credential = principal.delegation.credential
+  return {
+    actor: {
+      kind: principal.identityKind,
+      identityId: principal.identityId,
+      label: principal.label as never,
+    },
+    client: {
+      clientId: credential.type === 'access_token' ? credential.clientId : null,
+      kind: principal.client,
+      grantId: credential.type === 'access_token' ? credential.grantId : null,
+    },
+  }
+}
+
+/** Who reads rows, for the data-read audit and the lane's owner (Wave 7). */
+function readParties(caller: Caller): ReadParties {
+  const { actor, client } = denialParties(caller)
+  const tool = caller.kind === 'bearer' ? caller.tool : undefined
+  return {
+    actor: { kind: actor.kind, identityId: actor.identityId, label: actor.label },
+    client: {
+      clientId: client.clientId,
+      kind: client.kind,
+      grantId: 'grantId' in client ? client.grantId : null,
+      ...('sessionId' in client ? { sessionId: client.sessionId } : {}),
+    },
+    ...(tool === undefined ? {} : { tool }),
+  }
+}
+
+/** Where a denied request pointed, for the audit's subject. */
+function denialSubject(subject: SubjectRef) {
+  const s: Record<string, string | undefined> =
+    subject.kind === 'plan'
+      ? {
+          targetId: subject.subject.targetId,
+          targetPath: subject.subject.targetPath,
+          tier: subject.subject.tier,
+          clusterId: subject.subject.clusterId,
+          nodeId: subject.subject.nodeId,
+          serverId: subject.subject.serverId,
+        }
+      : subject.kind === 'target'
+        ? { targetId: subject.targetId }
+        : subject.kind === 'cluster'
+          ? { clusterId: subject.clusterId }
+          : subject.kind === 'server'
+            ? { serverId: subject.serverId }
+            : {}
+  return Object.fromEntries(Object.entries(s).filter(([, v]) => v !== undefined))
 }
 
 /**
@@ -218,6 +365,8 @@ export type Caller =
       readonly resource: OAuthResource
       /** The step-up receipt the request names (`ExponetDB-Step-Up`, ADR-0026); redeemed only by its bound use case. */
       readonly stepUpId?: string
+      /** The MCP tool the request came through: recorded in a denial's audit, never decided on. */
+      readonly tool?: string
     }
 
 export function sessionCaller(session: SessionContext): Caller {
@@ -308,6 +457,7 @@ function operationCaller(caller: Caller): RegistryActor {
     reauthAt: principal.stepUp?.reauthAt ?? null,
     client: principal.client,
     clientId: credential.type === 'access_token' ? credential.clientId : null,
+    grantId: credential.type === 'access_token' ? credential.grantId : null,
   }
 }
 
@@ -357,6 +507,8 @@ export class Application {
   /** The Wave 6 migration use cases (bundles, lint, plans, live reads). */
   readonly migrations: MigrationUseCases
   readonly breakGlass: BreakGlassUseCases
+  /** The Wave 7 data reads (`sql_query`, `sql_explain`, `sql_cancel`; ADR-0028). */
+  readonly queries: QueryUseCases
 
   constructor(deps: ApplicationDeps) {
     this.#d = deps
@@ -368,6 +520,20 @@ export class Application {
       authorize: (q, action, caller, subject) =>
         this.#authorize(q, action, caller as Caller, subject),
       admit: (q, action, caller) => this.#admit(q, action, caller as Caller),
+      allowed: async (q, action, caller, subject) =>
+        (
+          await this.#d.authorizer.authorize(
+            q,
+            {
+              action,
+              principal: principalOf(caller as Caller),
+              ...((caller as Caller).kind === 'bearer'
+                ? { resource: (caller as Extract<Caller, { kind: 'bearer' }>).resource }
+                : {}),
+            },
+            subject,
+          )
+        ).allowed,
       plan: (caller, action, idempotency, subject, create) =>
         this.#plan(
           caller as Caller,
@@ -387,6 +553,19 @@ export class Application {
     this.registry = new RegistryUseCases(host)
     this.nodes = new NodeUseCases(host)
     this.migrations = new MigrationUseCases(host)
+    this.queries = new QueryUseCases({
+      store: deps.auth.store,
+      clock: deps.policy.clock,
+      policy: () => deps.registry?.plans.policy,
+      authorize: host.authorize,
+      admit: host.admit,
+      parties: (caller) => readParties(caller as Caller),
+      denied: (action, caller, subject, error) => {
+        if (isActionId(action) && isHighRiskAction(action)) {
+          this.#auditDenial(action, caller as Caller, subject, 'policy', error)
+        }
+      },
+    })
     this.breakGlass = new BreakGlassUseCases(host, {
       channel: deps.auth.channel,
       dispatch: (pending) => dispatchNotifications(deps.auth.store, deps.auth.channel, pending),
@@ -428,9 +607,104 @@ export class Application {
       subject,
     )
     if (!result.allowed) {
+      if (
+        caller !== undefined &&
+        isActionId(action) &&
+        isHighRiskAction(action) &&
+        AUDITED_DENIALS.has(result.reason)
+      ) {
+        this.#auditDenial(action, caller, subject, result.reason, result.error)
+      }
       throw result.error
     }
     return result
+  }
+
+  /** Background writes still running: denial audits, grant uses (tests and shutdown wait). */
+  readonly #background = new Set<Promise<void>>()
+
+  #inBackground(event: string, work: Promise<unknown>): void {
+    const write: Promise<void> = work
+      .then(
+        () => undefined,
+        (failure: unknown) => this.#d.onBackgroundError?.(event, failure),
+      )
+      .finally(() => {
+        this.#background.delete(write)
+      })
+    this.#background.add(write)
+  }
+
+  /**
+   * A denied high-risk action, recorded as `authz.denied` (audit.md §2,
+   * Wave 7 order §18) with the reason, the action, the tool, the client and
+   * the grant, never an argument value. It is written in its own
+   * transaction once the denying one has ended: the denial rolls the
+   * request's transaction back, so the event cannot be part of it, and a
+   * write that waited for it inside would deadlock on the audit chain lock.
+   * The denial stands either way; a failed write is reported, never turned
+   * into anything else.
+   */
+  #auditDenial(
+    action: ActionId,
+    caller: Caller,
+    subject: SubjectRef,
+    reason: string,
+    error: { readonly code: string },
+  ): void {
+    const { actor, client } = denialParties(caller)
+    const tool = caller.kind === 'bearer' ? caller.tool : undefined
+    this.#inBackground(
+      'authz.denial_audit_failed',
+      this.#d.auth.store.transaction('application.authz.denied', (tx) =>
+        appendAuditEvent(
+          tx,
+          {
+            action: DENIAL_EVENT,
+            phase: 'denied',
+            actor,
+            client,
+            subject: denialSubject(subject),
+            changes: { action, reason, ...(tool === undefined ? {} : { tool }) },
+            result: { status: 'denied', errorCode: error.code },
+          },
+          { clock: this.#d.policy.clock },
+        ),
+      ),
+    )
+  }
+
+  /** The minute each grant's use was last written by this process (a bounded throttle). */
+  readonly #grantUses = new Map<string, number>()
+
+  /**
+   * Notes that a bearer caller's grant was used (Wave 7 order §16, decision
+   * 10): the minute and the class only, at most one write a minute per
+   * grant (the table's upsert holds that across processes, this throttle
+   * spares the round trip). In the background: a failure is reported and
+   * never fails the request. An API key has no grant: nothing is noted.
+   * The last use is a data basis for the Web App, never a decision input.
+   */
+  noteGrantUse(caller: Caller, useClass: oauth.GrantUseClass): void {
+    if (caller.kind !== 'bearer') return
+    const credential = caller.principal.delegation.credential
+    if (credential.type !== 'access_token') return
+    const nowMs = this.#d.policy.clock.nowMs()
+    const minute = Math.floor(nowMs / 60_000)
+    if (this.#grantUses.get(credential.grantId) === minute) return
+    if (this.#grantUses.size >= 10_000) this.#grantUses.clear()
+    this.#grantUses.set(credential.grantId, minute)
+    this.#inBackground(
+      'oauth.grant_use_failed',
+      oauth.recordGrantUse(this.#d.auth.store, credential.grantId, useClass, new Date(nowMs)),
+    )
+  }
+
+  /** Resolves when every pending background write has ended. */
+  async settled(): Promise<void> {
+    while (this.#background.size > 0) {
+      await Promise.all([...this.#background])
+    }
   }
 
   /** Phase 1 only, for lists whose items are filtered by the caller's scopes. */
@@ -445,6 +719,10 @@ export class Application {
       ...(caller.kind === 'bearer' ? { resource: caller.resource } : {}),
     })
     if (!result.allowed) {
+      // Admitted before any subject is resolved: the event names none.
+      if (isActionId(action) && isHighRiskAction(action) && AUDITED_DENIALS.has(result.reason)) {
+        this.#auditDenial(action, caller, INSTALLATION, result.reason, result.error)
+      }
       throw result.error
     }
     return result
@@ -794,9 +1072,29 @@ export class Application {
       )
       // Re-authentication is checked last: a decision denied only for it is one the
       // person may take after re-authenticating, so the item belongs in the queue.
-      if (decision.allowed || decision.reason === 'reauth') decidable.push(item)
+      if (decision.allowed || decision.reason === 'reauth') {
+        decidable.push({ ...item, review: await this.#review(plan) })
+      }
     }
     return { items: decidable }
+  }
+
+  /**
+   * What the person reviews (Wave 7 order §24): the server's own plan view
+   * (subject, creator, decision, rules, requirements, expiry, the change and
+   * its analysis), the creating client's own name (never verified) and, for
+   * migration plans, the files they run verbatim from the bundle store. No
+   * number or word in it comes from an agent.
+   */
+  async #review(plan: PlanRecord): Promise<NonNullable<ApprovalQueueItem['review']>> {
+    const store = this.#d.auth.store
+    const client =
+      plan.actor.clientId === null ? undefined : await oauth.readClient(store, plan.actor.clientId)
+    return {
+      plan: await planView(store, plan),
+      clientName: client?.displayName ?? null,
+      sources: await reviewSources(store, plan),
+    }
   }
 
   // ----- plan and operation reads (OD-26 (c), resolved 2026-10-12) -----
@@ -975,12 +1273,18 @@ export class Application {
       readonly action?: string | undefined
       readonly actor?: 'self' | 'any' | undefined
       readonly result?: 'succeeded' | 'failed' | 'denied' | undefined
+      /** The client and the grant the events were made through (runbook RB-11). */
+      readonly client?: string | undefined
+      readonly grant?: string | undefined
       readonly limit?: number | undefined
       readonly cursor?: string | undefined
     },
   ): Promise<{ items: AuditEventView[]; nextCursor: string | null }> {
     const limit = query.limit ?? 100
     const before = decodeAuditCursor(query.cursor)
+    if (query.target === undefined && restricted(caller)) {
+      return this.#auditEventsOfVisibleTargets(caller, query, limit, before)
+    }
     return this.#d.auth.store.transaction('application.audit.search', async (tx) => {
       await this.#authorize(
         tx,
@@ -998,6 +1302,8 @@ export class Application {
             AND ($5::text IS NULL OR actor_id = $5)
             AND ($6::text IS NULL OR event::jsonb -> 'result' ->> 'status' = $6)
             AND ($7::bigint IS NULL OR seq < $7)
+            AND ($9::text IS NULL OR event::jsonb -> 'client' ->> 'clientId' = $9)
+            AND ($10::text IS NULL OR event::jsonb -> 'client' ->> 'grantId' = $10)
           ORDER BY seq DESC
           LIMIT $8`,
         [
@@ -1009,6 +1315,8 @@ export class Application {
           query.result ?? null,
           before,
           limit + 1,
+          query.client ?? null,
+          query.grant ?? null,
         ],
       )
       const page = rows.slice(0, limit)
@@ -1021,6 +1329,84 @@ export class Application {
         nextCursor:
           rows.length > limit && last !== undefined ? encodeAuditCursor(last.text('seq')) : null,
       }
+    })
+  }
+
+  /**
+   * `audit.search` without a target for a grant restricted to tiers or
+   * targets (authorization.md §1, Wave 7 decision): the events of the
+   * targets the grant covers and the identity may read the audit of, never
+   * an installation-wide event, never a refusal of the whole list. At most
+   * `SCAN_LIMIT` events are examined per call; the cursor continues the scan.
+   */
+  async #auditEventsOfVisibleTargets(
+    caller: Caller,
+    query: Parameters<Application['auditEvents']>[1],
+    limit: number,
+    before: string | null,
+  ): Promise<{ items: AuditEventView[]; nextCursor: string | null }> {
+    const SCAN_LIMIT = 2000
+    return this.#d.auth.store.transaction('application.audit.search', async (tx) => {
+      await this.#admit(tx, 'audit.search', caller)
+      const { rows } = await tx.query(
+        'application.audit.search.targets',
+        `SELECT seq, event, event::jsonb -> 'subject' ->> 'targetId' AS target_id
+           FROM audit.audit_events
+          WHERE event::jsonb -> 'subject' ->> 'targetId' IS NOT NULL
+            AND ($1::timestamptz IS NULL OR occurred_at >= $1)
+            AND ($2::timestamptz IS NULL OR occurred_at < $2)
+            AND ($3::text IS NULL OR action = $3)
+            AND ($4::text IS NULL OR actor_id = $4)
+            AND ($5::text IS NULL OR event::jsonb -> 'result' ->> 'status' = $5)
+            AND ($6::bigint IS NULL OR seq < $6)
+            AND ($8::text IS NULL OR event::jsonb -> 'client' ->> 'clientId' = $8)
+            AND ($9::text IS NULL OR event::jsonb -> 'client' ->> 'grantId' = $9)
+          ORDER BY seq DESC
+          LIMIT $7`,
+        [
+          query.from ?? null,
+          query.to ?? null,
+          query.action ?? null,
+          query.actor === 'self' ? identityOf(caller) : null,
+          query.result ?? null,
+          before,
+          SCAN_LIMIT + 1,
+          query.client ?? null,
+          query.grant ?? null,
+        ],
+      )
+      const decided = new Map<string, boolean>()
+      const items: AuditEventView[] = []
+      let next: string | null = null
+      let scanned = 0
+      for (const row of rows) {
+        if (scanned === SCAN_LIMIT || items.length === limit) break
+        scanned++
+        const targetId = row.text('target_id')
+        let allowed = decided.get(targetId)
+        if (allowed === undefined) {
+          allowed =
+            isId('tgt', targetId) &&
+            (
+              await this.#d.authorizer.authorize(
+                tx,
+                {
+                  action: 'audit.search',
+                  principal: principalOf(caller),
+                  ...(caller.kind === 'bearer' ? { resource: caller.resource } : {}),
+                },
+                { kind: 'target', targetId },
+              )
+            ).allowed
+          decided.set(targetId, allowed)
+        }
+        if (allowed) {
+          items.push(auditView(JSON.parse(row.text('event')) as Record<string, unknown>))
+        }
+        next = encodeAuditCursor(row.text('seq'))
+      }
+      if (scanned === rows.length) next = null
+      return { items, nextCursor: next }
     })
   }
 
@@ -1287,10 +1673,13 @@ export class Application {
         plan.kind,
       )
       const actor = registryOperationActor(actorFor(caller, plan.kind, plan.actionClass))
+      // The applying actor only, as apply and withdraw bind it: the identity, the client kind
+      // and the registered client (another client of the same person cannot cancel).
       if (
         row.text('actor_kind') !== actor.kind ||
         row.textOrNull('actor_id') !== actor.identityId ||
-        row.text('client_kind') !== actor.client
+        row.text('client_kind') !== actor.client ||
+        plan.actor.clientId !== actor.clientId
       ) {
         throw new OperationError('PLAN_BINDING_ACTOR')
       }
@@ -1632,6 +2021,43 @@ export class Application {
 
   // ----- apply, withdraw, approvals -----
 
+  /**
+   * A refused apply of a `critical` plan says what to do (Wave 7 order §24):
+   * only a person applies it. Given only when the engine would let this
+   * caller apply the kind without the stored class, so it tells nothing the
+   * caller could not do otherwise; any other refusal stays as it was.
+   */
+  async #humanApply(
+    q: Queryable,
+    caller: Caller,
+    plan: { readonly planId: string; readonly kind: string; readonly actionClass: string },
+    error: unknown,
+  ): Promise<unknown> {
+    if (
+      plan.actionClass !== 'critical' ||
+      caller.kind !== 'bearer' ||
+      !(error instanceof AuthError) ||
+      error.code !== 'PERMISSION_DENIED'
+    ) {
+      return error
+    }
+    const stored = await readPlan(q, plan.planId)
+    if (stored === undefined) return error
+    const asKind = await this.#d.authorizer.authorize(
+      q,
+      {
+        action: 'plan.apply',
+        principal: principalOf(caller),
+        planKind: plan.kind,
+        resource: caller.resource,
+      },
+      { kind: 'plan', subject: subjectOf(stored) },
+    )
+    return asKind.allowed
+      ? new AuthError('HUMAN_APPLY_REQUIRED', { details: { planId: plan.planId } })
+      : error
+  }
+
   async apply(requested: Caller, planId: string): Promise<OperationView> {
     const operationId = await this.#d.auth.store.transaction('application.apply', async (tx) => {
       const plan = await readPlan(tx, planId)
@@ -1646,14 +2072,18 @@ export class Application {
         tokenId: null,
       })
       const caller = stepUp.caller as Caller
-      await this.#authorize(
-        tx,
-        'plan.apply',
-        caller,
-        { kind: 'plan', subject: subjectOf(plan) },
-        plan.kind,
-        plan.actionClass,
-      )
+      try {
+        await this.#authorize(
+          tx,
+          'plan.apply',
+          caller,
+          { kind: 'plan', subject: subjectOf(plan) },
+          plan.kind,
+          plan.actionClass,
+        )
+      } catch (error) {
+        throw await this.#humanApply(tx, caller, plan, error)
+      }
       if (this.#d.kinds.get(plan.kind) === undefined) {
         throw new OperationError('operation_kind_unknown')
       }
@@ -1881,7 +2311,56 @@ export class Application {
     bindingCookie: string | undefined,
   ): Promise<ConsentView> {
     await this.#authorize(this.#d.auth.store, 'oauth.consent.get', caller, selfRef(caller))
-    return oauth.consentView(this.#d.auth, sessionOf(caller), handle, bindingCookie)
+    const view = await oauth.consentView(this.#d.auth, sessionOf(caller), handle, bindingCookie)
+    return { ...view, targets: await this.#consentTargets(caller) }
+  }
+
+  /**
+   * The targets a person can see, for the consent page's target choice
+   * (Wave 7 order §16): the registry's list as this person, at most 200.
+   * A person who may list none chooses among none (every target of the
+   * tiers stays the default).
+   */
+  async #consentTargets(caller: Caller): Promise<ConsentView['targets']> {
+    if (this.#d.registry === undefined) return []
+    try {
+      const page = await this.registry.targets(caller, {}, { limit: 200 })
+      return page.items.map((t) => ({ id: t.id, path: t.path, tier: t.tier }))
+    } catch (error) {
+      if (error instanceof AuthError) return []
+      throw error
+    }
+  }
+
+  /**
+   * A chosen target list: each one a target the person can read now
+   * (`target.get`, the engine on the registry's subject) and of a chosen
+   * tier. Checked before the grant is written; the engine still decides at
+   * every use with the live role bindings.
+   */
+  async #checkTargetChoice(
+    caller: Caller,
+    body: { readonly tiers: readonly Tier[]; readonly targets?: TargetRestriction | undefined },
+  ): Promise<void> {
+    if (body.targets === undefined || body.targets.kind === 'all') return
+    const refuse = (index: number, message: string): never => {
+      throw new RegistryError('VALIDATION_FAILED', {
+        errors: [{ path: `/targets/targetIds/${index}`, code: 'invalid', message }],
+      })
+    }
+    if (this.#d.registry === undefined) refuse(0, 'No target can be chosen here.')
+    for (const [index, id] of body.targets.targetIds.entries()) {
+      let tier: Tier
+      try {
+        tier = (await this.registry.target(caller, id)).tier
+      } catch (error) {
+        if (error instanceof AuthError || error instanceof RegistryError) {
+          return refuse(index, 'Not a target you can see.')
+        }
+        throw error
+      }
+      if (!body.tiers.includes(tier)) refuse(index, 'The target is outside the chosen tiers.')
+    }
   }
 
   async consent(
@@ -1894,9 +2373,11 @@ export class Application {
       readonly tiers: readonly Tier[]
       readonly lifetimeDays: number
       readonly acknowledgeProduction?: true | undefined
+      readonly targets?: TargetRestriction | undefined
     },
     bindingCookie: string | undefined,
   ): Promise<{ readonly redirectTo: string }> {
+    if (body.decision === 'allow') await this.#checkTargetChoice(caller, body)
     return this.#d.auth.store.transaction('application.oauth.consent', async (tx) => {
       await this.#authorize(tx, 'oauth.consent', caller, selfRef(caller))
       return oauth.decideConsent(tx, this.#d.auth, meta, sessionOf(caller), body, bindingCookie)
@@ -1907,7 +2388,8 @@ export class Application {
     await this.#authorize(this.#d.auth.store, 'oauth.consent.get', caller, selfRef(caller))
     const session = sessionOf(caller)
     await oauth.countDeviceAttempt(this.#d.auth, session)
-    return oauth.deviceView(this.#d.auth, session, userCode)
+    const view = await oauth.deviceView(this.#d.auth, session, userCode)
+    return { ...view, targets: await this.#consentTargets(caller) }
   }
 
   async device(
@@ -1920,10 +2402,12 @@ export class Application {
       readonly tiers: readonly Tier[]
       readonly lifetimeDays: number
       readonly acknowledgeProduction?: true | undefined
+      readonly targets?: TargetRestriction | undefined
     },
   ): Promise<{ readonly status: 'approved' | 'denied' }> {
     await this.#authorize(this.#d.auth.store, 'oauth.consent', caller, selfRef(caller))
     await oauth.countDeviceAttempt(this.#d.auth, sessionOf(caller))
+    if (body.decision === 'allow') await this.#checkTargetChoice(caller, body)
     return this.#d.auth.store.transaction('application.oauth.device', async (tx) => {
       await this.#authorize(tx, 'oauth.consent', caller, selfRef(caller))
       return oauth.decideDevice(tx, this.#d.auth, meta, sessionOf(caller), body)
@@ -2306,6 +2790,11 @@ export function subjectOf(plan: PlanRecord): PlanSubject {
 }
 
 /** A bearer caller's grant restrictions (target list, tiers); a session has none. */
+/** Whether a caller's grant is limited to some tiers or targets (a session never is). */
+function restricted(caller: Caller): boolean {
+  return caller.kind === 'bearer' && !unrestricted(caller.principal.delegation.restrictions)
+}
+
 function restrictionsOf(caller: Caller): TargetVisibilityRestriction | undefined {
   if (caller.kind !== 'bearer') {
     return undefined
@@ -2339,7 +2828,10 @@ function decodeAuditCursor(cursor: string | undefined): string | null {
 
 type AuditEventView = ReturnType<typeof AuditEventSchema.parse>
 
-/** The REST read projection of a stored audit event (pseudonymous actor; no changes, request or decision). */
+/**
+ * The REST read projection of a stored audit event (pseudonymous actor; no
+ * changes, request or decision, except a denial's action, reason and tool).
+ */
 function auditView(e: Record<string, unknown>): AuditEventView {
   const o = (v: unknown) =>
     typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {}
@@ -2349,6 +2841,7 @@ function auditView(e: Record<string, unknown>): AuditEventView {
   const subject = o(e['subject'])
   const refs = o(e['refs'])
   const resultOf = o(e['result'])
+  const changes = o(e['changes'])
   const status = str(resultOf['status'])
   const errorCode = str(resultOf['errorCode'])
   const view = {
@@ -2384,6 +2877,14 @@ function auditView(e: Record<string, unknown>): AuditEventView {
       jobId: str(refs['jobId']),
     },
     reason: str(e['reason']),
+    denial:
+      e['action'] === DENIAL_EVENT
+        ? {
+            action: str(changes['action']),
+            reason: str(changes['reason']),
+            tool: str(changes['tool']),
+          }
+        : null,
     result: {
       // An event without a result records a request; it read as succeeded so far.
       status: status ?? 'succeeded',

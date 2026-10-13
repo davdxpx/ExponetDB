@@ -55,6 +55,8 @@ export type TargetErrorReason =
   | 'marker_missing'
   | 'marker_mismatch'
   | 'server_error'
+  /** The result of an untrusted statement went past the receive bound; the connection was closed. */
+  | 'receive_limit'
   | 'protocol'
   | 'unsupported_version'
 

@@ -58,6 +58,21 @@ are not members of the event: they are stored beside it (§4.1). Labels are
 `human #<n>`, `service #<n>` or `system:<process>` (`serve`, `worker`,
 `gateway`, `migrate`, `maintenance`). `reason` is at most 1,000 characters.
 
+**[OBSERVED]** (2026-10-13) Two client-kind sets exist and are not the
+same thing. The **client kinds of the authorization model** are `web`,
+`cli`, `mcp`, `ci` (`CLIENT_KINDS` in `packages/contracts/src/scopes.ts`):
+they decide which scopes and actions a caller may use
+([`../08-auth-and-security/authorization.md`](../08-auth-and-security/authorization.md)).
+The **recorded client kind** of an audit event (`client.kind`) and of a
+plan or operation (`client_kind`) admits six values, `web`, `rest`, `mcp`,
+`cli`, `ci`, `system` (the Wave 2 shape in `packages/contracts/src/audit.ts`
+and the operations tables): a caller is recorded with its authorization
+client kind, and `system` names the Control Plane's own processes
+(`system:worker`). `rest` is admitted by that shape, but no code path
+records it: a REST call is recorded with the kind of its credential's
+client (`web` for a session, `cli`, or `ci` for a service account's API
+key or machine grant).
+
 Rules:
 
 - **No secrets**: credentials, tokens, API keys, verifiers, private keys, OAuth
@@ -93,7 +108,7 @@ phases as applicable):
 | Registry | `target.registered`, `target.suspended`, `target.resumed`, `target.decommissioned`, `target.identity_stamped`, `placement.changed`, `cluster.confirmed`, `credential.rotated`, `credential.verified_failed` |
 | Access | `identity.created`, `identity.disabled`, `login.succeeded/failed` (rate-limited aggregation for failures), `reauth.succeeded/failed`, `role_binding.changed`, `oauth.client_registered`, `oauth.client_approved`, `oauth.grant_created`, `oauth.grant_revoked`, `oauth.token_refresh_reuse_detected`, `api_key.created`, `api_key.revoked`, `policy.settings_changed` |
 | Maintenance | `retention.pruned` (per dropped partition: class, range, row count, boundary) |
-| Security signals | `target.identity_mismatch`, `cluster.identity_mismatch`, `ledger.divergence_detected`, `authz.denied` for high-risk actions (sampled for low-risk) |
+| Security signals | `target.identity_mismatch`, `cluster.identity_mismatch`, `ledger.divergence_detected`, `authz.denied` for high-risk actions (other refusals: request log and metric only) |
 
 **[DECIDED]** (Wave 3B) The OAuth and delegation events as implemented:
 `oauth.client_registered` (CIMD added for review, DCR registration,
@@ -113,6 +128,41 @@ as a keyed pseudonym. Token issuance and refresh are not audited one by one
 Read-only requests (listing targets, schema inspection, diagnostics) are **not**
 audited individually; they are covered by request logs with shorter retention.
 `data.read` and raw-statement views are the exceptions because they reveal data.
+
+**[DECIDED]** (Wave 7 order §18, resolving the contradiction with
+`error-model.md`) Which refusal goes where, for every interface:
+
+| Event | Goes to | Content (never a value) |
+|---|---|---|
+| A state change (plans, operations, approvals, grants, clients) | audit, same transaction | actor (identity and pseudonymous label), client (`kind`, `clientId`, `grantId`; a client name is untrusted), action, subject, `planHash`/operation, result code |
+| A data read (`sql_query`, `sql_explain`, Wave 7 Phase 8) | audit | normalized statement, digest, row count, truncation, duration, masked columns; never a row value |
+| A denied **high-risk** action (`authz.denied`) | audit | the denied action, the engine's reason, the MCP tool, the client and the grant, the subject when the engine resolved one, the error code; never an argument value |
+| Any other refusal (validation, unknown tool, header, Origin, rate limit, invalid token, a read without permission, a missing re-authentication) | request log and metric | request id, era, version, tool, result code, duration, argument digest |
+
+High-risk is defined once, in the action catalog (`isHighRiskAction`,
+`packages/contracts/src/actions.ts`): every consequential action (applying
+any change; changing access, grants, keys, clients and policies), every
+`*.plan` action, approvals and break-glass, and data reads (`data.read`).
+Ceremonies and OAuth protocol endpoints keep their own events. A denial is
+a security signal when the engine names a missing permission, scope,
+client kind, resource or restriction, a human-only action by an agent,
+`not_self`, an unknown tier or the policy; a missing re-authentication, an
+unknown subject and an unauthenticated request are ordinary refusals. The
+check sits in the application's one enforcing path (`#authorize` and the
+admission step before a subject is resolved), so probes that only decide
+what to list (the tool list, list filters) never write one. Through MCP the
+event names the tool the call came through (`changes.tool`); the read
+projection shows it as `denial: { action, reason, tool }`, null for every
+other event. An alarm on many refused tool calls is the metric
+`exdb_mcp_denied_total{reason}` (no alerting system is built).
+
+**[DECIDED]** (Wave 7) Attribution of an agent's work: `plan.created` and
+`operation.accepted` carry the person, `client.kind: mcp`, the registered
+`clientId` and the `grantId`. The worker's events of that operation
+(`migration.apply`, `migration.verification`, state changes) carry no
+client; they belong to the request through `refs.operationId`, whose
+`operation.accepted` names client and grant. `[OBSERVED]` in
+`apps/server/test/mcp-plans.int.test.ts`.
 
 ## 3. Writing
 
@@ -259,13 +309,29 @@ and a partition no exported checkpoint covers. The default retention is
 `permanent`, under which nothing is ever dropped
 ([`data-retention.md`](./data-retention.md#2-mechanism)).
 
+**[DECIDED]** (Wave 7) The one exception to "same transaction": an
+`authz.denied` event. A denial rolls the request's transaction back, so its
+event cannot be part of it, and a second transaction awaited inside the
+first would wait on the chain lock the first may hold. The application
+writes it in its own transaction in the background, once the denying
+transaction has ended; the denial stands either way, and a failed write is
+logged (`authz.denial_audit_failed`), never retried into anything else. A
+process that stops waits for pending writes (`Application.settled()`).
+
 **[PLANNED] later:** append-only external sink (WORM storage or a transparency log)
 and signed checkpoints with a key held outside the Control Plane.
 
 ## 5. Reading
 
-- `audit.read` permission/scope; filters by time, actor, client, target, action,
-  result, plan/operation ids.
+- `audit.read` permission/scope. **[OBSERVED]** (2026-10-13,
+  `searchAuditEvents` in `packages/contracts/src/rest/routes.ts`, the tool
+  `audit_search`) `GET /api/v1/audit-events` and `audit_search` filter by
+  time (`from`, `to`), `target`, `action`, `actor` (`self` or `any`),
+  `result`, `client` and `grant`; there is no filter by plan or operation
+  id (an event names them in `refs`). **[DECIDED]** (Wave 7) The `client`
+  (a registered `cli_` id) and `grant` (a `grt_` id) filters exist so
+  runbook RB-11 can list the actions of a leaked credential; both match
+  the event's recorded client, the same rows through both interfaces.
 - Audit is readable by agents with `audit.read` (useful for "what happened on
   production yesterday"), with personal fields minimized (§6).
 - Every audit view is paginated; no bulk export via MCP.

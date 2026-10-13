@@ -52,10 +52,43 @@ RFC 9457 `application/problem+json`, extended:
 ### MCP
 
 A domain refusal is a **tool execution error**, not a protocol error: the tool
-result has `isError: true`, a short text content for the model, and
-`structuredContent` with the same object as the REST body (minus HTTP fields).
-Protocol errors (JSON-RPC) are reserved for malformed requests, unknown tools and
-authentication failures handled by the transport.
+result has `isError: true` and a text block with a server line (`Refused:
+<CODE>. Next step: <remediation>`) and the problem body without HTTP fields
+(`code`, `message`, `details`, `remediation`, `retryable`, `requestId`).
+**[DECIDED]** (Wave 7) The body is not sent as `structuredContent`:
+clients validate `structuredContent` against the tool's success schema
+(order §22, §35.2 item 9), so it stays in the text until a real client
+test shows otherwise. Protocol errors (JSON-RPC) are reserved for
+malformed requests, unknown tools and the version ladder; authentication
+is the transport's (HTTP status and challenge).
+
+**[DECIDED]** (Wave 7, implemented in `apps/server/src/interfaces/mcp/`;
+the full situation table is
+[`../05-mcp/protocol-baseline.md` §5](../05-mcp/protocol-baseline.md#5-situation-http-status-json-rpc-code-body)):
+
+| Code or situation | At `/mcp` |
+|---|---|
+| `UNAUTHENTICATED` (no token, unknown, expired, revoked, other audience, disabled client) | HTTP 401, `WWW-Authenticate` (`error="invalid_token"` when a token was sent; without one the baseline `scope`); JSON-RPC error without `id`, `data.code` `UNAUTHENTICATED`. `TOKEN_EXPIRED` and `GRANT_REVOKED` are never told apart |
+| `INSUFFICIENT_SCOPE` | HTTP 403 with `error="insufficient_scope"` and `scope` = the held scopes plus the missing one (some clients replace rather than merge); `data` = the tool error with `requiredScope` |
+| `RATE_LIMITED` | HTTP 429, `Retry-After`; `data.code` `RATE_LIMITED`, `data.retryAfterSeconds` |
+| `CONTROL_PLANE_DEGRADED` | HTTP 503, `Retry-After` |
+| `PERMISSION_DENIED`, `TARGET_NOT_FOUND`, `TARGET_NOT_IN_GRANT`, `TIER_NOT_PERMITTED`, `PLAN_DENIED`, `PLAN_STALE`, `PLAN_ALREADY_USED`, `APPROVAL_REQUIRED`, `IDEMPOTENCY_KEY_REUSED`, `CLIENT_NOT_APPROVED`, `CAPABILITY_UNAVAILABLE`, the `QUERY_*` codes, `DATA_READ_NOT_PERMITTED`, every other catalog code | HTTP 200, `isError: true`, the problem body in the text; never an HTTP 403 (a policy or RBAC refusal is a tool error) |
+| `VALIDATION_FAILED` (invalid tool arguments, an unknown or expired list cursor) | HTTP 200, `isError: true` with the issue paths, so the model can correct its call |
+| `INTERNAL` | HTTP 200, `isError: true`, code only; the cause stays in the server log under the request id (a `resources/read` that fails this way, or with `CONTROL_PLANE_DEGRADED`, is JSON-RPC `-32603` without text) |
+| unknown tool, invalid list cursor of `tools/list` or `resources/list`, resource not found | JSON-RPC `-32602` (resource not found `-32002` on the legacy revisions); the tool name is not echoed |
+| `-32020`, `-32021`, `-32022` | the transport's version and header ladder (not catalog codes), HTTP 400 |
+
+**[DECIDED]** (Wave 7 order §18) A refusal of a high-risk action (applying,
+planning, deciding, changing access or grants, reading data) is also an
+audit event, `authz.denied`, with the reason, the tool, the client and the
+grant; every other refusal is a request log line and the metric
+`exdb_mcp_denied_total{reason}` ([audit.md §2](./audit.md#2-what-is-audited)).
+An agent applying a `critical` plan gets `HUMAN_APPLY_REQUIRED` with the
+plan id and the next step for its person (make the plan again: the person
+cannot apply the agent's plan id, it is bound to its caller) (the engine narrows a critical
+plan to a person's session, reason `client_kind`; the refusal is translated
+only when the engine allows the caller the kind's apply without the stored
+class, so it reveals nothing the caller could not do otherwise).
 
 ### OAuth protocol endpoints (Wave 3B)
 
@@ -105,6 +138,8 @@ later without changes).
 | `PLAN_BINDING_ACTOR` | 403 | no | Caller is not the plan's actor/client. |
 | `PLAN_DENIED` | 403 | no | Policy decision at plan time was `deny`; plan exists for explanation only. |
 | `APPROVAL_REQUIRED` | 202/409 | no | Apply accepted into `awaiting_approval` (202) or approval missing for a kind that cannot wait (409). |
+| `HUMAN_APPLY_REQUIRED` | 403 | no | (Wave 7) A `critical` plan applied by an agent or another non-person client: only a person applies it (Web App session or CLI, fresh re-authentication); `details.planId`; the remediation says that the person makes the plan again (a plan is bound to its caller, so their apply of the agent's plan id is `PLAN_BINDING_ACTOR`) and names the CLI commands. Given only when the stored class is the sole obstacle (the engine allows the caller the kind's apply otherwise). |
+| `APPROVALS_PENDING_LIMIT` | 409 | no | (Wave 7) The caller already has 20 operations through the same client (client kind and registered client) that wait for an approval; an accept that would wait is refused and the plan stays active. Decide or cancel waiting operations, then apply again. A plan that needs no approval is not counted against it. |
 | `REAUTH_REQUIRED` | 401 | no | Fresh passkey/TOTP proof needed. |
 | `APPROVAL_COOLING_PERIOD` | 409 | yes | A `critical` self-approval is in its cooling period ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization)); apply again after `details.notBefore` with a fresh re-authentication (Wave 3A). |
 | `SELF_APPROVAL_UNACKNOWLEDGED` | 422 | no | An approval of one's own plan must carry the explicit acknowledgement (Wave 3A). |
@@ -237,7 +272,9 @@ later without changes).
 | `QUERY_NOT_READ_ONLY` | 422 | no | Statement classified as writing; use migrations. |
 | `QUERY_CONSTRUCT_UNSUPPORTED` | 422 | no | The query calls a function, operator or cast, or reads a relation, that the admission cannot classify as free of side effects; `details.construct`. |
 | `QUERY_TIMEOUT` | 408 | yes | `statement_timeout` reached. |
-| `QUERY_RESULT_TOO_LARGE` | 413 | no | Row or byte cap reached; `details.cap`. |
+| `QUERY_FAILED` | 422 | no | (Wave 7) A data read failed at run time (division by zero, an invalid cast of a value): `details.sqlstate` only, never the server's message, which can quote a value. |
+| `QUERY_CANCELED` | 409 | no | (Wave 7) The caller canceled its own running data read (`sql_cancel`, a closed stream); no rows. |
+| `QUERY_RESULT_TOO_LARGE` | 413 | no | (Wave 7) Not even one row fits the byte cap, or the sealed result exceeds the data-read lane's 16 MiB; `details.cap`. A result over the row or byte cap is otherwise returned capped with `truncated: true` and `truncation` (reason, cap), not refused ([ADR-0028](../01-architecture/adr/0028-data-read-lane.md)). |
 | `QUERY_PARSE_ERROR` | 422 | no | Parser rejected the statement; position given. |
 | `DATA_READ_NOT_PERMITTED` | 403 | no | Data reads disabled on this target or tier for this client. |
 | `SAMPLE_STALE` | 200 with warning / 503 | yes | Requested diagnostics older than freshness threshold and live read failed. |
@@ -249,7 +286,7 @@ later without changes).
 | `VALIDATION_FAILED` | 422 | no | Request schema violation; `details.errors[]`. |
 | `NOT_FOUND` | 404 | no | |
 | `CONFLICT` | 409 | no | Generic optimistic concurrency failure (`If-Match`). |
-| `RATE_LIMITED` | 429 | yes | `Retry-After` header. |
+| `RATE_LIMITED` | 429 | yes | `Retry-After` header. Optional `details.retryAfterSeconds` (positive whole seconds, the same wait; an MCP tool error has no header, so it carries the wait there). |
 | `CONTROL_PLANE_DEGRADED` | 503 | yes | Control Store unavailable or ExponetDB not ready. Distinct from `TARGET_UNAVAILABLE` (C-29). |
 | `INTERNAL` | 500 | yes | Unexpected; `requestId` correlates with logs. Never contains stack traces. |
 
@@ -285,7 +322,30 @@ nonprod-only token used to learn `INSUFFICIENT_SCOPE` with
 `requiredScope: …:prod`). The server writes why to its log
 (`authz.denial_concealed`: the route template, the request id and
 `target_restriction` or `tier_restriction`, never the path); it is not part
-of the answer and not an audit event (refusals are not audited).
+of the answer. The concealed answer is not an audit event by itself; when
+the refused action is high-risk the engine records `authz.denied` (audit.md
+§2, Wave 7), which only readers of the audit see (an ordinary refusal goes
+to the request log and a metric).
 `TARGET_NOT_IN_GRANT` and `TIER_NOT_PERMITTED` stay for plans and
-operations the caller already holds. An unrestricted delegated token, like
-a person, still learns that a path exists from `PERMISSION_DENIED`.
+operations the caller already holds.
+
+**[DECIDED]** (Wave 7, adversarial goal 18; supersedes the last sentence of
+the Wave 4 paragraph above for targets) A caller whose role bindings do not
+let it read a target (`targets.read` does not cover it) gets
+`TARGET_NOT_FOUND` for that target, exactly like an unknown path, whatever
+the action: a developer bound to one project cannot tell another project's
+targets from unknown ones, through the REST API, MCP or the CLI. The server
+writes `authz.denial_concealed` with `role_scope`; the audit keeps the true
+reason. A caller who can read the target and lacks only the action's
+permission still gets `PERMISSION_DENIED` (it can list the target anyway).
+Plans and operations of a target the caller cannot read are found by their
+unguessable ids only; their refusals are not changed (a residual).
+
+**[DECIDED]** (Wave 7 order §30, one response-time class for existence
+decisions) Every answer that an object is not there, real or concealed
+(REST `404`, an MCP tool error with a `*_NOT_FOUND` code), leaves no
+earlier than 50 ms after the request began (`apps/server/src/interfaces/existence.ts`).
+Measured before (2026-10-13, in process against PostgreSQL 17): an unknown
+target p50 6.1 ms, a target outside the grant 8.4 ms; after: 54.2 ms and
+54.3 ms. A path slower than the floor (a slow database) still differs; the
+rate limits bound how many samples a caller gets.

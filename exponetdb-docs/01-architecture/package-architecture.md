@@ -246,6 +246,23 @@ to §1.4:
 | `apps/cli` | the complete CLI: command registry, output contract (human, JSON, NDJSON, exit codes), profiles, every remote command through the SDK, local authoring (init, new, lint, checksum, graph), doctor, completion, agent help, the SCRAM verifier utility, the local lab (`exponetdb dev`), the packed tarball ([`15-cli/`](../15-cli/README.md)) | `contracts`, `kernel`, `sdk`, `migrations` (`format`, `graph`, `lint`); never `control-store`, `postgres` sessions or the engine |
 | `apps/web` | the write-only role password page the CLI hands off to | unchanged |
 
+### 1.7 State during Wave 7
+
+**[OBSERVED]** (Wave 7, in progress; G7 not accepted) Added to §1.6:
+
+| Path | Contents | Direct dependencies |
+|---|---|---|
+| `apps/server/src/interfaces/mcp/` | the `/mcp` endpoint ([ADR-0027](./adr/0027-mcp-protocol-layer.md)): the edge (`edge.ts`), the era classification (`classify.ts`), strict JSON, origin and host policy, in-process rate limits, the SDK server factory, the tool host and resource host over `packages/application`, result escaping and rendering, sealed list cursors | `application`, `auth`, `contracts`, `observability`, `@modelcontextprotocol/server` (exact version; only here) |
+| `packages/contracts` | the MCP tool catalog `exponetdb.mcp/v1`, protocol constants, the resources (authoring guide, error catalog, schema documents) | unchanged |
+| `packages/application` | lists for restricted grants show what the grant covers (`node.list`, `audit.search` without a target); the session list caps statements at 500 characters for MCP callers; `authz.denied` for denied high-risk actions and the grant's last use, both written in the background (`settled()`); the audit filters by client and grant; the grant id on an operation actor | unchanged |
+| `packages/auth` | the installation keys `mcp.cursor_key` and `mcp.request_state_key`; bearer challenges with scope lists; the grant's last use (`oauth/usage.ts`) | unchanged |
+| `packages/control-store` | additive bundles `mcp-keys`, `grant-last-use` and `data-read-lane` (not frozen until G7) | unchanged |
+| `packages/postgres` | the admitted read: a handle only `admitReadOn` makes (parser, relation kinds, user code) and only a reader session in its read-only transaction runs (`runAdmittedRead`) | unchanged |
+| `packages/diagnostics` | `data-read/`: the executor of one data read on a fresh reader session, the sealed lane between `serve` and the worker ([ADR-0028](./adr/0028-data-read-lane.md)), `serve`'s preparation (parser admission, normalized statement) | unchanged |
+| `packages/policy` | the rule `data.read` (OD-13 (a)) and the safety direction of its settings; a rule may check its parameters beyond their JSON types | unchanged |
+| `packages/testkit` (Phase 9) | `./mcp`: the reference client on `@modelcontextprotocol/client` (exactly pinned; the only package allowed to name it), the transcript format `exponetdb.mcp-transcript/v1`, its normalizer and replay; the eval harness (`ToolSession`, state-first grading, call predicates, the scripted agent, a Messages API agent over `fetch`, `exponetdb.mcp-eval/v1` lines) | adds `@modelcontextprotocol/client` 2.3.1; no model SDK |
+| `packages/application` (Phase 8) | `QueryUseCases`: `sql_query`, `sql_explain`, `sql_cancel` and their REST routes, the `data.read` audit | unchanged (`diagnostics` was already a dependency; never `postgres`) |
+
 ## 2. Dependency rules
 
 **[DECIDED]** Allowed dependencies (arrows point from consumer to dependency).
@@ -423,6 +440,7 @@ diffed.
 | `packages/contracts/generated/catalog.json` | error catalog, permissions, scopes, client kinds, action registry, contract versions | yes | same |
 | `packages/contracts/generated/jsonschema/*.json` | `migration-manifest.v1`, `project-config.v1`, `mcp-tools.v1`, `node-protocol.v1`; the role manifest follows with roles (Wave 3A) | yes | same |
 | `agent/node/internal/protocol/types_gen.go` | `node-protocol.v1.json` (contracts → JSON Schema → Go) | yes | same, plus `gofmt` |
+| `exponetdb-docs/05-mcp/resources/migration-authoring.md` | `MIGRATION_AUTHORING_GUIDE` in the contracts (Wave 7; the server serves the same text as an MCP resource) | yes | same |
 | `packages/sdk/src/generated/api.ts` | `openapi.json` (`tooling/generators/sdk.ts`, Wave 4) | yes | same; the SDK's own `src/` is the only product code that imports a generated file, and only this one (rules `no-generated-import`, `sdk-own-generated-only`); consumers import `@exponetdb/sdk` |
 | Golden vectors (`tooling/golden/…`, data only) | hand-curated + reviewed; append-only since the owner accepted G1 (2026-10-05); `LOCK.json` pins each vector's hash and `bun run golden:check` fails on a changed or removed vector in the current tree; `bun run golden:history <base>` fails when a vector, file member or lock entry of a base commit changed or disappeared ([`tooling/golden/README.md`](../../tooling/golden/README.md)) | yes | consumed by the TypeScript tests of `kernel` and `migrations/format` and by the Go tests of `agent/node/internal/conformance` |
 | Protocol fixtures (`tooling/fixtures/node-protocol/`, data only) | hand-written synthetic examples | yes | validated against the JSON Schema (Ajv) and decoded strictly by the generated Go types |

@@ -163,10 +163,8 @@ function identityContent(plan: PlanRecord): IdentityId | undefined {
   return isId('idn', id) ? id : undefined
 }
 
-export interface PolicySettingsContent {
+export type PolicySettingsContent = SettingsScope & {
   readonly ruleId: string
-  readonly scopeKind: 'installation'
-  readonly scopeId: 'installation'
   readonly params: JsonObject
   readonly revision: number
 }
@@ -176,17 +174,17 @@ function policySettingsContent(plan: PlanRecord): PolicySettingsContent | undefi
   const ruleId = content?.['ruleId']
   const params = content?.['params']
   const revision = content?.['revision']
+  const scope = settingsScope(content?.['scopeKind'], content?.['scopeId'])
   if (
     typeof ruleId !== 'string' ||
     !isJsonObject(params) ||
     typeof revision !== 'number' ||
     !Number.isSafeInteger(revision) ||
-    content?.['scopeKind'] !== 'installation' ||
-    content['scopeId'] !== 'installation'
+    scope === undefined
   ) {
     return undefined
   }
-  return { ruleId, scopeKind: 'installation', scopeId: 'installation', params, revision }
+  return { ...scope, ruleId, params, revision }
 }
 
 // ----- planning (serve, in the caller's transaction) -----
@@ -354,13 +352,14 @@ export async function planRoleBindingDelete(
 async function latestRevision(
   q: Queryable,
   ruleId: string,
+  scope: SettingsScope = INSTALLATION_SCOPE,
 ): Promise<{ revision: number; params: JsonObject }> {
   const { rows } = await q.query(
     'auth.policy_settings.latest',
     `SELECT revision, params::text AS params FROM policy.rule_settings
-      WHERE scope_kind = 'installation' AND scope_id = 'installation' AND rule_id = $1
+      WHERE scope_kind = $2 AND scope_id = $3 AND rule_id = $1
       ORDER BY revision DESC LIMIT 1`,
-    [ruleId],
+    [ruleId, scope.scopeKind, scope.scopeId],
   )
   const row = rows[0]
   if (row === undefined) {
@@ -373,9 +372,26 @@ async function latestRevision(
   return { revision: row.int('revision'), params: parsed.value }
 }
 
+/** Where a setting applies: the installation, or one registered target (Wave 7, OD-13 (a)). */
+export type SettingsScope =
+  | { readonly scopeKind: 'installation'; readonly scopeId: 'installation' }
+  | { readonly scopeKind: 'target'; readonly scopeId: string }
+
+const INSTALLATION_SCOPE: SettingsScope = { scopeKind: 'installation', scopeId: 'installation' }
+
+function settingsScope(kind: unknown, id: unknown): SettingsScope | undefined {
+  if (kind === 'installation' && id === 'installation') return INSTALLATION_SCOPE
+  if (kind === 'target' && isId('tgt', id)) return { scopeKind: 'target', scopeId: id }
+  return undefined
+}
+
 /**
- * Wave 3A plans installation-level settings only: product, project,
- * environment and target settings need the registry (Wave 4).
+ * Wave 3A planned installation-level settings; since Wave 7 a setting may
+ * also apply to one registered target (OD-13 (a): an administrator changes
+ * `data.read` per target). Product, project and environment settings are
+ * not planned yet. The effective values before and after are computed with
+ * what the target inherits, so a target setting that loosens the
+ * installation's is seen as loosening (`access.policy-safety`).
  */
 export async function planPolicySettingsUpdate(
   tx: Tx,
@@ -389,50 +405,47 @@ export async function planPolicySettingsUpdate(
   },
 ): Promise<PlanRecord> {
   const rule = context.registry.get(input.ruleId)
-  if (
-    rule === undefined ||
-    input.scopeKind !== 'installation' ||
-    input.scopeId !== 'installation'
-  ) {
+  const scope = settingsScope(input.scopeKind, input.scopeId)
+  if (rule === undefined || scope === undefined) {
     throw new AuthError('VALIDATION_FAILED')
   }
-  const latest = await latestRevision(tx, input.ruleId)
-  const merged = { ...latest.params, ...input.params }
-  const currentEffective = resolveParams(
-    rule,
-    latest.revision === 0
+  if (scope.scopeKind === 'target') {
+    const { rows } = await tx.query(
+      'auth.policy_settings.target',
+      `SELECT 1 FROM registry.targets WHERE target_id = $1 AND state <> 'decommissioned'`,
+      [scope.scopeId],
+    )
+    if (rows.length === 0) throw new AuthError('NOT_FOUND')
+  }
+  const latest = await latestRevision(tx, input.ruleId, scope)
+  // What the target inherits from the installation (nothing for the installation itself).
+  const inherited =
+    scope.scopeKind === 'target' ? await latestRevision(tx, input.ruleId) : undefined
+  const subject = scope.scopeKind === 'target' ? { targetId: scope.scopeId } : {}
+  const rows = (own: { revision: number; params: JsonObject } | undefined) => [
+    ...(inherited === undefined || inherited.revision === 0
       ? []
-      : [
-          {
-            scopeKind: 'installation',
-            scopeId: 'installation',
-            ruleId: rule.id,
-            revision: latest.revision,
-            params: latest.params,
-          },
-        ],
-    {},
-  )
+      : [{ ...INSTALLATION_SCOPE, ruleId: rule.id, ...inherited }]),
+    ...(own === undefined || own.revision === 0 ? [] : [{ ...scope, ruleId: rule.id, ...own }]),
+  ]
+  const merged = { ...latest.params, ...input.params }
+  const currentEffective = resolveParams(rule, rows(latest), subject)
   const nextEffective = resolveParams(
     rule,
-    [
-      {
-        scopeKind: 'installation',
-        scopeId: 'installation',
-        ruleId: rule.id,
-        revision: latest.revision + 1,
-        params: merged,
-      },
-    ],
-    {},
+    rows({ revision: latest.revision + 1, params: merged }),
+    subject,
   )
-  if (!currentEffective.ok || !nextEffective.ok) {
+  if (
+    !currentEffective.ok ||
+    !nextEffective.ok ||
+    (rule.checkParams !== undefined && !rule.checkParams(nextEffective.value))
+  ) {
     throw new AuthError('VALIDATION_FAILED')
   }
   const content = {
     ruleId: rule.id,
-    scopeKind: 'installation',
-    scopeId: 'installation',
+    scopeKind: scope.scopeKind,
+    scopeId: scope.scopeId,
     params: merged,
     revision: latest.revision + 1,
   }
@@ -789,7 +802,7 @@ export class PolicySettingsUpdateKind extends AccessKind {
     if (content === undefined) {
       return [{ binding: 'content', actual: 'invalid' }]
     }
-    const latest = await latestRevision(this.store, content.ruleId)
+    const latest = await latestRevision(this.store, content.ruleId, content)
     return latest.revision === content.revision - 1
       ? []
       : [{ binding: 'settingsRevision', expected: content.revision - 1, actual: latest.revision }]
@@ -804,8 +817,15 @@ export class PolicySettingsUpdateKind extends AccessKind {
       await tx.query(
         'auth.kind.policy_settings.insert',
         `INSERT INTO policy.rule_settings (scope_kind, scope_id, rule_id, revision, params, operation_id, created_by)
-         VALUES ('installation', 'installation', $1, $2, $3::jsonb, $4, current_user)`,
-        [content.ruleId, content.revision, JSON.stringify(content.params), ctx.operationId],
+         VALUES ($5, $6, $1, $2, $3::jsonb, $4, current_user)`,
+        [
+          content.ruleId,
+          content.revision,
+          JSON.stringify(content.params),
+          ctx.operationId,
+          content.scopeKind,
+          content.scopeId,
+        ],
       )
       await this.audit(tx, ctx, { ruleId: content.ruleId, revision: content.revision })
       return true

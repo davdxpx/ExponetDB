@@ -5,6 +5,7 @@ import {
   type ActionDefinition,
   type ActionId,
   isActionId,
+  isHighRiskAction,
   isScope,
   PERMISSION_IDS,
   PERMISSIONS,
@@ -302,6 +303,58 @@ describe('tier of consequential actions on plans and operations', () => {
       const d = def(id)
       if (d.effect === 'consequential' && (d.subject === 'plan' || d.subject === 'operation')) {
         expect(d.tierSemantics, id).toBe('subject')
+      }
+    }
+  })
+})
+
+describe('high-risk denials (authz.denied, audit.md §2)', () => {
+  it('applying, planning, deciding, changing access and reading data are high-risk', () => {
+    for (const id of [
+      'plan.apply',
+      'migration.plan',
+      'migration.rollback.plan',
+      'access.policy_settings.update.plan',
+      'approval.approve',
+      'approval.reject',
+      'breakglass.activate',
+      'query.run',
+      'query.explain',
+      'oauth.grant.revoke',
+      'oauth.grant.revoke_own',
+      'api_key.create',
+      'service_account.grant.create',
+      'access.role_binding.create',
+    ] as const) {
+      expect(isHighRiskAction(id), id).toBe(true)
+    }
+  })
+
+  it('metadata reads, withdrawals and ceremonies are not', () => {
+    for (const id of [
+      'target.get',
+      'schema.search',
+      'audit.search',
+      'operation.get',
+      'plan.withdraw',
+      'operation.cancel',
+      'auth.login',
+      'oauth.token',
+      'oauth.authorize',
+    ] as const) {
+      expect(isHighRiskAction(id), id).toBe(false)
+    }
+  })
+
+  it('every consequential action is high-risk unless it is a ceremony or a protocol step', () => {
+    for (const id of ACTION_IDS) {
+      const d = def(id)
+      if (
+        d.effect === 'consequential' &&
+        d.permission.kind !== 'public' &&
+        d.permission.kind !== 'protocol'
+      ) {
+        expect(isHighRiskAction(id), id).toBe(true)
       }
     }
   })

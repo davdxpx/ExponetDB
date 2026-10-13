@@ -47,7 +47,7 @@ export type AuthErrorDetails = JsonObject
  * Why a refusal answers like an unknown object (error-model.md §4): kept for
  * the server's log line, never part of the answer.
  */
-export type ConcealedReason = 'target_restriction' | 'tier_restriction'
+export type ConcealedReason = 'target_restriction' | 'tier_restriction' | 'role_scope'
 
 export class AuthError extends Error {
   override readonly name = 'AuthError'

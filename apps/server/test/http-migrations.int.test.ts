@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -30,6 +30,7 @@ import {
   serverFor,
   superuserClient,
   testTargets,
+  withClusterTurn,
 } from '@exponetdb/testkit'
 import { type ServerType, serve } from '@hono/node-server'
 import { Secret } from 'otpauth'
@@ -103,6 +104,7 @@ async function compose(withChannel: boolean) {
     webauthnRpId: undefined,
     trustedProxies: [],
     egressAddresses: [],
+    mcpAllowedOrigins: [],
   }
   const access = composeAccess(
     config,
@@ -263,15 +265,18 @@ async function ageReauth() {
 }
 
 async function drive() {
-  for (let i = 0; i < 30; i++) {
-    const r = await processNextOperation(stores.worker, {
-      workerId: newId('prc', Date.now()),
-      kinds,
-      clock: systemClock,
-      admit,
-    })
-    if (r.status === 'idle') return
-  }
+  // Parallel suites share the target cluster and its per-role connection limits: take turns.
+  await withClusterTurn(pg17, async () => {
+    for (let i = 0; i < 30; i++) {
+      const r = await processNextOperation(stores.worker, {
+        workerId: newId('prc', Date.now()),
+        kinds,
+        clock: systemClock,
+        admit,
+      })
+      if (r.status === 'idle') return
+    }
+  })
 }
 
 async function planAndApply(path: string, body: unknown, options: { reauth?: boolean } = {}) {
@@ -1276,6 +1281,43 @@ describe('the CLI as a process', () => {
     expect(json(plans).data.items.map((p: { id: string }) => p.id)).toEqual(
       expect.arrayContaining([plan.planId, json(prod).planId]),
     )
+  })
+
+  it('answers PLAN_DENIED for a denied plan: 403 over REST, exit 4 in the CLI (G6 finding O5)', async () => {
+    // A production plan without staging evidence is denied (migration.staging-evidence).
+    const deniedBundle = () =>
+      bundle({
+        id: ulid(),
+        name: 'denied-for-o5',
+        up: `CREATE TABLE public.denied_o5 (id int);\nGRANT SELECT ON public.denied_o5 TO ${APP_ROLE};\n`,
+        verify: '-- check: readable\nSELECT count(*) >= 0 AS ok FROM public.denied_o5;\n',
+        dependsOn: [first],
+      })
+    // Over REST, by a caller that holds migrations.apply:prod (the owner): the plan state
+    // decides after authorization, and it is PLAN_DENIED, never PLAN_STALE.
+    const planned = await owner.browser.call(
+      'POST',
+      `/api/v1/targets/${ids.productionTarget}/migrations/plans`,
+      { bundles: [deniedBundle()], defaults: DEFAULTS },
+    )
+    expect(planned.status, JSON.stringify(planned.body)).toBe(201)
+    expect([planned.body.decision, planned.body.state]).toEqual(['deny', 'denied'])
+    await reauth()
+    const applied = await owner.browser.call('POST', `/api/v1/plans/${planned.body.id}/apply`, {})
+    expect([applied.status, applied.body.code]).toEqual([403, 'PLAN_DENIED'])
+    // In the CLI, with the service account's key: the denied plan is a policy block (exit 4).
+    const key = (await readFile(join(home, 'ci.key'), 'utf8')).trim()
+    const denied = await app.request(`/api/v1/targets/${ids.productionTarget}/migrations/plans`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ bundles: [deniedBundle()], defaults: DEFAULTS }),
+    })
+    const plan = (await denied.json()) as { id: string; decision: string; state: string }
+    expect(denied.status, JSON.stringify(plan)).toBe(201)
+    expect([plan.decision, plan.state]).toEqual(['deny', 'denied'])
+    const cliApply = await cli(['plan', 'apply', plan.id, '--yes', '--no-input', '--json'])
+    expect(cliApply.code, cliApply.stdout + cliApply.stderr).toBe(4)
+    expect(json(cliApply)).toMatchObject({ status: 'failed', error: { code: 'PLAN_DENIED' } })
   })
 
   it('exits 5 when the server cannot be reached, and 2 on a usage error', async () => {

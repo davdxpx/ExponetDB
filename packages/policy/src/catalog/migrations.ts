@@ -24,6 +24,12 @@ export const SQL_KINDS = ['migration.apply', 'migration.rollback', 'migration.re
 export const AUTOCOMMIT_KINDS = ['migration.apply', 'migration.resume'] as const
 /** Kinds whose verify.sql may run declared consumer code. */
 export const VERIFYING_KINDS = ['migration.apply', 'migration.verify'] as const
+/**
+ * Kinds that read or change a production target with bundle SQL: the SQL
+ * kinds and a verification run again, whose verify.sql (stored by the
+ * caller, outside the apply checksum) answers a question about the data.
+ */
+export const AGENT_PRODUCTION_KINDS = [...SQL_KINDS, 'migration.verify'] as const
 
 export type EvidenceFact =
   | 'present'
@@ -449,10 +455,11 @@ export const migrationNontransactional: Rule = {
 
 export const migrationAgentProduction: Rule = {
   id: 'migration.agent-production',
-  version: 1,
+  // 2 (Wave 7): also a verification run again (`migration.verify`).
+  version: 2,
   description:
-    'A production migration an AI agent client initiates needs a human approval (OD-9: the human may approve the plan the agent proposed).',
-  appliesTo: SQL_KINDS,
+    'A production migration or verification run an AI agent client initiates needs a human approval (OD-9: the human may approve the plan the agent proposed).',
+  appliesTo: AGENT_PRODUCTION_KINDS,
   severity: 'require',
   overridableByBreakGlass: false,
   facts: [],

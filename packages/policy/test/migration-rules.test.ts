@@ -106,6 +106,17 @@ describe('migration rules', () => {
     }
     const agent = await decide('prod', {}, { kind: 'service', identityId: null, client: 'mcp' })
     expect(agent.decision).toBe('require')
+    // A verification run again by an agent too (Wave 7): verify.sql reads production data.
+    const person = { kind: 'human' as const, identityId: 'idn_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z' }
+    const verify = (tier: 'prod' | 'nonprod', client: 'mcp' | 'cli') =>
+      decide(tier, {}, { ...person, client }, undefined, 'migration.verify')
+    const byAgent = await verify('prod', 'mcp')
+    expect(byAgent.decision).toBe('require')
+    expect(byAgent.rules.find((r) => r.id === 'migration.agent-production')).toMatchObject({
+      result: 'fail',
+    })
+    expect((await verify('prod', 'cli')).decision).toBe('allow')
+    expect((await verify('nonprod', 'mcp')).decision).toBe('allow')
     // Imported legacy history: a lineage difference is a warning only (OD-14 (a)).
     expect((await decide('prod', { lineage: 'mismatch', legacyProject: true })).decision).toBe(
       'allow',

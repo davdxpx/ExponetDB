@@ -6,7 +6,7 @@ import {
   type ActionId,
   CredentialSubmissionSchema,
   contractJsonSchema,
-  MCP_READ_TOOL_LIST,
+  MCP_TOOL_LIST,
   REGISTRY_ROUTES,
   ROUTE_LIST,
   SCOPE_IDS,
@@ -161,7 +161,7 @@ describe('Wave 4 registry contracts', () => {
     for (const r of ROUTE_LIST) {
       check(r.operationId, contractJsonSchema(r.response.schema, { io: 'output' }))
     }
-    for (const t of MCP_READ_TOOL_LIST) {
+    for (const t of MCP_TOOL_LIST) {
       check(t.name, contractJsonSchema(t.input, { io: 'input' }))
       check(t.name, contractJsonSchema(t.output, { io: 'output' }))
     }

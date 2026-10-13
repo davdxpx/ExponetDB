@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
+| Status | Baseline (Wave 0), accepted 2026-10-05; MCP rows of §3, §6 and §9 updated on 2026-10-13 for Wave 7 (G7 not yet accepted, [G7 record](../14-roadmap/gates/7.md)) |
 | Applies to | Wave 6 (CLI, submission), Wave 10 (REOSA adoption), later waves (Git integration, CI) |
 | Read before | [`migration-bundles.md`](./migration-bundles.md) |
 
@@ -49,7 +49,7 @@ place removes that class of error.
 
 | Path | Who | V1 | Notes |
 |---|---|---|---|
-| MCP `migration_plan` with inline bundle | AI agents | **yes** | The agent sends manifest, `up.sql`, `verify.sql`, optional `down.sql`, plus a claimed source reference. Size limits apply. |
+| MCP `migration_plan` with inline bundles, or with `migrationIds` of bundles ingested earlier | AI agents | **yes** | The agent sends manifest, `up.sql`, `verify.sql`, optional `down.sql`, plus a claimed source reference. Size limits apply: 256 KiB per request in general, 16 MiB for the bundle-carrying tools (`migration_plan`, `migration_lint`). Optional `idempotencyKey`; no break-glass reference and no lint or invariant override. **[OBSERVED]** 2026-10-13, `packages/contracts/src/mcp/tools.ts`, `apps/server/test/mcp-plans.int.test.ts` |
 | REST `POST /targets/{id}/migrations/plans` with inline bundles | CLI, CI, SDK | **yes** | Same payload. |
 | CLI `exponetdb migration plan --target …` | humans, CI | **yes** | Reads bundles from the working tree, computes digests locally (the same code as the server), submits, prints the plan. |
 | By reference to the bundle store | any | **yes** | A bundle already ingested (for example planned for staging) can be referenced by `(projectId, migrationId, checksum)`; this is the normal way to plan production after staging. |
@@ -64,8 +64,14 @@ basics run.
 
 ## 4. CLI
 
-**[PLANNED]** `exponetdb` (package `apps/cli`, distributed as a single binary via
-Bun compile or as an npm package; Wave 6):
+**[OBSERVED]** (2026-10-13) The CLI exists since Wave 6 (package `apps/cli`,
+installed as an npm package, [`../15-cli/install.md`](../15-cli/install.md)); its
+commands are generated into [`../15-cli/reference.md`](../15-cli/reference.md),
+which is the authority. The table below is the Wave 0 design; where it differs,
+the reference wins: `migration apply` plans and applies the pending bundles in
+one call, a stored plan is applied with `plan apply <planId>`,
+`migration graph` reads the local stream only, and `lock-key` is not built. The original design, for reference
+(**[PLANNED]** in Wave 0):
 
 | Command | Purpose | Talks to server? |
 |---|---|---|
@@ -114,6 +120,12 @@ therefore never assume the consumer's CI ran; the server re-runs every check at
 plan time.
 
 ## 6. Authoring guidance (shipped as a design-system-like guide for agents)
+
+**[OBSERVED]** (2026-10-13, Wave 7) The guide is served to every authenticated
+MCP client as the resource `exponetdb://guides/migration-authoring`, next to
+the manifest schema (`exponetdb://schemas/migration-manifest/v1`); its text
+is `MIGRATION_AUTHORING_GUIDE` in `packages/contracts/src/mcp/resources.ts`
+and is generated into [`../05-mcp/resources/migration-authoring.md`](../05-mcp/resources/migration-authoring.md).
 
 - **Expand / contract.** Breaking changes are split: (1) expand (add new column,
   new table, dual-write in code), (2) migrate data in batches, (3) switch reads,
@@ -171,17 +183,25 @@ The contract is that counter-check, generalized.
 ## 9. The agent workflow, end to end
 
 1. Agent edits code and creates a bundle with `exponetdb migration new` (or writes
-   the files following the manifest schema).
+   the files following the manifest schema, which an MCP client reads as a
+   resource).
 2. Agent calls `migration_plan` for `reosa/platform/staging` with the bundle.
    Receives analysis, lint, decision `allow`.
-3. Agent calls `plan_apply(planId)`. Receives the operation; polls
-   `operation_get` until `succeeded` (applied + verified).
+3. Agent calls `plan_apply(planId)`. Receives the operation; observes
+   `operation_get` until `succeeded` (applied + verified); with `waitSeconds`
+   (at most 20) a call waits for the next change of state instead of polling
+   blind.
 4. Agent calls `migration_plan` for `reosa/platform/production` referencing the
    same migration id. Receives evidence (staging verified with the same checksum
    and verify digest), lineage, analysis, decision `require` (approval, because the
    client is an agent).
-5. Agent calls `plan_apply(planId)`. Receives `awaiting_approval` and, if the
-   client supports it, a URL elicitation to the approval page.
+5. Agent calls `plan_apply(planId)`. Receives `awaiting_approval` with the
+   `approvalUrl` (`<public origin>/approvals#operation=op_…`) in the result,
+   and, when a modern-era client declared URL elicitation, also an
+   elicitation to the approval page; the agent gives the link to its person.
+   A `critical` plan (for example a `lossy` rollback on production) is not
+   applied by an agent at all: `HUMAN_APPLY_REQUIRED`
+   ([`../02-control-plane/operations-engine.md` §12](../02-control-plane/operations-engine.md#12-plans-and-operations-from-mcp-wave-7)).
 6. The human opens the approval page in the Web App, reads plan and evidence,
    re-authenticates, approves (with compatibility attestation when required).
 7. The operation runs; the agent observes `succeeded`.

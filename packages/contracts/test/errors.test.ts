@@ -118,6 +118,37 @@ describe('problem documents', () => {
     expect(buildProblem('PLAN_STALE', { requestId }).ok).toBe(false)
   })
 
+  it('gives RATE_LIMITED optional details: the wait of Retry-After, positive whole seconds', () => {
+    // Optional: a rate limit with no known wait is still a RATE_LIMITED problem.
+    const plain = buildProblem('RATE_LIMITED', { requestId })
+    expect(plain.ok).toBe(true)
+    if (plain.ok) {
+      expect(plain.value).toMatchObject({ code: 'RATE_LIMITED', status: 429, retryable: true })
+      expect(plain.value.details).toBeUndefined()
+    }
+    for (const build of [buildProblem, buildToolError]) {
+      const built = build('RATE_LIMITED', { requestId, details: { retryAfterSeconds: 5 } })
+      expect(built.ok).toBe(true)
+      if (built.ok) {
+        expect(built.value.details).toEqual({ retryAfterSeconds: 5 })
+      }
+      for (const details of [
+        { retryAfterSeconds: 0 },
+        { retryAfterSeconds: -1 },
+        { retryAfterSeconds: 1.5 },
+        { retryAfterSeconds: '5' },
+        { retryAfterSeconds: 5, extra: true },
+        {},
+      ]) {
+        expect(build('RATE_LIMITED', { requestId, details }).ok, JSON.stringify(details)).toBe(
+          false,
+        )
+      }
+    }
+    // Only a schema that accepts its absence makes details optional: PLAN_STALE still needs them.
+    expect(buildToolError('PLAN_STALE', { requestId }).ok).toBe(false)
+  })
+
   it('never puts an Error, its message, stack or cause on the wire', () => {
     // Assembled at run time so the repository secret scan does not match a
     // synthetic credential that exists only to prove it never leaks.

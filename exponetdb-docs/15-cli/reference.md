@@ -138,6 +138,7 @@ exit codes are in [`README.md`](./README.md).
 | [`dev up`](#dev-up) | local | local | Create or start a local lab: Control Store, staging and production targets, serve, worker and gateway. |
 | [`dev status`](#dev-status) | local | read | The lab’s roles and readiness, its image against the source, the active and the last run (exit 0 only when ready). |
 | [`dev owner`](#dev-owner) | local | local | Issue the first-owner setup link of the lab into a new private file (or open it in the browser). |
+| [`dev mcp-client`](#dev-mcp-client) | local | local | Register the lab’s local MCP client (pending until the lab’s owner approves it). |
 | [`dev logs`](#dev-logs) | local | read | A role’s container log, or a test run’s own log. |
 | [`dev shell`](#dev-shell) | local | local | A shell in one of the lab’s containers (a terminal is needed). |
 | [`dev sql`](#dev-sql) | local | local | psql in one of the lab’s own databases (control, staging, production), as its local superuser. |
@@ -2221,6 +2222,8 @@ Runs: against the server; effect: read; action: `audit.search`; scopes: `audit.r
 | `--action <action>` | Only this action, e.g. plan.apply. |
 | `--mine` | Only your own events. |
 | `--result <succeeded\|failed\|denied>` | Only this result. |
+| `--client <cli_…>` | Only events made through this client (runbook RB-11, RB-15). |
+| `--grant <grt_…>` | Only events made through this grant. |
 | `--limit <number>` | Items to show (1 to 10000). (default 50) |
 | `--all` | Every page (at most 10000 items). |
 | `--cursor <cursor>` | Continue after a previous page. |
@@ -2373,6 +2376,22 @@ Runs: locally; effect: local; output: `LabOwnerLink`.
 | `--display-name <text>` | The owner’s display name. |
 | `--reissue` | Replace a pending setup link (the earlier one stops working). |
 | `--open` | Open the setup link in the browser. |
+
+### dev mcp-client
+
+Register the lab’s local MCP client (pending until the lab’s owner approves it).
+
+Registers one public MCP client with the lab through Dynamic Client Registration, as any MCP client would: no secret, PKCE, loopback redirect URIs on any port (Claude Code, Codex, VS Code, the MCP Inspector, the SDK harness). Like every client it is pending until an administrator approves exactly it in the Web App (Admin, Clients) with a passkey; nothing is pre-trusted. The client ID is kept in the lab’s state and printed; it is not a secret.
+
+```text
+exponetdb dev mcp-client [flags]
+```
+
+Runs: locally; effect: local; output: `LabMcpClient`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `--lab <id>` | The lab ID (default local, or EXPONETDB_LAB). |
 
 ### dev logs
 

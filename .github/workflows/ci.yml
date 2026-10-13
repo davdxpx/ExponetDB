@@ -63,6 +63,13 @@ jobs:
       - name: Build
         run: bun run build
 
+      # Wave 7: the pinned MCP conformance suite and the pinned MCP Inspector CLI
+      # (`--strict`) against the test composition of /mcp, both revisions; expected
+      # failures are listed with reasons in apps/server/test/conformance/. The same
+      # entry points locally: `bun run mcp:conformance`, `bun run mcp:inspect`.
+      - name: MCP conformance and Inspector (both eras)
+        run: bun run --cwd apps/server test:conformance
+
       - name: Generated artifacts are deterministic and committed
         run: bun run verify:generated
 
@@ -231,6 +238,14 @@ jobs:
           done
           printf 'EXDB_TEST_PG_URL=postgres://%s:%s@127.0.0.1:55432/postgres\n' postgres "$password" >> "$GITHUB_ENV"
 
+      # Wave 7: the approval round from MCP runs against real managed targets
+      # (the same pinned servers as the integration job).
+      - name: Start the managed-target servers (PostgreSQL 16, 17, 18 with TLS)
+        run: |
+          out="$RUNNER_TEMP/exdb-targets"
+          bash tooling/dev/targets.sh "$out"
+          echo "EXDB_TEST_TARGETS=$out/targets.json" >> "$GITHUB_ENV"
+
       - name: Install (lockfile must be current)
         run: bun install --frozen-lockfile
 
@@ -251,7 +266,10 @@ jobs:
       # with session rotation, password + TOTP, recovery code. G3B: CLI
       # loopback sign-in through the consent page, DCR approval with an
       # untrusted client name and refresh reuse, the device flow, service
-      # account keys and an API key shown once. Never skipped.
+      # account keys and an API key shown once. Wave 7: the plan review with
+      # hostile content, the consent target choice, and the approval round
+      # from MCP (URL elicitation, passkey review and approval, verified
+      # result, refusals). Never skipped.
       - name: Browser end-to-end tests
         run: bun run --cwd apps/server test:e2e
 

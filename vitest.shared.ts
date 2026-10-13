@@ -25,6 +25,8 @@ export const sharedConfig = defineConfig({
       'test/**/*.host.test.ts',
       'test/**/*.install.test.ts',
       'test/**/*.lab.test.ts',
+      'test/**/*.conformance.test.ts',
+      'test/**/*.model.test.ts',
       '**/node_modules/**',
     ],
     environment: 'node',
@@ -104,6 +106,38 @@ export const labConfig = defineConfig({
     exclude: ['**/node_modules/**'],
     testTimeout: 600_000,
     hookTimeout: 120_000,
+    fileParallelism: false,
+  },
+})
+
+// Conformance tests (`*.conformance.test.ts`, apps/server): the pinned MCP
+// conformance suite against the test composition of `/mcp` on a local port.
+// Never skipped: without the package registry (to fetch the pinned suite)
+// they fail.
+export const conformanceConfig = defineConfig({
+  ...sharedConfig,
+  test: {
+    ...sharedConfig.test,
+    include: ['test/**/*.conformance.test.ts'],
+    exclude: ['**/node_modules/**'],
+    testTimeout: 600_000,
+    hookTimeout: 120_000,
+    fileParallelism: false,
+  },
+})
+
+// Model evals (`*.model.test.ts`, apps/server; Wave 7 order §29 layers B and
+// C): a model works on the eval tasks through `/mcp` of the test composition
+// with the owner's own key (`EXDB_EVAL_ANTHROPIC_API_KEY`). Never part of
+// `verify` or CI; without the key every task fails as NOT RUN, never green.
+export const modelEvalsConfig = defineConfig({
+  ...sharedConfig,
+  test: {
+    ...sharedConfig.test,
+    include: ['test/**/*.model.test.ts'],
+    exclude: ['**/node_modules/**'],
+    testTimeout: 1_800_000,
+    hookTimeout: 300_000,
     fileParallelism: false,
   },
 })

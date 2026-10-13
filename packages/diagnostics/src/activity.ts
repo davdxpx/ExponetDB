@@ -6,7 +6,7 @@ import {
   type TargetRow,
   type TrustedSql,
 } from '@exponetdb/postgres'
-import { DEFAULT_MAX_LENGTH, redactStatement } from '@exponetdb/postgres/parser'
+import { DEFAULT_MAX_LENGTH, MCP_MAX_LENGTH, redactStatement } from '@exponetdb/postgres/parser'
 import { brand, type TargetRecord } from '@exponetdb/registry'
 import { DiagnosticsError } from './errors.ts'
 import { clip } from './findings.ts'
@@ -27,6 +27,12 @@ export interface SessionFilter {
   readonly minAgeSeconds?: number | undefined
   readonly application?: string | undefined
   readonly limit?: number | undefined
+  /**
+   * Who reads the statements: a redacted statement is capped at 2 000
+   * characters for people and 500 for agents (`MCP_MAX_LENGTH`, RED-2). Set
+   * by the use case from the caller, never from the request.
+   */
+  readonly reader?: 'human' | 'agent' | undefined
 }
 
 const TS = (column: TrustedSql) =>
@@ -120,7 +126,10 @@ export async function listSessions(
       const statement =
         query === null || query.length === 0
           ? null
-          : await redactStatement(query, { major, maxLength: DEFAULT_MAX_LENGTH })
+          : await redactStatement(query, {
+              major,
+              maxLength: filter.reader === 'agent' ? MCP_MAX_LENGTH : DEFAULT_MAX_LENGTH,
+            })
       sessions.push({
         pid: r.int('pid'),
         backendStart: r.text('backend_start'),
@@ -143,6 +152,7 @@ export async function listSessions(
                 digest: statement.digest as NonNullable<
                   SessionList['sessions'][number]['statement']
                 >['digest'],
+                truncated: statement.truncated,
               },
         exponetdbOperationId: operationOf(r.textOrNull('application_name')),
       })

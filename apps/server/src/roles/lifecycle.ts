@@ -16,13 +16,45 @@ export interface Listener {
   close(timeoutMs: number): Promise<void>
 }
 
+/**
+ * Read deadlines against slow clients (Wave 7 order §30): the request head
+ * must arrive within `headersMs` and the whole request within `requestMs`,
+ * checked every `checkMs`; an idle keep-alive connection closes after
+ * `keepAliveMs`. A response (a stream included) is not bounded by them. The
+ * `/mcp` edge adds its own, tighter body deadline (ADR-0027 §3).
+ */
+export interface ListenDeadlines {
+  readonly headersMs: number
+  readonly requestMs: number
+  readonly checkMs: number
+  readonly keepAliveMs: number
+}
+
+export const LISTEN_DEADLINES: ListenDeadlines = {
+  headersMs: 20_000,
+  requestMs: 120_000,
+  checkMs: 2_000,
+  keepAliveMs: 5_000,
+}
+
 export async function listen(
   fetch: (request: Request) => Response | Promise<Response>,
   endpoint: { readonly host: string; readonly port: number },
+  deadlines: ListenDeadlines = LISTEN_DEADLINES,
 ): Promise<Listener> {
   return new Promise((resolve, reject) => {
     const server = serve(
-      { fetch, hostname: endpoint.host, port: endpoint.port },
+      {
+        fetch,
+        hostname: endpoint.host,
+        port: endpoint.port,
+        serverOptions: {
+          headersTimeout: deadlines.headersMs,
+          requestTimeout: deadlines.requestMs,
+          connectionsCheckingInterval: deadlines.checkMs,
+          keepAliveTimeout: deadlines.keepAliveMs,
+        },
+      },
       (info: AddressInfo) => {
         resolve({
           port: info.port,

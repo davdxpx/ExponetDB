@@ -78,6 +78,7 @@ export const StepUpIdSchema = entityId('stu')
 export const BreakGlassGrantIdSchema = entityId('bgl')
 export const ImportReportIdSchema = entityId('imr')
 export const VerificationRunIdSchema = entityId('vfy')
+export const QueryIdSchema = entityId('qry')
 /** A schema snapshot is a sample batch of the schema observation (`smp_`). */
 export const SnapshotIdSchema = entityId('smp')
 

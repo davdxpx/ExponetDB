@@ -7,7 +7,8 @@ import {
   contractJsonSchema,
   ERROR_CODES,
   MCP_FORBIDDEN_TOOL_NAMES,
-  MCP_READ_TOOL_LIST,
+  MCP_SERVED_TOOL_LIST,
+  MCP_TOOL_LIST,
   ROUTE_LIST,
   SCOPES,
   type ScopeDefinition,
@@ -146,7 +147,7 @@ describe('REST read routes', () => {
   })
 })
 
-describe('MCP read tools', () => {
+describe('MCP tools', () => {
   const catalog = readDoc('05-mcp/tool-catalog.md')
   const documentedTools = new Map(
     tableRows(catalog)
@@ -164,8 +165,8 @@ describe('MCP read tools', () => {
     )
 
   it('have unique snake_case names that exist in tool-catalog.md with the same annotations', () => {
-    expect(new Set(MCP_READ_TOOL_LIST.map((t) => t.name)).size).toBe(MCP_READ_TOOL_LIST.length)
-    for (const t of MCP_READ_TOOL_LIST) {
+    expect(new Set(MCP_TOOL_LIST.map((t) => t.name)).size).toBe(MCP_TOOL_LIST.length)
+    for (const t of MCP_TOOL_LIST) {
       expect(t.name).toMatch(/^[a-z]+(_[a-z]+)*$/)
       const row = documentedTools.get(t.name)
       expect(row, t.name).toBeDefined()
@@ -188,7 +189,7 @@ describe('MCP read tools', () => {
   })
 
   it('require the scope tool-catalog.md names', () => {
-    for (const t of MCP_READ_TOOL_LIST) {
+    for (const t of MCP_TOOL_LIST) {
       const raw = documentedTools.get(t.name)?.[1] ?? ''
       const sameAs = raw.match(/^as `([a-z_]+)`$/)?.[1]
       const documentedScope = sameAs === undefined ? raw : (documentedTools.get(sameAs)?.[1] ?? '')
@@ -203,7 +204,7 @@ describe('MCP read tools', () => {
   })
 
   it('map to a REST route of the same action (one engine, C-9)', () => {
-    for (const t of MCP_READ_TOOL_LIST) {
+    for (const t of MCP_TOOL_LIST) {
       const route = ROUTE_LIST.find((r) => r.operationId === t.restOperationId)
       expect(route, t.name).toBeDefined()
       expect(
@@ -214,42 +215,38 @@ describe('MCP read tools', () => {
     }
   })
 
-  it('keep the MCP meaning of readOnlyHint: true exactly when the action is a pure read', () => {
-    expect(MCP_READ_TOOL_LIST).toHaveLength(23)
-    for (const t of MCP_READ_TOOL_LIST) {
+  it('keep the MCP meaning of the annotations: read-only exactly for pure reads, destructive only for consequential actions, open world exactly where foreign text is returned', () => {
+    for (const t of MCP_TOOL_LIST) {
       const a = action(t.action)
-      // An action that records anything (findings, plans) or changes a
-      // managed system is never announced as read-only.
-      if (a.effect !== 'read') {
-        expect(t.annotations.readOnlyHint, t.name).toBe(false)
-      }
-      if (t.annotations.readOnlyHint) {
-        expect(a.effect, t.name).toBe('read')
-      }
       expect(t.annotations.readOnlyHint, t.name).toBe(a.effect === 'read')
-      // Annotations are hints: open world is never claimed.
-      expect(t.annotations.openWorldHint, t.name).toBe(false)
+      if (t.annotations.destructiveHint) {
+        expect(a.effect, t.name).toBe('consequential')
+      }
+      if (a.effect === 'read') {
+        expect(t.annotations.destructiveHint, t.name).toBe(false)
+      }
+      const output = contractJsonSchema(t.output, { io: 'output' })
+      expect(t.annotations.openWorldHint, t.name).toBe(hasUntrusted(output))
     }
   })
 
   it('mark drift_check as recording, not read-only, not destructive, not idempotent', () => {
-    const drift = MCP_READ_TOOL_LIST.find((t) => t.name === 'drift_check')
+    const drift = MCP_TOOL_LIST.find((t) => t.name === 'drift_check')
     expect(drift?.action).toBe('drift.check')
     expect(action('drift.check').effect).toBe('control_record')
     expect(drift?.annotations).toEqual({
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
-      openWorldHint: false,
+      openWorldHint: true,
     })
   })
 
-  it('change no managed system in this read slice, and only need MCP-grantable scopes', () => {
-    for (const t of MCP_READ_TOOL_LIST) {
+  it('reach only actions an MCP client may call, with MCP-grantable scopes', () => {
+    for (const t of MCP_TOOL_LIST) {
       const a = action(t.action)
-      expect(t.annotations.destructiveHint, t.name).toBe(false)
-      expect(a.effect, t.name).not.toBe('consequential')
       expect(a.clientKinds, t.name).toContain('mcp')
+      expect(a.humanOnly, t.name).toBe(false)
       const scopes =
         a.scope.kind === 'fixed'
           ? [a.scope.scope]
@@ -266,19 +263,33 @@ describe('MCP read tools', () => {
     }
   })
 
+  it('apply nothing but a stored plan: the only destructive tool is plan_apply, and it takes the plan id alone', () => {
+    const destructive = MCP_TOOL_LIST.filter((t) => t.annotations.destructiveHint)
+    expect(destructive.map((t) => t.name)).toEqual(['plan_apply'])
+    const apply = MCP_TOOL_LIST.find((t) => t.name === 'plan_apply')
+    expect(Object.keys(apply?.input.shape ?? {})).toEqual(['planId'])
+  })
+
   it('have strict inputs, representable outputs and untrusted labels wherever database or caller text is returned', () => {
     const textFree = new Set([
       'targets_list',
       'plan_get',
+      'plan_apply',
+      'plan_withdraw',
       'operation_get',
       'operation_list',
+      'operation_cancel',
+      'sql_cancel',
+      'migration_plan',
+      'migration_rollback_plan',
+      'migration_verify',
       'backups_list',
       'nodes_list',
       'node_status',
       'target_health',
       'migration_lint',
     ])
-    for (const t of MCP_READ_TOOL_LIST) {
+    for (const t of MCP_TOOL_LIST) {
       expect(
         root(contractJsonSchema(t.input, { io: 'input' }))['additionalProperties'],
         t.name,
@@ -294,7 +305,7 @@ describe('MCP read tools', () => {
   })
 
   it('cap list sizes and data rows', () => {
-    for (const t of MCP_READ_TOOL_LIST) {
+    for (const t of MCP_TOOL_LIST) {
       const properties = contractJsonSchema(t.input, { io: 'input' })['properties']
       const limit =
         properties === undefined ? undefined : record(properties, `${t.name} properties`)['limit']
@@ -302,14 +313,24 @@ describe('MCP read tools', () => {
         expect(record(limit, `${t.name} limit`)['maximum'], t.name).toBe(t.limits.maxItems)
       }
     }
-    const sql = MCP_READ_TOOL_LIST.find((t) => t.name === 'sql_query')
+    const sql = MCP_TOOL_LIST.find((t) => t.name === 'sql_query')
     expect(sql?.limits.maxRows).toBe(500)
+  })
+
+  it('serve the Wave 7 part only: Wave 9 tools stay planned, and node planning is not a tool (OD-29)', () => {
+    for (const t of MCP_TOOL_LIST) {
+      if (t.wave === '9') {
+        expect(t.status, t.name).toBe('planned')
+      }
+    }
+    expect(MCP_TOOL_LIST.map((t) => t.name)).not.toContain('node_plan')
+    expect(MCP_SERVED_TOOL_LIST.every((t) => t.status === 'served')).toBe(true)
   })
 
   it('never include a tool that tool-catalog.md §12 excludes', () => {
     const excluded = section(catalog, '## 12. What is deliberately not a tool')
     for (const name of MCP_FORBIDDEN_TOOL_NAMES) {
-      expect(MCP_READ_TOOL_LIST.map((t) => t.name)).not.toContain(name)
+      expect(MCP_TOOL_LIST.map((t) => t.name)).not.toContain(name)
     }
     expect(excluded).toContain('execute_sql')
   })
