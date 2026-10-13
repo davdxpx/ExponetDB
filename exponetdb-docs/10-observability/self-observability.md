@@ -37,7 +37,8 @@ audit may not.
 | `actor` | `{kind: human, id: idn_…}` / `{kind: agent, client: cli_…, on_behalf_of: idn_…}` | ids only, no names or e-mail addresses |
 | `code` | `PLAN_STALE` | error codes from [`../02-control-plane/error-model.md`](../02-control-plane/error-model.md) |
 | `durationMs` | | |
-| `tool`, `era`, `protocolVersion`, `rpcMethod`, `rpcCode`, `grantId`, `clientId` | `targets_list`, `modern`, `2026-07-28`, `tools/call` | one `mcp.request` line per `/mcp` request (Wave 7); shapes only, never arguments, results, client names or the token; a value outside its shape is dropped |
+| `tool`, `toolVersion`, `catalogDigest`, `era`, `protocolVersion`, `rpcMethod`, `rpcCode`, `grantId`, `clientId` | `targets_list`, `1`, `sha256:…`, `modern`, `2026-07-28`, `tools/call` | one `mcp.request` line per `/mcp` request (Wave 7); shapes only, never arguments, results, client names or the token; a value outside its shape is dropped. A tool call names the tool's contract version, a `tools/list` the digest of the list it served, so a changed catalog is visible in the log (rug-pull detection, Wave 7 order §30) |
+| `reason` of `authz.denial_concealed` | `role_scope`, `target_restriction`, `tier_restriction` | a refusal that answered like an unknown object (error-model.md §4): REST and `/mcp` log the true reason with the request id and the route, never the requested path or id |
 
 Never logged: secrets, tokens (even hashed), connection strings with passwords,
 raw statement text (only redacted text and digests), PostgreSQL `DETAIL`, row

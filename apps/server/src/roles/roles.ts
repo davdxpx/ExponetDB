@@ -78,7 +78,7 @@ export function runServe(
           tools: createToolHost(composed.application, runtime.logger, {
             cursors,
             states: createRequestStateCodec(() =>
-              composed.auth.keys.mcpKey('mcp.request_state_key'),
+              composed.auth.keys.mcpKeys('mcp.request_state_key'),
             ),
           }),
           resources: createResourceHost(composed.application, runtime.logger, cursors),

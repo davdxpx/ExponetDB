@@ -1,5 +1,5 @@
 import { type Application, type Caller, idempotencyRequestHash } from '@exponetdb/application'
-import type { oauth } from '@exponetdb/auth'
+import { AuthError, type oauth } from '@exponetdb/auth'
 import {
   actionDefinition,
   type ErrorCode,
@@ -49,8 +49,11 @@ export interface McpCallContext {
    * ones plus the needed one, since some clients replace rather than merge).
    */
   challenge?: { readonly required: Scope; readonly scopes: readonly Scope[] }
-  /** For the request log: the tool and the outcome code. */
+  /** For the request log: the tool, its version and the outcome code. */
   tool?: string
+  toolVersion?: number
+  /** For the request log of `tools/list`: the digest of the list served (rug-pull detection). */
+  catalogDigest?: string
   outcome?: string
 }
 
@@ -576,6 +579,7 @@ export function createToolHost(
         return refuse(ctx, 'INTERNAL')
       }
       ctx.tool = name
+      ctx.toolVersion = tool.toolVersion
       const parsed = tool.input.safeParse(args ?? {})
       if (!parsed.success) {
         return refuse(ctx, 'VALIDATION_FAILED', {
@@ -639,6 +643,16 @@ export function createToolHost(
         const code = errorCodeOf(error)
         if (code === 'INTERNAL') {
           logger.error('mcp.tool_failed', { ...describeError(error), tool: name })
+        }
+        // As REST (api.ts): a refusal that answers like an unknown object keeps its true
+        // reason in the log (request id and reason, never the argument), not in the answer.
+        if (error instanceof AuthError && error.concealed !== undefined) {
+          logger.info('authz.denial_concealed', {
+            route: '/mcp',
+            tool: name,
+            requestId: ctx.requestId,
+            reason: error.concealed,
+          })
         }
         if (code === 'INSUFFICIENT_SCOPE') {
           const details =

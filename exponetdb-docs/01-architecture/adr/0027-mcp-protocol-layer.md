@@ -182,10 +182,26 @@ the expiry (at most ten minutes) and a random id. Any failure
 without saying why. The only state ExponetDB puts in it, the approval
 round of `plan_apply`, has no effect when repeated (the retry reads the
 operation), so no single-use store is needed. **[DECIDED]** (Wave 7 Phase
-7, `apps/server/src/interfaces/mcp/request-state.ts`) The key version in
-the format is `1`: installation keys are not rotated yet; when rotation
-exists it writes a new secret version and verification accepts the newest
-two versions. A state is at most 1 KiB.
+7, `apps/server/src/interfaces/mcp/request-state.ts`) A state is at most
+1 KiB. **[DECIDED]** (Wave 7 Phase 9, order §30: the key is rotatable) The
+version in the format is the version of the key's secret. An operator
+rotates with `exponetdb keyring rotate-mcp-key --purpose
+mcp.request_state_key` (login `exdb_serve`, the key's only reader): a new
+random version of the same secret under the installation-keys lock,
+audited as `auth.installation_key.rotate` with the purpose and the version
+(never key material). Each serve process reads the newest two versions
+again every five minutes (`MCP_KEY_REFRESH_MS`), seals under the newest
+and opens a state only under the version its prefix names if that version
+is one of the two; relabeling a state's version opens nothing (the version
+is in the associated data), and a version older than the newest two is
+refused like a forgery, so a second rotation retires a key. A round begun
+before a rotation completes after it. The cursor key `mcp.cursor_key`
+rotates the same way (its format carries no version: after a rotation an
+old cursor fails as invalid and the client lists again). The other
+installation keys are not rotatable (a new pseudonym key would break the
+audit's correlation of pseudonyms). Tests: `packages/auth/test/installation-keys.int.test.ts`,
+`apps/server/test/mcp-units.test.ts` ("rotates …"),
+`apps/server/test/server.int.test.ts` ("keyring rotate-mcp-key …").
 
 **Sealed list cursors** (Wave 7 Phase 5, order §22). A cursor handed to an
 agent is the use case's own cursor sealed the same way under a second key,

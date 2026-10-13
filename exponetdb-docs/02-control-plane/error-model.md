@@ -325,5 +325,16 @@ the refused action is high-risk the engine records `authz.denied` (audit.md
 §2, Wave 7), which only readers of the audit see (an ordinary refusal goes
 to the request log and a metric).
 `TARGET_NOT_IN_GRANT` and `TIER_NOT_PERMITTED` stay for plans and
-operations the caller already holds. An unrestricted delegated token, like
-a person, still learns that a path exists from `PERMISSION_DENIED`.
+operations the caller already holds.
+
+**[DECIDED]** (Wave 7, adversarial goal 18; supersedes the last sentence of
+the Wave 4 paragraph above for targets) A caller whose role bindings do not
+let it read a target (`targets.read` does not cover it) gets
+`TARGET_NOT_FOUND` for that target, exactly like an unknown path, whatever
+the action: a developer bound to one project cannot tell another project's
+targets from unknown ones, through the REST API, MCP or the CLI. The server
+writes `authz.denial_concealed` with `role_scope`; the audit keeps the true
+reason. A caller who can read the target and lacks only the action's
+permission still gets `PERMISSION_DENIED` (it can list the target anyway).
+Plans and operations of a target the caller cannot read are found by their
+unguessable ids only; their refusals are not changed (a residual).

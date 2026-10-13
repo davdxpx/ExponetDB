@@ -95,3 +95,39 @@ Nonprod should not contain production personal data (recommendation to consumers
 - "Agent replay" tests: recorded agent transcripts (from real Claude Code usage
   against a staging target) are replayed against new versions to catch behavior
   changes in refusals and plans.
+
+### 6.1 The grant forms (Wave 7)
+
+**[DECIDED]** (Wave 7 order §28) "Every grant shape" means these fourteen
+forms; the adversarial suite (`apps/server/test/mcp-adversarial.int.test.ts`)
+runs every goal with each of them, the token forms each as a `viewer`, a
+`developer` and an `owner` (a scope is a ceiling: a role never gains from
+it, and consent offers only what the role holds):
+
+| # | Form | Scopes and tiers |
+|---|---|---|
+| 1 | read, nonprod | `targets.read schema.read diagnostics.read`, nonprod |
+| 2 | plan only | reads, `migrations.read migrations.plan`, both tiers |
+| 3 | apply nonprod | reads, `migrations.plan migrations.apply:nonprod`, nonprod |
+| 4 | apply prod (approval required) | as 3 plus `migrations.apply:prod`, both tiers |
+| 5 | `data.read:nonprod` | reads, `data.read:nonprod`, nonprod |
+| 6 | `data.read:prod` (policy `humans_only`) | reads, `data.read:nonprod data.read:prod`, both tiers |
+| 7 | nodes | `targets.read nodes.read`, both tiers |
+| 8 | `connections.operate` | reads, `connections.operate:nonprod connections.operate:prod` (no tool before Wave 9: policy only) |
+| 9 | a target list | everything grantable, both tiers, restricted to one target |
+| 10 | both tiers | everything grantable to an MCP client, both tiers |
+| 11 | expired, revoked or disabled | an expired token, a revoked grant, a disabled client |
+| 12 | a foreign project | a developer bound to one project reaching into another |
+| 13 | the wrong audience | the first-party CLI's `/api` token at `/mcp` |
+| 14 | a manipulated record | a grant row carrying `policy.manage` and `plans.approve` (the database guard refuses it; planted with triggers off, it stays inert) |
+
+The goals are the seven of §3 and twelve more (credentials, target or tier
+switching, self-approval and approver deception, audit and rate evasion,
+poisoning, masking and cap evasion, write or outbound effects through
+EXPLAIN or functions, replay, TOCTOU, enumeration, exhaustion). The channels
+are names, comments, function bodies and policy expressions, enum labels,
+rows, database error texts, EXPLAIN texts, session texts, migration
+manifests and SQL comments, audit values, client metadata, approval notes,
+tool arguments, `_meta` and HTTP headers. What each grant form can combine
+(private data, foreign text, change) is in
+[`threat-model.md` §5, Wave 7](./threat-model.md#wave-7-2026-10-13-reviewed-for-g7-awaiting-the-owner).

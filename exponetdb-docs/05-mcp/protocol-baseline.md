@@ -37,7 +37,7 @@ IDs follow the session's source extract (M-n).
 | M-6 | Every result has `resultType` (`complete`, `input_required`) | SDK | protocol |
 | M-7 | Request ids string or integer, never `null`; no response to a notification | SDK; the edge refuses a body with `id: null` (`-32600`) | protocol |
 | M-8 | Codes `-32020…-32099` reserved, `-32000…-32019` legacy (SHOULD NOT use); never `-32002` or `-32042` on the modern era | edge uses `-32700`, `-32600` and the spec codes only | protocol |
-| M-9 | Unsupported version → `400` + `-32022`, `data: {supported, requested}` | edge: with a modern envelope `supported` is what `server/discover` lists (the conformance suite checks that the two agree); without one, every served version (§4) | protocol, conformance |
+| M-9 | Unsupported version → `400` + `-32022`, `data: {supported, requested}` | edge: with a modern envelope `supported` is what `server/discover` lists (the conformance suite checks that the two agree); without one, every served version (§4); `requested` echoes the requester's own value as SEP-2575 requires (the conformance suite checks it), back to that requester only, bounded to 64 printable ASCII characters (anything else is `"unrecognized"`), and never logged or audited (Phase 9 adversarial review) | protocol, conformance, adversarial (headers) |
 | M-10 | `server/discover` with `supportedVersions`, `capabilities`, `ttlMs`, `cacheScope`, `instructions` | SDK; `supportedVersions` = the modern revision only | protocol |
 | M-11 | Extensions only when both sides declare them | none declared in Wave 7 (owner decision 8: no Tasks) | protocol |
 | M-12, M-13 | Dual era: a modern envelope is served statelessly; `initialize` selects legacy | edge classification (§4), SDK | protocol |
@@ -138,7 +138,8 @@ against it. The specification leaves the rows marked **[DECIDED]** open
 
 | Situation | HTTP | JSON-RPC | Body |
 |---|---|---|---|
-| `GET`, `DELETE`, other methods | 405 | `-32600` | JSON-RPC error without `id`, `Allow: POST` |
+| Request head not complete within 20 s, or the whole request not received within 120 s (the listener of every role, `apps/server/src/roles/lifecycle.ts`, checked every 2 s; a response stream is not bounded by them) | 408 | — | Node's `408 Request Timeout`, connection closed; no handler ran (`apps/server/test/listen-deadlines.test.ts`) |
+| `GET`, `DELETE`, other methods (a CORS preflight `OPTIONS` too: no `Access-Control-*` header on any answer) | 405 | `-32600` | JSON-RPC error without `id`, `Allow: POST` |
 | `Origin` present and not allowed | 403 | `-32600` | JSON-RPC error without `id`; no CORS header |
 | `Host` not the public host | 421 | `-32600` | JSON-RPC error without `id` |
 | `Content-Type` not JSON | 415 | `-32600` | JSON-RPC error without `id` |

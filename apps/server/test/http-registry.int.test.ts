@@ -760,8 +760,8 @@ describe('the SDK against a live listener (order §265 to §267)', () => {
       retryable: false,
       requestId: expect.stringMatching(/^req_/),
     })
-    // A key that may reach production tiers still has no binding there: an unrestricted
-    // credential with access elsewhere learns that the path exists (error-model.md §4).
+    // A key that may reach production tiers still has no binding there: production is outside
+    // the account's role scope and answers like an unknown path (error-model.md §4, Wave 7).
     const bothKey = await apiKey(account, ['targets.read'], {
       tiers: ['nonprod', 'prod'],
       targets: { kind: 'all' },
@@ -771,10 +771,10 @@ describe('the SDK against a live listener (order §265 to §267)', () => {
       auth: { kind: 'apiKey', key: bothKey },
       fetch: wire,
     })
-    expect(errorOf(await both.targets.resolve(productionPath()))).toMatchObject({
-      code: 'PERMISSION_DENIED',
-      status: 403,
-    })
+    const outside = errorOf(await both.targets.resolve(productionPath()))
+    const unknown = errorOf(await both.targets.resolve(`${slug}/platform/nowhere`))
+    expect(outside).toMatchObject({ code: 'TARGET_NOT_FOUND', status: 404 })
+    expect({ ...outside, requestId: undefined }).toEqual({ ...unknown, requestId: undefined })
     const listed = await both.targets.all()
     expect(listed.ok && listed.value.map((t) => t.id)).toEqual([ids.target])
     // No schema.read scope: the schema stays closed.

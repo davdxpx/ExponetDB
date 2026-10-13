@@ -101,6 +101,8 @@ export function checkShape(body: unknown): RpcMessage | ShapeRefusal {
 }
 
 const MODERN: readonly string[] = MCP_MODERN_VERSIONS
+/** What `requested` may echo: the requester's own header, printable ASCII, bounded. */
+const ECHOABLE = /^[\x21-\x7e]{1,64}$/
 const LEGACY: readonly string[] = MCP_LEGACY_VERSIONS
 
 /**
@@ -115,7 +117,12 @@ function unsupported(requested: string, supported: readonly string[]): Refusal {
     status: 400,
     code: MCP_ERROR_CODES.unsupportedProtocolVersion,
     message: 'Unsupported protocol version',
-    data: { supported: [...supported], requested },
+    // SEP-2575: `requested` echoes the client's value, back to that client only; bounded to
+    // 64 printable ASCII characters, and never written to a log or the audit.
+    data: {
+      supported: [...supported],
+      requested: ECHOABLE.test(requested) ? requested : 'unrecognized',
+    },
   }
 }
 

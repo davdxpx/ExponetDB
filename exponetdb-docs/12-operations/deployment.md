@@ -77,7 +77,7 @@ startup; problems name the variable and a reason, never a value.
 |---|---|---|
 | `EXPONETDB_CONTROL_STORE_URL` | every role and command, **each with its own login** | `exdb_serve`, `exdb_worker`, `exdb_gateway`; `exdb_migrate` for `control-store migrate`; `exdb_audit_maint` for `audit prune`; secret |
 | `EXPONETDB_INSTALLATION_ID` | serve, worker, gateway | printed by the first `control-store migrate`; must match the Control Store marker (else the role refuses to start) |
-| `EXPONETDB_KEYRING` or `EXPONETDB_KEYRING_FILE` | serve, worker, gateway, `keyring status`, `node-pki init` | exactly one; the file must not be readable by group or others ([`../08-auth-and-security/secrets.md` §2.2](../08-auth-and-security/secrets.md#22-keyring)); secret |
+| `EXPONETDB_KEYRING` or `EXPONETDB_KEYRING_FILE` | serve, worker, gateway, `keyring status`, `keyring rotate-mcp-key` (serve login), `node-pki init` | exactly one; the file must not be readable by group or others ([`../08-auth-and-security/secrets.md` §2.2](../08-auth-and-security/secrets.md#22-keyring)); secret |
 | `EXPONETDB_ROLE` | serve, worker, gateway (optional) | if set, must equal the command's role |
 | `EXPONETDB_LISTEN` | serve | default `0.0.0.0:8080`; probes only in Wave 2 |
 | `EXPONETDB_PUBLIC_URL` | serve (**required since Wave 3A**), `bootstrap owner`, `auth recover-owner` | the public origin only (`https://db.exponet.cloud`, no path): the Web App, the exact `Origin` check of every mutating request, the WebAuthn origin and the setup and recovery links; `http:` only on a loopback host; also the OAuth issuer from Wave 3B |

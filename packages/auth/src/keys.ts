@@ -2,8 +2,8 @@ import { randomBytes } from 'node:crypto'
 import { createPseudonymizer, type Pseudonymizer } from '@exponetdb/audit'
 import { type ControlStore, EXDB_LOCK_NAMESPACE, lockKey2, type Tx } from '@exponetdb/control-store'
 import { type Clock, isId } from '@exponetdb/kernel'
-import { createSecret, type Keyring, readSecret } from '@exponetdb/secrets'
-import { appendAudit, SERVE_ACTOR } from './audit.ts'
+import { addSecretVersion, createSecret, type Keyring, readSecret } from '@exponetdb/secrets'
+import { appendAudit, MAINTENANCE_ACTOR, SERVE_ACTOR } from './audit.ts'
 import { AuthError } from './errors.ts'
 
 /**
@@ -14,7 +14,10 @@ import { AuthError } from './errors.ts'
  * request state, ADR-0027 §7). Each is 256 random bits, stored as a secret of the `auth`
  * consumer (readable by serve only) and named in `auth.installation_keys`.
  * Created on first use under a transaction lock, so concurrent serve
- * processes agree on one key; never rotated silently.
+ * processes agree on one key; never rotated silently. The two MCP keys are
+ * rotatable by an operator ({@link rotateMcpKey}, Wave 7 order §30): a new
+ * version of the same secret seals from then on, the version before it
+ * still opens, so a rotation cuts no client off mid-round.
  */
 export const INSTALLATION_KEY_PURPOSES = [
   'audit.pseudonym_key',
@@ -27,12 +30,35 @@ export type InstallationKeyPurpose = (typeof INSTALLATION_KEY_PURPOSES)[number]
 
 const KEYS_LOCK = { key1: EXDB_LOCK_NAMESPACE, key2: lockKey2('auth/installation-keys') } as const
 
-async function loadOrCreate(
+/** The keys of the MCP endpoint, the only rotatable installation keys. */
+export type McpKeyPurpose = 'mcp.cursor_key' | 'mcp.request_state_key'
+export const MCP_KEY_PURPOSES: readonly McpKeyPurpose[] = [
+  'mcp.cursor_key',
+  'mcp.request_state_key',
+]
+
+export interface VersionedKey {
+  /** The version of the key's secret (`secrets.secret_versions.version`), named in what it seals. */
+  readonly version: number
+  readonly key: Buffer
+}
+
+/** The newest version seals; the one before it still opens. */
+export interface McpKeySet {
+  readonly current: VersionedKey
+  readonly previous?: VersionedKey
+}
+
+/** How long a serve process keeps an MCP key set before it reads the versions again. */
+export const MCP_KEY_REFRESH_MS = 5 * 60_000
+
+/** The secret of an installation key, created (version 1) under the keys lock when missing. */
+async function ensureKey(
   tx: Tx,
   keyring: Keyring,
   clock: Clock,
   purpose: InstallationKeyPurpose,
-): Promise<Buffer> {
+): Promise<{ readonly secretId: string; readonly created: boolean }> {
   await tx.query('auth.keys.lock', 'SELECT pg_advisory_xact_lock($1::int, $2::int)', [
     KEYS_LOCK.key1,
     KEYS_LOCK.key2,
@@ -42,7 +68,7 @@ async function loadOrCreate(
     'SELECT secret_id FROM auth.installation_keys WHERE purpose = $1',
     [purpose],
   )
-  let secretId = existing.rows[0]?.text('secret_id')
+  const secretId = existing.rows[0]?.text('secret_id')
   if (secretId === undefined) {
     const installation = await tx.query(
       'auth.keys.installation',
@@ -77,17 +103,109 @@ async function loadOrCreate(
       },
       clock,
     )
-    secretId = ref.secretId
+    return { secretId: ref.secretId, created: true }
   }
+  return { secretId, created: false }
+}
+
+/** One version of an installation key's secret (the latest when `version` is omitted): 256 bits. */
+async function readKey(
+  tx: Tx,
+  keyring: Keyring,
+  secretId: string,
+  version?: number,
+): Promise<Buffer> {
   if (!isId('sec', secretId)) {
     throw new AuthError('auth_key_unavailable')
   }
-  const value = await readSecret(tx, keyring, { secretId, consumer: 'auth' })
+  const value = await readSecret(tx, keyring, {
+    secretId,
+    consumer: 'auth',
+    ...(version === undefined ? {} : { version }),
+  })
   if (value.length !== 32) {
     value.fill(0)
     throw new AuthError('auth_key_unavailable')
   }
   return value
+}
+
+async function loadOrCreate(
+  tx: Tx,
+  keyring: Keyring,
+  clock: Clock,
+  purpose: InstallationKeyPurpose,
+): Promise<Buffer> {
+  const { secretId } = await ensureKey(tx, keyring, clock, purpose)
+  return readKey(tx, keyring, secretId)
+}
+
+/** The newest two versions of an MCP key (created when missing). */
+async function loadKeySet(
+  tx: Tx,
+  keyring: Keyring,
+  clock: Clock,
+  purpose: McpKeyPurpose,
+): Promise<McpKeySet> {
+  const { secretId } = await ensureKey(tx, keyring, clock, purpose)
+  const { rows } = await tx.query(
+    'auth.keys.versions',
+    `SELECT version FROM secrets.secret_versions
+      WHERE secret_id = $1 AND consumer = 'auth' ORDER BY version DESC LIMIT 2`,
+    [secretId],
+  )
+  const [newest, before] = rows.map((r) => r.int('version'))
+  if (newest === undefined) {
+    throw new AuthError('auth_key_unavailable')
+  }
+  const current = { version: newest, key: await readKey(tx, keyring, secretId, newest) }
+  return before === undefined
+    ? { current }
+    : { current, previous: { version: before, key: await readKey(tx, keyring, secretId, before) } }
+}
+
+/**
+ * Rotates an MCP key (`exponetdb keyring rotate-mcp-key`, Wave 7 order §30):
+ * a new random version of the same secret, under the keys lock, audited as
+ * `auth.installation_key.rotate` with the purpose and the version. Serve
+ * processes seal with it within {@link MCP_KEY_REFRESH_MS}; what the version
+ * before it sealed still opens. A key that does not exist yet is created
+ * (version 1) and not rotated.
+ */
+export async function rotateMcpKey(
+  store: ControlStore,
+  keyring: Keyring,
+  clock: Clock,
+  purpose: McpKeyPurpose,
+): Promise<{ readonly purpose: McpKeyPurpose; readonly version: number }> {
+  if (!MCP_KEY_PURPOSES.includes(purpose)) {
+    throw new AuthError('auth_key_unavailable')
+  }
+  return store.transaction('auth.keys.rotate', async (tx) => {
+    const ensured = await ensureKey(tx, keyring, clock, purpose)
+    if (ensured.created) {
+      return { purpose, version: 1 }
+    }
+    if (!isId('sec', ensured.secretId)) {
+      throw new AuthError('auth_key_unavailable')
+    }
+    const key = randomBytes(32)
+    const ref = await addSecretVersion(tx, keyring, ensured.secretId, key)
+    key.fill(0)
+    await appendAudit(
+      tx,
+      {
+        action: 'auth.installation_key.rotate',
+        phase: 'completed',
+        actor: MAINTENANCE_ACTOR,
+        subject: { secretId: ensured.secretId },
+        changes: { purpose, version: ref.version },
+        result: { status: 'succeeded' },
+      },
+      clock,
+    )
+    return { purpose, version: ref.version }
+  })
 }
 
 /** Lazily loaded, process-wide installation keys of one serve process. */
@@ -126,19 +244,35 @@ export class InstallationKeys {
     return this.#pseudonymizer
   }
 
-  readonly #mcp = new Map<'mcp.cursor_key' | 'mcp.request_state_key', Promise<Buffer>>()
+  readonly #mcp = new Map<
+    McpKeyPurpose,
+    { readonly pending: Promise<McpKeySet>; readonly loadedAt: number }
+  >()
 
-  /** A key of the MCP endpoint: 256 bits, loaded once per process (a failed load is retried). */
-  mcpKey(purpose: 'mcp.cursor_key' | 'mcp.request_state_key'): Promise<Buffer> {
-    let pending = this.#mcp.get(purpose)
-    if (pending === undefined) {
-      pending = this.#load(purpose)
-      pending.catch(() => {
-        this.#mcp.delete(purpose)
-      })
-      this.#mcp.set(purpose, pending)
+  /**
+   * The newest two versions of an MCP key, read again after
+   * {@link MCP_KEY_REFRESH_MS} so a rotation reaches every serve process
+   * without a restart (a failed load is retried by the next caller).
+   */
+  mcpKeys(purpose: McpKeyPurpose): Promise<McpKeySet> {
+    const now = this.#clock.nowMs()
+    const cached = this.#mcp.get(purpose)
+    if (cached !== undefined && now - cached.loadedAt < MCP_KEY_REFRESH_MS) {
+      return cached.pending
     }
+    const pending = this.#store.transaction('auth.keys', (tx) =>
+      loadKeySet(tx, this.#keyring, this.#clock, purpose),
+    )
+    pending.catch(() => {
+      if (this.#mcp.get(purpose)?.pending === pending) this.#mcp.delete(purpose)
+    })
+    this.#mcp.set(purpose, { pending, loadedAt: now })
     return pending
+  }
+
+  /** The newest version of an MCP key: 256 bits. */
+  async mcpKey(purpose: McpKeyPurpose): Promise<Buffer> {
+    return (await this.mcpKeys(purpose)).current.key
   }
 
   rateLimitKey(): Promise<Buffer> {

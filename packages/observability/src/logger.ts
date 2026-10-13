@@ -146,6 +146,9 @@ export const LOG_FIELDS: Readonly<Record<string, Validator>> = {
   grantId: idOf('grt'),
   clientId: idOf('cli'),
   digest: pattern(/^sha256:[0-9a-f]{64}$/),
+  // The tool's contract version and the digest of a served tool list (rug-pull detection, §30).
+  toolVersion: number,
+  catalogDigest: pattern(/^sha256:[0-9a-f]{64}$/),
 }
 
 export interface LoggerOptions {

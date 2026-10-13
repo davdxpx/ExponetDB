@@ -1,6 +1,7 @@
 import { constants } from 'node:fs'
 import { open, unlink } from 'node:fs/promises'
 import { pruneAuditPartitions, verifyAuditChain } from '@exponetdb/audit'
+import { type McpKeyPurpose, rotateMcpKey } from '@exponetdb/auth'
 import {
   bootstrapPsqlScript,
   CONTROL_STORE_DATABASE,
@@ -169,6 +170,31 @@ export interface KeyringReport {
   }[]
   readonly missing: readonly string[]
   readonly mismatched: readonly string[]
+}
+
+/**
+ * `exponetdb keyring rotate-mcp-key`: a new version of an MCP installation
+ * key (Wave 7 order §30). Only serve reads these keys (consumer `auth`), so
+ * only its login writes the new version; the result names the purpose and
+ * the version, never key material.
+ */
+export async function rotateMcpKeyCommand(
+  config: StoreConfig & { readonly keyringEnv: Readonly<Record<string, string | undefined>> },
+  runtime: Runtime,
+  purpose: McpKeyPurpose,
+): Promise<{ readonly purpose: McpKeyPurpose; readonly version: number }> {
+  if (loginOf(config.controlStoreUrl) !== 'exdb_serve') {
+    throw new CommandRefused('serve_login_required')
+  }
+  const keyring = await loadKeyring(config.keyringEnv)
+  const store = openStore(runtime, config.controlStoreUrl, 'exdb_serve', 1)
+  try {
+    await store.verifyLogin()
+    return await rotateMcpKey(store, keyring, runtime.clock, purpose)
+  } finally {
+    keyring.destroy()
+    await store.close()
+  }
 }
 
 /** `exponetdb keyring status`: key ids and reference counts only, never key material. */

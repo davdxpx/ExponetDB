@@ -414,6 +414,33 @@ describe('operator commands', () => {
     })
   })
 
+  it('keyring rotate-mcp-key: the serve login only, prints the purpose and version, never a key', async () => {
+    const rotate = (login: Parameters<typeof db.url>[0], purpose: string) => {
+      const r = io({ EXPONETDB_CONTROL_STORE_URL: db.url(login), EXPONETDB_KEYRING: keyring })
+      return { r, run: () => runCommand(['keyring', 'rotate-mcp-key', '--purpose', purpose], r.io) }
+    }
+    const worker = rotate('exdb_worker', 'mcp.request_state_key')
+    expect(await worker.run()).toBe(2)
+    expect(worker.r.err.join('')).toContain('serve_login_required')
+    const wrong = rotate('exdb_serve', 'audit.pseudonym_key')
+    expect(await wrong.run()).toBe(2)
+    for (const expected of [1, 2]) {
+      // The first call creates the key (version 1), the second rotates it.
+      const serve = rotate('exdb_serve', 'mcp.request_state_key')
+      expect(await serve.run()).toBe(0)
+      expect(JSON.parse(serve.r.out.join(''))).toEqual({
+        purpose: 'mcp.request_state_key',
+        version: expected,
+      })
+    }
+    const versions = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT max(version)::int AS v FROM secrets.secret_versions WHERE purpose = 'mcp.request_state_key'`,
+      ),
+    )
+    expect(versions.rows[0]?.v).toBe(2)
+  })
+
   it('bootstrap-sql and keyring generate write secrets only to new 0600 files', async () => {
     const credentials = join(dir, 'credentials.env')
     const script = join(dir, 'bootstrap.sql')

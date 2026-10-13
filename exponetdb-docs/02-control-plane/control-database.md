@@ -522,7 +522,11 @@ cursors handed to agents and the request state of the approval round
 ([ADR-0027 §7](../01-architecture/adr/0027-mcp-protocol-layer.md)). Each is
 created on first use like the existing keys (a secret of consumer `auth`,
 readable by `serve` only). Only the CHECK constraint changes; the table
-stays append-only.
+stays append-only. **[DECIDED]** (Wave 7 Phase 9) The two MCP keys are
+rotatable: `exponetdb keyring rotate-mcp-key` adds a version to the same
+secret (`secrets.secret_versions`), so `auth.installation_keys` keeps one
+row per purpose; serve uses the newest two versions
+([ADR-0027 §7](../01-architecture/adr/0027-mcp-protocol-layer.md)).
 
 **[DECIDED]** (Wave 7, bundle `01M4S8BT93YJBDEE0Y6ZQAEH1J_grant-last-use`,
 depending on `mcp-keys`; not frozen until G7.) `oauth.grant_last_use` holds

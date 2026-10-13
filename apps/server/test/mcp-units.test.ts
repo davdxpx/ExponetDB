@@ -1,3 +1,4 @@
+import type { McpKeySet } from '@exponetdb/auth'
 import { MCP_META_KEYS, MCP_SERVED_VERSIONS, MCP_TOOLS, type Scope } from '@exponetdb/contracts'
 import { newId } from '@exponetdb/kernel'
 import { describe, expect, it } from 'vitest'
@@ -16,6 +17,7 @@ import {
 import {
   createRequestStateCodec,
   REQUEST_STATE_TTL_SECONDS,
+  singleKey,
 } from '../src/interfaces/mcp/request-state.ts'
 import { defuse, escapeForeign, escapeValue, renderText } from '../src/interfaces/mcp/results.ts'
 
@@ -458,7 +460,7 @@ describe('the request state of the approval round (ADR-0027 §7)', () => {
   let now = 1_800_000_000
   const key = Buffer.alloc(32, 7)
   const codec = createRequestStateCodec(
-    async () => key,
+    async () => singleKey(key),
     () => now,
   )
   const binding = {
@@ -504,10 +506,44 @@ describe('the request state of the approval round (ADR-0027 §7)', () => {
   it('opens nothing under another key', async () => {
     const state = await codec.seal(binding, operation)
     const other = createRequestStateCodec(
-      async () => Buffer.alloc(32, 8),
+      async () => singleKey(Buffer.alloc(32, 8)),
       () => now,
     )
     expect(await other.open(binding, state)).toBeUndefined()
+  })
+
+  it('rotates: seals under the newest version, opens the newest two, never an older one (§30)', async () => {
+    const v1 = Buffer.alloc(32, 1)
+    const v2 = Buffer.alloc(32, 2)
+    const v3 = Buffer.alloc(32, 3)
+    let set: McpKeySet = singleKey(v1)
+    const rotating = createRequestStateCodec(
+      async () => set,
+      () => now,
+    )
+    const old = await rotating.seal(binding, operation)
+    expect(old).toMatch(/^rs1\.1\./)
+    set = { current: { version: 2, key: v2 }, previous: { version: 1, key: v1 } }
+    const fresh = await rotating.seal(binding, operation)
+    expect(fresh).toMatch(/^rs1\.2\./)
+    // A round begun before the rotation still completes, and the new one too.
+    expect(await rotating.open(binding, old)).toBe(operation)
+    expect(await rotating.open(binding, fresh)).toBe(operation)
+    // The version is bound: relabeling a state to the other version opens nothing.
+    expect(await rotating.open(binding, fresh.replace('rs1.2.', 'rs1.1.'))).toBeUndefined()
+    expect(await rotating.open(binding, old.replace('rs1.1.', 'rs1.2.'))).toBeUndefined()
+    // A second rotation retires version 1.
+    set = { current: { version: 3, key: v3 }, previous: { version: 2, key: v2 } }
+    expect(await rotating.open(binding, old)).toBeUndefined()
+    expect(await rotating.open(binding, fresh)).toBe(operation)
+    for (const odd of [
+      'rs1.0.AAAA',
+      'rs1.01.AAAA',
+      'rs1.x.AAAA',
+      `rs1.9999999999.${'A'.repeat(60)}`,
+    ]) {
+      expect(await rotating.open(binding, odd)).toBeUndefined()
+    }
   })
 
   it('asks for URL elicitation only when the client declared its url mode', () => {

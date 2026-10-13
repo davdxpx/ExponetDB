@@ -203,6 +203,8 @@ let page: Page
 const dialogs: string[] = []
 const cspViolations: string[] = []
 const consented: unknown[] = []
+/** The consent view the stub serves (the trifecta case swaps it). */
+let consentView: unknown = CONSENT
 
 beforeAll(async () => {
   const web = await loadWebAssets([WEB_DIST])
@@ -236,7 +238,7 @@ beforeAll(async () => {
       })
     }
     if (url.pathname === '/api/v1/approvals') return json({ items: [ITEM] })
-    if (url.pathname === '/auth/oauth/consent/view') return json(CONSENT)
+    if (url.pathname === '/auth/oauth/consent/view') return json(consentView)
     if (url.pathname === '/auth/oauth/consent') {
       consented.push(request.postDataJSON())
       return json({ redirectTo: `${ORIGIN}/account` })
@@ -322,9 +324,43 @@ describe('the plan review in Chromium', () => {
     await page.screenshot({ path: `${SHOTS}approvals-hostile.png`, fullPage: true })
   })
 
+  it('the consent page names the trifecta when production rows and changes are asked together', async () => {
+    const scope = (name: string, effect: string) => ({
+      scope: name,
+      available: true,
+      reason: null,
+      write: effect !== 'read',
+      effect,
+      tier: 'prod',
+      explicitConsent: true,
+      humanOnly: false,
+    })
+    consentView = {
+      ...CONSENT,
+      scopes: [
+        ...CONSENT.scopes,
+        scope('data.read:prod', 'read'),
+        scope('migrations.apply:prod', 'consequential'),
+      ],
+    }
+    try {
+      await page.goto(`${ORIGIN}/oauth/consent#request=exar_${'B'.repeat(43)}`)
+      await page.waitForSelector('#consent-form')
+      expect(await page.locator('#trifecta-warning').textContent()).toContain(
+        'read production rows and to change databases',
+      )
+    } finally {
+      consentView = CONSENT
+      // A later visit must load the page again, not change the hash of this one.
+      await page.goto('about:blank')
+    }
+  })
+
   it('the consent page shows what each scope does and lets a person pick targets', async () => {
     await page.goto(`${ORIGIN}/oauth/consent#request=exar_${'A'.repeat(43)}`)
     await page.waitForSelector('#consent-form')
+    // Reads and records only: no trifecta warning.
+    expect(await page.locator('#trifecta-warning').count()).toBe(0)
     const badges = await page.locator('#consent-form .badge').allTextContents()
     expect(badges).toContain('reads')
     expect(badges).toContain('records plans or checks, changes nothing')

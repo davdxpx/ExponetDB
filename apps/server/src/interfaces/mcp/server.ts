@@ -106,11 +106,12 @@ export function mcpServerFactory(deps: ServerDeps): McpServerFactory {
       }
       const tools = deps.tools.list(ctx)
       ctx.outcome = 'ok'
+      ctx.catalogDigest = mcpCatalogDigest(tools)
       return {
         tools: tools as never,
         _meta: {
           [EXPONETDB_META_KEYS.catalog]: MCP_CATALOG_VERSION,
-          [EXPONETDB_META_KEYS.catalogDigest]: mcpCatalogDigest(tools),
+          [EXPONETDB_META_KEYS.catalogDigest]: ctx.catalogDigest,
         },
       }
     })

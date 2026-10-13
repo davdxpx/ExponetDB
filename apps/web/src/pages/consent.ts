@@ -182,9 +182,22 @@ export function consentForm(
     decide('deny'),
     h('button', { type: 'submit' }, 'Deny'),
   )
+  // The lethal trifecta (threat-model.md, Wave 7): production rows, text from elsewhere in
+  // the agent's context and the power to change. The server decides; this only says it.
+  const trifecta =
+    view.resource === 'mcp' &&
+    offered.some((o) => o.available && o.scope === 'data.read:prod') &&
+    offered.some((o) => o.available && o.effect === 'consequential')
   return h(
     'div',
     { class: 'consent' },
+    trifecta
+      ? h(
+          'p',
+          { class: 'banner warn', role: 'note', id: 'trifecta-warning' },
+          'This application asks to read production rows and to change databases. An agent that also reads text from elsewhere (a web page, a ticket, a database comment) could be steered to misuse both. Allow only what this task needs: production rows stay for people unless an administrator opens them, and production changes need your approval.',
+        )
+      : null,
     client.lookalike
       ? h(
           'p',

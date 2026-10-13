@@ -46,7 +46,14 @@ import { mcpMetrics } from '../../src/interfaces/mcp/edge.ts'
 import { createToolHost } from '../../src/interfaces/mcp/registry.ts'
 import { createRequestStateCodec } from '../../src/interfaces/mcp/request-state.ts'
 import { createResourceHost } from '../../src/interfaces/mcp/resources.ts'
-import { Browser, type BrowserResponse, enrollOwner, ORIGIN, type Person } from './node-world.ts'
+import {
+  Browser,
+  type BrowserResponse,
+  enrollFromLink,
+  enrollOwner,
+  ORIGIN,
+  type Person,
+} from './node-world.ts'
 
 /**
  * The MCP integration world: the real program (serve's public app with
@@ -92,19 +99,35 @@ export interface McpWorld {
   }>
   /** Registers and approves an MCP client through DCR; returns its client id. */
   mcpClient(name: string): Promise<string>
-  /** Tokens for the audience `mcp` through the code flow and the owner's consent. */
+  /** Tokens for the audience `mcp` through the code flow and a person's consent (the owner by default). */
   mcpToken(
     clientId: string,
     scopes: readonly Scope[],
     tiers: readonly Tier[],
-    options?: { readonly targets?: readonly string[] },
+    options?: { readonly targets?: readonly string[]; readonly person?: Person },
   ): Promise<{ access_token: string; refresh_token: string; scope: string }>
+  /**
+   * The consent decision for these scopes without asserting success (a
+   * person whose role does not cover a scope is refused): the status and body.
+   */
+  consentAttempt(
+    clientId: string,
+    scopes: readonly Scope[],
+    tiers: readonly Tier[],
+    person: Person,
+  ): Promise<{ status: number; body: Record<string, unknown> | undefined }>
+  /** Invites a person, enrolls them and binds a role (planned by the owner, run by the worker). */
+  invitePerson(
+    email: string,
+    roleId: 'viewer' | 'developer' | 'auditor' | 'operator' | 'admin',
+    scope: Record<string, string>,
+  ): Promise<Person>
   /** A pending authorization request of the MCP client (the consent page's handle). */
   consentRequest(clientId: string, scopes: readonly Scope[]): Promise<string>
   /** A REST call with a bearer token (the CLI's view of the same use case). */
   rest(token: string, method: string, path: string, body?: unknown): Promise<Json>
   /** Tokens for the audience `api` (the first-party CLI) with the same scopes and tiers. */
-  apiToken(scopes: readonly Scope[], tiers: readonly Tier[]): Promise<string>
+  apiToken(scopes: readonly Scope[], tiers: readonly Tier[], person?: Person): Promise<string>
   /** Waits for the engine's background audit writes (a denial's `authz.denied`). */
   settled(): Promise<void>
   /** The worker's data-read lane (ADR-0028): started with the world, stopped and started by tests. */
@@ -183,7 +206,7 @@ export async function mcpWorld(
         application: access.application,
         tools: createToolHost(access.application, serveLogger, {
           cursors,
-          states: createRequestStateCodec(() => access.auth.keys.mcpKey('mcp.request_state_key')),
+          states: createRequestStateCodec(() => access.auth.keys.mcpKeys('mcp.request_state_key')),
         }),
         resources: createResourceHost(access.application, serveLogger, cursors),
         publicOrigin: ORIGIN,
@@ -260,9 +283,9 @@ export async function mcpWorld(
     return { status: response.status, body: text.length === 0 ? undefined : JSON.parse(text) }
   }
 
-  /** Starts an authorization request as the signed-in owner; returns the consent handle. */
-  async function authorizeRequest(query: URLSearchParams): Promise<string> {
-    const authorize = await owner.browser.call('GET', `/oauth/authorize?${query.toString()}`)
+  /** Starts an authorization request as a signed-in person; returns the consent handle. */
+  async function authorizeRequest(query: URLSearchParams, as: Person = owner): Promise<string> {
+    const authorize = await as.browser.call('GET', `/oauth/authorize?${query.toString()}`)
     expect(authorize.status, authorize.text).toBe(302)
     const location = authorize.headers.get('location') ?? ''
     return location.slice(location.indexOf('#request=') + '#request='.length)
@@ -275,6 +298,7 @@ export async function mcpWorld(
     scopes: readonly Scope[],
     tiers: readonly Tier[],
     targets?: readonly string[],
+    as: Person = owner,
   ) {
     const verifier =
       'v'.repeat(20) + Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url')
@@ -291,10 +315,10 @@ export async function mcpWorld(
       code_challenge_method: 'S256',
       resource: `${ORIGIN}/${resource}`,
     })
-    const handle = await authorizeRequest(query)
+    const handle = await authorizeRequest(query, as)
     const production = tiers.includes('prod')
-    if (production) await owner.reauth()
-    const decided = await owner.browser.call('POST', '/auth/oauth/consent', {
+    if (production) await as.reauth()
+    const decided = await as.browser.call('POST', '/auth/oauth/consent', {
       request: handle,
       decision: 'allow',
       scopes,
@@ -507,7 +531,50 @@ export async function mcpWorld(
       return clientId
     },
     mcpToken: (clientId, scopes, tiers, options) =>
-      codeFlow(clientId, MCP_REDIRECT, 'mcp', scopes, tiers, options?.targets),
+      codeFlow(clientId, MCP_REDIRECT, 'mcp', scopes, tiers, options?.targets, options?.person),
+    async consentAttempt(clientId, scopes, tiers, person) {
+      const handle = await authorizeRequest(
+        new URLSearchParams({
+          response_type: 'code',
+          client_id: clientId,
+          redirect_uri: MCP_REDIRECT,
+          scope: scopes.join(' '),
+          state: 'state-1',
+          code_challenge: 'c'.repeat(43),
+          code_challenge_method: 'S256',
+          resource: `${ORIGIN}/mcp`,
+        }),
+        person,
+      )
+      if (tiers.includes('prod')) await person.reauth()
+      const decided = await person.browser.call('POST', '/auth/oauth/consent', {
+        request: handle,
+        decision: 'allow',
+        scopes,
+        tiers,
+        lifetimeDays: 30,
+        ...(tiers.includes('prod') ? { acknowledgeProduction: true } : {}),
+      })
+      return { status: decided.status, body: decided.body }
+    },
+    async invitePerson(email, roleId, scope) {
+      await owner.reauth()
+      const invited = await owner.browser.call('POST', '/api/v1/identities', { email })
+      expect(invited.status, invited.text).toBe(201)
+      const person = await enrollFromLink(request, invited.body.invitation.link)
+      await owner.reauth()
+      const planned = await owner.browser.call('POST', '/api/v1/role-bindings', {
+        identityId: person.identityId,
+        roleId,
+        scope,
+      })
+      expect(planned.status, planned.text).toBe(201)
+      await owner.reauth()
+      const applied = await owner.browser.call('POST', `/api/v1/plans/${planned.body.id}/apply`, {})
+      expect(applied.status, applied.text).toBe(202)
+      await drive()
+      return person
+    },
     consentRequest: (clientId, scopes) =>
       authorizeRequest(
         new URLSearchParams({
@@ -521,13 +588,15 @@ export async function mcpWorld(
           resource: `${ORIGIN}/mcp`,
         }),
       ),
-    async apiToken(scopes, tiers) {
+    async apiToken(scopes, tiers, person) {
       const tokens = await codeFlow(
         'exponetdb-cli',
         'http://127.0.0.1:51234/callback',
         'api',
         scopes,
         tiers,
+        undefined,
+        person,
       )
       return tokens.access_token
     },

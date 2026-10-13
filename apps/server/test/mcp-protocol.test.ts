@@ -1,5 +1,10 @@
 import { readFile } from 'node:fs/promises'
-import { MCP_BASELINE_SCOPES, MCP_META_KEYS, MCP_SERVED_VERSIONS } from '@exponetdb/contracts'
+import {
+  MCP_BASELINE_SCOPES,
+  MCP_META_KEYS,
+  MCP_SERVED_VERSIONS,
+  MCP_TOOL_LIST,
+} from '@exponetdb/contracts'
 import { fixedClock, newId } from '@exponetdb/kernel'
 import { MetricsRegistry, type ReadinessReport, silentLogger } from '@exponetdb/observability'
 import { describe, expect, it } from 'vitest'
@@ -100,6 +105,49 @@ describe('/mcp edge: refusals before authentication', () => {
       expect(errorOf(await rpc(res)).code).toBe(-32600)
     }
     expect(seen).toEqual([])
+  })
+
+  it('answers no CORS preflight, even from an allowed Origin: no Access-Control header at all', async () => {
+    const { app, seen } = world({ extraOrigins: ['https://app.example.test'] })
+    const res = await app.request('/mcp', {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'https://app.example.test',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'authorization, mcp-protocol-version, mcp-method',
+      },
+    })
+    expect(res.status).toBe(405)
+    expect([...res.headers.keys()].filter((k) => k.startsWith('access-control-'))).toEqual([])
+    expect(seen).toEqual([])
+  })
+
+  it('ends a body that trickles in past its deadline with 408, before any tool runs', async () => {
+    const { app, lines } = world({ limits: { bodyTimeoutMs: 200 } })
+    let sent = 0
+    const trickle = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        // One byte, then silence: a slow client holding the request open.
+        if (sent === 0) controller.enqueue(new TextEncoder().encode('{'))
+        sent += 1
+        await new Promise((r) => setTimeout(r, 1_000))
+      },
+    })
+    const started = Date.now()
+    const res = await app.request('/mcp', {
+      method: 'POST',
+      headers: { ...BASE_HEADERS, 'content-length': '64' },
+      body: trickle,
+      duplex: 'half',
+    } as RequestInit)
+    expect(res.status).toBe(408)
+    expect(errorOf(await rpc(res)).code).toBe(-32600)
+    expect(Date.now() - started).toBeLessThan(5_000)
+    const records = lines
+      .map((l) => JSON.parse(l) as Json)
+      .filter((l) => l['msg'] === 'mcp.request')
+    expect(records.at(-1)).toMatchObject({ status: 408, reason: 'body_timeout' })
+    expect(records.at(-1)?.['tool']).toBeUndefined()
   })
 
   it('refuses a foreign or null Origin with 403 and no CORS header', async () => {
@@ -391,6 +439,12 @@ describe('/mcp classification (protocol-baseline.md §4 is the oracle)', () => {
       expect(error.code, version).toBe(-32022)
       expect(error.data).toEqual({ supported, requested: version })
     }
+    // SEP-2575 echoes the requester's value, bounded: longer header text is not reflected.
+    const res = await post(app, legacy('tools/list'), {
+      'mcp-protocol-version': `SYSTEM-${'x'.repeat(80)}`,
+    })
+    expect(res.status).toBe(400)
+    expect(errorOf(await rpc(res)).data).toEqual({ supported, requested: 'unrecognized' })
   })
 
   it('an envelope naming a legacy version (no initialize): 400, -32022', async () => {
@@ -795,21 +849,28 @@ describe('/mcp limits, headers and records', () => {
     })
     await post(app, call.body, call.headers)
     await post(app, legacy('tools/list'), { authorization: 'Bearer exat_unknown' })
+    const listed = await post(app, modern('tools/list').body, modern('tools/list').headers)
+    const listedBody = (await rpc(listed)) as { result: { _meta: Record<string, unknown> } }
+    const digest = listedBody.result._meta['cloud.exponet.db/catalogDigest']
     const records = lines
       .map((l) => JSON.parse(l) as Json)
       .filter((l) => l['msg'] === 'mcp.request')
-    expect(records).toHaveLength(2)
+    expect(records).toHaveLength(3)
     expect(records[0]).toMatchObject({
       status: 200,
       era: 'modern',
       protocolVersion: MODERN,
       rpcMethod: 'tools/call',
       tool: 'targets_list',
+      // The tool's version and the served list's digest make a changed catalog visible (§30).
+      toolVersion: MCP_TOOL_LIST.find((t) => t.name === 'targets_list')?.toolVersion,
       outcome: 'ok',
       grantId,
       clientId,
     })
     expect(records[1]).toMatchObject({ status: 401, reason: 'invalid_token' })
+    expect(digest).toMatch(/^sha256:[0-9a-f]{64}$/)
+    expect(records[2]).toMatchObject({ rpcMethod: 'tools/list', catalogDigest: digest })
     const all = lines.join('\n')
     expect(all).not.toContain(TOKEN)
     expect(all).not.toContain('exat_unknown')

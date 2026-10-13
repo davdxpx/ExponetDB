@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
+import type { McpKeySet } from '@exponetdb/auth'
 import { canonicalize } from '@exponetdb/kernel'
 
 /**
@@ -13,13 +14,15 @@ import { canonicalize } from '@exponetdb/kernel'
  * answer is never read as a decision.
  *
  * Format: `rs1.<key version>.` and the base64url of 12 bytes nonce, the
- * ciphertext and the 16-byte tag. The key version is `1`: installation
- * keys are not rotated yet (when they are, the newest two versions open).
- * Every failure is `undefined`, never a reason.
+ * ciphertext and the 16-byte tag. The key is the installation key of the
+ * purpose `mcp.request_state_key` (no other key opens a state); the version
+ * is that secret's version, and it is bound in the additional data. A state
+ * seals under the newest version; the newest two open, so an operator's
+ * rotation (`exponetdb keyring rotate-mcp-key`) cuts no round off. Every
+ * failure is `undefined`, never a reason.
  */
 export const REQUEST_STATE_TTL_SECONDS = 600
 const PREFIX = 'rs1.'
-const KEY_VERSION = '1'
 const AAD = 'exponetdb.mcp.request-state/v1'
 /** Large enough for the payload, small enough for a client to echo cheaply. */
 const MAX_LENGTH = 1024
@@ -47,8 +50,8 @@ function digest(args: unknown): string {
     .digest('hex')
 }
 
-function aad(): Buffer {
-  return Buffer.from(`${AAD}\u0000${KEY_VERSION}`, 'utf8')
+function aad(version: number): Buffer {
+  return Buffer.from(`${AAD}\u0000${version}`, 'utf8')
 }
 
 interface Payload {
@@ -62,8 +65,13 @@ interface Payload {
   readonly n: string
 }
 
+/** One key as a key set (tests, and a single-version installation). */
+export function singleKey(key: Buffer, version = 1): McpKeySet {
+  return { current: { version, key } }
+}
+
 export function createRequestStateCodec(
-  key: () => Promise<Buffer>,
+  keys: () => Promise<McpKeySet>,
   nowSeconds: () => number = () => Math.floor(Date.now() / 1000),
 ): RequestStateCodec {
   return {
@@ -78,28 +86,33 @@ export function createRequestStateCodec(
         e: nowSeconds() + REQUEST_STATE_TTL_SECONDS,
         n: randomBytes(12).toString('base64url'),
       }
+      const { current } = await keys()
       const nonce = randomBytes(12)
-      const cipher = createCipheriv('aes-256-gcm', await key(), nonce)
-      cipher.setAAD(aad())
+      const cipher = createCipheriv('aes-256-gcm', current.key, nonce)
+      cipher.setAAD(aad(current.version))
       const sealed = Buffer.concat([
         nonce,
         cipher.update(Buffer.from(JSON.stringify(payload), 'utf8')),
         cipher.final(),
         cipher.getAuthTag(),
       ])
-      return `${PREFIX}${KEY_VERSION}.${sealed.toString('base64url')}`
+      return `${PREFIX}${current.version}.${sealed.toString('base64url')}`
     },
     async open(binding, state) {
-      const head = `${PREFIX}${KEY_VERSION}.`
-      if (state.length > MAX_LENGTH || !state.startsWith(head)) return undefined
-      const body = state.slice(head.length)
-      if (!/^[A-Za-z0-9_-]+$/.test(body)) return undefined
-      const bytes = Buffer.from(body, 'base64url')
+      if (state.length > MAX_LENGTH) return undefined
+      const m = /^rs1\.([1-9][0-9]{0,8})\.([A-Za-z0-9_-]+)$/.exec(state)
+      if (m === null) return undefined
+      const version = Number(m[1])
+      const bytes = Buffer.from(m[2] ?? '', 'base64url')
       if (bytes.length < 12 + 16 + 1) return undefined
+      const set = await keys()
+      // Only the newest two versions open; an older or unknown version is refused like a forgery.
+      const key = [set.current, set.previous].find((k) => k?.version === version)?.key
+      if (key === undefined) return undefined
       let payload: Partial<Payload>
       try {
-        const decipher = createDecipheriv('aes-256-gcm', await key(), bytes.subarray(0, 12))
-        decipher.setAAD(aad())
+        const decipher = createDecipheriv('aes-256-gcm', key, bytes.subarray(0, 12))
+        decipher.setAAD(aad(version))
         decipher.setAuthTag(bytes.subarray(bytes.length - 16))
         const plain = Buffer.concat([
           decipher.update(bytes.subarray(12, bytes.length - 16)),

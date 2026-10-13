@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05; reviewed at every wave's security gate (last: Wave 5 for G5, §5, awaiting the owner's acceptance) |
+| Status | Baseline (Wave 0), accepted 2026-10-05; reviewed at every wave's security gate (last: Wave 7 for G7, §5, awaiting the owner's acceptance) |
 | Read before | [`../00-product/constitution.md`](../00-product/constitution.md) Part IV, [`ai-agent-safety.md`](./ai-agent-safety.md) |
 
 ## 1. Assets
@@ -241,7 +241,7 @@ control, residual.
 | Malicious extension metadata | Objects hidden from the fingerprint | Extension entries are data (name, version, schema); objects owned by an extension are represented by that entry only; a schema that belongs to an extension is reported as unmanaged, never silently dropped | An extension owner can hide an object by `ALTER EXTENSION … ADD` (the member set is not hashed); owner decision in the G4 record §7 |
 | Control Store snapshot tampering | A forged baseline or document | Documents verified on every read (bounded inflation, digest, entry hashes, fingerprint equal to the row key); never inflated past the recorded length | An attacker with write access to the Control Store can replace a document and its digest together (T11) |
 
-### Wave 5 (2026-10-08, reviewed for G5; awaiting the owner's acceptance)
+### Wave 5 (2026-10-08, reviewed for G5; G5 accepted 2026-10-12)
 
 **[OBSERVED]** What the node agent, the root helper, the private gateway and
 the capability operations implement of the mitigations above (boundaries
@@ -279,4 +279,73 @@ run commands, a socket permission race, unbounded unauthenticated buffering
 at the gateway, reconciliation deciding while the job could still run, role
 grants that widened ExponetDB's own roles, and the verifier in the server log
 under transaction sampling ([G5 record §7](../14-roadmap/gates/5.md#7-phase-progress)).
+
+### Wave 6 (2026-10-12, reviewed for G6; G6 accepted 2026-10-12)
+
+**[OBSERVED]** The migration engine and the CLI ([G6 record](../14-roadmap/gates/6.md)).
+
+| Threat | Impact | Control | Residual |
+|---|---|---|---|
+| Authored SQL as the attack | A migration destroys data or widens rights | Bundles are linted with the parser of each major; the apply checksum (`c1`) binds what runs; statements run as the project's `NOLOGIN` execution role (`SET ROLE`), in one transaction with the ledger row, under the target's advisory lock; `verify.sql` runs read-only and rolled back as the verifier; production needs the same checksum applied and verified on the evidence environment, the policy's approvals and, for `critical` plans, a person; `down.sql` never runs on its own; a failure is never retried automatically | What a person may apply on non-production runs; E16, E18 and E25 have no detection (waived with expiries at G6) |
+| Plan and apply drift (TOCTOU) | A reviewed plan applies to a changed database | A plan binds target identity and generation, fingerprint, ledger state, policy version and content; apply and dispatch re-check them (`PLAN_STALE`) and the plan's authority (E27) | A change between the last check and the statement is caught by the lock and the transaction, not by the plan |
+| CLI credentials | A stolen CLI token acts as its person | Tokens in a protected file; a step-up receipt bound to one action and one plan (ADR-0026); the device flow never carries an explicit-consent scope | A token on a compromised workstation acts until it expires or is revoked |
+| Break-glass misuse | Production changes outside the policy | Human only, time-boxed, audited; activation refused until OD-21 (notification channel) is decided | — |
+
+### Wave 7 (2026-10-13, reviewed for G7; awaiting the owner)
+
+**[OBSERVED]** The MCP endpoint, its tools, approvals from an MCP
+conversation and the agent data-read path ([G7 record](../14-roadmap/gates/7.md),
+ADR-0027 to ADR-0029). Boundary B2 now exists. Each row: threat, control,
+residual, evidence.
+
+| Threat | Control | Residual | Evidence |
+|---|---|---|---|
+| Header and body disagree (smuggling between an intermediary and the server) | One JSON-RPC message per request, strict JSON; `Mcp-Method` and `Mcp-Name` must equal the body (`-32020`); the classification table is the oracle | An intermediary that rewrites the body itself is outside ExponetDB | `mcp-protocol.test.ts` (classification) |
+| Origin and DNS rebinding, Host manipulation | Origin allowlist before authentication (403, no CORS header); another Host 421 | A browser on an allowed origin acts with the token it holds | `mcp-protocol.test.ts`, adversarial channel 15 |
+| Era confusion, legacy session confusion | Classification by envelope and header; a session id is dropped and never returned (stateless) | — | `mcp-protocol.test.ts` |
+| `requestState` tampering or reuse; forged or early elicitation answers | AES-256-GCM under an installation key, bound to identity, client, grant, tool, argument digest and operation, ten minutes; any failure is `VALIDATION_FAILED`; an `accept` decides nothing, the retry reads the operation | Within ten minutes the same principal can read its own operation again (a read) | `mcp-units.test.ts`, adversarial goal 10 |
+| Prompt injection through any channel (§28 axis 3) | Every string escaped (control, bidirectional, zero-width and tag characters made visible); foreign text only in fields marked untrusted and in a delimited block; static instructions; no database text in a tool description | An agent can still be persuaded; persuasion is made insufficient (§3 of `ai-agent-safety.md`) | adversarial suite, channels |
+| Exfiltration through URLs, Markdown images, resource links | Links, images, raw URLs and code fences defused in the data block; no resource link built from database text; no tool fetches a URL | The client decides what it does with the text it reads | adversarial OR-6 |
+| Deceiving the approver (plan text, agent note, client name, filler pushing a DROP out of view) | The approval page shows the server's computed facts first (statements, destructive drops, policy rules, hash), then the raw text verbatim with line numbers and code points; the client name is marked unverified; an agent-made plan says so | A person can still approve without reading | `web-review.e2e.test.ts`, `mcp-approval.e2e.test.ts` (OR-8) |
+| Enumeration through the tool list, errors, timing or caches | The list is what the grant can use, `cacheScope: private`; a target outside a restricted grant answers like an unknown one | Response times are not equalized | adversarial goal 18 |
+| Shared state between principals (a handler or cache the first user fills) | The SDK server and the handler are built per request; no principal state in a process-wide object | — | adversarial incident "parallel principals" |
+| Token confusion `/api` ↔ `/mcp`, confused deputy, token passthrough | Audience-bound opaque tokens; a token of the other audience is `invalid_token`; ExponetDB calls nothing with a caller's token; the MCP module stores no token | — | `mcp.int.test.ts`, adversarial forms 13 and goal 4 to 6 |
+| SSRF | No tool takes a URL; the only fetcher is the hardened CIMD fetcher (Wave 3B) | — | adversarial OR-5 (sinkhole) |
+| Consent phishing with lookalike names | A lookalike banner and "name not verified"; consent offers only scopes the person holds; production opt-in | A person can still consent | `web-review.e2e.test.ts` |
+| Tool poisoning, rug pull, shadow tools | Static, reviewed descriptions with `toolVersion`; the catalog digest in `tools/list` `_meta` and in the request log; the list pinned per grant shape; replay transcripts fail on a changed digest | A deployment changes the list (visible, never silent) | `mcp-catalog.test.ts`, `mcp-replay.int.test.ts` |
+| Resource exhaustion (bodies, slow streams, parallel reads, costly EXPLAIN, unbounded pages, amplification) | Body and header limits before work, JSON depth limit, rate limits per grant, identity and tool class, 2/3/8 data reads at once, row, byte and statement caps, page limits, streams per grant | No cost preflight for EXPLAIN | `mcp-protocol.test.ts`, adversarial goal 19 |
+
+**The lethal trifecta per grant form, and the rule of two.** An agent is
+dangerous when it combines (A) foreign text in its context, (B) private data
+and (C) state changes or communication to the outside. ExponetDB never
+communicates to the outside on an agent's behalf. Every form below has
+foreign text (A: catalog and row text is foreign); what keeps the third
+property away:
+
+| Form (`ai-agent-safety.md` §6.1) | B private data | C change | Why not all three |
+|---|---|---|---|
+| 1 read, 2 plan only, 7 nodes, 8 connections | no rows | no (plans are records; no node or connection tool) | B and C absent |
+| 3 apply nonprod | no rows | non-production | B absent |
+| 4 apply prod | no rows | production only with a person's approval | B absent; C bound to a person |
+| 5 `data.read:nonprod` | non-production rows (masked columns) | no | C absent |
+| 6 `data.read:prod` | production rows refused (`humans_only`) | no | C absent; B on production refused |
+| 9 target list, 10 both tiers | non-production rows | non-production changes; production with approval | **all three on non-production**: the residual of a person's broad consent; the consent page names the combination; non-production should not hold production personal data |
+| 11 expired/revoked/disabled, 13 wrong audience, 14 manipulated record | none | none | nothing is reachable |
+| 12 foreign project | none outside its project | none outside its project | the subject boundary |
+
+The consent page warns when `data.read:prod` and a changing scope are asked
+together (Wave 7).
+
+**Incidents published in 2025 and 2026, as regression cases** (each a test
+in the adversarial suite): a "read-only" gate passed by `COMMIT;` and a
+second statement, a `statement_timeout` leaking through a pool (refused;
+a fresh reader session per read); a token from a database row used by an
+agent with a service role (no tool returns a credential; production rows
+`humans_only`); a server accepting any bearer on some route spellings
+(every spelling of `/mcp` checked); a session id checked by format only (no
+sessions); a target taken from a request header (no address in any input);
+shared transports leaking across users (parallel principals); unauthenticated
+inspection proxies (none shipped); approval dialogs deceived by filler or
+summaries (the computed facts first); approvals surviving a configuration
+change (a stale plan or a changed policy refuses).
 

@@ -751,6 +751,8 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
       rpcMethod: record.rpcMethod,
       rpcCode: record.rpcCode,
       tool: ctx?.tool,
+      toolVersion: ctx?.toolVersion,
+      catalogDigest: ctx?.catalogDigest,
       outcome: ctx?.outcome,
       reason: record.denial,
       grantId: credential?.type === 'access_token' ? credential.grantId : undefined,

@@ -118,8 +118,13 @@ export async function enrollOwner(db: MigratedTestDatabase, request: Requester):
     },
     { email: 'owner@example.test', reissue: false },
   )
+  return enrollFromLink(request, issued.link)
+}
+
+/** A person enrolled from an enrollment or invitation link: passkey, password, TOTP. */
+export async function enrollFromLink(request: Requester, link: string): Promise<Person> {
   const browser = new Browser(request)
-  const token = new URL(issued.link).hash.replace('#token=', '')
+  const token = new URL(link).hash.replace('#token=', '')
   expect((await browser.call('POST', '/auth/enrollment/redeem', { token })).status).toBe(200)
   const options = await browser.call('POST', '/auth/enrollment/passkey/options', {})
   const authenticator = new SoftAuthenticator(

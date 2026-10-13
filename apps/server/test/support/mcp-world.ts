@@ -6,10 +6,10 @@ import { fixedClock, newId } from '@exponetdb/kernel'
 import { createLogger, MetricsRegistry, type ReadinessReport } from '@exponetdb/observability'
 import { createPublicApp, httpMetrics } from '../../src/interfaces/http/app.ts'
 import { createCursorCodec } from '../../src/interfaces/mcp/cursor.ts'
-import { mcpMetrics } from '../../src/interfaces/mcp/edge.ts'
+import { type McpLimits, mcpMetrics } from '../../src/interfaces/mcp/edge.ts'
 import { RateLimiter } from '../../src/interfaces/mcp/rate-limit.ts'
 import { BINDINGS, createToolHost } from '../../src/interfaces/mcp/registry.ts'
-import { createRequestStateCodec } from '../../src/interfaces/mcp/request-state.ts'
+import { createRequestStateCodec, singleKey } from '../../src/interfaces/mcp/request-state.ts'
 import { createResourceHost } from '../../src/interfaces/mcp/resources.ts'
 
 /**
@@ -69,6 +69,8 @@ export interface WorldOptions {
   readonly publicOrigin?: string
   /** No rate limits (the conformance suite sends hundreds of requests from one grant). */
   readonly unlimited?: boolean
+  /** Tighter edge limits (a slow client within a test's time). */
+  readonly limits?: Partial<McpLimits>
 }
 
 export function world(options: WorldOptions = {}) {
@@ -140,7 +142,7 @@ export function world(options: WorldOptions = {}) {
         tools: createToolHost(
           application,
           logger,
-          { cursors, states: createRequestStateCodec(async () => key) },
+          { cursors, states: createRequestStateCodec(async () => singleKey(key)) },
           bindings,
         ),
         resources: createResourceHost(application, logger, cursors),
@@ -151,6 +153,7 @@ export function world(options: WorldOptions = {}) {
         metrics: mcpMetrics(registry),
         available: () => options.available ?? true,
         ...(options.unlimited === true ? { limiter: unlimitedLimiter() } : {}),
+        ...(options.limits === undefined ? {} : { limits: options.limits }),
       },
     },
   )
