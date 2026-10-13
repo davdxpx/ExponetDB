@@ -281,6 +281,68 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
   },
 )
 
+describe('secret-bearing catalogs (Wave 7 review)', () => {
+  // The reader and the verifier are members of pg_read_all_data, which PostgreSQL lets read
+  // every relation, system catalogs included: the parser refuses these by name, in every spelling.
+  const SECRET_READS: readonly string[] = [
+    'SELECT rolname, rolpassword FROM pg_catalog.pg_authid',
+    'TABLE pg_catalog.pg_authid',
+    'SELECT * FROM pg_catalog.pg_shadow',
+    'SELECT * FROM pg_catalog.pg_user_mapping',
+    'SELECT * FROM pg_catalog.pg_user_mappings',
+    'SELECT subconninfo FROM pg_catalog.pg_subscription',
+    'SELECT setconfig FROM pg_catalog.pg_db_role_setting',
+    'SELECT stavalues1 FROM pg_catalog.pg_statistic',
+    'SELECT * FROM pg_catalog.pg_statistic_ext_data',
+    'SELECT most_common_vals FROM pg_catalog.pg_stats',
+    'SELECT * FROM pg_catalog.pg_stats_ext',
+    'SELECT * FROM pg_catalog.pg_stats_ext_exprs',
+    'SELECT * FROM information_schema.user_mapping_options',
+    'SELECT * FROM information_schema.user_mappings',
+    'SELECT x.rolpassword FROM public.t JOIN pg_catalog.pg_authid x ON true',
+    'SELECT (SELECT rolpassword FROM pg_catalog.pg_authid LIMIT 1)',
+    'WITH a AS (SELECT rolpassword FROM pg_catalog.pg_authid) SELECT * FROM a',
+    'EXPLAIN SELECT * FROM pg_catalog.pg_authid',
+    'SELECT * FROM pg_authid',
+  ]
+
+  it.each(SUPPORTED_MAJORS.flatMap((m) => SECRET_READS.map((t) => [m, t] as const)))(
+    'refuses on %i: %s',
+    (major, text) => {
+      expect(admitReadSync(major, text)).toMatchObject({
+        ok: false,
+        code: 'QUERY_CONSTRUCT_UNSUPPORTED',
+        reason: 'relation_secret',
+      })
+    },
+  )
+
+  it('refuses them in verify checks too, even where unqualified relations are allowed', () => {
+    for (const text of [
+      "SELECT true AS ok, rolpassword AS detail FROM pg_catalog.pg_authid WHERE rolname = 'app'",
+      'SELECT count(*) > 0 AS ok FROM pg_catalog.pg_stats',
+    ]) {
+      expect(admitVerifySync(17, text)).toMatchObject({ ok: false, reason: 'relation_secret' })
+    }
+    expect(
+      admitVerifySync(17, 'SELECT count(*) > 0 AS ok FROM pg_authid', {
+        unqualifiedRelations: true,
+      }),
+    ).toMatchObject({ ok: false, reason: 'relation_secret', construct: 'pg_catalog.pg_authid' })
+  })
+
+  it('still admits the ordinary catalogs and a CTE that only shares the name', () => {
+    for (const text of [
+      'SELECT rolname FROM pg_catalog.pg_roles',
+      'SELECT relname FROM pg_catalog.pg_class',
+      'SELECT * FROM information_schema.columns',
+      'WITH pg_authid AS (SELECT 1 AS x) SELECT * FROM pg_authid',
+    ]) {
+      expect(admitReadSync(17, text), text).toMatchObject({ ok: true })
+    }
+  })
+})
+
 describe('grammar per major', () => {
   it('parses PostgreSQL 18 syntax with the 18 grammar only', () => {
     const virtual = 'SELECT 1'

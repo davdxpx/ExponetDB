@@ -65,6 +65,20 @@ is refused with `QUERY_NOT_READ_ONLY` and the hint to use a migration.
    in depth, not a sandbox: `data.read` rests on permission, scope, tier, the
    setting of the policy rule `data.read` for the target (ADR-0028 calls it
    `dataRead`) and the reader role's privileges.
+   **[DECIDED]** (Wave 7 review, 2026-10-13) The reader and the verifier are
+   members of `pg_read_all_data`, which PostgreSQL lets read every relation,
+   system catalogs included (observed: such a member reads
+   `pg_catalog.pg_authid` with its password verifiers). The parser therefore
+   refuses, by name and in every spelling (qualified, `TABLE`, in a join,
+   subquery, CTE or `EXPLAIN`; unqualified counts as `pg_catalog`), the
+   catalogs that hold secrets or sampled column values: `pg_authid`,
+   `pg_shadow`, `pg_user_mapping`, `pg_user_mappings`, `pg_subscription`,
+   `pg_db_role_setting`, `pg_statistic`, `pg_statistic_ext_data`,
+   `pg_stats`, `pg_stats_ext`, `pg_stats_ext_exprs`, and
+   `information_schema.user_mapping_options`, `user_mappings`,
+   `_pg_user_mappings` (`SECRET_CATALOG_RELATIONS` in
+   `packages/postgres/src/parser/admission.ts`; for `data.read` and
+   `verify.sql` alike).
    **[DECIDED]** (G4 correction, 2026-10-07) Calls and operators are also
    checked where the syntax hides them:
    - field selection `(expr).name` is refused as a whole: PostgreSQL turns it
@@ -217,6 +231,17 @@ values.
   `null` with `masked: true`, and an expression column is masked whenever
   the statement reads a table with a masked column. Masking applies to
   every caller: an unmasked read (`data.read_sensitive`) has no action yet.
+  **[DECIDED]** (Wave 7 review, 2026-10-13) Masking guards the output only,
+  so a masked column may appear only as a bare column of the top-level
+  target list of a plain `SELECT`. Any other use is refused with
+  `QUERY_CONSTRUCT_UNSUPPORTED` before the statement runs, because the rows,
+  their order, their count or an error would answer for the value: a
+  predicate, an ordering (also by output name or position), a grouping, a
+  join (also `USING` and `NATURAL`), an expression, a window, a subquery, a
+  CTE, a set operation, `DISTINCT`, a whole-row reference, or `*` below the
+  top level (`sensitiveReference` in
+  `packages/postgres/src/parser/sensitive.ts`; the names of the masked
+  columns come from the relations the statement reads).
   A comment-based marking (`[SENSITIVE]`) is not read.
 - **Refusals** carry only the details the error catalog defines (a
   construct, a parse position, a SQLSTATE); a runtime error of the target

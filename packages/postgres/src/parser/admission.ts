@@ -66,6 +66,7 @@ export type AdmissionReason =
   | 'cast'
   | 'user_code'
   | 'relation_unqualified'
+  | 'relation_secret'
   | 'relation_kind'
   | 'output_columns'
   | 'explain_option'
@@ -121,6 +122,40 @@ const EXPLAIN_OPTIONS = new Set([
   'format',
 ])
 const CATALOG_SCHEMAS = new Set(['pg_catalog', 'information_schema'])
+
+/**
+ * Catalog relations no read and no verify check may name, in whatever
+ * spelling: password verifiers (`pg_authid`, `pg_shadow`), options of user
+ * mappings and subscriptions (they can carry passwords), per-role settings,
+ * and the sampled values of every column (`pg_statistic` and its views,
+ * which would also bypass column masking). The reader and the verifier are
+ * members of `pg_read_all_data`, which PostgreSQL lets read every relation,
+ * system catalogs included ([`sql-execution-security.md` §5](../../../../exponetdb-docs/03-database-model/sql-execution-security.md)).
+ * Unqualified names count as `pg_catalog`: it is searched first.
+ */
+export const SECRET_CATALOG_RELATIONS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  [
+    'pg_catalog',
+    new Set([
+      'pg_authid',
+      'pg_shadow',
+      'pg_user_mapping',
+      'pg_user_mappings',
+      'pg_subscription',
+      'pg_db_role_setting',
+      'pg_statistic',
+      'pg_statistic_ext_data',
+      'pg_stats',
+      'pg_stats_ext',
+      'pg_stats_ext_exprs',
+    ]),
+  ],
+  ['information_schema', new Set(['user_mapping_options', 'user_mappings', '_pg_user_mappings'])],
+])
+
+function isSecretRelation(schema: string | null, name: string): boolean {
+  return SECRET_CATALOG_RELATIONS.get(schema ?? 'pg_catalog')?.has(name) === true
+}
 const BETWEEN_NAMES = new Set([
   'BETWEEN',
   'NOT BETWEEN',
@@ -426,6 +461,13 @@ function checkTree(
       const name = typeof body['relname'] === 'string' ? body['relname'] : ''
       if (schema === null && ctes.has(name)) {
         return true
+      }
+      if (isSecretRelation(schema, name)) {
+        refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'relation_secret', {
+          construct: `${schema ?? 'pg_catalog'}.${name}`,
+          ...at(body),
+        })
+        return false
       }
       if (schema === null && options.unqualifiedRelations !== true) {
         refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'relation_unqualified', {

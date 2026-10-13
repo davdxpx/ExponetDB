@@ -184,7 +184,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
     it('masks sensitive columns, also through expressions over their table, and names RLS relations', async () => {
       const patterns = ['public.accounts.password', '*.*.email']
       const r = await read(
-        'SELECT id, email, password, upper(email) AS shout FROM public.accounts WHERE id = 1',
+        'SELECT id, email, password, upper(note) AS shout FROM public.accounts WHERE id = 1',
         {
           sensitiveColumns: patterns,
         },
@@ -199,6 +199,35 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       ])
       expect(r.rows).toEqual([[1, null, null, null]])
       expect(JSON.stringify(r)).not.toContain('canary')
+      // A masked column may only be output: a predicate, an ordering, an expression, a join or
+      // an error would answer for its value, so each is refused before the statement runs.
+      for (const statement of [
+        "SELECT id FROM public.accounts WHERE password LIKE 'h%'",
+        'SELECT id FROM public.accounts ORDER BY password',
+        'SELECT id, password AS p FROM public.accounts ORDER BY p',
+        'SELECT id, password FROM public.accounts ORDER BY 2',
+        'SELECT upper(email) FROM public.accounts',
+        "SELECT 1 / (CASE WHEN password LIKE 'h%' THEN 0 ELSE 1 END) FROM public.accounts",
+        "SELECT id FROM public.accounts a WHERE a::text LIKE '%hunter%'",
+        'SELECT id FROM public.accounts a JOIN public.accounts b USING (email)',
+        'SELECT id FROM public.accounts NATURAL JOIN public.accounts b',
+        'SELECT DISTINCT password FROM public.accounts',
+        "SELECT id FROM public.accounts WHERE id IN (SELECT id FROM public.accounts WHERE email LIKE 'c%')",
+        'WITH c AS (SELECT email FROM public.accounts) SELECT * FROM c',
+        'SELECT email FROM public.accounts UNION SELECT email FROM public.accounts',
+      ]) {
+        const refused = await read(statement, { sensitiveColumns: patterns })
+        expect(refused, statement).toMatchObject({
+          kind: 'refused',
+          code: 'QUERY_CONSTRUCT_UNSUPPORTED',
+          reason: 'sensitive_reference',
+        })
+      }
+      // Without a pattern the same statement runs: the refusal is the masking's.
+      expect(await read("SELECT id FROM public.accounts WHERE password LIKE 'h%'")).toMatchObject({
+        kind: 'query',
+        rows: [[1]],
+      })
       const rls = await read('SELECT id FROM public.secured')
       expect(rls).toMatchObject({ rowCount: 1, rlsRelations: ['public.secured'] })
     })
@@ -244,6 +273,41 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
           'QUERY_CONSTRUCT_UNSUPPORTED',
           'QUERY_PARSE_ERROR',
         ]).toContain(r.code)
+      }
+    })
+
+    it('refuses the catalogs that pg_read_all_data would let the reader read: verifiers, mappings, column statistics', async () => {
+      // The reader role itself can read them: the refusal by the parser is the barrier.
+      await runAsSuperuser(server, database, ['ANALYZE public.accounts'])
+      const c = await superuserClient(server, database)
+      try {
+        await c.query(`SET ROLE ${ROLE_NAMES.reader}`)
+        const verifiers = await c.query(
+          'SELECT count(*)::int AS n FROM pg_catalog.pg_authid WHERE rolpassword IS NOT NULL',
+        )
+        expect(verifiers.rows[0].n).toBeGreaterThan(0)
+        const stats = await c.query(
+          "SELECT histogram_bounds::text AS h FROM pg_catalog.pg_stats WHERE schemaname = 'public' AND tablename = 'accounts' AND attname = 'email'",
+        )
+        expect(String(stats.rows[0]?.h)).toContain(CANARY)
+        await c.query('RESET ROLE')
+      } finally {
+        await c.end()
+      }
+      for (const statement of [
+        'SELECT rolname, rolpassword FROM pg_catalog.pg_authid',
+        'TABLE pg_catalog.pg_authid',
+        'SELECT usename, passwd FROM pg_catalog.pg_shadow',
+        'SELECT umoptions FROM pg_catalog.pg_user_mapping',
+        "SELECT histogram_bounds FROM pg_catalog.pg_stats WHERE tablename = 'accounts'",
+        'SELECT stavalues1 FROM pg_catalog.pg_statistic',
+      ]) {
+        const r = await read(statement, { callerClass: 'human' })
+        expect(r, statement).toMatchObject({
+          kind: 'refused',
+          code: 'QUERY_CONSTRUCT_UNSUPPORTED',
+        })
+        expect(JSON.stringify(r), statement).not.toMatch(/SCRAM-SHA-256|canary/)
       }
     })
 

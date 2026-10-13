@@ -203,7 +203,7 @@ describe('data reads through /mcp and REST', () => {
     )
     const r = await agent.call('sql_query', {
       target: w.ids.stagingTarget,
-      sql: 'SELECT id, note, upper(note) AS shout FROM public.accounts ORDER BY id',
+      sql: 'SELECT id, note, upper(id::text) AS shout FROM public.accounts ORDER BY id',
     })
     expect(r.isError, r.content[0]?.text.slice(0, 300)).toBeUndefined()
     expect(r.structuredContent?.['columns']).toEqual([
@@ -219,6 +219,14 @@ describe('data reads through /mcp and REST', () => {
     const reads = await auditEvents('data.read')
     const last = reads.at(-1) as { changes: Record<string, unknown> }
     expect(last.changes['maskedColumns']).toEqual(['note', 'shout'])
+    // A masked column is output only (masked): a predicate or an expression over it is refused.
+    for (const sqlText of [
+      "SELECT id FROM public.accounts WHERE note LIKE 's%'",
+      'SELECT upper(note) FROM public.accounts',
+    ]) {
+      const refused = await agent.call('sql_query', { target: w.ids.stagingTarget, sql: sqlText })
+      expect(refused.content[0]?.text, sqlText).toMatch(/^Refused: QUERY_CONSTRUCT_UNSUPPORTED\./)
+    }
     // The setting is the target's: production keeps the installation's defaults.
     const person = await w.rest(
       cliToken,

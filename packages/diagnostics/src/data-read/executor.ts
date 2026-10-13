@@ -8,6 +8,7 @@ import {
   TargetError,
   type TargetSession,
 } from '@exponetdb/postgres'
+import { sensitiveReference } from '@exponetdb/postgres/parser'
 import { redactPlan, summarizePlan } from './explain.ts'
 import {
   admissionRefusal,
@@ -85,13 +86,13 @@ async function origins(
   )
 }
 
-/** Whether any relation the statement reads has a column a pattern names (an expression column may derive from it). */
-async function readsSensitive(
+/** The names of the columns a pattern names in the relations the statement reads (an expression column may derive from them). */
+async function sensitiveNames(
   session: TargetSession,
   read: AdmittedRead,
   patterns: readonly string[],
-): Promise<boolean> {
-  if (patterns.length === 0 || read.relations.length === 0) return false
+): Promise<Set<string>> {
+  if (patterns.length === 0 || read.relations.length === 0) return new Set()
   const rows = await session.query(
     sql`SELECT n.nspname AS schema, c.relname AS "table", a.attname AS "column"
           FROM pg_catalog.json_to_recordset($1::json) AS r(schema text, name text)
@@ -100,8 +101,12 @@ async function readsSensitive(
           JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped`,
     [JSON.stringify(read.relations.map((r) => ({ schema: r.schema ?? 'public', name: r.name })))],
   )
-  return rows.some((r) =>
-    patterns.some((p) => matchesColumn(p, r.text('schema'), r.text('table'), r.text('column'))),
+  return new Set(
+    rows
+      .filter((r) =>
+        patterns.some((p) => matchesColumn(p, r.text('schema'), r.text('table'), r.text('column'))),
+      )
+      .map((r) => r.text('column')),
   )
 }
 
@@ -201,6 +206,17 @@ export async function executeDataRead(
             `${request.statementTimeoutMs + 5_000}ms`,
           ])
         }
+        // A masked column may only be output (and masked there): any other use is refused
+        // before the statement runs, so neither rows, their order nor an error answer for it.
+        const masked = await sensitiveNames(session, read, request.sensitiveColumns)
+        const reference = sensitiveReference(session.facts.major, text, masked)
+        if (reference !== undefined) {
+          return refused(
+            'QUERY_CONSTRUCT_UNSUPPORTED',
+            { construct: reference.slice(0, 256) },
+            'sensitive_reference',
+          )
+        }
         const raw = await session.runAdmittedRead(
           read,
           request.params,
@@ -223,7 +239,7 @@ export async function executeDataRead(
         const names = await typeNames(session, raw)
         const from = await origins(session, raw)
         const patterns = request.sensitiveColumns
-        const expressionsMasked = await readsSensitive(session, read, patterns)
+        const expressionsMasked = masked.size > 0
         const columns: QueryColumn[] = raw.fields.map((f) => {
           const origin = from.get(`${f.tableOid}:${f.columnNumber}`)
           const masked =
