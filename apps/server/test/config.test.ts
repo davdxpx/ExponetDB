@@ -119,6 +119,17 @@ describe('Wave 3A authentication configuration', () => {
     }
   })
 
+  it('admits new MCP clients openly by default, or for review (owner decision 2026-10-13)', () => {
+    expect(serveConfig(serveBase).clientRegistration).toBe('open')
+    expect(
+      serveConfig({ ...serveBase, EXPONETDB_OAUTH_CLIENT_REGISTRATION: 'review' })
+        .clientRegistration,
+    ).toBe('review')
+    expect(
+      problems(() => serveConfig({ ...serveBase, EXPONETDB_OAUTH_CLIENT_REGISTRATION: 'closed' })),
+    ).toEqual([{ variable: 'EXPONETDB_OAUTH_CLIENT_REGISTRATION', reason: 'invalid' }])
+  })
+
   it('the auth operator commands use the serve login and the public origin', () => {
     expect(
       authOperatorConfig({
