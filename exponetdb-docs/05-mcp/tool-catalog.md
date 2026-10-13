@@ -97,6 +97,18 @@ agents read no rows (ADR-0028).
 `plan_apply` is idempotent with respect to `planId`. It never accepts parameters
 that change what runs.
 
+**[DECIDED]** (Wave 7 Phase 6) Attribution of an agent's plan: the plan and
+operation views name the person (`actor.via: mcp`) and the registered
+client (`clientId`); the grant appears in the audit (`client.grantId` on
+`plan.created` and `operation.accepted`), not in the plan, because the
+plan hash binds the person and the client only. A `critical` plan (for
+example a `lossy` rollback on production) may be proposed by an agent but is
+applied by a person (CLI, or a Web App session for a released cooling
+operation) with a fresh re-authentication: the agent's `plan_apply` is
+`HUMAN_APPLY_REQUIRED` with the plan id and the person's next step, and the
+engine's refusal is audited as `authz.denied`. `[OBSERVED]` in
+`apps/server/test/mcp-plans.int.test.ts`.
+
 ## 6. Connections and locks
 
 | Tool | Scope | Ann. | Input | Output | REST |
@@ -134,7 +146,7 @@ that change what runs.
 
 | Tool | Scope | Ann. | Input | Output | REST |
 |---|---|---|---|---|---|
-| `audit_search` | `audit.read` | RO | filters (time, target, action, actor `self` or `any` (absent = any, as REST), result), cursor | audit events (pseudonymized actors); a restricted grant without a target sees the events of the targets it covers, never installation-wide ones | `GET /audit-events` |
+| `audit_search` | `audit.read` | RO | filters (time, target, action, actor `self` or `any` (absent = any, as REST), result, `client` (`cli_…`), `grant` (`grt_…`), Wave 7 for runbook RB-11), cursor | audit events (pseudonymized actors; `denial` names the action, reason and tool of an `authz.denied`); a restricted grant without a target sees the events of the targets it covers, never installation-wide ones | `GET /audit-events` |
 
 ## 11. Resources
 

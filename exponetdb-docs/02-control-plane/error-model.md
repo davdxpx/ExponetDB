@@ -78,6 +78,17 @@ the full situation table is
 | unknown tool, invalid list cursor of `tools/list` or `resources/list`, resource not found | JSON-RPC `-32602` (resource not found `-32002` on the legacy revisions); the tool name is not echoed |
 | `-32020`, `-32021`, `-32022` | the transport's version and header ladder (not catalog codes), HTTP 400 |
 
+**[DECIDED]** (Wave 7 order §18) A refusal of a high-risk action (applying,
+planning, deciding, changing access or grants, reading data) is also an
+audit event, `authz.denied`, with the reason, the tool, the client and the
+grant; every other refusal is a request log line and the metric
+`exdb_mcp_denied_total{reason}` ([audit.md §2](./audit.md#2-what-is-audited)).
+An agent applying a `critical` plan gets `HUMAN_APPLY_REQUIRED` with the
+plan id and the next step for its person (the engine narrows a critical
+plan to a person's session, reason `client_kind`; the refusal is translated
+only when the engine allows the caller the kind's apply without the stored
+class, so it reveals nothing the caller could not do otherwise).
+
 ### OAuth protocol endpoints (Wave 3B)
 
 **[DECIDED]** (Wave 3B) The authorization server speaks OAuth, not RFC 9457
@@ -126,6 +137,7 @@ later without changes).
 | `PLAN_BINDING_ACTOR` | 403 | no | Caller is not the plan's actor/client. |
 | `PLAN_DENIED` | 403 | no | Policy decision at plan time was `deny`; plan exists for explanation only. |
 | `APPROVAL_REQUIRED` | 202/409 | no | Apply accepted into `awaiting_approval` (202) or approval missing for a kind that cannot wait (409). |
+| `HUMAN_APPLY_REQUIRED` | 403 | no | (Wave 7) A `critical` plan applied by an agent or another non-person client: only a person applies it (Web App session or CLI, fresh re-authentication); `details.planId`; the remediation names the CLI commands. Given only when the stored class is the sole obstacle (the engine allows the caller the kind's apply otherwise). |
 | `REAUTH_REQUIRED` | 401 | no | Fresh passkey/TOTP proof needed. |
 | `APPROVAL_COOLING_PERIOD` | 409 | yes | A `critical` self-approval is in its cooling period ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization)); apply again after `details.notBefore` with a fresh re-authentication (Wave 3A). |
 | `SELF_APPROVAL_UNACKNOWLEDGED` | 422 | no | An approval of one's own plan must carry the explicit acknowledgement (Wave 3A). |
@@ -306,7 +318,10 @@ nonprod-only token used to learn `INSUFFICIENT_SCOPE` with
 `requiredScope: …:prod`). The server writes why to its log
 (`authz.denial_concealed`: the route template, the request id and
 `target_restriction` or `tier_restriction`, never the path); it is not part
-of the answer and not an audit event (refusals are not audited).
+of the answer. The concealed answer is not an audit event by itself; when
+the refused action is high-risk the engine records `authz.denied` (audit.md
+§2, Wave 7), which only readers of the audit see (an ordinary refusal goes
+to the request log and a metric).
 `TARGET_NOT_IN_GRANT` and `TIER_NOT_PERMITTED` stay for plans and
 operations the caller already holds. An unrestricted delegated token, like
 a person, still learns that a path exists from `PERMISSION_DENIED`.

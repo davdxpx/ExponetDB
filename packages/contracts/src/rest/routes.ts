@@ -732,6 +732,10 @@ export const ROUTES = [
       action: z.string().max(64).optional(),
       actor: z.enum(['self', 'any']).optional(),
       result: z.enum(['succeeded', 'failed', 'denied']).optional(),
+      client: OAuthClientIdSchema.optional().meta({
+        description: 'Events made through this client (runbook RB-11: list what a credential did).',
+      }),
+      grant: GrantIdSchema.optional().meta({ description: 'Events made through this grant.' }),
       ...page(500, 100),
     }),
     response: { status: 200, schema: pageSchema(AuditEventSchema) },

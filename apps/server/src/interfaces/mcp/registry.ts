@@ -18,7 +18,7 @@ import {
 import type { RequestId } from '@exponetdb/kernel'
 import { describeError, type Logger } from '@exponetdb/observability'
 import type * as z from 'zod'
-import { errorCodeOf } from '../http/request.ts'
+import { detailsOf, errorCodeOf } from '../http/request.ts'
 import type { CursorCodec } from './cursor.ts'
 import { escapeValue, renderError, renderText, toolError } from './results.ts'
 
@@ -203,7 +203,20 @@ export const BINDINGS: { readonly [N in ToolName]?: Binding<N> } = {
   plan_get: (app, caller, a) => app.plan(caller, a.planId),
   plan_apply: (app, caller, a) => app.apply(caller, a.planId),
   plan_withdraw: (app, caller, a) => app.withdraw(caller, a.planId),
-  operation_get: (app, caller, a) => app.operation(caller, a.operationId),
+  operation_get: async (app, caller, a, ctx) => {
+    const first = await app.operation(caller, a.operationId)
+    const deadline = Date.now() + (a.waitSeconds ?? 0) * 1000
+    const signature = (o: { state: string; applyOutcome: string; verificationOutcome: string }) =>
+      `${o.state}|${o.applyOutcome}|${o.verificationOutcome}`
+    // Observe instead of guessing (order §25): the same read, repeated, until something changed.
+    let current = first
+    while (!FINAL_STATES.has(current.state) && Date.now() < deadline && !ctx.signal.aborted) {
+      await new Promise((resolve) => setTimeout(resolve, Math.min(1000, deadline - Date.now())))
+      current = await app.operation(caller, a.operationId)
+      if (signature(current) !== signature(first)) break
+    }
+    return current
+  },
   operation_list: (app, caller, a) =>
     app.operations(caller, {
       target: a.target,
@@ -231,9 +244,19 @@ export const BINDINGS: { readonly [N in ToolName]?: Binding<N> } = {
       action: a.action,
       actor: a.actor,
       result: a.result,
+      client: a.client,
+      grant: a.grant,
       ...page(a),
     }),
 }
+
+/** Operation states that never change again (a wait ends at once). */
+const FINAL_STATES: ReadonlySet<string> = new Set([
+  'succeeded',
+  'failed',
+  'verification_failed',
+  'canceled',
+])
 
 /** Subjects a restricted grant cannot address (authorization.md §1). */
 const CONTAINER_SUBJECTS: ReadonlySet<string> = new Set(['product', 'project', 'environment'])
@@ -499,7 +522,10 @@ export function createToolHost(
       }
       let value: unknown
       try {
-        value = await binding(application, ctx.caller, input as ArgsOf<ToolName>, ctx)
+        // The tool travels with the caller for a denial's audit (never decided on).
+        const caller: Caller =
+          ctx.caller.kind === 'bearer' ? { ...ctx.caller, tool: name } : ctx.caller
+        value = await binding(application, caller, input as ArgsOf<ToolName>, ctx)
       } catch (error) {
         const code = errorCodeOf(error)
         if (code === 'INTERNAL') {
@@ -519,11 +545,9 @@ export function createToolHost(
             ctx.challenge = { required, scopes: [...scopes].sort() }
           }
         }
-        const details =
-          error instanceof Error && 'details' in error
-            ? (error as { details?: unknown }).details
-            : undefined
-        return refuse(ctx, code, details)
+        // The same details REST gives (request.ts detailsOf): a stale plan names what changed.
+        const planId = typeof input['planId'] === 'string' ? input['planId'] : undefined
+        return refuse(ctx, code, detailsOf(error, code, planId === undefined ? {} : { planId }))
       }
       if (
         typeof value === 'object' &&

@@ -258,6 +258,22 @@ access token ends that token; a token of another client or an unknown
 value is answered with success and changes nothing; an API key is
 `unsupported_token_type` (it is revoked by an administrator).
 
+**Last use of a grant.** **[DECIDED]** (Wave 7 order §16, decision 10;
+bundle `grant-last-use`, `packages/auth/src/oauth/usage.ts`) Every
+authenticated request with an access token notes its grant's last use:
+`oauth.grant_last_use` holds one row per grant with the minute
+(`last_used_at`, truncated to the minute) and the class of the use (an MCP
+tool's rate class `read`, `plan`, `apply`, `data`, or `rest` for
+`/api/v1`). The upsert changes a row only when the stored minute is older,
+so a grant is written at most once a minute across processes; each serve
+process also skips the round trip within the minute. It runs in the
+background and never fails a request; an API key has no grant and records
+nothing. It is a data basis only: Wave 8 shows "last used" on the
+Connected applications page and Wave 9 derives an "unused for 30 days"
+finding; it is never a log of requests (the audit and the request logs are)
+and never an input to a decision. A table of its own, so a use never locks
+the grant row that a refresh or a revocation takes.
+
 **Device flow and the CLI.** **[DECIDED]** (Wave 3B,
 `packages/auth/src/oauth/device.ts`, `apps/cli`.) The first-party CLI signs
 in with the loopback authorization code flow (a one-shot listener on

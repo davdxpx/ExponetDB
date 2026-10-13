@@ -21,8 +21,19 @@ function methods(): { name: string; body: string }[] {
   }))
 }
 
-/** Not use cases: request authentication itself (it yields the principal). */
-const NOT_USE_CASES = new Set(['constructor', 'authenticate', 'authenticateBearer'])
+/**
+ * Not use cases: request authentication itself (it yields the principal),
+ * the grant's last use noted for an already authenticated caller (a data
+ * basis, never a decision, Wave 7 order §16) and waiting for those
+ * background writes.
+ */
+const NOT_USE_CASES = new Set([
+  'constructor',
+  'authenticate',
+  'authenticateBearer',
+  'noteGrantUse',
+  'settled',
+])
 const GATE =
   /this\.(?:#authorize|#admit|#ceremony|#selfCeremony|#protocol|#clientDecision|#serviceChange|#plan|#decide|#mayRead|#d\.authorizer\.authorize)(?:<[^>]*>)?\(/
 

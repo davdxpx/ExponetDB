@@ -3,8 +3,10 @@ import type { ActionId } from '../actions.ts'
 import {
   ClusterIdSchema,
   CursorSchema,
+  GrantIdSchema,
   MigrationIdSchema,
   NodeIdSchema,
+  OAuthClientIdSchema,
   OperationIdSchema,
   PlanIdSchema,
   pageSchema,
@@ -176,6 +178,12 @@ export const MCP_CATALOG_TEXT_CAPS = {
   constraintDefinition: 2_048,
   indexDefinition: 2_048,
 } as const
+
+/**
+ * The longest `operation_get` waits for a change of state (order §25): well
+ * under the 60 s client timeouts, so a call never outlives its client.
+ */
+export const MCP_OPERATION_WAIT_SECONDS = 20
 
 /** Agent-facing caps (sql-execution-security.md §2.2): 500 rows, 5 MiB. */
 export const MCP_AGENT_ROW_CAP = 500
@@ -569,11 +577,21 @@ export const MCP_TOOLS = [
     toolVersion: 1,
     title: 'Get operation',
     description:
-      'Operation state with the apply outcome and the verification outcome as separate fields, per-migration outcomes, steps and the next action. Applied is not verified.',
+      'Operation state with the apply outcome and the verification outcome as separate fields, per-migration outcomes, steps and the next action. Applied is not verified. With waitSeconds it answers at the next change of state, at the latest after that many seconds; poll again until the state is final.',
     action: 'operation.get',
     restOperationId: 'getOperation',
     annotations: RO,
-    input: z.strictObject({ operationId: OperationIdSchema }),
+    input: z.strictObject({
+      operationId: OperationIdSchema,
+      waitSeconds: z
+        .int()
+        .min(0)
+        .max(MCP_OPERATION_WAIT_SECONDS)
+        .optional()
+        .meta({
+          description: `Wait up to this many seconds (at most ${MCP_OPERATION_WAIT_SECONDS}) for the state to change before answering.`,
+        }),
+    }),
     output: OperationSchema,
     limits: {},
     wave: '7',
@@ -779,7 +797,7 @@ export const MCP_TOOLS = [
     toolVersion: 1,
     title: 'Search audit',
     description:
-      'Audit events with pseudonymized actors, filtered by time, target, action, actor and result; paged, no bulk export.' +
+      'Audit events with pseudonymized actors, filtered by time, target, action, actor, result, client and grant; paged, no bulk export.' +
       UNTRUSTED_NOTE,
     action: 'audit.search',
     restOperationId: 'searchAuditEvents',
@@ -791,6 +809,10 @@ export const MCP_TOOLS = [
       action: z.string().max(64).optional(),
       actor: z.enum(['self', 'any']).optional(),
       result: z.enum(['succeeded', 'failed', 'denied']).optional(),
+      client: OAuthClientIdSchema.optional().meta({
+        description: 'Events made through this client.',
+      }),
+      grant: GrantIdSchema.optional().meta({ description: 'Events made through this grant.' }),
       limit: limit(500, 100),
       cursor,
     }),

@@ -1639,6 +1639,28 @@ export function isConsequential(id: ActionId): boolean {
   return ACTIONS[id].effect === 'consequential'
 }
 
+/**
+ * Whether a denial of this action is a security signal recorded in the
+ * audit as `authz.denied` (audit.md §2, Wave 7 order §18): applying any
+ * change or changing access, grants, keys and policies (consequential),
+ * planning one (`*.plan`), deciding one (approvals, break-glass), and
+ * reading data (`data.read`). Every other denial goes to the request log
+ * and a metric only. Ceremonies and protocol endpoints keep their own audit.
+ */
+export function isHighRiskAction(id: ActionId): boolean {
+  const a = ACTIONS[id]
+  if (a.permission.kind === 'public' || a.permission.kind === 'protocol') {
+    return false
+  }
+  return (
+    a.effect === 'consequential' ||
+    id.endsWith('.plan') ||
+    id.startsWith('approval.') ||
+    id === 'breakglass.activate' ||
+    (a.permission.kind === 'fixed' && a.permission.permission === 'data.read')
+  )
+}
+
 function scopesOfRule(rule: ScopeRule): readonly Scope[] {
   switch (rule.kind) {
     case 'fixed':

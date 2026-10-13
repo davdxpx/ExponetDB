@@ -74,6 +74,8 @@ export function world(options: WorldOptions = {}) {
   const lines: string[] = []
   const logger = createLogger({ role: 'serve', write: (l) => lines.push(l), level: 'debug' })
   const seen: { token: string; resource: string }[] = []
+  /** The use classes the edge noted for the grant's last use. */
+  const uses: string[] = []
   const application = {
     registry: {
       targets: async (_caller: unknown, _filter: unknown, page: { cursor?: string }) => {
@@ -97,6 +99,9 @@ export function world(options: WorldOptions = {}) {
         return principal(options.scopes ?? MCP_BASELINE_SCOPES)
       }
       return undefined
+    },
+    noteGrantUse: (_caller: unknown, useClass: string) => {
+      uses.push(useClass)
     },
   } as unknown as Application
   const bindings = {
@@ -143,5 +148,5 @@ export function world(options: WorldOptions = {}) {
       },
     },
   )
-  return { app, lines, seen, registry }
+  return { app, lines, seen, uses, registry }
 }

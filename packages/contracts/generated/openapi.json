@@ -906,6 +906,43 @@
               }
             ]
           },
+          "denial": {
+            "anyOf": [
+              {
+                "properties": {
+                  "action": {
+                    "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+$",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "pattern": "^[a-z][a-z_]{0,31}$",
+                    "type": "string"
+                  },
+                  "tool": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[a-z][a-z0-9_]{0,47}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "action",
+                  "reason",
+                  "tool"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For `authz.denied` (a denied high-risk action): the denied action, the reason code and the MCP tool it came through; never an argument value. Null for every other event."
+          },
           "id": {
             "description": "Entity id `^aud_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
             "pattern": "^aud_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
@@ -1041,6 +1078,7 @@
           "subject",
           "refs",
           "reason",
+          "denial",
           "result"
         ],
         "type": "object"
@@ -8656,6 +8694,7 @@
               "PLAN_BINDING_ACTOR",
               "PLAN_DENIED",
               "APPROVAL_REQUIRED",
+              "HUMAN_APPLY_REQUIRED",
               "REAUTH_REQUIRED",
               "APPROVAL_COOLING_PERIOD",
               "SELF_APPROVAL_UNACKNOWLEDGED",
@@ -13019,6 +13058,26 @@
                 "failed",
                 "denied"
               ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "client",
+            "required": false,
+            "schema": {
+              "description": "Events made through this client (runbook RB-11: list what a credential did).",
+              "pattern": "^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "grant",
+            "required": false,
+            "schema": {
+              "description": "Events made through this grant.",
+              "pattern": "^grt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
               "type": "string"
             }
           },

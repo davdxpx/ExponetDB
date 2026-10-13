@@ -57,7 +57,7 @@ tested with the feature that introduces the condition.
 | RB-08 Recovery from backup | S1 data loss/corruption | [`../09-backups-and-restore/restore.md` §5](../09-backups-and-restore/restore.md#5-recovery-runbook-production) |
 | RB-09 Identity mismatch | `identity_mismatch` | target suspended; find which database answers on the endpoint; restore placement or re-stamp after decision |
 | RB-10 Control Store down | Control Plane `down` | check the Coolify resource; restore from Coolify backup or the daily dump; after restore, reconcile ledgers vs mirrors (F30); steps: [`control-store-runbook.md` §4](./control-store-runbook.md#4-rb-10-control-store-down) |
-| RB-11 Token or key leak | security report | revoke grant/key/session; list actions by that credential from audit; rotate affected secrets |
+| RB-11 Token or key leak | security report | revoke grant/key/session; list actions by that credential from audit (`audit_search` or `GET /api/v1/audit-events` with `grant=` or `client=`, Wave 7; refused attempts are `authz.denied`); rotate affected secrets |
 | RB-12 Audit chain break | self-check failure | freeze audit partition export; compare with last off-host checkpoint; escalate as security incident |
 | [RB-13 Node agent lost](./node-runbook.md#6-rb-13-node-agent-lost) | node `offline` for > 15 min | systemd status via SSH; certificate expiry; re-enroll if needed; queued jobs expire safely |
 | RB-14 Keyring lost | decryption failures | restore offline keyring copy; if lost: rotate all PostgreSQL credentials through the node agent ([`../08-auth-and-security/secrets.md` §5](../08-auth-and-security/secrets.md#5-bootstrap-secrets-and-coolify)) |

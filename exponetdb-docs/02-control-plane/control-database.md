@@ -524,6 +524,16 @@ created on first use like the existing keys (a secret of consumer `auth`,
 readable by `serve` only). Only the CHECK constraint changes; the table
 stays append-only.
 
+**[DECIDED]** (Wave 7, bundle `01M4S8BT93YJBDEE0Y6ZQAEH1J_grant-last-use`,
+depending on `mcp-keys`; not frozen until G7.) `oauth.grant_last_use` holds
+one row per grant: `last_used_at` (truncated to the minute) and
+`use_class` (`read`, `plan`, `apply`, `data`, `rest`). `serve` may select,
+insert and update those two columns, never delete; the row goes with its
+grant (`ON DELETE CASCADE`, grants are never deleted today). It is the data
+basis of "last used" (Wave 8) and an "unused grant" finding (Wave 9), never
+a request log and never a decision input
+([`../05-mcp/oauth.md` §5](../05-mcp/oauth.md#5-tokens)).
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

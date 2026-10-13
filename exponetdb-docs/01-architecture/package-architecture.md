@@ -254,9 +254,9 @@ to §1.4:
 |---|---|---|
 | `apps/server/src/interfaces/mcp/` | the `/mcp` endpoint ([ADR-0027](./adr/0027-mcp-protocol-layer.md)): the edge (`edge.ts`), the era classification (`classify.ts`), strict JSON, origin and host policy, in-process rate limits, the SDK server factory, the tool host and resource host over `packages/application`, result escaping and rendering, sealed list cursors | `application`, `auth`, `contracts`, `observability`, `@modelcontextprotocol/server` (exact version; only here) |
 | `packages/contracts` | the MCP tool catalog `exponetdb.mcp/v1`, protocol constants, the resources (authoring guide, error catalog, schema documents) | unchanged |
-| `packages/application` | lists for restricted grants show what the grant covers (`node.list`, `audit.search` without a target); the session list caps statements at 500 characters for MCP callers | unchanged |
-| `packages/auth` | the installation keys `mcp.cursor_key` and `mcp.request_state_key`; bearer challenges with scope lists | unchanged |
-| `packages/control-store` | additive bundle `mcp-keys` (not frozen until G7) | unchanged |
+| `packages/application` | lists for restricted grants show what the grant covers (`node.list`, `audit.search` without a target); the session list caps statements at 500 characters for MCP callers; `authz.denied` for denied high-risk actions and the grant's last use, both written in the background (`settled()`); the audit filters by client and grant; the grant id on an operation actor | unchanged |
+| `packages/auth` | the installation keys `mcp.cursor_key` and `mcp.request_state_key`; bearer challenges with scope lists; the grant's last use (`oauth/usage.ts`) | unchanged |
+| `packages/control-store` | additive bundles `mcp-keys` and `grant-last-use` (not frozen until G7) | unchanged |
 
 ## 2. Dependency rules
 

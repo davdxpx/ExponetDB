@@ -1315,6 +1315,20 @@ export const AuditEventSchema = z
       jobId: JobIdSchema.nullable(),
     }),
     reason: untrustedText(2000, 'Caller-supplied reason, recorded and never evaluated.').nullable(),
+    denial: z
+      .object({
+        action: z.string().regex(/^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/),
+        reason: z.string().regex(/^[a-z][a-z_]{0,31}$/),
+        tool: z
+          .string()
+          .regex(/^[a-z][a-z0-9_]{0,47}$/)
+          .nullable(),
+      })
+      .nullable()
+      .meta({
+        description:
+          'For `authz.denied` (a denied high-risk action): the denied action, the reason code and the MCP tool it came through; never an argument value. Null for every other event.',
+      }),
     result: z.object({
       status: z.enum(['succeeded', 'failed', 'denied']),
       errorCode: z

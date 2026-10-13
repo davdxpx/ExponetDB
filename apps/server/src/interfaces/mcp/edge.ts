@@ -138,7 +138,7 @@ export function mcpMetrics(registry: MetricsRegistry): McpMetrics {
 }
 
 export interface McpDeps {
-  readonly application: Pick<Application, 'authenticateBearer'>
+  readonly application: Pick<Application, 'authenticateBearer' | 'noteGrantUse'>
   readonly tools: ToolHost
   readonly resources: ResourceHost
   /** `EXPONETDB_PUBLIC_URL`: the issuer, the resource and the allowed origin. */
@@ -558,6 +558,9 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
           ),
         )
       }
+
+      // The grant's last use, by tool class (data basis only, decision 10): in the background.
+      deps.application.noteGrantUse(caller, rateClass)
 
       // A notification is acknowledged here: stateless serving has nothing it could act on
       // (a cancellation reaches a fresh instance; closing the connection is what cancels).

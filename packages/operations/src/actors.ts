@@ -1,4 +1,4 @@
-import type { IdentityId, OAuthClientId } from '@exponetdb/kernel'
+import type { GrantId, IdentityId, OAuthClientId } from '@exponetdb/kernel'
 
 /**
  * Who acts: an identity (or the system) through a client. Established by
@@ -12,6 +12,12 @@ export interface OperationActor {
   readonly label: string
   readonly client: 'web' | 'rest' | 'mcp' | 'cli' | 'ci' | 'system'
   readonly clientId: OAuthClientId | null
+  /**
+   * The OAuth grant a delegated caller acted through (Wave 7, attribution:
+   * the person, the client and the grant). Recorded in audit only; never
+   * part of a plan's stored actor or its hash.
+   */
+  readonly grantId?: GrantId | null
 }
 
 export const WORKER_ACTOR: OperationActor = {
@@ -44,6 +50,11 @@ export function auditActor(actor: OperationActor): {
 export function auditClient(actor: OperationActor): {
   clientId: OAuthClientId | null
   kind: OperationActor['client']
+  grantId?: GrantId
 } {
-  return { clientId: actor.clientId, kind: actor.client }
+  return {
+    clientId: actor.clientId,
+    kind: actor.client,
+    ...(actor.grantId === undefined || actor.grantId === null ? {} : { grantId: actor.grantId }),
+  }
 }

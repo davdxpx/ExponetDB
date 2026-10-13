@@ -171,7 +171,7 @@ describe('read tools answer what their REST route answers', () => {
     const restSessions = await w.rest(cli, 'GET', `/api/v1/targets/${t}/sessions`)
     expect(sessions.structuredContent).toMatchObject({ source: 'live', truncated: false })
     type Row = { statement: { redacted: string; digest: string; truncated: boolean } | null }
-    const agent = (sessions.structuredContent?.['sessions'] as Row[]).find(
+    const agent = ((sessions.structuredContent?.['sessions'] ?? []) as Row[]).find(
       (r) => r.statement?.redacted.startsWith('SELECT id AS column_0') === true,
     )?.statement
     const person = (restSessions.body.sessions as Row[]).find(
@@ -374,8 +374,8 @@ describe('pagination and resources', () => {
     const second = await both.call('targets_list', { limit: 1, cursor })
     expect(second.isError).toBeUndefined()
     const ids = [
-      ...first.structuredContent?.['items'].map((i: { id: string }) => i.id),
-      ...second.structuredContent?.['items'].map((i: { id: string }) => i.id),
+      ...(first.structuredContent?.['items'] ?? []).map((i: { id: string }) => i.id),
+      ...(second.structuredContent?.['items'] ?? []).map((i: { id: string }) => i.id),
     ].sort()
     expect(ids).toEqual([w.ids.productionTarget, w.ids.stagingTarget].sort())
     for (const [caller, args] of [

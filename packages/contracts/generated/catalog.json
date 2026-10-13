@@ -6859,6 +6859,33 @@
       "type": "https://db.exponet.cloud/errors/approval-required"
     },
     {
+      "code": "HUMAN_APPLY_REQUIRED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/HUMAN_APPLY_REQUIRED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "planId": {
+            "description": "Entity id `^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "planId"
+        ],
+        "type": "object"
+      },
+      "group": "plans_and_operations",
+      "message": "The plan is critical: only a person applies it, through a Web App session or the CLI, with a fresh re-authentication.",
+      "remediation": "Give the plan id to your person: they review it with `exponetdb plan show <planId>` and apply it with `exponetdb plan apply <planId>`. An agent cannot apply it.",
+      "retryable": false,
+      "status": 403,
+      "title": "A person applies this plan",
+      "type": "https://db.exponet.cloud/errors/human-apply-required"
+    },
+    {
       "code": "REAUTH_REQUIRED",
       "details": null,
       "group": "plans_and_operations",

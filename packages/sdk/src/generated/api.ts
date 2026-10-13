@@ -103,6 +103,11 @@ export type AuditEvent = {
     readonly kind: "web" | "rest" | "mcp" | "cli" | "ci" | "system"
     readonly sessionId: string | null
   }) | null
+  readonly denial: ({
+    readonly action: string
+    readonly reason: string
+    readonly tool: string | null
+  }) | null
   readonly id: string
   readonly occurredAt: string
   readonly phase: "requested" | "denied" | "accepted" | "completed" | "failed" | "reconciled"
@@ -2647,7 +2652,7 @@ export interface Operations {
   }
   searchAuditEvents: {
     readonly params: Record<string, never>
-    readonly query: { readonly action?: string; readonly actor?: "self" | "any"; readonly cursor?: string; readonly from?: string; readonly limit?: number; readonly result?: "succeeded" | "failed" | "denied"; readonly target?: string; readonly to?: string }
+    readonly query: { readonly action?: string; readonly actor?: "self" | "any"; readonly client?: string; readonly cursor?: string; readonly from?: string; readonly grant?: string; readonly limit?: number; readonly result?: "succeeded" | "failed" | "denied"; readonly target?: string; readonly to?: string }
     readonly body: never
     readonly response: {
       readonly items: readonly AuditEvent[]

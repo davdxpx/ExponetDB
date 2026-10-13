@@ -27,7 +27,7 @@ import {
   NODE_OPERATION_KINDS,
   nodeKinds,
 } from '@exponetdb/nodes'
-import { fail, type HealthCheck, pass } from '@exponetdb/observability'
+import { describeError, fail, type HealthCheck, pass } from '@exponetdb/observability'
 import {
   type DispatchAdmission,
   KindRegistry,
@@ -99,7 +99,7 @@ export interface AccessComposition {
 export function composeAccess(
   config: ServeConfig,
   services: Pick<RoleServices, 'store' | 'keyring'>,
-  runtime: Pick<Runtime, 'clock'>,
+  runtime: Pick<Runtime, 'clock'> & { readonly logger?: Runtime['logger'] },
   /** Tests only: a notification channel (no channel is configured in production, OD-21). */
   testing: { readonly channel?: NotificationChannel } = {},
 ): AccessComposition {
@@ -158,6 +158,8 @@ export function composeAccess(
     },
     // Client metadata documents go through the hardened fetcher only (oauth.md §7).
     oauth: { network: oauth.systemNetwork() },
+    // A denial's audit event is written after the denial (audit.md §2); a failure is logged.
+    onBackgroundError: (event, error) => runtime.logger?.error(event, { ...describeError(error) }),
   })
   let rolesVerified = false
   let scopesVerified = false

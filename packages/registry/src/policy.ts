@@ -1,5 +1,5 @@
 import type { Queryable } from '@exponetdb/control-store'
-import type { Clock, IdentityId, JsonValue, OAuthClientId } from '@exponetdb/kernel'
+import type { Clock, GrantId, IdentityId, JsonValue, OAuthClientId } from '@exponetdb/kernel'
 import { type OperationActor, readPolicySettings } from '@exponetdb/operations'
 import {
   type BreakGlass,
@@ -29,6 +29,8 @@ export interface RegistryActor {
   readonly reauthAt: string | null
   readonly client?: Exclude<OperationActor['client'], 'system'>
   readonly clientId?: OAuthClientId | null
+  /** The OAuth grant of a delegated caller, for the audit (OperationActor.grantId). */
+  readonly grantId?: GrantId | null
 }
 
 export function operationActor(actor: RegistryActor): OperationActor {
@@ -38,6 +40,7 @@ export function operationActor(actor: RegistryActor): OperationActor {
     label: actor.label,
     client: actor.client ?? 'web',
     clientId: actor.clientId ?? null,
+    ...(actor.grantId === undefined || actor.grantId === null ? {} : { grantId: actor.grantId }),
   }
 }
 

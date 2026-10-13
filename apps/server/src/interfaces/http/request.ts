@@ -161,7 +161,7 @@ export function errorCodeOf(error: unknown): ErrorCode {
   return 'INTERNAL'
 }
 
-function detailsOf(
+export function detailsOf(
   error: unknown,
   code: ErrorCode,
   context: { readonly planId?: string },

@@ -186,6 +186,17 @@ export const ERRORS = {
     title: 'Approval required',
     message: 'The plan needs a human approval before it can run.',
   },
+  HUMAN_APPLY_REQUIRED: {
+    group: 'plans_and_operations',
+    status: 403,
+    retryable: false,
+    title: 'A person applies this plan',
+    message:
+      'The plan is critical: only a person applies it, through a Web App session or the CLI, with a fresh re-authentication.',
+    remediation:
+      'Give the plan id to your person: they review it with `exponetdb plan show <planId>` and apply it with `exponetdb plan apply <planId>`. An agent cannot apply it.',
+    details: z.strictObject({ planId: PlanIdSchema }),
+  },
   REAUTH_REQUIRED: {
     group: 'plans_and_operations',
     status: 401,

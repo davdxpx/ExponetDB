@@ -563,6 +563,8 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         actor: actor === 'self' || actor === 'any' ? actor : undefined,
         result:
           status === 'succeeded' || status === 'failed' || status === 'denied' ? status : undefined,
+        client: optionalText(call.query, 'client'),
+        grant: optionalText(call.query, 'grant'),
         ...pageOf(call.query),
       }),
     )
@@ -1492,6 +1494,8 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
             return challenge(fail(new HttpRefusal('UNAUTHENTICATED')), 'invalid_token')
           }
           bearer = { kind: 'bearer', principal: authenticated.principal, resource: 'api' }
+          // The grant's last use (data basis only, decision 10): in the background.
+          deps.application.noteGrantUse(bearer, 'rest')
         }
         // A step-up receipt (ADR-0026) is named by a bearer request only; its bound use case redeems it.
         const stepUpHeader = c.req.header(STEP_UP_HEADER)

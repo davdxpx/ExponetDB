@@ -551,6 +551,17 @@ describe('/mcp tools', () => {
     expect(block?.text).toMatch(/<<<exponetdb-data-[0-9a-f]{12}\n/)
   })
 
+  it("notes the grant's use by tool class once authenticated, never for a refused token", async () => {
+    const { app, uses } = world()
+    const list = modern('tools/list')
+    await post(app, list.body, list.headers)
+    const plan = modern('tools/call', { name: 'migration_plan', arguments: {} })
+    await post(app, plan.body, plan.headers)
+    expect(uses).toEqual(['read', 'plan'])
+    await post(app, list.body, { ...list.headers, authorization: 'Bearer nope' })
+    expect(uses).toEqual(['read', 'plan'])
+  })
+
   it('answers invalid arguments as a VALIDATION_FAILED tool error the model can correct', async () => {
     const { app } = world()
     const call = modern('tools/call', { name: 'targets_list', arguments: { limit: 'many' } })
