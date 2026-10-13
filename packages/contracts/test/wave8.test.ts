@@ -8,6 +8,7 @@ import {
   AuditChainSchema,
   buildOpenApi,
   contractJsonSchema,
+  DriftAcceptRequestSchema,
   GRANT_USE_CLASS_VALUES,
   GrantViewSchema,
   InstallationHealthSchema,
@@ -42,6 +43,8 @@ const WAVE8: readonly [ActionId, string][] = [
 
 /** Break-glass list and review (order §9): owner and admin through `policy.manage`, human sessions only. */
 const BREAK_GLASS: readonly ActionId[] = ['breakglass.list', 'breakglass.review']
+/** Order §9 endpoint 3: drift acceptance, a planned operation for a person only. */
+const DRIFT_ACCEPT: readonly ActionId[] = ['drift.accept', 'drift.accept.plan']
 
 function propertyNames(schema: unknown, out: Set<string> = new Set()): Set<string> {
   if (Array.isArray(schema)) {
@@ -77,7 +80,7 @@ describe('Wave 8 actions', () => {
     }
     // The only actions of wave 8 are these: a new one is a decision to review.
     expect(ACTION_IDS.filter((id) => ACTIONS[id].wave === '8').sort()).toEqual(
-      [...WAVE8.map(([id]) => id), ...BREAK_GLASS].sort(),
+      [...WAVE8.map(([id]) => id), ...BREAK_GLASS, ...DRIFT_ACCEPT].sort(),
     )
   })
 
@@ -105,6 +108,54 @@ describe('Wave 8 actions', () => {
     // Hono answers with the first route that matches: `certificates` must come before `{nodeId}`.
     const order = ROUTE_LIST.map((r) => r.operationId)
     expect(order.indexOf('listNodeCertificates')).toBeLessThan(order.indexOf('getNode'))
+  })
+})
+
+describe('Wave 8 drift acceptance (order §9 endpoint 3)', () => {
+  it('plans drift.accept with schema.manage, for a person only, never through MCP', () => {
+    const plan = ACTIONS['drift.accept.plan']
+    expect(plan.effect).toBe('control_record')
+    expect(plan.permission).toEqual({ kind: 'fixed', permission: 'schema.manage' })
+    expect(plan.scope).toEqual({ kind: 'fixed', scope: 'schema.manage' })
+    expect(plan.humanOnly).toBe(true)
+    expect([...plan.clientKinds].sort()).toEqual(['cli', 'web'])
+    const kind = ACTIONS['drift.accept']
+    expect(kind.effect).toBe('consequential')
+    expect(kind.operationKind).toBe(true)
+    expect(kind.humanOnly).toBe(true)
+    expect(kind.class).toEqual({ kind: 'by_tier', nonprod: 'standard', prod: 'high' })
+    expect(kind.tierSemantics).toBe('subject')
+    expect(kind.exclusivity).toEqual(['target.schema'])
+    expect(kind.verification).toBe('required')
+    for (const id of DRIFT_ACCEPT) {
+      expect(ACTIONS[id].clientKinds, id).not.toContain('mcp')
+      expect(
+        MCP_TOOL_LIST.some((t) => t.action === id),
+        id,
+      ).toBe(false)
+    }
+  })
+
+  it('is POST /findings/{finding}/accept, answers a plan and lists 422 and the plan errors', () => {
+    const route = ROUTE_LIST.find((r) => r.operationId === 'planDriftAcceptance')
+    expect([route?.method, route?.path, route?.action, route?.response.status]).toEqual([
+      'post',
+      '/findings/{finding}/accept',
+      'drift.accept.plan',
+      201,
+    ])
+    expect(route?.response.schema).toBe(PlanViewSchema)
+    expect(route?.errors).toEqual(
+      expect.arrayContaining(['VALIDATION_FAILED', 'REGISTRY_CONFLICT', 'NOT_FOUND']),
+    )
+    const body = DriftAcceptRequestSchema
+    expect(body.safeParse({}).success).toBe(true)
+    expect(body.safeParse({ reason: 'Hotfix adopted after review' }).success).toBe(true)
+    expect(body.safeParse({ reason: 'short' }).success).toBe(false)
+    expect(body.safeParse({ reason: 'x'.repeat(1001) }).success).toBe(false)
+    expect(
+      body.safeParse({ reason: 'Hotfix adopted after review', fingerprint: 'x' }).success,
+    ).toBe(false)
   })
 })
 

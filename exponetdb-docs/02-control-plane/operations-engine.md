@@ -90,11 +90,36 @@ Initial kinds (owning wave in brackets):
 | `ledger.reconcile` | high | 6 |
 | `migration.resume` (continue or clean up an incomplete non-transactional bundle) | high | 6 |
 | `migration.rebaseline` (legacy import correction) | high | 6 |
-| `drift.accept` | standard / high | 6 |
+| `drift.accept` (adopt the target's current schema as its baseline; resolves the covered drift findings `accepted`; no DDL) | standard / high | 8 |
 | `operation.force_release` (release a lock domain held by a lost worker) | high | 6 |
 | `node.decommission` | high | 5 |
 | `node.config.update` (job-signing key rotation through the node's `config.update@1`; the gateway address is OD-27) | high | 5 |
 | `node.inspect` (one read or plan capability through a node; its node-signed result becomes an observation, [`../07-node-agent/control-plane.md` §9.2](../07-node-agent/control-plane.md#92-observations-nodeinspect)) | low | 5 |
+
+**[DECIDED]** (Wave 8, order §9 endpoint 3; `packages/diagnostics/src/drift-accept.ts`)
+`drift.accept`: planned by `drift.accept.plan` (`POST /findings/{finding}/accept`,
+`schema.manage`, a person through the Web App or the CLI only) from an open
+drift finding; class `standard` on nonprod and `high` on prod; exclusivity
+domain `target.schema` (no migration records a baseline at the same time).
+Its content is the target id, the named finding, the generation, the
+project's managed scope, the `fp1` fingerprint of the complete snapshot it
+will record, the open drift findings it covers (all of the target's) and the
+person's reason (required for critical or security-relevant drift); its
+`expectedState` the generation, the current baseline and its fingerprint,
+the schema fingerprint and the number of covered findings. Kind-specific
+bindings, checked live at acceptance and under the locks (`PLAN_STALE`):
+`schemaFingerprint` (a live complete snapshot with the plan's scope),
+`baseline`, `findings` (a drift finding opened since planning), `scope`,
+`generation`, `target`. Execution writes only the Control Store, in one
+transaction: the snapshot (purpose `drift_accept`), the baseline (reason
+`drift_accept`), the covered findings resolved `accepted` and the kind's
+`drift.accept` audit event (ids, counts, fingerprints and the reason, never
+catalog text), besides the engine's own operation events. Verification
+re-reads the baseline, the target's live fingerprint and the findings;
+reconciliation reads the operation's baseline row. Production plans need
+`drift.accept-prod`; the worker's dispatch admission re-checks the policy,
+the approvals and the planner's authority before it starts
+([`../03-database-model/drift-detection.md` §5](../03-database-model/drift-detection.md#5-resolutions)).
 
 **[DECIDED]** (pre-G1, 2026-10-05) `operation.force_release` needs its own
 permission and scope, `operations.recover`: human only, never MCP-grantable or

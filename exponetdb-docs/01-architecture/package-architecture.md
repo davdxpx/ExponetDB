@@ -368,6 +368,7 @@ graph TD
   diagnostics --> nodes
   diagnostics --> controlstore
   diagnostics --> audit
+  diagnostics --> operations
   application --> auth
   application --> operations
   application --> policy
@@ -407,6 +408,15 @@ audited). The server's composition root (`apps/server/src/composition`)
 additionally wires `postgres`, `registry` and `diagnostics`; its
 `interfaces` still import none of them. Tests of `registry` may import
 `packages/testkit` (never product code, rule `no-testkit-in-product`).
+
+**[DECIDED]** (Wave 8, order §9 endpoint 3) One arrow was added:
+`diagnostics → operations`. The drift acceptance (`drift.accept`) is an
+Operations Engine kind owned by `diagnostics`, which owns snapshots,
+baselines and findings; its plan is made and its policy evaluated through
+`registry` (as the registry kinds do), and it writes its audit event
+(`diagnostics → audit`, already allowed). No cycle: `operations` reaches
+neither `diagnostics` nor `registry`. `tooling/boundaries/graph.json` carries
+the arrow.
 
 **[DECIDED]** (Wave 5 Phase 3, [`control-plane.md` §8](../07-node-agent/control-plane.md#8-boundaries))
 `nodes` gains the arrows `registry` has (`contracts`, `control-store`,

@@ -7,6 +7,7 @@ import {
   EndpointIdSchema,
   EnrollmentTokenIdSchema,
   EnvironmentIdSchema,
+  FindingIdSchema,
   GrantIdSchema,
   IdentityIdSchema,
   ImportReportIdSchema,
@@ -114,6 +115,7 @@ import {
   CredentialViewSchema,
   DatabaseRegisterRequestSchema,
   DatabaseViewSchema,
+  DriftAcceptRequestSchema,
   EndpointRequestSchema,
   EndpointRetireRequestSchema,
   EndpointViewSchema,
@@ -1683,6 +1685,19 @@ export const REGISTRY_ROUTES = [
     body: TargetStateChangeRequestSchema,
     response: planned,
     errors: [...PLAN_ERRORS, ...TARGET_ERRORS],
+  },
+  // Wave 8 (order §9): drift acceptance; applied through `POST /plans/{id}/apply`.
+  {
+    operationId: 'planDriftAcceptance',
+    method: 'post',
+    path: '/findings/{finding}/accept',
+    summary:
+      "Plan a drift acceptance (drift.accept) from an open drift finding: the target's current complete schema becomes its baseline and the open drift findings of the target are resolved as accepted; no DDL. The plan binds the target identity, its baseline, its open drift findings and the fingerprint it will record.",
+    action: 'drift.accept.plan',
+    pathParams: z.strictObject({ finding: FindingIdSchema }),
+    body: DriftAcceptRequestSchema,
+    response: planned,
+    errors: [...PLAN_ERRORS, ...LIVE_TARGET_ERRORS, 'VALIDATION_FAILED'],
   },
 ] as const satisfies readonly RouteContract[]
 

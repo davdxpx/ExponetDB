@@ -47,6 +47,7 @@ import {
   DEFAULT_BODY_LIMIT_BYTES,
   DeviceDecisionRequestSchema,
   DisableIdentityRequestSchema,
+  DriftAcceptRequestSchema,
   decodeQuery,
   EmailSchema,
   EndpointIdSchema,
@@ -56,6 +57,7 @@ import {
   EnvironmentCreateRequestSchema,
   EnvironmentIdSchema,
   type ExplainRequest,
+  FindingIdSchema,
   GrantIdSchema,
   GrantStateSchema,
   IdentityIdSchema,
@@ -1123,6 +1125,15 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         'target.decommission',
         target(call),
         TargetStateChangeRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planDriftAcceptance: async (app, call) =>
+    value(
+      await app.registry.planDriftAccept(
+        caller(call),
+        FindingIdSchema.parse(field(call.params, 'finding')),
+        DriftAcceptRequestSchema.parse(call.body ?? {}),
         idempotency(call),
       ),
     ),

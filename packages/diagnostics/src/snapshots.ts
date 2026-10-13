@@ -25,7 +25,15 @@ import { requireIdentity } from './identity.ts'
  * outside the scope and why it was taken. An incomplete snapshot is stored
  * (it is the truth about what could be read) but is never a baseline.
  */
-export type SnapshotPurpose = 'registration' | 'drift_check' | 'read' | 'migration'
+export type SnapshotPurpose = 'registration' | 'drift_check' | 'read' | 'migration' | 'drift_accept'
+
+const PURPOSES: readonly SnapshotPurpose[] = [
+  'registration',
+  'drift_check',
+  'read',
+  'migration',
+  'drift_accept',
+]
 
 export interface SnapshotDeps {
   /** The Control Store login of the process (serve for reads, worker for checks and registration). */
@@ -159,7 +167,7 @@ function snapshotFrom(row: Row): SnapshotRecord {
     missingSchemas: strings(row.json('missing_schemas')),
     excludedSchemas: strings(row.json('excluded_schemas')),
     serverVersionNum: row.int('server_version_num'),
-    purpose: purpose === 'registration' || purpose === 'drift_check' ? purpose : 'read',
+    purpose: PURPOSES.find((p) => p === purpose) ?? 'read',
     durationMs: row.int('duration_ms'),
     operationId: row.textOrNull('operation_id'),
     takenAt: row.text('taken_at'),

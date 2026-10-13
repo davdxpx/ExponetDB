@@ -161,6 +161,8 @@ describe('served routes (Wave 2 and 4 to 8)', () => {
       'listFindings',
       'listNodeCertificates',
       'listNodeJobs',
+      // Wave 8, order §9 endpoint 3: drift acceptance (a plan, applied through plan.apply).
+      'planDriftAcceptance',
       'reviewBreakGlassGrant',
     ])
     for (const { route } of servedRoutes()) {

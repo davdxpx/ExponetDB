@@ -165,6 +165,25 @@ export async function openFindings(
   return rows.map(findingFrom)
 }
 
+/** One finding by id, open or resolved. */
+export async function getFinding(
+  q: Queryable,
+  findingId: string,
+): Promise<FindingRecord | undefined> {
+  const { rows } = await q.query(
+    'observation.findings.get',
+    `SELECT ${FINDING_COLUMNS} FROM observation.findings f WHERE f.finding_id = $1`,
+    [findingId],
+  )
+  const row = rows[0]
+  return row === undefined ? undefined : findingFrom(row)
+}
+
+/** Whether a finding's drift is security-relevant or critical (drift-detection.md §6). */
+export function securitySensitive(f: Pick<FindingRecord, 'severity' | 'details'>): boolean {
+  return f.severity === 'critical' || f.details['securityRelevant'] === true
+}
+
 export async function openFindingCount(q: Queryable, targetId: string): Promise<number> {
   const { rows } = await q.query(
     'observation.findings.open_count',

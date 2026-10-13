@@ -1021,6 +1021,10 @@ export const ERRORS = {
             'job_key_not_removable',
             'job_key_overlap',
             'job_keys_invalid',
+            // Wave 8, drift acceptance: the finding is already resolved; the
+            // target's current schema could not be read completely.
+            'finding_resolved',
+            'snapshot_incomplete',
           ],
         }),
     }),

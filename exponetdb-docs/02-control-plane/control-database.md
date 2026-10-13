@@ -586,6 +586,16 @@ needs a person. The worker may read `oauth.clients.approved_by_identity_id`
 and `created_at` and `oauth.authorization_requests.client_id` for that
 prune. No table or column changes.
 
+**[DECIDED]** (Wave 8, order §9 endpoint 3; bundle
+`01M4V4DA2W7HK9QB5NZ3XT6RME_drift-acceptance`, depending on
+`oauth-open-registration`, additive, transactional; not frozen until G8) The
+CHECK of `observation.schema_snapshots.purpose` accepts one more value,
+`drift_accept`: the snapshot the worker records as a target's baseline when
+a person's drift acceptance is applied. The baseline reason `drift_accept`
+and the finding resolution `accepted` exist since the observation bundle; no
+table, column, row or right changes (the worker already inserts baselines
+and resolves findings; `serve` never inserts a baseline).
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

@@ -56,6 +56,20 @@ export {
   recordDriftFailure,
   runDriftCheck,
 } from './drift.ts'
+export {
+  type AcceptanceExpectation,
+  type AcceptanceObservation,
+  acceptanceBindings,
+  acceptClass,
+  DRIFT_ACCEPT_KIND,
+  DriftAcceptKind,
+  type DriftAcceptKindDeps,
+  type DriftAcceptPlanContext,
+  diagnosticsKinds,
+  MAX_COVERED_FINDINGS,
+  planDriftAccept,
+  reasonRequired,
+} from './drift-accept.ts'
 export { DiagnosticsError, DocumentCorrupt, failureCodeOf } from './errors.ts'
 export {
   clip,
@@ -66,12 +80,14 @@ export {
   type FleetFindingFilter,
   type FleetFindingRecord,
   findingView,
+  getFinding,
   listFindings,
   listFleetFindings,
   openFindingCount,
   openFindings,
   recordFinding,
   resolveFinding,
+  securitySensitive,
 } from './findings.ts'
 export {
   FLEET_HEALTH_STATES,

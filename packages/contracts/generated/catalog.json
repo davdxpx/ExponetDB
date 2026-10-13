@@ -1572,6 +1572,37 @@
       "wave": "6"
     },
     {
+      "basis": "resources.md \"Schema and drift\"; drift-detection.md §5",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "drift.accept.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "schema.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "schema.manage"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Plan a drift acceptance",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
       "basis": "resources.md, tool-catalog.md",
       "class": {
         "class": "read",
@@ -2491,7 +2522,7 @@
       "wave": "6"
     },
     {
-      "basis": "operations-engine.md §2; policy drift.accept-prod",
+      "basis": "operations-engine.md §2; drift-detection.md §5; policy drift.accept-prod",
       "class": {
         "kind": "by_tier",
         "nonprod": "standard",
@@ -2502,7 +2533,9 @@
         "cli"
       ],
       "effect": "consequential",
-      "exclusivity": [],
+      "exclusivity": [
+        "target.schema"
+      ],
       "humanOnly": true,
       "id": "drift.accept",
       "mechanism": "stored_plan",
@@ -2520,7 +2553,7 @@
       "tierSemantics": "subject",
       "title": "Accept drift",
       "verification": "required",
-      "wave": "6"
+      "wave": "8"
     },
     {
       "basis": "operations-engine.md §2, concurrency.md; permission operations.recover decided by the owner before G1",
@@ -8992,7 +9025,9 @@
               "job_key_not_addable",
               "job_key_not_removable",
               "job_key_overlap",
-              "job_keys_invalid"
+              "job_keys_invalid",
+              "finding_resolved",
+              "snapshot_incomplete"
             ]
           }
         },

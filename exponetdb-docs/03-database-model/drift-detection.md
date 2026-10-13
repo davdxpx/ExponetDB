@@ -80,13 +80,65 @@ the idea to schema, ACLs and cluster state.
 
 | Resolution | Operation | Effect |
 |---|---|---|
-| Adopt actual as expected | `drift.accept` (planned; records the new document as expected with a reason) | finding closed; no DDL |
+| Adopt actual as expected | `drift.accept` (Wave 8; records the current document as expected, with a reason when the drift is security-relevant) | findings resolved `accepted`; no DDL |
 | Restore expected | authored forward migration (bundle) | normal migration path |
 | Explain | link to an operation or external change record | finding annotated |
 | Ignore class | project configuration (e.g. exclude a schema) | scope change, audited |
 
 `drift.accept` on prod tier requires approval, because it turns an unreviewed
 change into the baseline future plans bind to.
+
+**[DECIDED]** (Wave 8, order §9 endpoint 3; `packages/diagnostics/src/drift-accept.ts`)
+`drift.accept` as built:
+
+- **Plan.** `POST /api/v1/findings/{finding}/accept` (action
+  `drift.accept.plan`, permission and scope `schema.manage`, a person through
+  the Web App or the CLI only; an agent, an MCP client or a service account
+  is refused, and `schema.manage` is never delegable) answers `201` with a
+  plan of kind `drift.accept`, applied through `POST /plans/{id}/apply`. The
+  finding must be an open drift finding of an active target: another kind is
+  `422 VALIDATION_FAILED` (`/finding`, `not_drift_finding`), a resolved one
+  `409 REGISTRY_CONFLICT` (reason `finding_resolved`), an unknown one
+  `404 NOT_FOUND`, a target that is not active `REGISTRY_CONFLICT`
+  (`target_state`). `serve` takes a live snapshot with the project's managed
+  scope on an observer session whose identity marker it checks first; an
+  incomplete one is refused (`snapshot_incomplete`). The plan **covers every
+  open drift finding of the target** (the new baseline is the whole schema,
+  so all of them are absorbed; at most 2,000), whichever one was named.
+  When a covered finding is `critical` or security-relevant (§6), the body
+  must carry a `reason` (10 to 1,000 characters, stored verbatim in the plan
+  and the audit, untrusted); without one the request is `422`
+  (`/reason`, `reason_required`). Class `standard` on nonprod, `high` on
+  prod.
+- **Bindings.** The plan binds the target (id, generation, and the
+  installation through the identity marker read with each snapshot), the
+  project's managed scope, the target's current baseline, the open drift
+  findings it covers and the `fp1` fingerprint it will record. At
+  acceptance and again under the locks (the target's schema domain, so no
+  migration records a baseline at the same time) a live snapshot is taken:
+  a changed fingerprint, an incomplete snapshot, another baseline, a drift
+  finding opened since planning, another scope, generation or state is
+  `PLAN_STALE` (bindings `schemaFingerprint`, `baseline`, `findings`,
+  `scope`, `generation`, `target`). A covered finding resolved meanwhile
+  changes nothing.
+- **Apply.** The worker takes a new complete snapshot with the plan's scope
+  and requires exactly the planned fingerprint; then one Control Store
+  transaction, under the drift check's lock and while the worker still holds
+  the operation's lease, re-checks the bindings, stores the snapshot
+  (purpose `drift_accept`), records it as the baseline (reason
+  `drift_accept`, the operation id), resolves the covered findings that are
+  still open as `accepted` and appends the `drift.accept` audit event (ids,
+  counts, fingerprints, the reason; never object names). Nothing is written
+  to the target.
+- **Verify** re-reads: the operation's baseline has the planned fingerprint,
+  the target's live fingerprint equals it, and every covered finding is
+  resolved. **Reconcile** reads the operation's baseline row. The next drift
+  check compares with the accepted schema.
+- Production: policy rule `drift.accept-prod` (approval and re-authentication,
+  [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md)),
+  re-checked by the worker before it starts. Proven by
+  `apps/server/test/http-drift-accept.int.test.ts` (PostgreSQL 17) and
+  `packages/diagnostics/test/drift-accept.test.ts`.
 
 ## 6. Security-relevant drift
 
@@ -119,7 +171,7 @@ unnoticed for weeks.
 migration engine exists (Wave 6), the expected schema of a target is its
 latest **baseline**: the registration snapshot (taken by `target.register`
 after the identity read-back, stored as the baseline only when it is
-complete) or, once `drift.accept` exists, an accepted drift. The provenance is
+complete) or an accepted drift (`drift.accept`, Wave 8, §5). The provenance is
 recorded (`reason`, operation). Wave 6 supersedes it with the last verified
 `fingerprint_after`. The current schema is never taken as expected.
 

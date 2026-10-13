@@ -216,7 +216,15 @@ incomplete fingerprint cannot be used for plan binding or evidence (fail closed)
   visibility report, configured schemas that do not exist, the schemas that
   exist outside the managed scope or belong to an extension
   (`excluded_schemas`, reported as `unmanaged`, never as matched), the server version, why it was taken
-  (`registration`, `drift_check`, `read`) and how long it took.
+  (`registration`, `drift_check`, `read`; since Wave 6 `migration`; since
+  Wave 8 `drift_accept`, bundle `01M4V4DA2W7HK9QB5NZ3XT6RME_drift-acceptance`)
+  and how long it took.
+- **[DECIDED]** (Wave 8, order §9, `drift.accept`) An incomplete snapshot is
+  never a baseline, also for a drift acceptance: its planner refuses one
+  (`REGISTRY_CONFLICT`, reason `snapshot_incomplete`), its plan binds the
+  `fp1` fingerprint of the complete snapshot it will record, and the worker
+  records only a new complete snapshot with exactly that fingerprint
+  ([`drift-detection.md` §5](./drift-detection.md#5-resolutions)).
 - Every snapshot is taken on an observer session whose identity marker was
   checked first (installation, target, generation, cluster
   `system_identifier`); a snapshot of the wrong database is never stored.

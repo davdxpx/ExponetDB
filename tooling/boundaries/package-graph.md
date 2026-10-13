@@ -93,6 +93,7 @@ graph TD
   packages_control-store["@exponetdb/control-store"] --> packages_kernel
   packages_control-store["@exponetdb/control-store"] --> packages_migrations
   packages_control-store["@exponetdb/control-store"] --> packages_observability
+  packages_diagnostics["@exponetdb/diagnostics"] --> packages_audit
   packages_diagnostics["@exponetdb/diagnostics"] --> packages_contracts
   packages_diagnostics["@exponetdb/diagnostics"] --> packages_control-store
   packages_diagnostics["@exponetdb/diagnostics"] --> packages_kernel

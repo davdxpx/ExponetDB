@@ -17,7 +17,7 @@ import {
   SERVE_OPERATION_ACTOR,
 } from '@exponetdb/auth'
 import type { ControlStore } from '@exponetdb/control-store'
-import { MigrationBaselineStore } from '@exponetdb/diagnostics'
+import { DRIFT_ACCEPT_KIND, diagnosticsKinds, MigrationBaselineStore } from '@exponetdb/diagnostics'
 import { migrationKinds } from '@exponetdb/migrations-engine'
 import {
   capabilityKinds,
@@ -134,6 +134,13 @@ export function composeAccess(
     ...capabilityKinds(rt),
     // Acceptance checks only (observer reads): serve holds no migrator secret.
     ...migrationKinds({ ...rt, connector, engineVersion: codeVersion() }),
+    // Wave 8: drift acceptance; serve checks its bindings live when a person applies it.
+    ...diagnosticsKinds({
+      store: services.store,
+      connector,
+      installationId: config.installationId,
+      clock: runtime.clock,
+    }),
   ])
   const policy = registryPolicy(rules, codeVersion(), runtime.clock)
   const authConfig = parseAuthConfig({
@@ -257,6 +264,8 @@ export function workerKinds(
         installationId,
       }),
     }),
+    // Wave 8: the worker records an accepted drift as the target's baseline.
+    ...diagnosticsKinds({ store: services.store, connector, installationId, clock: runtime.clock }),
   ]
 }
 
@@ -277,8 +286,9 @@ export function workerDispatchAdmission(
       systemActor: WORKER_ACTOR,
       liveSubject: livePolicySubject,
     },
-    // Migrations as well: an approval revoked or a tier changed after acceptance stops them here.
-    [...NODE_OPERATION_KINDS, ...SQL_KINDS, ...VERIFYING_KINDS],
+    // Migrations as well: an approval revoked or a tier changed after acceptance stops them here;
+    // and a drift acceptance (Wave 8), whose production approval must still hold when it starts.
+    [...NODE_OPERATION_KINDS, ...SQL_KINDS, ...VERIFYING_KINDS, DRIFT_ACCEPT_KIND],
     // The plan's subject as serve's authorizer resolves it, read in the dispatch transaction.
     (q) => new ControlPlaneSubjectResolver(registryChains(q)),
   )

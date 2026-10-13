@@ -667,6 +667,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M4T4DMYR23DXVB3SP8RF3RBZ',
         // Owner decision 2026-10-13: open client registration (the guard of oauth.clients).
         '01M4TKQ5C3X8Y2NZ7D4B9W6F1H',
+        // Wave 8: a drift acceptance stores its snapshot with its own purpose.
+        '01M4V4DA2W7HK9QB5NZ3XT6RME',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

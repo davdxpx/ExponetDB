@@ -233,6 +233,20 @@ is not in Wave 5. The other node rules of the table above are
 | `target.register-prod-approval` | require approval + reauth | registering a prod-tier target (identity stamp and ledger initialization) |
 | `drift.accept-prod` | require approval + reauth | accepting drift on a prod-tier target (`drift.accept`); security-relevant drift classes also require a reason |
 
+**[DECIDED]** (Wave 8, `packages/policy/src/catalog/registry.ts`)
+`drift.accept-prod` as implemented: severity `require`, not overridable,
+parameters `approvals` (default 1) and `reauthWithinSeconds` (default 300,
+at most 900), version 1, the same requirements as
+`target.register-prod-approval`. It reads the subject tier the planner
+resolved from the target: `prod` fails (an approval and a re-authentication
+are required), `nonprod` is not applicable, an unknown tier is `unknown` and
+requires the same. It applies to `drift.accept` only; the worker re-checks it
+with the approvals before the operation starts. The reason that
+security-relevant drift needs is not a rule result: the planner refuses a
+request without one (`422`, `reason_required`) whenever a covered finding is
+`critical` or security-relevant, on every tier
+([`../03-database-model/drift-detection.md` §5](../03-database-model/drift-detection.md#5-resolutions)).
+
 ### Backup and restore
 
 | Rule id | Severity | Default |

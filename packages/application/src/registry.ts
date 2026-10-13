@@ -15,6 +15,7 @@ import type {
   CredentialView,
   DatabaseRegisterRequest,
   DatabaseView,
+  DriftAcceptRequest,
   DriftCheck,
   EndpointRequest,
   EndpointView,
@@ -61,6 +62,7 @@ import {
   fleetFindingCounts,
   fleetTargetCounts,
   GAP_THRESHOLD_SECONDS,
+  getFinding,
   HISTORY_MAX_RANGE_MS,
   healthSummary,
   listFindings,
@@ -68,6 +70,7 @@ import {
   listSessions,
   lockGraph,
   openFindingCount,
+  planDriftAccept,
   readHealthHistory,
   readStatuses,
   runDriftCheck,
@@ -862,6 +865,35 @@ export class RegistryUseCases {
       idem,
       { kind: 'target', targetId: target.targetId },
       (tx, c, a) => planTargetStateChange(tx, c, a, kind, target.targetId, body),
+    )
+  }
+
+  /**
+   * `drift.accept.plan` (Wave 8, order §9): plans adopting a target's current
+   * schema as expected, from one of its open drift findings. The engine
+   * decides on the finding's target (a person with `schema.manage`, never an
+   * agent); the diagnostics package checks the finding and plans
+   * (`drift.accept`, applied through `plan.apply`).
+   */
+  async planDriftAccept(
+    caller: CallerLike,
+    findingId: string,
+    body: DriftAcceptRequest,
+    idem?: Idempotency,
+  ): Promise<PlanView> {
+    const { observation } = this.#services()
+    await this.#h.admit(this.#h.store, 'drift.accept.plan', caller)
+    const finding = await getFinding(this.#h.store, findingId)
+    if (finding === undefined) {
+      throw new RegistryError('NOT_FOUND')
+    }
+    return this.#plan(
+      caller,
+      'drift.accept.plan',
+      idem,
+      { kind: 'target', targetId: finding.targetId },
+      (tx, c, a) =>
+        planDriftAccept(tx, { policy: c.policy, observation }, a, finding.findingId, body),
     )
   }
 

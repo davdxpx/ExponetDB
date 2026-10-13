@@ -650,6 +650,19 @@ export const ACTIONS = {
       humanOnly: true,
     },
   ),
+  // Wave 8 (order §9): plans `drift.accept` from one open drift finding; a person only.
+  'drift.accept.plan': record(
+    'Plan a drift acceptance',
+    'target',
+    perm('schema.manage'),
+    scopeOf('schema.manage'),
+    {
+      clientKinds: HUMAN,
+      humanOnly: true,
+      wave: '8',
+      basis: 'resources.md "Schema and drift"; drift-detection.md §5',
+    },
+  ),
   'migration.resume.plan': record(
     'Plan resuming a non-transactional bundle',
     'target',
@@ -953,6 +966,10 @@ export const ACTIONS = {
       exclusivity: ['target.schema'],
     },
   ),
+  // Wave 8 (order §9): the target's current complete snapshot becomes its
+  // baseline and the open drift findings it covers are resolved `accepted`;
+  // no DDL. It holds the target's schema domain, so no migration writes a
+  // baseline at the same time.
   'drift.accept': adminOperation(
     'Accept drift',
     byTier('standard', 'high'),
@@ -960,7 +977,9 @@ export const ACTIONS = {
     'schema.manage',
     {
       tierSemantics: 'subject',
-      basis: 'operations-engine.md §2; policy drift.accept-prod',
+      exclusivity: ['target.schema'],
+      wave: '8',
+      basis: 'operations-engine.md §2; drift-detection.md §5; policy drift.accept-prod',
     },
   ),
   'operation.force_release': adminOperation(

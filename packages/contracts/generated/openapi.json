@@ -587,6 +587,7 @@
               "migration.bundle.ingest",
               "migration.import.analyze",
               "migration.baseline.plan",
+              "drift.accept.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -3000,6 +3001,19 @@
           "placement",
           "createdAt"
         ],
+        "type": "object"
+      },
+      "DriftAcceptRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "description": "Why the actual schema is adopted as expected: stored verbatim in the plan, untrusted, never interpreted (10 to 1000 characters). Required when a covered finding is critical or security-relevant.",
+            "maxLength": 1000,
+            "minLength": 10,
+            "type": "string",
+            "x-untrusted": true
+          }
+        },
         "type": "object"
       },
       "DriftCheck": {
@@ -10033,6 +10047,7 @@
               "migration.bundle.ingest",
               "migration.import.analyze",
               "migration.baseline.plan",
+              "drift.accept.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -10447,6 +10462,7 @@
               "migration.bundle.ingest",
               "migration.import.analyze",
               "migration.baseline.plan",
+              "drift.accept.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -10917,6 +10933,7 @@
               "migration.bundle.ingest",
               "migration.import.analyze",
               "migration.baseline.plan",
+              "drift.accept.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -11302,6 +11319,7 @@
               "migration.bundle.ingest",
               "migration.import.analyze",
               "migration.baseline.plan",
+              "drift.accept.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -18949,6 +18967,118 @@
           "RATE_LIMITED",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
+    "/findings/{finding}/accept": {
+      "post": {
+        "operationId": "planDriftAcceptance",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "finding",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^fnd_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^fnd_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriftAcceptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND, TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, REGISTRY_CONFLICT, TARGET_IDENTITY_MISMATCH."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, SAMPLE_STALE, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "schema.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a drift acceptance (drift.accept) from an open drift finding: the target's current complete schema becomes its baseline and the open drift findings of the target are resolved as accepted; no DDL. The plan binds the target identity, its baseline, its open drift findings and the fingerprint it will record.",
+        "tags": [
+          "findings"
+        ],
+        "x-exponetdb-action": "drift.accept.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CLUSTER_IDENTITY_MISMATCH",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "SAMPLE_STALE",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_IDENTITY_MISMATCH",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
