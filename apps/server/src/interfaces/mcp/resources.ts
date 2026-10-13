@@ -9,6 +9,7 @@ import {
   targetSummaryUri,
 } from '@exponetdb/contracts'
 import { describeError, type Logger } from '@exponetdb/observability'
+import { existenceFloor } from '../existence.ts'
 import { errorCodeOf } from '../http/request.ts'
 import type { CursorCodec } from './cursor.ts'
 import { grantOf, type McpCallContext } from './registry.ts'
@@ -156,9 +157,15 @@ export function createResourceHost(
     },
 
     async read(ctx, uri) {
+      // One time class for every "not there", unknown, concealed or real (existence.ts).
+      const started = performance.now()
+      const notFound = async (): Promise<ResourceRead> => {
+        await existenceFloor(started)
+        return { kind: 'not_found' }
+      }
       const ref = resourceRef(uri)
       if (ref === undefined) {
-        return { kind: 'not_found' }
+        return notFound()
       }
       if (ref.kind === 'static') {
         return {
@@ -180,7 +187,7 @@ export function createResourceHost(
         }
       } catch (error) {
         const code = refusal(ctx, error)
-        return HIDDEN.has(code) ? { kind: 'not_found' } : { kind: 'refused', code }
+        return HIDDEN.has(code) ? notFound() : { kind: 'refused', code }
       }
     },
   }

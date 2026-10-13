@@ -91,7 +91,6 @@
                         },
                         "source": {
                           "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
-                          "maxLength": 64,
                           "minLength": 1,
                           "type": "string",
                           "x-extensible-enum": [
@@ -290,7 +289,6 @@
                   },
                   "source": {
                     "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
-                    "maxLength": 64,
                     "minLength": 1,
                     "type": "string",
                     "x-extensible-enum": [
@@ -369,7 +367,6 @@
                   },
                   "source": {
                     "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
-                    "maxLength": 64,
                     "minLength": 1,
                     "type": "string",
                     "x-extensible-enum": [
@@ -415,7 +412,6 @@
                   },
                   "clusterName": {
                     "description": "Cluster display name.",
-                    "maxLength": 128,
                     "type": "string",
                     "untrusted": true
                   },
@@ -446,7 +442,6 @@
                     "anyOf": [
                       {
                         "description": "Server display name (no address).",
-                        "maxLength": 128,
                         "type": "string",
                         "untrusted": true
                       },
@@ -584,7 +579,6 @@
                   },
                   "source": {
                     "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
-                    "maxLength": 64,
                     "minLength": 1,
                     "type": "string",
                     "x-extensible-enum": [
@@ -624,7 +618,6 @@
               "properties": {
                 "condition": {
                   "description": "Named health condition (health.md §3).",
-                  "maxLength": 64,
                   "minLength": 1,
                   "type": "string",
                   "x-extensible-enum": [
@@ -746,7 +739,6 @@
                   },
                   "source": {
                     "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
-                    "maxLength": 64,
                     "minLength": 1,
                     "type": "string",
                     "x-extensible-enum": [
@@ -834,7 +826,6 @@
                     },
                     "label": {
                       "description": "Endpoint label; never host credentials.",
-                      "maxLength": 128,
                       "type": "string",
                       "untrusted": true
                     },
@@ -909,7 +900,6 @@
           },
           "source": {
             "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
-            "maxLength": 64,
             "minLength": 1,
             "type": "string",
             "x-extensible-enum": [
@@ -1074,7 +1064,6 @@
                               "anyOf": [
                                 {
                                   "description": "Default expression.",
-                                  "maxLength": 4096,
                                   "type": "string",
                                   "untrusted": true
                                 },
@@ -1087,7 +1076,6 @@
                               "anyOf": [
                                 {
                                   "description": "Generation expression.",
-                                  "maxLength": 4096,
                                   "type": "string",
                                   "untrusted": true
                                 },
@@ -1112,7 +1100,6 @@
                             },
                             "name": {
                               "description": "Column name.",
-                              "maxLength": 63,
                               "type": "string",
                               "untrusted": true
                             },
@@ -1121,7 +1108,6 @@
                             },
                             "type": {
                               "description": "Canonical type including typmod.",
-                              "maxLength": 256,
                               "type": "string",
                               "untrusted": true
                             }
@@ -1147,7 +1133,6 @@
                     "anyOf": [
                       {
                         "description": "Object comment.",
-                        "maxLength": 8192,
                         "type": "string",
                         "untrusted": true
                       },
@@ -1164,13 +1149,11 @@
                           "properties": {
                             "definition": {
                               "description": "Definition.",
-                              "maxLength": 8192,
                               "type": "string",
                               "untrusted": true
                             },
                             "name": {
                               "description": "Constraint name.",
-                              "maxLength": 63,
                               "type": "string",
                               "untrusted": true
                             },
@@ -1208,7 +1191,6 @@
                     "anyOf": [
                       {
                         "description": "Deparsed definition (views, functions, policies, indexes).",
-                        "maxLength": 262144,
                         "type": "string",
                         "untrusted": true
                       },
@@ -1225,7 +1207,6 @@
                           "properties": {
                             "grantee": {
                               "description": "Grantee role.",
-                              "maxLength": 63,
                               "type": "string",
                               "untrusted": true
                             },
@@ -1257,13 +1238,11 @@
                           "properties": {
                             "definition": {
                               "description": "Definition.",
-                              "maxLength": 8192,
                               "type": "string",
                               "untrusted": true
                             },
                             "name": {
                               "description": "Index name.",
-                              "maxLength": 63,
                               "type": "string",
                               "untrusted": true
                             },
@@ -1296,7 +1275,6 @@
                   },
                   "owner": {
                     "description": "Owning role.",
-                    "maxLength": 63,
                     "type": "string",
                     "untrusted": true
                   },
@@ -1318,7 +1296,6 @@
                             },
                             "name": {
                               "description": "Policy name.",
-                              "maxLength": 63,
                               "type": "string",
                               "untrusted": true
                             },
@@ -1328,7 +1305,6 @@
                             "roles": {
                               "items": {
                                 "description": "Role.",
-                                "maxLength": 63,
                                 "type": "string",
                                 "untrusted": true
                               },
@@ -1338,7 +1314,6 @@
                               "anyOf": [
                                 {
                                   "description": "USING expression.",
-                                  "maxLength": 8192,
                                   "type": "string",
                                   "untrusted": true
                                 },
@@ -1351,7 +1326,6 @@
                               "anyOf": [
                                 {
                                   "description": "WITH CHECK expression.",
-                                  "maxLength": 8192,
                                   "type": "string",
                                   "untrusted": true
                                 },
@@ -1385,7 +1359,6 @@
                         "description": "The canonical fp1 key of the object (schema-fingerprints.md §3).",
                         "items": {
                           "description": "Canonical key element.",
-                          "maxLength": 2048,
                           "type": "string",
                           "untrusted": true
                         },
@@ -1394,7 +1367,6 @@
                       },
                       "kind": {
                         "description": "Kind of a database object.",
-                        "maxLength": 64,
                         "minLength": 1,
                         "type": "string",
                         "x-extensible-enum": [
@@ -1414,7 +1386,6 @@
                       },
                       "name": {
                         "description": "Object name.",
-                        "maxLength": 63,
                         "type": "string",
                         "untrusted": true
                       },
@@ -1422,7 +1393,6 @@
                         "anyOf": [
                           {
                             "description": "Owning table, view or type of a column, constraint, index, trigger, policy or rule.",
-                            "maxLength": 63,
                             "type": "string",
                             "untrusted": true
                           },
@@ -1433,7 +1403,6 @@
                       },
                       "schema": {
                         "description": "Schema name.",
-                        "maxLength": 63,
                         "type": "string",
                         "untrusted": true
                       },
@@ -1441,7 +1410,6 @@
                         "anyOf": [
                           {
                             "description": "Identity arguments of a function or procedure.",
-                            "maxLength": 1024,
                             "type": "string",
                             "untrusted": true
                           },
@@ -1498,7 +1466,6 @@
                   },
                   "source": {
                     "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
-                    "maxLength": 64,
                     "minLength": 1,
                     "type": "string",
                     "x-extensible-enum": [
@@ -1591,7 +1558,6 @@
                         },
                         "name": {
                           "description": "Schema name.",
-                          "maxLength": 63,
                           "type": "string",
                           "untrusted": true
                         },
@@ -1618,7 +1584,6 @@
                   },
                   "source": {
                     "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
-                    "maxLength": 64,
                     "minLength": 1,
                     "type": "string",
                     "x-extensible-enum": [
@@ -1655,7 +1620,6 @@
                             "key": {
                               "items": {
                                 "description": "Canonical key element.",
-                                "maxLength": 2048,
                                 "type": "string",
                                 "untrusted": true
                               },
@@ -1664,7 +1628,6 @@
                             },
                             "objectClass": {
                               "description": "Kind of a database object.",
-                              "maxLength": 64,
                               "minLength": 1,
                               "type": "string",
                               "x-extensible-enum": [
@@ -1704,7 +1667,6 @@
                       "missingSchemas": {
                         "items": {
                           "description": "Configured schema that does not exist (informational).",
-                          "maxLength": 63,
                           "type": "string",
                           "untrusted": true
                         },
@@ -1741,7 +1703,6 @@
           "truncated": {
             "description": "JSON pointers of the fields cut at the MCP caps (MCP_CATALOG_TEXT_CAPS).",
             "items": {
-              "maxLength": 160,
               "type": "string"
             },
             "maxItems": 400,
@@ -1858,7 +1819,6 @@
                   "description": "The canonical fp1 key of the object (schema-fingerprints.md §3).",
                   "items": {
                     "description": "Canonical key element.",
-                    "maxLength": 2048,
                     "type": "string",
                     "untrusted": true
                   },
@@ -1867,7 +1827,6 @@
                 },
                 "kind": {
                   "description": "Kind of a database object.",
-                  "maxLength": 64,
                   "minLength": 1,
                   "type": "string",
                   "x-extensible-enum": [
@@ -1887,7 +1846,6 @@
                 },
                 "name": {
                   "description": "Object name.",
-                  "maxLength": 63,
                   "type": "string",
                   "untrusted": true
                 },
@@ -1895,7 +1853,6 @@
                   "anyOf": [
                     {
                       "description": "Owning table, view or type of a column, constraint, index, trigger, policy or rule.",
-                      "maxLength": 63,
                       "type": "string",
                       "untrusted": true
                     },
@@ -1906,7 +1863,6 @@
                 },
                 "schema": {
                   "description": "Schema name.",
-                  "maxLength": 63,
                   "type": "string",
                   "untrusted": true
                 },
@@ -1914,7 +1870,6 @@
                   "anyOf": [
                     {
                       "description": "Identity arguments of a function or procedure.",
-                      "maxLength": 1024,
                       "type": "string",
                       "untrusted": true
                     },
@@ -2091,7 +2046,6 @@
                         "description": "The canonical fp1 key of the object (schema-fingerprints.md §3).",
                         "items": {
                           "description": "Canonical key element.",
-                          "maxLength": 2048,
                           "type": "string",
                           "untrusted": true
                         },
@@ -2100,7 +2054,6 @@
                       },
                       "kind": {
                         "description": "Kind of a database object.",
-                        "maxLength": 64,
                         "minLength": 1,
                         "type": "string",
                         "x-extensible-enum": [
@@ -2120,7 +2073,6 @@
                       },
                       "name": {
                         "description": "Object name.",
-                        "maxLength": 63,
                         "type": "string",
                         "untrusted": true
                       },
@@ -2128,7 +2080,6 @@
                         "anyOf": [
                           {
                             "description": "Owning table, view or type of a column, constraint, index, trigger, policy or rule.",
-                            "maxLength": 63,
                             "type": "string",
                             "untrusted": true
                           },
@@ -2139,7 +2090,6 @@
                       },
                       "schema": {
                         "description": "Schema name.",
-                        "maxLength": 63,
                         "type": "string",
                         "untrusted": true
                       },
@@ -2147,7 +2097,6 @@
                         "anyOf": [
                           {
                             "description": "Identity arguments of a function or procedure.",
-                            "maxLength": 1024,
                             "type": "string",
                             "untrusted": true
                           },
@@ -2186,7 +2135,6 @@
                             "description": "The canonical fp1 key of the object (schema-fingerprints.md §3).",
                             "items": {
                               "description": "Canonical key element.",
-                              "maxLength": 2048,
                               "type": "string",
                               "untrusted": true
                             },
@@ -2195,7 +2143,6 @@
                           },
                           "kind": {
                             "description": "Kind of a database object.",
-                            "maxLength": 64,
                             "minLength": 1,
                             "type": "string",
                             "x-extensible-enum": [
@@ -2215,7 +2162,6 @@
                           },
                           "name": {
                             "description": "Object name.",
-                            "maxLength": 63,
                             "type": "string",
                             "untrusted": true
                           },
@@ -2223,7 +2169,6 @@
                             "anyOf": [
                               {
                                 "description": "Owning table, view or type of a column, constraint, index, trigger, policy or rule.",
-                                "maxLength": 63,
                                 "type": "string",
                                 "untrusted": true
                               },
@@ -2234,7 +2179,6 @@
                           },
                           "schema": {
                             "description": "Schema name.",
-                            "maxLength": 63,
                             "type": "string",
                             "untrusted": true
                           },
@@ -2242,7 +2186,6 @@
                             "anyOf": [
                               {
                                 "description": "Identity arguments of a function or procedure.",
-                                "maxLength": 1024,
                                 "type": "string",
                                 "untrusted": true
                               },
@@ -2273,7 +2216,6 @@
                 },
                 "objectClass": {
                   "description": "Kind of a database object.",
-                  "maxLength": 64,
                   "minLength": 1,
                   "type": "string",
                   "x-extensible-enum": [
@@ -2299,7 +2241,6 @@
                         "description": "The canonical fp1 key of the object (schema-fingerprints.md §3).",
                         "items": {
                           "description": "Canonical key element.",
-                          "maxLength": 2048,
                           "type": "string",
                           "untrusted": true
                         },
@@ -2308,7 +2249,6 @@
                       },
                       "kind": {
                         "description": "Kind of a database object.",
-                        "maxLength": 64,
                         "minLength": 1,
                         "type": "string",
                         "x-extensible-enum": [
@@ -2328,7 +2268,6 @@
                       },
                       "name": {
                         "description": "Object name.",
-                        "maxLength": 63,
                         "type": "string",
                         "untrusted": true
                       },
@@ -2336,7 +2275,6 @@
                         "anyOf": [
                           {
                             "description": "Owning table, view or type of a column, constraint, index, trigger, policy or rule.",
-                            "maxLength": 63,
                             "type": "string",
                             "untrusted": true
                           },
@@ -2347,7 +2285,6 @@
                       },
                       "schema": {
                         "description": "Schema name.",
-                        "maxLength": 63,
                         "type": "string",
                         "untrusted": true
                       },
@@ -2355,7 +2292,6 @@
                         "anyOf": [
                           {
                             "description": "Identity arguments of a function or procedure.",
-                            "maxLength": 1024,
                             "type": "string",
                             "untrusted": true
                           },
@@ -2423,7 +2359,6 @@
                   "description": "The canonical fp1 key of the object (schema-fingerprints.md §3).",
                   "items": {
                     "description": "Canonical key element.",
-                    "maxLength": 2048,
                     "type": "string",
                     "untrusted": true
                   },
@@ -2432,7 +2367,6 @@
                 },
                 "kind": {
                   "description": "Kind of a database object.",
-                  "maxLength": 64,
                   "minLength": 1,
                   "type": "string",
                   "x-extensible-enum": [
@@ -2452,7 +2386,6 @@
                 },
                 "name": {
                   "description": "Object name.",
-                  "maxLength": 63,
                   "type": "string",
                   "untrusted": true
                 },
@@ -2460,7 +2393,6 @@
                   "anyOf": [
                     {
                       "description": "Owning table, view or type of a column, constraint, index, trigger, policy or rule.",
-                      "maxLength": 63,
                       "type": "string",
                       "untrusted": true
                     },
@@ -2471,7 +2403,6 @@
                 },
                 "schema": {
                   "description": "Schema name.",
-                  "maxLength": 63,
                   "type": "string",
                   "untrusted": true
                 },
@@ -2479,7 +2410,6 @@
                   "anyOf": [
                     {
                       "description": "Identity arguments of a function or procedure.",
-                      "maxLength": 1024,
                       "type": "string",
                       "untrusted": true
                     },
@@ -2697,7 +2627,6 @@
                   "anyOf": [
                     {
                       "description": "Actual value, redacted.",
-                      "maxLength": 4096,
                       "type": "string",
                       "untrusted": true
                     },
@@ -2732,7 +2661,6 @@
                   "anyOf": [
                     {
                       "description": "Expected value, redacted.",
-                      "maxLength": 4096,
                       "type": "string",
                       "untrusted": true
                     },
@@ -2760,7 +2688,6 @@
                   "anyOf": [
                     {
                       "description": "Affected object, qualified name.",
-                      "maxLength": 512,
                       "type": "string",
                       "untrusted": true
                     },
@@ -2932,13 +2859,11 @@
                 },
                 "name": {
                   "description": "Column name.",
-                  "maxLength": 63,
                   "type": "string",
                   "untrusted": true
                 },
                 "type": {
                   "description": "PostgreSQL type.",
-                  "maxLength": 256,
                   "type": "string",
                   "untrusted": true
                 }
@@ -2964,7 +2889,6 @@
           "rlsRelations": {
             "items": {
               "description": "Relation with RLS enabled.",
-              "maxLength": 127,
               "type": "string",
               "untrusted": true
             },
@@ -3303,7 +3227,6 @@
                     },
                     "node": {
                       "description": "Plan node.",
-                      "maxLength": 127,
                       "type": "string",
                       "untrusted": true
                     }
@@ -3323,7 +3246,6 @@
               "sequentialScans": {
                 "items": {
                   "description": "Relation scanned sequentially.",
-                  "maxLength": 127,
                   "type": "string",
                   "untrusted": true
                 },
@@ -3600,7 +3522,6 @@
                   ]
                 },
                 "directory": {
-                  "maxLength": 91,
                   "type": "string"
                 },
                 "findings": {
@@ -3635,7 +3556,6 @@
                         "type": "string"
                       },
                       "message": {
-                        "maxLength": 1024,
                         "type": "string"
                       },
                       "rule": {
@@ -3736,7 +3656,6 @@
                     },
                     "migrationIds": {
                       "items": {
-                        "maxLength": 80,
                         "type": "string"
                       },
                       "type": "array"
@@ -3840,7 +3759,6 @@
                     },
                     {
                       "description": "Baseline node baseline:<slug>.",
-                      "maxLength": 73,
                       "type": "string"
                     },
                     {
@@ -3850,7 +3768,6 @@
                 },
                 "name": {
                   "description": "Migration name.",
-                  "maxLength": 200,
                   "type": "string",
                   "untrusted": true
                 },
@@ -3939,7 +3856,6 @@
             "anyOf": [
               {
                 "description": "Baseline node baseline:<slug>.",
-                "maxLength": 73,
                 "type": "string"
               },
               {
@@ -4002,7 +3918,6 @@
                 },
                 "name": {
                   "description": "Migration name.",
-                  "maxLength": 64,
                   "type": "string",
                   "untrusted": true
                 }
@@ -4018,7 +3933,6 @@
           },
           "source": {
             "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
-            "maxLength": 64,
             "minLength": 1,
             "type": "string",
             "x-extensible-enum": [
@@ -4524,7 +4438,6 @@
           },
           "overriddenRules": {
             "items": {
-              "maxLength": 128,
               "type": "string"
             },
             "type": "array"
@@ -4542,14 +4455,12 @@
                   "type": "string"
                 },
                 "message": {
-                  "maxLength": 1024,
                   "type": "string"
                 },
                 "overridableByBreakGlass": {
                   "type": "boolean"
                 },
                 "remediation": {
-                  "maxLength": 1024,
                   "type": "string"
                 },
                 "result": {
@@ -4658,7 +4569,6 @@
                       "type": "string"
                     },
                     "windowId": {
-                      "maxLength": 64,
                       "type": "string"
                     }
                   },
@@ -4677,7 +4587,6 @@
                     },
                     "rules": {
                       "items": {
-                        "maxLength": 128,
                         "type": "string"
                       },
                       "type": "array"
@@ -5153,7 +5062,6 @@
           },
           "overriddenRules": {
             "items": {
-              "maxLength": 128,
               "type": "string"
             },
             "type": "array"
@@ -5171,14 +5079,12 @@
                   "type": "string"
                 },
                 "message": {
-                  "maxLength": 1024,
                   "type": "string"
                 },
                 "overridableByBreakGlass": {
                   "type": "boolean"
                 },
                 "remediation": {
-                  "maxLength": 1024,
                   "type": "string"
                 },
                 "result": {
@@ -5287,7 +5193,6 @@
                       "type": "string"
                     },
                     "windowId": {
-                      "maxLength": 64,
                       "type": "string"
                     }
                   },
@@ -5306,7 +5211,6 @@
                     },
                     "rules": {
                       "items": {
-                        "maxLength": 128,
                         "type": "string"
                       },
                       "type": "array"
@@ -5632,7 +5536,6 @@
                 },
                 "name": {
                   "description": "Kebab-case slug, at most 64 characters; not hashed.",
-                  "maxLength": 64,
                   "type": "string"
                 },
                 "sqlstate": {
@@ -6243,7 +6146,6 @@
           },
           "overriddenRules": {
             "items": {
-              "maxLength": 128,
               "type": "string"
             },
             "type": "array"
@@ -6261,14 +6163,12 @@
                   "type": "string"
                 },
                 "message": {
-                  "maxLength": 1024,
                   "type": "string"
                 },
                 "overridableByBreakGlass": {
                   "type": "boolean"
                 },
                 "remediation": {
-                  "maxLength": 1024,
                   "type": "string"
                 },
                 "result": {
@@ -6377,7 +6277,6 @@
                       "type": "string"
                     },
                     "windowId": {
-                      "maxLength": 64,
                       "type": "string"
                     }
                   },
@@ -6396,7 +6295,6 @@
                     },
                     "rules": {
                       "items": {
-                        "maxLength": 128,
                         "type": "string"
                       },
                       "type": "array"
@@ -6696,7 +6594,6 @@
                 },
                 "name": {
                   "description": "Kebab-case slug, at most 64 characters; not hashed.",
-                  "maxLength": 64,
                   "type": "string"
                 },
                 "sqlstate": {
@@ -7307,7 +7204,6 @@
           },
           "overriddenRules": {
             "items": {
-              "maxLength": 128,
               "type": "string"
             },
             "type": "array"
@@ -7325,14 +7221,12 @@
                   "type": "string"
                 },
                 "message": {
-                  "maxLength": 1024,
                   "type": "string"
                 },
                 "overridableByBreakGlass": {
                   "type": "boolean"
                 },
                 "remediation": {
-                  "maxLength": 1024,
                   "type": "string"
                 },
                 "result": {
@@ -7441,7 +7335,6 @@
                       "type": "string"
                     },
                     "windowId": {
-                      "maxLength": 64,
                       "type": "string"
                     }
                   },
@@ -7460,7 +7353,6 @@
                     },
                     "rules": {
                       "items": {
-                        "maxLength": 128,
                         "type": "string"
                       },
                       "type": "array"
@@ -7766,7 +7658,6 @@
                 },
                 "name": {
                   "description": "Kebab-case slug, at most 64 characters; not hashed.",
-                  "maxLength": 64,
                   "type": "string"
                 },
                 "sqlstate": {
@@ -8273,7 +8164,6 @@
                       },
                       "name": {
                         "description": "Kebab-case slug, at most 64 characters; not hashed.",
-                        "maxLength": 64,
                         "type": "string"
                       },
                       "sqlstate": {
@@ -8755,7 +8645,6 @@
                 },
                 "name": {
                   "description": "Kebab-case slug, at most 64 characters; not hashed.",
-                  "maxLength": 64,
                   "type": "string"
                 },
                 "sqlstate": {
@@ -9119,7 +9008,6 @@
               "properties": {
                 "applicationName": {
                   "description": "application_name.",
-                  "maxLength": 128,
                   "type": "string",
                   "untrusted": true
                 },
@@ -9170,12 +9058,10 @@
                 },
                 "role": {
                   "description": "Session role.",
-                  "maxLength": 63,
                   "type": "string",
                   "untrusted": true
                 },
                 "state": {
-                  "maxLength": 64,
                   "type": "string",
                   "x-extensible-enum": [
                     "active",
@@ -9215,7 +9101,6 @@
                         },
                         "redacted": {
                           "description": "Redacted statement text.",
-                          "maxLength": 16384,
                           "type": "string",
                           "untrusted": true
                         },
@@ -9255,11 +9140,9 @@
                       "additionalProperties": false,
                       "properties": {
                         "event": {
-                          "maxLength": 64,
                           "type": "string"
                         },
                         "type": {
-                          "maxLength": 64,
                           "type": "string"
                         }
                       },
@@ -9295,7 +9178,6 @@
           },
           "source": {
             "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
-            "maxLength": 64,
             "minLength": 1,
             "type": "string",
             "x-extensible-enum": [
@@ -9384,7 +9266,6 @@
           },
           "source": {
             "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
-            "maxLength": 64,
             "minLength": 1,
             "type": "string",
             "x-extensible-enum": [
@@ -9427,14 +9308,12 @@
                   ]
                 },
                 "lockMode": {
-                  "maxLength": 64,
                   "type": "string"
                 },
                 "relation": {
                   "anyOf": [
                     {
                       "description": "Relation name.",
-                      "maxLength": 127,
                       "type": "string",
                       "untrusted": true
                     },
@@ -9570,7 +9449,6 @@
           },
           "source": {
             "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
-            "maxLength": 64,
             "minLength": 1,
             "type": "string",
             "x-extensible-enum": [
@@ -9599,7 +9477,6 @@
                 },
                 "normalizedText": {
                   "description": "Normalized statement with constants removed.",
-                  "maxLength": 16384,
                   "type": "string",
                   "untrusted": true
                 },
@@ -9746,7 +9623,6 @@
                   "anyOf": [
                     {
                       "description": "Index with the same definition.",
-                      "maxLength": 63,
                       "type": "string",
                       "untrusted": true
                     },
@@ -9757,7 +9633,6 @@
                 },
                 "name": {
                   "description": "Index.",
-                  "maxLength": 63,
                   "type": "string",
                   "untrusted": true
                 },
@@ -9768,7 +9643,6 @@
                 },
                 "schema": {
                   "description": "Schema.",
-                  "maxLength": 63,
                   "type": "string",
                   "untrusted": true
                 },
@@ -9779,7 +9653,6 @@
                 },
                 "table": {
                   "description": "Table.",
-                  "maxLength": 63,
                   "type": "string",
                   "untrusted": true
                 },
@@ -9807,7 +9680,6 @@
           },
           "source": {
             "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
-            "maxLength": 64,
             "minLength": 1,
             "type": "string",
             "x-extensible-enum": [
@@ -9905,13 +9777,11 @@
                 },
                 "name": {
                   "description": "Table.",
-                  "maxLength": 63,
                   "type": "string",
                   "untrusted": true
                 },
                 "schema": {
                   "description": "Schema.",
-                  "maxLength": 63,
                   "type": "string",
                   "untrusted": true
                 },
@@ -10058,14 +9928,12 @@
                   "type": "string"
                 },
                 "message": {
-                  "maxLength": 1024,
                   "type": "string"
                 },
                 "object": {
                   "anyOf": [
                     {
                       "description": "Affected object.",
-                      "maxLength": 512,
                       "type": "string",
                       "untrusted": true
                     },
@@ -10075,7 +9943,6 @@
                   ]
                 },
                 "remediation": {
-                  "maxLength": 2048,
                   "type": "string"
                 },
                 "rule": {
@@ -10293,7 +10160,6 @@
           },
           "source": {
             "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
-            "maxLength": 64,
             "minLength": 1,
             "type": "string",
             "x-extensible-enum": [
@@ -10635,7 +10501,6 @@
                 },
                 "localName": {
                   "description": "Local cluster name such as 17/main.",
-                  "maxLength": 64,
                   "type": "string",
                   "untrusted": true
                 },
@@ -10752,7 +10617,6 @@
           },
           "source": {
             "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
-            "maxLength": 64,
             "minLength": 1,
             "type": "string",
             "x-extensible-enum": [
@@ -10915,7 +10779,6 @@
                     },
                     "label": {
                       "description": "Pseudonymous label.",
-                      "maxLength": 64,
                       "type": "string"
                     }
                   },
@@ -11048,7 +10911,6 @@
                   "anyOf": [
                     {
                       "description": "Caller-supplied reason, recorded and never evaluated.",
-                      "maxLength": 2000,
                       "type": "string",
                       "untrusted": true
                     },

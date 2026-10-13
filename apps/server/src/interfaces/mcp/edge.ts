@@ -118,7 +118,8 @@ export function mcpMetrics(registry: MetricsRegistry): McpMetrics {
       'MCP tool calls by tool and outcome code.',
       {
         tool,
-        outcome: { pattern: /^(?:ok|[A-Z][A-Z0-9_]{0,63})$/, maxDistinct: 96 },
+        // `input_required` is the approval round of plan_apply (registry.ts), not an error code.
+        outcome: { pattern: /^(?:ok|input_required|[A-Z][A-Z0-9_]{0,63})$/, maxDistinct: 96 },
         era: { values: ['modern', 'legacy'] },
       },
     ),
@@ -442,25 +443,25 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
     let releaseLarge: (() => void) | undefined
     try {
       let limit = limits.bodyBytes
-      if (bundleClaim) {
-        limit = limits.bundleBodyBytes
-      } else if (mcpMethod === undefined) {
-        // Legacy names no tool in a header: a large body holds one of few slots per grant.
-        if (declaredBytes === undefined || declaredBytes > limits.bodyBytes) {
-          releaseLarge = gate.acquire([
-            { key: `large:${grantKey(principal)}`, max: limits.largeBodiesPerGrant },
-          ])
-          if (releaseLarge === undefined) {
-            return deny(
-              'large_bodies',
-              rpcError(429, MCP_ERROR_CODES.invalidRequest, 'Too many large requests at once.', {
-                data: { code: 'RATE_LIMITED', retryAfterSeconds: 1 },
-                headers: { 'retry-after': '1' },
-              }),
-            )
-          }
-          limit = limits.bundleBodyBytes
+      // A body that may be large holds one of few slots per grant: a legacy request names no
+      // tool in a header, and a modern request claiming a bundle tool may send the large tier too.
+      if (
+        (bundleClaim || mcpMethod === undefined) &&
+        (declaredBytes === undefined || declaredBytes > limits.bodyBytes)
+      ) {
+        releaseLarge = gate.acquire([
+          { key: `large:${grantKey(principal)}`, max: limits.largeBodiesPerGrant },
+        ])
+        if (releaseLarge === undefined) {
+          return deny(
+            'large_bodies',
+            rpcError(429, MCP_ERROR_CODES.invalidRequest, 'Too many large requests at once.', {
+              data: { code: 'RATE_LIMITED', retryAfterSeconds: 1 },
+              headers: { 'retry-after': '1' },
+            }),
+          )
         }
+        limit = limits.bundleBodyBytes
       }
       const read = await readBounded(c.req.raw.body, limit, limits.bodyTimeoutMs)
       if (read.kind === 'too_large') return tooLarge()
@@ -626,7 +627,7 @@ export function mountMcp(app: Hono<Env>, deps: McpDeps): McpHttpHandler {
           rpcError(
             504,
             MCP_ERROR_CODES.internalError,
-            'The request took too long. An accepted operation continues; observe it with operation_get.',
+            'The request took too long and was canceled. A read ends with it; an operation that was already accepted continues: observe it with operation_get.',
             { id: message.id },
           ),
         )

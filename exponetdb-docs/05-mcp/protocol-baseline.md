@@ -147,7 +147,7 @@ against it. The specification leaves the rows marked **[DECIDED]** open
 | Body over its tier | 413 | `-32600` | JSON-RPC error without `id` |
 | Body arrives slower than its deadline (30 s) | 408 | `-32600` | JSON-RPC error without `id` |
 | Role matrix not verified yet | 503 | `-32603` | `Retry-After`; `data.code` `CONTROL_PLANE_DEGRADED` |
-| Whole request over 90 s | 504 | `-32603` | with the request's `id`; an accepted operation continues |
+| Whole request over 90 s | 504 | `-32603` | with the request's `id`; the request is canceled: a read ends with it, an accepted operation continues |
 | No or invalid token, wrong audience, revoked grant, disabled client | 401 | `-32600` | `WWW-Authenticate: Bearer error="invalid_token", resource_metadata=…`; without a token no `error` but `scope` = the baseline scopes; JSON-RPC error without `id`, `data.code` `UNAUTHENTICATED` |
 | Scope missing for the called tool | 403 | `-32600` | `WWW-Authenticate: Bearer error="insufficient_scope", resource_metadata=…, scope="<held ∪ needed>"`; JSON-RPC error without `id`, `data` = the `INSUFFICIENT_SCOPE` tool error (required scope, remediation) |
 | Rate limit | 429 | `-32600` | `Retry-After`; JSON-RPC error without `id`, code `RATE_LIMITED` in `data` |
@@ -157,8 +157,9 @@ against it. The specification leaves the rows marked **[DECIDED]** open
 | Unknown tool (the name is not echoed), invalid cursor, resource not found (modern) | 200 | `-32602` | |
 | Invalid tool arguments | 200 | — | `isError: true`, `VALIDATION_FAILED` with the issue paths (2025-11-25 SEP-1303: the model can correct its call) |
 | Resource not found (legacy) | 200 | `-32002` | |
+| A resource read that fails inside ExponetDB (`INTERNAL`, `CONTROL_PLANE_DEGRADED`) | 200 | `-32603` | `Internal error.`, no data and no cause |
 | Refusal by RBAC, tier, grant, policy, plan state; validation in the use case | 200 | — | `isError: true`, text block = the problem body without HTTP fields (code, message, details, remediation, `retryable`, `requestId`); no `structuredContent` |
-| An object that is not there, real or concealed (`TARGET_NOT_FOUND`, `PLAN_NOT_FOUND`, …) | 200 | — | as the row above, sent no earlier than 50 ms after the request began (one time class, `error-model.md` §4) |
+| An object that is not there, real or concealed (`TARGET_NOT_FOUND`, `PLAN_NOT_FOUND`, …; also a `resources/read` that finds nothing) | 200 | — | as the row above (a resource: the not-found rows), sent no earlier than 50 ms after the request began (one time class, `error-model.md` §4) |
 | Internal failure | 200 | — | `isError: true`, code `INTERNAL`, no internal text |
 
 ## 6. Conformance and reference tools

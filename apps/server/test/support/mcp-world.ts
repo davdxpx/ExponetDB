@@ -73,6 +73,8 @@ export interface WorldOptions {
   readonly limits?: Partial<McpLimits>
   /** Keep no log lines or token uses (a load run must not measure its own records). */
   readonly discard?: boolean
+  /** What reading a target (the `registry.target` use case) does instead of the default. */
+  readonly target?: (caller: unknown, id: string) => Promise<unknown>
 }
 
 export function world(options: WorldOptions = {}) {
@@ -95,7 +97,8 @@ export function world(options: WorldOptions = {}) {
           ? { items: [{ id: TARGET, tier: 'nonprod' }], nextCursor: 'r1_next' }
           : { items: [], nextCursor: null }
       },
-      target: async (_caller: unknown, id: string) => {
+      target: async (caller: unknown, id: string) => {
+        if (options.target !== undefined) return options.target(caller, id)
         if (id !== TARGET) {
           throw Object.assign(new Error('nope'), { code: 'TARGET_NOT_FOUND' })
         }

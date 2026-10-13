@@ -111,9 +111,12 @@ export const MCP_OUTPUT_ENUM_LIMIT = 16
  * values (action ids, error codes, plan kinds) becomes a string with a
  * description naming the vocabulary, and the patterns of server-made values
  * (ids, digests) are left out: otherwise they are announced once per tool
- * and dominate `tools/list`. The server still validates every result with
- * the full contract before it sends it; inputs keep their enumerations and
- * patterns.
+ * and dominate `tools/list`. `maxLength` is left out too: the server escapes
+ * invisible characters after it validated a result (one becomes up to eight,
+ * `\u{200B}`), so an escaped string can be longer than the bound it passed
+ * (`minLength` stays: escaping never shortens a string). The server still
+ * validates every result with the full contract before it sends it; inputs
+ * keep their enumerations, patterns and bounds.
  */
 function relaxLargeEnums(node: unknown): unknown {
   if (Array.isArray(node)) return node.map(relaxLargeEnums)
@@ -122,6 +125,8 @@ function relaxLargeEnums(node: unknown): unknown {
   for (const [key, value] of Object.entries(node)) {
     // A pattern of a server-made value (an id, a digest) tells a client nothing it can act on.
     if (key === 'pattern' && typeof value === 'string') continue
+    // Escaping lengthens a value after it was validated (results.ts): a bound would reject valid output.
+    if (key === 'maxLength' && typeof value === 'number') continue
     out[key] = relaxLargeEnums(value)
   }
   const values = node['enum']

@@ -11,7 +11,11 @@ Every tool maps to one application service that the REST API also exposes (colum
 policy engine can still require approval or deny. Input and output schemas are
 defined in `packages/contracts/src/mcp/` and generated into the tool definitions
 (`generated/jsonschema/mcp-tools.v1.json`, built by the same function that
-serves `tools/list`).
+serves `tools/list`). Output schemas announce no `maxLength`, no `pattern` and
+no enumeration of more than 16 values: the server validates every result with the
+full contract first and escapes invisible characters afterwards, which lengthens a
+string, so a bound would reject valid output in a validating client. Input
+schemas keep all of their bounds.
 
 ## 0. Served and planned
 

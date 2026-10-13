@@ -41,7 +41,10 @@ export interface ErrorDefinition {
    */
   readonly message: string
   readonly remediation?: string
-  /** Strict schema of `details`; absent means the code carries no details in v1. */
+  /**
+   * Strict schema of `details`; absent means the code carries no details in v1.
+   * A schema that accepts `undefined` (`.optional()`) makes the details optional.
+   */
   readonly details?: z.ZodType
 }
 
@@ -1242,6 +1245,8 @@ export const ERRORS = {
     retryable: true,
     title: 'Rate limited',
     message: 'Too many requests. Retry after the time in Retry-After.',
+    // The same time as the Retry-After header of a REST answer, for MCP, which has no header.
+    details: z.strictObject({ retryAfterSeconds: z.int().positive() }).optional(),
   },
   CONTROL_PLANE_DEGRADED: {
     group: 'generic',

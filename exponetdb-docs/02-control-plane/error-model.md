@@ -74,7 +74,7 @@ the full situation table is
 | `CONTROL_PLANE_DEGRADED` | HTTP 503, `Retry-After` |
 | `PERMISSION_DENIED`, `TARGET_NOT_FOUND`, `TARGET_NOT_IN_GRANT`, `TIER_NOT_PERMITTED`, `PLAN_DENIED`, `PLAN_STALE`, `PLAN_ALREADY_USED`, `APPROVAL_REQUIRED`, `IDEMPOTENCY_KEY_REUSED`, `CLIENT_NOT_APPROVED`, `CAPABILITY_UNAVAILABLE`, the `QUERY_*` codes, `DATA_READ_NOT_PERMITTED`, every other catalog code | HTTP 200, `isError: true`, the problem body in the text; never an HTTP 403 (a policy or RBAC refusal is a tool error) |
 | `VALIDATION_FAILED` (invalid tool arguments, an unknown or expired list cursor) | HTTP 200, `isError: true` with the issue paths, so the model can correct its call |
-| `INTERNAL` | HTTP 200, `isError: true`, code only; the cause stays in the server log under the request id |
+| `INTERNAL` | HTTP 200, `isError: true`, code only; the cause stays in the server log under the request id (a `resources/read` that fails this way, or with `CONTROL_PLANE_DEGRADED`, is JSON-RPC `-32603` without text) |
 | unknown tool, invalid list cursor of `tools/list` or `resources/list`, resource not found | JSON-RPC `-32602` (resource not found `-32002` on the legacy revisions); the tool name is not echoed |
 | `-32020`, `-32021`, `-32022` | the transport's version and header ladder (not catalog codes), HTTP 400 |
 
@@ -284,7 +284,7 @@ later without changes).
 | `VALIDATION_FAILED` | 422 | no | Request schema violation; `details.errors[]`. |
 | `NOT_FOUND` | 404 | no | |
 | `CONFLICT` | 409 | no | Generic optimistic concurrency failure (`If-Match`). |
-| `RATE_LIMITED` | 429 | yes | `Retry-After` header. |
+| `RATE_LIMITED` | 429 | yes | `Retry-After` header. Optional `details.retryAfterSeconds` (positive whole seconds, the same wait; an MCP tool error has no header, so it carries the wait there). |
 | `CONTROL_PLANE_DEGRADED` | 503 | yes | Control Store unavailable or ExponetDB not ready. Distinct from `TARGET_UNAVAILABLE` (C-29). |
 | `INTERNAL` | 500 | yes | Unexpected; `requestId` correlates with logs. Never contains stack traces. |
 

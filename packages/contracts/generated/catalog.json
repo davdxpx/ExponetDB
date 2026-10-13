@@ -9139,7 +9139,23 @@
     },
     {
       "code": "RATE_LIMITED",
-      "details": null,
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/RATE_LIMITED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "retryAfterSeconds": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "retryAfterSeconds"
+        ],
+        "type": "object"
+      },
       "group": "generic",
       "message": "Too many requests. Retry after the time in Retry-After.",
       "retryable": true,

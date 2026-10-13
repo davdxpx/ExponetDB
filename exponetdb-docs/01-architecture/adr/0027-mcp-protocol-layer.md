@@ -93,9 +93,11 @@ anything (the order §10):
    JSON (`-32700`; a duplicate key, a depth or element overrun `-32600`),
    exactly one JSON-RPC object (an array is `-32600`). A modern request
    names its tool in `Mcp-Name`, so only a bundle tool reads up to the
-   bundle tier; a legacy request names none, so a body over the general
-   tier takes one of two large-body slots of its grant and is checked
-   against the tool in the body after parsing.
+   bundle tier; a body that can be over the general tier takes one of two
+   large-body slots of its grant for as long as the request runs: a legacy
+   request (it names no tool) and a modern request that claims a bundle
+   tool in its headers alike. Either is checked against the tool in the
+   body after parsing.
 8. **Classification** by ExponetDB's own table (the oracle the tests use
    against the SDK; [`protocol-baseline.md` §4](../../05-mcp/protocol-baseline.md#4-classification-of-a-request)):
    the version ladder ExponetDB answers itself (an unsupported or legacy
@@ -113,8 +115,9 @@ anything (the order §10):
     and the three `Mcp-*`/`MCP-Protocol-Version` headers. The SDK never
     sees `Authorization`, cookies, `Origin`, `X-Forwarded-*` or
     `Mcp-Session-Id`; it gets the authentication *result* as `authInfo`
-    (no token value). The whole request is bounded (`504` after 90 s; an
-    accepted operation continues and is observed with `operation_get`).
+    (no token value). The whole request is bounded (`504` after 90 s and
+    the request is canceled: a read ends with it, an accepted operation
+    continues and is observed with `operation_get`).
     The factory checks that the SDK put the request in the era the edge
     classified; when not, the instance serves nothing and the mismatch is
     logged (the table is the oracle, the SDK never overrides it).

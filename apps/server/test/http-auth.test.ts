@@ -185,6 +185,15 @@ describe('cookies and problems', () => {
     })
     expect(limited.status).toBe(429)
     expect(limited.headers.get('retry-after')).toBe('5')
+    // The same wait is in the body too (the tool error of MCP carries it).
+    expect(await limited.json()).toMatchObject({
+      code: 'RATE_LIMITED',
+      details: { retryAfterSeconds: 5 },
+    })
+    const unknownWait = problemResponse(requestId, new HttpRefusal('RATE_LIMITED'))
+    expect(unknownWait.status).toBe(429)
+    expect(unknownWait.headers.get('retry-after')).toBeNull()
+    expect(await unknownWait.json()).not.toHaveProperty('details')
     const unknown = problemResponse(requestId, new Error('boom'))
     const body: unknown = await unknown.json()
     expect(body).toMatchObject({ code: 'INTERNAL' })

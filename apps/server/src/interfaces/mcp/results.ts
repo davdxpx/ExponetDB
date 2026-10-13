@@ -18,9 +18,10 @@ import type { RequestId } from '@exponetdb/kernel'
  *   `structuredContent`) starts with lines the server writes from its own
  *   facts (ids, states, the approval link), then the result as JSON between
  *   delimiters with a random tag. In that copy links and images are
- *   defused (`![`, `](`, `http://`, `https://`, code fences): text from a
- *   database never becomes a clickable link or an image request. The
- *   delimiter only reduces noise; it is not a security boundary.
+ *   defused (`![`, `](`, `http://`, `https://`, code fences) with JSON
+ *   escapes: text from a database never becomes a clickable link or an
+ *   image request, and the copy still parses as JSON. The delimiter only
+ *   reduces noise; it is not a security boundary.
  * - A refusal is `isError: true` with the problem body (code, message,
  *   details, remediation, retryability, request id) as JSON text and no
  *   `structuredContent` (clients validate it against the success schema).
@@ -53,13 +54,20 @@ export function escapeValue(value: unknown): unknown {
   return value
 }
 
-/** Defuses links, images and code fences in text a model reads. */
+/**
+ * Defuses links, images and code fences in the JSON text a model reads. Every
+ * change is a JSON string escape (`\u0028` for `(`), so the text still parses
+ * with `JSON.parse` and decodes to the original characters; only the raw
+ * text loses the markdown and URL syntax. `JSON.stringify` writes every
+ * backslash as `\\`, so an escape written here cannot be taken for the tail of
+ * another one.
+ */
 export function defuse(text: string): string {
   return text
-    .replace(/!\[/g, '!\\[')
-    .replace(/\]\(/g, ']\\(')
-    .replace(/\b(https?):\/\//gi, '$1[:]//')
-    .replace(/`{3,}/g, (fence) => "'".repeat(fence.length))
+    .replace(/!\[/g, '!\\u005b')
+    .replace(/\]\(/g, ']\\u0028')
+    .replace(/(https?):\/\//gi, '$1\\u003a//')
+    .replace(/`{3,}/g, (fence) => '\\u0060'.repeat(fence.length))
     .replace(/</g, '\\u003c')
     .replace(/>/g, '\\u003e')
 }

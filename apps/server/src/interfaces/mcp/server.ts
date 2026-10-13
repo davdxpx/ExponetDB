@@ -150,6 +150,10 @@ export function mcpServerFactory(deps: ServerDeps): McpServerFactory {
       }
       if (read.kind === 'refused') {
         ctx.outcome = read.code
+        // A failure of ExponetDB is not the client's invalid parameter (as `internal` above).
+        if (read.code === 'INTERNAL' || read.code === 'CONTROL_PLANE_DEGRADED') {
+          throw new ProtocolError(MCP_ERROR_CODES.internalError, 'Internal error.')
+        }
         throw new ProtocolError(MCP_ERROR_CODES.invalidParams, 'Resource not readable', {
           code: read.code,
           ...uriData(uri),

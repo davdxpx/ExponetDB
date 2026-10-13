@@ -7,10 +7,20 @@ import {
 } from '@exponetdb/contracts'
 import { fixedClock, newId } from '@exponetdb/kernel'
 import { MetricsRegistry, type ReadinessReport, silentLogger } from '@exponetdb/observability'
+import { AjvJsonSchemaValidator } from '@modelcontextprotocol/server/validators/ajv'
 import { describe, expect, it } from 'vitest'
 import { EXISTENCE_FLOOR_MS, isExistenceRefusal } from '../src/interfaces/existence.ts'
 import { createPublicApp, httpMetrics } from '../src/interfaces/http/app.ts'
-import { API_TOKEN, clientId, grantId, NOW, TARGET, TOKEN, world } from './support/mcp-world.ts'
+import {
+  API_TOKEN,
+  clientId,
+  grantId,
+  NOW,
+  SECRET_TEXT,
+  TARGET,
+  TOKEN,
+  world,
+} from './support/mcp-world.ts'
 
 /**
  * The `/mcp` endpoint against the protocol baseline (protocol-baseline.md
@@ -326,6 +336,39 @@ describe('/mcp edge: the body', () => {
       legacy('tools/call', { name: 'migration_plan', arguments: { target: padding } }),
     )
     expect(bundle.status).toBe(200)
+  })
+
+  it('holds a large-body slot per grant for a modern bundle-tool claim too, not only for legacy', async () => {
+    const { app } = world({ limits: { largeBodiesPerGrant: 1, bodyTimeoutMs: 600 } })
+    const call = modern('tools/call', { name: 'migration_plan', arguments: {} })
+    const small = String(JSON.stringify(call.body).length)
+    const large = String(300 * 1024)
+    // A body that never ends holds the grant's only slot until its deadline.
+    const stalled = new ReadableStream<Uint8Array>({
+      pull: () => new Promise((resolve) => setTimeout(resolve, 3_000)),
+    })
+    const holding = app.request('/mcp', {
+      method: 'POST',
+      headers: { ...BASE_HEADERS, ...call.headers, 'content-length': large },
+      body: stalled,
+      duplex: 'half',
+    } as RequestInit)
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    const refused = await post(app, call.body, { ...call.headers, 'content-length': large })
+    expect(refused.status).toBe(429)
+    expect(refused.headers.get('retry-after')).toBe('1')
+    expect(errorOf(await rpc(refused)).data).toMatchObject({ code: 'RATE_LIMITED' })
+    // A body within the small tier takes no slot, so it passes while the slot is held.
+    const passes = await post(app, call.body, { ...call.headers, 'content-length': small })
+    expect(passes.status).toBe(200)
+    expect((await holding).status).toBe(408)
+    // The slot is released when the request ends.
+    const again = await post(app, call.body, { ...call.headers, 'content-length': large })
+    expect(again.status).toBe(200)
+    // A claim of a tool that is not a bundle tool may not send the large tier at all.
+    const plain = modern('tools/call', { name: 'targets_list', arguments: {} })
+    const tooLarge = await post(app, plain.body, { ...plain.headers, 'content-length': large })
+    expect(tooLarge.status).toBe(413)
   })
 })
 
@@ -662,6 +705,36 @@ describe('/mcp tools', () => {
     expect(['PERMISSION_DENIED', 'NOT_FOUNDATION', 'FOUND'].some(isExistenceRefusal)).toBe(false)
   })
 
+  it('a rate limit of the engine carries its wait in the tool error (REST has Retry-After)', async () => {
+    const limited = (retryAfterSeconds?: number) => async () => {
+      throw Object.assign(new Error('busy'), {
+        code: 'RATE_LIMITED',
+        ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
+      })
+    }
+    const { app } = world({
+      bindings: { targets_list: limited(2.2), target_get: limited() },
+    })
+    const refusal = async (name: string, args: Json) => {
+      const call = modern('tools/call', { name, arguments: args })
+      const result = (await rpc(await post(app, call.body, call.headers)))['result'] as Json
+      expect(result['isError']).toBe(true)
+      const text = (result['content'] as { text: string }[])[0]?.text ?? ''
+      expect(text).toMatch(/^Refused: RATE_LIMITED\./)
+      return JSON.parse(text.split('\n')[1] ?? '') as Json
+    }
+    // The wait is rounded up to whole seconds, as the Retry-After header is.
+    expect(await refusal('targets_list', {})).toMatchObject({
+      code: 'RATE_LIMITED',
+      retryable: true,
+      details: { retryAfterSeconds: 3 },
+    })
+    // Without a known wait the refusal is still RATE_LIMITED, with no details.
+    const unknown = await refusal('target_get', { target: newId('tgt', NOW) })
+    expect(unknown['code']).toBe('RATE_LIMITED')
+    expect(unknown['details']).toBeUndefined()
+  })
+
   it('an unexpected failure is INTERNAL without any of its text', async () => {
     const { app, lines } = world()
     const call = modern('tools/call', {
@@ -712,6 +785,45 @@ describe('/mcp tools', () => {
     expect(res.headers.get('content-type')).toBe('application/json')
     const result = (await rpc(res))['result'] as Json
     expect(result['structuredContent']).toEqual({ items: [], nextCursor: null })
+  })
+
+  it('an escaped result still validates against the output schema the server advertises', async () => {
+    // Escaping makes one invisible character up to eight (`\u{200B}`): a name at its
+    // maxLength would break a validating client if the output schema kept that bound.
+    const hidden = String.fromCodePoint(0x200b).repeat(63)
+    const { app } = world({
+      bindings: {
+        schema_search: async () => ({
+          items: [
+            {
+              kind: 'table',
+              schema: 'public',
+              name: hidden,
+              signature: null,
+              parent: null,
+              key: ['public', hidden],
+            },
+          ],
+          nextCursor: null,
+        }),
+      },
+    })
+    const call = modern('tools/call', {
+      name: 'schema_search',
+      arguments: { target: TARGET, q: 'x' },
+    })
+    const result = (await rpc(await post(app, call.body, call.headers)))['result'] as Json
+    const structured = result['structuredContent'] as { items: { name: string }[] }
+    expect(structured.items[0]?.name).toBe('\\u{200B}'.repeat(63))
+    const list = modern('tools/list')
+    const tools = (await rpc(await post(app, list.body, list.headers)))['result'] as {
+      tools: { name: string; inputSchema: Json; outputSchema: Json }[]
+    }
+    const tool = tools.tools.find((t) => t.name === 'schema_search')
+    const verdict = new AjvJsonSchemaValidator().getValidator(tool?.outputSchema ?? {})(structured)
+    expect(verdict, JSON.stringify(verdict)).toMatchObject({ valid: true })
+    // Inputs keep their bounds: only what the server sends is relaxed.
+    expect(JSON.stringify(tool?.inputSchema)).toContain('"maxLength":128')
   })
 })
 
@@ -802,6 +914,63 @@ describe('/mcp resources', () => {
     const listed = (await rpc(await post(app, templates.body, templates.headers)))['result'] as Json
     expect(listed['resourceTemplates']).toEqual([])
   })
+
+  it('answers every not-found read no earlier than the existence floor: unknown, concealed or no such guide (§30)', async () => {
+    const outside = newId('tgt', NOW + 2)
+    const { app } = world({
+      target: async (_caller, id) => {
+        throw Object.assign(new Error('nope'), {
+          code: id === outside ? 'TARGET_NOT_IN_GRANT' : 'TARGET_NOT_FOUND',
+        })
+      },
+    })
+    for (const uri of [
+      `exponetdb://targets/${newId('tgt', NOW + 1)}/summary`,
+      `exponetdb://targets/${outside}/summary`,
+      'exponetdb://guides/nope',
+      'file:///etc/passwd',
+    ]) {
+      const req = modern('resources/read', { uri })
+      let started = performance.now()
+      const modernError = errorOf(
+        await rpc(await post(app, req.body, { ...req.headers, 'mcp-name': uri })),
+      )
+      expect(performance.now() - started, uri).toBeGreaterThanOrEqual(EXISTENCE_FLOOR_MS)
+      expect(modernError.code, uri).toBe(-32602)
+      started = performance.now()
+      const legacyError = errorOf(await rpc(await post(app, legacy('resources/read', { uri }))))
+      expect(performance.now() - started, uri).toBeGreaterThanOrEqual(EXISTENCE_FLOOR_MS)
+      expect(legacyError.code, uri).toBe(-32002)
+    }
+  })
+
+  it('answers a failure of ExponetDB on a read as -32603 without any text, a refusal of the caller as -32602', async () => {
+    const uri = `exponetdb://targets/${TARGET}/summary`
+    for (const code of ['INTERNAL', 'CONTROL_PLANE_DEGRADED']) {
+      const { app } = world({
+        target: async () => {
+          throw Object.assign(new Error(SECRET_TEXT), { code })
+        },
+      })
+      const req = modern('resources/read', { uri })
+      const res = await post(app, req.body, { ...req.headers, 'mcp-name': uri })
+      const error = errorOf(await rpc(res.clone()))
+      expect(error, code).toEqual({ code: -32603, message: 'Internal error.' })
+      expect(await res.text(), code).not.toContain('hunter2')
+      const legacyError = errorOf(await rpc(await post(app, legacy('resources/read', { uri }))))
+      expect(legacyError, code).toEqual({ code: -32603, message: 'Internal error.' })
+    }
+    const { app } = world({
+      target: async () => {
+        throw Object.assign(new Error('no'), { code: 'PERMISSION_DENIED' })
+      },
+    })
+    const req = modern('resources/read', { uri })
+    const denied = errorOf(
+      await rpc(await post(app, req.body, { ...req.headers, 'mcp-name': uri })),
+    )
+    expect(denied).toMatchObject({ code: -32602, data: { code: 'PERMISSION_DENIED' } })
+  })
 })
 
 describe('public JSON Schemas', () => {
@@ -844,6 +1013,38 @@ describe('/mcp limits, headers and records', () => {
     // Reads are another class and still pass.
     const read = modern('tools/call', { name: 'targets_list', arguments: {} })
     expect((await post(app, read.body, read.headers)).status).toBe(200)
+  })
+
+  it('ends a request past its deadline with 504 and a text true for a read and for an operation', async () => {
+    let canceled = false
+    const { app } = world({
+      limits: { requestTimeoutMs: 150 },
+      bindings: {
+        targets_list: (_application, _caller, _input, ctx) =>
+          new Promise<never>((_resolve, reject) =>
+            ctx.signal.addEventListener(
+              'abort',
+              () => {
+                canceled = true
+                reject(new Error('canceled'))
+              },
+              { once: true },
+            ),
+          ),
+      },
+    })
+    const call = modern('tools/call', { name: 'targets_list', arguments: {} }, 9)
+    const res = await post(app, call.body, call.headers)
+    expect(res.status).toBe(504)
+    const body = await rpc(res)
+    expect(body['id']).toBe(9)
+    const error = errorOf(body)
+    expect(error.code).toBe(-32603)
+    // A read ends with the request; only an operation that was already accepted goes on.
+    expect(error.message).toContain('A read ends with it')
+    expect(error.message).toContain('an operation that was already accepted continues')
+    expect(error.message).toContain('operation_get')
+    expect(canceled).toBe(true)
   })
 
   it('sets the response headers of every answer and no cookie', async () => {

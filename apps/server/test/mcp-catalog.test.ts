@@ -49,27 +49,28 @@ const SHAPES: Record<string, { scopes: Scope[]; tiers: Tier[] }> = {
 // returns one); the data reader's list gained sql_query, sql_explain and sql_cancel
 // when the data-read path was served (Phase 8). Re-pinned in Phase 9: wire schemas
 // are single-typed (`anyOf` instead of `type` arrays) and a recursive JSON value names
-// its six types, the portability findings of Inspector 2.10.1 `--strict`.
+// its six types, the portability findings of Inspector 2.10.1 `--strict`. Re-pinned
+// after the Wave 7 review: output maxLength relaxed: escaping can lengthen a value.
 const PINNED: Record<string, { tools: number; digest: string }> = {
   'baseline, nonprod': {
     tools: 12,
-    digest: 'sha256:4ec0e7e737fa865fd7de914594dc571b2bdbe700ba5848ec7f5c3dc2e77ea22e',
+    digest: 'sha256:459040f9b24342f70070890d7f1b70696930b82f3bb1171ec2ad859b6832cbf4',
   },
   'every read, nonprod': {
     tools: 16,
-    digest: 'sha256:a9615de14f5073692d4c0f19802718be8fd44210266d03f7b791b349b7d24805',
+    digest: 'sha256:c10abdfd832c8fe905ee970350890ad533cdf0169c948eba9d773bb1f786b368',
   },
   'agent, nonprod': {
     tools: 22,
-    digest: 'sha256:e54db0d67d469d28ecce1f3ea55ff0e3ea8f0e7db428a59160da41be709fb7f1',
+    digest: 'sha256:6b79719e2c1d396feffef90a14f7aacae190ccf8588157079245b550fa6c713d',
   },
   'agent, both tiers': {
     tools: 23,
-    digest: 'sha256:0a9c742454a4a4114a5b9c296c4de49680b72cec7828608108e28a03a70a78d1',
+    digest: 'sha256:af59711e7f1823cce90951eae5e4be1fbaf86b98dab863563697edf12f6ce8d7',
   },
   'data reader, nonprod': {
     tools: 19,
-    digest: 'sha256:4177c477f47fe5db8347f7ea16e1aa4b1618f3e815e50ed49e59a1f1b2134394',
+    digest: 'sha256:5303fa9aef31e027074c25a3754f53fe89d7b5afe18944bf2cb0002f4037c826',
   },
 }
 

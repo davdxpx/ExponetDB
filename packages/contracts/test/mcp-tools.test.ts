@@ -222,6 +222,15 @@ describe('MCP tool definitions on the wire', () => {
       expect(JSON.stringify(d.outputSchema), d.name).not.toMatch(/One of \d+ values/)
     }
   })
+
+  it('announce no maxLength in an output schema (escaping lengthens a value after validation), and keep it in inputs', () => {
+    for (const d of definitions) {
+      expect(keys(d.outputSchema), d.name).not.toContain('maxLength')
+    }
+    expect(definitions.some((d) => keys(d.inputSchema).includes('maxLength'))).toBe(true)
+    // minLength is unaffected by escaping and stays.
+    expect(definitions.some((d) => keys(d.outputSchema).includes('minLength'))).toBe(true)
+  })
 })
 
 describe('the Claude Code allow-list in its guide (order §35.2 item 8)', () => {

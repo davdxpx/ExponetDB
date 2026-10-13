@@ -21,18 +21,31 @@ const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
 const num = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined)
 
-/** Characters that change what a reader sees without being seen themselves. */
+/**
+ * Characters that change what a reader sees without being seen themselves:
+ * control, bidi and format characters, line and paragraph separators, and the
+ * invisible fillers (soft hyphen, Hangul and Khmer fillers, Mongolian
+ * separators, variation selectors).
+ */
 function invisible(cp: number): boolean {
   return (
     cp < 0x20 ||
     (cp >= 0x7f && cp <= 0x9f) ||
+    cp === 0x00ad ||
+    cp === 0x034f ||
     cp === 0x061c ||
+    (cp >= 0x115f && cp <= 0x1160) ||
+    (cp >= 0x17b4 && cp <= 0x17b5) ||
+    (cp >= 0x180b && cp <= 0x180f) ||
     (cp >= 0x200b && cp <= 0x200f) ||
-    (cp >= 0x202a && cp <= 0x202e) ||
-    (cp >= 0x2060 && cp <= 0x2069) ||
+    (cp >= 0x2028 && cp <= 0x202e) ||
+    (cp >= 0x2060 && cp <= 0x206f) ||
+    cp === 0x3164 ||
+    (cp >= 0xfe00 && cp <= 0xfe0f) ||
     cp === 0xfeff ||
-    (cp >= 0xe0000 && cp <= 0xe007f) ||
-    (cp >= 0xfe00 && cp <= 0xfe0f)
+    cp === 0xffa0 ||
+    (cp >= 0xfff0 && cp <= 0xfffb) ||
+    (cp >= 0xe0000 && cp <= 0xe0fff)
   )
 }
 
@@ -75,6 +88,11 @@ export function markedLine(line: string): { readonly nodes: Child[]; readonly ma
   }
   flush()
   return { nodes, marked }
+}
+
+/** A name from outside ExponetDB inside a fact: marked like the raw text, never plain. */
+function foreign(text: string): Child[] {
+  return markedLine(text).nodes
 }
 
 /** The statements of one file, verbatim, numbered; statement starts carry the server's facts. */
@@ -164,7 +182,7 @@ function migrationFacts(item: Json, analysis: Json | undefined): HTMLElement {
   return h(
     'section',
     { class: 'migration-facts' },
-    h('h4', {}, `${str(item['name']) ?? ''} (${str(item['migrationId']) ?? ''})`),
+    h('h4', {}, ...foreign(str(item['name']) ?? ''), ` (${str(item['migrationId']) ?? ''})`),
     pairs(
       [
         'Compatibility',
@@ -191,7 +209,11 @@ function migrationFacts(item: Json, analysis: Json | undefined): HTMLElement {
         'Drops',
         destructive.length === 0
           ? 'nothing'
-          : h('ul', {}, ...destructive.map((d) => h('li', { class: 'destructive' }, d))),
+          : h(
+              'ul',
+              {},
+              ...destructive.map((d) => h('li', { class: 'destructive' }, ...foreign(d))),
+            ),
       ],
       [
         'Table rewrites (estimate)',
@@ -204,7 +226,8 @@ function migrationFacts(item: Json, analysis: Json | undefined): HTMLElement {
                 h(
                   'li',
                   {},
-                  `${str(r['relation']) ?? ''}: ${num(r['rows']) === undefined ? 'unknown rows' : `${String(num(r['rows']))} rows`}, ${num(r['bytes']) === undefined ? 'unknown size' : `${String(num(r['bytes']))} bytes`}`,
+                  ...foreign(str(r['relation']) ?? ''),
+                  `: ${num(r['rows']) === undefined ? 'unknown rows' : `${String(num(r['rows']))} rows`}, ${num(r['bytes']) === undefined ? 'unknown size' : `${String(num(r['bytes']))} bytes`}`,
                 ),
               ),
             ),
@@ -266,7 +289,7 @@ export function reviewSection(review: Review): HTMLElement {
                   'span',
                   { class: 'client-name' },
                   ' (client ',
-                  h('q', {}, review.clientName),
+                  h('q', {}, ...foreign(review.clientName)),
                   ' ',
                   h('span', { class: 'badge warn' }, 'name not verified'),
                   ')',

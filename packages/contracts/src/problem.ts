@@ -96,7 +96,10 @@ function checkDetails(
     failure('invalid_problem_details', `Details do not match the schema of ${code}.`, { code }),
   )
   if (details === undefined) {
-    return def.details === undefined ? ok(undefined) : invalid
+    // Details are required when the schema has one, unless that schema accepts their absence.
+    return def.details === undefined || def.details.safeParse(undefined).success
+      ? ok(undefined)
+      : invalid
   }
   if (def.details === undefined) {
     return invalid

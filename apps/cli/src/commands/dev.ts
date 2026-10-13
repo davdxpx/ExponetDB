@@ -453,19 +453,29 @@ export const devCommands: readonly CommandSpec[] = [
         )
       await runningContainer(env, 'serve')
       const server = `http://localhost:${lab.port}`
-      const response = await env.fetch(`${server}/oauth/register`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          client_name: LAB_MCP_CLIENT.name,
-          software_id: 'exponetdb-lab',
-          application_type: 'native',
-          token_endpoint_auth_method: 'none',
-          grant_types: ['authorization_code', 'refresh_token'],
-          response_types: ['code'],
-          redirect_uris: [...LAB_MCP_CLIENT.redirectUris],
-        }),
-      })
+      const response = await env
+        .fetch(`${server}/oauth/register`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            client_name: LAB_MCP_CLIENT.name,
+            software_id: 'exponetdb-lab',
+            application_type: 'native',
+            token_endpoint_auth_method: 'none',
+            grant_types: ['authorization_code', 'refresh_token'],
+            response_types: ['code'],
+            redirect_uris: [...LAB_MCP_CLIENT.redirectUris],
+          }),
+          signal: AbortSignal.timeout(10_000),
+        })
+        .catch((error: unknown) => {
+          if (error instanceof Error && error.name === 'TimeoutError')
+            throw new CliError(
+              'lab_failed',
+              'The lab did not answer the registration within 10 seconds; see: exponetdb dev logs serve',
+            )
+          throw error
+        })
       const body = (await response.json().catch(() => ({}))) as { client_id?: unknown }
       if (response.status !== 201 || typeof body.client_id !== 'string')
         throw new CliError(

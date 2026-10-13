@@ -64,8 +64,10 @@ export function createCursorCodec(
       if (!sealed.startsWith(PREFIX)) return undefined
       const bytes = Buffer.from(sealed.slice(PREFIX.length), 'base64url')
       if (bytes.length < 12 + 16 + 1) return undefined
+      // Outside the try: a key that cannot be loaded is a failure (INTERNAL), not an unknown cursor.
+      const sealingKey = await key()
       try {
-        const decipher = createDecipheriv('aes-256-gcm', await key(), bytes.subarray(0, 12))
+        const decipher = createDecipheriv('aes-256-gcm', sealingKey, bytes.subarray(0, 12))
         decipher.setAAD(aad(binding))
         decipher.setAuthTag(bytes.subarray(bytes.length - 16))
         const plain = Buffer.concat([
