@@ -178,7 +178,15 @@
     },
     "diagnostics": {
       "path": "^packages/diagnostics/",
-      "allowed": ["registry", "postgres", "postgres/parser", "nodes", "control-store", "audit"]
+      "allowed": [
+        "registry",
+        "postgres",
+        "postgres/parser",
+        "nodes",
+        "control-store",
+        "audit",
+        "operations"
+      ]
     },
     "application": {
       "path": "^packages/application/",

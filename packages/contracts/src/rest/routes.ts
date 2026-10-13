@@ -1,11 +1,13 @@
 import * as z from 'zod'
 import type { ActionId } from '../actions.ts'
 import {
+  BreakGlassGrantIdSchema,
   ClusterIdSchema,
   CursorSchema,
   EndpointIdSchema,
   EnrollmentTokenIdSchema,
   EnvironmentIdSchema,
+  FindingIdSchema,
   GrantIdSchema,
   IdentityIdSchema,
   ImportReportIdSchema,
@@ -19,8 +21,10 @@ import {
   ProjectIdSchema,
   pageSchema,
   QueryIdSchema,
+  SavedQueryIdSchema,
   ServerIdSchema,
   SessionIdSchema,
+  Sha256DigestSchema,
   SlugSchema,
   StepUpIdSchema,
   TargetIdSchema,
@@ -71,7 +75,11 @@ import {
 import {
   BaselinePlanRequestSchema,
   BreakGlassActivateRequestSchema,
+  BreakGlassGrantListQuerySchema,
+  BreakGlassGrantListSchema,
+  BreakGlassGrantRecordSchema,
   BreakGlassGrantSchema,
+  BreakGlassReviewRequestSchema,
   BundleFileSchema,
   BundleIngestRequestSchema,
   BundleIngestResultSchema,
@@ -99,16 +107,19 @@ import {
   NodeObservationListSchema,
   NodeObservationQuerySchema,
   NodePlanRequestSchema,
+  RoleVerifierSubmissionSchema,
 } from './nodes.ts'
 import {
   AccessRoleSchema,
   ClusterBootstrapSqlSchema,
   ClusterConfirmRequestSchema,
+  ClusterDeclaredTierRequestSchema,
   ClusterRegisterRequestSchema,
   CredentialSubmissionSchema,
   CredentialViewSchema,
   DatabaseRegisterRequestSchema,
   DatabaseViewSchema,
+  DriftAcceptRequestSchema,
   EndpointRequestSchema,
   EndpointRetireRequestSchema,
   EndpointViewSchema,
@@ -126,6 +137,8 @@ import {
   AdvisorRunSchema,
   AuditChainSchema,
   AuditEventSchema,
+  AuditExportLineSchema,
+  AuditExportQuerySchema,
   BackupCatalogSchema,
   ClusterSchema,
   DriftCheckSchema,
@@ -133,7 +146,10 @@ import {
   EnvironmentSchema,
   ExplainRequestSchema,
   ExplainResultSchema,
+  FindingListQuerySchema,
   FindingSchema,
+  FleetFindingSchema,
+  FleetSchema,
   InstallationHealthSchema,
   InstallationSchema,
   LockGraphSchema,
@@ -152,9 +168,19 @@ import {
   ProductSchema,
   ProjectSchema,
   QueryCancelResultSchema,
+  QueryHistoryQuerySchema,
+  QueryHistorySchema,
   QueryRequestSchema,
   QueryResultSchema,
   QueryStatsSchema,
+  RawStatementQuerySchema,
+  RawStatementSchema,
+  SavedQueryCreateRequestSchema,
+  SavedQueryDeletedSchema,
+  SavedQueryListQuerySchema,
+  SavedQueryListSchema,
+  SavedQuerySchema,
+  SavedQueryUpdateRequestSchema,
   SchemaDiffRequestSchema,
   SchemaDiffSchema,
   SchemaFingerprintDocumentSchema,
@@ -164,6 +190,8 @@ import {
   SchemaOverviewSchema,
   ServerSchema,
   SessionListSchema,
+  SqlClassificationRequestSchema,
+  SqlClassificationSchema,
   TableStatsSchema,
   TargetHealthHistoryQuerySchema,
   TargetHealthHistorySchema,
@@ -177,7 +205,7 @@ import {
 export const REST_API_BASE_PATH = '/api/v1'
 export const REST_API_VERSION = 'v1'
 
-export type HttpMethod = 'get' | 'post' | 'delete'
+export type HttpMethod = 'get' | 'post' | 'put' | 'delete'
 
 /**
  * One REST route. A route can only name a registered action (`ActionId`), so
@@ -195,6 +223,12 @@ export interface RouteContract {
   readonly query?: z.ZodObject
   readonly body?: z.ZodType
   readonly response: { readonly status: 200 | 201 | 202; readonly schema: z.ZodType }
+  /**
+   * The response media type when it is not `application/json`. Only
+   * `application/x-ndjson` exists: `response.schema` then describes one line
+   * and the server sends the body as lines (audit export, audit.md §5.1).
+   */
+  readonly mediaType?: 'application/x-ndjson'
   /** Route-specific error codes in addition to the codes every route can return. */
   readonly errors: readonly ErrorCode[]
   /**
@@ -207,6 +241,13 @@ export interface RouteContract {
 
 /** The body limit of a route that names none (64 KiB). */
 export const DEFAULT_BODY_LIMIT_BYTES = 64 * 1024
+
+/**
+ * The body limit of a saved query's create and update (Wave 8): a SQL text
+ * of 65,536 characters may take up to four UTF-8 bytes each, plus JSON
+ * escaping, the name and the envelope.
+ */
+export const SAVED_QUERY_BODY_LIMIT_BYTES = 320 * 1024
 
 /** Codes every authenticated route can return. */
 export const COMMON_ROUTE_ERRORS: readonly ErrorCode[] = [
@@ -263,6 +304,29 @@ export const ROUTES = [
     pathParams: noParams,
     response: { status: 200, schema: InstallationHealthSchema },
     errors: [],
+  },
+  {
+    operationId: 'getFleet',
+    method: 'get',
+    path: '/fleet',
+    summary:
+      'Fleet overview (Wave 8): targets by tier and health, open findings by severity, operations that run, need attention or await approval; only what the caller may see, each count with source, time and whether it is a lower bound.',
+    action: 'fleet.get',
+    pathParams: noParams,
+    response: { status: 200, schema: FleetSchema },
+    errors: [],
+  },
+  {
+    operationId: 'listFindings',
+    method: 'get',
+    path: '/findings',
+    summary:
+      'Findings across the targets the caller may read with diagnostics.read, newest first (Wave 8); each carries its target id and path.',
+    action: 'finding.list',
+    pathParams: noParams,
+    query: FindingListQuerySchema.extend(page(200, 50)),
+    response: { status: 200, schema: pageSchema(FleetFindingSchema) },
+    errors: TARGET_ERRORS,
   },
   {
     operationId: 'listProducts',
@@ -514,6 +578,80 @@ export const ROUTES = [
     response: { status: 200, schema: QueryCancelResultSchema },
     errors: [...LIVE_TARGET_ERRORS, 'NOT_FOUND'],
   },
+  // Wave 8 (order §9, endpoints 6 and 7): the caller's own data reads and saved queries.
+  // A static segment under /queries: `history` is no qry_ id (cancel is POST .../{queryId}/cancel).
+  {
+    operationId: 'listQueryHistory',
+    method: 'get',
+    path: '/targets/{target}/queries/history',
+    summary:
+      "Your own data reads on a target, newest first, from the audit's data.read events: the redacted statement as the audit holds it (at most 256 characters), digest, rows, truncation, duration and outcome (Wave 8).",
+    action: 'query.history.list',
+    pathParams: targetParams,
+    query: QueryHistoryQuerySchema,
+    response: { status: 200, schema: QueryHistorySchema },
+    errors: TARGET_ERRORS,
+  },
+  {
+    operationId: 'listSavedQueries',
+    method: 'get',
+    path: '/saved-queries',
+    summary:
+      'The saved queries you may read: your own, and the project queries of the scopes where you may read data; optionally only those of one target and its project (Wave 8).',
+    action: 'saved_query.list',
+    pathParams: noParams,
+    query: SavedQueryListQuerySchema,
+    response: { status: 200, schema: SavedQueryListSchema },
+    errors: TARGET_ERRORS,
+  },
+  {
+    operationId: 'createSavedQuery',
+    method: 'post',
+    path: '/saved-queries',
+    summary:
+      'Save a query in a project or on a target; nothing runs. The audit records the digest of the text, never the text or the name (Wave 8).',
+    action: 'saved_query.create',
+    pathParams: noParams,
+    body: SavedQueryCreateRequestSchema,
+    response: { status: 201, schema: SavedQuerySchema },
+    errors: [...TARGET_ERRORS, 'NOT_FOUND'],
+    maxBodyBytes: SAVED_QUERY_BODY_LIMIT_BYTES,
+  },
+  {
+    operationId: 'getSavedQuery',
+    method: 'get',
+    path: '/saved-queries/{savedQueryId}',
+    summary:
+      'One saved query you may read; any other answers NOT_FOUND, whether it exists or not (Wave 8).',
+    action: 'saved_query.get',
+    pathParams: z.strictObject({ savedQueryId: SavedQueryIdSchema }),
+    response: { status: 200, schema: SavedQuerySchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'updateSavedQuery',
+    method: 'put',
+    path: '/saved-queries/{savedQueryId}',
+    summary:
+      'Replace the name, text and visibility of one of your saved queries at the revision you read; a stale revision answers CONFLICT, a query of someone else NOT_FOUND or PERMISSION_DENIED (Wave 8).',
+    action: 'saved_query.update',
+    pathParams: z.strictObject({ savedQueryId: SavedQueryIdSchema }),
+    body: SavedQueryUpdateRequestSchema,
+    response: { status: 200, schema: SavedQuerySchema },
+    errors: ['NOT_FOUND', 'CONFLICT'],
+    maxBodyBytes: SAVED_QUERY_BODY_LIMIT_BYTES,
+  },
+  {
+    operationId: 'deleteSavedQuery',
+    method: 'delete',
+    path: '/saved-queries/{savedQueryId}',
+    summary:
+      'Delete one of your saved queries; a query of someone else answers NOT_FOUND or PERMISSION_DENIED (Wave 8).',
+    action: 'saved_query.delete',
+    pathParams: z.strictObject({ savedQueryId: SavedQueryIdSchema }),
+    response: { status: 200, schema: SavedQueryDeletedSchema },
+    errors: ['NOT_FOUND'],
+  },
   {
     operationId: 'lintMigrations',
     method: 'post',
@@ -674,6 +812,18 @@ export const ROUTES = [
     errors: [...LIVE_TARGET_ERRORS, 'CAPABILITY_UNAVAILABLE'],
   },
   {
+    operationId: 'getRawStatement',
+    method: 'get',
+    path: '/statements/{digest}/raw',
+    summary:
+      'The text of one statement, read live from the target at request time and checked against its digest, with secrets removed (Wave 8, owner decision S2). Web App only, human, re-authenticated within 15 minutes, audited; never stored.',
+    action: 'statement.raw.get',
+    pathParams: z.strictObject({ digest: Sha256DigestSchema }),
+    query: RawStatementQuerySchema,
+    response: { status: 200, schema: RawStatementSchema },
+    errors: [...LIVE_TARGET_ERRORS, 'STATEMENT_NOT_AVAILABLE', 'REAUTH_REQUIRED'],
+  },
+  {
     operationId: 'getTableStats',
     method: 'get',
     path: '/targets/{target}/table-stats',
@@ -821,6 +971,20 @@ export const ROUTES = [
     errors: [],
   },
   {
+    operationId: 'classifySql',
+    method: 'post',
+    path: '/sql/classifications',
+    summary:
+      'Classify submitted SQL statement by statement with the parser (Wave 8): position, node kind, classes and whether the read-only data path would admit it. Touches no target, executes nothing, never echoes the text.',
+    action: 'sql.classify',
+    pathParams: noParams,
+    body: SqlClassificationRequestSchema,
+    response: { status: 200, schema: SqlClassificationSchema },
+    errors: [],
+    // 64 KiB of SQL, escaped as JSON (at most six bytes per character), plus the envelope.
+    maxBodyBytes: 512 * 1024,
+  },
+  {
     operationId: 'getAuditChain',
     method: 'get',
     path: '/audit-events/chain',
@@ -830,6 +994,19 @@ export const ROUTES = [
     pathParams: noParams,
     response: { status: 200, schema: AuditChainSchema },
     errors: [],
+  },
+  {
+    operationId: 'exportAuditEvents',
+    method: 'get',
+    path: '/audit-events/export',
+    summary:
+      'Export the stored audit events verbatim as NDJSON for offline ac1 verification (Wave 8, owner decision 2026-10-13): a header line, then at most 10,000 events by ascending seq with a cursor. Owners and admins in the Web App, re-authenticated within 300 s; the events are full content (personal data per OD-8); the export is audited as audit.export.',
+    action: 'audit.export',
+    pathParams: noParams,
+    query: AuditExportQuerySchema,
+    response: { status: 200, schema: AuditExportLineSchema },
+    mediaType: 'application/x-ndjson',
+    errors: ['REAUTH_REQUIRED', 'VALIDATION_FAILED'],
   },
   // ----- Wave 3A: the current identity, access management, plans and approvals -----
   {
@@ -1486,6 +1663,18 @@ export const REGISTRY_ROUTES = [
     ],
   },
   {
+    operationId: 'planClusterDeclaredTier',
+    method: 'post',
+    path: '/clusters/{clusterId}/declared-tier',
+    summary:
+      "Plan the declaration of a cluster's intended tier (OD-22); needs registry.manage:prod whichever value, applied through plan.apply.",
+    action: 'registry.cluster.declare_tier.plan',
+    pathParams: clusterParams,
+    body: ClusterDeclaredTierRequestSchema,
+    response: planned,
+    errors: PLAN_ERRORS,
+  },
+  {
     operationId: 'getClusterBootstrapSql',
     method: 'get',
     path: '/clusters/{clusterId}/bootstrap-sql',
@@ -1637,6 +1826,19 @@ export const REGISTRY_ROUTES = [
     response: planned,
     errors: [...PLAN_ERRORS, ...TARGET_ERRORS],
   },
+  // Wave 8 (order §9): drift acceptance; applied through `POST /plans/{id}/apply`.
+  {
+    operationId: 'planDriftAcceptance',
+    method: 'post',
+    path: '/findings/{finding}/accept',
+    summary:
+      "Plan a drift acceptance (drift.accept) from an open drift finding: the target's current complete schema becomes its baseline and the open drift findings of the target are resolved as accepted; no DDL. The plan binds the target identity, its baseline, its open drift findings and the fingerprint it will record.",
+    action: 'drift.accept.plan',
+    pathParams: z.strictObject({ finding: FindingIdSchema }),
+    body: DriftAcceptRequestSchema,
+    response: planned,
+    errors: [...PLAN_ERRORS, ...LIVE_TARGET_ERRORS, 'VALIDATION_FAILED'],
+  },
 ] as const satisfies readonly RouteContract[]
 
 // ----- Wave 5: node enrollment, revocation and decommissioning (control-plane.md §7) -----
@@ -1782,6 +1984,28 @@ export const NODE_ROUTES = [
     response: planned,
     errors: [
       ...PLAN_ERRORS,
+      'NODE_OFFLINE',
+      'NODE_REVOKED',
+      'CAPABILITY_UNAVAILABLE',
+      'NODE_OBSERVATION_STALE',
+      'REGISTRY_CONFLICT',
+    ],
+  },
+  {
+    operationId: 'submitRoleVerifier',
+    method: 'post',
+    path: '/clusters/{clusterId}/role-verifiers',
+    summary:
+      "Write-only submission of a consumer role's SCRAM-SHA-256 verifier (Web App, re-authentication; never a password): sealed at once, never readable; plans postgres.roles.verifier.set, which plan.apply runs through the node.",
+    action: 'postgres.roles.verifier.plan',
+    pathParams: z.strictObject({ clusterId: ClusterIdSchema }),
+    body: RoleVerifierSubmissionSchema,
+    response: planned,
+    errors: [
+      'REAUTH_REQUIRED',
+      'CSRF_FAILED',
+      'NOT_FOUND',
+      'POLICY_DENIED',
       'NODE_OFFLINE',
       'NODE_REVOKED',
       'CAPABILITY_UNAVAILABLE',
@@ -1954,6 +2178,30 @@ export const MIGRATION_ROUTES = [
       'REAUTH_REQUIRED',
       'BREAK_GLASS_UNAVAILABLE',
     ],
+  },
+  {
+    operationId: 'listBreakGlassGrants',
+    method: 'get',
+    path: '/break-glass-grants',
+    summary:
+      'Break-glass grants, newest first, with their state derived from the stored grant and the database clock, the person who activated each, the reason as data and the post-incident review or null (Wave 8; owners and admins).',
+    action: 'breakglass.list',
+    pathParams: noParams,
+    query: BreakGlassGrantListQuerySchema,
+    response: { status: 200, schema: BreakGlassGrantListSchema },
+    errors: ['TARGET_NOT_FOUND'],
+  },
+  {
+    operationId: 'reviewBreakGlassGrant',
+    method: 'post',
+    path: '/break-glass-grants/{grant}/review',
+    summary:
+      'Record the post-incident review of a break-glass grant that is no longer active: once per grant, by an owner or admin re-authenticated within 300 s in the Web App; the note is permanent (Wave 8).',
+    action: 'breakglass.review',
+    pathParams: z.strictObject({ grant: BreakGlassGrantIdSchema }),
+    body: BreakGlassReviewRequestSchema,
+    response: { status: 200, schema: BreakGlassGrantRecordSchema },
+    errors: ['NOT_FOUND', 'CONFLICT', 'CSRF_FAILED', 'VALIDATION_FAILED', 'REAUTH_REQUIRED'],
   },
   {
     operationId: 'planImportAnalysis',

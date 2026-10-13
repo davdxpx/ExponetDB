@@ -10,10 +10,16 @@ export {
 export { clusterBootstrapSql } from './bootstrap.ts'
 export {
   type BreakGlassGrant,
+  type BreakGlassGrantRecord,
+  type BreakGlassGrantState,
+  type BreakGlassReviewOutcome,
   grantUsable,
+  listBreakGlassGrants,
   planBreakGlass,
   readBreakGlassGrant,
+  readBreakGlassRecord,
   recordBreakGlassGrant,
+  reviewBreakGlassGrant,
   useBreakGlassGrant,
 } from './breakglass.ts'
 export {
@@ -55,6 +61,7 @@ export {
 } from './kind-base.ts'
 export {
   ClusterConfirmKind,
+  ClusterDeclareTierKind,
   ClusterRegisterKind,
   DatabaseRegisterKind,
   EndpointAddKind,
@@ -71,6 +78,7 @@ export {
 export {
   observeClusterIdentity,
   planClusterConfirm,
+  planClusterDeclareTier,
   planClusterRegister,
   planDatabaseRegister,
   planEndpointAdd,
@@ -127,6 +135,7 @@ export {
   type PageRequest,
   type TargetFilter,
   type TargetVisibility,
+  targetVisibilitySql,
 } from './reads.ts'
 export type {
   ClusterRecord,

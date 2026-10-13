@@ -1,3 +1,4 @@
+import { appendAuditEvent } from '@exponetdb/audit'
 import {
   type AccessRole,
   isNodeCapabilityKey,
@@ -23,6 +24,7 @@ import {
   type OperationKind,
   type PlanRecord,
   readPlan,
+  WORKER_ACTOR,
 } from '@exponetdb/operations'
 import {
   Body,
@@ -55,6 +57,7 @@ import {
   presentedCertificate,
   tlsProofValid,
 } from './postgres-ca.ts'
+import { roleVerifierRecord, takeRoleVerifier } from './role-verifiers.ts'
 import {
   APPLY_JOB_SECONDS,
   awaitJob,
@@ -1898,6 +1901,242 @@ export async function rotationOwner(
   return { replaces: Body.expected(plan).textOrNull('activeCredentialId') }
 }
 
+// ----- postgres.roles.verifier.set (owner decision S3) -----
+
+/**
+ * Sets one consumer role's SCRAM verifier through the node
+ * ([credentials-and-roles.md §4](../../../exponetdb-docs/03-database-model/credentials-and-roles.md#4-consumer-roles-as-cluster-desired-state)):
+ * a fresh roles read with the plan's `rolesDigest`, then, in one
+ * transaction that holds the operation's lease, the stored verifier is
+ * taken (opened and cleared) and sent sealed for the node in one
+ * `set_password` step of `postgres.roles.apply@2`. The agent sets it with
+ * statement logging off and the verifier only as a session value
+ * (capabilities.md). Verification reads the roles again: the role must
+ * carry a SCRAM-SHA-256 verifier, and the apply job's signed statement must
+ * say the step committed. The verifier is never read back.
+ */
+export class RoleVerifierSetKind extends CapabilityKind {
+  readonly kind = 'postgres.roles.verifier.set' as const
+
+  protected override applyCapability(): NodeCapabilityKey {
+    return 'postgres.roles.apply@2'
+  }
+
+  /**
+   * The plan is bound to its stored verifier: still submitted for this
+   * cluster and role (a newer submission supersedes it), or already taken
+   * by this plan's own operation.
+   */
+  override async checkBindings(plan: PlanRecord): Promise<readonly ChangedBinding[]> {
+    const changed = await super.checkBindings(plan)
+    if (changed.length > 0) {
+      return changed
+    }
+    try {
+      const c = Body.content(plan)
+      const record = await roleVerifierRecord(this.d.store, c.text('verifierId'))
+      if (
+        record === undefined ||
+        record.clusterId !== c.text('clusterId') ||
+        record.roleName !== c.text('roleName')
+      ) {
+        return [{ binding: 'roleVerifier', actual: 'unknown' }]
+      }
+      if (record.state === 'submitted') {
+        return []
+      }
+      if (record.state === 'consumed' && record.operationId !== null) {
+        const { rows } = await this.d.store.query(
+          'nodes.kind.role_verifier.operation_plan',
+          'SELECT plan_id FROM operations.operations WHERE operation_id = $1',
+          [record.operationId],
+        )
+        if (rows[0]?.textOrNull('plan_id') === plan.planId) {
+          return []
+        }
+      }
+      return [{ binding: 'roleVerifier', expected: 'submitted', actual: record.state }]
+    } catch (error) {
+      if (error instanceof ContentInvalid) {
+        return [{ binding: 'content', actual: 'invalid' }]
+      }
+      throw error
+    }
+  }
+
+  private roleOf(result: JsonObject, roleName: string): JsonObject | undefined {
+    return list(result['roles'])
+      .map(obj)
+      .find((r) => r['name'] === roleName)
+  }
+
+  async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
+    const c = Body.content(ctx.plan)
+    const roleName = c.text('roleName')
+    const fresh = await this.freshBasis(
+      ctx,
+      'postgres.roles.inspect@2',
+      { cluster: this.cluster(c), expectSettings: [] },
+      (r) => str(r['rolesDigest']),
+    )
+    if ('outcome' in fresh) {
+      return fresh.outcome
+    }
+    const role = this.roleOf(fresh.result, roleName)
+    if (role === undefined || role['superuser'] !== false) {
+      return this.stale('host_state')
+    }
+    if (!isId('op', ctx.operationId)) {
+      return 'not_applied'
+    }
+    const operationId = ctx.operationId
+    let jobId: string | undefined
+    let stale: readonly ChangedBinding[] = []
+    try {
+      jobId = await this.d.store.transaction('nodes.kind.role_verifier.prepare', async (tx) => {
+        // Only the lease holder takes the verifier and creates the job, and
+        // only while what admitted the operation still holds.
+        if (ctx.signal.aborted || !(await leaseHeld(tx, operationId, ctx.leaseOwner))) {
+          return undefined
+        }
+        if (ctx.readmit !== undefined) {
+          stale = await ctx.readmit(tx)
+          if (stale.length > 0) {
+            return undefined
+          }
+        }
+        const verifierId = c.text('verifierId')
+        const clusterId = c.text('clusterId')
+        const plaintext = await takeRoleVerifier(tx, this.d.keyring, {
+          verifierId,
+          clusterId,
+          roleName,
+          operationId,
+        })
+        if (plaintext === undefined) {
+          stale = [{ binding: 'roleVerifier', expected: 'submitted' }]
+          return undefined
+        }
+        try {
+          const created = await createJob(tx, this.d.keyring, this.d.clock, this.d.installationId, {
+            nodeId: c.text('nodeId'),
+            operationId,
+            capability: 'postgres.roles.apply@2',
+            windowSeconds: APPLY_JOB_SECONDS,
+            args: (seal) => ({
+              cluster: this.cluster(c),
+              expectedRolesDigest: str(fresh.result['rolesDigest']) ?? '',
+              steps: [
+                {
+                  op: 'set_password',
+                  role: roleName,
+                  attributes: null,
+                  verifier: seal('verifier', plaintext),
+                  member: null,
+                  admin: null,
+                  inherit: null,
+                  set: null,
+                  database: null,
+                  setting: null,
+                  value: null,
+                },
+              ],
+            }),
+          })
+          // The audit names the role, the cluster, the verifier id and the
+          // operation; never the verifier.
+          await appendAuditEvent(
+            tx,
+            {
+              action: 'role_verifier.consumed',
+              phase: 'completed',
+              actor: { kind: 'system', identityId: null, label: WORKER_ACTOR.label },
+              subject: { clusterId: clusterId as never },
+              refs: { operationId, planId: ctx.plan.planId as never },
+              changes: { verifierId, roleName, jobId: created.jobId, state: 'consumed' },
+              result: { status: 'succeeded' },
+            },
+            { clock: this.d.clock },
+          )
+          return created.jobId
+        } finally {
+          plaintext.fill(0)
+        }
+      })
+    } catch (error) {
+      if (error instanceof NodeError) {
+        return { outcome: 'not_applied', errorCode: error.code }
+      }
+      throw error
+    }
+    if (stale.length > 0) {
+      return {
+        outcome: 'not_applied',
+        errorCode: 'PLAN_STALE',
+        detail: { changedBindings: stale.map((b) => b.binding) },
+      }
+    }
+    if (jobId === undefined) {
+      return 'unknown'
+    }
+    const end = await awaitJob(this.d, jobId, 'postgres.roles.apply@2', ctx.signal)
+    return this.applied(end, 'postgres.roles.apply@2')
+  }
+
+  /**
+   * Passed when a fresh roles read shows the role with a SCRAM-SHA-256
+   * verifier and the apply job's signed statement says its step committed
+   * (the agent checks the roles, sets the verifier and commits in one
+   * transaction). A role without one fails; a job without a statement of
+   * success proves nothing (error, needs attention).
+   */
+  async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
+    const c = Body.content(ctx.plan)
+    const own = await this.ownJob(ctx.operationId, 'postgres.roles.apply@2')
+    if (own === undefined) {
+      return 'error'
+    }
+    const read = await this.read(ctx, 'postgres.roles.inspect@2', {
+      cluster: this.cluster(c),
+      expectSettings: [],
+    })
+    if (!read.ok) {
+      return 'error'
+    }
+    const role = this.roleOf(read.result, c.text('roleName'))
+    if (role === undefined || role['password'] !== 'scram-sha-256') {
+      return 'failed'
+    }
+    return own.end?.end === 'succeeded' ? 'passed' : 'error'
+  }
+
+  /**
+   * After an apply job that settled without a decisive statement: a role
+   * that had no password before and has a SCRAM verifier now was set, one
+   * still without a password was not; anything else cannot be told apart
+   * on the host (the verifier is never read back) and stays unknown.
+   */
+  protected override async hostState(ctx: ExecutionContext) {
+    const c = Body.content(ctx.plan)
+    const read = await this.read(ctx, 'postgres.roles.inspect@2', {
+      cluster: this.cluster(c),
+      expectSettings: [],
+    })
+    if (!read.ok) {
+      return 'unknown' as const
+    }
+    const role = this.roleOf(read.result, c.text('roleName'))
+    const before = new Body(ctx.plan.body['analysis'], 'analysis').textOrNull('passwordBefore')
+    if (before === 'none' && role?.['password'] === 'scram-sha-256') {
+      return 'applied' as const
+    }
+    if (before === 'none' && role?.['password'] === 'none') {
+      return 'not_applied' as const
+    }
+    return 'unknown' as const
+  }
+}
+
 // ----- node.config.update (§9.8) -----
 
 function keySet(value: JsonValue | undefined): string[] {
@@ -2104,6 +2343,7 @@ export function capabilityKinds(deps: CapabilityKindDeps): OperationKind[] {
     new ExtensionsApplyKind(deps),
     new TlsRotateKind(deps),
     new CredentialRotateKind(deps),
+    new RoleVerifierSetKind(deps),
     new NodeConfigUpdateKind(deps),
   ]
 }

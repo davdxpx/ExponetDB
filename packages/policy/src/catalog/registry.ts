@@ -51,4 +51,40 @@ export const targetRegisterProdApproval: Rule = {
   },
 }
 
-export const REGISTRY_RULES: readonly Rule[] = [targetRegisterProdApproval]
+/**
+ * `drift.accept-prod` (Wave 8): accepting drift on a production target
+ * turns an unreviewed change into the schema future plans bind to
+ * (drift-detection.md §5), so it needs a human approval and a fresh
+ * re-authentication. It reads the subject tier the planner resolved from
+ * the target; an unknown tier requires the same. The reason that
+ * security-relevant drift also needs is checked by the planner (a request
+ * without one is refused before a plan exists).
+ */
+export const driftAcceptProd: Rule = {
+  id: 'drift.accept-prod',
+  version: 1,
+  description:
+    'Accepting drift on a production target (its current schema becomes the expected one) needs a human approval and a fresh re-authentication.',
+  appliesTo: ['drift.accept'],
+  severity: 'require',
+  overridableByBreakGlass: false,
+  facts: [],
+  defaults: { approvals: 1, reauthWithinSeconds: 300 },
+  requirements: targetRegisterProdApproval.requirements,
+  evaluate({ request }) {
+    const tier = request.subject.tier
+    if (tier === 'nonprod') {
+      return { result: 'not_applicable', message: 'The target is not production.' }
+    }
+    if (tier === 'prod') {
+      return {
+        result: 'fail',
+        message: 'Drift on a production target is accepted only after a human approval.',
+        facts: { tier },
+      }
+    }
+    return { result: 'unknown', message: 'The tier of the target is not known.' }
+  },
+}
+
+export const REGISTRY_RULES: readonly Rule[] = [targetRegisterProdApproval, driftAcceptProd]

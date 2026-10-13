@@ -1,4 +1,5 @@
 import { isIP } from 'node:net'
+import { appendAuditEvent } from '@exponetdb/audit'
 import {
   type AccessRole,
   actionDefinition,
@@ -24,6 +25,7 @@ import {
   type RegistryActor,
   type RegistryPolicyContext,
 } from '@exponetdb/registry'
+import type { Keyring } from '@exponetdb/secrets'
 import { NodeError } from './errors.ts'
 import { argsHashOf } from './jobs.ts'
 import {
@@ -39,6 +41,7 @@ import {
   type ObservationRecord,
 } from './observations.ts'
 import { bundleTrusts, postgresCa } from './postgres-ca.ts'
+import { storeRoleVerifier } from './role-verifiers.ts'
 import { SESSION_PARAMETERS } from './session-parameters.ts'
 
 /**
@@ -58,7 +61,11 @@ export interface CapabilityPlanContext {
   readonly egressAddresses?: readonly string[]
 }
 
-export type CapabilityKindName = NodePlanKind | 'credential.rotate' | 'node.config.update'
+export type CapabilityKindName =
+  | NodePlanKind
+  | 'credential.rotate'
+  | 'node.config.update'
+  | 'postgres.roles.verifier.set'
 
 /** The capability whose observation a plan binds (§9.3). */
 export const BASIS: Readonly<Record<CapabilityKindName, NodeCapabilityKey>> = {
@@ -71,6 +78,7 @@ export const BASIS: Readonly<Record<CapabilityKindName, NodeCapabilityKey>> = {
   'postgres.tls.rotate': 'postgres.tls.inspect@1',
   'credential.rotate': 'postgres.roles.inspect@2',
   'node.config.update': 'agent.diagnostics@2',
+  'postgres.roles.verifier.set': 'postgres.roles.inspect@2',
 }
 
 /**
@@ -92,6 +100,7 @@ export const RUNS: Readonly<Record<CapabilityKindName, readonly NodeCapabilityKe
   'postgres.tls.rotate': ['postgres.tls.inspect@1', 'postgres.tls.plan@1', 'postgres.tls.rotate@1'],
   'credential.rotate': ['postgres.roles.inspect@2', 'postgres.roles.apply@2'],
   'node.config.update': ['agent.diagnostics@2', 'config.update@1'],
+  'postgres.roles.verifier.set': ['postgres.roles.inspect@2', 'postgres.roles.apply@2'],
 }
 
 /** The arguments of a kind's basis capability (its observation is looked up by their hash). */
@@ -108,6 +117,7 @@ export function basisArgs(
       return { cluster, database: change['database'] ?? null }
     case 'postgres.roles.apply':
     case 'credential.rotate':
+    case 'postgres.roles.verifier.set':
       return { cluster, expectSettings: [] }
     default:
       return { cluster }
@@ -143,6 +153,7 @@ export function basisDigest(kind: CapabilityKindName, result: JsonObject): strin
     case 'postgres.hba.apply':
       return text(result['fileDigest'])
     case 'postgres.roles.apply':
+    case 'postgres.roles.verifier.set':
       return text(result['rolesDigest'])
     case 'postgres.extensions.apply':
       return text(result['extensionsDigest'])
@@ -844,6 +855,110 @@ export async function planCredentialRotation(
       },
     },
   })
+}
+
+/**
+ * `postgres.roles.verifier.set` (owner decision S3; credentials-and-roles.md
+ * §4): the person's SCRAM verifier for one consumer role is sealed and
+ * stored write-only, and the plan binds the cluster's mapping, the roles
+ * as the node last reported them (`rolesDigest`, at most 10 minutes old)
+ * and the stored verifier's id, never the verifier: the plan, its hash, its
+ * analysis and the audit name the role and the verifier id only.
+ */
+export async function planRoleVerifierSet(
+  tx: Tx,
+  context: CapabilityPlanContext & {
+    readonly keyring: Keyring
+    readonly requestId?: string
+  },
+  actor: RegistryActor,
+  clusterId: string,
+  submission: { readonly role: string; readonly verifier: string },
+): Promise<PlanRecord> {
+  const kind = 'postgres.roles.verifier.set' as const
+  const roleName = submission.role
+  if (OWN_ROLE.test(roleName) || roleName.startsWith('pg_')) {
+    // ExponetDB's own roles: credential.rotate and the credential submission.
+    throw new NodeError('VALIDATION_FAILED')
+  }
+  const { mapping, node } = await mapCluster(tx, clusterId, context.policy.clock.nowMs())
+  requireCapabilities(node, [BASIS[kind], ...RUNS[kind]])
+  const observation = await basisObservation(tx, kind, mapping, {})
+  const row = list(observation.result['roles']).find(
+    (r) => isJsonObject(r) && r['name'] === roleName,
+  )
+  if (!isJsonObject(row)) {
+    throw new NodeError('REGISTRY_CONFLICT', { reason: 'role_missing' })
+  }
+  if (row['superuser'] !== false) {
+    // The agent never changes a superuser role (capabilities.md).
+    throw new NodeError('REGISTRY_CONFLICT', { reason: 'role_superuser' })
+  }
+  const digest = basisDigest(kind, observation.result)
+  const stored = await storeRoleVerifier(
+    tx,
+    { keyring: context.keyring, clock: context.policy.clock },
+    { clusterId, roleName, verifier: submission.verifier, submittedBy: actor.identityId },
+  )
+  const plan = await storePlan(tx, context, actor, {
+    kind,
+    tier: mapping.tier,
+    subject: { clusterId, nodeId: mapping.nodeId, serverId: mapping.serverId },
+    content: {
+      ...mappingContent(mapping),
+      roleName,
+      verifierId: stored.verifierId,
+      basis: { capability: BASIS[kind], jobId: observation.jobId, digest },
+    },
+    expectedState: {
+      nodeId: mapping.nodeId,
+      localName: mapping.localName,
+      systemIdentifier: mapping.systemIdentifier,
+      basisDigest: digest,
+      verifierState: 'submitted',
+    },
+    analysis: {
+      roleName,
+      verifierId: stored.verifierId,
+      login: row['login'] === true,
+      passwordBefore: typeof row['password'] === 'string' ? row['password'] : null,
+      supersededVerifierIds: [...stored.superseded],
+      tier: mapping.tier,
+      basis: {
+        capability: BASIS[kind],
+        observedAt: observation.observedAt.toISOString(),
+        source: 'agent_reported',
+      },
+    },
+  })
+  await appendAuditEvent(
+    tx,
+    {
+      action: 'role_verifier.submitted',
+      phase: 'completed',
+      actor: {
+        kind: 'human',
+        identityId: actor.identityId,
+        label: actor.label as never,
+        reauthAt: actor.reauthAt,
+      },
+      client: { clientId: actor.clientId ?? null, kind: actor.client ?? 'web' },
+      subject: { clusterId: clusterId as never },
+      refs: { planId: plan.planId as never },
+      changes: {
+        verifierId: stored.verifierId,
+        roleName,
+        state: 'submitted',
+        supersededVerifierIds: [...stored.superseded],
+      },
+      result: { status: 'succeeded' },
+      ...(context.requestId === undefined
+        ? {}
+        : { request: { requestId: context.requestId as never } }),
+    },
+    { clock: context.policy.clock },
+  )
+  return plan
 }
 
 // ----- node.config.update (§9.8) -----

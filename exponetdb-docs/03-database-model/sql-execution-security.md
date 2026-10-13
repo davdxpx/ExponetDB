@@ -289,6 +289,160 @@ values.
 - **Not implemented in Wave 7:** the cost preflight of §2.1 item 5, the
   5-minute human timeout, `data.read_sensitive`, `EXPLAIN` with `BUFFERS`.
 
+### 2.5 Statement classification for the Web App (Wave 8)
+
+**[DECIDED]** (Wave 8 order §9; owner decision 2026-10-13 that the SQL editor
+shows live what a statement is) `POST /api/v1/sql/classifications`
+(`classifySql`, action `sql.classify`, permission `migrations.read` at the
+installation; REST only, no MCP tool). **[OBSERVED]**
+(`packages/diagnostics/src/sql-classification.ts`,
+`packages/application/src/sql-classification.ts`) It is a **pure parse**:
+no target is touched, nothing is executed, stored, logged or audited (a
+read that writes nothing needs no audit event), and **the text is never
+echoed**: the answer holds positions, the parser's node kind, a label from a
+closed vocabulary, classes and reason codes, never a piece of the text. It
+adds **no SQL safety rule**: every class maps a fact that `analyzeMigrationSql`
+([`analysis.md`](../04-migrations/analysis.md)) or `admitRead` (§2.1) already
+derives, and a statement the analysis has no rule for gets no class it
+cannot show (C-30).
+
+- **Input.** `{ sql, postgresMajor? }`: at most 64 KiB of UTF-8 bytes
+  (counted in bytes, not characters; the route's body limit of 512 KiB only
+  leaves room for JSON escaping) and at most 200 statements; above either
+  the answer is `422 VALIDATION_FAILED` naming the path `/sql` and the
+  bound (`too_big`, `too_many_statements`). `postgresMajor` (16, 17 or 18;
+  17 when absent) selects the grammar and is echoed with the parser build
+  (`grammar`). The text is parsed as submitted; line ends are not
+  normalized.
+- **Positions.** `line` is 1-based and lines end at U+000A only (U+000D
+  stays a character of its line). `column` is 1-based and counts Unicode
+  **code points** from the line start (a character outside the Basic
+  Multilingual Plane counts once). `offset` is the 0-based **UTF-16 code unit** index into the
+  submitted text (JavaScript string indices, CodeMirror's unit), so an
+  editor can mark `[start.offset, end.offset)` directly. `start` is the
+  statement's first token (leading white space and comments excluded);
+  `end` is exclusive, just after its last character, without the terminating
+  semicolon and without trailing white space. A syntax error carries the
+  parser's error position in the same three numbers (`parseError.position`;
+  null when the parser names none), as a `200` result with
+  `status: "parse_error"`, never a `500`. Text with comments only is
+  `status: "empty"`. A NUL character is a parse error without a position.
+  **[OBSERVED]** (2026-10-13) The parser reports its error position in
+  characters, not bytes; `errorPosition` in `parse.ts` converted it as if it were
+  UTF-8 bytes, which was wrong after any non-ASCII character. Fixed with a
+  regression test (`packages/postgres/test/migration-analysis.test.ts`); the
+  position of `QUERY_PARSE_ERROR` and of the migration lint now agree with the text.
+- **Kind.** `kind` is the parser's node kind (`IndexStmt`, `DropStmt`);
+  `label` the analysis' readable name (`CREATE INDEX CONCURRENTLY`).
+- **Classes** (several can apply; a statement can also have none):
+
+  | Class | Derived from |
+  |---|---|
+  | `read_only` | `admitRead` admits the statement on its own (the same admission as the data path: one statement, the closed node list, allowlisted functions and operators, qualified relations). |
+  | `write` | `admitRead` refuses it as `QUERY_NOT_READ_ONLY` (data-modifying CTE, locking clause, `SELECT INTO`, a non-read statement class), **or** its node kind is none of `SELECT`, `SHOW`, `EXPLAIN` (any other statement may change data, schema or session state: DML, DDL, `SET LOCAL`, `VACUUM`, `LOCK`, `NOTIFY`, `DO`, `CALL`). |
+  | `destructive` | the analysis flags the compatibility class `destructive` (`DROP`, `DELETE`, `TRUNCATE`, `DROP COLUMN`, partition detach, ...). |
+  | `rewrite` | the analysis' `rewrite` is not `none`: `table` (`VACUUM FULL`, `CLUSTER`, `SET TABLESPACE`), `possible` (`ALTER COLUMN ... TYPE`) or `unknown` (included conservatively) |
+  | `non_transactional` | the analysis' `autocommitOnly`: `CREATE INDEX CONCURRENTLY`, `VACUUM`, `REINDEX CONCURRENTLY`, `DROP INDEX CONCURRENTLY`, ... |
+  | `security` | grants and revokes (`GRANT`, `REVOKE`, `GRANT role`), `ALTER DEFAULT PRIVILEGES`, policies (`CREATE`/`ALTER`/`DROP POLICY`), row security enable, disable and force, `ALTER <object> OWNER TO` (a table excepted, see below), a `SECURITY DEFINER` function, and a statement the migration engine refuses as role management (`CREATE`/`ALTER`/`DROP ROLE`, `REASSIGN OWNED`). |
+
+  A `SELECT` the read path refuses for an unsupported construct (an
+  unqualified relation, a function outside the allowlist) is **neither
+  `read_only` nor `write`**: its effects are not derivable from the text, and
+  `procedural: true` says so (a top-level `SELECT`, a `DO` block or a `CALL`
+  runs code the analysis cannot see). The absence of a class is never a
+  statement of safety. **[OBSERVED]** Limits of the analysis' facts (not
+  repaired here, no new rule): `ALTER TABLE ... OWNER TO` is not exposed as a
+  fact and carries no `security` class; `DROP POLICY` is not `destructive`.
+- **Read-only path.** Per statement, `readOnlyPath` and `readOnlyRefusal`
+  (the admission's error code and reason code, never the construct) say
+  whether `admitRead` would admit it **on its own**; the top-level
+  `readOnlyPath` says whether the **whole text** is exactly one admitted
+  statement (`multiple_statements` otherwise). This is the parser admission
+  only: the data path also needs the permission, the tier, the target's
+  setting, the relation kinds on the target and the reader role (§2.1), so
+  `readOnlyPath: true` is never a promise that a read will run.
+- **Migration refusal.** `migrationRefusal` is the reason code under which the
+  migration engine refuses the statement in `up.sql` (`role_management`,
+  `transaction_control`, ...), or null.
+- **Tests.** `packages/diagnostics/test/sql-classification.test.ts` (kinds and
+  classes, multi-line and non-ASCII positions, dollar quotes and comments,
+  parse errors, the statement bound, no text in the answer),
+  `packages/contracts/test/wave8-sql.test.ts` (the byte bound), and
+  `apps/server/test/http-wave8-sql.int.test.ts` (permission, 422s, no
+  audit event, nothing in the logs, a marker from the SQL never in a
+  response).
+
+### 2.6 Query history (Wave 8)
+
+**[DECIDED]** (Wave 8, order §9, endpoint 6; `QueryUseCases.history` in
+`packages/application/src/queries.ts`; `GET /targets/{target}/queries/history`,
+action `query.history.list`, REST only, no MCP tool)
+
+- **Source.** The history is the audit: the `data.read` events of §2.4,
+  read back member by member (`source: audit`). Nothing else is stored for
+  it and nothing is reconstructed. The statement is the redacted one the
+  audit holds (constants replaced, at most its first 256 characters); the
+  text the caller sent is never stored, so it cannot be returned. **[OBSERVED]**
+  (`apps/server/test/http-saved-queries.int.test.ts`) a refused write with a
+  literal e-mail address comes back with the address replaced.
+- **Own reads only.** The audit's actor is the caller's identity, whichever
+  client read in its name: a person also sees the reads an MCP client made
+  for them (`client: mcp`, `callerClass: agent`), a service account only its
+  own. Another identity's reads on the same target never appear; there is
+  no "all reads" view here (that is the audit search, `audit.read`).
+- **Authorization.** Like a data read of the target: `data.read` covering it
+  and, for a delegated caller, `data.read:<tier>` and a grant whose
+  restrictions include it; an invisible target is `TARGET_NOT_FOUND`.
+- **Fields the audit does not hold** are `null`: `rows` and `truncated` for
+  an EXPLAIN and for a failed or refused read, `durationMs` for a failed or
+  refused read. A refusal before the lane (bounds, no worker) was never a
+  read and is not in the history (§2.4).
+- **Paging.** Keyset by audit sequence, newest first, `limit` 1 to 200
+  (default 50); served by the partial index `audit_events_data_read_actor`
+  (`actor_id, seq` where `action = 'data.read'`, bundle `saved-queries`).
+
+### 2.7 Saved queries (Wave 8)
+
+**[DECIDED]** (Wave 8, order §9, endpoint 7; `packages/application/src/saved-queries.ts`;
+Control Store bundle `01M4V1SQ7K2D9QHRZ5XW0BN3EA_saved-queries`)
+
+- **A saved query is data.** A name (1 to 120 characters, one line, no
+  control or bidirectional formatting characters) and a SQL text (1 to
+  65,536 characters), both untrusted. Saving never runs, admits or
+  classifies the text; running it later is an ordinary data read with every
+  check of §2.1 to §2.4. The Web App may open it in the editor; it never
+  runs on opening (as for `?sql=` deep links, information-architecture.md §4).
+- **Scope and visibility.** Each belongs to one scope that never changes:
+  one target, or one project. `personal` is seen by its owner only;
+  `project` by everyone who may read data in its scope. Reading data in the
+  scope means, for a target, `data.read` on it at its tier (decided by the
+  central engine like a data read); for a project, `data.read` through a
+  binding that covers the **project itself** (global, its product or the
+  project; a binding on one environment or one target of it does not),
+  decided like a production subject of the project, so a delegated caller
+  also needs `data.read:prod` and an unrestricted grant. A query the caller
+  may not see answers `NOT_FOUND`, exactly like an id that does not exist;
+  lists hold only what the caller may see, without a count of the rest.
+- **Changes.** Creating, changing and deleting are a person's own records,
+  made in the Web App (self-service actions with the session scope `api`,
+  so `data.read` scopes stay read scopes, G3B); the person must also read
+  data in the scope. Only the owner changes or deletes, and a change names
+  the revision it is based on (a stale one is `CONFLICT`). A visible
+  `project` query of someone else is `PERMISSION_DENIED` for a change. The
+  Control Store enforces the same: `serve` holds no `UPDATE` or `DELETE` on
+  the table and changes rows only through `savedq.update_saved_query` and
+  `savedq.delete_saved_query`, which name the owner (and the revision) and
+  refuse anything else (`EXQ02`, `EXQ03`); a guard keeps the id, owner and
+  scope and raises the revision by exactly one (`EXQ01`).
+- **Audit.** `saved_query.create`, `saved_query.update` and
+  `saved_query.delete` in the transaction of the change, with the id, the
+  scope, the visibility, the revision and the **digest** of the redacted
+  text (the construction of §2.4, on the target's major, PostgreSQL 17
+  for a project scope), never the text and never the name.
+- **Not in Wave 8:** running a saved query by its id (the client sends the
+  text as any read), sharing beyond the scope, folders, and a cap on the
+  number of saved queries per person (an open point of the G8 record).
+
 ## 3. EXPLAIN
 
 **[DECIDED]**

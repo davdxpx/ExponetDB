@@ -283,7 +283,7 @@ export async function getServer(q: Queryable, serverId: string): Promise<ServerR
 }
 
 const CLUSTER_COLUMNS = `c.cluster_id, c.server_id, c.management_mode, c.display_name, c.state, c.system_identifier,
-  c.server_version_num, c.ca_bundle, ${ts('c.confirmed_at')}, ct.derived_tier`
+  c.server_version_num, c.ca_bundle, ${ts('c.confirmed_at')}, ct.derived_tier, c.declared_tier`
 const CLUSTER_FROM = `registry.clusters c JOIN registry.cluster_tiers ct ON ct.cluster_id = c.cluster_id`
 
 export async function listClusters(
@@ -537,6 +537,36 @@ const TARGET_FROM = `registry.targets t
   LEFT JOIN registry.clusters c ON c.cluster_id = d.cluster_id
   LEFT JOIN registry.servers s ON s.server_id = c.server_id`
 
+/**
+ * The one rule for which targets a caller may read, as SQL over the aliases
+ * `t` (registry.targets) and `j` (registry.projects): the scopes of its
+ * grants, then the restrictions of a delegation (a target list, tiers). The
+ * target list and every Wave 8 aggregate over targets (the fleet overview,
+ * the cross-target findings) use this clause, so none of them has a rule of
+ * its own. Seven parameters starting at `first`.
+ */
+export function targetVisibilitySql(
+  visibility: TargetVisibility,
+  first: number,
+): { readonly sql: string; readonly params: unknown[] } {
+  const p = (n: number) => `$${first + n}`
+  return {
+    sql: `(${p(0)}::boolean OR j.product_id = ANY(${p(1)}::text[]) OR t.project_id = ANY(${p(2)}::text[])
+             OR t.environment_id = ANY(${p(3)}::text[]) OR t.target_id = ANY(${p(4)}::text[]))
+        AND (${p(5)}::text[] IS NULL OR t.target_id = ANY(${p(5)}::text[]))
+        AND t.tier = ANY(${p(6)}::text[])`,
+    params: [
+      visibility.all,
+      [...visibility.productIds],
+      [...visibility.projectIds],
+      [...visibility.environmentIds],
+      [...visibility.targetIds],
+      visibility.onlyTargetIds === undefined ? null : [...visibility.onlyTargetIds],
+      [...(visibility.onlyTiers ?? ['prod', 'nonprod'])],
+    ],
+  }
+}
+
 export async function listTargets(
   q: Queryable,
   visibility: TargetVisibility,
@@ -544,13 +574,11 @@ export async function listTargets(
   request: PageRequest,
 ): Promise<Page<TargetRecord>> {
   const limit = limitOf(request)
+  const visible = targetVisibilitySql(visibility, 1)
   const { rows } = await q.query(
     'registry.targets.list',
     `SELECT ${TARGET_COLUMNS} FROM ${TARGET_FROM}
-      WHERE ($1::boolean OR j.product_id = ANY($2::text[]) OR t.project_id = ANY($3::text[])
-             OR t.environment_id = ANY($4::text[]) OR t.target_id = ANY($5::text[]))
-        AND ($6::text[] IS NULL OR t.target_id = ANY($6::text[]))
-        AND t.tier = ANY($7::text[])
+      WHERE ${visible.sql}
         AND ($8::text IS NULL OR pr.slug = $8)
         AND ($9::text IS NULL OR j.slug = $9)
         AND ($10::text IS NULL OR e.slug = $10)
@@ -559,13 +587,7 @@ export async function listTargets(
         AND ($13::text IS NULL OR t.target_id > $13)
       ORDER BY t.target_id LIMIT $14`,
     [
-      visibility.all,
-      [...visibility.productIds],
-      [...visibility.projectIds],
-      [...visibility.environmentIds],
-      [...visibility.targetIds],
-      visibility.onlyTargetIds === undefined ? null : [...visibility.onlyTargetIds],
-      [...(visibility.onlyTiers ?? ['prod', 'nonprod'])],
+      ...visible.params,
       filter.product ?? null,
       filter.project ?? null,
       filter.environment ?? null,

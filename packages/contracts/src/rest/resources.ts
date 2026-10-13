@@ -1,10 +1,12 @@
 import * as z from 'zod'
 import { ActionClassSchema, ActionIdSchema } from '../actions.ts'
+import { StoredAuditEventSchema } from '../audit.ts'
 import {
   ApplyChecksumSchema,
   AuditEventIdSchema,
   BackupIdSchema,
   ClusterIdSchema,
+  CursorSchema,
   EndpointIdSchema,
   EnrollmentTokenIdSchema,
   EnvironmentIdSchema,
@@ -15,6 +17,7 @@ import {
   JobIdSchema,
   JsonValueSchema,
   LedgerStateHashSchema,
+  limitSchema,
   MigrationIdSchema,
   NodeIdSchema,
   OAuthClientIdSchema,
@@ -26,6 +29,7 @@ import {
   ProductIdSchema,
   ProjectIdSchema,
   QueryIdSchema,
+  SavedQueryIdSchema,
   SchemaFingerprintSchema,
   ServerIdSchema,
   SessionIdSchema,
@@ -34,6 +38,7 @@ import {
   SnapshotIdSchema,
   TargetIdSchema,
   TargetPathSchema,
+  TargetRefSchema,
   TierSchema,
   TimestampSchema,
   untrustedJson,
@@ -728,6 +733,170 @@ export const ExplainResultSchema = z
   })
   .meta({ id: 'ExplainResult' })
 
+// ----- query history and saved queries (Wave 8, order §9) -----
+
+const ERROR_CODE_TEXT = /^[A-Z][A-Z0-9_]{1,63}$/
+
+/**
+ * Wave 8: one of the caller's own data reads, as the audit's `data.read`
+ * event holds it. Nothing here is read from anywhere else, and nothing the
+ * audit does not hold is reconstructed: such a field is null.
+ */
+export const QueryHistoryEntrySchema = z
+  .object({
+    queryId: QueryIdSchema,
+    kind: z.enum(['query', 'explain']),
+    occurredAt: TimestampSchema.meta({
+      description: 'When the audit recorded the read (after it ended).',
+    }),
+    statement: untrustedText(
+      256,
+      'The redacted statement exactly as the audit holds it: constants replaced by placeholders, at most its first 256 characters; never the text the caller sent.',
+    ),
+    statementDigest: Sha256DigestSchema.meta({
+      description: 'sha256 of the whole redacted statement before the 256-character cut.',
+    }),
+    rows: z.int().min(0).nullable().meta({
+      description:
+        'Rows returned. Null for an EXPLAIN and for a read that failed or was refused: the audit records no row count for them.',
+    }),
+    truncated: z.boolean().nullable().meta({
+      description:
+        'Whether a cap cut the result. Null for an EXPLAIN and for a read that failed or was refused: the audit records it only for a completed query.',
+    }),
+    durationMs: z.int().min(0).nullable().meta({
+      description:
+        'Duration on the target. Null for a read that failed or was refused: the audit records no duration for it.',
+    }),
+    outcome: z.enum(['succeeded', 'failed']),
+    errorCode: z.string().regex(ERROR_CODE_TEXT).nullable().meta({
+      description: 'The error code of a failed or refused read; null when it succeeded.',
+    }),
+    client: z.enum(['web', 'rest', 'mcp', 'cli', 'ci']).meta({
+      description:
+        'The client the read came through (an MCP client reads in the name of the person who delegated to it).',
+    }),
+    callerClass: z.enum(['human', 'agent']),
+  })
+  .meta({ id: 'QueryHistoryEntry' })
+
+export const QueryHistoryQuerySchema = z.strictObject({
+  limit: limitSchema(200, 50).optional(),
+  cursor: CursorSchema.optional(),
+})
+
+export const QueryHistorySchema = z
+  .object({
+    items: z.array(QueryHistoryEntrySchema),
+    nextCursor: CursorSchema.nullable().meta({
+      description: 'Cursor for the next (older) page, null on the last page.',
+    }),
+    source: z.literal('audit').meta({
+      description: 'Every entry is a data.read event of the audit chain, newest first.',
+    }),
+  })
+  .meta({ id: 'QueryHistory' })
+
+/** A saved query's name: untrusted, short, one line, no control or bidirectional formatting characters. */
+export const SavedQueryNameSchema = untrustedText(
+  120,
+  'A name for the saved query; untrusted text, never interpreted.',
+)
+  .min(1)
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are refused on purpose
+  .regex(/^[^\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]+$/)
+
+export const SavedQuerySqlSchema = untrustedText(
+  65_536,
+  'The SQL text as written (at most 65,536 characters). Saving never runs, parses or classifies it; running it is an ordinary data read.',
+).min(1)
+
+export const SavedQueryVisibilitySchema = z.enum(['personal', 'project']).meta({
+  id: 'SavedQueryVisibility',
+  description:
+    'personal: only its owner sees it. project: everyone who may read data in its scope sees it; only the owner changes or deletes it.',
+})
+
+export const SavedQueryScopeRequestSchema = z
+  .discriminatedUnion('kind', [
+    z.strictObject({ kind: z.literal('project'), projectId: ProjectIdSchema }),
+    z.strictObject({
+      kind: z.literal('target'),
+      target: TargetRefSchema,
+    }),
+  ])
+  .meta({ id: 'SavedQueryScopeRequest' })
+
+export const SavedQueryScopeSchema = z
+  .discriminatedUnion('kind', [
+    z.object({ kind: z.literal('project'), projectId: ProjectIdSchema }),
+    z.object({ kind: z.literal('target'), targetId: TargetIdSchema }),
+  ])
+  .meta({ id: 'SavedQueryScope' })
+
+export const SavedQueryCreateRequestSchema = z
+  .strictObject({
+    name: SavedQueryNameSchema,
+    sql: SavedQuerySqlSchema,
+    visibility: SavedQueryVisibilitySchema.default('personal'),
+    scope: SavedQueryScopeRequestSchema.meta({
+      description: 'Where the query belongs: one project or one target. It never changes.',
+    }),
+  })
+  .meta({ id: 'SavedQueryCreateRequest' })
+
+export const SavedQueryUpdateRequestSchema = z
+  .strictObject({
+    name: SavedQueryNameSchema,
+    sql: SavedQuerySqlSchema,
+    visibility: SavedQueryVisibilitySchema,
+    revision: z.int().min(1).meta({
+      description: 'The revision the change is based on; another one answers CONFLICT.',
+    }),
+  })
+  .meta({ id: 'SavedQueryUpdateRequest' })
+
+export const SavedQuerySchema = z
+  .object({
+    id: SavedQueryIdSchema,
+    name: SavedQueryNameSchema,
+    sql: SavedQuerySqlSchema,
+    sqlDigest: Sha256DigestSchema.meta({
+      description:
+        'sha256 of the SQL text with its constants redacted (the construction of the data-read audit); the audit of a change records this digest only.',
+    }),
+    visibility: SavedQueryVisibilitySchema,
+    scope: SavedQueryScopeSchema,
+    ownerIdentityId: IdentityIdSchema,
+    ownedByCaller: z.boolean(),
+    revision: z.int().min(1),
+    createdAt: TimestampSchema,
+    updatedAt: TimestampSchema,
+  })
+  .meta({ id: 'SavedQuery' })
+
+export const SavedQueryListQuerySchema = z.strictObject({
+  target: TargetRefSchema.optional().meta({
+    description:
+      'Only the saved queries of this target and of its project (a target as tgt_ id or path).',
+  }),
+  limit: limitSchema(200, 50).optional(),
+  cursor: CursorSchema.optional(),
+})
+
+export const SavedQueryListSchema = z
+  .object({
+    items: z.array(SavedQuerySchema),
+    nextCursor: CursorSchema.nullable().meta({
+      description: 'Cursor for the next page, null on the last page.',
+    }),
+  })
+  .meta({ id: 'SavedQueryList' })
+
+export const SavedQueryDeletedSchema = z
+  .object({ id: SavedQueryIdSchema, deleted: z.literal(true) })
+  .meta({ id: 'SavedQueryDeleted' })
+
 // ----- migrations -----
 
 export const VerificationStatusSchema = z
@@ -1332,6 +1501,10 @@ export const ClusterSchema = z
       .nullable()
       .meta({ description: 'Pinned system_identifier.' }),
     derivedTier: TierSchema.nullable(),
+    declaredTier: TierSchema.nullable().optional().meta({
+      description:
+        'The intended tier a person declared with production authority (OD-22); null while undeclared, which counts as prod for registry authority.',
+    }),
     health: HealthSummarySchema.nullable(),
   })
   .meta({ id: 'Cluster' })
@@ -1773,6 +1946,304 @@ export const AuditChainSchema = z
   })
   .meta({ id: 'AuditChain' })
 
+// ----- Wave 8: the audit export (owner decision 2026-10-13; audit.md §5.1) -----
+
+/** The most events one export response carries (audit.md §5.1). */
+export const AUDIT_EXPORT_MAX_EVENTS = 10_000
+export const AUDIT_EXPORT_FORMAT = 'exponetdb.audit-export/v1'
+
+/**
+ * A bound of the export range: an RFC 3339 UTC time (`occurredAt`) or a
+ * decimal sequence number (`seq`). `from` is inclusive and `to` exclusive for
+ * both kinds.
+ */
+export const AuditExportBoundSchema = z
+  .string()
+  .regex(/^(?:[1-9][0-9]{0,15}|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z)$/)
+  .meta({
+    description:
+      'An RFC 3339 UTC time ending in Z, or a decimal sequence number. `from` is inclusive, `to` is exclusive.',
+  })
+
+export const AuditExportQuerySchema = z.strictObject({
+  from: AuditExportBoundSchema.optional(),
+  to: AuditExportBoundSchema.optional(),
+  cursor: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,512}$/)
+    .optional()
+    .meta({ description: 'The `nextCursor` of the previous response; the range is the same.' }),
+  limit: z
+    .int()
+    .min(1)
+    .max(AUDIT_EXPORT_MAX_EVENTS)
+    .optional()
+    .meta({
+      description: `Events per response, at most ${AUDIT_EXPORT_MAX_EVENTS} (the default).`,
+    }),
+})
+
+export const AuditExportHeaderSchema = z
+  .object({
+    type: z.literal('header'),
+    format: z.literal(AUDIT_EXPORT_FORMAT),
+    chain: z.literal('ac1'),
+    from: z.string().nullable(),
+    to: z.string().nullable(),
+    firstSeq: z.int().min(1).nullable(),
+    lastSeq: z.int().min(1).nullable(),
+    count: z.int().min(0).max(AUDIT_EXPORT_MAX_EVENTS),
+    more: z.boolean(),
+    nextCursor: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,512}$/)
+      .nullable(),
+    checkpoints: z
+      .array(z.object({ seq: z.int().min(1), hash: AuditHashSchema, createdAt: TimestampSchema }))
+      .max(50)
+      .meta({
+        description:
+          'Checkpoints of the chain with `firstSeq - 1 <= seq <= lastSeq`, oldest first (at most 50): anchors a verifier compares with the event hashes of the page.',
+      }),
+    generatedAt: TimestampSchema,
+  })
+  .meta({ id: 'AuditExportHeader' })
+
+export const AuditExportEventLineSchema = z
+  .object({
+    type: z.literal('event'),
+    seq: z.int().min(1),
+    prevHash: z.string(),
+    hash: AuditHashSchema,
+    event: StoredAuditEventSchema.meta({
+      description:
+        'The stored event verbatim: its JCS (RFC 8785) text is exactly what ac1 hashed, so a verifier canonicalizes this member to check `hash`. Contains full event content (personal data per OD-8).',
+    }),
+  })
+  .meta({ id: 'AuditExportEventLine' })
+
+/** One line of the NDJSON response: the header first, then the events by ascending `seq`. */
+export const AuditExportLineSchema = z
+  .discriminatedUnion('type', [AuditExportHeaderSchema, AuditExportEventLineSchema])
+  .meta({ id: 'AuditExportLine' })
+
+export type AuditExportHeader = z.infer<typeof AuditExportHeaderSchema>
+
+// ----- Wave 8: live statement classification (additive, REST only) -----
+
+/** The input bounds of `POST /sql/classifications` (sql-execution-security.md §2.5). */
+export const SQL_CLASSIFY_MAX_BYTES = 64 * 1024
+export const SQL_CLASSIFY_MAX_STATEMENTS = 200
+
+/** The classes a statement can carry (sql-execution-security.md §2.5); several can apply. */
+export const SQL_CLASSES = [
+  'read_only',
+  'write',
+  'destructive',
+  'rewrite',
+  'non_transactional',
+  'security',
+] as const
+
+export const SqlClassificationRequestSchema = z
+  .strictObject({
+    sql: z
+      .string()
+      .min(1)
+      .max(SQL_CLASSIFY_MAX_BYTES)
+      .refine((v) => new TextEncoder().encode(v).length <= SQL_CLASSIFY_MAX_BYTES, {
+        message: 'At most 64 KiB (UTF-8 bytes).',
+      })
+      .meta({
+        untrusted: true,
+        description:
+          'The text to classify: at most 64 KiB (UTF-8 bytes) and 200 statements. Parsed on the server, never executed, never stored, never echoed.',
+      }),
+    postgresMajor: z
+      .union([z.literal(16), z.literal(17), z.literal(18)])
+      .optional()
+      .meta({
+        description:
+          'The PostgreSQL grammar to parse with (each major has its own); 17 when absent. Echoed in the answer.',
+      }),
+  })
+  .meta({ id: 'SqlClassificationRequest' })
+
+const SqlPositionSchema = z
+  .object({
+    line: z.int().min(1).meta({ description: '1-based; lines end at U+000A.' }),
+    column: z.int().min(1).meta({
+      description:
+        '1-based, counted in Unicode code points from the start of the line (a character outside the Basic Multilingual Plane counts once; U+000D counts as a character).',
+    }),
+    offset: z.int().min(0).meta({
+      description:
+        '0-based UTF-16 code unit offset into the submitted text, as JavaScript string indices and CodeMirror count.',
+    }),
+  })
+  .meta({ id: 'SqlPosition' })
+
+const SqlReadRefusalSchema = z
+  .object({
+    code: z.enum(['QUERY_NOT_READ_ONLY', 'QUERY_CONSTRUCT_UNSUPPORTED', 'QUERY_PARSE_ERROR']),
+    reason: z.string().regex(/^[a-z][a-z_]{0,31}$/),
+  })
+  .meta({
+    id: 'SqlReadRefusal',
+    description:
+      'Why the read-only data path would refuse it: the admission error code and its reason code, never the construct or any text of the statement.',
+  })
+
+export const SqlClassificationSchema = z
+  .object({
+    status: z.enum(['parsed', 'empty', 'parse_error']),
+    postgresMajor: z.union([z.literal(16), z.literal(17), z.literal(18)]),
+    grammar: z
+      .string()
+      .max(128)
+      .meta({ description: 'The parser build that produced the answer.' }),
+    bytes: z.int().min(0).meta({ description: 'UTF-8 bytes of the submitted text.' }),
+    statementCount: z.int().min(0).max(SQL_CLASSIFY_MAX_STATEMENTS),
+    statements: z
+      .array(
+        z.object({
+          index: z.int().min(0),
+          kind: z
+            .string()
+            .regex(/^[A-Z][A-Za-z0-9]{0,63}$/)
+            .meta({
+              description: "The parser's node kind, e.g. `IndexStmt`.",
+            }),
+          label: z
+            .string()
+            .regex(/^[A-Z][A-Z ]{0,63}$/)
+            .meta({
+              description:
+                'A readable name from a closed vocabulary, e.g. `CREATE INDEX CONCURRENTLY`.',
+            }),
+          start: SqlPositionSchema.meta({
+            description:
+              'Where the statement text begins (its first token; leading comments excluded).',
+          }),
+          end: SqlPositionSchema.meta({
+            description:
+              'Just after its last character: exclusive, without the terminating semicolon and without trailing white space.',
+          }),
+          classes: z.array(z.enum(SQL_CLASSES)).max(6),
+          procedural: z.boolean().meta({
+            description:
+              'A top-level SELECT, a DO block or a CALL: the effects of the code it runs are not derivable from the text.',
+          }),
+          readOnlyPath: z.boolean().meta({
+            description:
+              'True when the read-only data path would admit this statement on its own (`admitRead`).',
+          }),
+          readOnlyRefusal: SqlReadRefusalSchema.nullable(),
+          migrationRefusal: z
+            .string()
+            .regex(/^[a-z][a-z_]{0,31}$/)
+            .nullable()
+            .meta({
+              description:
+                'The reason code when the migration engine would refuse the statement in `up.sql` (transaction control, role management, ...); null otherwise.',
+            }),
+        }),
+      )
+      .max(SQL_CLASSIFY_MAX_STATEMENTS),
+    readOnlyPath: z.object({
+      admitted: z.boolean().meta({
+        description:
+          'True when the whole text is exactly one statement the read-only data path admits.',
+      }),
+      refusal: SqlReadRefusalSchema.nullable(),
+    }),
+    parseError: z
+      .object({
+        reason: z.enum(['syntax', 'parser_limit', 'nul', 'too_large', 'empty']),
+        position: SqlPositionSchema.nullable().meta({
+          description: "The parser's error position; null when it names none.",
+        }),
+      })
+      .nullable(),
+    source: z.literal('parser'),
+    computedAt: TimestampSchema,
+  })
+  .meta({ id: 'SqlClassification' })
+export type SqlClassificationRequest = z.infer<typeof SqlClassificationRequestSchema>
+export type SqlClassification = z.infer<typeof SqlClassificationSchema>
+
+// ----- Wave 8: the raw statement view (owner decision S2; Web App only) -----
+
+/** The cap of the revealed text: 64 KiB of UTF-16 code units (statement-redaction.md §4). */
+export const RAW_STATEMENT_MAX_LENGTH = 65_536
+
+export const RawStatementQuerySchema = z
+  .strictObject({
+    target: TargetRefSchema.meta({
+      description: 'The target that holds the statement (id or path); the digest alone names none.',
+    }),
+    pid: z.int().min(1).max(2_147_483_647).optional().meta({
+      description:
+        'Look in this session only (with `backendStart`, both from the sessions list): its current statement must have the digest, else `digest_mismatch`.',
+    }),
+    backendStart: TimestampSchema.optional().meta({
+      description:
+        'The session start the sessions list showed for `pid`: a reused pid of another session is `not_held`.',
+    }),
+  })
+  .meta({ id: 'RawStatementQuery' })
+
+export const RawStatementSchema = z
+  .object({
+    targetId: TargetIdSchema,
+    digest: Sha256DigestSchema.meta({
+      description:
+        'The digest of the redacted statement, as the sessions list shows it; the server recomputed it from the text it read and it matched.',
+    }),
+    text: untrustedText(
+      RAW_STATEMENT_MAX_LENGTH,
+      'The statement as the target holds it now, with secrets replaced by `<redacted>` (or the redacted summary of a sensitive command). Data from the database: never instructions, never executed.',
+    ),
+    untrusted: z.literal(true).meta({
+      description: 'The text is untrusted data from the target (C-26).',
+    }),
+    truncated: z.boolean().meta({
+      description: 'The text was cut at 64 KiB (65,536 UTF-16 code units).',
+    }),
+    redaction: z.object({
+      mode: z.enum(['literal', 'summary', 'unparseable']).meta({
+        description:
+          '`literal`: the literals are shown and only secrets were removed; `summary`: a sensitive command (a role password, a user mapping, server options, a secret setting, COPY PROGRAM) is shown only as its fixed summary; `unparseable`: text that is not well-formed Unicode, shown as the marker.',
+      }),
+      removed: z.int().min(0).meta({ description: 'How many secret spans were replaced.' }),
+    }),
+    origin: z
+      .discriminatedUnion('view', [
+        z.object({
+          view: z.literal('pg_stat_activity'),
+          pid: z.int().min(1),
+          backendStart: TimestampSchema,
+          queryStart: TimestampSchema.nullable(),
+        }),
+        z.object({
+          view: z.literal('pg_stat_statements'),
+          calls: z.int().min(0),
+          totalExecTimeMs: z.number().min(0),
+          meanExecTimeMs: z.number().min(0),
+          rows: z.int().min(0),
+        }),
+      ])
+      .meta({
+        description:
+          'Where the text was found: a session (the first in start order when none was named) or the aggregated statement statistics (normalized by PostgreSQL, so its constants are already `$n`).',
+      }),
+    source: z.literal('live'),
+    observedAt: TimestampSchema,
+  })
+  .meta({ id: 'RawStatement' })
+export type RawStatementQuery = z.infer<typeof RawStatementQuerySchema>
+export type RawStatement = z.infer<typeof RawStatementSchema>
+
 // ----- Wave 8: plan and operation reads (additive, REST only) -----
 
 /**
@@ -1800,6 +2271,137 @@ export type Environment = z.infer<typeof EnvironmentSchema>
 export type Project = z.infer<typeof ProjectSchema>
 export type TargetSummary = z.infer<typeof TargetSummarySchema>
 export type Target = z.infer<typeof TargetSchema>
+// ----- fleet overview and cross-target findings (Wave 8, order §9) -----
+
+/** What every count says about itself: where it was read, when, and whether it is exact. */
+const fleetCountMeta = {
+  source: ObservationSourceSchema,
+  observedAt: TimestampSchema.meta({
+    description: 'When the counts were read from the Control Store.',
+  }),
+  lowerBound: z.boolean().meta({
+    description:
+      'true when the count is a lower bound: something was capped or could not be read. The real number is at least the one shown.',
+  }),
+  lowerBoundReason: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]{0,63}$/)
+    .nullable()
+    .meta({ 'x-extensible-enum': ['scan_limit'] }),
+}
+
+const FleetSeverityCountsSchema = z.object({
+  info: z.int().min(0),
+  warning: z.int().min(0),
+  critical: z.int().min(0),
+})
+
+const fleetUnavailable = z.object({
+  available: z.literal(false),
+  reason: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]{0,63}$/)
+    .meta({
+      'x-extensible-enum': ['permission_denied'],
+      description:
+        'Why the part is not shown: the caller lacks the permission for it. The rest of the overview is still served; the part is never shown as zero.',
+    }),
+})
+
+export const FleetTargetsSchema = z
+  .object({
+    total: z.int().min(0).meta({
+      description: 'Targets the caller may list that are not decommissioned.',
+    }),
+    decommissioned: z.int().min(0).meta({
+      description: 'Decommissioned targets the caller may list; in no other count here.',
+    }),
+    byTier: z.object({ prod: z.int().min(0), nonprod: z.int().min(0) }),
+    byHealth: z
+      .object({
+        healthy: z.int().min(0),
+        degraded: z.int().min(0),
+        unhealthy: z.int().min(0),
+        unreachable: z.int().min(0),
+        unknown: z.int().min(0).meta({
+          description:
+            'No sample yet, a sample older than the sampler allows, or a state that is unknown. Never counted healthy.',
+        }),
+        suspended: z.int().min(0),
+      })
+      .meta({
+        description: 'The latest sampled state of each target, read as the target list reads it.',
+      }),
+    bySource: z
+      .object({
+        sampled: z.int().min(0),
+        cached: z.int().min(0),
+        inferred: z.int().min(0),
+      })
+      .meta({
+        description:
+          'How many targets each kind of source stands behind: sampled (a fresh sample), cached (a stale one), inferred (no sample yet).',
+      }),
+    oldestSampleAt: TimestampSchema.nullable().meta({
+      description:
+        'The oldest health sample behind the health counts; null when no counted target was ever sampled.',
+    }),
+    ...fleetCountMeta,
+  })
+  .meta({ id: 'FleetTargets' })
+
+export const FleetFindingsSchema = z
+  .discriminatedUnion('available', [
+    z.object({
+      available: z.literal(true),
+      open: z.int().min(0),
+      bySeverity: FleetSeverityCountsSchema,
+      ...fleetCountMeta,
+    }),
+    fleetUnavailable,
+  ])
+  .meta({ id: 'FleetFindings' })
+
+export const FleetOperationsSchema = z
+  .discriminatedUnion('available', [
+    z.object({
+      available: z.literal(true),
+      running: z.int().min(0),
+      needs_attention: z.int().min(0),
+      awaiting_approval: z.int().min(0),
+      ...fleetCountMeta,
+    }),
+    fleetUnavailable,
+  ])
+  .meta({ id: 'FleetOperations' })
+
+export const FleetSchema = z
+  .object({
+    targets: FleetTargetsSchema,
+    findings: FleetFindingsSchema,
+    operations: FleetOperationsSchema,
+    asOf: TimestampSchema,
+  })
+  .meta({ id: 'Fleet' })
+
+export const FindingListQuerySchema = z.strictObject({
+  severity: z.enum(['info', 'warning', 'critical']).optional(),
+  state: z.enum(['open', 'resolved', 'all']).optional().meta({
+    description: 'Default `open`: the open findings; `all` lists open and resolved.',
+  }),
+  kind: z.enum(['drift', 'health']).optional(),
+  target: TargetRefSchema.optional().meta({
+    description: 'One target, by `tgt_` id or URL-decoded path.',
+  }),
+})
+
+export const FleetFindingSchema = FindingSchema.extend({
+  targetId: TargetIdSchema,
+  targetPath: TargetPathSchema,
+}).meta({ id: 'FleetFinding' })
+
+export type Fleet = z.infer<typeof FleetSchema>
+export type FleetFinding = z.infer<typeof FleetFindingSchema>
 export type Server = z.infer<typeof ServerSchema>
 export type Node = z.infer<typeof NodeSchema>
 export type NodeStatus = z.infer<typeof NodeStatusSchema>
@@ -1826,6 +2428,12 @@ export type QueryResult = z.infer<typeof QueryResultSchema>
 export type ExplainRequest = z.input<typeof ExplainRequestSchema>
 export type ExplainResult = z.infer<typeof ExplainResultSchema>
 export type QueryCancelResult = z.infer<typeof QueryCancelResultSchema>
+export type QueryHistoryEntry = z.infer<typeof QueryHistoryEntrySchema>
+export type QueryHistory = z.infer<typeof QueryHistorySchema>
+export type SavedQuery = z.infer<typeof SavedQuerySchema>
+export type SavedQueryList = z.infer<typeof SavedQueryListSchema>
+export type SavedQueryCreateRequest = z.output<typeof SavedQueryCreateRequestSchema>
+export type SavedQueryUpdateRequest = z.output<typeof SavedQueryUpdateRequestSchema>
 export type VisibilityReport = z.infer<typeof VisibilityReportSchema>
 export type PlanView = z.infer<typeof PlanViewSchema>
 export type PlanRead = z.infer<typeof PlanReadSchema>

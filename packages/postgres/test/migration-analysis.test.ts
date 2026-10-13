@@ -86,6 +86,16 @@ describe('splitting by the parser, never by `;` or comment markers', () => {
     expect(bad).toMatchObject({ ok: false, failure: { kind: 'syntax' }, line: 2 })
   })
 
+  it('maps the parser error position (0-based, in characters) to a string index, also after non-ASCII text', () => {
+    const text = "SELECT 'äöü😀' FROM ;"
+    const bad = analyzeMigrationSql(17, text)
+    expect(bad.ok).toBe(false)
+    if (bad.ok || bad.failure.kind !== 'syntax') throw new Error('expected a syntax error')
+    // The error is at the semicolon.
+    expect(bad.failure.position).toBe(text.indexOf(';'))
+    expect(bad).toMatchObject({ line: 1, column: [...text].indexOf(';') + 1 })
+  })
+
   it('parses a valid 3 MiB migration while the data-read budget stays 1 MiB', () => {
     const line = `INSERT INTO public.t (a) VALUES ('${'x'.repeat(1000)}');\n`
     const sql = line.repeat(Math.floor((3 * 1024 * 1024) / line.length))

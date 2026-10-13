@@ -73,3 +73,39 @@ describe('target.register-prod-approval', () => {
     }
   })
 })
+
+/** `drift.accept-prod` (Wave 8): accepting drift on production needs an approval and re-authentication. */
+describe('drift.accept-prod', () => {
+  it('allows accepting drift on a nonprod target without approval', async () => {
+    const d = await decide('drift.accept', 'nonprod')
+    expect(d.decision).toBe('allow')
+    expect(d.requirements).toEqual([])
+    expect(d.rules.map((r) => [r.id, r.result])).toEqual([['drift.accept-prod', 'not_applicable']])
+  })
+
+  it('requires one approval and a 300-second re-authentication for production', async () => {
+    const d = await decide('drift.accept', 'prod')
+    expect(d.decision).toBe('require')
+    expect(d.requirements).toEqual(
+      expect.arrayContaining([
+        { kind: 'approval', count: 1, permission: 'plans.approve' },
+        { kind: 'reauth', withinSeconds: 300 },
+      ]),
+    )
+    expect(d.rules.map((r) => [r.id, r.result])).toEqual([['drift.accept-prod', 'fail']])
+  })
+
+  it('treats an unknown tier like production (fail closed)', async () => {
+    const d = await decide('drift.accept')
+    expect(d.decision).toBe('require')
+    expect(d.requirements.some((r) => r.kind === 'approval')).toBe(true)
+  })
+
+  it('applies to drift.accept only, and the registration rule not to it', async () => {
+    const d = await decide('drift.accept', 'prod')
+    expect(d.rules.some((r) => r.id === 'target.register-prod-approval')).toBe(false)
+    const register = await decide('target.register', 'prod')
+    expect(register.rules.some((r) => r.id === 'drift.accept-prod')).toBe(false)
+    expect((await decide('drift.check', 'prod')).decision).toBe('allow')
+  })
+})

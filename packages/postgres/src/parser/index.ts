@@ -71,6 +71,17 @@ export {
   redactStatement,
   redactStatementSync,
 } from './redact.ts'
+export {
+  RAW_MAX_LENGTH,
+  REDACTED,
+  type RevealedStatement,
+  type RevealMode,
+  type RevealOptions,
+  revealStatement,
+  revealStatementSync,
+  SECRET_FUNCTIONS,
+  secretSpans,
+} from './reveal.ts'
 export { sensitiveReference } from './sensitive.ts'
 export {
   analyzeVerifyFile,

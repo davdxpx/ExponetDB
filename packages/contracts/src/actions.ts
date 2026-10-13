@@ -57,8 +57,28 @@ export type SubjectKind = (typeof SUBJECT_KINDS)[number]
  * executes, so an action on a production operation is a production action);
  * `subject_max` (cluster, server, node: the highest tier of any database they
  * host).
+ *
+ * The registry tiers of `registry.manage` (OD-22, extended 2026-10-13;
+ * authorization.md §5.1), which decide between `registry.manage:nonprod` and
+ * `registry.manage:prod`:
+ * - `production`: always production authority (an installation-wide subject,
+ *   a subject that spans tiers such as a product, a project, a server or a
+ *   node, and every change of a cluster's declared tier);
+ * - `cluster_registry`: a cluster's registry tier, production unless the
+ *   cluster is declared `nonprod` and hosts no production target (an
+ *   undeclared cluster is production: fail closed);
+ * - `placement`: placing a database as a target (`target.register`): the
+ *   stricter of the environment's tier and the declared tier of the cluster
+ *   that holds the database, where an undeclared cluster counts as `prod`.
  */
-export const TIER_SEMANTICS = ['none', 'subject', 'subject_max'] as const
+export const TIER_SEMANTICS = [
+  'none',
+  'subject',
+  'subject_max',
+  'production',
+  'cluster_registry',
+  'placement',
+] as const
 export type TierSemantics = (typeof TIER_SEMANTICS)[number]
 
 /** Exclusivity domains ([operations-engine.md §7](../../../exponetdb-docs/02-control-plane/operations-engine.md#7-exclusivity-domains)). */
@@ -181,6 +201,8 @@ function scopeNamed(permission: Permission): ScopeRule {
 }
 
 const READ_DOC = 'resources.md, tool-catalog.md'
+const SAVED_QUERY_DOC =
+  'sql-execution-security.md §2.7; information-architecture.md §4; resources.md "Queries"; control-database.md §5'
 
 function read(
   title: string,
@@ -458,22 +480,63 @@ const accessPlan = (
 
 const REGISTRY_DOC = 'registry.md, resources.md (Registry) (Wave 4)'
 
+/**
+ * `registry.manage` is tier-aware since Wave 8 (OD-22, extended 2026-10-13):
+ * every registry action has a registry tier (its `tierSemantics`,
+ * authorization.md §5.1), and production authority is needed where that
+ * tier is `prod`: a role binding that covers the subject with production
+ * authority and, for a bearer credential, a grant whose tiers include `prod`.
+ * The OAuth scope stays the single `registry.manage`: the frozen scope
+ * catalog (bundle `oauth-delegation`) pins its tiered scopes, so the tier of
+ * a delegated grant is its tier restriction.
+ */
+const REGISTRY_SCOPE: ScopeRule = scopeNamed('registry.manage')
+
+/** The registry tier of a registry action by its subject (authorization.md §5.1). */
+function registryTier(subject: SubjectKind): TierSemantics {
+  switch (subject) {
+    case 'target':
+      return 'subject'
+    case 'cluster':
+      return 'cluster_registry'
+    default:
+      return 'production'
+  }
+}
+
 /** A registry read that shows administrative detail (addresses, credential metadata): registry.manage, human only. */
 const registryRead = (title: string, extra: Partial<ActionDefinition> = {}) =>
   read(title, 'cluster', 'registry.manage', {
     clientKinds: HUMAN,
     humanOnly: true,
     basis: REGISTRY_DOC,
+    scope: REGISTRY_SCOPE,
+    tierSemantics: 'cluster_registry',
     ...extra,
   })
 
 /** Creates the plan of a registry change (a record); `plan.apply` executes it. */
 const registryPlan = (title: string, subject: SubjectKind, extra: Partial<ActionDefinition> = {}) =>
-  record(title, subject, perm('registry.manage'), scopeNamed('registry.manage'), {
+  record(title, subject, perm('registry.manage'), REGISTRY_SCOPE, {
     clientKinds: HUMAN,
     humanOnly: true,
+    tierSemantics: registryTier(subject),
     wave: '4',
     basis: 'resources.md (Registry): registry changes create a plan',
+    ...extra,
+  })
+
+/** A registry change executed by the worker from a stored plan (also node enrollment and credential rotation). */
+const registryOperation = (
+  title: string,
+  cls: ClassRule,
+  subject: SubjectKind,
+  extra: Partial<ActionDefinition> = {},
+) =>
+  operation(title, cls, subject, 'registry.manage', REGISTRY_SCOPE, {
+    clientKinds: HUMAN,
+    humanOnly: true,
+    tierSemantics: registryTier(subject),
     ...extra,
   })
 
@@ -484,7 +547,7 @@ const registryKind = (
   subject: SubjectKind,
   extra: Partial<ActionDefinition> = {},
 ) =>
-  adminOperation(title, cls, subject, 'registry.manage', {
+  registryOperation(title, cls, subject, {
     wave: '4',
     basis: REGISTRY_DOC,
     ...extra,
@@ -650,6 +713,19 @@ export const ACTIONS = {
       humanOnly: true,
     },
   ),
+  // Wave 8 (order §9): plans `drift.accept` from one open drift finding; a person only.
+  'drift.accept.plan': record(
+    'Plan a drift acceptance',
+    'target',
+    perm('schema.manage'),
+    scopeOf('schema.manage'),
+    {
+      clientKinds: HUMAN,
+      humanOnly: true,
+      wave: '8',
+      basis: 'resources.md "Schema and drift"; drift-detection.md §5',
+    },
+  ),
   'migration.resume.plan': record(
     'Plan resuming a non-transactional bundle',
     'target',
@@ -801,76 +877,50 @@ export const ACTIONS = {
   },
 
   // ----- Operations Engine kinds (operations-engine.md §2) -----
-  'target.register': adminOperation(
-    'Register a target',
-    fixed('standard'),
-    'target',
-    'registry.manage',
-    {
-      exclusivity: ['target.schema'],
-      wave: '4',
-      basis: 'operations-engine.md §2; target.register-prod-approval',
-    },
-  ),
-  'target.suspend': adminOperation(
-    'Suspend writes to a target',
-    fixed('standard'),
-    'target',
-    'registry.manage',
-    { wave: '4' },
-  ),
-  'target.resume': adminOperation(
-    'Resume writes to a target',
-    fixed('standard'),
-    'target',
-    'registry.manage',
-    { wave: '4' },
-  ),
-  'target.decommission': adminOperation(
-    'Decommission a target',
-    fixed('critical'),
-    'target',
-    'registry.manage',
-    {
-      exclusivity: ['target.maintenance'],
-      reauthentication: true,
-      reauthWithinSeconds: 300,
-      wave: '4',
-    },
-  ),
-  'target.identity.stamp': adminOperation(
+  'target.register': registryOperation('Register a target', fixed('standard'), 'target', {
+    exclusivity: ['target.schema'],
+    tierSemantics: 'placement',
+    wave: '4',
+    basis:
+      'operations-engine.md §2; target.register-prod-approval; registry tier by placement (OD-22, authorization.md §5.1)',
+  }),
+  'target.suspend': registryOperation('Suspend writes to a target', fixed('standard'), 'target', {
+    wave: '4',
+  }),
+  'target.resume': registryOperation('Resume writes to a target', fixed('standard'), 'target', {
+    wave: '4',
+  }),
+  'target.decommission': registryOperation('Decommission a target', fixed('critical'), 'target', {
+    exclusivity: ['target.maintenance'],
+    reauthentication: true,
+    reauthWithinSeconds: 300,
+    wave: '4',
+  }),
+  'target.identity.stamp': registryOperation(
     'Stamp the target identity marker',
     fixed('standard'),
     'target',
-    'registry.manage',
     {
       exclusivity: ['target.schema'],
       wave: '4',
     },
   ),
-  'ledger.initialize': adminOperation(
+  'ledger.initialize': registryOperation(
     'Initialize the target ledger',
     byTier('standard', 'high'),
     'target',
-    'registry.manage',
     {
       exclusivity: ['target.schema'],
       tierSemantics: 'subject',
       wave: '4',
     },
   ),
-  'credential.rotate': adminOperation(
-    'Rotate a credential',
-    fixed('high'),
-    'cluster',
-    'registry.manage',
-    {
-      tierSemantics: 'subject_max',
-      wave: '4/5',
-      basis:
-        'operations-engine.md §2; permission registry.manage decided by the owner before G1 (credential lifecycle is registry management in V1)',
-    },
-  ),
+  'credential.rotate': registryOperation('Rotate a credential', fixed('high'), 'cluster', {
+    tierSemantics: 'cluster_registry',
+    wave: '4/5',
+    basis:
+      'operations-engine.md §2; permission registry.manage decided by the owner before G1 (credential lifecycle is registry management in V1)',
+  }),
   'migration.apply': operation(
     'Apply migrations',
     byTier('standard', 'high'),
@@ -953,6 +1003,10 @@ export const ACTIONS = {
       exclusivity: ['target.schema'],
     },
   ),
+  // Wave 8 (order §9): the target's current complete snapshot becomes its
+  // baseline and the open drift findings it covers are resolved `accepted`;
+  // no DDL. It holds the target's schema domain, so no migration writes a
+  // baseline at the same time.
   'drift.accept': adminOperation(
     'Accept drift',
     byTier('standard', 'high'),
@@ -960,7 +1014,9 @@ export const ACTIONS = {
     'schema.manage',
     {
       tierSemantics: 'subject',
-      basis: 'operations-engine.md §2; policy drift.accept-prod',
+      exclusivity: ['target.schema'],
+      wave: '8',
+      basis: 'operations-engine.md §2; drift-detection.md §5; policy drift.accept-prod',
     },
   ),
   'operation.force_release': adminOperation(
@@ -1140,35 +1196,30 @@ export const ACTIONS = {
       wave: '9',
     },
   ),
-  'node.enroll': adminOperation('Enroll a node', fixed('high'), 'node', 'registry.manage', {
+  'node.enroll': registryOperation('Enroll a node', fixed('high'), 'node', {
     ...REAUTH,
     wave: '5',
     basis: 'enrollment.md §3: registry.manage and re-authentication; ADR-0024 §6',
   }),
-  'node.revoke': adminOperation('Revoke a node', fixed('high'), 'node', 'registry.manage', {
+  'node.revoke': registryOperation('Revoke a node', fixed('high'), 'node', {
     ...REAUTH,
     wave: '5',
     basis: 'enrollment.md §5: plan, high, re-authentication; ADR-0024 §6',
   }),
-  'node.decommission': adminOperation(
-    'Decommission a node',
-    fixed('high'),
-    'node',
-    'registry.manage',
-    {
-      ...REAUTH,
-      wave: '5',
-      basis: 'enrollment.md §5: as node.revoke; ADR-0024 §6',
-    },
-  ),
+  'node.decommission': registryOperation('Decommission a node', fixed('high'), 'node', {
+    ...REAUTH,
+    wave: '5',
+    basis: 'enrollment.md §5: as node.revoke; ADR-0024 §6',
+  }),
   'node.enroll.plan': record(
     'Plan a node enrollment for a server',
     'server',
     perm('registry.manage'),
-    scopeNamed('registry.manage'),
+    REGISTRY_SCOPE,
     {
       clientKinds: HUMAN,
       humanOnly: true,
+      tierSemantics: 'production',
       wave: '5',
       basis: 'control-plane.md §4: node.enroll is a stored plan; plan.apply executes it',
     },
@@ -1177,10 +1228,11 @@ export const ACTIONS = {
     'Plan a node revocation',
     'node',
     perm('registry.manage'),
-    scopeNamed('registry.manage'),
+    REGISTRY_SCOPE,
     {
       clientKinds: HUMAN,
       humanOnly: true,
+      tierSemantics: 'production',
       wave: '5',
       basis: 'enrollment.md §5: node.revoke is a stored plan; plan.apply executes it',
     },
@@ -1189,10 +1241,11 @@ export const ACTIONS = {
     'Plan a job-key change on a node',
     'node',
     perm('registry.manage'),
-    scopeNamed('registry.manage'),
+    REGISTRY_SCOPE,
     {
       clientKinds: HUMAN,
       humanOnly: true,
+      tierSemantics: 'production',
       wave: '5',
       basis:
         'control-plane.md §9.8: node.config.update adds or removes job-signing keys on one node; a stored plan, plan.apply executes it',
@@ -1202,10 +1255,11 @@ export const ACTIONS = {
     'Plan a node decommissioning',
     'node',
     perm('registry.manage'),
-    scopeNamed('registry.manage'),
+    REGISTRY_SCOPE,
     {
       clientKinds: HUMAN,
       humanOnly: true,
+      tierSemantics: 'production',
       wave: '5',
       basis: 'enrollment.md §5: node.decommission is a stored plan; plan.apply executes it',
     },
@@ -1214,10 +1268,11 @@ export const ACTIONS = {
     'Plan a credential rotation on an agent-managed cluster',
     'cluster',
     perm('registry.manage'),
-    scopeNamed('registry.manage'),
+    REGISTRY_SCOPE,
     {
       clientKinds: HUMAN,
       humanOnly: true,
+      tierSemantics: 'cluster_registry',
       wave: '5',
       basis: 'control-plane.md §9.7: credential.rotate is a stored plan; plan.apply executes it',
     },
@@ -1242,13 +1297,13 @@ export const ACTIONS = {
     mechanism: 'inline_plan',
     subject: 'server',
     permission: perm('registry.manage'),
-    scope: scopeNamed('registry.manage'),
+    scope: REGISTRY_SCOPE,
     // The CLI only with a redeemed step-up receipt (ADR-0026): re-authentication still applies.
     clientKinds: HUMAN,
     humanOnly: true,
     reauthentication: true,
     reauthWithinSeconds: 300,
-    tierSemantics: 'none',
+    tierSemantics: 'production',
     exclusivity: [],
     verification: 'required',
     operationKind: true,
@@ -1256,11 +1311,10 @@ export const ACTIONS = {
     basis:
       'control-plane.md §4: the identity that applied node.enroll reveals the token once, with a fresh re-authentication, within 30 minutes; the secret exists only in that response. Applied: issued at once (redeem hash for the gateway, bind key for the worker); verified: the worker binds the node that redeemed it',
   },
-  'node.config.update': adminOperation(
+  'node.config.update': registryOperation(
     'Update a node agent configuration',
     fixed('high'),
     'node',
-    'registry.manage',
     {
       ...REAUTH,
       wave: '5',
@@ -1418,9 +1472,11 @@ export const ACTIONS = {
   'registry.project.create.plan': registryPlan('Plan a project', 'project'),
   'registry.project.update.plan': registryPlan('Plan a project change', 'project'),
   'registry.server.create.plan': registryPlan('Plan a server record', 'server'),
+  // A cluster being registered has no declared tier yet: production authority (fail closed).
   'registry.cluster.register.plan': registryPlan(
     'Plan the registration of an external cluster',
     'cluster',
+    { tierSemantics: 'production' },
   ),
   'registry.cluster.confirm.plan': registryPlan(
     'Plan the confirmation of a cluster (pins its system_identifier)',
@@ -1432,6 +1488,7 @@ export const ACTIONS = {
   'target.register.plan': registryPlan(
     'Plan the registration of a target (identity marker and empty ledger)',
     'target',
+    { tierSemantics: 'placement' },
   ),
   'target.suspend.plan': registryPlan('Plan the suspension of a target', 'target'),
   'target.resume.plan': registryPlan('Plan resuming a target', 'target'),
@@ -1467,7 +1524,7 @@ export const ACTIONS = {
     'Register an external cluster (pending, CA bundle and endpoints)',
     fixed('standard'),
     'cluster',
-    REAUTH,
+    { ...REAUTH, tierSemantics: 'production' },
   ),
   'registry.cluster.confirm': registryKind(
     'Confirm a cluster: pin its system_identifier, refuse the Control Store',
@@ -1479,18 +1536,35 @@ export const ACTIONS = {
     'Add an endpoint to a cluster',
     byTier('standard', 'high'),
     'cluster',
-    { ...REAUTH, tierSemantics: 'subject_max' },
+    REAUTH,
   ),
   'registry.endpoint.retire': registryKind(
     'Retire an endpoint of a cluster',
     byTier('standard', 'high'),
     'cluster',
-    { ...REAUTH, tierSemantics: 'subject_max' },
+    REAUTH,
   ),
   'registry.database.register': registryKind(
     'Register an existing database of a confirmed cluster',
     fixed('standard'),
     'cluster',
+  ),
+  'registry.cluster.declare_tier.plan': registryPlan(
+    "Plan the declaration of a cluster's intended tier (OD-22)",
+    'cluster',
+    { tierSemantics: 'production', wave: '8' },
+  ),
+  'registry.cluster.declare_tier': registryKind(
+    "Declare a cluster's intended tier: prod or nonprod (OD-22); production authority whichever value",
+    fixed('high'),
+    'cluster',
+    {
+      ...REAUTH,
+      tierSemantics: 'production',
+      wave: '8',
+      basis:
+        'OD-22 (extended 2026-10-13): setting or changing the declared tier is a production decision; registry.md §4',
+    },
   ),
   'registry.credential.submit': {
     title: 'Submit a credential of an ExponetDB role (write-only; the worker verifies it)',
@@ -1499,12 +1573,12 @@ export const ACTIONS = {
     mechanism: 'inline_plan',
     subject: 'cluster',
     permission: perm('registry.manage'),
-    scope: scopeNamed('registry.manage'),
+    scope: REGISTRY_SCOPE,
     clientKinds: ['web'],
     humanOnly: true,
     reauthentication: true,
     reauthWithinSeconds: 300,
-    tierSemantics: 'none',
+    tierSemantics: 'cluster_registry',
     exclusivity: [],
     verification: 'required',
     operationKind: true,
@@ -1666,6 +1740,168 @@ export const ACTIONS = {
       basis: 'audit.md §4; resources.md "Audit"',
     },
   ),
+  // Wave 8 (order §9): the fleet overview. `targets.read` admits it; the findings part also needs `diagnostics.read`, and the operations part is filtered by the operation read rule.
+  'fleet.get': read('Get the fleet overview', 'target', 'targets.read', {
+    clientKinds: REST_ONLY,
+    wave: '8',
+    basis: 'health.md "Fleet overview"; resources.md "Targets"; visibility as target.list',
+  }),
+  // Wave 8 (order §9): findings across the targets the caller may read with diagnostics.read.
+  'finding.list': read('List findings across targets', 'target', 'diagnostics.read', {
+    clientKinds: REST_ONLY,
+    wave: '8',
+    basis: 'health.md "Fleet overview"; resources.md "Findings"; visibility as target.finding.list',
+  }),
+  // Wave 8 (order §9): the parser's verdict on submitted text; no target, no execution, no stored text.
+  'sql.classify': read(
+    'Classify submitted SQL statement by statement with the parser',
+    'installation',
+    'migrations.read',
+    {
+      clientKinds: REST_ONLY,
+      wave: '8',
+      basis: 'sql-execution-security.md §2.5; resources.md "Migrations"',
+    },
+  ),
+  // Wave 8 (owner decision S2): one statement's text, read live from the target with its
+  // secrets removed. A person in the Web App, re-authenticated within 15 minutes, per
+  // statement, audited (`diagnostics.raw_statement_viewed`); never MCP, never stored.
+  'statement.raw.get': read(
+    'View the text of one statement live from the target, secrets removed',
+    'target',
+    'diagnostics.read_sensitive',
+    {
+      clientKinds: WEB,
+      humanOnly: true,
+      reauthentication: true,
+      reauthWithinSeconds: 900,
+      wave: '8',
+      basis:
+        'statement-redaction.md §4; identity.md §4 (15 min); open-decisions.md "Owner decisions in the Wave 8 session" S2',
+    },
+  ),
+  // Wave 8 (order §9): break-glass grants for the owners and admins who review them. `policy.manage`
+  // is held by exactly `owner` and `admin` (authorization.md §3.1), its scope only by a human
+  // session; the subject is the installation, so only a global binding reaches it. Neither action
+  // can activate, extend or use a grant: activation stays refused while OD-21 is open.
+  'breakglass.list': read('List break-glass grants and their reviews', 'access', 'policy.manage', {
+    clientKinds: HUMAN,
+    humanOnly: true,
+    wave: '8',
+    basis:
+      'operations-engine.md §8 (break-glass review); resources.md "Plans, approvals, operations"; reads breakglass.grants',
+  }),
+  'breakglass.review': record(
+    'Record the post-incident review of a break-glass grant',
+    'access',
+    perm('policy.manage'),
+    scopeNamed('policy.manage'),
+    {
+      clientKinds: WEB,
+      humanOnly: true,
+      reauthentication: true,
+      reauthWithinSeconds: 300,
+      wave: '8',
+      basis:
+        'operations-engine.md §8: the review (breakglass.reviewed, with a note), once per grant, into the review columns of the frozen breakglass bundle',
+    },
+  ),
+  // Wave 8 (order §9, endpoint 6): the caller's own data reads on one target, from the
+  // audit's `data.read` events (the redacted statement the audit holds, never more).
+  'query.history.list': read('List your own data reads on a target', 'target', 'data.read', {
+    scope: tieredScope('data.read'),
+    tierSemantics: 'subject',
+    clientKinds: REST_ONLY,
+    wave: '8',
+    basis: 'sql-execution-security.md §2.6; information-architecture.md §4; resources.md "Queries"',
+  }),
+  // Wave 8 (order §9, endpoint 7): saved queries. Saving never runs anything. Each is
+  // decided on the saved query's scope (a target at its tier, or a project as a
+  // production subject of that project); list and get never reveal a hidden one.
+  'saved_query.list': read('List the saved queries you may read', 'target', 'data.read', {
+    scope: tieredScope('data.read'),
+    tierSemantics: 'subject',
+    clientKinds: REST_ONLY,
+    wave: '8',
+    basis: SAVED_QUERY_DOC,
+  }),
+  'saved_query.get': read('Get a saved query you may read', 'target', 'data.read', {
+    scope: tieredScope('data.read'),
+    tierSemantics: 'subject',
+    clientKinds: REST_ONLY,
+    wave: '8',
+    basis: SAVED_QUERY_DOC,
+  }),
+  // The changes are a person's own records, made in the Web App (a session's `api`
+  // scope, like the other self-service actions): a data.read scope never becomes a
+  // write scope (G3B). The person must also read data in the query's scope, decided
+  // with `saved_query.get` on it.
+  'saved_query.create': selfService(
+    'Save a query of your own in a project or on a target (nothing runs)',
+    'control_record',
+    { wave: '8', basis: SAVED_QUERY_DOC },
+  ),
+  'saved_query.update': selfService(
+    'Change one of your saved queries at its revision',
+    'control_record',
+    { wave: '8', basis: SAVED_QUERY_DOC },
+  ),
+  'saved_query.delete': selfService('Delete one of your saved queries', 'control_record', {
+    wave: '8',
+    basis: SAVED_QUERY_DOC,
+  }),
+  // Wave 8 (owner decision 2026-10-13): the full-fidelity audit export. `policy.manage` is held by exactly
+  // `owner` and `admin` (the auditor holds `audit.read`, which is not enough: the export carries whole events).
+  // Re-authentication within 300 seconds is enforced on the GET like on any action; the Web App session proves
+  // it. The CLI has no step-up for this action yet (ADR-0026 binds plan.apply and enrollment tokens only).
+  'audit.export': read(
+    'Export the stored audit events verbatim for offline verification',
+    'installation',
+    'policy.manage',
+    {
+      clientKinds: WEB,
+      humanOnly: true,
+      reauthentication: true,
+      reauthWithinSeconds: 300,
+      wave: '8',
+      basis:
+        'audit.md §5.1 (export, owner decision 2026-10-13); a read that is audited: it writes audit.export with range and count, never content',
+    },
+  ),
+  'postgres.roles.verifier.plan': record(
+    "Submit a role's SCRAM verifier (write-only) and plan setting it through the node",
+    'cluster',
+    perm('nodes.operate'),
+    tieredScope('nodes.operate'),
+    {
+      clientKinds: WEB,
+      humanOnly: true,
+      reauthentication: true,
+      reauthWithinSeconds: 300,
+      tierSemantics: 'subject_max',
+      wave: '8',
+      basis:
+        'credentials-and-roles.md §4 (login role passwords: a verifier through a write-only endpoint); owner decision S3 (2026-10-13); the verifier is sealed at once and never readable',
+    },
+  ),
+  'postgres.roles.verifier.set': operation(
+    "Set a role's SCRAM verifier through the node",
+    fixed('high'),
+    'cluster',
+    'nodes.operate',
+    tieredScope('nodes.operate'),
+    {
+      clientKinds: HUMAN,
+      humanOnly: true,
+      reauthentication: true,
+      reauthWithinSeconds: 300,
+      exclusivity: ['cluster.config'],
+      tierSemantics: 'subject_max',
+      wave: '8',
+      basis:
+        'credentials-and-roles.md §4; control-plane.md §9.3, §9.6 (one set_password step of postgres.roles.apply@2); owner decision S3 (2026-10-13)',
+    },
+  ),
 } as const satisfies Record<string, ActionDefinition>
 
 export type ActionId = keyof typeof ACTIONS
@@ -1697,7 +1933,8 @@ export function isConsequential(id: ActionId): boolean {
  * audit as `authz.denied` (audit.md §2, Wave 7 order §18): applying any
  * change or changing access, grants, keys and policies (consequential),
  * planning one (`*.plan`), deciding one (approvals, break-glass), and
- * reading data (`data.read`). Every other denial goes to the request log
+ * reading data (`data.read`, and the raw statement view through
+ * `diagnostics.read_sensitive`, Wave 8). Every other denial goes to the request log
  * and a metric only. Ceremonies and protocol endpoints keep their own audit.
  */
 export function isHighRiskAction(id: ActionId): boolean {
@@ -1710,7 +1947,9 @@ export function isHighRiskAction(id: ActionId): boolean {
     id.endsWith('.plan') ||
     id.startsWith('approval.') ||
     id === 'breakglass.activate' ||
-    (a.permission.kind === 'fixed' && a.permission.permission === 'data.read')
+    (a.permission.kind === 'fixed' &&
+      (a.permission.permission === 'data.read' ||
+        a.permission.permission === 'diagnostics.read_sensitive'))
   )
 }
 

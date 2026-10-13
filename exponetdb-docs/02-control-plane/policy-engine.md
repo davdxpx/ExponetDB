@@ -206,12 +206,16 @@ before they are returned ([`../03-database-model/sql-execution-security.md`](../
 
 **[DECIDED]** (Wave 5 correction F2, `packages/policy/src/catalog/nodes.ts`)
 `node.prod-apply-approval` as implemented: severity `require`, not
-overridable, parameter `approvals` (default 1, 1 to 10), version 1. It
+overridable, parameter `approvals` (default 1, 1 to 10), version 2
+(**[DECIDED]** Wave 8, owner decision S3: version 1 lacked
+`postgres.roles.verifier.set`). It
 applies to every apply of the Wave 5 catalog on a node or cluster:
 `postgres.config.apply`, `postgres.reload`, `postgres.restart`,
 `postgres.hba.apply`, `postgres.roles.apply`, `postgres.extensions.apply`,
-`postgres.tls.rotate`, `credential.rotate` and `node.config.update`
-(`NODE_APPLY_KINDS`; a unit test checks it against the action catalog).
+`postgres.tls.rotate`, `credential.rotate` and `node.config.update`, and
+to `postgres.roles.verifier.set` (Wave 8)
+(`NODE_APPLY_KINDS`; a unit test checks it against the Wave 5 and Wave 8
+action catalog).
 `prod` fails (an approval is required), `nonprod` is not applicable, an
 unknown tier is `unknown` and requires the same approval. A class of `high`
 or `critical` and a re-authentication are no substitute for it. The tier is
@@ -232,6 +236,20 @@ is not in Wave 5. The other node rules of the table above are
 |---|---|---|
 | `target.register-prod-approval` | require approval + reauth | registering a prod-tier target (identity stamp and ledger initialization) |
 | `drift.accept-prod` | require approval + reauth | accepting drift on a prod-tier target (`drift.accept`); security-relevant drift classes also require a reason |
+
+**[DECIDED]** (Wave 8, `packages/policy/src/catalog/registry.ts`)
+`drift.accept-prod` as implemented: severity `require`, not overridable,
+parameters `approvals` (default 1) and `reauthWithinSeconds` (default 300,
+at most 900), version 1, the same requirements as
+`target.register-prod-approval`. It reads the subject tier the planner
+resolved from the target: `prod` fails (an approval and a re-authentication
+are required), `nonprod` is not applicable, an unknown tier is `unknown` and
+requires the same. It applies to `drift.accept` only; the worker re-checks it
+with the approvals before the operation starts. The reason that
+security-relevant drift needs is not a rule result: the planner refuses a
+request without one (`422`, `reason_required`) whenever a covered finding is
+`critical` or security-relevant, on every tier
+([`../03-database-model/drift-detection.md` §5](../03-database-model/drift-detection.md#5-resolutions)).
 
 ### Backup and restore
 

@@ -1,3 +1,4 @@
+import { createHash, createHmac, pbkdf2Sync, randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -8,9 +9,12 @@ import {
   AuditChainSchema,
   buildOpenApi,
   contractJsonSchema,
+  DriftAcceptRequestSchema,
   GRANT_USE_CLASS_VALUES,
   GrantViewSchema,
   InstallationHealthSchema,
+  isScramSha256Verifier,
+  isWriteScope,
   MCP_TOOL_LIST,
   MigrationStreamSchema,
   NodeCertificatesSchema,
@@ -20,8 +24,25 @@ import {
   PlanReadSchema,
   PlanViewSchema,
   ROUTE_LIST,
+  RoleVerifierSubmissionSchema,
+  SavedQueryCreateRequestSchema,
+  SavedQueryUpdateRequestSchema,
   TargetHealthHistorySchema,
 } from '../src/index.ts'
+
+const PRJ = 'prj_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z'
+
+/** A SCRAM-SHA-256 verifier as libpq and PostgreSQL compute it (RFC 5802, 4096 iterations). */
+function scramVerifierFor(password: string): string {
+  const salt = randomBytes(16)
+  const salted = pbkdf2Sync(password, salt, 4096, 32, 'sha256')
+  const storedKey = createHash('sha256')
+    .update(createHmac('sha256', salted).update('Client Key').digest())
+    .digest()
+  const serverKey = createHmac('sha256', salted).update('Server Key').digest()
+  const b64 = (b: Buffer) => b.toString('base64')
+  return `SCRAM-SHA-256$4096:${b64(salt)}$${b64(storedKey)}:${b64(serverKey)}`
+}
 
 /**
  * The Wave 8 server batch S1 (order §9): eight additive read endpoints. The
@@ -35,6 +56,48 @@ const WAVE8: readonly [ActionId, string][] = [
   ['node.job.list', 'nodes.read'],
   ['node.certificate.list', 'nodes.read'],
   ['audit.chain.get', 'audit.read'],
+  ['fleet.get', 'targets.read'],
+  ['finding.list', 'diagnostics.read'],
+  ['sql.classify', 'migrations.read'],
+]
+
+/** Break-glass list and review (order §9): owner and admin through `policy.manage`, human sessions only. */
+const BREAK_GLASS: readonly ActionId[] = ['breakglass.list', 'breakglass.review']
+/** Order §9 endpoint 3: drift acceptance, a planned operation for a person only. */
+const DRIFT_ACCEPT: readonly ActionId[] = ['drift.accept', 'drift.accept.plan']
+/**
+ * Endpoints 6 and 7 (query history and saved queries): reads decided on
+ * `data.read` at the subject's tier, and the saved query changes as a
+ * person's own records in the Web App (self-service, scope `api`), so no
+ * `data.read` scope becomes a write scope.
+ */
+const WAVE8_QUERY_READS: readonly ActionId[] = [
+  'query.history.list',
+  'saved_query.list',
+  'saved_query.get',
+]
+const WAVE8_QUERY_CHANGES: readonly ActionId[] = [
+  'saved_query.create',
+  'saved_query.update',
+  'saved_query.delete',
+]
+
+/** OD-22 (extended 2026-10-13, owner decision S4): the declared tier of a cluster, a registry plan and its kind. */
+const WAVE8_REGISTRY: readonly ActionId[] = [
+  'registry.cluster.declare_tier',
+  'registry.cluster.declare_tier.plan',
+]
+
+/** The audit export (owner decision 2026-10-13): see audit-export.test.ts. */
+const AUDIT_EXPORT: readonly ActionId[] = ['audit.export']
+
+/** The raw statement view (owner decision S2): `diagnostics.read_sensitive`, a person in the Web App. */
+const RAW_STATEMENT: readonly ActionId[] = ['statement.raw.get']
+
+/** Role verifiers (owner decision S3): a write-only submission that plans a node operation. */
+const ROLE_VERIFIERS: readonly ActionId[] = [
+  'postgres.roles.verifier.plan',
+  'postgres.roles.verifier.set',
 ]
 
 function propertyNames(schema: unknown, out: Set<string> = new Set()): Set<string> {
@@ -71,8 +134,99 @@ describe('Wave 8 actions', () => {
     }
     // The only actions of wave 8 are these: a new one is a decision to review.
     expect(ACTION_IDS.filter((id) => ACTIONS[id].wave === '8').sort()).toEqual(
-      WAVE8.map(([id]) => id).sort(),
+      [
+        ...WAVE8.map(([id]) => id),
+        ...AUDIT_EXPORT,
+        ...BREAK_GLASS,
+        ...DRIFT_ACCEPT,
+        ...RAW_STATEMENT,
+        ...ROLE_VERIFIERS,
+        ...WAVE8_QUERY_READS,
+        ...WAVE8_QUERY_CHANGES,
+        ...WAVE8_REGISTRY,
+      ].sort(),
     )
+  })
+
+  it('decide the query history and saved query reads on data.read at the tier, REST only, no MCP tool', () => {
+    for (const id of WAVE8_QUERY_READS) {
+      const a = ACTIONS[id]
+      expect(a.effect, id).toBe('read')
+      expect(a.permission, id).toEqual({ kind: 'fixed', permission: 'data.read' })
+      expect(a.scope, id).toEqual({ kind: 'tiered', permission: 'data.read' })
+      expect(a.tierSemantics, id).toBe('subject')
+      expect(a.clientKinds, id).toEqual(['web', 'cli', 'ci'])
+      expect(
+        MCP_TOOL_LIST.some((t) => t.action === id),
+        id,
+      ).toBe(false)
+    }
+  })
+
+  it('make saved query changes own records of a person in the Web App; data.read stays a read scope', () => {
+    for (const id of WAVE8_QUERY_CHANGES) {
+      const a = ACTIONS[id]
+      expect(a.effect, id).toBe('control_record')
+      expect(a.permission, id).toEqual({ kind: 'self' })
+      expect(a.scope, id).toEqual({ kind: 'fixed', scope: 'api' })
+      expect(a.clientKinds, id).toEqual(['web'])
+      expect(a.humanOnly, id).toBe(true)
+      expect(MCP_TOOL_LIST.some((t) => t.action === id)).toBe(false)
+    }
+    expect(isWriteScope('data.read:prod')).toBe(false)
+    expect(isWriteScope('data.read:nonprod')).toBe(false)
+  })
+
+  it('route the history under the target and the saved queries at their own collection', () => {
+    const route = (operationId: string) => ROUTE_LIST.find((r) => r.operationId === operationId)
+    expect(
+      [
+        'listQueryHistory',
+        'listSavedQueries',
+        'createSavedQuery',
+        'getSavedQuery',
+        'updateSavedQuery',
+        'deleteSavedQuery',
+      ].map((id) => [id, route(id)?.method, route(id)?.path, route(id)?.action]),
+    ).toEqual([
+      ['listQueryHistory', 'get', '/targets/{target}/queries/history', 'query.history.list'],
+      ['listSavedQueries', 'get', '/saved-queries', 'saved_query.list'],
+      ['createSavedQuery', 'post', '/saved-queries', 'saved_query.create'],
+      ['getSavedQuery', 'get', '/saved-queries/{savedQueryId}', 'saved_query.get'],
+      ['updateSavedQuery', 'put', '/saved-queries/{savedQueryId}', 'saved_query.update'],
+      ['deleteSavedQuery', 'delete', '/saved-queries/{savedQueryId}', 'saved_query.delete'],
+    ])
+    expect(route('updateSavedQuery')?.errors).toContain('CONFLICT')
+  })
+
+  it('bound a saved query: a one-line name of at most 120 characters, a text of at most 65,536', () => {
+    const ok = { name: 'Orders today', sql: 'select 1', scope: { kind: 'project', projectId: PRJ } }
+    expect(SavedQueryCreateRequestSchema.safeParse(ok).success).toBe(true)
+    expect(SavedQueryCreateRequestSchema.parse(ok).visibility).toBe('personal')
+    for (const name of [
+      '',
+      'x'.repeat(121),
+      'a\nb',
+      'tab\there',
+      `bidi${String.fromCharCode(0x202e)}`,
+    ]) {
+      expect(SavedQueryCreateRequestSchema.safeParse({ ...ok, name }).success, name).toBe(false)
+    }
+    expect(SavedQueryCreateRequestSchema.safeParse({ ...ok, sql: '' }).success).toBe(false)
+    expect(
+      SavedQueryCreateRequestSchema.safeParse({ ...ok, sql: 'x'.repeat(65_537) }).success,
+    ).toBe(false)
+    expect(
+      SavedQueryCreateRequestSchema.safeParse({ ...ok, sql: 'x'.repeat(65_536) }).success,
+    ).toBe(true)
+    // Strict: an owner, a revision or a time cannot be sent.
+    expect(
+      SavedQueryCreateRequestSchema.safeParse({ ...ok, ownerIdentityId: 'idn_x' }).success,
+    ).toBe(false)
+    expect(
+      SavedQueryUpdateRequestSchema.safeParse({ name: 'n', sql: 's', visibility: 'project' })
+        .success,
+    ).toBe(false)
   })
 
   it('have routes: GET, the documented paths, the static node path before the node id', () => {
@@ -99,6 +253,118 @@ describe('Wave 8 actions', () => {
     // Hono answers with the first route that matches: `certificates` must come before `{nodeId}`.
     const order = ROUTE_LIST.map((r) => r.operationId)
     expect(order.indexOf('listNodeCertificates')).toBeLessThan(order.indexOf('getNode'))
+  })
+})
+
+describe('Wave 8 drift acceptance (order §9 endpoint 3)', () => {
+  it('plans drift.accept with schema.manage, for a person only, never through MCP', () => {
+    const plan = ACTIONS['drift.accept.plan']
+    expect(plan.effect).toBe('control_record')
+    expect(plan.permission).toEqual({ kind: 'fixed', permission: 'schema.manage' })
+    expect(plan.scope).toEqual({ kind: 'fixed', scope: 'schema.manage' })
+    expect(plan.humanOnly).toBe(true)
+    expect([...plan.clientKinds].sort()).toEqual(['cli', 'web'])
+    const kind = ACTIONS['drift.accept']
+    expect(kind.effect).toBe('consequential')
+    expect(kind.operationKind).toBe(true)
+    expect(kind.humanOnly).toBe(true)
+    expect(kind.class).toEqual({ kind: 'by_tier', nonprod: 'standard', prod: 'high' })
+    expect(kind.tierSemantics).toBe('subject')
+    expect(kind.exclusivity).toEqual(['target.schema'])
+    expect(kind.verification).toBe('required')
+    for (const id of DRIFT_ACCEPT) {
+      expect(ACTIONS[id].clientKinds, id).not.toContain('mcp')
+      expect(
+        MCP_TOOL_LIST.some((t) => t.action === id),
+        id,
+      ).toBe(false)
+    }
+  })
+
+  it('is POST /findings/{finding}/accept, answers a plan and lists 422 and the plan errors', () => {
+    const route = ROUTE_LIST.find((r) => r.operationId === 'planDriftAcceptance')
+    expect([route?.method, route?.path, route?.action, route?.response.status]).toEqual([
+      'post',
+      '/findings/{finding}/accept',
+      'drift.accept.plan',
+      201,
+    ])
+    expect(route?.response.schema).toBe(PlanViewSchema)
+    expect(route?.errors).toEqual(
+      expect.arrayContaining(['VALIDATION_FAILED', 'REGISTRY_CONFLICT', 'NOT_FOUND']),
+    )
+    const body = DriftAcceptRequestSchema
+    expect(body.safeParse({}).success).toBe(true)
+    expect(body.safeParse({ reason: 'Hotfix adopted after review' }).success).toBe(true)
+    expect(body.safeParse({ reason: 'short' }).success).toBe(false)
+    expect(body.safeParse({ reason: 'x'.repeat(1001) }).success).toBe(false)
+    expect(
+      body.safeParse({ reason: 'Hotfix adopted after review', fingerprint: 'x' }).success,
+    ).toBe(false)
+  })
+})
+
+describe('role verifiers (owner decision S3)', () => {
+  const VERIFIER = scramVerifierFor('marker password for the contract test')
+
+  it('are human only, Web App or human sessions, re-authenticated, tiered on nodes.operate', () => {
+    const plan = ACTIONS['postgres.roles.verifier.plan']
+    expect([plan.clientKinds, plan.humanOnly, plan.reauthentication]).toEqual([['web'], true, true])
+    expect(plan.scope).toEqual({ kind: 'tiered', permission: 'nodes.operate' })
+    const set = ACTIONS['postgres.roles.verifier.set']
+    expect([set.operationKind, set.humanOnly, set.reauthentication, set.class]).toEqual([
+      true,
+      true,
+      true,
+      { kind: 'fixed', class: 'high' },
+    ])
+    expect(set.clientKinds).not.toContain('mcp')
+    expect(set.scope).toEqual({ kind: 'tiered', permission: 'nodes.operate' })
+    expect(set.exclusivity).toEqual(['cluster.config'])
+    expect(MCP_TOOL_LIST.some((t) => t.action.startsWith('postgres.roles.verifier'))).toBe(false)
+    const route = ROUTE_LIST.find((r) => r.operationId === 'submitRoleVerifier')
+    expect([route?.method, route?.path, route?.action]).toEqual([
+      'post',
+      '/clusters/{clusterId}/role-verifiers',
+      'postgres.roles.verifier.plan',
+    ])
+  })
+
+  it('accepts a SCRAM-SHA-256 verifier as PostgreSQL stores it, and nothing else', () => {
+    expect(isScramSha256Verifier(VERIFIER)).toBe(true)
+    const [, iterations, rest] = /^SCRAM-SHA-256\$(\d+):(.*)$/.exec(VERIFIER) ?? []
+    for (const bad of [
+      'marker password for the contract test',
+      `md5${'0'.repeat(32)}`,
+      VERIFIER.replace(`$${iterations}:`, '$4095:'),
+      VERIFIER.replace(`$${iterations}:`, '$04096:'),
+      VERIFIER.replace(`$${iterations}:`, '$12345678:'),
+      `SCRAM-SHA-256$4096:${Buffer.alloc(8).toString('base64')}$${rest?.split('$')[1]}`,
+      `${VERIFIER}x`,
+      VERIFIER.replace('SCRAM-SHA-256', 'SCRAM-SHA-1'),
+      VERIFIER.slice(0, -2),
+    ]) {
+      expect(isScramSha256Verifier(bad), bad).toBe(false)
+    }
+  })
+
+  it('refuses a password, a predefined or own role, and never echoes the submitted value', () => {
+    const ok = RoleVerifierSubmissionSchema.safeParse({ role: 'acme_app', verifier: VERIFIER })
+    expect(ok.success).toBe(true)
+    const marker = ['marker', 'never', 'echoed', '0123456789'].join('-')
+    for (const body of [
+      { role: 'acme_app', verifier: marker },
+      { role: 'acme_app', password: marker },
+      { role: 'acme_app', verifier: VERIFIER, password: marker },
+      { role: 'pg_monitor', verifier: VERIFIER },
+      { role: 'exponetdb_reader', verifier: VERIFIER },
+    ]) {
+      const r = RoleVerifierSubmissionSchema.safeParse(body)
+      expect(r.success, JSON.stringify(Object.keys(body))).toBe(false)
+      const text = JSON.stringify(r.error?.issues.map((i) => [i.path, i.code, i.message]))
+      expect(text).not.toContain(marker)
+      expect(text).not.toContain(VERIFIER)
+    }
   })
 })
 

@@ -27,6 +27,8 @@ export {
   AUDIT_STATEMENT_LENGTH,
   type NormalizedStatement,
   prepareDataRead,
+  SAVED_QUERY_DIGEST_MAJOR,
+  savedQueryDigest,
 } from './data-read/prepare.ts'
 export {
   DOCUMENT_ENCODING,
@@ -56,6 +58,20 @@ export {
   recordDriftFailure,
   runDriftCheck,
 } from './drift.ts'
+export {
+  type AcceptanceExpectation,
+  type AcceptanceObservation,
+  acceptanceBindings,
+  acceptClass,
+  DRIFT_ACCEPT_KIND,
+  DriftAcceptKind,
+  type DriftAcceptKindDeps,
+  type DriftAcceptPlanContext,
+  diagnosticsKinds,
+  MAX_COVERED_FINDINGS,
+  planDriftAccept,
+  reasonRequired,
+} from './drift-accept.ts'
 export { DiagnosticsError, DocumentCorrupt, failureCodeOf } from './errors.ts'
 export {
   clip,
@@ -63,13 +79,28 @@ export {
   type FindingInput,
   type FindingKind,
   type FindingRecord,
+  type FleetFindingFilter,
+  type FleetFindingRecord,
   findingView,
+  getFinding,
   listFindings,
+  listFleetFindings,
   openFindingCount,
   openFindings,
   recordFinding,
   resolveFinding,
+  securitySensitive,
 } from './findings.ts'
+export {
+  FLEET_HEALTH_STATES,
+  type FleetFindingCounts,
+  type FleetHealthState,
+  type FleetSeverity,
+  type FleetTargetCounts,
+  type FleetTier,
+  fleetFindingCounts,
+  fleetTargetCounts,
+} from './fleet.ts'
 export {
   type HealthDeps,
   type HealthObservation,
@@ -108,6 +139,15 @@ export {
 export { checkIdentity, mismatchField, requireIdentity } from './identity.ts'
 export { type MigrationBaselineOutcome, MigrationBaselineStore } from './migration-baselines.ts'
 export { classesOfKind, displayIdent, objectKind, objectLabel, objectRef } from './objects.ts'
+export {
+  ACTIVITY_SCAN,
+  findStatement,
+  matchesDigest,
+  type RawStatementLookup,
+  readRawStatement,
+  STATEMENTS_SCAN,
+  type StatementUnavailableReason,
+} from './raw-statement.ts'
 export {
   DEFAULT_THRESHOLDS,
   type EndpointSample,
@@ -151,3 +191,10 @@ export {
   scopeOfHeader,
   scopeOfProject,
 } from './snapshots.ts'
+export {
+  classesOf,
+  classifySql,
+  type SqlClass,
+  type SqlClassificationResult,
+  type SqlClassifyOutcome,
+} from './sql-classification.ts'

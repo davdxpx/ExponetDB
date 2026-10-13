@@ -1572,6 +1572,37 @@
       "wave": "6"
     },
     {
+      "basis": "resources.md \"Schema and drift\"; drift-detection.md §5",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "drift.accept.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "schema.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "schema.manage"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Plan a drift acceptance",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
       "basis": "resources.md, tool-catalog.md",
       "class": {
         "class": "read",
@@ -1989,7 +2020,7 @@
       "wave": "2"
     },
     {
-      "basis": "operations-engine.md §2; target.register-prod-approval",
+      "basis": "operations-engine.md §2; target.register-prod-approval; registry tier by placement (OD-22, authorization.md §5.1)",
       "class": {
         "class": "standard",
         "kind": "fixed"
@@ -2016,7 +2047,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "placement",
       "title": "Register a target",
       "verification": "required",
       "wave": "4"
@@ -2047,7 +2078,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "subject",
       "title": "Suspend writes to a target",
       "verification": "required",
       "wave": "4"
@@ -2078,7 +2109,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "subject",
       "title": "Resume writes to a target",
       "verification": "required",
       "wave": "4"
@@ -2112,7 +2143,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "subject",
       "title": "Decommission a target",
       "verification": "required",
       "wave": "4"
@@ -2145,7 +2176,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "subject",
       "title": "Stamp the target identity marker",
       "verification": "required",
       "wave": "4"
@@ -2210,7 +2241,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "subject_max",
+      "tierSemantics": "cluster_registry",
       "title": "Rotate a credential",
       "verification": "required",
       "wave": "4/5"
@@ -2491,7 +2522,7 @@
       "wave": "6"
     },
     {
-      "basis": "operations-engine.md §2; policy drift.accept-prod",
+      "basis": "operations-engine.md §2; drift-detection.md §5; policy drift.accept-prod",
       "class": {
         "kind": "by_tier",
         "nonprod": "standard",
@@ -2502,7 +2533,9 @@
         "cli"
       ],
       "effect": "consequential",
-      "exclusivity": [],
+      "exclusivity": [
+        "target.schema"
+      ],
       "humanOnly": true,
       "id": "drift.accept",
       "mechanism": "stored_plan",
@@ -2520,7 +2553,7 @@
       "tierSemantics": "subject",
       "title": "Accept drift",
       "verification": "required",
-      "wave": "6"
+      "wave": "8"
     },
     {
       "basis": "operations-engine.md §2, concurrency.md; permission operations.recover decided by the owner before G1",
@@ -3043,7 +3076,7 @@
         "scope": "registry.manage"
       },
       "subject": "node",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Enroll a node",
       "verification": "required",
       "wave": "5"
@@ -3075,7 +3108,7 @@
         "scope": "registry.manage"
       },
       "subject": "node",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Revoke a node",
       "verification": "required",
       "wave": "5"
@@ -3107,7 +3140,7 @@
         "scope": "registry.manage"
       },
       "subject": "node",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Decommission a node",
       "verification": "required",
       "wave": "5"
@@ -3138,7 +3171,7 @@
         "scope": "registry.manage"
       },
       "subject": "server",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan a node enrollment for a server",
       "verification": "none",
       "wave": "5"
@@ -3169,7 +3202,7 @@
         "scope": "registry.manage"
       },
       "subject": "node",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan a node revocation",
       "verification": "none",
       "wave": "5"
@@ -3200,7 +3233,7 @@
         "scope": "registry.manage"
       },
       "subject": "node",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan a job-key change on a node",
       "verification": "none",
       "wave": "5"
@@ -3231,7 +3264,7 @@
         "scope": "registry.manage"
       },
       "subject": "node",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan a node decommissioning",
       "verification": "none",
       "wave": "5"
@@ -3262,7 +3295,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Plan a credential rotation on an agent-managed cluster",
       "verification": "none",
       "wave": "5"
@@ -3327,7 +3360,7 @@
         "scope": "registry.manage"
       },
       "subject": "server",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Reveal an enrollment token once (re-authentication; the CLI through a step-up)",
       "verification": "required",
       "wave": "5"
@@ -3359,7 +3392,7 @@
         "scope": "registry.manage"
       },
       "subject": "node",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Update a node agent configuration",
       "verification": "required",
       "wave": "5"
@@ -4521,7 +4554,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "List the endpoints of a cluster with their addresses",
       "verification": "none",
       "wave": "4"
@@ -4552,7 +4585,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "List the databases of a cluster",
       "verification": "none",
       "wave": "4"
@@ -4583,7 +4616,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "List credential metadata of a cluster (never a secret)",
       "verification": "none",
       "wave": "4"
@@ -4614,7 +4647,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Get the role bootstrap SQL of an external cluster (contains no password)",
       "verification": "none",
       "wave": "4"
@@ -4645,7 +4678,7 @@
         "scope": "registry.manage"
       },
       "subject": "product",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan a product",
       "verification": "none",
       "wave": "4"
@@ -4676,7 +4709,7 @@
         "scope": "registry.manage"
       },
       "subject": "product",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan an environment",
       "verification": "none",
       "wave": "4"
@@ -4707,7 +4740,7 @@
         "scope": "registry.manage"
       },
       "subject": "product",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan an environment change",
       "verification": "none",
       "wave": "4"
@@ -4738,7 +4771,7 @@
         "scope": "registry.manage"
       },
       "subject": "project",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan a project",
       "verification": "none",
       "wave": "4"
@@ -4769,7 +4802,7 @@
         "scope": "registry.manage"
       },
       "subject": "project",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan a project change",
       "verification": "none",
       "wave": "4"
@@ -4800,7 +4833,7 @@
         "scope": "registry.manage"
       },
       "subject": "server",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan a server record",
       "verification": "none",
       "wave": "4"
@@ -4831,7 +4864,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Plan the registration of an external cluster",
       "verification": "none",
       "wave": "4"
@@ -4862,7 +4895,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Plan the confirmation of a cluster (pins its system_identifier)",
       "verification": "none",
       "wave": "4"
@@ -4893,7 +4926,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Plan an endpoint",
       "verification": "none",
       "wave": "4"
@@ -4924,7 +4957,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Plan the retirement of an endpoint",
       "verification": "none",
       "wave": "4"
@@ -4955,7 +4988,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Plan the registration of a database",
       "verification": "none",
       "wave": "4"
@@ -4986,7 +5019,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "placement",
       "title": "Plan the registration of a target (identity marker and empty ledger)",
       "verification": "none",
       "wave": "4"
@@ -5017,7 +5050,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "subject",
       "title": "Plan the suspension of a target",
       "verification": "none",
       "wave": "4"
@@ -5048,7 +5081,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "subject",
       "title": "Plan resuming a target",
       "verification": "none",
       "wave": "4"
@@ -5079,7 +5112,7 @@
         "scope": "registry.manage"
       },
       "subject": "target",
-      "tierSemantics": "none",
+      "tierSemantics": "subject",
       "title": "Plan the decommissioning of a target",
       "verification": "none",
       "wave": "4"
@@ -5110,7 +5143,7 @@
         "scope": "registry.manage"
       },
       "subject": "product",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Create a product",
       "verification": "required",
       "wave": "4"
@@ -5141,7 +5174,7 @@
         "scope": "registry.manage"
       },
       "subject": "product",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Create an environment",
       "verification": "required",
       "wave": "4"
@@ -5177,7 +5210,7 @@
         "scope": "registry.manage"
       },
       "subject": "product",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Change an environment (display name, tier, evidence source, rank)",
       "verification": "required",
       "wave": "4"
@@ -5208,7 +5241,7 @@
         "scope": "registry.manage"
       },
       "subject": "project",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Create a project",
       "verification": "required",
       "wave": "4"
@@ -5243,7 +5276,7 @@
         "scope": "registry.manage"
       },
       "subject": "project",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Change a project (display name, managed schema scope, evidence override)",
       "verification": "required",
       "wave": "4"
@@ -5274,7 +5307,7 @@
         "scope": "registry.manage"
       },
       "subject": "server",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Create a server record",
       "verification": "required",
       "wave": "4"
@@ -5306,7 +5339,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "production",
       "title": "Register an external cluster (pending, CA bundle and endpoints)",
       "verification": "required",
       "wave": "4"
@@ -5338,7 +5371,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Confirm a cluster: pin its system_identifier, refuse the Control Store",
       "verification": "required",
       "wave": "4"
@@ -5371,7 +5404,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "subject_max",
+      "tierSemantics": "cluster_registry",
       "title": "Add an endpoint to a cluster",
       "verification": "required",
       "wave": "4"
@@ -5404,7 +5437,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "subject_max",
+      "tierSemantics": "cluster_registry",
       "title": "Retire an endpoint of a cluster",
       "verification": "required",
       "wave": "4"
@@ -5435,10 +5468,73 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Register an existing database of a confirmed cluster",
       "verification": "required",
       "wave": "4"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.cluster.declare_tier.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "production",
+      "title": "Plan the declaration of a cluster's intended tier (OD-22)",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "OD-22 (extended 2026-10-13): setting or changing the declared tier is a production decision; registry.md §4",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.cluster.declare_tier",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "production",
+      "title": "Declare a cluster's intended tier: prod or nonprod (OD-22); production authority whichever value",
+      "verification": "required",
+      "wave": "8"
     },
     {
       "basis": "resources.md (write-only credential submission), registry.md §2.2; applied: encrypted at once and recorded pending; verified: a login over verified TLS by the worker activates it",
@@ -5466,7 +5562,7 @@
         "scope": "registry.manage"
       },
       "subject": "cluster",
-      "tierSemantics": "none",
+      "tierSemantics": "cluster_registry",
       "title": "Submit a credential of an ExponetDB role (write-only; the worker verifies it)",
       "verification": "required",
       "wave": "4"
@@ -6467,6 +6563,474 @@
       "tierSemantics": "none",
       "title": "Get the audit chain state and verify it from the latest checkpoint",
       "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "health.md \"Fleet overview\"; resources.md \"Targets\"; visibility as target.list",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "fleet.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "targets.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "targets.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Get the fleet overview",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "health.md \"Fleet overview\"; resources.md \"Findings\"; visibility as target.finding.list",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "finding.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "diagnostics.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "diagnostics.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "List findings across targets",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "sql-execution-security.md §2.5; resources.md \"Migrations\"",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "sql.classify",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.read"
+      },
+      "subject": "installation",
+      "tierSemantics": "none",
+      "title": "Classify submitted SQL statement by statement with the parser",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "statement-redaction.md §4; identity.md §4 (15 min); open-decisions.md \"Owner decisions in the Wave 8 session\" S2",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "statement.raw.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "diagnostics.read_sensitive"
+      },
+      "reauthWithinSeconds": 900,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "diagnostics.read_sensitive"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "View the text of one statement live from the target, secrets removed",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "operations-engine.md §8 (break-glass review); resources.md \"Plans, approvals, operations\"; reads breakglass.grants",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "breakglass.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "policy.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "policy.manage"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "List break-glass grants and their reviews",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "operations-engine.md §8: the review (breakglass.reviewed, with a note), once per grant, into the review columns of the frozen breakglass bundle",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "breakglass.review",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "policy.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "policy.manage"
+      },
+      "subject": "access",
+      "tierSemantics": "none",
+      "title": "Record the post-incident review of a break-glass grant",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "sql-execution-security.md §2.6; information-architecture.md §4; resources.md \"Queries\"",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "query.history.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "data.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "data.read"
+      },
+      "subject": "target",
+      "tierSemantics": "subject",
+      "title": "List your own data reads on a target",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "sql-execution-security.md §2.7; information-architecture.md §4; resources.md \"Queries\"; control-database.md §5",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "saved_query.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "data.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "data.read"
+      },
+      "subject": "target",
+      "tierSemantics": "subject",
+      "title": "List the saved queries you may read",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "sql-execution-security.md §2.7; information-architecture.md §4; resources.md \"Queries\"; control-database.md §5",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "saved_query.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "data.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "tiered",
+        "permission": "data.read"
+      },
+      "subject": "target",
+      "tierSemantics": "subject",
+      "title": "Get a saved query you may read",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "sql-execution-security.md §2.7; information-architecture.md §4; resources.md \"Queries\"; control-database.md §5",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "saved_query.create",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Save a query of your own in a project or on a target (nothing runs)",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "sql-execution-security.md §2.7; information-architecture.md §4; resources.md \"Queries\"; control-database.md §5",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "saved_query.update",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Change one of your saved queries at its revision",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "sql-execution-security.md §2.7; information-architecture.md §4; resources.md \"Queries\"; control-database.md §5",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "saved_query.delete",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "self"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "api"
+      },
+      "subject": "identity",
+      "tierSemantics": "none",
+      "title": "Delete one of your saved queries",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "audit.md §5.1 (export, owner decision 2026-10-13); a read that is audited: it writes audit.export with range and count, never content",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "audit.export",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "policy.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "policy.manage"
+      },
+      "subject": "installation",
+      "tierSemantics": "none",
+      "title": "Export the stored audit events verbatim for offline verification",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "credentials-and-roles.md §4 (login role passwords: a verifier through a write-only endpoint); owner decision S3 (2026-10-13); the verifier is sealed at once and never readable",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "postgres.roles.verifier.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.operate"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "tiered",
+        "permission": "nodes.operate"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Submit a role's SCRAM verifier (write-only) and plan setting it through the node",
+      "verification": "none",
+      "wave": "8"
+    },
+    {
+      "basis": "credentials-and-roles.md §4; control-plane.md §9.3, §9.6 (one set_password step of postgres.roles.apply@2); owner decision S3 (2026-10-13)",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "cluster.config"
+      ],
+      "humanOnly": true,
+      "id": "postgres.roles.verifier.set",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "nodes.operate"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "tiered",
+        "permission": "nodes.operate"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Set a role's SCRAM verifier through the node",
+      "verification": "required",
       "wave": "8"
     }
   ],
@@ -8848,6 +9412,7 @@
               "cluster_ambiguous",
               "egress_addresses_unknown",
               "role_privileges",
+              "role_superuser",
               "tls_name_not_registered",
               "credential_pending",
               "job_key_already_staged",
@@ -8859,7 +9424,9 @@
               "job_key_not_addable",
               "job_key_not_removable",
               "job_key_overlap",
-              "job_keys_invalid"
+              "job_keys_invalid",
+              "finding_resolved",
+              "snapshot_incomplete"
             ]
           }
         },
@@ -9220,6 +9787,37 @@
       "status": 403,
       "title": "Data read not permitted",
       "type": "https://db.exponet.cloud/errors/data-read-not-permitted"
+    },
+    {
+      "code": "STATEMENT_NOT_AVAILABLE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/STATEMENT_NOT_AVAILABLE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "enum": [
+              "not_held",
+              "target_unreachable",
+              "digest_mismatch",
+              "extension_missing"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
+      "group": "queries_and_diagnostics",
+      "message": "The target does not hold a statement with this digest now, or it could not be read live; no stored or invented text is returned.",
+      "remediation": "Open the raw view from a current sessions list while the statement is still running or held, and make sure the target is reachable.",
+      "retryable": false,
+      "status": 404,
+      "title": "Statement not available",
+      "type": "https://db.exponet.cloud/errors/statement-not-available"
     },
     {
       "code": "SAMPLE_STALE",

@@ -1,0 +1,20 @@
+schema: exponetdb.migration/v1
+id: 01M4V4DA2W7HK9QB5NZ3XT6RME
+name: drift-acceptance
+description: |
+  Drift acceptance (Wave 8, order §9; drift.accept): the worker stores the
+  complete snapshot it takes when a person's drift acceptance is applied
+  (purpose drift_accept) and records it as the target's baseline (reason
+  drift_accept, allowed since the observation bundle), resolving the covered
+  drift findings as accepted (allowed since the observation bundle).
+  Additive: one CHECK constraint accepts one more value; no table, column,
+  row or right changes.
+dependsOn:
+  - 01M4TKQ5C3X8Y2NZ7D4B9W6F1H
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

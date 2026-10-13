@@ -138,11 +138,17 @@ export async function planView(q: Queryable, plan: PlanRecord): Promise<PlanView
       kind.startsWith('registry.') ||
       kind.startsWith('target.') ||
       kind.startsWith('node.') ||
-      kind.startsWith('migration.')) &&
+      kind.startsWith('migration.') ||
+      // Wave 8: a drift acceptance names finding ids, fingerprints and the person's reason, never catalog text.
+      kind.startsWith('drift.') ||
+      // The role and the stored verifier's id, never the verifier (owner decision S3).
+      kind === 'postgres.roles.verifier.set') &&
     content !== undefined
       ? { change: { content, analysis: analysis ?? null } }
       : {}),
-    ...(kind.startsWith('migration.') ? { policyRules: policyRulesOf(policy) } : {}),
+    ...(kind.startsWith('migration.') || kind.startsWith('drift.')
+      ? { policyRules: policyRulesOf(policy) }
+      : {}),
   }
 }
 

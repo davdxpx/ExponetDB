@@ -11,10 +11,12 @@ import type {
   Cluster,
   ClusterBootstrapSql,
   ClusterConfirmRequest,
+  ClusterDeclaredTierRequest,
   ClusterRegisterRequest,
   CredentialView,
   DatabaseRegisterRequest,
   DatabaseView,
+  DriftAcceptRequest,
   DriftCheck,
   EndpointRequest,
   EndpointView,
@@ -22,6 +24,8 @@ import type {
   EnvironmentChangeRequest,
   EnvironmentCreateRequest,
   Finding,
+  Fleet,
+  FleetFinding,
   LockGraph,
   OperationView,
   PlanView,
@@ -53,15 +57,21 @@ import {
   documentByFingerprint,
   driftCheckView,
   type FindingFilter,
+  type FleetFindingFilter,
   findingView,
   fingerprintTargets,
+  fleetFindingCounts,
+  fleetTargetCounts,
   GAP_THRESHOLD_SECONDS,
+  getFinding,
   HISTORY_MAX_RANGE_MS,
   healthSummary,
   listFindings,
+  listFleetFindings,
   listSessions,
   lockGraph,
   openFindingCount,
+  planDriftAccept,
   readHealthHistory,
   readStatuses,
   runDriftCheck,
@@ -78,6 +88,7 @@ import {
 import type { IdentityId } from '@exponetdb/kernel'
 import type { PlanRecord } from '@exponetdb/operations'
 import {
+  brand,
   type ClusterRecord,
   CREDENTIAL_LIST_LIMIT,
   clusterBootstrapSql,
@@ -90,6 +101,7 @@ import {
   environmentView,
   findTarget,
   getCluster,
+  getDatabase,
   getEnvironment,
   getProduct,
   getProject,
@@ -107,6 +119,7 @@ import {
   type Page,
   type PageRequest,
   planClusterConfirm,
+  planClusterDeclareTier,
   planClusterRegister,
   planDatabaseRegister,
   planEndpointAdd,
@@ -492,6 +505,92 @@ export class RegistryUseCases {
     return page(await listFindings(this.#h.store, target.targetId, filter, request), findingView)
   }
 
+  /**
+   * The targets and findings parts of the fleet overview (`fleet.get`,
+   * Wave 8). `targets.read` admits the request (the target list's
+   * permission) and the same visibility applies: the scopes of the
+   * caller's grants, narrowed by a delegation. The findings part needs
+   * `diagnostics.read` as well, under the same visibility rule; a caller
+   * that lacks it (or whose client may not use it) gets the part as
+   * unavailable with a reason, never as zero. Two aggregate queries,
+   * whatever the number of targets; both exact.
+   */
+  async fleetParts(caller: CallerLike): Promise<Pick<Fleet, 'targets' | 'findings'>> {
+    const visibility = await this.#visibility(caller, 'fleet.get')
+    const counts = await fleetTargetCounts(this.#h.store, visibility)
+    const targets: Fleet['targets'] = {
+      total: counts.total,
+      decommissioned: counts.decommissioned,
+      byTier: { ...counts.byTier },
+      byHealth: { ...counts.byHealth },
+      bySource: { ...counts.bySource },
+      oldestSampleAt: counts.oldestObservedAt,
+      source: 'live',
+      observedAt: counts.asOf,
+      lowerBound: false,
+      lowerBoundReason: null,
+    }
+    let findingVisibility: TargetVisibility
+    try {
+      findingVisibility = await this.#visibility(caller, 'finding.list')
+    } catch (error) {
+      if (
+        error instanceof AuthError &&
+        (error.code === 'PERMISSION_DENIED' || error.code === 'INSUFFICIENT_SCOPE')
+      ) {
+        return { targets, findings: { available: false, reason: 'permission_denied' } }
+      }
+      throw error
+    }
+    const open = await fleetFindingCounts(this.#h.store, findingVisibility)
+    return {
+      targets,
+      findings: {
+        available: true,
+        open: open.total,
+        bySeverity: { ...open.bySeverity },
+        source: 'live',
+        observedAt: open.asOf,
+        lowerBound: false,
+        lowerBoundReason: null,
+      },
+    }
+  }
+
+  /**
+   * `finding.list` (Wave 8): findings across targets, newest first, keyset
+   * pages. `diagnostics.read` at the targets the caller may read (the rule
+   * of `target.finding.list`); a named `target` is resolved and authorized
+   * exactly as the per-target route does, so an unknown or invisible one is
+   * `TARGET_NOT_FOUND`. Without `state` only open findings are listed.
+   */
+  async findings(
+    caller: CallerLike,
+    filter: Omit<FleetFindingFilter, 'targetId'> & { readonly target?: string | undefined },
+    request: PageRequest,
+  ): Promise<{ items: FleetFinding[]; nextCursor: string | null }> {
+    const visibility = await this.#visibility(caller, 'finding.list')
+    const { target, ...rest } = filter
+    const targetId =
+      target === undefined
+        ? undefined
+        : (await this.#authorizedTarget('finding.list', caller, target)).targetId
+    const p = await listFleetFindings(
+      this.#h.store,
+      visibility,
+      { ...rest, ...(targetId === undefined ? {} : { targetId }) },
+      request,
+    )
+    return {
+      items: p.items.map((f) => ({
+        ...findingView(f),
+        targetId: brand('tgt', f.targetId),
+        targetPath: f.targetPath as FleetFinding['targetPath'],
+      })),
+      nextCursor: p.nextCursor,
+    }
+  }
+
   // ----- infrastructure reads (installation-wide: a cluster can host several products) -----
 
   async servers(
@@ -690,6 +789,26 @@ export class RegistryUseCases {
     )
   }
 
+  /**
+   * Declares a cluster's intended tier (OD-22, extended 2026-10-13): a
+   * production decision whichever value (`registry.cluster.declare_tier.plan`
+   * has the registry tier `production`), applied through `plan.apply`.
+   */
+  planClusterDeclaredTier(
+    caller: CallerLike,
+    clusterId: string,
+    body: ClusterDeclaredTierRequest,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.cluster.declare_tier.plan',
+      idem,
+      { kind: 'cluster', clusterId },
+      (tx, c, a) => planClusterDeclareTier(tx, c, a, clusterId, body),
+    )
+  }
+
   planEndpoint(caller: CallerLike, clusterId: string, body: EndpointRequest, idem?: Idempotency) {
     return this.#plan(
       caller,
@@ -739,14 +858,23 @@ export class RegistryUseCases {
         // The target does not exist yet: the subject is the chain of its future path.
         const project = await getProject(tx, body.projectId)
         const env = await getEnvironment(tx, body.environmentId)
-        if (project === undefined || env === undefined || env.productId !== project.productId) {
+        const database = await getDatabase(tx, body.databaseId)
+        if (
+          project === undefined ||
+          env === undefined ||
+          database === undefined ||
+          env.productId !== project.productId
+        ) {
           throw new RegistryError('NOT_FOUND')
         }
+        // The placement tier (OD-22): the environment's tier and the declared tier of the
+        // cluster that holds the database, read from the registry, never from the request.
         return {
           kind: 'plan',
           subject: {
             targetPath: `${project.productSlug}/${project.slug}/${env.slug}`,
             tier: env.tier,
+            clusterId: database.clusterId,
           },
         }
       },
@@ -769,6 +897,35 @@ export class RegistryUseCases {
       idem,
       { kind: 'target', targetId: target.targetId },
       (tx, c, a) => planTargetStateChange(tx, c, a, kind, target.targetId, body),
+    )
+  }
+
+  /**
+   * `drift.accept.plan` (Wave 8, order §9): plans adopting a target's current
+   * schema as expected, from one of its open drift findings. The engine
+   * decides on the finding's target (a person with `schema.manage`, never an
+   * agent); the diagnostics package checks the finding and plans
+   * (`drift.accept`, applied through `plan.apply`).
+   */
+  async planDriftAccept(
+    caller: CallerLike,
+    findingId: string,
+    body: DriftAcceptRequest,
+    idem?: Idempotency,
+  ): Promise<PlanView> {
+    const { observation } = this.#services()
+    await this.#h.admit(this.#h.store, 'drift.accept.plan', caller)
+    const finding = await getFinding(this.#h.store, findingId)
+    if (finding === undefined) {
+      throw new RegistryError('NOT_FOUND')
+    }
+    return this.#plan(
+      caller,
+      'drift.accept.plan',
+      idem,
+      { kind: 'target', targetId: finding.targetId },
+      (tx, c, a) =>
+        planDriftAccept(tx, { policy: c.policy, observation }, a, finding.findingId, body),
     )
   }
 

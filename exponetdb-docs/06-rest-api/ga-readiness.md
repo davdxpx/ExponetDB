@@ -37,7 +37,7 @@ way. Every statement is **[OBSERVED]** on the branch unless marked.
 | 8 | A changelog that carries notice of changes | `architecture.md` §9 promises "notice in the changelog"; the repository has no changelog | **not met** |
 | 9 | CI has run the matrix on the commit to be declared | no GitHub Actions runner has ever started for this repository | **not met** |
 | 10 | Deployed and observed off-host | G2 off-host deployment evidence is still outstanding (`gates/2.md`) | **not met** |
-| 11 | Open decisions that change the API | OD-22 (the declared-tier field on clusters is not implemented), OD-21 (notification channel; break-glass activation refused), OD-27 | open |
+| 11 | Open decisions that change the API | OD-22 implemented in Wave 8 part 2 (`declaredTier`, `POST /clusters/{id}/declared-tier`; tiered OAuth scope strings for `registry.manage` wait for the owner), OD-21 (notification channel; break-glass activation refused), OD-27 | open |
 
 ## 3. Changes Wave 7 made to existing answers
 

@@ -219,14 +219,15 @@
       "name": "@exponetdb/diagnostics",
       "version": "0.0.0",
       "dependencies": {
+        "@exponetdb/audit": "workspace:*",
         "@exponetdb/contracts": "workspace:*",
         "@exponetdb/control-store": "workspace:*",
         "@exponetdb/kernel": "workspace:*",
+        "@exponetdb/operations": "workspace:*",
         "@exponetdb/postgres": "workspace:*",
         "@exponetdb/registry": "workspace:*",
       },
       "devDependencies": {
-        "@exponetdb/operations": "workspace:*",
         "@exponetdb/policy": "workspace:*",
         "@exponetdb/secrets": "workspace:*",
         "@exponetdb/testkit": "workspace:*",

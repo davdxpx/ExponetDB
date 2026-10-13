@@ -1019,6 +1019,7 @@ export const ERRORS = {
             'cluster_ambiguous',
             'egress_addresses_unknown',
             'role_privileges',
+            'role_superuser',
             'tls_name_not_registered',
             'credential_pending',
             'job_key_already_staged',
@@ -1031,6 +1032,10 @@ export const ERRORS = {
             'job_key_not_removable',
             'job_key_overlap',
             'job_keys_invalid',
+            // Wave 8, drift acceptance: the finding is already resolved; the
+            // target's current schema could not be read completely.
+            'finding_resolved',
+            'snapshot_incomplete',
           ],
         }),
     }),
@@ -1235,6 +1240,19 @@ export const ERRORS = {
     message: 'Data reads are disabled on this target or tier for this client.',
     remediation:
       'The data.read policy rule of the target decides who reads its rows; by default production rows are for people only. Read a non-production target, or ask a person to run the read.',
+  },
+  STATEMENT_NOT_AVAILABLE: {
+    group: 'queries_and_diagnostics',
+    status: 404,
+    retryable: false,
+    title: 'Statement not available',
+    message:
+      'The target does not hold a statement with this digest now, or it could not be read live; no stored or invented text is returned.',
+    remediation:
+      'Open the raw view from a current sessions list while the statement is still running or held, and make sure the target is reachable.',
+    details: z.strictObject({
+      reason: z.enum(['not_held', 'target_unreachable', 'digest_mismatch', 'extension_missing']),
+    }),
   },
   SAMPLE_STALE: {
     group: 'queries_and_diagnostics',

@@ -90,8 +90,12 @@ function carriesValue(schema: unknown): boolean {
   )
 }
 
-/** The API key of a service account is shown once at creation, by design (Wave 3B, oauth.md §8). */
-const SHOWN_ONCE = new Set(['createApiKey.secret'])
+/**
+ * The API key of a service account is shown once at creation, by design (Wave 3B, oauth.md §8).
+ * `exportAuditEvents.secretId` is the `sec_` id an audit event's refs member names (a reference,
+ * never a value), in the stored event the audit export returns verbatim (audit.md §5.1).
+ */
+const SHOWN_ONCE = new Set(['createApiKey.secret', 'exportAuditEvents.secretId'])
 
 describe('Wave 4 registry contracts', () => {
   it('keep the write-ness of every scope exactly as accepted with G3B', () => {
@@ -122,6 +126,113 @@ describe('Wave 4 registry contracts', () => {
         expect(def(kind as ActionId).mechanism, kind).toBe('stored_plan')
       }
     }
+  })
+
+  it('give every registry.manage action a registry tier (OD-22, authorization.md §5.1)', () => {
+    const expected: Record<string, string> = {}
+    for (const id of ACTION_IDS) {
+      const a = def(id)
+      if (a.permission.kind !== 'fixed' || a.permission.permission !== 'registry.manage') continue
+      // The OAuth scope stays the single registry.manage: the frozen scope catalog pins its tiered scopes.
+      expect(a.scope, id).toEqual({ kind: 'fixed', scope: 'registry.manage' })
+      expected[id] = a.tierSemantics
+    }
+    const by = (semantics: string) =>
+      Object.keys(expected)
+        .filter((id) => expected[id] === semantics)
+        .sort()
+    // Placing a database: the stricter of its environment and its cluster's declared tier.
+    expect(by('placement')).toEqual(['target.register', 'target.register.plan'])
+    // A cluster: prod unless declared nonprod and hosting no production target.
+    expect(by('cluster_registry')).toEqual([
+      'cluster.bootstrap_sql.get',
+      'credential.list',
+      'credential.rotate',
+      'credential.rotate.plan',
+      'database.list',
+      'endpoint.list',
+      'registry.cluster.confirm',
+      'registry.cluster.confirm.plan',
+      'registry.credential.submit',
+      'registry.database.register',
+      'registry.database.register.plan',
+      'registry.endpoint.add',
+      'registry.endpoint.add.plan',
+      'registry.endpoint.retire',
+      'registry.endpoint.retire.plan',
+    ])
+    // A registered target: its environment's tier.
+    expect(by('subject')).toEqual([
+      'ledger.initialize',
+      'target.decommission',
+      'target.decommission.plan',
+      'target.identity.stamp',
+      'target.resume',
+      'target.resume.plan',
+      'target.suspend',
+      'target.suspend.plan',
+    ])
+    // Everything else is production authority: installation-wide, spanning tiers, or a
+    // declared tier (whichever value).
+    expect(by('production')).toEqual([
+      'node.config.update',
+      'node.config.update.plan',
+      'node.decommission',
+      'node.decommission.plan',
+      'node.enroll',
+      'node.enroll.plan',
+      'node.enrollment_token.reveal',
+      'node.revoke',
+      'node.revoke.plan',
+      'registry.cluster.declare_tier',
+      'registry.cluster.declare_tier.plan',
+      'registry.cluster.register',
+      'registry.cluster.register.plan',
+      'registry.environment.create',
+      'registry.environment.create.plan',
+      'registry.environment.update',
+      'registry.environment.update.plan',
+      'registry.product.create',
+      'registry.product.create.plan',
+      'registry.project.create',
+      'registry.project.create.plan',
+      'registry.project.update',
+      'registry.project.update.plan',
+      'registry.server.create',
+      'registry.server.create.plan',
+    ])
+    expect(Object.keys(expected)).toHaveLength(
+      by('placement').length +
+        by('cluster_registry').length +
+        by('subject').length +
+        by('production').length,
+    )
+  })
+
+  it('declare a cluster tier as a high, re-authenticated registry plan with production authority', () => {
+    const kind = def('registry.cluster.declare_tier')
+    expect(kind).toMatchObject({
+      class: { kind: 'fixed', class: 'high' },
+      mechanism: 'stored_plan',
+      subject: 'cluster',
+      reauthentication: true,
+      humanOnly: true,
+      tierSemantics: 'production',
+      operationKind: true,
+    })
+    expect(def('registry.cluster.declare_tier.plan')).toMatchObject({
+      effect: 'control_record',
+      tierSemantics: 'production',
+      clientKinds: ['web', 'cli'],
+    })
+    const route = ROUTE_LIST.find((r) => r.operationId === 'planClusterDeclaredTier')
+    expect(route).toMatchObject({
+      method: 'post',
+      path: '/clusters/{clusterId}/declared-tier',
+      action: 'registry.cluster.declare_tier.plan',
+      response: { status: 201 },
+    })
+    expect(MCP_TOOL_LIST.some((t) => t.action.startsWith('registry.'))).toBe(false)
   })
 
   it('make the credential submission write-only: Web App, re-authentication, inline, verified', () => {

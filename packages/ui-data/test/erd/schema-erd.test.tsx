@@ -349,6 +349,8 @@ describe('SchemaErd: the table alternative', () => {
     expect(within(relations).getByText('ghost')).toBeInTheDocument()
   })
 
+  // Renders 250 rows and pages through them in jsdom: about 1.3 s alone, but it ran past the
+  // default 5 s once in a full parallel run of every package (2026-10-13), so it gets its own bound.
   it('shows a long list in pages with an explicit "Show more"', async () => {
     const user = userEvent.setup()
     const tables = Array.from({ length: 250 }, (_, index) => ({
@@ -369,7 +371,7 @@ describe('SchemaErd: the table alternative', () => {
     await user.click(screen.getByRole('button', { name: 'Show 50 more tables (50 not shown)' }))
     expect(within(list()).getAllByRole('rowheader')).toHaveLength(250)
     expect(screen.queryByRole('button', { name: /more tables/ })).toBeNull()
-  })
+  }, 20_000)
 })
 
 describe('SchemaErd: the node limit', () => {

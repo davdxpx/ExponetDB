@@ -1,0 +1,21 @@
+schema: exponetdb.migration/v1
+id: 01M4V3RV9F5XM2TB8KC6QZJ0NS
+name: role-verifiers
+description: |
+  Role verifiers (owner decision S3 of 2026-10-13): write-only storage of
+  the SCRAM-SHA-256 verifier a person submits for one role of a cluster.
+  The verifier is sealed with se1 at once; serve inserts a row and may
+  supersede (clear) one, but reads none of its sealed columns; the worker
+  opens it once, hands it sealed to the node in the apply job of
+  postgres.roles.verifier.set and clears it in the same transaction. No
+  interface reads it back. A new schema with one table; nothing existing
+  changes.
+dependsOn:
+  - 01M4V2CT4N8PJ6GZ3YQ1RWK7HD
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

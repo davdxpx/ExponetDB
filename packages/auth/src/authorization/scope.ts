@@ -18,6 +18,11 @@ import { AuthError } from '../errors.ts'
  *   "developer on the nonprod environments" is expressed);
  * - `target:T` covers exactly the target T.
  *
+ * An environment or target binding carries the authority of its
+ * environment's tier: it does not cover a subject whose registry tier the
+ * engine raised to production above the subject's own (`tierRaised`,
+ * OD-22, authorization.md §5.1).
+ *
  * There are no text patterns. Installation-wide subjects (identities,
  * roles, policy settings, the approval queue) have an empty chain and are
  * covered by `global` bindings only, so an `access.manage` binding on a
@@ -30,6 +35,20 @@ export interface SubjectChain {
   readonly targetId?: string
   /** Known tier of the subject; required when the action's tier matters. */
   readonly tier?: 'prod' | 'nonprod'
+  /**
+   * Registry facts of the cluster the subject is, or is placed on: its
+   * declared intended tier (OD-22; null while undeclared). Read by the
+   * registry tiers of `registry.manage` only (authorization.md §5.1).
+   */
+  readonly cluster?: { readonly declaredTier: 'prod' | 'nonprod' | null }
+  /**
+   * Set by the engine, never by a resolver: the action's registry tier is
+   * production while the subject's own tier is not (a nonprod environment's
+   * database on a cluster declared prod, say). A binding at an environment or
+   * a target carries the authority of that environment's tier only, so it
+   * does not cover such a subject; global, product and project bindings do.
+   */
+  readonly tierRaised?: boolean
 }
 
 /** The empty chain of installation-wide subjects. */
@@ -44,9 +63,17 @@ export function covers(scope: BindingScope, subject: SubjectChain): boolean {
     case 'project':
       return subject.projectId !== undefined && subject.projectId === scope.projectId
     case 'environment':
-      return subject.environmentId !== undefined && subject.environmentId === scope.environmentId
+      return (
+        subject.tierRaised !== true &&
+        subject.environmentId !== undefined &&
+        subject.environmentId === scope.environmentId
+      )
     case 'target':
-      return subject.targetId !== undefined && subject.targetId === scope.targetId
+      return (
+        subject.tierRaised !== true &&
+        subject.targetId !== undefined &&
+        subject.targetId === scope.targetId
+      )
   }
 }
 

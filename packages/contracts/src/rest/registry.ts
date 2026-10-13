@@ -232,6 +232,21 @@ export const ClusterConfirmRequestSchema = z
   })
   .meta({ id: 'ClusterConfirmRequest' })
 
+/**
+ * The declared intended tier of a cluster (OD-22, extended 2026-10-13). A
+ * registered cluster starts undeclared (`null` in the cluster view), which
+ * the registry treats as production for registry authority (fail closed).
+ * Declaring or changing it needs `registry.manage:prod`, whichever value.
+ */
+export const ClusterDeclaredTierRequestSchema = z
+  .strictObject({
+    declaredTier: TierSchema.meta({
+      description:
+        'The tier the cluster is meant for: prod (every database registered on it needs production authority) or nonprod (the environment decides).',
+    }),
+  })
+  .meta({ id: 'ClusterDeclaredTierRequest' })
+
 export const EndpointRetireRequestSchema = z
   .strictObject({ reason: ReasonSchema.optional() })
   .meta({ id: 'EndpointRetireRequest' })
@@ -263,6 +278,27 @@ export const TargetRegisterRequestSchema = z
 export const TargetStateChangeRequestSchema = z
   .strictObject({ reason: ReasonSchema })
   .meta({ id: 'TargetStateChangeRequest' })
+
+/**
+ * `POST /findings/{finding}/accept` (Wave 8, `drift.accept`): the target's
+ * current complete schema becomes its expected schema. A reason is required
+ * when a covered finding is critical or security-relevant
+ * (policy-engine.md, `drift.accept-prod`; drift-detection.md §6).
+ */
+export const DriftAcceptRequestSchema = z
+  .strictObject({
+    reason: z
+      .string()
+      .min(10)
+      .max(1000)
+      .meta({
+        untrusted: true,
+        description:
+          'Why the actual schema is adopted as expected: stored verbatim in the plan, untrusted, never interpreted (10 to 1000 characters). Required when a covered finding is critical or security-relevant.',
+      })
+      .optional(),
+  })
+  .meta({ id: 'DriftAcceptRequest' })
 
 // ----- write-only credential submission (inline, never readable) -----
 
@@ -383,9 +419,11 @@ export type ServerCreateRequest = z.infer<typeof ServerCreateRequestSchema>
 export type EndpointRequest = z.infer<typeof EndpointRequestSchema>
 export type ClusterRegisterRequest = z.infer<typeof ClusterRegisterRequestSchema>
 export type ClusterConfirmRequest = z.infer<typeof ClusterConfirmRequestSchema>
+export type ClusterDeclaredTierRequest = z.infer<typeof ClusterDeclaredTierRequestSchema>
 export type DatabaseRegisterRequest = z.infer<typeof DatabaseRegisterRequestSchema>
 export type TargetRegisterRequest = z.infer<typeof TargetRegisterRequestSchema>
 export type TargetStateChangeRequest = z.infer<typeof TargetStateChangeRequestSchema>
+export type DriftAcceptRequest = z.infer<typeof DriftAcceptRequestSchema>
 export type EndpointView = z.infer<typeof EndpointViewSchema>
 export type DatabaseView = z.infer<typeof DatabaseViewSchema>
 export type CredentialView = z.infer<typeof CredentialViewSchema>

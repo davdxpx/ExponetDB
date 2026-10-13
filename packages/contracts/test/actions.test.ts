@@ -325,6 +325,7 @@ describe('high-risk denials (authz.denied, audit.md §2)', () => {
       'api_key.create',
       'service_account.grant.create',
       'access.role_binding.create',
+      'statement.raw.get',
     ] as const) {
       expect(isHighRiskAction(id), id).toBe(true)
     }

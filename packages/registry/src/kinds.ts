@@ -584,6 +584,82 @@ export class ClusterConfirmKind extends RegistryKind {
   }
 }
 
+/**
+ * Declares a cluster's intended tier (OD-22, extended 2026-10-13). Bound to
+ * the declared tier and the cluster state the plan was made against; the
+ * Control Store guard admits the write only from an operation of this kind
+ * and stamps its time.
+ */
+export class ClusterDeclareTierKind extends RegistryKind {
+  readonly kind = 'registry.cluster.declare_tier'
+  readonly actionClass = 'high'
+
+  async bindings(_plan: PlanRecord, c: Body, expected: Body) {
+    const cluster = await getCluster(this.deps.store, c.text('clusterId'))
+    const changed: ChangedBinding[] = []
+    if (cluster === undefined || cluster.state === 'retired') {
+      changed.push({
+        binding: 'clusterState',
+        expected: expected.text('clusterState'),
+        actual: cluster?.state ?? null,
+      })
+    }
+    if (cluster !== undefined && cluster.declaredTier !== expected.textOrNull('declaredTier')) {
+      changed.push({
+        binding: 'declaredTier',
+        expected: expected.textOrNull('declaredTier'),
+        actual: cluster.declaredTier,
+      })
+    }
+    return changed
+  }
+
+  async run(ctx: ExecutionContext, c: Body) {
+    const clusterId = c.id('cls', 'clusterId')
+    const declaredTier = c.oneOf(['prod', 'nonprod'] as const, 'declaredTier')
+    return this.effect(async (tx) => {
+      const { rows } = await tx.query(
+        'registry.kind.cluster.declared_tier_before',
+        `SELECT declared_tier FROM registry.clusters WHERE cluster_id = $1 AND state <> 'retired' FOR UPDATE`,
+        [clusterId],
+      )
+      const before = rows[0]
+      if (before === undefined) return false
+      const { rowCount } = await tx.query(
+        'registry.kind.cluster.declare_tier',
+        `UPDATE registry.clusters SET declared_tier = $2, declared_tier_by_operation_id = $3
+          WHERE cluster_id = $1 AND state <> 'retired'`,
+        [clusterId, declaredTier, ctx.operationId],
+      )
+      if (rowCount !== 1) return false
+      await this.audit(
+        tx,
+        ctx,
+        { clusterId, declaredTier, before: before.textOrNull('declared_tier') },
+        { clusterId, tier: 'prod' },
+      )
+      return true
+    })
+  }
+
+  check(ctx: ExecutionContext, c: Body) {
+    return this.exists(
+      'registry.kind.cluster_declare_tier.verify',
+      `SELECT 1 FROM registry.clusters
+        WHERE cluster_id = $1 AND declared_tier = $2 AND declared_tier_by_operation_id = $3`,
+      [c.text('clusterId'), c.text('declaredTier'), ctx.operationId],
+    )
+  }
+
+  applied(ctx: ExecutionContext, c: Body) {
+    return this.exists(
+      'registry.kind.cluster_declare_tier.reconcile',
+      'SELECT 1 FROM registry.clusters WHERE cluster_id = $1 AND declared_tier_by_operation_id = $2',
+      [c.text('clusterId'), ctx.operationId],
+    )
+  }
+}
+
 export class EndpointAddKind extends RegistryKind {
   readonly kind = 'registry.endpoint.add'
   readonly actionClass = 'high'
@@ -918,6 +994,7 @@ export function registryKinds(deps: RegistryKindDeps): readonly OperationKind[] 
     new ServerCreateKind(deps),
     new ClusterRegisterKind(deps),
     new ClusterConfirmKind(deps),
+    new ClusterDeclareTierKind(deps),
     new EndpointAddKind(deps),
     new EndpointRetireKind(deps),
     new DatabaseRegisterKind(deps),

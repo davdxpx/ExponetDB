@@ -81,6 +81,7 @@ Initial kinds (owning wave in brackets):
 | `postgres.config.apply`, `postgres.reload`, `postgres.restart` | standard / high | 5 |
 | `postgres.tls.rotate` | high | 5 |
 | `postgres.roles.apply`, `postgres.extensions.apply`, `postgres.hba.apply` | high | 5 |
+| `postgres.roles.verifier.set` (a consumer role's SCRAM verifier, submitted write-only and sealed, set through one `set_password` step of the node; **[OBSERVED]** `packages/nodes/src/capability-kinds.ts` `RoleVerifierSetKind`, [`../03-database-model/credentials-and-roles.md` §4.1](../03-database-model/credentials-and-roles.md#41-role-verifiers-wave-8-owner-decision-s3)) | high | 8 |
 | `packages.apply_update` | high | after 9 (Wave 5 ships audit and planning only) |
 | `backup.run`, `backup.verify` | standard / low | 9 |
 | `restore.execute` | standard (drill into scratch) / high (clone into a new nonprod target) / critical (recovery, unmasked production clone) | 9 |
@@ -90,11 +91,36 @@ Initial kinds (owning wave in brackets):
 | `ledger.reconcile` | high | 6 |
 | `migration.resume` (continue or clean up an incomplete non-transactional bundle) | high | 6 |
 | `migration.rebaseline` (legacy import correction) | high | 6 |
-| `drift.accept` | standard / high | 6 |
+| `drift.accept` (adopt the target's current schema as its baseline; resolves the covered drift findings `accepted`; no DDL) | standard / high | 8 |
 | `operation.force_release` (release a lock domain held by a lost worker) | high | 6 |
 | `node.decommission` | high | 5 |
 | `node.config.update` (job-signing key rotation through the node's `config.update@1`; the gateway address is OD-27) | high | 5 |
 | `node.inspect` (one read or plan capability through a node; its node-signed result becomes an observation, [`../07-node-agent/control-plane.md` §9.2](../07-node-agent/control-plane.md#92-observations-nodeinspect)) | low | 5 |
+
+**[DECIDED]** (Wave 8, order §9 endpoint 3; `packages/diagnostics/src/drift-accept.ts`)
+`drift.accept`: planned by `drift.accept.plan` (`POST /findings/{finding}/accept`,
+`schema.manage`, a person through the Web App or the CLI only) from an open
+drift finding; class `standard` on nonprod and `high` on prod; exclusivity
+domain `target.schema` (no migration records a baseline at the same time).
+Its content is the target id, the named finding, the generation, the
+project's managed scope, the `fp1` fingerprint of the complete snapshot it
+will record, the open drift findings it covers (all of the target's) and the
+person's reason (required for critical or security-relevant drift); its
+`expectedState` the generation, the current baseline and its fingerprint,
+the schema fingerprint and the number of covered findings. Kind-specific
+bindings, checked live at acceptance and under the locks (`PLAN_STALE`):
+`schemaFingerprint` (a live complete snapshot with the plan's scope),
+`baseline`, `findings` (a drift finding opened since planning), `scope`,
+`generation`, `target`. Execution writes only the Control Store, in one
+transaction: the snapshot (purpose `drift_accept`), the baseline (reason
+`drift_accept`), the covered findings resolved `accepted` and the kind's
+`drift.accept` audit event (ids, counts, fingerprints and the reason, never
+catalog text), besides the engine's own operation events. Verification
+re-reads the baseline, the target's live fingerprint and the findings;
+reconciliation reads the operation's baseline row. Production plans need
+`drift.accept-prod`; the worker's dispatch admission re-checks the policy,
+the approvals and the planner's authority before it starts
+([`../03-database-model/drift-detection.md` §5](../03-database-model/drift-detection.md#5-resolutions)).
 
 **[DECIDED]** (pre-G1, 2026-10-05) `operation.force_release` needs its own
 permission and scope, `operations.recover`: human only, never MCP-grantable or
@@ -544,6 +570,56 @@ deliberately inconvenient.
   unacceptable (`BREAK_GLASS_REQUIRED`).
 - **Not yet in Wave 6:** the review (`breakglass.reviewed`) and the banner are
   Web App work; unreviewed grants stay queryable (`reviewed_at IS NULL`).
+
+**[DECIDED]** Wave 8 (order §9): list and post-incident review
+([`resources.md`](../06-rest-api/resources.md#plans-approvals-operations)):
+
+- **Who:** owners and admins, through `policy.manage` at the installation
+  (a global binding). `policy.manage` is held by exactly `owner` and
+  `admin` (authorization.md §3.1) and its scope only by a human session, so
+  no service account, API key or MCP client reaches either action; neither
+  is an MCP tool. Overriding safety policy stays an owner power
+  (`breakglass.activate`); reviewing what an override did is a policy
+  governance task both roles share.
+- **List** `GET /break-glass-grants` (`breakglass.list`, Web App or CLI
+  session): newest first, by a keyset on the grant id. A grant shows its
+  target (id, path, tier), the person who activated it (the frozen bundle
+  records a grant at activation: there is no requester or approver), the
+  rules, the reason as untrusted data, its time box and uses, and its review
+  or `null`. Its **state** is derived on each read at one database clock
+  reading (`observedAt`, `source: live`): `revoked`, else `expired`, else
+  `used_up`, else `active`. Filters: `state`, `review` (`open`, `done`),
+  `target`.
+- **Review procedure** `POST /break-glass-grants/{id}/review` with
+  `{ note }` (`breakglass.review`, Web App session re-authenticated within
+  300 s): look at the grant and at the operations made under it (the audit
+  search for `breakglass.used` and the plans that carry its
+  `overriddenRules`), then write what happened and what follows. The review
+  is accepted only once the grant can no longer be used (`expired`,
+  `revoked` or `used_up`); an `active` grant is `CONFLICT`, so later uses
+  are never left outside a review. It writes only the review columns of the
+  frozen `breakglass` bundle (`reviewed_at`, `reviewed_by`, `review_note`,
+  which `exdb_serve` was granted for this in Wave 6) and the audit event in
+  one transaction. **Once per grant:** the write matches only an unreviewed
+  grant, so of two concurrent reviews the second changes nothing and is
+  `CONFLICT`; the bundle's guard trigger refuses any later change of a
+  recorded review. The activator may review their own grant (an
+  installation may have one owner); the reviewer is recorded and shown.
+- **The note** is untrusted text: 1 to 2,000 characters (the bundle's
+  `CHECK`), not blank, no control character except the line feed, no
+  bidirectional override. **It is permanent:** it cannot be changed or
+  erased (grants are never deleted), so it must not contain personal data
+  (names, e-mail addresses, customer details); refer to people by role and
+  to incidents by ticket number.
+- **Audit:** `breakglass.reviewed` carries the grant id, the grant's state
+  at review, the activator's identity id, the note's length and its
+  SHA-256 (`noteSha256`), never the note text: the text is kept once, with
+  the grant, and the audit export does not copy free text a second time;
+  the digest binds the audited review to the stored note.
+- **Activation is untouched:** neither route can activate, extend or use a
+  grant, and activation stays refused while
+  [OD-21](../00-product/open-decisions.md#od-21-delivery-channel-for-invitations-and-security-notifications)
+  is open. **[OBSERVED]** `apps/server/test/http-breakglass.int.test.ts`.
 
 ## 9. Audit integration
 

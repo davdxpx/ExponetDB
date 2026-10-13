@@ -24,18 +24,23 @@ import {
   ApprovalDecisionRequestSchema,
   AUTH_BASE_PATH,
   AUTH_ROUTES,
+  AuditExportQuerySchema,
   AuthenticationCredentialSchema,
   AuthFactorIdSchema,
   AuthorizationRequestHandleSchema,
   actionDefinition,
   BaselinePlanRequestSchema,
   BreakGlassActivateRequestSchema,
+  BreakGlassGrantIdSchema,
+  BreakGlassGrantListQuerySchema,
+  BreakGlassReviewRequestSchema,
   BundleIngestRequestSchema,
   CimdClientRequestSchema,
   CLIENT_STATES,
   ClientApprovalRequestSchema,
   ClientDecisionReasonSchema,
   ClusterConfirmRequestSchema,
+  ClusterDeclaredTierRequestSchema,
   ClusterIdSchema,
   ClusterRegisterRequestSchema,
   ConsentDecisionRequestSchema,
@@ -44,6 +49,7 @@ import {
   DEFAULT_BODY_LIMIT_BYTES,
   DeviceDecisionRequestSchema,
   DisableIdentityRequestSchema,
+  DriftAcceptRequestSchema,
   decodeQuery,
   EmailSchema,
   EndpointIdSchema,
@@ -53,6 +59,7 @@ import {
   EnvironmentCreateRequestSchema,
   EnvironmentIdSchema,
   type ExplainRequest,
+  FindingIdSchema,
   GrantIdSchema,
   GrantStateSchema,
   IdentityIdSchema,
@@ -96,7 +103,11 @@ import {
   RoleBindingIdSchema,
   RoleBindingPlanRequestSchema,
   RoleIdSchema,
+  RoleVerifierSubmissionSchema,
   type RouteContract,
+  type SavedQueryCreateRequest,
+  SavedQueryIdSchema,
+  type SavedQueryUpdateRequest,
   SchemaDiffRequestSchema,
   SchemaObjectKindSchema,
   type Scope,
@@ -105,7 +116,9 @@ import {
   ServiceAccountCreateRequestSchema,
   ServiceClientKeysRequestSchema,
   SessionIdSchema,
+  Sha256DigestSchema,
   SlugSchema,
+  SqlClassificationRequestSchema,
   StepUpIdSchema,
   TargetRefSchema,
   TargetRegisterRequestSchema,
@@ -184,6 +197,8 @@ interface Call {
 /** A plain result, or a ceremony outcome (which carries cookie instructions). */
 type Result =
   | { readonly kind: 'value'; readonly value: unknown }
+  /** A body the use case already serialized (`mediaType` routes: NDJSON). */
+  | { readonly kind: 'text'; readonly body: string }
   | { readonly kind: 'outcome'; readonly outcome: Outcome<unknown> }
 
 type Handler = (app: Application, call: Call) => Promise<Result>
@@ -242,6 +257,7 @@ function pageOf(query: unknown): { limit: number; cursor?: string } {
 
 const target = (call: Call) => TargetRefSchema.parse(field(call.params, 'target'))
 const clusterId = (call: Call) => ClusterIdSchema.parse(field(call.params, 'clusterId'))
+const savedQueryId = (call: Call) => SavedQueryIdSchema.parse(field(call.params, 'savedQueryId'))
 
 function optional<T>(source: unknown, key: string, parse: (v: unknown) => T): T | undefined {
   const v = field(source, key)
@@ -626,6 +642,12 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   // ----- /api/v1: the Wave 8 reads (order §9) -----
   getInstallationHealth: async (app, call) => value(await app.installationHealth(caller(call))),
   getAuditChain: async (app, call) => value(await app.auditChain(caller(call))),
+  exportAuditEvents: async (app, call) => {
+    const query = AuditExportQuerySchema.parse(call.query)
+    return { kind: 'text', body: await app.exportAuditEvents(caller(call), query) }
+  },
+  classifySql: async (app, call) =>
+    value(await app.classifySql(caller(call), SqlClassificationRequestSchema.parse(call.body))),
   getTargetHealthHistory: async (app, call) =>
     value(
       await app.registry.targetHealthHistory(caller(call), target(call), {
@@ -938,6 +960,27 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       ),
     )
   },
+  // ----- /api/v1: the fleet overview and the findings across targets (Wave 8, order §9) -----
+  getFleet: async (app, call) => value(await app.fleet(caller(call))),
+  listFindings: async (app, call) => {
+    const severity = field(call.query, 'severity')
+    const state = field(call.query, 'state')
+    const kind = field(call.query, 'kind')
+    return value(
+      await app.registry.findings(
+        caller(call),
+        {
+          target: optional(call.query, 'target', (v) => TargetRefSchema.parse(v)),
+          ...(severity === 'info' || severity === 'warning' || severity === 'critical'
+            ? { severity }
+            : {}),
+          ...(state === 'open' || state === 'resolved' || state === 'all' ? { state } : {}),
+          ...(kind === 'drift' || kind === 'health' ? { kind } : {}),
+        },
+        pageOf(call.query),
+      ),
+    )
+  },
   listServers: async (app, call) =>
     value(await app.registry.servers(caller(call), pageOf(call.query))),
   getServer: async (app, call) =>
@@ -1034,6 +1077,15 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         idempotency(call),
       ),
     ),
+  planClusterDeclaredTier: async (app, call) =>
+    value(
+      await app.registry.planClusterDeclaredTier(
+        caller(call),
+        clusterId(call),
+        ClusterDeclaredTierRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
   planEndpoint: async (app, call) =>
     value(
       await app.registry.planEndpoint(
@@ -1096,6 +1148,15 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         'target.decommission',
         target(call),
         TargetStateChangeRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planDriftAcceptance: async (app, call) =>
+    value(
+      await app.registry.planDriftAccept(
+        caller(call),
+        FindingIdSchema.parse(field(call.params, 'finding')),
+        DriftAcceptRequestSchema.parse(call.body ?? {}),
         idempotency(call),
       ),
     ),
@@ -1182,6 +1243,26 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         caller(call),
         target(call),
         BreakGlassActivateRequestSchema.parse(call.body),
+      ),
+    ),
+  // Wave 8 (order §9): the grants and their post-incident review; nothing here activates one.
+  listBreakGlassGrants: async (app, call) => {
+    const query = BreakGlassGrantListQuerySchema.parse(call.query)
+    return value(
+      await app.breakGlass.list(caller(call), {
+        state: query.state,
+        review: query.review,
+        target: query.target,
+        ...pageOf(call.query),
+      }),
+    )
+  },
+  reviewBreakGlassGrant: async (app, call) =>
+    value(
+      await app.breakGlass.review(
+        caller(call),
+        BreakGlassGrantIdSchema.parse(field(call.params, 'grant')),
+        BreakGlassReviewRequestSchema.parse(call.body),
       ),
     ),
   planImportAnalysis: async (app, call) =>
@@ -1321,6 +1402,16 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         idempotency(call),
       ),
     ),
+  // Write-only (owner decision S3): no idempotency key, whose request hash would cover the verifier.
+  submitRoleVerifier: async (app, call) =>
+    value(
+      await app.nodes.submitRoleVerifier(
+        call.meta.requestId,
+        caller(call),
+        clusterId(call),
+        RoleVerifierSubmissionSchema.parse(call.body),
+      ),
+    ),
 
   // ----- /api/v1: schema, drift, sessions (Wave 4) -----
   getSchemaOverview: async (app, call) =>
@@ -1376,6 +1467,41 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     value(
       await app.queries.cancel(caller(call), target(call), String(field(call.params, 'queryId'))),
     ),
+  // ----- Wave 8 (order §9, endpoints 6 and 7): own query history, saved queries -----
+  listQueryHistory: async (app, call) =>
+    value(await app.queries.history(caller(call), target(call), pageOf(call.query))),
+  listSavedQueries: async (app, call) => {
+    const scope = optional(call.query, 'target', (v) => TargetRefSchema.parse(v))
+    return value(
+      await app.savedQueries.list(caller(call), {
+        ...pageOf(call.query),
+        ...(scope === undefined ? {} : { target: scope }),
+      }),
+    )
+  },
+  createSavedQuery: async (app, call) =>
+    value(
+      await app.savedQueries.create(caller(call), call.body as SavedQueryCreateRequest, {
+        requestId: call.meta.requestId,
+      }),
+    ),
+  getSavedQuery: async (app, call) =>
+    value(await app.savedQueries.get(caller(call), savedQueryId(call))),
+  updateSavedQuery: async (app, call) =>
+    value(
+      await app.savedQueries.update(
+        caller(call),
+        savedQueryId(call),
+        call.body as SavedQueryUpdateRequest,
+        { requestId: call.meta.requestId },
+      ),
+    ),
+  deleteSavedQuery: async (app, call) =>
+    value(
+      await app.savedQueries.remove(caller(call), savedQueryId(call), {
+        requestId: call.meta.requestId,
+      }),
+    ),
   listSessions: async (app, call) => {
     const minAge = field(call.query, 'minAgeSeconds')
     const limit = field(call.query, 'limit')
@@ -1389,6 +1515,21 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     )
   },
   getLockGraph: async (app, call) => value(await app.registry.locks(caller(call), target(call))),
+  getRawStatement: async (app, call) => {
+    const pid = field(call.query, 'pid')
+    return value(
+      await app.rawStatements.view(
+        caller(call),
+        TargetRefSchema.parse(field(call.query, 'target')),
+        {
+          digest: Sha256DigestSchema.parse(field(call.params, 'digest')),
+          pid: typeof pid === 'number' ? pid : undefined,
+          backendStart: optionalText(call.query, 'backendStart'),
+        },
+        { requestId: call.meta.requestId },
+      ),
+    )
+  },
 
   disableOAuthClient: async (app, call) =>
     value(
@@ -1633,6 +1774,22 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
           oauthBinding: cookies.get(OAUTH_BINDING_COOKIE),
         }
         const result = await handler(deps.application, call)
+        if (result.kind === 'text') {
+          if (route.mediaType === undefined) {
+            deps.logger.error('http.response_contract_violation', { route: route.operationId })
+            return fail(new HttpRefusal('INTERNAL'))
+          }
+          // The use case validated the lines it wrote against the contract; a download is never cached.
+          return new Response(result.body, {
+            status: route.response.status,
+            headers: new Headers({
+              'content-type': route.mediaType,
+              'cache-control': 'no-store',
+              'x-content-type-options': 'nosniff',
+              'content-disposition': 'attachment; filename="exponetdb-audit-export.ndjson"',
+            }),
+          })
+        }
         const headers = new Headers({ 'content-type': 'application/json' })
         let payload: unknown
         if (result.kind === 'outcome') {

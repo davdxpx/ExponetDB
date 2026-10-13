@@ -107,12 +107,13 @@ phases as applicable):
 | Plans / approvals | `plan.created`, `plan.invalidated`, `plan.withdrawn`, `plan.expired`, `approval.granted`, `approval.rejected`, `operation.accepted`, `operation.state_changed` (every transition, Wave 2: completion, reconciliation and failures are transitions), `operation.force_release` |
 | Break-glass | `breakglass.activated`, `breakglass.used`, `breakglass.expired`, `breakglass.reviewed` |
 | Connections | `connections.cancel`, `connections.terminate` |
-| Data access | `data.read` (normalized statement, digest, rows, duration), `diagnostics.raw_statement_viewed` |
+| Data access | `data.read` (normalized statement, digest, rows, duration), `diagnostics.raw_statement_viewed`, `saved_query.create`, `saved_query.update`, `saved_query.delete` (Wave 8: id, scope, visibility, revision and the digest of the redacted text; never the text or the name) |
 | Backups / restore | `backup.started`, `backup.completed`, `backup.verified`, `backup.failed`, `restore.planned`, `restore.executed`, `restore.verified`, `restore_drill.*` |
 | Node / cluster | `node.enrolled`, `node.revoked`, `node.certificate_renewed`, `postgres.config.planned/applied`, `postgres.restart.*`, `postgres.reload`, `postgres.tls.rotated`, `postgres.roles.applied`, `postgres.hba.applied`, `postgres.extensions.applied`, `packages.update.*` |
 | Registry | `target.registered`, `target.suspended`, `target.resumed`, `target.decommissioned`, `target.identity_stamped`, `placement.changed`, `cluster.confirmed`, `credential.rotated`, `credential.verified_failed` |
 | Access | `identity.created`, `identity.disabled`, `login.succeeded/failed` (rate-limited aggregation for failures), `reauth.succeeded/failed`, `role_binding.changed`, `oauth.client_registered`, `oauth.client_approved`, `oauth.grant_created`, `oauth.grant_revoked`, `oauth.token_refresh_reuse_detected`, `api_key.created`, `api_key.revoked`, `policy.settings_changed` |
 | Maintenance | `retention.pruned` (per dropped partition: class, range, row count, boundary) |
+| Audit | `audit.export` (the export itself: range and count, never content; §5.1) |
 | Security signals | `target.identity_mismatch`, `cluster.identity_mismatch`, `ledger.divergence_detected`, `authz.denied` for high-risk actions (other refusals: request log and metric only) |
 
 **[DECIDED]** (Wave 3B) The OAuth and delegation events as implemented:
@@ -157,7 +158,8 @@ request log. **[ASSUMPTION]** The wording is for the owner's review.
 High-risk is defined once, in the action catalog (`isHighRiskAction`,
 `packages/contracts/src/actions.ts`): every consequential action (applying
 any change; changing access, grants, keys, clients and policies), every
-`*.plan` action, approvals and break-glass, and data reads (`data.read`).
+`*.plan` action, approvals and break-glass, and data reads (`data.read`,
+and since Wave 8 the raw statement view through `diagnostics.read_sensitive`).
 Ceremonies and OAuth protocol endpoints keep their own events. A denial is
 a security signal when the engine names a missing permission, scope,
 client kind, resource or restriction, a human-only action by an agent,
@@ -178,6 +180,35 @@ other event. An alarm on many refused tool calls is the metric
 client; they belong to the request through `refs.operationId`, whose
 `operation.accepted` names client and grant. `[OBSERVED]` in
 `apps/server/test/mcp-plans.int.test.ts`.
+
+**[DECIDED]** (Wave 8, order §9) `breakglass.reviewed` is written in the
+transaction that records the post-incident review
+([`operations-engine.md` §8](./operations-engine.md#8-break-glass)):
+`subject` is the grant's target, `changes` carries `grantId`, `grantState`
+(at review), `activatedBy` (identity id), `noteLength` and `noteSha256`
+(`sha256:<hex>` of the UTF-8 note). The note text itself is **not** copied
+into the audit: it is free text of up to 2,000 characters, kept once and
+permanently with the grant (`breakglass.grants.review_note`), and a change
+value is capped at 256 characters; the digest binds the audited review to
+the stored note. A refused review is an ordinary refusal (request log and
+metric): `isHighRiskAction` names `breakglass.activate`, not the review,
+which can neither override a rule nor change a managed system.
+`[OBSERVED]` in `apps/server/test/http-breakglass.int.test.ts`.
+
+**[DECIDED]** (Wave 8, owner decision S2) `diagnostics.raw_statement_viewed`
+is written for every raw statement view
+([`statement-redaction.md` §4](../03-database-model/statement-redaction.md#4-raw-text-access)),
+in its own transaction **before** the answer leaves: no audit, no text. A
+lookup that found nothing is audited too (`phase: failed`, `result.errorCode`
+`STATEMENT_NOT_AVAILABLE`, `changes.reason`). `subject` is the target (id,
+path, tier, cluster); `changes` carries `statementDigest`, `requestedPid`
+when the request named a session, and on success `view`
+(`pg_stat_activity` or `pg_stat_statements`), `pid`, `mode`, `removed` and
+`truncated`. **Never the statement text**, redacted or not: the text is read
+live and kept nowhere. A refusal by the engine (no `diagnostics.read_sensitive`,
+not a person in the Web App) is `authz.denied`; a missing re-authentication
+is an ordinary refusal. `[OBSERVED]` in
+`apps/server/test/http-raw-statement.int.test.ts`.
 
 ## 3. Writing
 
@@ -378,7 +409,104 @@ and signed checkpoints with a key held outside the Control Plane.
   plan would not use it.
 - Audit is readable by agents with `audit.read` (useful for "what happened on
   production yesterday"), with personal fields minimized (§6).
-- Every audit view is paginated; no bulk export via MCP.
+- Every audit view is paginated; no bulk export via MCP. The export of §5.1 is
+  not an MCP tool either.
+
+### 5.1 Export for offline verification
+
+**[DECIDED]** (owner decision 2026-10-13; the earlier question "may the
+search view serve offline verification" is answered no: `searchAuditEvents`
+projects parts of an event away, and `ac1` hashes `JCS(E)` of the whole stored
+event, so a verifier needs the stored event verbatim, behind its own gate.)
+
+`GET /api/v1/audit-events/export?from&to&cursor&limit` (`exportAuditEvents`,
+action `audit.export`, wave 8) answers `application/x-ndjson` with the stored
+events unchanged.
+
+- **Who.** Owners and admins only: the permission is `policy.manage`, held by
+  exactly those two roles (`audit.read` is also held by the operator and the
+  auditor and is **not** enough). Human only, a **Web App session** (`clientKinds`:
+  `web`), never an MCP tool, an OAuth client, an API key or a service account.
+  **Fresh re-authentication within 300 seconds** (`reauthentication`,
+  `reauthWithinSeconds`), enforced by the central authorization engine like for
+  any action; it works for a GET because the engine reads the session's
+  re-authentication time, not the HTTP method (a browser download link with the
+  session cookie is enough; a stale proof answers `REAUTH_REQUIRED`). The
+  CLI is **not** admitted yet: its step-ups (ADR-0026) are bound to
+  `plan.apply` and enrollment tokens only, and a new step-up action would be a
+  change to a frozen bundle's vocabulary and needs its own decision.
+  **[OPEN]** whether the CLI should export.
+- **Warning: full events.** The export contains every member of every event
+  (`changes`, `decision`, request pseudonyms, client names, refs, the
+  caller-supplied `reason`), that is, the personal-data surface of
+  [§6](#6-personal-data) and [OD-8](../00-product/open-decisions.md#od-8-audit-retention-and-personal-data)
+  in one file. Treat the file like the audit itself: store it encrypted, keep it
+  as long as the audit retention allows and no longer, and do not attach it to
+  tickets. The response is `Cache-Control: no-store` and a download
+  (`Content-Disposition: attachment`).
+- **Audited.** Each export writes `audit.export` in the same transaction
+  (`phase: completed`; `changes`: `from`, `to`, `firstSeq`, `lastSeq`, `count`,
+  `more`, `paged`): the range and the count, never the content. If the event
+  cannot be written, nothing is exported (§3). The export event itself is not
+  part of the page it audits (the page was read before it); it is in the next
+  export.
+- **Range.** `from` is inclusive and `to` exclusive, each either an RFC 3339
+  UTC time (`occurredAt`) or a decimal sequence number (kinds may be mixed);
+  both optional. A bad value, or `to` not after `from` for the same kind, is
+  `VALIDATION_FAILED` (422).
+- **Paging.** At most **10,000 events per response** (`limit` may lower it),
+  ordered by `seq` ascending, and at most 32 MiB of event text (an event is at
+  most 64 KiB, so a page of unusually large events is shorter). `more` and
+  `nextCursor` in the header continue with the same `from`/`to`
+  (`cursor` = events after the last `seq` of the page). Events are append-only
+  and `seq` is gapless, so pages of different requests join without overlap.
+
+**Format** `exponetdb.audit-export/v1` (one JSON document per line, LF
+separated; split on LF only, event text may contain U+2028):
+
+1. **Header first.** The page is built before it is sent, so the counts are
+   known: `{"type":"header","format":"exponetdb.audit-export/v1","chain":"ac1",
+   "from":…,"to":…,"firstSeq":…,"lastSeq":…,"count":…,"more":…,"nextCursor":…,
+   "checkpoints":[{"seq","hash","createdAt"}…],"generatedAt":…}`. `from`/`to` echo
+   the request (null when absent); `firstSeq`/`lastSeq` are null for an empty
+   page. `checkpoints` are the stored chain checkpoints with
+   `firstSeq - 1 <= seq <= lastSeq`, oldest first (at most 50): anchors to compare.
+   More anchors: `GET /audit-events/chain` and the off-host checkpoint objects of
+   [§4.4](#44-checkpoints-and-off-host-export), which a database rewrite cannot reach.
+2. **One line per event:** `{"type":"event","seq":N,"prevHash":"…","hash":"…",
+   "event":{…}}` where `event` is the stored event text (its JCS form, the value
+   `ac1` hashed) embedded unchanged.
+
+**Offline verification, exactly.** A verifier needs SHA-256 and an RFC 8785
+(JCS) canonicalizer, nothing from ExponetDB. For each event line, in file order:
+
+1. Parse the line as JSON. Let `E` be its `event` member and `P` its `prevHash`.
+2. `T = JCS(E)` as UTF-8 bytes (RFC 8785: members sorted by UTF-16 code unit,
+   no insignificant whitespace, ES6 number and string serialization). Any change
+   to `E` changes `T`.
+3. Build the input bytes: `UTF8("exponetdb/audit-chain/ac1") LF`, then
+   `UTF8("prevHash") LF decimal(byteLength(UTF8(P))) LF UTF8(P) LF`, then
+   `UTF8("event") LF decimal(byteLength(T)) LF T LF` (LF is byte 0x0A; the length
+   is the number of **bytes**).
+4. `H = "sha256:ac1:" + lowercase hex(SHA-256(input))`. It must equal the line's
+   `hash`; otherwise the event, `prevHash` or `hash` was altered.
+5. `E.seq` must equal the line's `seq`. Across lines, `seq` rises by exactly 1,
+   and each line's `prevHash` equals the previous line's `hash`. For `seq` 1,
+   `prevHash` is the genesis value `ac1:genesis:<installation id>`.
+6. Anchor the page: the first line's `prevHash` must equal a known hash of
+   `firstSeq - 1` (a header checkpoint with that `seq`, the last line of the
+   previous page, or an off-host checkpoint), or be the genesis value. Every
+   header checkpoint whose `seq` falls inside the page must equal the `hash` of
+   that line. A page whose events verify but match no anchor proves only
+   internal consistency, not that history was not rewritten as a whole.
+7. Stop at the first failure and report its `seq`. Continue with `nextCursor`
+   while `more` is true; the next page's first `prevHash` must equal this page's
+   last `hash`.
+
+The reference check is the golden vectors `tooling/golden/audit-chain.json`;
+**[OBSERVED]** an independent verifier written from this text only, and its
+failure on a one-byte change, are in `apps/server/test/http-audit-export.int.test.ts`.
+
 
 ## 6. Personal data
 

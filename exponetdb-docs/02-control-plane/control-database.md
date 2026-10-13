@@ -586,6 +586,80 @@ needs a person. The worker may read `oauth.clients.approved_by_identity_id`
 and `created_at` and `oauth.authorization_requests.client_id` for that
 prune. No table or column changes.
 
+**[DECIDED]** (Wave 8, order §9 endpoint 3; bundle
+`01M4V4DA2W7HK9QB5NZ3XT6RME_drift-acceptance`, depending on
+`oauth-open-registration`, additive, transactional; not frozen until G8) The
+CHECK of `observation.schema_snapshots.purpose` accepts one more value,
+`drift_accept`: the snapshot the worker records as a target's baseline when
+a person's drift acceptance is applied. The baseline reason `drift_accept`
+and the finding resolution `accepted` exist since the observation bundle; no
+table, column, row or right changes (the worker already inserts baselines
+and resolves findings; `serve` never inserts a baseline).
+
+**[DECIDED]** (Wave 8, order §9; bundle
+`01M4V1SQ7K2D9QHRZ5XW0BN3EA_saved-queries`, depending on
+`drift-acceptance`, additive, transactional, not frozen) Schema
+`savedq`, owned by `exdb_migrate`, with one table `savedq.saved_queries`:
+the `sqy_` id, the owner (`auth.identities`), the name (1 to 120
+characters, no control character), the SQL text (1 to 65,536 characters),
+its digest (`sha256:` of the redacted text), the visibility (`personal`,
+`project`), the scope (`project` with a project id or `target` with a
+target id, CHECKed exclusive, foreign keys `ON DELETE RESTRICT`), a
+revision and the created and updated times (the database's clock). A guard
+keeps the id, the owner, the scope and the creation time, and lets a change
+raise the revision by exactly one (`EXQ01`). Rights: `serve` selects and
+inserts; it holds no `UPDATE`, `DELETE` or `TRUNCATE` and changes or
+deletes a row only through the security-definer functions
+`savedq.update_saved_query` (owner and revision named, `EXQ02` for a row
+that is missing or someone else's, `EXQ03` for a stale revision) and
+`savedq.delete_saved_query` (owner named, `EXQ02`); `worker` has no access.
+The same bundle adds the partial index `audit_events_data_read_actor` on
+`audit.audit_events (actor_id, seq) WHERE action = 'data.read'` for the
+history of one's own data reads; the events and their chain are unchanged
+([`../03-database-model/sql-execution-security.md` §2.6, §2.7](../03-database-model/sql-execution-security.md#26-query-history-wave-8)).
+
+**[DECIDED]** (owner decision 2026-10-13, OD-22 extended, S4; bundle
+`01M4V2CT4N8PJ6GZ3YQ1RWK7HD_cluster-declared-tier`, depending on
+`saved-queries`, additive, transactional) `registry.clusters`
+gains the declared intended tier: `declared_tier` (`prod` or `nonprod`,
+NULL while undeclared), `declared_tier_at` (database clock) and
+`declared_tier_by_operation_id`, recorded together (CHECK). A second
+guard (`clusters_tier_guard`; the frozen `registry` bundle's guard is
+untouched) refuses a cluster registered declared, a declaration on a
+retired cluster, a declared tier set back to NULL, a declaration without
+its own operation of the kind `registry.cluster.declare_tier`, and any
+written time. Only `exdb_worker` may update the three columns; `serve`
+reads them through its table-wide SELECT. The OAuth scope catalog is not
+changed: the frozen `oauth-delegation` bundle's `verify.sql` pins exactly
+four `:prod` and four `:nonprod` scopes and fifteen explicit-consent
+scopes, so `registry.manage` stays one scope
+([authorization.md §5.1](../08-auth-and-security/authorization.md#51-the-registry-tier-of-registrymanage-od-22)).
+Tests: `packages/control-store/test/registry-schema.int.test.ts`
+("declares a cluster tier only through its own declare_tier operation",
+and the upgrade from the G3B schema through every later bundle).
+
+**[DECIDED]** (owner decision S3, 2026-10-13; bundle
+`01M4V3RV9F5XM2TB8KC6QZJ0NS_role-verifiers`, depending on
+`cluster-declared-tier`, additive) Write-only storage of role verifiers
+([`../03-database-model/credentials-and-roles.md` §4.1](../03-database-model/credentials-and-roles.md#41-role-verifiers-wave-8-owner-decision-s3)):
+a schema of its own, `role_verifiers` (the frozen `secrets-store` bundle
+pins the tables of `secrets`), owned by `exdb_migrate`, `USAGE` for
+`exdb_serve` and `exdb_worker` only, with one table `verifiers`: the
+`rvf_…` id, the cluster, the role (`^[a-z_][a-z0-9_$-]{0,62}$`, never
+`pg_…` or `exponetdb_…`), the state (`submitted`, `consumed`,
+`superseded`), the `se1` context id (`sec_…`), the sealed columns (key id,
+wrap nonce, wrapped data key, nonce, ciphertext; present exactly while
+`submitted`), the submitter, the times and, once consumed, the operation.
+One submitted verifier per role of a cluster (partial unique index). The
+guard (`EXS03`) sets the times, lets a row move once from `submitted` to
+`consumed` or `superseded` and only with every sealed column cleared, keeps
+its binding (id, cluster, role, context, submitter) and refuses deletes;
+truncation is refused. Grants: `exdb_serve` `INSERT`, `SELECT` on the
+metadata columns only (no sealed column) and `UPDATE` of the state and the
+sealed columns (to clear a superseded row); `exdb_worker` `SELECT` and
+`UPDATE` of the state, the sealed columns and the operation. No other
+role. Nothing existing changes.
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

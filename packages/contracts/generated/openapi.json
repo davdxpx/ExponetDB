@@ -587,6 +587,7 @@
               "migration.bundle.ingest",
               "migration.import.analyze",
               "migration.baseline.plan",
+              "drift.accept.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -708,6 +709,8 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
               "oauth.authorize",
@@ -740,7 +743,22 @@
               "target.health.history.get",
               "node.job.list",
               "node.certificate.list",
-              "audit.chain.get"
+              "audit.chain.get",
+              "fleet.get",
+              "finding.list",
+              "sql.classify",
+              "statement.raw.get",
+              "breakglass.list",
+              "breakglass.review",
+              "query.history.list",
+              "saved_query.list",
+              "saved_query.get",
+              "saved_query.create",
+              "saved_query.update",
+              "saved_query.delete",
+              "audit.export",
+              "postgres.roles.verifier.plan",
+              "postgres.roles.verifier.set"
             ],
             "type": "string"
           },
@@ -1601,6 +1619,585 @@
         ],
         "type": "object"
       },
+      "AuditExportEventLine": {
+        "properties": {
+          "event": {
+            "additionalProperties": false,
+            "description": "The stored event verbatim: its JCS (RFC 8785) text is exactly what ac1 hashed, so a verifier canonicalizes this member to check `hash`. Contains full event content (personal data per OD-8).",
+            "properties": {
+              "action": {
+                "description": "Audited action, `<domain>.<verb>` (audit.md §2). Open set.",
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+$",
+                "type": "string"
+              },
+              "actor": {
+                "additionalProperties": false,
+                "properties": {
+                  "identityId": {
+                    "anyOf": [
+                      {
+                        "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                        "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "kind": {
+                    "enum": [
+                      "human",
+                      "service",
+                      "system"
+                    ],
+                    "type": "string"
+                  },
+                  "label": {
+                    "pattern": "^(?:(?:human|service) #[1-9][0-9]{0,9}|system:(?:serve|worker|gateway|migrate|maintenance))$",
+                    "type": "string"
+                  },
+                  "reauthAt": {
+                    "anyOf": [
+                      {
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?Z$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "viaBreakGlass": {
+                    "anyOf": [
+                      {
+                        "description": "Entity id `^bgl_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                        "pattern": "^bgl_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "identityId",
+                  "label"
+                ],
+                "type": "object"
+              },
+              "changes": {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/__schema0"
+                },
+                "propertyNames": {
+                  "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "client": {
+                "additionalProperties": false,
+                "properties": {
+                  "clientId": {
+                    "anyOf": [
+                      {
+                        "description": "Entity id `^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                        "pattern": "^cli_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "grantId": {
+                    "anyOf": [
+                      {
+                        "description": "Entity id `^grt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                        "pattern": "^grt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "kind": {
+                    "enum": [
+                      "web",
+                      "rest",
+                      "mcp",
+                      "cli",
+                      "ci",
+                      "system"
+                    ],
+                    "type": "string"
+                  },
+                  "name": {
+                    "description": "Registered or metadata name of the client; untrusted, never used for decisions.",
+                    "maxLength": 100,
+                    "type": "string",
+                    "x-untrusted": true
+                  },
+                  "sessionId": {
+                    "anyOf": [
+                      {
+                        "description": "Entity id `^ses_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                        "pattern": "^ses_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "clientId",
+                  "kind"
+                ],
+                "type": "object"
+              },
+              "decision": {
+                "additionalProperties": false,
+                "properties": {
+                  "decision": {
+                    "enum": [
+                      "allow",
+                      "require",
+                      "deny"
+                    ],
+                    "type": "string"
+                  },
+                  "policyVersion": {
+                    "pattern": "^sha256:pv1:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "rules": {
+                    "items": {
+                      "pattern": "^[A-Za-z0-9_.:-]{1,128}$",
+                      "type": "string"
+                    },
+                    "maxItems": 128,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "decision",
+                  "rules",
+                  "policyVersion"
+                ],
+                "type": "object"
+              },
+              "id": {
+                "description": "Entity id `^aud_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^aud_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              "occurredAt": {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$",
+                "type": "string"
+              },
+              "phase": {
+                "enum": [
+                  "requested",
+                  "denied",
+                  "accepted",
+                  "completed",
+                  "failed",
+                  "reconciled"
+                ],
+                "type": "string"
+              },
+              "reason": {
+                "description": "Why, as supplied by the caller: stored verbatim, untrusted, never interpreted, permanent (must not contain personal data).",
+                "maxLength": 1000,
+                "type": "string",
+                "x-untrusted": true
+              },
+              "refs": {
+                "additionalProperties": false,
+                "properties": {
+                  "approvalIds": {
+                    "items": {
+                      "description": "Entity id `^apr_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                      "pattern": "^apr_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                      "type": "string"
+                    },
+                    "maxItems": 32,
+                    "type": "array"
+                  },
+                  "boundaryHash": {
+                    "pattern": "^sha256:ac1:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "checkpointSeq": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "checksums": {
+                    "items": {
+                      "pattern": "^sha256:c1:[0-9a-f]{64}$",
+                      "type": "string"
+                    },
+                    "maxItems": 256,
+                    "type": "array"
+                  },
+                  "droppedThroughSeq": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "jobId": {
+                    "anyOf": [
+                      {
+                        "description": "Entity id `^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                        "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "keyIds": {
+                    "items": {
+                      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                      "type": "string"
+                    },
+                    "maxItems": 32,
+                    "type": "array"
+                  },
+                  "migrationIds": {
+                    "items": {
+                      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                      "type": "string"
+                    },
+                    "maxItems": 256,
+                    "type": "array"
+                  },
+                  "operationId": {
+                    "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "planHash": {
+                    "pattern": "^sha256:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "planId": {
+                    "description": "Entity id `^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^pln_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "request": {
+                "additionalProperties": false,
+                "properties": {
+                  "ipHash": {
+                    "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "requestId": {
+                    "description": "Entity id `^req_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^req_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "traceId": {
+                    "pattern": "^[0-9a-f]{32}$",
+                    "type": "string"
+                  },
+                  "userAgentHash": {
+                    "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "result": {
+                "additionalProperties": false,
+                "properties": {
+                  "applyOutcome": {
+                    "enum": [
+                      "not_started",
+                      "applied",
+                      "not_applied",
+                      "partially_applied",
+                      "unknown"
+                    ],
+                    "type": "string"
+                  },
+                  "errorCode": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[A-Za-z0-9_]{1,64}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "status": {
+                    "enum": [
+                      "succeeded",
+                      "failed",
+                      "denied"
+                    ],
+                    "type": "string"
+                  },
+                  "verificationOutcome": {
+                    "enum": [
+                      "not_applicable",
+                      "pending",
+                      "passed",
+                      "failed",
+                      "partial",
+                      "error"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status"
+                ],
+                "type": "object"
+              },
+              "schema": {
+                "const": "exponetdb.audit/v1",
+                "type": "string"
+              },
+              "seq": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "subject": {
+                "additionalProperties": false,
+                "properties": {
+                  "clusterId": {
+                    "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "installationId": {
+                    "description": "Entity id `^ins_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^ins_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "nodeId": {
+                    "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "secretId": {
+                    "description": "Entity id `^sec_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^sec_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "serverId": {
+                    "description": "Entity id `^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "targetId": {
+                    "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "targetPath": {
+                    "maxLength": 160,
+                    "pattern": "^[a-z][a-z0-9-]{0,38}(?:\\/[a-z][a-z0-9-]{0,38}){2}$",
+                    "type": "string"
+                  },
+                  "tier": {
+                    "enum": [
+                      "prod",
+                      "nonprod"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "action",
+              "phase",
+              "actor",
+              "schema",
+              "seq",
+              "id",
+              "occurredAt"
+            ],
+            "title": "exponetdb.audit/v1",
+            "type": "object"
+          },
+          "hash": {
+            "pattern": "^sha256:ac1:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "prevHash": {
+            "type": "string"
+          },
+          "seq": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "type": {
+            "const": "event",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "seq",
+          "prevHash",
+          "hash",
+          "event"
+        ],
+        "type": "object"
+      },
+      "AuditExportHeader": {
+        "properties": {
+          "chain": {
+            "const": "ac1",
+            "type": "string"
+          },
+          "checkpoints": {
+            "description": "Checkpoints of the chain with `firstSeq - 1 <= seq <= lastSeq`, oldest first (at most 50): anchors a verifier compares with the event hashes of the page.",
+            "items": {
+              "properties": {
+                "createdAt": {
+                  "description": "RFC 3339 UTC timestamp ending in Z.",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "hash": {
+                  "pattern": "^sha256:ac1:[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "seq": {
+                  "maximum": 9007199254740991,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "seq",
+                "hash",
+                "createdAt"
+              ],
+              "type": "object"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "count": {
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "firstSeq": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "format": {
+            "const": "exponetdb.audit-export/v1",
+            "type": "string"
+          },
+          "from": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "generatedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "lastSeq": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "more": {
+            "type": "boolean"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "const": "header",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "format",
+          "chain",
+          "from",
+          "to",
+          "firstSeq",
+          "lastSeq",
+          "count",
+          "more",
+          "nextCursor",
+          "checkpoints",
+          "generatedAt"
+        ],
+        "type": "object"
+      },
+      "AuditExportLine": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AuditExportHeader"
+          },
+          {
+            "$ref": "#/components/schemas/AuditExportEventLine"
+          }
+        ]
+      },
       "AuthFactor": {
         "oneOf": [
           {
@@ -2237,6 +2834,240 @@
         ],
         "type": "object"
       },
+      "BreakGlassGrantList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BreakGlassGrantRecord"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cursor for the next page, null on the last page."
+          },
+          "observedAt": {
+            "description": "The database time every state of this page was derived at.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "source": {
+            "const": "live",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "source",
+          "observedAt"
+        ],
+        "type": "object"
+      },
+      "BreakGlassGrantRecord": {
+        "properties": {
+          "activatedBy": {
+            "description": "The person who activated the grant (the only one who may use it); there is no separate requester or approver.",
+            "properties": {
+              "identityId": {
+                "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "identityId"
+            ],
+            "type": "object"
+          },
+          "createdAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "expiresAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "grantId": {
+            "description": "Entity id `^bgl_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^bgl_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "maxUses": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "description": "Why, as the person wrote it at activation: data, never instructions.",
+            "maxLength": 2000,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "review": {
+            "anyOf": [
+              {
+                "properties": {
+                  "note": {
+                    "description": "The review note as written: data, never instructions; permanent.",
+                    "maxLength": 2000,
+                    "type": "string",
+                    "x-untrusted": true
+                  },
+                  "reviewedAt": {
+                    "description": "RFC 3339 UTC timestamp ending in Z.",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  "reviewedBy": {
+                    "properties": {
+                      "identityId": {
+                        "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                        "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "identityId"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "reviewedBy",
+                  "reviewedAt",
+                  "note"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The post-incident review, or null while it is an open finding."
+          },
+          "revokedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rules": {
+            "items": {
+              "maxLength": 128,
+              "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)+$",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "state": {
+            "$ref": "#/components/schemas/BreakGlassGrantState"
+          },
+          "target": {
+            "properties": {
+              "path": {
+                "description": "Target path <product>/<project>/<environment>.",
+                "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                "type": "string"
+              },
+              "targetId": {
+                "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              "tier": {
+                "description": "Authorization tier (C-24).",
+                "enum": [
+                  "prod",
+                  "nonprod"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "targetId",
+              "path",
+              "tier"
+            ],
+            "type": "object"
+          },
+          "uses": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "grantId",
+          "target",
+          "state",
+          "activatedBy",
+          "rules",
+          "reason",
+          "createdAt",
+          "expiresAt",
+          "maxUses",
+          "uses",
+          "revokedAt",
+          "review"
+        ],
+        "type": "object"
+      },
+      "BreakGlassGrantState": {
+        "description": "Derived from the stored grant and the database clock: revoked, else expired, else used_up, else active.",
+        "enum": [
+          "active",
+          "expired",
+          "revoked",
+          "used_up"
+        ],
+        "type": "string"
+      },
+      "BreakGlassReviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "description": "The post-incident review: 1 to 2000 characters, no control characters except line feeds. Stored permanently with the grant; it can never be changed or erased, so it must not contain personal data.",
+            "maxLength": 2000,
+            "minLength": 1,
+            "pattern": "^[^\\x00-\\x09\\x0b-\\x1f\\x7f-\\x9f\\u202a-\\u202e\\u2066-\\u2069]*$",
+            "type": "string",
+            "x-untrusted": true
+          }
+        },
+        "required": [
+          "note"
+        ],
+        "type": "object"
+      },
       "CapabilityRef": {
         "additionalProperties": false,
         "description": "Capability name and major version (postgres.config.apply@1).",
@@ -2313,6 +3144,22 @@
                 "type": "null"
               }
             ]
+          },
+          "declaredTier": {
+            "anyOf": [
+              {
+                "description": "Authorization tier (C-24).",
+                "enum": [
+                  "prod",
+                  "nonprod"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The intended tier a person declared with production authority (OD-22); null while undeclared, which counts as prod for registry authority."
           },
           "derivedTier": {
             "anyOf": [
@@ -2464,6 +3311,23 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ClusterDeclaredTierRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "declaredTier": {
+            "description": "The tier the cluster is meant for: prod (every database registered on it needs production authority) or nonprod (the environment decides).",
+            "enum": [
+              "prod",
+              "nonprod"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "declaredTier"
+        ],
         "type": "object"
       },
       "ClusterRegisterRequest": {
@@ -2761,6 +3625,19 @@
           "placement",
           "createdAt"
         ],
+        "type": "object"
+      },
+      "DriftAcceptRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "description": "Why the actual schema is adopted as expected: stored verbatim in the plan, untrusted, never interpreted (10 to 1000 characters). Required when a covered finding is critical or security-relevant.",
+            "maxLength": 1000,
+            "minLength": 10,
+            "type": "string",
+            "x-untrusted": true
+          }
+        },
         "type": "object"
       },
       "DriftCheck": {
@@ -3716,6 +4593,596 @@
           "firstSeenAt",
           "lastSeenAt",
           "resolvedAt"
+        ],
+        "type": "object"
+      },
+      "Fleet": {
+        "properties": {
+          "asOf": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "findings": {
+            "$ref": "#/components/schemas/FleetFindings"
+          },
+          "operations": {
+            "$ref": "#/components/schemas/FleetOperations"
+          },
+          "targets": {
+            "$ref": "#/components/schemas/FleetTargets"
+          }
+        },
+        "required": [
+          "targets",
+          "findings",
+          "operations",
+          "asOf"
+        ],
+        "type": "object"
+      },
+      "FleetFinding": {
+        "properties": {
+          "code": {
+            "description": "Rule or condition that produced the finding.",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "firstSeenAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "id": {
+            "description": "Entity id `^fnd_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^fnd_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "kind": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string",
+            "x-extensible-enum": [
+              "drift",
+              "advisor",
+              "health",
+              "lint",
+              "certificate",
+              "backup"
+            ]
+          },
+          "lastSeenAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "object": {
+            "anyOf": [
+              {
+                "description": "Affected object (class and qualified name), when there is one.",
+                "maxLength": 512,
+                "type": "string",
+                "x-untrusted": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occurrences": {
+            "description": "How often the same finding was detected while open (deduplicated, never repeated).",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "x-extensible-enum": [
+              "cleared",
+              "accepted",
+              "superseded"
+            ]
+          },
+          "resolvedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "securityRelevant": {
+            "type": "boolean"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "critical"
+            ],
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "resolved"
+            ],
+            "type": "string"
+          },
+          "subject": {
+            "properties": {
+              "clusterId": {
+                "anyOf": [
+                  {
+                    "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "nodeId": {
+                "anyOf": [
+                  {
+                    "description": "Entity id `^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "targetId": {
+                "anyOf": [
+                  {
+                    "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "targetId",
+              "clusterId",
+              "nodeId"
+            ],
+            "type": "object"
+          },
+          "summary": {
+            "description": "Finding summary; may quote database object names.",
+            "maxLength": 1024,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "targetId": {
+            "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "targetPath": {
+            "description": "Target path <product>/<project>/<environment>.",
+            "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "code",
+          "severity",
+          "subject",
+          "summary",
+          "state",
+          "occurrences",
+          "object",
+          "securityRelevant",
+          "resolution",
+          "firstSeenAt",
+          "lastSeenAt",
+          "resolvedAt",
+          "targetId",
+          "targetPath"
+        ],
+        "type": "object"
+      },
+      "FleetFindings": {
+        "oneOf": [
+          {
+            "properties": {
+              "available": {
+                "const": true,
+                "type": "boolean"
+              },
+              "bySeverity": {
+                "properties": {
+                  "critical": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "info": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "warning": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "info",
+                  "warning",
+                  "critical"
+                ],
+                "type": "object"
+              },
+              "lowerBound": {
+                "description": "true when the count is a lower bound: something was capped or could not be read. The real number is at least the one shown.",
+                "type": "boolean"
+              },
+              "lowerBoundReason": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "x-extensible-enum": [
+                  "scan_limit"
+                ]
+              },
+              "observedAt": {
+                "description": "When the counts were read from the Control Store.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "open": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "source": {
+                "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_.:-]*$",
+                "type": "string",
+                "x-extensible-enum": [
+                  "live",
+                  "sampled",
+                  "cached",
+                  "agent_reported",
+                  "inferred"
+                ]
+              }
+            },
+            "required": [
+              "available",
+              "open",
+              "bySeverity",
+              "source",
+              "observedAt",
+              "lowerBound",
+              "lowerBoundReason"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "available": {
+                "const": false,
+                "type": "boolean"
+              },
+              "reason": {
+                "description": "Why the part is not shown: the caller lacks the permission for it. The rest of the overview is still served; the part is never shown as zero.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string",
+                "x-extensible-enum": [
+                  "permission_denied"
+                ]
+              }
+            },
+            "required": [
+              "available",
+              "reason"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "FleetOperations": {
+        "oneOf": [
+          {
+            "properties": {
+              "available": {
+                "const": true,
+                "type": "boolean"
+              },
+              "awaiting_approval": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "lowerBound": {
+                "description": "true when the count is a lower bound: something was capped or could not be read. The real number is at least the one shown.",
+                "type": "boolean"
+              },
+              "lowerBoundReason": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "x-extensible-enum": [
+                  "scan_limit"
+                ]
+              },
+              "needs_attention": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "observedAt": {
+                "description": "When the counts were read from the Control Store.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "running": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "source": {
+                "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_.:-]*$",
+                "type": "string",
+                "x-extensible-enum": [
+                  "live",
+                  "sampled",
+                  "cached",
+                  "agent_reported",
+                  "inferred"
+                ]
+              }
+            },
+            "required": [
+              "available",
+              "running",
+              "needs_attention",
+              "awaiting_approval",
+              "source",
+              "observedAt",
+              "lowerBound",
+              "lowerBoundReason"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "available": {
+                "const": false,
+                "type": "boolean"
+              },
+              "reason": {
+                "description": "Why the part is not shown: the caller lacks the permission for it. The rest of the overview is still served; the part is never shown as zero.",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string",
+                "x-extensible-enum": [
+                  "permission_denied"
+                ]
+              }
+            },
+            "required": [
+              "available",
+              "reason"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "FleetTargets": {
+        "properties": {
+          "byHealth": {
+            "description": "The latest sampled state of each target, read as the target list reads it.",
+            "properties": {
+              "degraded": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "healthy": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "suspended": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "unhealthy": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "unknown": {
+                "description": "No sample yet, a sample older than the sampler allows, or a state that is unknown. Never counted healthy.",
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "unreachable": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "healthy",
+              "degraded",
+              "unhealthy",
+              "unreachable",
+              "unknown",
+              "suspended"
+            ],
+            "type": "object"
+          },
+          "bySource": {
+            "description": "How many targets each kind of source stands behind: sampled (a fresh sample), cached (a stale one), inferred (no sample yet).",
+            "properties": {
+              "cached": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "inferred": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "sampled": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "sampled",
+              "cached",
+              "inferred"
+            ],
+            "type": "object"
+          },
+          "byTier": {
+            "properties": {
+              "nonprod": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "prod": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "prod",
+              "nonprod"
+            ],
+            "type": "object"
+          },
+          "decommissioned": {
+            "description": "Decommissioned targets the caller may list; in no other count here.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "lowerBound": {
+            "description": "true when the count is a lower bound: something was capped or could not be read. The real number is at least the one shown.",
+            "type": "boolean"
+          },
+          "lowerBoundReason": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "x-extensible-enum": [
+              "scan_limit"
+            ]
+          },
+          "observedAt": {
+            "description": "When the counts were read from the Control Store.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "oldestSampleAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The oldest health sample behind the health counts; null when no counted target was ever sampled."
+          },
+          "source": {
+            "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.:-]*$",
+            "type": "string",
+            "x-extensible-enum": [
+              "live",
+              "sampled",
+              "cached",
+              "agent_reported",
+              "inferred"
+            ]
+          },
+          "total": {
+            "description": "Targets the caller may list that are not decommissioned.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "decommissioned",
+          "byTier",
+          "byHealth",
+          "bySource",
+          "oldestSampleAt",
+          "source",
+          "observedAt",
+          "lowerBound",
+          "lowerBoundReason"
         ],
         "type": "object"
       },
@@ -9211,6 +10678,7 @@
               "migration.bundle.ingest",
               "migration.import.analyze",
               "migration.baseline.plan",
+              "drift.accept.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -9332,6 +10800,8 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
               "oauth.authorize",
@@ -9364,7 +10834,22 @@
               "target.health.history.get",
               "node.job.list",
               "node.certificate.list",
-              "audit.chain.get"
+              "audit.chain.get",
+              "fleet.get",
+              "finding.list",
+              "sql.classify",
+              "statement.raw.get",
+              "breakglass.list",
+              "breakglass.review",
+              "query.history.list",
+              "saved_query.list",
+              "saved_query.get",
+              "saved_query.create",
+              "saved_query.update",
+              "saved_query.delete",
+              "audit.export",
+              "postgres.roles.verifier.plan",
+              "postgres.roles.verifier.set"
             ],
             "type": "string"
           },
@@ -9620,6 +11105,7 @@
               "migration.bundle.ingest",
               "migration.import.analyze",
               "migration.baseline.plan",
+              "drift.accept.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -9741,6 +11227,8 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
               "oauth.authorize",
@@ -9773,7 +11261,22 @@
               "target.health.history.get",
               "node.job.list",
               "node.certificate.list",
-              "audit.chain.get"
+              "audit.chain.get",
+              "fleet.get",
+              "finding.list",
+              "sql.classify",
+              "statement.raw.get",
+              "breakglass.list",
+              "breakglass.review",
+              "query.history.list",
+              "saved_query.list",
+              "saved_query.get",
+              "saved_query.create",
+              "saved_query.update",
+              "saved_query.delete",
+              "audit.export",
+              "postgres.roles.verifier.plan",
+              "postgres.roles.verifier.set"
             ],
             "type": "string"
           },
@@ -10085,6 +11588,7 @@
               "migration.bundle.ingest",
               "migration.import.analyze",
               "migration.baseline.plan",
+              "drift.accept.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -10206,6 +11710,8 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
               "oauth.authorize",
@@ -10238,7 +11744,22 @@
               "target.health.history.get",
               "node.job.list",
               "node.certificate.list",
-              "audit.chain.get"
+              "audit.chain.get",
+              "fleet.get",
+              "finding.list",
+              "sql.classify",
+              "statement.raw.get",
+              "breakglass.list",
+              "breakglass.review",
+              "query.history.list",
+              "saved_query.list",
+              "saved_query.get",
+              "saved_query.create",
+              "saved_query.update",
+              "saved_query.delete",
+              "audit.export",
+              "postgres.roles.verifier.plan",
+              "postgres.roles.verifier.set"
             ],
             "type": "string"
           },
@@ -10465,6 +11986,7 @@
               "migration.bundle.ingest",
               "migration.import.analyze",
               "migration.baseline.plan",
+              "drift.accept.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -10586,6 +12108,8 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
               "oauth.authorize",
@@ -10618,7 +12142,22 @@
               "target.health.history.get",
               "node.job.list",
               "node.certificate.list",
-              "audit.chain.get"
+              "audit.chain.get",
+              "fleet.get",
+              "finding.list",
+              "sql.classify",
+              "statement.raw.get",
+              "breakglass.list",
+              "breakglass.review",
+              "query.history.list",
+              "saved_query.list",
+              "saved_query.get",
+              "saved_query.create",
+              "saved_query.update",
+              "saved_query.delete",
+              "audit.export",
+              "postgres.roles.verifier.plan",
+              "postgres.roles.verifier.set"
             ],
             "type": "string"
           },
@@ -11195,6 +12734,7 @@
               "QUERY_RESULT_TOO_LARGE",
               "QUERY_PARSE_ERROR",
               "DATA_READ_NOT_PERMITTED",
+              "STATEMENT_NOT_AVAILABLE",
               "SAMPLE_STALE",
               "VALIDATION_FAILED",
               "NOT_FOUND",
@@ -11738,6 +13278,157 @@
         ],
         "type": "object"
       },
+      "QueryHistory": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QueryHistoryEntry"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cursor for the next (older) page, null on the last page."
+          },
+          "source": {
+            "const": "audit",
+            "description": "Every entry is a data.read event of the audit chain, newest first.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "source"
+        ],
+        "type": "object"
+      },
+      "QueryHistoryEntry": {
+        "properties": {
+          "callerClass": {
+            "enum": [
+              "human",
+              "agent"
+            ],
+            "type": "string"
+          },
+          "client": {
+            "description": "The client the read came through (an MCP client reads in the name of the person who delegated to it).",
+            "enum": [
+              "web",
+              "rest",
+              "mcp",
+              "cli",
+              "ci"
+            ],
+            "type": "string"
+          },
+          "durationMs": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Duration on the target. Null for a read that failed or was refused: the audit records no duration for it."
+          },
+          "errorCode": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z][A-Z0-9_]{1,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The error code of a failed or refused read; null when it succeeded."
+          },
+          "kind": {
+            "enum": [
+              "query",
+              "explain"
+            ],
+            "type": "string"
+          },
+          "occurredAt": {
+            "description": "When the audit recorded the read (after it ended).",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "succeeded",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "queryId": {
+            "description": "Entity id `^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^qry_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Rows returned. Null for an EXPLAIN and for a read that failed or was refused: the audit records no row count for them."
+          },
+          "statement": {
+            "description": "The redacted statement exactly as the audit holds it: constants replaced by placeholders, at most its first 256 characters; never the text the caller sent.",
+            "maxLength": 256,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "statementDigest": {
+            "description": "sha256 of the whole redacted statement before the 256-character cut.",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "truncated": {
+            "description": "Whether a cap cut the result. Null for an EXPLAIN and for a read that failed or was refused: the audit records it only for a completed query.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "queryId",
+          "kind",
+          "occurredAt",
+          "statement",
+          "statementDigest",
+          "rows",
+          "truncated",
+          "durationMs",
+          "outcome",
+          "errorCode",
+          "client",
+          "callerClass"
+        ],
+        "type": "object"
+      },
       "QueryRequest": {
         "additionalProperties": false,
         "properties": {
@@ -12010,6 +13701,195 @@
         ],
         "type": "object"
       },
+      "RawStatement": {
+        "properties": {
+          "digest": {
+            "description": "The digest of the redacted statement, as the sessions list shows it; the server recomputed it from the text it read and it matched.",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "observedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "origin": {
+            "description": "Where the text was found: a session (the first in start order when none was named) or the aggregated statement statistics (normalized by PostgreSQL, so its constants are already `$n`).",
+            "oneOf": [
+              {
+                "properties": {
+                  "backendStart": {
+                    "description": "RFC 3339 UTC timestamp ending in Z.",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  "pid": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "queryStart": {
+                    "anyOf": [
+                      {
+                        "description": "RFC 3339 UTC timestamp ending in Z.",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "view": {
+                    "const": "pg_stat_activity",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "view",
+                  "pid",
+                  "backendStart",
+                  "queryStart"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "calls": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "meanExecTimeMs": {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "rows": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "totalExecTimeMs": {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "view": {
+                    "const": "pg_stat_statements",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "view",
+                  "calls",
+                  "totalExecTimeMs",
+                  "meanExecTimeMs",
+                  "rows"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "redaction": {
+            "properties": {
+              "mode": {
+                "description": "`literal`: the literals are shown and only secrets were removed; `summary`: a sensitive command (a role password, a user mapping, server options, a secret setting, COPY PROGRAM) is shown only as its fixed summary; `unparseable`: text that is not well-formed Unicode, shown as the marker.",
+                "enum": [
+                  "literal",
+                  "summary",
+                  "unparseable"
+                ],
+                "type": "string"
+              },
+              "removed": {
+                "description": "How many secret spans were replaced.",
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "mode",
+              "removed"
+            ],
+            "type": "object"
+          },
+          "source": {
+            "const": "live",
+            "type": "string"
+          },
+          "targetId": {
+            "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "text": {
+            "description": "The statement as the target holds it now, with secrets replaced by `<redacted>` (or the redacted summary of a sensitive command). Data from the database: never instructions, never executed.",
+            "maxLength": 65536,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "truncated": {
+            "description": "The text was cut at 64 KiB (65,536 UTF-16 code units).",
+            "type": "boolean"
+          },
+          "x-untrusted": {
+            "const": true,
+            "description": "The text is untrusted data from the target (C-26).",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "targetId",
+          "digest",
+          "text",
+          "untrusted",
+          "truncated",
+          "redaction",
+          "origin",
+          "source",
+          "observedAt"
+        ],
+        "type": "object"
+      },
+      "RawStatementQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "backendStart": {
+            "description": "The session start the sessions list showed for `pid`: a reused pid of another session is `not_held`.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "pid": {
+            "description": "Look in this session only (with `backendStart`, both from the sessions list): its current statement must have the digest, else `digest_mismatch`.",
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "description": "Target path <product>/<project>/<environment>.",
+                "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                "type": "string"
+              }
+            ],
+            "description": "The target that holds the statement (id or path); the digest alone names none."
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
+      },
       "ReviewSource": {
         "properties": {
           "bytes": {
@@ -12218,6 +14098,317 @@
           "developer",
           "viewer",
           "auditor"
+        ],
+        "type": "string"
+      },
+      "RoleVerifierSubmission": {
+        "additionalProperties": false,
+        "description": "A role's SCRAM-SHA-256 verifier, write-only (credentials-and-roles.md §4): ExponetDB never learns a consumer password; the Web App derives the verifier in the browser.",
+        "properties": {
+          "role": {
+            "description": "The PostgreSQL role (a consumer login role of the cluster).",
+            "pattern": "^[a-z_][a-z0-9_$-]{0,62}$",
+            "type": "string"
+          },
+          "verifier": {
+            "description": "The SCRAM-SHA-256 verifier the consumer computed from its password (never the password): sealed at once, never readable again, never logged.",
+            "maxLength": 512,
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "role",
+          "verifier"
+        ],
+        "type": "object"
+      },
+      "SavedQuery": {
+        "properties": {
+          "createdAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "id": {
+            "description": "Entity id `^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "name": {
+            "description": "A name for the saved query; untrusted text, never interpreted.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]+$",
+            "type": "string",
+            "x-untrusted": true
+          },
+          "ownedByCaller": {
+            "type": "boolean"
+          },
+          "ownerIdentityId": {
+            "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "revision": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/SavedQueryScope"
+          },
+          "sql": {
+            "description": "The SQL text as written (at most 65,536 characters). Saving never runs, parses or classifies it; running it is an ordinary data read.",
+            "maxLength": 65536,
+            "minLength": 1,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "sqlDigest": {
+            "description": "sha256 of the SQL text with its constants redacted (the construction of the data-read audit); the audit of a change records this digest only.",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/SavedQueryVisibility"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "sql",
+          "sqlDigest",
+          "visibility",
+          "scope",
+          "ownerIdentityId",
+          "ownedByCaller",
+          "revision",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "SavedQueryCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "A name for the saved query; untrusted text, never interpreted.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]+$",
+            "type": "string",
+            "x-untrusted": true
+          },
+          "scope": {
+            "$ref": "#/components/schemas/SavedQueryScopeRequest",
+            "description": "Where the query belongs: one project or one target. It never changes."
+          },
+          "sql": {
+            "description": "The SQL text as written (at most 65,536 characters). Saving never runs, parses or classifies it; running it is an ordinary data read.",
+            "maxLength": 65536,
+            "minLength": 1,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/SavedQueryVisibility",
+            "default": "personal"
+          }
+        },
+        "required": [
+          "name",
+          "sql",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "SavedQueryDeleted": {
+        "properties": {
+          "deleted": {
+            "const": true,
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Entity id `^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "deleted"
+        ],
+        "type": "object"
+      },
+      "SavedQueryList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SavedQuery"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cursor for the next page, null on the last page."
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "type": "object"
+      },
+      "SavedQueryScope": {
+        "oneOf": [
+          {
+            "properties": {
+              "kind": {
+                "const": "project",
+                "type": "string"
+              },
+              "projectId": {
+                "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "projectId"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "target",
+                "type": "string"
+              },
+              "targetId": {
+                "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "targetId"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "SavedQueryScopeRequest": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "project",
+                "type": "string"
+              },
+              "projectId": {
+                "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "projectId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "target",
+                "type": "string"
+              },
+              "target": {
+                "anyOf": [
+                  {
+                    "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  {
+                    "description": "Target path <product>/<project>/<environment>.",
+                    "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                    "type": "string"
+                  }
+                ],
+                "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+              }
+            },
+            "required": [
+              "kind",
+              "target"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "SavedQueryUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "A name for the saved query; untrusted text, never interpreted.",
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]+$",
+            "type": "string",
+            "x-untrusted": true
+          },
+          "revision": {
+            "description": "The revision the change is based on; another one answers CONFLICT.",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sql": {
+            "description": "The SQL text as written (at most 65,536 characters). Saving never runs, parses or classifies it; running it is an ordinary data read.",
+            "maxLength": 65536,
+            "minLength": 1,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/SavedQueryVisibility"
+          }
+        },
+        "required": [
+          "name",
+          "sql",
+          "visibility",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "SavedQueryVisibility": {
+        "description": "personal: only its owner sees it. project: everyone who may read data in its scope sees it; only the owner changes or deletes it.",
+        "enum": [
+          "personal",
+          "project"
         ],
         "type": "string"
       },
@@ -13597,6 +15788,305 @@
         ],
         "type": "object"
       },
+      "SqlClassification": {
+        "properties": {
+          "bytes": {
+            "description": "UTF-8 bytes of the submitted text.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "computedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "grammar": {
+            "description": "The parser build that produced the answer.",
+            "maxLength": 128,
+            "type": "string"
+          },
+          "parseError": {
+            "anyOf": [
+              {
+                "properties": {
+                  "position": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/SqlPosition"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The parser's error position; null when it names none."
+                  },
+                  "reason": {
+                    "enum": [
+                      "syntax",
+                      "parser_limit",
+                      "nul",
+                      "too_large",
+                      "empty"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reason",
+                  "position"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "postgresMajor": {
+            "anyOf": [
+              {
+                "const": 16,
+                "type": "number"
+              },
+              {
+                "const": 17,
+                "type": "number"
+              },
+              {
+                "const": 18,
+                "type": "number"
+              }
+            ]
+          },
+          "readOnlyPath": {
+            "properties": {
+              "admitted": {
+                "description": "True when the whole text is exactly one statement the read-only data path admits.",
+                "type": "boolean"
+              },
+              "refusal": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SqlReadRefusal"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "admitted",
+              "refusal"
+            ],
+            "type": "object"
+          },
+          "source": {
+            "const": "parser",
+            "type": "string"
+          },
+          "statementCount": {
+            "maximum": 200,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "statements": {
+            "items": {
+              "properties": {
+                "classes": {
+                  "items": {
+                    "enum": [
+                      "read_only",
+                      "write",
+                      "destructive",
+                      "rewrite",
+                      "non_transactional",
+                      "security"
+                    ],
+                    "type": "string"
+                  },
+                  "maxItems": 6,
+                  "type": "array"
+                },
+                "end": {
+                  "$ref": "#/components/schemas/SqlPosition",
+                  "description": "Just after its last character: exclusive, without the terminating semicolon and without trailing white space."
+                },
+                "index": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "kind": {
+                  "description": "The parser's node kind, e.g. `IndexStmt`.",
+                  "pattern": "^[A-Z][A-Za-z0-9]{0,63}$",
+                  "type": "string"
+                },
+                "label": {
+                  "description": "A readable name from a closed vocabulary, e.g. `CREATE INDEX CONCURRENTLY`.",
+                  "pattern": "^[A-Z][A-Z ]{0,63}$",
+                  "type": "string"
+                },
+                "migrationRefusal": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[a-z][a-z_]{0,31}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "The reason code when the migration engine would refuse the statement in `up.sql` (transaction control, role management, ...); null otherwise."
+                },
+                "procedural": {
+                  "description": "A top-level SELECT, a DO block or a CALL: the effects of the code it runs are not derivable from the text.",
+                  "type": "boolean"
+                },
+                "readOnlyPath": {
+                  "description": "True when the read-only data path would admit this statement on its own (`admitRead`).",
+                  "type": "boolean"
+                },
+                "readOnlyRefusal": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SqlReadRefusal"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "start": {
+                  "$ref": "#/components/schemas/SqlPosition",
+                  "description": "Where the statement text begins (its first token; leading comments excluded)."
+                }
+              },
+              "required": [
+                "index",
+                "kind",
+                "label",
+                "start",
+                "end",
+                "classes",
+                "procedural",
+                "readOnlyPath",
+                "readOnlyRefusal",
+                "migrationRefusal"
+              ],
+              "type": "object"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "parsed",
+              "empty",
+              "parse_error"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "postgresMajor",
+          "grammar",
+          "bytes",
+          "statementCount",
+          "statements",
+          "readOnlyPath",
+          "parseError",
+          "source",
+          "computedAt"
+        ],
+        "type": "object"
+      },
+      "SqlClassificationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "postgresMajor": {
+            "anyOf": [
+              {
+                "const": 16,
+                "type": "number"
+              },
+              {
+                "const": 17,
+                "type": "number"
+              },
+              {
+                "const": 18,
+                "type": "number"
+              }
+            ],
+            "description": "The PostgreSQL grammar to parse with (each major has its own); 17 when absent. Echoed in the answer."
+          },
+          "sql": {
+            "description": "The text to classify: at most 64 KiB (UTF-8 bytes) and 200 statements. Parsed on the server, never executed, never stored, never echoed.",
+            "maxLength": 65536,
+            "minLength": 1,
+            "type": "string",
+            "x-untrusted": true
+          }
+        },
+        "required": [
+          "sql"
+        ],
+        "type": "object"
+      },
+      "SqlPosition": {
+        "properties": {
+          "column": {
+            "description": "1-based, counted in Unicode code points from the start of the line (a character outside the Basic Multilingual Plane counts once; U+000D counts as a character).",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "line": {
+            "description": "1-based; lines end at U+000A.",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "description": "0-based UTF-16 code unit offset into the submitted text, as JavaScript string indices and CodeMirror count.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "line",
+          "column",
+          "offset"
+        ],
+        "type": "object"
+      },
+      "SqlReadRefusal": {
+        "description": "Why the read-only data path would refuse it: the admission error code and its reason code, never the construct or any text of the statement.",
+        "properties": {
+          "code": {
+            "enum": [
+              "QUERY_NOT_READ_ONLY",
+              "QUERY_CONSTRUCT_UNSUPPORTED",
+              "QUERY_PARSE_ERROR"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "pattern": "^[a-z][a-z_]{0,31}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "reason"
+        ],
+        "type": "object"
+      },
       "StepUp": {
         "properties": {
           "action": {
@@ -14919,6 +17409,42 @@
           "assurance"
         ],
         "type": "object"
+      },
+      "__schema0": {
+        "anyOf": [
+          {
+            "maxLength": 256,
+            "type": "string"
+          },
+          {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/components/schemas/__schema0"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/__schema0"
+            },
+            "propertyNames": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
       }
     },
     "securitySchemes": {
@@ -15840,6 +18366,349 @@
           "INTERNAL",
           "PERMISSION_DENIED",
           "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
+    "/audit-events/export": {
+      "get": {
+        "operationId": "exportAuditEvents",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "description": "An RFC 3339 UTC time ending in Z, or a decimal sequence number. `from` is inclusive, `to` is exclusive.",
+              "pattern": "^(?:[1-9][0-9]{0,15}|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?Z)$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "description": "An RFC 3339 UTC time ending in Z, or a decimal sequence number. `from` is inclusive, `to` is exclusive.",
+              "pattern": "^(?:[1-9][0-9]{0,15}|\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?Z)$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "description": "The `nextCursor` of the previous response; the range is the same.",
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "Events per response, at most 10000 (the default).",
+              "maximum": 10000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditExportLine"
+                }
+              }
+            },
+            "description": "OK. One JSON document per line (LF separated); the schema describes one line."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Export the stored audit events verbatim as NDJSON for offline ac1 verification (Wave 8, owner decision 2026-10-13): a header line, then at most 10,000 events by ascending seq with a cursor. Owners and admins in the Web App, re-authenticated within 300 s; the events are full content (personal data per OD-8); the export is audited as audit.export.",
+        "tags": [
+          "audit-events"
+        ],
+        "x-exponetdb-action": "audit.export",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
+    "/break-glass-grants": {
+      "get": {
+        "operationId": "listBreakGlassGrants",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/BreakGlassGrantState"
+            }
+          },
+          {
+            "in": "query",
+            "name": "review",
+            "required": false,
+            "schema": {
+              "description": "open: not reviewed yet (an open finding); done: reviewed.",
+              "enum": [
+                "open",
+                "done"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakGlassGrantList"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "policy.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Break-glass grants, newest first, with their state derived from the stored grant and the database clock, the person who activated each, the reason as data and the post-incident review or null (Wave 8; owners and admins).",
+        "tags": [
+          "break-glass-grants"
+        ],
+        "x-exponetdb-action": "breakglass.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TARGET_NOT_FOUND",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
+    "/break-glass-grants/{grant}/review": {
+      "post": {
+        "operationId": "reviewBreakGlassGrant",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "grant",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^bgl_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^bgl_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BreakGlassReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakGlassGrantRecord"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Record the post-incident review of a break-glass grant that is no longer active: once per grant, by an owner or admin re-authenticated within 300 s in the Web App; the note is permanent (Wave 8).",
+        "tags": [
+          "break-glass-grants"
+        ],
+        "x-exponetdb-action": "breakglass.review",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
@@ -16970,6 +19839,109 @@
         "x-exponetdb-wave": "4"
       }
     },
+    "/clusters/{clusterId}/declared-tier": {
+      "post": {
+        "operationId": "planClusterDeclaredTier",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClusterDeclaredTierRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan the declaration of a cluster's intended tier (OD-22); needs registry.manage:prod whichever value, applied through plan.apply.",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "registry.cluster.declare_tier.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
     "/clusters/{clusterId}/endpoints": {
       "get": {
         "operationId": "listClusterEndpoints",
@@ -17297,6 +20269,109 @@
         "x-exponetdb-wave": "4"
       }
     },
+    "/clusters/{clusterId}/role-verifiers": {
+      "post": {
+        "operationId": "submitRoleVerifier",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleVerifierSubmission"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, POLICY_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CAPABILITY_UNAVAILABLE, NODE_OBSERVATION_STALE, NODE_REVOKED, REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, NODE_OFFLINE."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Write-only submission of a consumer role's SCRAM-SHA-256 verifier (Web App, re-authentication; never a password): sealed at once, never readable; plans postgres.roles.verifier.set, which plan.apply runs through the node.",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "postgres.roles.verifier.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CAPABILITY_UNAVAILABLE",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NODE_OBSERVATION_STALE",
+          "NODE_OFFLINE",
+          "NODE_REVOKED",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "POLICY_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
     "/enrollment-tokens/{tokenId}/reveal": {
       "post": {
         "operationId": "revealEnrollmentToken",
@@ -17395,6 +20470,375 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "5"
+      }
+    },
+    "/findings": {
+      "get": {
+        "operationId": "listFindings",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "enum": [
+                "info",
+                "warning",
+                "critical"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "description": "Default `open`: the open findings; `all` lists open and resolved.",
+              "enum": [
+                "open",
+                "resolved",
+                "all"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "enum": [
+                "drift",
+                "health"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "One target, by `tgt_` id or URL-decoded path."
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/FleetFinding"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Cursor for the next page, null on the last page."
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "diagnostics.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Findings across the targets the caller may read with diagnostics.read, newest first (Wave 8); each carries its target id and path.",
+        "tags": [
+          "findings"
+        ],
+        "x-exponetdb-action": "finding.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
+    "/findings/{finding}/accept": {
+      "post": {
+        "operationId": "planDriftAcceptance",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "finding",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^fnd_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^fnd_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriftAcceptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND, TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, REGISTRY_CONFLICT, TARGET_IDENTITY_MISMATCH."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, SAMPLE_STALE, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "schema.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a drift acceptance (drift.accept) from an open drift finding: the target's current complete schema becomes its baseline and the open drift findings of the target are resolved as accepted; no DDL. The plan binds the target identity, its baseline, its open drift findings and the fingerprint it will record.",
+        "tags": [
+          "findings"
+        ],
+        "x-exponetdb-action": "drift.accept.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CLUSTER_IDENTITY_MISMATCH",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "SAMPLE_STALE",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_IDENTITY_MISMATCH",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
+    "/fleet": {
+      "get": {
+        "operationId": "getFleet",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Fleet"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "targets.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Fleet overview (Wave 8): targets by tier and health, open findings by severity, operations that run, need attention or await approval; only what the caller may see, each count with source, time and whether it is a lower bound.",
+        "tags": [
+          "fleet"
+        ],
+        "x-exponetdb-action": "fleet.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
       }
     },
     "/grants": {
@@ -24031,6 +27475,480 @@
         "x-exponetdb-wave": "3A"
       }
     },
+    "/saved-queries": {
+      "get": {
+        "operationId": "listSavedQueries",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "Only the saved queries of this target and of its project (a target as tgt_ id or path)."
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedQueryList"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "data.read:nonprod"
+            ]
+          },
+          {
+            "oauth2": [
+              "data.read:prod"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "The saved queries you may read: your own, and the project queries of the scopes where you may read data; optionally only those of one target and its project (Wave 8).",
+        "tags": [
+          "saved-queries"
+        ],
+        "x-exponetdb-action": "saved_query.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      },
+      "post": {
+        "operationId": "createSavedQuery",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavedQueryCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedQuery"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND, TARGET_NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Save a query in a project or on a target; nothing runs. The audit records the digest of the text, never the text or the name (Wave 8).",
+        "tags": [
+          "saved-queries"
+        ],
+        "x-exponetdb-action": "saved_query.create",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
+    "/saved-queries/{savedQueryId}": {
+      "delete": {
+        "operationId": "deleteSavedQuery",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "savedQueryId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedQueryDeleted"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Delete one of your saved queries; a query of someone else answers NOT_FOUND or PERMISSION_DENIED (Wave 8).",
+        "tags": [
+          "saved-queries"
+        ],
+        "x-exponetdb-action": "saved_query.delete",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      },
+      "get": {
+        "operationId": "getSavedQuery",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "savedQueryId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedQuery"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "data.read:nonprod"
+            ]
+          },
+          {
+            "oauth2": [
+              "data.read:prod"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "One saved query you may read; any other answers NOT_FOUND, whether it exists or not (Wave 8).",
+        "tags": [
+          "saved-queries"
+        ],
+        "x-exponetdb-action": "saved_query.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      },
+      "put": {
+        "operationId": "updateSavedQuery",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "savedQueryId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^sqy_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavedQueryUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedQuery"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Replace the name, text and visibility of one of your saved queries at the revision you read; a stale revision answers CONFLICT, a query of someone else NOT_FOUND or PERMISSION_DENIED (Wave 8).",
+        "tags": [
+          "saved-queries"
+        ],
+        "x-exponetdb-action": "saved_query.update",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
     "/schema-diffs": {
       "post": {
         "operationId": "createSchemaDiff",
@@ -25245,6 +29163,183 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "3B"
+      }
+    },
+    "/sql/classifications": {
+      "post": {
+        "operationId": "classifySql",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SqlClassificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SqlClassification"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Classify submitted SQL statement by statement with the parser (Wave 8): position, node kind, classes and whether the read-only data path would admit it. Touches no target, executes nothing, never echoes the text.",
+        "tags": [
+          "sql"
+        ],
+        "x-exponetdb-action": "sql.classify",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
+    "/statements/{digest}/raw": {
+      "get": {
+        "operationId": "getRawStatement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "digest",
+            "required": true,
+            "schema": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RawStatement"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, REAUTH_REQUIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: STATEMENT_NOT_AVAILABLE, TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, SAMPLE_STALE, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "The text of one statement, read live from the target at request time and checked against its digest, with secrets removed (Wave 8, owner decision S2). Web App only, human, re-authenticated within 15 minutes, audited; never stored.",
+        "tags": [
+          "statements"
+        ],
+        "x-exponetdb-action": "statement.raw.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CLUSTER_IDENTITY_MISMATCH",
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REAUTH_REQUIRED",
+          "SAMPLE_STALE",
+          "STATEMENT_NOT_AVAILABLE",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_IDENTITY_MISMATCH",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
       }
     },
     "/step-ups": {
@@ -28668,6 +32763,132 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "7"
+      }
+    },
+    "/targets/{target}/queries/history": {
+      "get": {
+        "operationId": "listQueryHistory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryHistory"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "data.read:nonprod"
+            ]
+          },
+          {
+            "oauth2": [
+              "data.read:prod"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Your own data reads on a target, newest first, from the audit's data.read events: the redacted statement as the audit holds it (at most 256 characters), digest, rows, truncation, duration and outcome (Wave 8).",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "query.history.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
       }
     },
     "/targets/{target}/queries/{queryId}/cancel": {

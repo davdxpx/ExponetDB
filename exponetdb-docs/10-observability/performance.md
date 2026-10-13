@@ -17,7 +17,7 @@ covers how these queries are written and reviewed.
 
 | Area | Sources | Shown as | Notes |
 |---|---|---|---|
-| Sessions | `pg_stat_activity` (client backends) | list with conditions from [`health.md` §3](./health.md#3-named-conditions), grouped by role/application | statement text redacted; raw text only for `diagnostics.read_sensitive` in the Web App |
+| Sessions | `pg_stat_activity` (client backends) | list with conditions from [`health.md` §3](./health.md#3-named-conditions), grouped by role/application | statement text redacted; raw text only for `diagnostics.read_sensitive` in the Web App: **[OBSERVED]** (Wave 8, owner decision S2) a live lookup by digest, secrets removed, audited, never stored ([`statement-redaction.md` §4](../03-database-model/statement-redaction.md#4-raw-text-access)) |
 | Locks and blocking | `pg_locks`, `pg_blocking_pids()` | blocking trees (root blocker first), lock mode, relation, wait time | the root blocker is the actionable item |
 | Statement statistics | `pg_stat_statements` (deltas every 5 min) | top by total time, mean time, calls, rows, shared blocks read; per-query history | requires the extension (see §2); query text is already normalized by PostgreSQL and is passed through ExponetDB's redaction again |
 | Table health | `pg_stat_user_tables`, `pg_class` | dead tuples, last (auto)vacuum/analyze, seq vs idx scans, size | bloat is an **estimate** and labeled as such |
