@@ -210,6 +210,18 @@ describe('the question mark', () => {
 })
 
 describe('chords', () => {
+  it('runs Mod+Enter and leaves Enter alone', () => {
+    const { manager } = setup()
+    const handler = vi.fn()
+    manager.register('sql.run', handler)
+    expect(manager.handleKeyDown(press('Enter'), open)).toBeUndefined()
+    expect(
+      manager.handleKeyDown(press('Enter', { shiftKey: true, ctrlKey: true }), open),
+    ).toBeUndefined()
+    expect(manager.handleKeyDown(press('Enter', { ctrlKey: true }), open)).toBe('sql.run')
+    expect(handler).toHaveBeenCalledOnce()
+  })
+
   it('runs Control+K on a platform that uses Control, and not Command+K', () => {
     const { manager } = setup({ apple: false })
     const handler = vi.fn()

@@ -18,7 +18,7 @@ ExponetDB/
 ├── apps/
 │   ├── server/            control plane process: roles serve | worker | gateway
 │   │   └── src/{config, composition, roles, commands, interfaces/{http, rest, mcp, oauth, gateway, web-assets}}
-│   ├── web/               Web App (framework-free until Wave 8 [OBSERVED]; React SPA from Wave 8 [PLANNED]; talks only to /api/v1, /auth and /oauth)
+│   ├── web/               Web App: React SPA on the UI packages (Wave 8 [OBSERVED]); talks only to /api/v1, /auth and /oauth
 │   ├── cli/               `exponetdb` CLI (bundles, lint, checksum, plan/apply via REST)
 │   └── design-system/     component documentation, guidance pages, live demos
 ├── agent/
@@ -63,16 +63,16 @@ ExponetDB/
 Count: 4 apps, 1 agent module, 24 packages. Each package has one owner domain, a
 README stating its responsibility and its allowed dependencies, and tests.
 
-**[OBSERVED]** (2026-10-13, `apps/web/src/main.ts`) The Web App is
-framework-free vanilla TypeScript through Wave 7 and while Wave 8 starts (one
-bundled module, no React, no router, no design-system package), so "React SPA"
-in the layout above is a target. **[PLANNED]** Wave 8 rebuilds it as a React
-SPA on the UI packages
-(§1.8; [ADR-0030](./adr/0030-supabase-ui-source-adoption.md), the
-[Wave 8 order](../14-roadmap/orders/wave-8-order.md) §7). The Web App talks to
-`/api/v1`, `/auth` (the sign-in ceremony routes, outside OpenAPI) and `/oauth`
-only; [ADR-0019](./adr/0019-process-roles-and-web-app.md) names `/api/v1` and
-`/oauth`.
+**[OBSERVED]** (2026-10-13, `apps/web/src/main.tsx`, `apps/web/package.json`)
+The Web App is a React SPA on the UI packages (§1.8;
+[ADR-0030](./adr/0030-supabase-ui-source-adoption.md), the
+[Wave 8 order](../14-roadmap/orders/wave-8-order.md) §7): Vite builds it into
+`apps/web/dist` (`bun run --cwd apps/web build`, which also runs
+`scripts/postbuild.ts`), and `serve` answers every page path with it
+([ADR-0031](./adr/0031-web-app-serving.md)). The framework-free app of Waves
+3A to 7 was deleted in Wave 8 Phase 8. The Web App talks to `/api/v1`, `/auth`
+(the sign-in ceremony routes, outside OpenAPI) and `/oauth` only
+([ADR-0019](./adr/0019-process-roles-and-web-app.md)).
 
 ### 1.1 `packages/migrations` by subpath and wave
 

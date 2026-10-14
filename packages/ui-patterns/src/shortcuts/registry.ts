@@ -20,7 +20,7 @@ export class ShortcutConflictError extends Error {
 export interface ShortcutRegistry<Id extends string = string> {
   readonly ids: readonly Id[]
   definition: (id: Id) => ShortcutDefinition
-  /** The id of the `Mod+<letter>` chord. */
+  /** The id of the `Mod+<letter>` chord (`enter` for `Mod+Enter`). */
   chordFor: (letter: string) => Id | undefined
   /** The id of a single key (`?`). */
   keyFor: (key: string) => Id | undefined
@@ -31,6 +31,8 @@ export interface ShortcutRegistry<Id extends string = string> {
 }
 
 const LETTER = /^[a-z]$/
+/** The chord key of Enter (`Mod+Enter`). */
+export const CHORD_ENTER = 'enter'
 
 function bindingKey(binding: ShortcutBinding): string {
   switch (binding.type) {
@@ -46,9 +48,9 @@ function bindingKey(binding: ShortcutBinding): string {
 function checkBinding(id: string, binding: ShortcutBinding): void {
   switch (binding.type) {
     case 'chord':
-      if (!LETTER.test(binding.key)) {
+      if (!LETTER.test(binding.key) && binding.key !== CHORD_ENTER) {
         throw new ShortcutDefinitionError(
-          `Shortcut ${id}: a chord is the modifier plus one lower case letter a to z.`,
+          `Shortcut ${id}: a chord is the modifier plus one lower case letter a to z, or plus enter.`,
         )
       }
       return
@@ -131,7 +133,7 @@ export const shortcutRegistry: ShortcutRegistry<ShortcutId> = defineShortcuts(SH
 export function spokenBinding(binding: ShortcutBinding, apple: boolean): string {
   switch (binding.type) {
     case 'chord':
-      return `${apple ? 'Command' : 'Control'} ${binding.key.toUpperCase()}`
+      return `${apple ? 'Command' : 'Control'} ${binding.key === CHORD_ENTER ? 'Enter' : binding.key.toUpperCase()}`
     case 'sequence':
       return `${binding.keys[0].toUpperCase()} then ${binding.keys[1].toUpperCase()}`
     case 'key':

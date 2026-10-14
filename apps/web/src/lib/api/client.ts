@@ -65,6 +65,20 @@ export function queryString(query: Readonly<Record<string, unknown>> = {}): stri
   return text.length === 0 ? '' : `?${text}`
 }
 
+/**
+ * A body that is not JSON: raw bytes with their exact content type (a profile
+ * picture). Sent with the same cookie, CSRF header and error handling as a
+ * JSON call, never with an `Authorization` header.
+ */
+export class RawBody {
+  readonly bytes: Blob | ArrayBuffer | Uint8Array
+  readonly contentType: string
+  constructor(bytes: Blob | ArrayBuffer | Uint8Array, contentType: string) {
+    this.bytes = bytes
+    this.contentType = contentType
+  }
+}
+
 export class ApiClient {
   readonly gate: RequestGate
   readonly #deps: ClientDeps
@@ -84,6 +98,19 @@ export class ApiClient {
     return this.send<ResponseOf<Id>>(op.method, path, input.body, input.signal)
   }
 
+  /**
+   * A REST operation whose success answer is not JSON (`shape: none`, such as
+   * the NDJSON audit export): the body as text. Failures are read as problems
+   * like every other answer; the same headers, never an `Authorization`.
+   */
+  operationText<Id extends OperationId>(id: Id, input: OperationInput<Id> = {}): Promise<string> {
+    const op = OPERATIONS[id]
+    const path = `${API_BASE}${fillPath(op.path, input.params as Readonly<Record<string, string>>)}${queryString(input.query as Readonly<Record<string, unknown>>)}`
+    return this.gate.run(() =>
+      this.#attempt<string>(op.method, path, input.body, input.signal, true, 'text'),
+    )
+  }
+
   /** A `/auth` ceremony (outside OpenAPI): always `POST`. */
   ceremony<T>(path: `/auth/${string}`, body?: unknown, signal?: AbortSignal): Promise<T> {
     return this.send<T>('POST', path, body ?? {}, signal)
@@ -97,6 +124,16 @@ export class ApiClient {
     return this.#attempt<T>('POST', path, body ?? {}, undefined, true)
   }
 
+  /** A call whose body is raw bytes with a content type of its own (`PUT /me/avatar`). */
+  sendRaw<T>(
+    method: 'PUT' | 'POST',
+    path: string,
+    body: RawBody,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    return this.send<T>(method, path, body, signal)
+  }
+
   send<T>(method: Method, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
     return this.gate.run(() => this.#attempt<T>(method, path, body, signal, true))
   }
@@ -107,17 +144,25 @@ export class ApiClient {
     body: unknown,
     signal: AbortSignal | undefined,
     mayRetry: boolean,
+    expect: 'json' | 'text' = 'json',
   ): Promise<T> {
     const csrf = readCsrf(this.#deps.cookies())
-    const headers: Record<string, string> = { accept: 'application/json' }
+    const headers: Record<string, string> = {
+      accept: expect === 'text' ? 'application/x-ndjson, application/json' : 'application/json',
+    }
     if (csrf !== undefined) {
       headers[CSRF_HEADER] = csrf
     }
     const init: RequestInit = { method, headers, credentials: 'same-origin', cache: 'no-store' }
     if (signal !== undefined) init.signal = signal
     if (method !== 'GET' && method !== 'DELETE') {
-      headers['content-type'] = 'application/json'
-      init.body = JSON.stringify(body ?? {})
+      if (body instanceof RawBody) {
+        headers['content-type'] = body.contentType
+        init.body = body.bytes as BodyInit
+      } else {
+        headers['content-type'] = 'application/json'
+        init.body = JSON.stringify(body ?? {})
+      }
     }
     let response: Response
     try {
@@ -138,11 +183,14 @@ export class ApiClient {
       if (isSessionGone(error)) {
         const now = readCsrf(this.#deps.cookies())
         if (mayRetry && now !== undefined && now !== csrf) {
-          return this.#attempt<T>(method, path, body, signal, false)
+          return this.#attempt<T>(method, path, body, signal, false, expect)
         }
         this.#deps.onSessionGone()
       }
       throw error
+    }
+    if (expect === 'text') {
+      return text as T
     }
     if (text.length > 0 && parsed === undefined) {
       throw new ApiError(

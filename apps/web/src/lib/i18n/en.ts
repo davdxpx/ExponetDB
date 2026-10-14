@@ -6,13 +6,27 @@
  * text, never as markup.
  */
 import { accessMessages } from './messages/access.ts'
+import { accessAdminMessages } from './messages/access-admin.ts'
 import { accountMessages } from './messages/account.ts'
+import { auditMessages } from './messages/audit.ts'
+import { changesMessages } from './messages/changes.ts'
+import { connectionsMessages } from './messages/connections.ts'
+import { fleetMessages } from './messages/fleet.ts'
+import { infrastructureMessages } from './messages/infrastructure.ts'
 import { oauthMessages } from './messages/oauth.ts'
 import { plansMessages } from './messages/plans.ts'
+import { schemaMessages } from './messages/schema.ts'
+import { settingsMessages } from './messages/settings.ts'
+import { sqlMessages } from './messages/sql.ts'
 import { targetMessages } from './messages/target.ts'
+import { targetOverviewMessages } from './messages/target-overview.ts'
+import { targetPageMessages } from './messages/target-pages.ts'
+import { wave9Messages } from './messages/wave9.ts'
 
 const core = {
   'app.name': 'ExponetDB',
+  'title.page': '{page} · {app}',
+  'title.consent': 'Authorize an application',
   'error.network': 'The server could not be reached. Check your connection and try again.',
   'error.unknown': 'Something went wrong. Reload the page and try again.',
   'error.rateLimited': 'Too many attempts. Try again in {seconds} seconds.',
@@ -74,6 +88,18 @@ export const CATALOG_PARTS = {
   oauth: oauthMessages,
   access: accessMessages,
   plans: plansMessages,
+  fleet: fleetMessages,
+  targetOverview: targetOverviewMessages,
+  schema: schemaMessages,
+  changes: changesMessages,
+  targetPages: targetPageMessages,
+  sql: sqlMessages,
+  connections: connectionsMessages,
+  wave9: wave9Messages,
+  infrastructure: infrastructureMessages,
+  accessAdmin: accessAdminMessages,
+  audit: auditMessages,
+  settings: settingsMessages,
 } as const
 
 export const en = {
@@ -83,6 +109,18 @@ export const en = {
   ...oauthMessages,
   ...accessMessages,
   ...plansMessages,
+  ...fleetMessages,
+  ...targetOverviewMessages,
+  ...schemaMessages,
+  ...changesMessages,
+  ...targetPageMessages,
+  ...sqlMessages,
+  ...connectionsMessages,
+  ...wave9Messages,
+  ...infrastructureMessages,
+  ...accessAdminMessages,
+  ...auditMessages,
+  ...settingsMessages,
 } as const
 
 export type MessageKey = keyof typeof en

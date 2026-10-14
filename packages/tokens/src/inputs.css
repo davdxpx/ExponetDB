@@ -29,21 +29,21 @@
  */
 
 :root {
-  /* Spot color: placeholder indigo-blue (OD-11). */
-  --hue: 255;
+  /* Spot color: turquoise accent chosen by the owner (S9); the rest of the brand is the OD-11 placeholder. */
+  --hue: 178;
   --surface-hue: var(--hue);
 
   /*
    * Hues of the expressive colors. They are fixed on purpose: an error stays red, a warning
-   * amber and the production tier magenta no matter which --hue the product uses. The production
+   * amber and the production tier indigo-blue no matter which --hue the product uses. The production
    * hue is reserved: keep it clear of --hue, of the destructive hue and of the warning hue.
    */
   --expressive-chroma: 0.14;
   --success-hue: 150;
   --warning-hue: 70;
   --destructive-hue: 25;
-  --info-hue: 215;
-  --production-hue: 320;
+  --info-hue: 205;
+  --production-hue: 262;
   --production-chroma: 0.2;
   --state-healthy-hue: 150;
   --state-degraded-hue: 70;
@@ -55,8 +55,21 @@
   --colors-black: 0deg 0% 0%;
   --colors-white: 0deg 0% 100%;
 
-  /* Shape and layout constants the primitives reference. */
+  /*
+   * Shape and layout constants the primitives reference. ExponetDB character (design-system.md
+   * section 2, owner decision S5): --radius is the one input of the radius scale (theme.css
+   * derives sm, md, lg and xl from it): crisp controls (md 5px), soft panels (lg 10px).
+   */
   --radius: 0.625rem;
+  /* Density: data rows and column headers are compact; forms keep the comfortable control sizes. */
+  --row-padding-y: 0.625rem;
+  --table-head-height: 2.25rem;
+  /* Emphasis: a 3px focus ring, and the weight and tracking of headings and labels. */
+  --focus-ring-width: 3px;
+  --heading-weight: 600;
+  --heading-tracking: -0.015em;
+  --label-weight: 500;
+  --label-tracking: 0.02em;
   --padding-x-sm: 1rem;
   --padding-x-md: 1.5rem;
   --card-padding-x: var(--padding-x-sm);
@@ -67,11 +80,11 @@
 :root,
 [data-theme="light"] {
   color-scheme: light;
-  --chroma: 0.008;
-  --surface: 0.97;
+  --chroma: 0.012;
+  --surface: 0.965;
   --foreground-lightness: 0.1;
   --contrast: 0.5;
-  --elevation-step: 0.015;
+  --elevation-step: 0.02;
   /* Secondary text eases between a floor (contrast 0) and its level (0.5), then toward full ink. */
   --muted-foreground-level: 0.68;
   --muted-foreground-floor: 0.58;
@@ -98,11 +111,11 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]):not([data-theme="dark"]) {
     color-scheme: dark;
-    --chroma: 0.01;
-    --surface: 0.19;
+    --chroma: 0.014;
+    --surface: 0.18;
     --foreground-lightness: 0.95;
     --contrast: 0.5;
-    --elevation-step: 0.025;
+    --elevation-step: 0.03;
     --muted-foreground-level: 0.8;
     --muted-foreground-floor: 0.68;
     --tertiary-foreground-level: 0.7;
@@ -125,11 +138,11 @@
 /* Dark theme, explicit. Keep this block identical to the media block above (a test checks it). */
 [data-theme="dark"] {
   color-scheme: dark;
-  --chroma: 0.01;
-  --surface: 0.19;
+  --chroma: 0.014;
+  --surface: 0.18;
   --foreground-lightness: 0.95;
   --contrast: 0.5;
-  --elevation-step: 0.025;
+  --elevation-step: 0.03;
   --muted-foreground-level: 0.8;
   --muted-foreground-floor: 0.68;
   --tertiary-foreground-level: 0.7;

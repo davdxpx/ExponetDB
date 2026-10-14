@@ -4,6 +4,7 @@ import { ConnectPage } from '../../features/connect/connect-page.tsx'
 
 /** `/connect[?client=<id>]`: connecting an MCP client; the client id is an allowlist value. */
 export const Route = createFileRoute('/_app/connect')({
+  staticData: { title: 'connect.title' },
   validateSearch: connectSearch,
   component: ConnectRoute,
 })

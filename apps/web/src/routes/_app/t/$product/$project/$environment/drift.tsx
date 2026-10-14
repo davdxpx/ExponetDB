@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { TargetSectionPage } from '../../../../../../features/target/section-page.tsx'
+import { DriftPage } from '../../../../../../features/drift/drift-page.tsx'
 
 /** `/t/<product>/<project>/<environment>/drift` */
 export const Route = createFileRoute('/_app/t/$product/$project/$environment/drift')({
-  component: () => <TargetSectionPage section="drift" />,
+  component: DriftPage,
 })

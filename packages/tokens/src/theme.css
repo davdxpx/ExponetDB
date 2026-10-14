@@ -31,6 +31,16 @@
 }
 
 @theme inline {
+  /*
+   * Radius scale (ExponetDB character, owner decision S5): one input, --radius (inputs.css, 10px).
+   * sm 3px (checkboxes, chips), md 5px (controls, menus), lg 10px (cards, dialogs, alerts),
+   * xl 14px (inset layout surfaces). Controls stay crisp while panels read soft.
+   */
+  --radius-sm: calc(var(--radius) - 7px);
+  --radius-md: calc(var(--radius) - 5px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
   /* shadcn pairs */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -227,7 +237,7 @@
 
   /* Shape and layout */
   --breakpoint-xs: 480px;
-  --radius-panel: 6px;
-  --radius-item: calc(var(--radius-md) - 2px);
+  --radius-panel: var(--radius);
+  --radius-item: calc(var(--radius) - 7px);
   --spacing-card: var(--card-padding-x);
 }

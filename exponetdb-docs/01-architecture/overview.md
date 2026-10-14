@@ -76,7 +76,7 @@ Plus:
 | Control Store | Coolify PostgreSQL resource on `reos-01` (V1) | [`../02-control-plane/control-database.md`](../02-control-plane/control-database.md) |
 | `exponetdb-node` | each database host, systemd | [`../07-node-agent/architecture.md`](../07-node-agent/architecture.md) |
 | CLI `exponetdb` | developer machines, CI | uses the REST API; shares bundle/checksum code with the server |
-| Web App | static SPA served by `serve` | talks only to `/api/v1` and `/oauth` like any client |
+| Web App | static SPA served by `serve` | talks only to `/api/v1`, `/auth` and `/oauth` like any client |
 
 ## 3. Layering inside the server
 
@@ -158,7 +158,7 @@ from "ExponetDB degraded" (C-29).
 | MCP | official TypeScript SDK (`@modelcontextprotocol/server` 2.3.1, exactly pinned, only in `apps/server`), dual-era: 2026-07-28 and 2025-11-25 and 2025-06-18, stateless | **[DECIDED]** ([`../05-mcp/architecture.md`](../05-mcp/architecture.md), [ADR-0027](./adr/0027-mcp-protocol-layer.md)); **[OBSERVED]** 2026-10-13 (`apps/server/package.json`, `tooling/boundaries/graph.json`) |
 | SQL parser | libpg_query | **[DECIDED]** ([ADR-0021](./adr/0021-libpg-query-parser.md)) |
 | PostgreSQL driver | node-postgres (`pg`, with `pg-cursor` for bounded reads), in `packages/postgres`, `packages/control-store` and the test kit | **[OBSERVED]** 2026-10-13 (`packages/postgres/package.json`) |
-| Web App | React 19, Vite 8, TanStack Router (file-based) + TanStack Query, Tailwind v4 (`@tailwindcss/vite`), `radix-ui`, `class-variance-authority`, `cmdk`, `react-hook-form` + zod, TanStack Table + Virtual, `react-resizable-panels`, `lucide-react`, `recharts`, `@xyflow/react` + dagre (lazy), a code editor (Monaco, lazy; subject to the CSP spike of Wave 8 Phase 1); exact version pins | **[PLANNED]** ([`../11-ui/design-system.md`](../11-ui/design-system.md), [Wave 8 order §7](../14-roadmap/orders/wave-8-order.md)); becomes **[OBSERVED]** in Wave 8 Phase 7, when `apps/web` is rebuilt on it. **[OBSERVED]** today (`apps/web/src/main.ts`): framework-free TypeScript, one bundled module |
+| Web App | React 19.3, Vite 8.3 (`bun --bun vite build`), TanStack Router 1.170 (file-based, code-split; plain-string query parsing) + TanStack Query 5, Tailwind v4.3 (`@tailwindcss/vite`), `radix-ui`, `class-variance-authority`, `cmdk`, `react-hook-form` + zod (jitless under the CSP), TanStack Table + Virtual, `react-resizable-panels`, `lucide-react`, `recharts`, `@xyflow/react` + dagre (lazy), CodeMirror 6 for the SQL editor and diffs ([OD-40](../00-product/open-decisions.md)); exact version pins | **[OBSERVED]** 2026-10-13 (`apps/web/package.json`, `packages/ui*/package.json`; built into `apps/web/dist` and served by `serve` since Wave 8 Phase 8, [ADR-0031](./adr/0031-web-app-serving.md)); the framework-free Wave 3A app is deleted ([`../11-ui/design-system.md`](../11-ui/design-system.md), [Wave 8 order §7](../14-roadmap/orders/wave-8-order.md)) |
 | Node agent | Go, single static binary + root helper | **[DECIDED]** ([OD-2](../00-product/open-decisions.md#od-2-node-agent-implementation-language), resolved 2026-10-05) |
 | Control Store | PostgreSQL 17 | **[DECIDED]** |
 | Queues, leases, locks | PostgreSQL (`SKIP LOCKED`, leases, advisory locks) | **[DECIDED]** (P-8) |

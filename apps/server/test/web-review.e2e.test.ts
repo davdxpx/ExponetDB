@@ -137,26 +137,26 @@ const ITEM = {
                   line: 3,
                   kind: 'ALTER TABLE',
                   compatibility: 'additive',
-                  lock: { mode: 'ACCESS EXCLUSIVE', severity: 'brief', objects: [] },
+                  lock: { mode: 'ACCESS EXCLUSIVE', severity: 'low', objects: [] },
                 },
                 {
                   index: 1,
                   line: 404,
                   kind: 'DROP TABLE',
                   compatibility: 'destructive',
-                  lock: { mode: 'ACCESS EXCLUSIVE', severity: 'blocking', objects: [] },
+                  lock: { mode: 'ACCESS EXCLUSIVE', severity: 'high', objects: [] },
                 },
               ],
               compatibility: { declared: 'additive', observed: 'destructive', agreement: false },
               destructive: ['table public.accounts'],
-              lockSeverity: 'blocking',
+              lockSeverity: 'high',
               rewriteRisk: [],
               rollback: { available: false, declaredSafety: null },
             },
           ],
           summary: {
             compatibility: 'destructive',
-            lockSeverity: 'blocking',
+            lockSeverity: 'high',
             destructive: true,
             nontransactional: false,
           },
@@ -241,6 +241,12 @@ beforeAll(async () => {
   await mkdir(SHOTS, { recursive: true })
   browser = await chromium.launch({ headless: true })
   context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+  // A CSP violation a script catches (zod's eval probe, say) logs nothing; the page reports it
+  // as an event, written here to the console the suite counts.
+  await context.addInitScript({
+    content:
+      "document.addEventListener('securitypolicyviolation', (e) => console.error('Content Security Policy violation: ' + e.violatedDirective + ' ' + e.blockedURI))",
+  })
   await context.route(`${ORIGIN}/**`, async (route) => {
     const request = route.request()
     const url = new URL(request.url())
@@ -289,30 +295,43 @@ describe('the plan review in Chromium', () => {
     const response = await page.goto(`${ORIGIN}/approvals#operation=${OP}`)
     // The page is never framed; the operation id travels in the fragment (no Referer leak).
     expect(response?.headers()['content-security-policy']).toContain("frame-ancestors 'none'")
-    await page.waitForSelector('.review')
+    // The link of the server, the CLI and MCP opens the plan's review page; the fragment is gone.
+    await page.waitForURL(`${ORIGIN}/changes/plans/${PLAN}`)
+    await page.waitForSelector('li.card.focused[data-operation] .review .computed')
     const review = page.locator('.review')
     // Facts ExponetDB computed: the target, production, the drop, the decision and its rule.
     const computed = review.locator('.computed')
     expect(await computed.textContent()).toContain('shop/platform/production')
-    expect(await computed.locator('.badge.warn').first().textContent()).toBe('production')
-    expect(await computed.locator('ul li.destructive').allTextContents()).toEqual([
+    // Production is framed and named as a tier, never as an error.
+    expect(await page.locator('[data-plan-frame][data-tier="production"]').count()).toBe(1)
+    expect(await computed.locator('[data-tier]').first().textContent()).toBe('Production')
+    expect(await computed.locator('li.destructive').allTextContents()).toEqual([
       'table public.accounts',
     ])
-    expect(await computed.textContent()).toContain(
-      'declared additive, observed destructive (they disagree)',
+    expect(await computed.textContent()).toMatch(
+      /declared\s*Additive\s*,\s*observed\s*Destructive\s*\(they disagree\)/,
     )
     // Every statement is listed with its line before any raw text: filler cannot hide the DROP.
-    expect(await computed.locator('ol.statements li').allTextContents()).toEqual([
-      'ALTER TABLE at line 3, lock ACCESS EXCLUSIVE, additive',
-      'DROP TABLE at line 404, lock ACCESS EXCLUSIVE, destructive',
-    ])
-    expect(await computed.textContent()).toContain('migration.agent-production (require): fail.')
+    const statements = computed.locator('tr[data-statement]')
+    expect(await statements.count()).toBe(2)
+    expect(
+      (await statements.nth(0).locator('td').allTextContents()).slice(0, 5).map((c) => c.trim()),
+    ).toEqual(['#1', '3', 'ALTER TABLE', 'ACCESS EXCLUSIVE (severity Low)', 'Additive'])
+    expect(
+      (await statements.nth(1).locator('td').allTextContents()).slice(0, 5).map((c) => c.trim()),
+    ).toEqual(['#2', '404', 'DROP TABLE', 'ACCESS EXCLUSIVE (severity High)', 'Destructive'])
+    expect(await statements.nth(1).getAttribute('class')).toContain('destructive')
+    const policy = computed.locator('[data-plan-block="policy"]')
+    expect(await policy.textContent()).toContain('migration.agent-production')
+    expect(await policy.textContent()).toContain('failed')
+    expect(await policy.textContent()).toContain('the rule requires')
     expect(await computed.locator('code.full-hash').textContent()).toBe(HASH)
-    // The client's own name: text, in quotes, marked as not verified.
-    expect(await computed.locator('.client-name q').textContent()).toBe(
+    // The client's own name: text, isolated, marked as not verified.
+    const clientName = computed.locator('.client-name [data-untrusted="name"]')
+    expect(await clientName.locator('[dir="ltr"]').first().textContent()).toBe(
       'ExponetDB Official ✅ <b>trusted</b>',
     )
-    expect(await computed.locator('.client-name .badge').textContent()).toBe('name not verified')
+    expect(await clientName.textContent()).toContain('name not verified')
 
     // Nothing from the plan became markup: no script, image, link or bold element inside the review.
     for (const tag of ['script', 'img', 'a', 'b', 'iframe']) {
@@ -322,29 +341,32 @@ describe('the plan review in Chromium', () => {
     expect(dialogs).toEqual([])
 
     // Every line numbered; the DROP at its line with its statement facts, never out of the list.
-    const up = review.locator('section.source', { hasText: 'up.sql of' })
-    const rows = up.locator('table.source-text tr')
+    const up = review.locator('section.source[data-file="up.sql"]')
+    const rows = up.locator('table.source-text tbody tr')
     expect(await rows.count()).toBe(UP_SQL.split('\n').length)
     // verify.sql is shown too, numbered, without the statement facts of up.sql.
-    const verify = review.locator('section.source', { hasText: 'verify.sql of' })
-    expect(await verify.locator('table.source-text tr').count()).toBe(VERIFY_SQL.split('\n').length)
-    expect(await verify.locator('tr.statement-start').count()).toBe(0)
-    expect(await review.locator('.raw .banner.warn', { hasText: 'This page shows' }).count()).toBe(
-      0,
+    const verify = review.locator('section.source[data-file="verify.sql"]')
+    expect(await verify.locator('table.source-text tbody tr').count()).toBe(
+      VERIFY_SQL.split('\n').length,
     )
+    expect(await verify.locator('tr.statement-start').count()).toBe(0)
+    // Every file the plan runs is on the page (no "This page shows n of m files" notice).
+    expect(await review.locator('.raw', { hasText: 'This page shows' }).count()).toBe(0)
     const drop = up.locator('tr.statement-start', { hasText: 'DROP TABLE public.accounts;' })
-    expect(await drop.locator('td.line').textContent()).toBe('404')
-    expect(await drop.locator('.badge.stmt').textContent()).toBe(
-      '#2 DROP TABLE · lock ACCESS EXCLUSIVE · destructive',
+    expect(await drop.getAttribute('data-line')).toBe('404')
+    expect(await drop.locator('td').first().textContent()).toBe('404')
+    expect(await drop.locator('[data-statement-start]').textContent()).toBe(
+      'Statement 2: DROP TABLE, lock ACCESS EXCLUSIVE, destructive',
     )
     // Direction and tag characters never act: they are shown by their code point.
     const raw = (await up.locator('table.source-text').textContent()) ?? ''
     expect(raw).not.toContain(BIDI)
     expect(raw).toContain('⟨U+202E⟩')
-    expect(raw).toContain('⟨U+E0041⟩⟨U+E0042⟩')
+    expect(raw).toContain('⟨U+E0041⟩')
+    expect(raw).toContain('⟨U+E0042⟩')
     expect(raw).toContain('<script>window.__pwned = 1</script>')
-    expect(await review.locator('.raw .banner.warn').first().textContent()).toMatch(
-      /^\d+ character\(s\) are not plain ASCII/,
+    expect(await up.locator('[role="note"]').first().textContent()).toMatch(
+      /^This file has characters that are not plain ASCII: \d+ hidden characters? shown as code points/,
     )
     await page.screenshot({ path: `${SHOTS}approvals-hostile.png`, fullPage: true })
   })

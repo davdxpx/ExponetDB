@@ -57,6 +57,10 @@ import {
   ApprovalDecisionRequestSchema,
   ApprovalQueueItemSchema,
   ApprovalViewSchema,
+  AVATAR_MAX_BYTES,
+  AVATAR_MEDIA_TYPES,
+  AvatarBytesSchema,
+  AvatarQuerySchema,
   DisableIdentityRequestSchema,
   FactorViewSchema,
   IdentityStateSchema,
@@ -66,6 +70,8 @@ import {
   MeSchema,
   PolicySettingsPlanRequestSchema,
   PolicySettingsViewSchema,
+  ProfileUpdateRequestSchema,
+  ProfileViewSchema,
   RoleBindingIdSchema,
   RoleBindingPlanRequestSchema,
   RoleBindingViewSchema,
@@ -229,6 +235,18 @@ export interface RouteContract {
    * and the server sends the body as lines (audit export, audit.md §5.1).
    */
   readonly mediaType?: 'application/x-ndjson'
+  /**
+   * A request body that is not JSON (Wave 8, the profile picture): the raw
+   * bytes in one of these media types, at most `maxBodyBytes`. `body` is
+   * then absent; the use case checks the bytes themselves.
+   */
+  readonly rawBody?: { readonly mediaTypes: readonly string[] }
+  /**
+   * A response that is not JSON (Wave 8, the profile picture): the raw bytes
+   * in one of these media types, with the headers the handler sets.
+   * `response.schema` then only describes the bytes.
+   */
+  readonly rawResponse?: { readonly mediaTypes: readonly string[] }
   /** Route-specific error codes in addition to the codes every route can return. */
   readonly errors: readonly ErrorCode[]
   /**
@@ -1019,6 +1037,42 @@ export const ROUTES = [
     response: { status: 200, schema: MeSchema },
     errors: ['SESSION_EXPIRED', 'RECOVERY_REQUIRED'],
   },
+  // Wave 8 (owner decision S10): the own profile, a display name and a picture.
+  {
+    operationId: 'updateMyProfile',
+    method: 'put',
+    path: '/me/profile',
+    summary:
+      'Set or clear the own display name at the profile revision it is based on (a stale revision is 409); the name is never written to the audit.',
+    action: 'me.profile.update',
+    pathParams: noParams,
+    body: ProfileUpdateRequestSchema,
+    response: { status: 200, schema: ProfileViewSchema },
+    errors: ['SESSION_EXPIRED', 'CSRF_FAILED', 'CONFLICT'],
+  },
+  {
+    operationId: 'setMyAvatar',
+    method: 'put',
+    path: '/me/avatar',
+    summary:
+      'Upload the own profile picture as the raw body: PNG, JPEG or WebP, at most 256 KiB, 32 to 1024 pixels each way, still (no animation). The server reads the format from the bytes and refuses anything else, a declared type that does not match and trailing data.',
+    action: 'me.avatar.set',
+    pathParams: noParams,
+    rawBody: { mediaTypes: AVATAR_MEDIA_TYPES },
+    maxBodyBytes: AVATAR_MAX_BYTES,
+    response: { status: 200, schema: ProfileViewSchema },
+    errors: ['SESSION_EXPIRED', 'CSRF_FAILED'],
+  },
+  {
+    operationId: 'deleteMyAvatar',
+    method: 'delete',
+    path: '/me/avatar',
+    summary: 'Remove the own profile picture (nothing to remove is not an error).',
+    action: 'me.avatar.delete',
+    pathParams: noParams,
+    response: { status: 200, schema: ProfileViewSchema },
+    errors: ['SESSION_EXPIRED', 'CSRF_FAILED'],
+  },
   {
     operationId: 'listMySessions',
     method: 'get',
@@ -1080,6 +1134,19 @@ export const ROUTES = [
     action: 'identity.get',
     pathParams: z.strictObject({ identityId: IdentityIdSchema }),
     response: { status: 200, schema: IdentityViewSchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'getIdentityAvatar',
+    method: 'get',
+    path: '/identities/{identityId}/avatar',
+    summary:
+      "A person's profile picture: the stored bytes with the stored media type, nosniff, a sandboxing policy and a year of private caching keyed by the hash in `v`. The own picture, or anyone's with access.read; an unknown, hidden or replaced picture is 404.",
+    action: 'identity.avatar.get',
+    pathParams: z.strictObject({ identityId: IdentityIdSchema }),
+    query: AvatarQuerySchema,
+    response: { status: 200, schema: AvatarBytesSchema },
+    rawResponse: { mediaTypes: AVATAR_MEDIA_TYPES },
     errors: ['NOT_FOUND'],
   },
   {

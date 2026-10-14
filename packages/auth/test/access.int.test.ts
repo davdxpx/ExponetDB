@@ -619,6 +619,15 @@ describe('OD-9 approvals', () => {
 
   it('5 to 8. a critical self-approval cools for 10 minutes, then needs a fresh proof at apply', async () => {
     const victim = await invitePerson(h, ownerSession, 'erase-me@example.test')
+    // A profile (owner decision S10): erasure removes the chosen name and the picture too.
+    await h.db.asRole('exdb_serve', async (c) => {
+      await c.query('SELECT profiles.set_display_name($1, 0, $2)', [victim.identityId, 'Erase Me'])
+      const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex')
+      await c.query(
+        `SELECT profiles.set_avatar($1, $2, 'image/png', 'sha256:' || encode(sha256($2), 'hex'), 64, 64)`,
+        [victim.identityId, png],
+      )
+    })
     let s = await signIn(h, owner)
     const erase = await plan((tx) =>
       planIdentityChange(tx, a.context, s, 'access.identity.erase', idn(victim.identityId)),
@@ -714,6 +723,16 @@ describe('OD-9 approvals', () => {
       webauthn_user_handle: null,
       factors: 0,
     })
+    const profiles = await h.db.asSuperuser(
+      async (c) =>
+        (
+          await c.query(
+            'SELECT count(*)::int AS n FROM profiles.identity_profiles WHERE identity_id = $1',
+            [victim.identityId],
+          )
+        ).rows[0],
+    )
+    expect(profiles).toEqual({ n: 0 })
   })
 
   it('the proof given for a self-approval never serves the apply, even with a short cooling period', async () => {

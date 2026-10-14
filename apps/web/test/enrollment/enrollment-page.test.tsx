@@ -134,7 +134,7 @@ describe('taking the one-time token', () => {
       'initTheme(',
       'createQueryClient(',
       'new ApiClient(',
-      'createRouter(',
+      'createAppRouter(',
       'createRoot(',
     ]) {
       const at = body.indexOf(later)

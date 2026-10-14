@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
 import { accessKeys } from '../../src/features/access/keys.ts'
+import { secretExposure } from '../security/secret-scan.ts'
 import {
   apiKey,
   cacheText,
@@ -214,6 +215,8 @@ describe('the service accounts page', { timeout: 20_000 }, () => {
       expect((field as HTMLInputElement).value).not.toContain(SECRET)
     }
     expect(document.title).not.toContain(SECRET)
+    // Besides the one element: in no attribute (title, data-*, aria-*), comment, text or storage.
+    expect(secretExposure(document.body, SECRET, '#api-key-secret')).toEqual([])
 
     // A refresh of the list keeps the one display and never adds another.
     await act(() => queryClient.invalidateQueries({ queryKey: accessKeys.serviceAccounts }))
@@ -223,6 +226,7 @@ describe('the service accounts page', { timeout: 20_000 }, () => {
     await user.click(within(card('Nightly checks')).getByRole('button', { name: 'Hide the key' }))
     expect(document.getElementById('api-key-secret')).toBeNull()
     expect(document.body.innerHTML).not.toContain(SECRET)
+    expect(secretExposure(document.body, SECRET, '#api-key-secret')).toEqual([])
     await act(() => queryClient.invalidateQueries({ queryKey: accessKeys.serviceAccounts }))
     expect(document.body.innerHTML).not.toContain(SECRET)
 

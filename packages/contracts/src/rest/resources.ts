@@ -2045,13 +2045,35 @@ export const SQL_CLASSES = [
   'security',
 ] as const
 
+/**
+ * The UTF-8 length of a string without `TextEncoder` (the contracts build for every runtime):
+ * one byte below U+0080, two below U+0800, four for a surrogate pair, three otherwise (a lone
+ * surrogate counts three, as its replacement character U+FFFD would).
+ */
+export function utf8Length(text: string): number {
+  let bytes = 0
+  for (let i = 0; i < text.length; i++) {
+    const unit = text.charCodeAt(i)
+    if (unit < 0x80) bytes += 1
+    else if (unit < 0x800) bytes += 2
+    else if (unit >= 0xd800 && unit <= 0xdbff && i + 1 < text.length) {
+      const next = text.charCodeAt(i + 1)
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        bytes += 4
+        i++
+      } else bytes += 3
+    } else bytes += 3
+  }
+  return bytes
+}
+
 export const SqlClassificationRequestSchema = z
   .strictObject({
     sql: z
       .string()
       .min(1)
       .max(SQL_CLASSIFY_MAX_BYTES)
-      .refine((v) => new TextEncoder().encode(v).length <= SQL_CLASSIFY_MAX_BYTES, {
+      .refine((v) => utf8Length(v) <= SQL_CLASSIFY_MAX_BYTES, {
         message: 'At most 64 KiB (UTF-8 bytes).',
       })
       .meta({
@@ -2177,21 +2199,19 @@ export type SqlClassification = z.infer<typeof SqlClassificationSchema>
 /** The cap of the revealed text: 64 KiB of UTF-16 code units (statement-redaction.md §4). */
 export const RAW_STATEMENT_MAX_LENGTH = 65_536
 
-export const RawStatementQuerySchema = z
-  .strictObject({
-    target: TargetRefSchema.meta({
-      description: 'The target that holds the statement (id or path); the digest alone names none.',
-    }),
-    pid: z.int().min(1).max(2_147_483_647).optional().meta({
-      description:
-        'Look in this session only (with `backendStart`, both from the sessions list): its current statement must have the digest, else `digest_mismatch`.',
-    }),
-    backendStart: TimestampSchema.optional().meta({
-      description:
-        'The session start the sessions list showed for `pid`: a reused pid of another session is `not_held`.',
-    }),
-  })
-  .meta({ id: 'RawStatementQuery' })
+export const RawStatementQuerySchema = z.strictObject({
+  target: TargetRefSchema.meta({
+    description: 'The target that holds the statement (id or path); the digest alone names none.',
+  }),
+  pid: z.int().min(1).max(2_147_483_647).optional().meta({
+    description:
+      'Look in this session only (with `backendStart`, both from the sessions list): its current statement must have the digest, else `digest_mismatch`.',
+  }),
+  backendStart: TimestampSchema.optional().meta({
+    description:
+      'The session start the sessions list showed for `pid`: a reused pid of another session is `not_held`.',
+  }),
+})
 
 export const RawStatementSchema = z
   .object({

@@ -1,4 +1,6 @@
-import { createRootRoute, Outlet } from '@tanstack/react-router'
+import { createRootRoute, Outlet, useRouterState } from '@tanstack/react-router'
+import { type ReactNode, useEffect } from 'react'
+import { titleOf } from '../app/title.ts'
 import { NotFoundPage } from '../shell/not-found.tsx'
 
 /**
@@ -9,6 +11,26 @@ import { NotFoundPage } from '../shell/not-found.tsx'
  * its command menu and its shortcuts stay.
  */
 export const Route = createRootRoute({
-  component: () => <Outlet />,
+  component: () => (
+    <>
+      <DocumentTitle />
+      <Outlet />
+    </>
+  ),
   notFoundComponent: () => <NotFoundPage landmark />,
 })
+
+/** Keeps `document.title` on "<Page> · ExponetDB" for the current page (`src/app/title.ts`). */
+function DocumentTitle(): ReactNode {
+  const title = useRouterState({
+    select: (state) =>
+      titleOf(
+        state.location.pathname,
+        state.matches.map((match) => match.staticData?.title),
+      ),
+  })
+  useEffect(() => {
+    document.title = title
+  }, [title])
+  return null
+}

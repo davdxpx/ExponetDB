@@ -109,6 +109,8 @@ async function ageProofs(): Promise<void> {
 }
 
 async function signOut(): Promise<void> {
+  // The account menu holds sign-out (the shell's header, every signed-in page).
+  await page.getByRole('button', { name: 'Account', exact: true }).click()
   await page.click('#sign-out')
   await page.waitForURL(`${origin}/login`)
   expect(await sessionValue()).toBeUndefined()
@@ -187,6 +189,12 @@ beforeAll(async () => {
 
   browser = await chromium.launch({ headless: true })
   context = await browser.newContext()
+  // A CSP violation a script catches (zod's eval probe, say) logs nothing; the page reports it
+  // as an event, written here to the console the suite counts.
+  await context.addInitScript({
+    content:
+      "document.addEventListener('securitypolicyviolation', (e) => console.error('Content Security Policy violation: ' + e.violatedDirective + ' ' + e.blockedURI))",
+  })
   page = await context.newPage()
   page.on('console', (message) => {
     if (/Content.Security.Policy/i.test(message.text())) {
@@ -316,7 +324,7 @@ async function bearer(path: string, token: string) {
 
 /** Confirms the pending re-authentication dialog with the passkey. */
 async function confirmWithPasskey(): Promise<void> {
-  await page.waitForSelector('dialog.reauth[open]')
+  await page.waitForSelector('[role="dialog"][data-reauth]')
   await page.click('#reauth-passkey')
 }
 
@@ -391,7 +399,415 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
     await page.waitForURL(`${origin}/account`)
     await expect.poll(() => page.textContent('#me-email')).toBe(EMAIL)
     expect(await page.textContent('#me-roles')).toContain('owner (global)')
+    // Passkeys, authenticator app, recovery codes and sessions are on the security tab.
+    await page.goto(`${origin}/account/security`)
+    await page.waitForSelector('#passkey-list li')
     expect(await page.locator('#passkey-list li').count()).toBe(1)
+  })
+
+  it('the rail never covers the page at 1440×900, in each of its three modes', async () => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    // The visible box of the rail and the page's `main` landmark, in CSS pixels (evaluated in the
+    // page as text: the server's TypeScript program has no DOM library).
+    type Box = { readonly left: number; readonly right: number } | null
+    const rects = () =>
+      page.evaluate<{ readonly rail: Box; readonly main: Box }>(`(() => {
+        const box = (selector) => {
+          const r = document.querySelector(selector)?.getBoundingClientRect()
+          return r === undefined ? null : { left: r.left, right: r.right }
+        }
+        return { rail: box('[data-sidebar="sidebar"]'), main: box('main') }
+      })()`)
+    const measured: Record<string, unknown> = {}
+    for (const [mode, railWidth] of [
+      ['hover', 48],
+      ['open', 208],
+      ['collapsed', 48],
+    ] as const) {
+      await page.evaluate((m) => {
+        if (m === 'hover') localStorage.removeItem('exdb.sidebar.mode')
+        else localStorage.setItem('exdb.sidebar.mode', m)
+      }, mode)
+      await page.goto(`${origin}/account`)
+      await page.waitForSelector('#me-email')
+      await page.mouse.move(1000, 500)
+      const loaded = await rects()
+      expect(loaded.main?.left, mode).toBe(railWidth)
+      expect(loaded.rail?.right ?? Infinity, mode).toBeLessThanOrEqual(loaded.main?.left ?? 0)
+
+      // A click in the rail leaves focus on the link; once the pointer leaves, the page is free.
+      await page.locator('[data-sidebar="sidebar"] a[href="/targets"]').click()
+      await page.waitForURL(`${origin}/targets`)
+      if (mode === 'hover') {
+        // While hovered, the rail opens over the page (the page does not move).
+        await expect.poll(async () => (await rects()).rail?.right ?? 0).toBeGreaterThan(200)
+      }
+      await page.mouse.move(1000, 500)
+      await expect
+        .poll(
+          async () => {
+            const after = await rects()
+            return (after.rail?.right ?? Infinity) <= (after.main?.left ?? 0)
+          },
+          { message: mode },
+        )
+        .toBe(true)
+      measured[mode] = { loaded, afterClick: await rects() }
+    }
+    console.info(`shell rects at 1440x900: ${JSON.stringify(measured)}`)
+    await page.evaluate(() => localStorage.removeItem('exdb.sidebar.mode'))
+    await page.goto(`${origin}/account`)
+    await page.waitForSelector('#me-email')
+  })
+
+  it('the Web App fits a phone at 390×844: no horizontal page scroll, the header never overlaps itself', async () => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    // Two targets answer from the browser's route table (the suite has no registered target): a
+    // staging one and a production one, enough for the target layout, its section tabs and header.
+    const targetBody = (path: string, tier: 'nonprod' | 'production') => ({
+      id: `tgt_${path.endsWith('production') ? '2' : '1'}`.padEnd(30, '0'),
+      path,
+      productId: 'prd_00000000000000000000000001',
+      projectId: 'prj_00000000000000000000000001',
+      environmentId: 'env_00000000000000000000000001',
+      tier,
+      state: 'active',
+      generation: 1,
+      health: null,
+      environment: { slug: path.split('/')[2], tier },
+      placement: null,
+      ledger: null,
+      openFindingCount: 0,
+    })
+    await page.route('**/api/v1/targets**', async (route) => {
+      const url = new URL(route.request().url())
+      const detail = /^\/api\/v1\/targets\/([^/]+)$/.exec(url.pathname)
+      if (detail?.[1] !== undefined) {
+        const path = decodeURIComponent(detail[1])
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(
+            targetBody(path, path.endsWith('production') ? 'production' : 'nonprod'),
+          ),
+        })
+        return
+      }
+      if (url.pathname === '/api/v1/targets') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            items: [
+              'shop/platform/staging',
+              'shop/platform/production',
+              'billing-and-invoicing/ledger-and-reconciliation/staging-eu-west-central',
+            ].map((path) => {
+              const { id, productId, projectId, environmentId, tier, state, generation, health } =
+                targetBody(path, path.endsWith('production') ? 'production' : 'nonprod')
+              return {
+                id,
+                path,
+                productId,
+                projectId,
+                environmentId,
+                tier,
+                state,
+                generation,
+                health,
+              }
+            }),
+            nextCursor: null,
+          }),
+        })
+        return
+      }
+      await route.fallback()
+    })
+    // The reads of the migrations and activity pages answer with real-looking, long values (ids,
+    // checksums, long names), so a wide cell or a nowrap row shows up as overflow.
+    const ulid = (n: number) => `01M4S9${String(n).padStart(20, '0')}`
+    const ago = (ms: number) => new Date(Date.now() - ms).toISOString()
+    const stagingPath = 'shop/platform/staging'
+    const subject = {
+      clusterId: null,
+      nodeId: null,
+      targetId: null,
+      targetPath: stagingPath,
+      tier: 'nonprod',
+    }
+    const environmentOf = (slug: string, tier: string, rank: number) => ({
+      slug,
+      displayName: slug,
+      tier,
+      evidenceFrom: rank === 0 ? null : 'development',
+      rank,
+      target: {
+        id: `tgt_${ulid(rank + 50)}`,
+        path: `shop/platform/${slug}`,
+        lifecycle: 'active',
+        generation: 1,
+      },
+      mirror: {
+        observedAt: ago(60_000),
+        ledgerStateHash: `sha256:${'e'.repeat(64)}`,
+        baselineId: null,
+        divergent: false,
+        divergence: null,
+        entriesOutsideStream: 0,
+      },
+    })
+    const cellOf = (slug: string, state: string) => ({
+      environment: slug,
+      state,
+      checksum: null,
+      checksumMatches: null,
+      appliedAt: state === 'not_applied' ? null : ago(120_000),
+      verification: null,
+      observedAt: ago(60_000),
+    })
+    const readBodies: ReadonlyArray<readonly [RegExp, unknown]> = [
+      [
+        /\/api\/v1\/targets\/[^/]+\/migrations$/,
+        {
+          applied: [1, 2, 3].map((n) => ({
+            appliedAt: ago(60_000 * n),
+            checksum: `sha256:c1:${String(n).padStart(64, 'a')}`,
+            migrationId: ulid(n),
+            name: `add_customer_orders_and_invoices_reconciliation_table_${n}`,
+            operationId: `op_${ulid(n)}`,
+            origin: 'exponetdb',
+            reverted: false,
+            verification: {
+              status: n === 2 ? 'pending' : 'passed',
+              verifiedAt: n === 2 ? null : ago(30_000 * n),
+              verifyDigest: null,
+            },
+          })),
+          baselineId: `bln_${ulid(7)}`,
+          ledgerStateHash: `sha256:${'b'.repeat(64)}`,
+          mirror: { inSync: false, checkedAt: ago(1000) },
+          observedAt: ago(1000),
+          pending: [
+            { checksum: `sha256:c1:${'c'.repeat(64)}`, migrationId: ulid(9), name: 'add_invoices' },
+          ],
+          source: 'live',
+          targetId: 'tgt_10000000000000000000000000',
+        },
+      ],
+      [
+        /\/api\/v1\/projects\/[^/]+\/migrations$/,
+        {
+          projectId: 'prj_00000000000000000000000001',
+          graph: { valid: true, errors: [] },
+          heads: [ulid(2)],
+          baselines: [],
+          bundles: [1, 2].map((n) => ({
+            migrationId: ulid(n),
+            name: `add_orders_${n}`,
+            revision: 1,
+            checksum: `sha256:c1:${'a'.repeat(64)}`,
+            dependsOn: n === 1 ? [] : [ulid(1)],
+            states: [
+              cellOf('development', 'verified'),
+              cellOf('staging', 'applied'),
+              cellOf('production', 'not_applied'),
+            ],
+          })),
+          bundleCount: 2,
+          truncated: false,
+          environments: [
+            environmentOf('development', 'nonprod', 0),
+            environmentOf('staging', 'nonprod', 1),
+            environmentOf('production', 'prod', 2),
+          ],
+          source: 'cached',
+          observedAt: ago(1000),
+        },
+      ],
+      [
+        /\/api\/v1\/plans\?/,
+        {
+          items: [1, 2].map((n) => ({
+            id: `pln_${ulid(n)}`,
+            kind: 'migration.plan',
+            class: 'standard',
+            state: 'active',
+            createdAt: ago(60_000),
+            subject,
+          })),
+          nextCursor: null,
+        },
+      ],
+      [/\/api\/v1\/targets\/[^/]+\/findings/, { items: [], nextCursor: null }],
+      [
+        /\/api\/v1\/operations\?/,
+        {
+          items: [1, 2].map((n) => ({
+            id: `op_${ulid(n)}`,
+            planId: `pln_${ulid(n)}`,
+            kind: 'migration.apply',
+            state: 'verification_failed',
+            applyOutcome: 'applied',
+            verificationOutcome: 'failed',
+            errorCode: 'VERIFICATION_FAILED',
+            actor: { identityId: `idn_${ulid(n)}`, kind: 'human', via: 'web' },
+            createdAt: ago(60_000 * n),
+            updatedAt: ago(30_000 * n),
+            approvalUrl: null,
+            steps: [],
+            subject,
+            waitingFor: null,
+          })),
+          nextCursor: null,
+        },
+      ],
+      [
+        /\/api\/v1\/audit-events\?/,
+        {
+          items: [1, 2].map((n) => ({
+            id: `aud_${ulid(n)}`,
+            action: 'migration.apply',
+            phase: 'completed',
+            actor: { identityId: null, kind: 'human', label: `human #${n}` },
+            client: { clientId: `cli_${ulid(n)}`, grantId: null, kind: 'mcp', sessionId: null },
+            denial: null,
+            occurredAt: ago(60_000 * n),
+            reason: 'Applying the orders change after review',
+            refs: {
+              jobId: null,
+              operationId: `op_${ulid(n)}`,
+              planHash: null,
+              planId: `pln_${ulid(n)}`,
+            },
+            result: { status: 'failed', errorCode: 'VERIFICATION_FAILED' },
+            subject,
+          })),
+          nextCursor: null,
+        },
+      ],
+    ]
+    await page.route('**/api/v1/**', async (route) => {
+      const url = route.request().url()
+      const hit = readBodies.find(([pattern]) => pattern.test(url))
+      if (hit === undefined || route.request().method() !== 'GET') {
+        await route.fallback()
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(hit[1]),
+      })
+    })
+    const pages = [
+      '/',
+      '/approvals',
+      '/changes/plans',
+      '/changes/operations',
+      '/targets',
+      '/account',
+      '/account/security',
+      '/infrastructure/servers',
+      '/infrastructure/clusters',
+      '/connect',
+      '/access/oauth-clients',
+      '/t/shop/platform/staging',
+      '/t/shop/platform/staging/migrations',
+      '/t/shop/platform/staging/activity',
+      '/t/shop/platform/production',
+    ]
+    const measured: Record<string, unknown> = {}
+    try {
+      for (const path of pages) {
+        await page.goto(`${origin}${path}`)
+        await page.waitForSelector('header button[aria-label="Account"]')
+        if (path.startsWith('/t/')) await page.waitForSelector('[data-slot="page-nav"]')
+        if (path.endsWith('/migrations')) await page.waitForSelector('[data-pending]')
+        if (path.endsWith('/activity')) await page.waitForSelector('[data-audit]')
+        const result = await page.evaluate<{
+          readonly scrollWidth: number
+          readonly height: number
+          readonly innerWidth: number
+          readonly overlaps: string[]
+          readonly outside: string[]
+          readonly wide: string[]
+        }>(`(() => {
+          const header = document.querySelector('header')
+          const boxes = [...header.querySelectorAll('a, button, input, [role=button]')]
+            .map((el) => ({ el, r: el.getBoundingClientRect() }))
+            .filter(({ r }) => r.width > 0 && r.height > 0)
+          const name = (el) => el.getAttribute('aria-label') || el.textContent.trim().slice(0, 24)
+          const overlaps = []
+          for (let i = 0; i < boxes.length; i++) {
+            for (let j = i + 1; j < boxes.length; j++) {
+              const a = boxes[i].r
+              const b = boxes[j].r
+              if (boxes[i].el.contains(boxes[j].el) || boxes[j].el.contains(boxes[i].el)) continue
+              if (a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) {
+                overlaps.push(name(boxes[i].el) + ' / ' + name(boxes[j].el))
+              }
+            }
+          }
+          const outside = boxes
+            .filter(({ r }) => r.left < -0.5 || r.right > window.innerWidth + 0.5)
+            .map(({ el }) => name(el))
+          const wide = [...document.querySelectorAll('body *')]
+            .filter((el) => el.getBoundingClientRect().right > window.innerWidth + 0.5)
+            .filter((el) => !el.parentElement || el.parentElement.getBoundingClientRect().right <= window.innerWidth + 0.5 || el.parentElement === document.body)
+            .slice(0, 5)
+            .map((el) => {
+              const chain = []
+              for (let n = el; n && n !== document.body && chain.length < 9; n = n.parentElement) {
+                chain.push(n.tagName.toLowerCase() + (n.dataset.slot ? '[' + n.dataset.slot + ']' : '') + '.' + String(n.className).slice(0, 40) + ' w' + Math.round(n.getBoundingClientRect().width))
+              }
+              return chain.join(' < ') + ' text=' + (el.textContent || '').slice(0, 30)
+            })
+          return {
+            scrollWidth: document.documentElement.scrollWidth,
+            height: document.documentElement.scrollHeight,
+            innerWidth: window.innerWidth,
+            overlaps,
+            outside,
+            wide,
+          }
+        })()`)
+        measured[path] = result
+        expect(
+          result.scrollWidth,
+          `${path} scrollWidth (wide: ${result.wide.join(' | ')})`,
+        ).toBeLessThanOrEqual(result.innerWidth)
+        expect(result.overlaps, `${path} header overlaps`).toEqual([])
+        expect(result.outside, `${path} header outside the viewport`).toEqual([])
+      }
+      // The off-canvas menu has a visible button, opens over the page and lists the sections.
+      await page.goto(`${origin}/account`)
+      const open = page.locator('header [data-sidebar="trigger"]')
+      await expect.poll(() => open.isVisible()).toBe(true)
+      await open.click()
+      await page.waitForSelector('[data-mobile="true"] a[href="/targets"]')
+      await page.keyboard.press('Escape')
+      // On a production target the tier chip stays in the header at phone width.
+      await page.goto(`${origin}/t/shop/platform/production`)
+      await page.waitForSelector('[data-slot="target-context-bar"]')
+      expect(await page.locator('[data-slot="target-context-bar"]').innerText()).toContain(
+        'Production',
+      )
+      // The current section tab is inside the visible part of its own scrolling row.
+      await page.goto(`${origin}/t/shop/platform/staging/migrations`)
+      await page.waitForSelector('[data-slot="page-nav"] a[aria-current="page"]')
+      const tab = await page.evaluate<{ readonly left: number; readonly right: number }>(`(() => {
+        const r = document.querySelector('[data-slot="page-nav"] a[aria-current="page"]').getBoundingClientRect()
+        return { left: r.left, right: r.right }
+      })()`)
+      expect(tab.left).toBeGreaterThanOrEqual(0)
+      expect(tab.right).toBeLessThanOrEqual(390)
+    } finally {
+      console.info(`phone layout at 390x844: ${JSON.stringify(measured)}`)
+      await page.unroute('**/api/v1/**')
+      await page.unroute('**/api/v1/targets**')
+      await page.setViewportSize({ width: 1440, height: 900 })
+    }
   })
 
   it('logout ends the session; a passkey signs in again with a new session', async () => {
@@ -418,8 +834,9 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
   it('re-authentication with a passkey: the action waits for the proof, the session rotates', async () => {
     await ageProofs()
     const before = await sessionValue()
+    await page.goto(`${origin}/account/security`)
     await page.click('#regenerate-codes')
-    await page.waitForSelector('dialog.reauth[open]')
+    await page.waitForSelector('[role="dialog"][data-reauth]')
     await page.click('#reauth-passkey')
     await page.waitForSelector('#recovery-codes li')
     recoveryCodes = await page.locator('#recovery-codes code').allTextContents()
@@ -432,7 +849,7 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
     expect(old.status).toBe(401)
     await page.check('#codes-stored')
     await page.click('#continue')
-    await page.waitForURL(`${origin}/account`)
+    await page.waitForURL(`${origin}/account/security`)
   })
 
   it('password and TOTP fallback', async () => {
@@ -567,7 +984,7 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
     expect(whoami.code, whoami.stderr).toBe(0)
     expect(whoami.stdout).toContain('Scope:   targets.read')
 
-    await page.goto(`${origin}/account`)
+    await page.goto(`${origin}/account/applications`)
     await page.waitForSelector('#grant-list li')
     expect(await page.textContent('#grant-list')).toContain('REST API: targets.read; nonprod')
 
@@ -610,6 +1027,11 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
     expect(await card.textContent()).toContain('name not verified')
     await ageProofs()
     await card.getByRole('button', { name: 'Approve this exact client' }).click()
+    // The confirmation states the consequence and names the exact client before anything is sent.
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Approve this exact client' })
+      .click()
     await confirmWithPasskey()
     await page.locator('li.card.state-active', { hasText: clientId }).waitFor()
 
@@ -695,7 +1117,7 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
     expect(done.code, done.stderr).toBe(0)
     expect((await cli(['whoami']).done).code).toBe(0)
 
-    await page.goto(`${origin}/account`)
+    await page.goto(`${origin}/account/applications`)
     await page.waitForSelector('#grant-list li')
     await page
       .locator('#grant-list li', { hasNotText: 'name not verified' })
@@ -743,6 +1165,7 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
       hasText: 'targets.read, active',
     })
     await key.getByRole('button', { name: 'Revoke' }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Revoke API key' }).click()
     await expect.poll(async () => (await bearer('/api/v1/installation', secret)).status).toBe(401)
     // The secret is never shown again.
     await page.reload()

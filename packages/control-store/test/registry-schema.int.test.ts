@@ -744,6 +744,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M4V2CT4N8PJ6GZ3YQ1RWK7HD',
         // Owner decision S3 (2026-10-13): write-only storage of role verifiers.
         '01M4V3RV9F5XM2TB8KC6QZJ0NS',
+        // Owner decision S10 (2026-10-13): the profile of a person (display name, picture).
+        '01M4V7PRFXK2N9QB4ZH6WD3TME',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

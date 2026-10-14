@@ -46,6 +46,9 @@ describe('the CSRF cookie', () => {
     expect(readCsrf('a=b; __Host-exdb_csrf=abc_DEF-123; c=d')).toBe('abc_DEF-123')
     expect(readCsrf('__Host-exdb_csrf=bad value')).toBeUndefined()
     expect(readCsrf('x__Host-exdb_csrf=abc')).toBeUndefined()
+    // Ported from the Wave 3A app (safe.test.ts): only the CSRF cookie, never the session cookie.
+    expect(readCsrf('__Host-exdb_session=exst_x')).toBeUndefined()
+    expect(readCsrf('__Host-exdb_csrf=<script>')).toBeUndefined()
     expect(readCsrf('__Host-exdb_csrf=')).toBeUndefined()
     expect(readCsrf(`__Host-exdb_csrf=${'a'.repeat(129)}`)).toBeUndefined()
     expect(readCsrf('')).toBeUndefined()

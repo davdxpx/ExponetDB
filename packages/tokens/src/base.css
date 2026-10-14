@@ -22,6 +22,15 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  /* Headings: one weight and a slight negative tracking (tokens), overridden by any utility. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-weight: var(--heading-weight);
+    letter-spacing: var(--heading-tracking);
+  }
+
   /* Hide the spinner buttons of number inputs (WebKit and Firefox). */
   input[type="number"]::-webkit-outer-spin-button,
   input[type="number"]::-webkit-inner-spin-button {

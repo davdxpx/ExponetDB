@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query'
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
 import type { ApiClient } from '../../lib/api/client.ts'
 
 /**
@@ -26,6 +26,34 @@ export function sessionsQuery(client: ApiClient) {
   return queryOptions({
     queryKey: accountKeys.sessions,
     queryFn: ({ signal }) => client.operation('listMySessions', { signal }),
+  })
+}
+
+export const ACTIVITY_PAGE_SIZE = 25
+
+/**
+ * The person's own audit events (`actor=self`), newest first, a page at a
+ * time. Only a holder of `audit.read` can read them (resources.md); anyone
+ * else gets a refusal the tab shows as the named not-permitted state.
+ */
+export function activityQuery(client: ApiClient) {
+  return infiniteQueryOptions({
+    queryKey: [...accountKeys.all, 'activity'] as const,
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam, signal }) =>
+      client.operation('searchAuditEvents', {
+        query: {
+          actor: 'self',
+          limit: ACTIVITY_PAGE_SIZE,
+          ...(pageParam === undefined ? {} : { cursor: pageParam }),
+        },
+        signal,
+      }),
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    select: (data) => ({
+      items: data.pages.flatMap((page) => page.items),
+      hasMore: data.pages[data.pages.length - 1]?.nextCursor != null,
+    }),
   })
 }
 

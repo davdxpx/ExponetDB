@@ -50,7 +50,7 @@ Seven inputs derive everything else. The first two are theme-independent and liv
 `:root`; the others are set per theme.
 
 - `--hue`: the spot color (`primary`, chart slot 1). Any angle from 0 to 360. The
-  placeholder is 255, an indigo-blue, until the owner supplies a brand (OD-11).
+  accent is 178, a turquoise chosen by the owner (S9); the rest of the brand is the OD-11 placeholder.
 - `--surface-hue`: the tint of the neutral ramp. It follows `--hue` by default.
 - `--chroma`: how strong that tint is. Supported range 0 to 0.04; 0.008 in the
   light theme, 0.01 in the dark one.
@@ -78,8 +78,8 @@ chart slot 1. Nothing else is edited.
 
 The hues of `success`, `warning`, `destructive`, `info`, `production` and the
 operational states are fixed on purpose: an error stays red, a warning amber and
-production magenta whatever the product color is. Keep `--hue` away from them, at
-least 45 degrees from the production hue (320), and clear of the destructive (25)
+production indigo-blue whatever the product color is. Keep `--hue` away from them, at
+least 45 degrees from the production hue (262), and clear of the destructive (25)
 and warning (70) hues, so the spot color is not mistaken for a status.
 
 <Demo id="tokens/theme/fixed-hues" />

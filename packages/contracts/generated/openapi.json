@@ -756,6 +756,10 @@
               "saved_query.create",
               "saved_query.update",
               "saved_query.delete",
+              "me.profile.update",
+              "me.avatar.set",
+              "me.avatar.delete",
+              "identity.avatar.get",
               "audit.export",
               "postgres.roles.verifier.plan",
               "postgres.roles.verifier.set"
@@ -2354,6 +2358,36 @@
             "type": "object"
           }
         ]
+      },
+      "AvatarRef": {
+        "properties": {
+          "height": {
+            "maximum": 1024,
+            "minimum": 32,
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "url": {
+            "description": "Same-origin path of the picture; the query names the hash of its bytes, so the address changes with the picture.",
+            "pattern": "^\\/api\\/v1\\/identities\\/idn_[0-7][0-9A-HJKMNP-TV-Z]{25}\\/avatar\\?v=sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "width": {
+            "maximum": 1024,
+            "minimum": 32,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "url",
+          "sha256",
+          "width",
+          "height"
+        ],
+        "type": "object"
       },
       "Backup": {
         "properties": {
@@ -5688,6 +5722,16 @@
               }
             ]
           },
+          "avatar": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AvatarRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "createdAt": {
             "description": "RFC 3339 UTC timestamp ending in Z.",
             "format": "date-time",
@@ -5741,6 +5785,28 @@
             "description": "Pseudonymous label used in audit events.",
             "pattern": "^(?:human|service) #[1-9][0-9]{0,9}$",
             "type": "string"
+          },
+          "profileDisplayName": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]+$"
+                  },
+                  {
+                    "pattern": "^\\S(?:.*\\S)?$"
+                  }
+                ],
+                "description": "A display name the person chose; untrusted text, shown and never interpreted.",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string",
+                "x-untrusted": true
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "recoveryRequired": {
             "type": "boolean"
@@ -6896,11 +6962,44 @@
       },
       "Me": {
         "properties": {
+          "avatar": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AvatarRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "bindings": {
             "items": {
               "$ref": "#/components/schemas/RoleBinding"
             },
             "type": "array"
+          },
+          "displayName": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]+$"
+                  },
+                  {
+                    "pattern": "^\\S(?:.*\\S)?$"
+                  }
+                ],
+                "description": "A display name the person chose; untrusted text, shown and never interpreted.",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string",
+                "x-untrusted": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The display name the person chose (their profile); null while unset. The name an admin gave at invitation is identity.displayName."
           },
           "effectivePermissions": {
             "description": "Projection of the live bindings at the time of the request: which permission holds at which scopes. Authorization is evaluated per request; this list is information, not a token.",
@@ -6911,6 +7010,12 @@
           },
           "identity": {
             "$ref": "#/components/schemas/Identity"
+          },
+          "profileRevision": {
+            "description": "The revision of the profile a PUT /me/profile is based on (0 while never set).",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
           },
           "session": {
             "$ref": "#/components/schemas/WebSession"
@@ -10847,6 +10952,10 @@
               "saved_query.create",
               "saved_query.update",
               "saved_query.delete",
+              "me.profile.update",
+              "me.avatar.set",
+              "me.avatar.delete",
+              "identity.avatar.get",
               "audit.export",
               "postgres.roles.verifier.plan",
               "postgres.roles.verifier.set"
@@ -11274,6 +11383,10 @@
               "saved_query.create",
               "saved_query.update",
               "saved_query.delete",
+              "me.profile.update",
+              "me.avatar.set",
+              "me.avatar.delete",
+              "identity.avatar.get",
               "audit.export",
               "postgres.roles.verifier.plan",
               "postgres.roles.verifier.set"
@@ -11757,6 +11870,10 @@
               "saved_query.create",
               "saved_query.update",
               "saved_query.delete",
+              "me.profile.update",
+              "me.avatar.set",
+              "me.avatar.delete",
+              "identity.avatar.get",
               "audit.export",
               "postgres.roles.verifier.plan",
               "postgres.roles.verifier.set"
@@ -12155,6 +12272,10 @@
               "saved_query.create",
               "saved_query.update",
               "saved_query.delete",
+              "me.profile.update",
+              "me.avatar.set",
+              "me.avatar.delete",
+              "identity.avatar.get",
               "audit.export",
               "postgres.roles.verifier.plan",
               "postgres.roles.verifier.set"
@@ -12847,6 +12968,111 @@
         "required": [
           "slug",
           "displayName"
+        ],
+        "type": "object"
+      },
+      "Profile": {
+        "properties": {
+          "avatar": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AvatarRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "displayName": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]+$"
+                  },
+                  {
+                    "pattern": "^\\S(?:.*\\S)?$"
+                  }
+                ],
+                "description": "A display name the person chose; untrusted text, shown and never interpreted.",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string",
+                "x-untrusted": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identityId": {
+            "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "revision": {
+            "description": "Grows by one with every change of the name or the picture; 0 while the person never set either.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "updatedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "identityId",
+          "displayName",
+          "avatar",
+          "revision",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "ProfileUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]+$"
+                  },
+                  {
+                    "pattern": "^\\S(?:.*\\S)?$"
+                  }
+                ],
+                "description": "A display name the person chose; untrusted text, shown and never interpreted.",
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string",
+                "x-untrusted": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "displayName",
+          "revision"
         ],
         "type": "object"
       },
@@ -13851,42 +14077,6 @@
           "origin",
           "source",
           "observedAt"
-        ],
-        "type": "object"
-      },
-      "RawStatementQuery": {
-        "additionalProperties": false,
-        "properties": {
-          "backendStart": {
-            "description": "The session start the sessions list showed for `pid`: a reused pid of another session is `not_held`.",
-            "format": "date-time",
-            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
-            "type": "string"
-          },
-          "pid": {
-            "description": "Look in this session only (with `backendStart`, both from the sessions list): its current statement must have the digest, else `digest_mismatch`.",
-            "maximum": 2147483647,
-            "minimum": 1,
-            "type": "integer"
-          },
-          "target": {
-            "anyOf": [
-              {
-                "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
-                "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
-                "type": "string"
-              },
-              {
-                "description": "Target path <product>/<project>/<environment>.",
-                "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
-                "type": "string"
-              }
-            ],
-            "description": "The target that holds the statement (id or path); the digest alone names none."
-          }
-        },
-        "required": [
-          "target"
         ],
         "type": "object"
       },
@@ -21386,6 +21576,114 @@
         "x-exponetdb-wave": "3A"
       }
     },
+    "/identities/{identityId}/avatar": {
+      "get": {
+        "operationId": "getIdentityAvatar",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identityId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "v",
+            "required": true,
+            "schema": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "contentMediaType": "image/jpeg",
+                  "type": "string"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "contentMediaType": "image/png",
+                  "type": "string"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "contentMediaType": "image/webp",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "access.read"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "A person's profile picture: the stored bytes with the stored media type, nosniff, a sandboxing policy and a year of private caching keyed by the hash in `v`. The own picture, or anyone's with access.read; an unknown, hidden or replaced picture is 404.",
+        "tags": [
+          "identities"
+        ],
+        "x-exponetdb-action": "identity.avatar.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
     "/identities/{identityId}/disable": {
       "post": {
         "operationId": "disableIdentity",
@@ -22028,6 +22326,161 @@
         "x-exponetdb-wave": "3A"
       }
     },
+    "/me/avatar": {
+      "delete": {
+        "operationId": "deleteMyAvatar",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, SESSION_EXPIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Remove the own profile picture (nothing to remove is not an error).",
+        "tags": [
+          "me"
+        ],
+        "x-exponetdb-action": "me.avatar.delete",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "SESSION_EXPIRED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      },
+      "put": {
+        "operationId": "setMyAvatar",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "contentMediaType": "image/jpeg",
+                "type": "string"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "contentMediaType": "image/png",
+                "type": "string"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "contentMediaType": "image/webp",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, SESSION_EXPIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Upload the own profile picture as the raw body: PNG, JPEG or WebP, at most 256 KiB, 32 to 1024 pixels each way, still (no animation). The server reads the format from the bytes and refuses anything else, a declared type that does not match and trailing data.",
+        "tags": [
+          "me"
+        ],
+        "x-exponetdb-action": "me.avatar.set",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "SESSION_EXPIRED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
+      }
+    },
     "/me/factors": {
       "get": {
         "operationId": "listMyFactors",
@@ -22275,6 +22728,88 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "3B"
+      }
+    },
+    "/me/profile": {
+      "put": {
+        "operationId": "updateMyProfile",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, SESSION_EXPIRED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Set or clear the own display name at the profile revision it is based on (a stale revision is 409); the name is never written to the audit.",
+        "tags": [
+          "me"
+        ],
+        "x-exponetdb-action": "me.profile.update",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONFLICT",
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "SESSION_EXPIRED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "8"
       }
     },
     "/me/sessions": {
@@ -29258,6 +29793,48 @@
             "required": true,
             "schema": {
               "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "The target that holds the statement (id or path); the digest alone names none."
+            }
+          },
+          {
+            "in": "query",
+            "name": "pid",
+            "required": false,
+            "schema": {
+              "description": "Look in this session only (with `backendStart`, both from the sessions list): its current statement must have the digest, else `digest_mismatch`.",
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "backendStart",
+            "required": false,
+            "schema": {
+              "description": "The session start the sessions list showed for `pid`: a reused pid of another session is `not_held`.",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
               "type": "string"
             }
           }

@@ -103,7 +103,7 @@ const TableHead = React.forwardRef<
         ref={ref}
         aria-sort={reportedSort}
         className={cn(
-          'h-10 px-4 text-left align-middle text-xs font-mono uppercase tracking-wider font-medium whitespace-nowrap text-foreground-lighter [&:has([role=checkbox])]:pr-0',
+          'h-(--table-head-height) px-4 text-left align-middle text-xs eyebrow whitespace-nowrap text-foreground-lighter [&:has([role=checkbox])]:pr-0',
           // Transition text color when NoSearchResults or NoFilterResults empty state is shown
           'transition-colors',
           className,
@@ -156,7 +156,7 @@ function TableHeadSort<TColumn extends string = string>({
     <button
       type="button"
       className={cn(
-        'group/table-head-sort text-xs font-mono uppercase tracking-wider font-medium whitespace-nowrap flex items-center gap-1 cursor-pointer select-none bg-transparent! border-none p-0 w-full text-left',
+        'group/table-head-sort text-xs eyebrow whitespace-nowrap flex items-center gap-1 cursor-pointer select-none bg-transparent! border-none p-0 w-full text-left',
         'focus-inset',
         className,
       )}
@@ -197,7 +197,10 @@ const TableCell = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <td
     ref={ref}
-    className={cn('transition-colors p-4 align-middle [&:has([role=checkbox])]:pr-0', className)}
+    className={cn(
+      'transition-colors px-4 py-(--row-padding-y) align-middle [&:has([role=checkbox])]:pr-0',
+      className,
+    )}
     {...props}
   />
 ))

@@ -476,6 +476,19 @@ describe('the health history of a target', () => {
     const times: number[] = []
     for (let t = start; t < start + 1_800_000; t += 15_000) times.push(t)
     for (let t = start + 3_000_000; t < now - 60_000; t += 15_000) times.push(t)
+    // Partitions start at today (UTC); in the first two hours after midnight these
+    // back-dated samples fall on yesterday, which the sampler never writes to.
+    await db.asSuperuser((c) =>
+      c.query(`DO $$
+        DECLARE day date := (date_trunc('day', now() AT TIME ZONE 'UTC') - interval '1 day')::date;
+                name text := format('health_samples_d%s', to_char(day, 'YYYYMMDD'));
+        BEGIN
+          IF to_regclass(format('observation.%I', name)) IS NULL THEN
+            EXECUTE format('CREATE TABLE observation.%I PARTITION OF observation.health_samples FOR VALUES FROM (%L) TO (%L)',
+                           name, (day::text || ' 00:00:00+00')::timestamptz, ((day + 1)::text || ' 00:00:00+00')::timestamptz);
+          END IF;
+        END $$`),
+    )
     await db.asSuperuser((c) =>
       c.query(
         `INSERT INTO observation.health_samples (sample_id, target_id, observed_at, state, probes, conditions)

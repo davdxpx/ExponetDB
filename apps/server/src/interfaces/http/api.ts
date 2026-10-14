@@ -91,6 +91,7 @@ import {
   PolicySettingsPlanRequestSchema,
   ProductCreateRequestSchema,
   ProductIdSchema,
+  type ProfileUpdateRequest,
   ProjectChangeRequestSchema,
   ProjectCreateRequestSchema,
   ProjectIdSchema,
@@ -140,6 +141,7 @@ import {
   HttpRefusal,
   parseCookies,
   problemResponse,
+  readLimitedBytes,
   readLimitedText,
   setCookie,
 } from './request.ts'
@@ -184,6 +186,8 @@ interface Call {
     readonly userAgent: string | undefined
   }
   readonly body: unknown
+  /** The raw body of a `rawBody` route (a picture): the bytes and the declared media type. */
+  readonly raw?: { readonly bytes: Uint8Array; readonly mediaType: string }
   readonly params: unknown
   readonly query: unknown
   readonly session: SessionContext | undefined
@@ -199,9 +203,36 @@ type Result =
   | { readonly kind: 'value'; readonly value: unknown }
   /** A body the use case already serialized (`mediaType` routes: NDJSON). */
   | { readonly kind: 'text'; readonly body: string }
+  /** Raw bytes of a `rawResponse` route (a picture) with its media type and caching key. */
+  | {
+      readonly kind: 'bytes'
+      readonly body: Uint8Array
+      readonly mediaType: string
+      readonly headers: Readonly<Record<string, string>>
+      /**
+       * The strong entity tag of exactly these bytes. A request whose `If-None-Match`
+       * names it is answered `304 Not Modified` without the bytes, but only after the
+       * handler ran: the caller was authorized for the current bytes first.
+       */
+      readonly etag?: string
+    }
   | { readonly kind: 'outcome'; readonly outcome: Outcome<unknown> }
 
 type Handler = (app: Application, call: Call) => Promise<Result>
+
+/**
+ * Whether an `If-None-Match` header names the entity tag (RFC 9110 §13.1.2:
+ * weak comparison, a list of tags or `*`). An absent or malformed header never
+ * matches, so the full answer is sent.
+ */
+function matchesEtag(header: string | undefined, etag: string): boolean {
+  if (header === undefined || header.length > 2048) return false
+  const opaque = etag.replace(/^W\//, '')
+  return header.split(',').some((part) => {
+    const tag = part.trim()
+    return tag === '*' || tag.replace(/^W\//, '') === opaque
+  })
+}
 
 const value = (v: unknown): Result => ({ kind: 'value', value: v })
 const outcome = (o: Outcome<unknown>): Result => ({ kind: 'outcome', outcome: o })
@@ -416,6 +447,23 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
 
   // ----- /api/v1: the current identity -----
   getMe: async (app, call) => value(await app.me(caller(call))),
+  // Wave 8 (owner decision S10): the own profile.
+  updateMyProfile: async (app, call) =>
+    value(
+      await app.profiles.updateProfile(caller(call), call.body as ProfileUpdateRequest, {
+        requestId: call.meta.requestId,
+      }),
+    ),
+  setMyAvatar: async (app, call) => {
+    if (call.raw === undefined) {
+      throw new HttpRefusal('VALIDATION_FAILED')
+    }
+    return value(
+      await app.profiles.setAvatar(caller(call), call.raw, { requestId: call.meta.requestId }),
+    )
+  },
+  deleteMyAvatar: async (app, call) =>
+    value(await app.profiles.deleteAvatar(caller(call), { requestId: call.meta.requestId })),
   listMySessions: async (app, call) => value({ items: await app.sessions(caller(call)) }),
   revokeMySession: async (app, call) =>
     outcome(
@@ -438,6 +486,31 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         limit: limitOf(call.query),
       }),
     )
+  },
+  getIdentityAvatar: async (app, call) => {
+    const picture = await app.profiles.avatar(
+      caller(call),
+      IdentityIdSchema.parse(field(call.params, 'identityId')),
+      Sha256DigestSchema.parse(field(call.query, 'v')),
+    )
+    return {
+      kind: 'bytes',
+      body: picture.bytes,
+      mediaType: picture.mediaType,
+      // The entity tag is the stored hash of the bytes (an image without its metadata).
+      etag: `"${picture.sha256.slice('sha256:'.length)}"`,
+      // An image only, whatever the bytes might look like to a sniffer (threat-model.md, Wave 8):
+      // never sniffed, never a document. Kept privately but revalidated on every use
+      // (`no-cache`), so a person who loses access, or a removed picture, stops being
+      // shown at once; an unchanged picture is a `304` without the bytes.
+      headers: {
+        'x-content-type-options': 'nosniff',
+        'content-security-policy': "default-src 'none'; sandbox",
+        'cache-control': 'private, no-cache',
+        'content-disposition': 'inline',
+        'cross-origin-resource-policy': 'same-origin',
+      },
+    }
   },
   getIdentity: async (app, call) =>
     value(
@@ -1604,6 +1677,42 @@ function applyCookies(headers: Headers, cookies: Outcome<unknown>['cookies']): v
   }
 }
 
+/**
+ * The raw body of a `rawBody` route: the declared media type must be one the
+ * route names (its essence, without parameters), the bytes at most the
+ * route's limit. What the bytes are is the use case's check.
+ */
+async function readRawBody(
+  c: Context<Env>,
+  route: RouteContract & { readonly rawBody: { readonly mediaTypes: readonly string[] } },
+): Promise<{ bytes: Uint8Array; mediaType: string }> {
+  const mediaType = (c.req.header('content-type') ?? '').split(';')[0]?.trim().toLowerCase() ?? ''
+  if (!route.rawBody.mediaTypes.includes(mediaType)) {
+    throw new HttpRefusal('VALIDATION_FAILED', {
+      errors: [
+        {
+          path: '/headers/content-type',
+          code: 'invalid',
+          message: `One of ${route.rawBody.mediaTypes.join(', ')}.`,
+        },
+      ],
+    })
+  }
+  const bytes = await readLimitedBytes(c.req.raw, route.maxBodyBytes ?? DEFAULT_BODY_LIMIT_BYTES)
+  if (bytes === undefined) {
+    throw new HttpRefusal('VALIDATION_FAILED', {
+      errors: [
+        {
+          path: '/body',
+          code: 'too_large',
+          message: `At most ${route.maxBodyBytes ?? DEFAULT_BODY_LIMIT_BYTES} bytes.`,
+        },
+      ],
+    })
+  }
+  return { bytes, mediaType }
+}
+
 async function readBody(c: Context<Env>, route: RouteContract): Promise<unknown> {
   if (route.body === undefined) {
     return undefined
@@ -1721,8 +1830,12 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
           }
         }
         let rawBody: unknown
+        let raw: { bytes: Uint8Array; mediaType: string } | undefined
         try {
           rawBody = await readBody(c, route)
+          if (route.rawBody !== undefined) {
+            raw = await readRawBody(c, { ...route, rawBody: route.rawBody })
+          }
         } catch (error) {
           return fail(error)
         }
@@ -1766,6 +1879,7 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
             userAgent,
           },
           body: bodyCheck?.success === true ? bodyCheck.data : undefined,
+          ...(raw === undefined ? {} : { raw }),
           params: paramsCheck.success ? paramsCheck.data : {},
           query: queryCheck?.success === true ? queryCheck.data : {},
           session: current,
@@ -1774,6 +1888,24 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
           oauthBinding: cookies.get(OAUTH_BINDING_COOKIE),
         }
         const result = await handler(deps.application, call)
+        if (result.kind === 'bytes') {
+          if (
+            route.rawResponse === undefined ||
+            !route.rawResponse.mediaTypes.includes(result.mediaType)
+          ) {
+            deps.logger.error('http.response_contract_violation', { route: route.operationId })
+            return fail(new HttpRefusal('INTERNAL'))
+          }
+          const headers = new Headers({ ...result.headers, 'content-type': result.mediaType })
+          if (result.etag !== undefined) {
+            headers.set('etag', result.etag)
+            if (matchesEtag(c.req.header('if-none-match'), result.etag)) {
+              headers.delete('content-type')
+              return new Response(null, { status: 304, headers })
+            }
+          }
+          return new Response(result.body, { status: route.response.status, headers })
+        }
         if (result.kind === 'text') {
           if (route.mediaType === undefined) {
             deps.logger.error('http.response_contract_violation', { route: route.operationId })

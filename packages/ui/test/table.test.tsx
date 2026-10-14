@@ -349,4 +349,28 @@ describe('ShadowScrollArea in a table', () => {
 
     expect(ref.current).toBe(screen.getByRole('table').parentElement)
   })
+
+  it('sits in a horizontally scrollable region that may shrink below its table (no page overflow)', () => {
+    const { container } = render(
+      <div className="flex">
+        <Table>
+          <TableBody>
+            <TableRow>
+              <TableCell>{'x'.repeat(400)}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>,
+    )
+    const table = container.querySelector('table') as HTMLElement
+    const scroller = table.parentElement as HTMLElement
+    const outer = scroller.parentElement as HTMLElement
+    expect(scroller.className).toContain('overflow-auto')
+    expect(scroller.className).toContain('w-full')
+    // Positioned, so `sr-only` text of a far column scrolls with the box and never widens the page.
+    expect(scroller).toHaveClass('relative')
+    // A flex or grid parent would otherwise size the region to the table's content.
+    expect(outer.className).toContain('min-w-0')
+    expect(outer.className).toContain('max-w-full')
+  })
 })

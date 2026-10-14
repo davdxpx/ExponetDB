@@ -59,8 +59,13 @@ const ShadowScrollArea = React.forwardRef<HTMLDivElement, ShadowScrollAreaProps>
       '[&_th:last-child]:before:easing-[0.24, 0.25, 0.05, 1] [&_th:last-child]:before:z-39',
     )
 
+    // `min-w-0 max-w-full` on the outer box: inside a flex or grid parent the region shrinks to the
+    // page and scrolls inside itself instead of widening the page to the width of its table.
     return (
-      <div ref={outerContainerRef} className={cn(containerClassName, 'relative')}>
+      <div
+        ref={outerContainerRef}
+        className={cn(containerClassName, 'relative min-w-0 max-w-full')}
+      >
         <div
           className={cn(
             'absolute inset-0 pointer-events-none z-38',
@@ -74,7 +79,9 @@ const ShadowScrollArea = React.forwardRef<HTMLDivElement, ShadowScrollAreaProps>
         <div
           ref={setContainerRef}
           className={cn(
-            'w-full overflow-auto',
+            // `relative`: the scroll box is the containing block of absolutely positioned content in
+            // its cells (`sr-only` text), so that content scrolls with it instead of widening the page.
+            'relative w-full overflow-auto',
             stickyLastColumn && [
               '[&_tr>*:last-child]:sticky [&_tr>*:last-child]:z-38 [&_tr>*:last-child]:right-0',
               // Sticky cells need an opaque base. `bg-surface-200` / `--muted` is alpha-based,

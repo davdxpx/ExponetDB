@@ -70,8 +70,8 @@ describe('theme inputs', () => {
     }
   })
 
-  it('uses the placeholder hue 255 (OD-11)', () => {
-    expect(rootBlock.decls.get('--hue')).toBe('255')
+  it('uses the turquoise accent hue 178 (owner decision S9)', () => {
+    expect(rootBlock.decls.get('--hue')).toBe('178')
     expect(rootBlock.decls.get('--surface-hue')).toBe('var(--hue)')
   })
 

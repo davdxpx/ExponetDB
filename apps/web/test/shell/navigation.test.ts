@@ -26,9 +26,9 @@ describe('the navigation model', () => {
       '/access/people',
       '/access/roles',
       '/access/service-accounts',
-      '/access/api-keys',
       '/access/oauth-clients',
       '/access/connected-apps',
+      '/connect',
       '/audit',
       '/settings/products',
       '/settings/environments',
@@ -44,6 +44,11 @@ describe('the navigation model', () => {
     for (const item of GLOBAL_NAV) {
       expect(safeReturnTo(item.path), item.path).toBe(item.path)
     }
+    // API keys live on the service accounts page: no page and no entry of their own.
+    expect(GLOBAL_NAV.some((item) => item.path === '/access/api-keys')).toBe(false)
+    // The connect page belongs to Access (its section menu and rail item are current there).
+    expect(sectionOf('/connect')?.id).toBe('access')
+    expect(sectionMenu('access').map((item) => item.path)).toContain('/connect')
   })
 
   it('lists every target section once, each a safe return target', () => {

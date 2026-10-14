@@ -104,7 +104,8 @@ person signs in with a passkey and consents on ExponetDB's page to the
 client (its name marked "not verified", the lookalike warning), the scopes
 and the tiers; production applies by agents wait for a human approval;
 production rows stay `humans_only` for agents (OD-13 (a)). An
-administrator can disable any client on **Admin → Clients** (every grant
+administrator can disable any client on **Access → OAuth clients**
+(`/access/oauth-clients`; the old `/admin/clients` link redirects there; every grant
 and token ends at once) or reject a pending one; a rejected or disabled
 client is never approved automatically (`client_not_approved`). The
 database guard (bundle `oauth-open-registration`) admits an approval
@@ -221,6 +222,19 @@ CIMD ids are portable by design.
   fragment (never sent to a server or in a `Referer`). The consent page
   shows and decides the request only for the browser that started it; a
   request is decided once.
+- **[DECIDED]** (Wave 8 Phase 8; `apps/web/src/app/router.ts`,
+  `src/lib/navigation/search.ts`) The Web App reads the handle from the
+  fragment exactly as the address bar has it and matches it against the
+  exact grammar `#request=exar_<43>`. Its router writes its canonical
+  location back on load with the fragment percent-decoded; the app keeps
+  the raw fragment when the router writes the same fragment in decoded
+  form, so an encoded handle (`exar_%41…`) never becomes a valid one by
+  that rewrite and is refused like any other malformed fragment. Query
+  values are read as plain strings (never as JSON), so
+  `?returnTo=%22%2Fapprovals%22` is the text `"/approvals"` and falls back
+  to the account page. One-time link tokens (`/setup`, `/invite`,
+  `/recover`) leave the address bar and the history before the router
+  exists. Pinned by `apps/web/test/app/router.test.tsx`.
 - The user authenticates with their ExponetDB identity (passkey or password +
   TOTP); an existing Web App session within the last 12 hours counts, but
   granting any `:prod` write scope requires re-authentication within 5 minutes.
@@ -237,7 +251,7 @@ CIMD ids are portable by design.
   user may access, or a chosen subset, default: non-production only); the grant
   lifetime (default 30 days, maximum 90); explicit opt-in checkboxes for any
   production write scope.
-- **[DECIDED]** (Wave 7 order §16, minimal; `apps/web/src/pages/consent.ts`,
+- **[DECIDED]** (Wave 7 order §16, minimal; since Wave 8 `apps/web/src/features/consent/`,
   `Application.consentView`/`consent`.) The consent view lists the targets
   the person can see (`targets`: id, path, tier; at most 200, from the
   registry as this person); the page offers "every target of the chosen

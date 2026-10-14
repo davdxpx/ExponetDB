@@ -120,6 +120,12 @@ beforeAll(async () => {
   )
   browser = await chromium.launch({ headless: true })
   context = await browser.newContext()
+  // A CSP violation a script catches (zod's eval probe, say) logs nothing; the page reports it
+  // as an event, written here to the console the suite counts.
+  await context.addInitScript({
+    content:
+      "document.addEventListener('securitypolicyviolation', (e) => console.error('Content Security Policy violation: ' + e.violatedDirective + ' ' + e.blockedURI))",
+  })
   await route(context)
   page = await context.newPage()
   page.on('dialog', (d) => {
@@ -248,23 +254,38 @@ describe('approval from MCP in a real browser', () => {
     await card.locator('.review').waitFor()
     const computed = (await card.locator('.review .computed').textContent()) ?? ''
     expect(computed).toContain(`${w.ids.slug}/platform/production`)
-    expect(computed).toContain('Staging evidencepresent')
-    expect(await card.locator('.client-name q').textContent()).toBe('Agent E2E')
-    expect(await card.locator('.client-name .badge').textContent()).toBe('name not verified')
-    expect(await card.locator('code.full-hash').textContent()).toBe(plan['planHash'])
-    expect(await card.locator('table.source-text td.text').first().textContent()).toContain(
-      'ALTER TABLE public.accounts ADD COLUMN reviewed text;',
+    expect(computed).toContain(
+      'Applied and verified with the same checksum on the evidence environment',
     )
+    // The client's own name: text, isolated, marked as not verified.
+    const clientName = card.locator('.client-name [data-untrusted="name"]')
+    expect(await clientName.locator('[dir="ltr"]').first().textContent()).toBe('Agent E2E')
+    expect(await clientName.textContent()).toContain('name not verified')
+    expect(await card.locator('.computed code.full-hash').textContent()).toBe(plan['planHash'])
+    expect(
+      await card.locator('section.source[data-file="up.sql"] table.source-text').textContent(),
+    ).toContain('ALTER TABLE public.accounts ADD COLUMN reviewed text;')
     await page.screenshot({ path: `${SHOTS}approval-review.png`, fullPage: true })
 
     // An agent proposed it: the card says so; approving it is the person's decision, not a
     // self-approval of their own plan (OD-9, G3A case 1), so no self-approval box is shown.
     expect(await card.locator(`#agent-note-${operationId}`).textContent()).toContain(
-      'the agent cannot approve',
+      'An agent proposed this plan; it cannot approve it.',
     )
-    expect(await card.locator('input[name="acknowledge"]').count()).toBe(0)
-    await card.getByRole('button', { name: 'Approve' }).click()
-    const reauth = page.locator('dialog.reauth[open]')
+    expect(await card.getByRole('checkbox', { name: /This is my own plan/ }).count()).toBe(0)
+    await card.getByRole('button', { name: 'Approve', exact: true }).click()
+    // The confirmation names the target, the tier, the class and the full plan hash; a high or
+    // critical plan needs the target path typed before the approval is sent.
+    const confirm = page.getByRole('alertdialog')
+    expect(await confirm.textContent()).toContain(plan['planHash'] as string)
+    expect(await confirm.textContent()).toContain(`${w.ids.slug}/platform/production`)
+    // A schema change on production is a high plan: unavailable until the path is typed exactly.
+    expect(plan['class']).toBe('high')
+    const approvePlan = confirm.getByRole('button', { name: 'Approve plan' })
+    expect(await approvePlan.isDisabled()).toBe(true)
+    await confirm.getByRole('textbox').fill(`${w.ids.slug}/platform/production`)
+    await confirm.getByRole('button', { name: 'Approve plan' }).click()
+    const reauth = page.locator('[role="dialog"][data-reauth]')
     const done = page.locator('p.status', { hasText: /^Approved/ })
     await Promise.race([reauth.waitFor(), done.waitFor()])
     if (await reauth.isVisible()) await page.click('#reauth-passkey')

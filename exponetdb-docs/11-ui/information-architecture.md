@@ -34,19 +34,20 @@ through node agents. Three things must be visible everywhere:
 | **Changes** | `/changes` | plans (awaiting approval, approved, expired), operations (running, failed, needs attention), migration streams per project with environment promotion view (staging ahead of production) |
 | **Infrastructure** | `/infrastructure/servers`, `/clusters`, `/nodes`, `/certificates` | servers, PostgreSQL clusters with placements, node agents (version, capabilities, heartbeat, clock skew), certificates (agent, PostgreSQL server, gateway) with expiry |
 | **Backups** | `/backups` | per cluster: protection state, RPO measured vs objective, last verified backup, PITR window, drills and their evidence |
-| **Access** | `/access/people`, `/roles`, `/service-accounts`, `/api-keys`, `/oauth-clients`, `/connected-apps` | identities, role bindings, service accounts, API keys, OAuth/MCP clients, grants per person ("connected applications") |
+| **Access** | `/access/people`, `/roles`, `/service-accounts`, `/oauth-clients`, `/connected-apps`, `/connect` | identities, role bindings, service accounts with their API keys, OAuth/MCP clients, grants per person ("connected applications"), how to connect an MCP client (`/connect`) |
 | **Audit** | `/audit` | audit search, chain verification status, export |
 | **Settings** | `/settings/products`, `/environments`, `/policies`, `/notifications`, `/installation` | registry structure, environment tiers and evidence chain, policy settings, notification channels, installation info |
 
-**[OBSERVED]** (2026-10-13, `apps/web/src/safe.ts`, `apps/web/src/shell.ts`)
-The **Access** routes above are the Wave 8 plan. Today OAuth and MCP clients are
-administered on **Clients** (`/admin/clients`) and service accounts on
-**Service accounts** (`/admin/service-accounts`); `/access/oauth-clients`
-does not exist yet.
-
-**[PLANNED]** (Wave 8) `/admin/clients` and `/admin/service-accounts` move
-under `/access/oauth-clients` and `/access/service-accounts`, and the old
-paths redirect to the new ones.
+**[OBSERVED]** (2026-10-13, Wave 8 Phase 8, `apps/web/src/shell/navigation.ts`,
+`apps/web/src/routes/_app/admin/`) OAuth and MCP clients are administered on
+**Access → OAuth clients** (`/access/oauth-clients`) and service accounts,
+with their API keys, on **Access → Service accounts**
+(`/access/service-accounts`); API keys have no page of their own (no
+`/access/api-keys`, and it is no sign-in return target). The old paths
+`/admin/clients` and `/admin/service-accounts` redirect to the new ones (the
+server, the CLI and earlier documents link them). **Access → Connect a
+client** (`/connect[?client=<id>]`) explains how to connect an MCP client to
+this installation; it belongs to the Access section menu.
 
 **[OBSERVED]** (Wave 8, `apps/web/src/shell/`) The shell's icon rail lists the
 eight sections above (Overview, Databases, Changes, Infrastructure, Backups,
@@ -60,12 +61,85 @@ stays open or stays collapsed, kept per browser; small screens get it as a
 sheet with the section pages listed under each section. An unknown path below
 the shell renders "page not found" inside the shell.
 
+**[OBSERVED]** (Wave 8 Phase 14, `apps/web/src/features/{access,audit,settings}/`)
+**Access:** People (`/access/people`, identities of kind `human` with their
+active role bindings; invite with the one-time link shown once and never
+cached; a new invitation link; disable inline with an optional audit reason;
+binding, unbinding, enabling and erasure are plans whose review page opens),
+Roles (`/access/roles`, the catalog and who holds each role where) and
+Connected applications (`/access/connected-apps`, `GET /grants` with client,
+person, resource, scopes, tiers, expiry and `lastUsedAt`/`lastUseClass`,
+revoke after a confirmation and re-authentication). The OAuth clients page
+states both OD-5 rules (`open`, `review`) and that
+`EXPONETDB_OAUTH_CLIENT_REGISTRATION` sets the mode; no read reports the
+current mode, so the page does not claim one. **Audit** (`/audit`): the
+chain indicator over `GET /audit-events/chain` (verified through sequence N
+at time T, broken with sequence and reason, "not verified yet" with the
+reason, a failed read never shown as intact), the search with its filters as
+validated URL parameters, event details with links to plan, operation and
+migrations ledger only through the return-path allowlist, and the NDJSON
+export for `policy.manage` (re-authentication, a `Blob` download, the next
+part through the cursor; the personal-data warning and the offline
+procedure of `audit.md` §5.1 as text). **Settings:** products, environments
+(tier from the contract with the production chip, evidence chain; changes
+are plans), policies (the `data.read` mode per tier first; changes through
+`POST /policy-settings/plans` for the installation or one target),
+installation and its health (unobserved components listed as not observed),
+notifications as the OD-21 named state, and `/settings/break-glass` for
+`policy.manage` (grants with reason and review as untrusted text; the
+permanent review note after a confirmation and re-authentication; 409 shown
+in the dialog). Every settings page shows a banner while grants wait for
+their review. Break-glass activation is offered nowhere (OD-21).
+
+**[OBSERVED]** (Wave 8 Phases 9 to 13, `apps/web/src/routes/_app/**` and
+`apps/web/src/features/`) The remaining screens, one note each. Every list,
+card and chart renders loading, failed, stale, partial and empty as
+distinct states (§6); a failed read is never an empty list.
+
+| Route | Source | What the screen is |
+|---|---|---|
+| `/` | `features/fleet/` | Fleet overview from one `GET /fleet`: counts across every target the person may see, each with its source, age and a "at least" mark when it is a floor; a part the server could not count says why and is never zero; what needs a person (approvals, findings) and the Control Plane's own health |
+| `/targets` | `features/targets/` | Databases: search, filters and sort kept in the URL (validated), table and grid, cursor followed to a bound with a note when more exist; health per row is the one the list carries |
+| `/targets/register` | `features/targets/register-page.tsx` | Register a target: product, project, environment, cluster and database; shows the cluster's declared tier; creates a registration plan (`POST /targets`) and opens it for review |
+| `/changes` | `features/changes/changes-page.tsx` | Entry page to plans, operations and promotion; reads nothing itself |
+| `/changes/plans`, `/changes/plans/$planId` | `features/plans/` | Plan list and the plan review page (§5) |
+| `/changes/operations`, `/changes/operations/$operationId` | `features/changes/` | Operations list; operation page with applied and verified as separate indicators, "Verify again" when `retryable`, cancel where the operation allows it |
+| `/changes/promotion` | `features/changes/promotion-page.tsx` | Migration stream of one project against its environments in evidence order, from the Control Store mirrors (`source: cached`); a missing mirror cell is `unknown`, never "not applied" |
+| `/approvals` | `features/approvals/` | Approvals queue (earlier URL, §2.1 parity) |
+| `/infrastructure`, `/servers`, `/servers/$serverId` | `features/infrastructure/` | Servers of the registry with the agent's last report; register a server by plan |
+| `/infrastructure/clusters`, `/clusters/$clusterId` | `features/infrastructure/` | PostgreSQL clusters with management mode, declared tier, placements, desired roles; role-verifier hand-off (the browser computes a SCRAM-SHA-256 verifier, never sends a password) |
+| `/infrastructure/nodes`, `/nodes/$nodeId` | `features/infrastructure/` | Node agents, capabilities, jobs (never the job envelope), enrollment with a reveal-once token |
+| `/infrastructure/certificates` | `features/infrastructure/certificates-page.tsx` | Certificate authorities of the agent PKI and the PostgreSQL CA with expiry |
+| `/backups` | `features/wave9/` | Named "not available yet" state (Wave 9) |
+| `/t/<product>/<project>/<environment>` | `features/target-overview/` | Target overview: health in incident order, health history, migration head against the other environments, recent operations, open findings; each block reads and fails on its own |
+| `…/schema`, `…/schema/$kind` | `features/schema/` | Schema browser (status, fingerprint, object lists by kind, detail, visualizer with a table alternative); needs a name filter, because the API has no list-all endpoint |
+| `…/migrations` | `features/migrations/` | Ledger from the target, timeline across environments, plans, drift summary, legacy import; no "run now" |
+| `…/sql` | `features/sql/` | SQL workspace (§4) |
+| `…/drift`, `…/findings` | `features/drift/`, `features/findings/` | Drift: stored findings first, then the result of a check run from the page (expected and actual side by side); "Accept drift" only creates a plan. Findings: filters from the address, keyset "load more" |
+| `…/performance`, `…/advisors`, `…/backups` | `features/wave9/` | Named "not available yet" states (Wave 9) |
+| `…/connections`, `…/locks` | `features/connections/` | Sessions grouped by role and application, blockers, endpoints with probe results; the lock graph as tree and table; cancel and terminate are not controls (Wave 9); the raw statement view is human only and re-authenticated |
+| `…/configuration` | `features/configuration/` | Read-only: registry facts, the data-read policy that applies, PostgreSQL settings as a named state, the cluster's roles |
+| `…/activity` | `features/activity/` | Operations and audit events of the target (`audit.read`) |
+| `/settings/*`, `/access/*`, `/audit`, `/account/*` | see the paragraphs above | Settings, access, audit and the account tabs |
+
 **[DECIDED]** (Wave 8 order D6) Every earlier URL stays valid with the
 behavior it has today, because the server, the CLI and MCP emit links to them
 ([order Appendix C](../14-roadmap/orders/wave-8-order.md#appendix-c--what-the-rebuild-must-preserve-parity-oracle)):
 `/login`, `/setup#token=`, `/invite#token=`, `/recover#token=`, `/account`,
 `/approvals#operation=`, `/step-up#id=`, `/credentials#cluster=`,
 `/oauth/consent#request=`, `/oauth/device` and `/oauth/error?reason=`.
+**[OBSERVED]** (Wave 8, owner decision S10) The account area is a set of tabs
+under `/account`, opened from the avatar menu in the header (the picture or the
+initials, the name and e-mail, the theme switch, the links below, sign out):
+Profile (`/account`: display name, profile picture), Preferences
+(`/account/preferences`: theme, sidebar, shortcuts, kept in this browser),
+Security (`/account/security`: passkeys, password, authenticator app, recovery
+codes, sessions), Connected applications (`/account/applications`) and Your
+activity (`/account/activity`: `GET /audit-events?actor=self`, which needs
+`audit.read`; without it the tab says so). A recovery session shows Security on
+every path of the area and no tab navigation. The five paths are exact
+`returnTo` targets.
+
 **[PLANNED]** `/approvals#operation=op_…` redirects to the plan review page
 `/changes/plans/<id>` (§5).
 
@@ -116,7 +190,11 @@ packages (installed vs available), jobs history, enrollment and certificate.
   (pattern from Studio's route sanitization). Keyboard: `E` then the first
   letter of the environment.
 - Every target-scoped client state (tabs, filters, SQL tabs, grid state) is
-  keyed by target id; switching remounts the target outlet.
+  keyed by target id; switching remounts the target outlet. **[DECIDED]**
+  State kept in browser storage beyond the page is also keyed by the signed-in
+  person: the SQL tabs live under `exdb.sql.tabs.<identityId>.<targetId>`, and
+  sign-out or an ended session removes every `exdb.sql.tabs.*` key, so unsent
+  SQL text never waits for the next person on the same browser.
 - Route metadata declares requirements (`requires: ['target.reachable']`,
   `requires: ['capability:backup.list']`); the shell renders a named state
   (unreachable, suspended, node offline, not supported on this version) instead
@@ -175,6 +253,40 @@ for the target (its default `by_tier` is `humans_only` for prod,
 [OD-13](../00-product/open-decisions.md#od-13-data-reads-by-ai-agents-on-production),
 [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md)); there is no separate target field.
 Sensitive columns are masked unless the person has `data.read_sensitive`.
+
+**[OBSERVED]** (Wave 8 Phase 11, `apps/web/src/features/sql/`) The SQL
+section is built as decided above, in Studio's layout: a side panel (saved
+queries, own history), query tabs per target, the lazy CodeMirror editor
+(OD-40) and, below it, the result or the classification. The tabs' unsent
+text (never a result) is kept in this browser's `localStorage` per person and
+target id (`exdb.sql.tabs.<identityId>.<targetId>`; a key of the older
+by-target shape is never read and is removed when seen); sign-out (the account
+menu) and an ended session (the client's `onSessionGone`, `leaveForSignIn` in
+`apps/web/src/lib/session/session.ts`) remove every `exdb.sql.tabs.*` key, and
+every storage access tolerates a storage that throws.
+Query mode sends one statement (the selection, if any) to
+`POST /targets/{t}/queries` or `/explain` with a `qry_` id the page chooses;
+cancel is `POST /targets/{t}/queries/{qry}/cancel` (the Wave 7 contract names
+the query by that id, not by pid and `backend_start`). Before sending, the
+page asks `POST /sql/classifications` for exactly that text: a text the
+server classifies as a write is not sent; the page explains and offers
+"Draft as migration" (same text, Draft mode). A classification that failed
+or is pending does not block: the data-read endpoint decides, and its
+refusal is shown with its code. Draft mode shows the classification live
+(per statement its lines, kind, classes as badges and gutter marks; a
+statement without a class and a failed classification are said to be not
+safe); "Create migration" builds `migration.yaml` from the person's input,
+`up.sql` from the editor and a `verify.sql` skeleton whose checks are
+`SELECT false AS ok` until replaced, lints it (`POST
+/projects/{p}/migrations/lint`) and creates a plan (`POST
+/targets/{t}/migrations/plans`) that opens on the plan page. `?sql=` (at most
+16,384 characters, read as a plain string) and `?mode=draft` open text in a
+new tab with an "opened from a link, not run" note that counts hidden and
+direction characters; history entries and saved queries open the same way.
+Completion asks the schema search endpoint for one page of names per word
+(no columns: the API has no column search). There is no formatter (no SQL
+formatter exists in the repository). `Mod+Enter` (run) and `Mod+S` (save)
+are registered shortcuts (group "SQL editor") and appear in the shortcut sheet.
 
 ## 5. Plans, approvals and confirmations in the UI
 

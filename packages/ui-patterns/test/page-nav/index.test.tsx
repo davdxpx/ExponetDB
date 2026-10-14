@@ -74,4 +74,29 @@ describe('PageNav', () => {
 
     expect(await axeViolations(container)).toEqual([])
   })
+
+  it('scrolls inside its own row on a narrow screen and brings the current link into view', () => {
+    const { container } = render(<PageNav label="Target sections" items={items} />)
+    const row = container.querySelector<HTMLElement>('[data-slot="page-nav-menu"]')
+    expect(row?.className).toContain('overflow-x-auto')
+    expect(row?.className).toContain('[&>nav]:min-w-max')
+
+    // jsdom has no layout: give the row and the current link boxes, then render again.
+    cleanup()
+    const box = (left: number, right: number) => () =>
+      ({ left, right, top: 0, bottom: 0, width: right - left, height: 0, x: left, y: 0 }) as DOMRect
+    const original = Element.prototype.getBoundingClientRect
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      if (this.getAttribute('data-slot') === 'page-nav-menu') return box(0, 390)()
+      if (this.getAttribute('aria-current') === 'page') return box(500, 600)()
+      return original.call(this)
+    }
+    try {
+      const view = render(<PageNav label="Target sections" items={items} />)
+      const scroller = view.container.querySelector<HTMLElement>('[data-slot="page-nav-menu"]')
+      expect(scroller?.scrollLeft).toBe(210)
+    } finally {
+      Element.prototype.getBoundingClientRect = original
+    }
+  })
 })

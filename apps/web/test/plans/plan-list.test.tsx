@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, screen, within } from '@testing-library/react'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
 import { BIDI, hostilePlan, mountApp, PLAN, World } from './support.tsx'
@@ -25,7 +25,7 @@ describe('the plan list', () => {
     expect(table.textContent).not.toContain(BIDI)
   })
 
-  it('says when more plans exist than one read returns', async () => {
+  it('shows a partial list as partial: more plans exist than one read returns', async () => {
     const world = new World()
     world.plans.set(OTHER, hostilePlan({ id: OTHER }))
     world.plansNextCursor = 'next'
@@ -45,6 +45,31 @@ describe('the plan list', () => {
     mountApp('/changes/plans', world)
     expect(await screen.findByText('You may not list plans.')).toBeInTheDocument()
     expect(screen.queryByText(/found no Plans/)).toBeNull()
+  })
+
+  it('shows an old read as stale with its age and a refresh, keeping the plans', async () => {
+    const world = new World()
+    world.plans.set(PLAN, hostilePlan())
+    const { queryClient } = mountApp('/changes/plans', world)
+    await screen.findByRole('table', { name: 'Plans, newest first' })
+    world.failures.set('GET /api/v1/plans', { status: 500, code: 'INTERNAL', message: 'Boom.' })
+    await act(async () => {
+      await queryClient.refetchQueries()
+    })
+    await waitFor(() =>
+      expect(document.querySelector('[data-state="stale"]')?.textContent).toMatch(
+        /Showing an earlier read of Plans.*Observed/,
+      ),
+    )
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument()
+    expect(screen.getByRole('table', { name: 'Plans, newest first' })).toBeInTheDocument()
+  })
+
+  it('is empty only after a successful read', async () => {
+    const world = new World()
+    mountApp('/changes/plans', world)
+    expect(await screen.findByText(/found no plans/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Could not read/)).toBeNull()
   })
 
   it('has no accessibility violations', async () => {

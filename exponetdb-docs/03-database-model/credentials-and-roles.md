@@ -220,6 +220,11 @@ the operation kind `postgres.roles.verifier.set`:
   Web App, the browser from the password the person types (PBKDF2, HMAC and
   SHA-256 of WebCrypto), over the same-origin session; the password never
   leaves the browser **[PLANNED]** (the form is Web App work of Wave 8).
+  **[OBSERVED]** (`apps/web/src/features/infrastructure/cluster-roles.tsx`
+  `planRoleVerifier`, `apps/web/test/infrastructure/clusters.test.tsx`) The
+  form says "could not compute the verifier, nothing was sent" only when the
+  derivation itself fails; a failure of the request (a network failure
+  included) is reported through the normal error path as a request failure.
   `exponetdb secrets scram-verifier` stays **[PLANNED]**; the route's
   client kind is `web` only (re-authentication, like the credential
   submission of §5), so the CLI does not submit verifiers.

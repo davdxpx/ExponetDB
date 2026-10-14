@@ -272,11 +272,31 @@ development and tests.
 
 ## 7. Web App (Wave 8)
 
-**[PLANNED]** (Wave 8, authorized 2026-10-13; [Wave 8 order](../14-roadmap/orders/wave-8-order.md)
-§5.2 and §7) The commands to build, test and develop the rebuilt Web App
-(React, Vite, the UI packages and `apps/design-system`) are documented here
-when Phase 1 (tooling) and Phase 7 (`apps/web`) create them; until then §6
-describes the current build (`bun run --cwd apps/web build`).
+**[OBSERVED]** (2026-10-13, Wave 8 Phase 8; [Wave 8 order](../14-roadmap/orders/wave-8-order.md)
+§5.2 and §7) The Web App is the React SPA in `apps/web` (Vite, TanStack
+Router and Query, the UI packages); the framework-free app of Waves 3A to 7
+is gone. The commands:
+
+```sh
+bun run --cwd apps/web build      # vite build into apps/web/dist, then scripts/postbuild.ts:
+                                  # served file types only, index.html without inline script or
+                                  # style, no eval and no foreign origin in a script (a short
+                                  # allowlist of identifier literals), .br and .gz next to each file
+EXDB_WEB_OUT_DIR=/tmp/web bun run --cwd apps/web build   # the same build beside dist (a parity run)
+cd apps/web && bunx vitest run    # component tests (jsdom, Testing Library, axe)
+cd apps/web && bunx tsc -p tsconfig.json --noEmit
+bun run --cwd apps/design-system build   # the design-system app; csp-ui-surface.e2e serves it
+bun run ui-safety                 # the browser code rules (no markup sinks, no eval, no storage writes ...)
+```
+
+The browser suites take another build with `EXDB_TEST_WEB_DIST=<dir>`
+(default `apps/web/dist`). They count every CSP violation the page reports,
+also one a script catches (the page's `securitypolicyviolation` events are
+written to the console the suites watch): zod runs jitless for that reason
+(`apps/web/src/app/zod-jitless.ts`). The server bundle
+(`bun run --cwd apps/server bundle`) and the image copy `apps/web/dist`
+(`/app/web` in the image); `serve` answers every page path with its
+`index.html` ([ADR-0031](../01-architecture/adr/0031-web-app-serving.md)).
 
 **[OBSERVED]** (2026-10-13, `packages/auth/src/sessions.ts`,
 `apps/server/src/interfaces/http/api.ts`, the order §5.2)
@@ -294,9 +314,41 @@ the configured public origin:
   host, and Chromium treats `http://localhost` as a secure context, so
   `__Host-` cookies work); or
 - skip the dev server and serve the built `dist` through `serve` itself, as
-  §6 does today.
+  §6 does today (**[OBSERVED]** the way the Web App is tried by hand and
+  tested; no Vite dev server or proxy is configured in `apps/web`).
 
 **[ASSUMPTION]** The proxy variant works with `Origin`, `User-Agent` (a
 session is bound to a coarse device label) and cookies passed through
 unchanged; Phase 1 verifies it in Chromium and this section records the exact
 setup.
+
+### 7.1 Running the Web App's checks locally (Wave 8)
+
+**[OBSERVED]** (2026-10-14, Wave 8 part 2; commands from the root
+`package.json` and `apps/server/package.json`) CI has never run for this
+repository, so these local runs are the evidence:
+
+```sh
+node --version                                   # 24.x: the root `engines` asks for >=24 <25; run vitest under Node 24
+eval "$(bun run --silent dev:control-store)"     # Docker: the Control Store container, exports EXDB_TEST_PG_URL
+eval "$(bun run --silent dev:targets)"           # Docker: PostgreSQL 16, 17, 18 targets, exports EXDB_TEST_TARGETS
+node apps/server/node_modules/playwright-core/cli.js install chromium   # once per pinned version
+bun run --cwd apps/design-system build           # csp-ui-surface.e2e and visual-regression.e2e serve it
+bun run test:e2e                                 # builds apps/web and the CLI, then apps/server/test/*.e2e.test.ts
+# one suite, from apps/server:
+bunx vitest run --config vitest.e2e.config.ts test/web-axe.e2e.test.ts
+# rewrite the visual baselines (review the diff before committing them):
+EXDB_UPDATE_VISUAL=1 bunx vitest run --config vitest.e2e.config.ts test/visual-regression.e2e.test.ts
+```
+
+The browser suites are `web.e2e`, `web-review.e2e`, `mcp-approval.e2e`,
+`csp-ui-surface.e2e`, `web-cross-surface.e2e`, `web-hostile-content.e2e`,
+`web-browser-surface.e2e`, `web-axe.e2e` and `visual-regression.e2e`; each
+fails on any CSP violation the page reports. The visual baselines in
+`apps/server/test/visual-baselines/` are Chromium-specific (another Chromium
+build or operating system's font rendering needs them regenerated). The web
+build also checks the bundle budgets (`apps/web/scripts/budgets.ts`) and
+writes the license notices (`apps/web/scripts/notices.ts`). Component tests
+(`cd apps/web && bunx vitest run`) need no Docker. Every database is local
+and disposable, only synthetic addresses (`@example.test`) appear, and no
+real host or secret is used.

@@ -21,7 +21,7 @@ export const CollapsibleCardSection = ({
   children,
 }: CollapsibleCardSectionProps) => (
   <Collapsible defaultOpen={defaultOpen}>
-    <CollapsibleTrigger className="group/trigger flex items-center gap-1 font-mono text-xs uppercase tracking-widest text-foreground-lighter transition hover:text-foreground-light data-[state=open]:text-foreground-light motion-reduce:transition-none">
+    <CollapsibleTrigger className="group/trigger flex items-center gap-1 eyebrow text-xs text-foreground-lighter transition hover:text-foreground-light data-[state=open]:text-foreground-light motion-reduce:transition-none">
       {title}
       <ChevronRight
         size={16}

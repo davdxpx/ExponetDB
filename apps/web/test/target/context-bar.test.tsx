@@ -50,13 +50,32 @@ describe('the context bar', () => {
     await waitFor(() => expect(button).toHaveTextContent('Non-production'))
   })
 
+  it('on a phone keeps the environment and its tier chip, and the menu names product and project', async () => {
+    const world = new World()
+    project(world, 'shop', 'platform')
+    mountApp('/t/shop/platform/staging', world)
+    const nav = await bar()
+    // Below the md breakpoint the crumbs for product and project are hidden by class.
+    for (const crumb of [within(nav).getByText('shop'), within(nav).getByText('platform')]) {
+      expect(crumb.closest('li')?.className).toContain('max-md:hidden')
+    }
+    const button = await switcher()
+    await waitFor(() => expect(button).toHaveTextContent('Non-production'))
+    const user = userEvent.setup()
+    const menu = await openSwitcher(user)
+    expect(within(menu).getByText('shop / platform')).toBeInTheDocument()
+  })
+
   it('renders nothing outside a target page, and asks for nothing', async () => {
     const world = new World()
     project(world)
     mountApp('/', world)
     await screen.findByRole('heading', { level: 1, name: 'Overview' })
     expect(screen.queryByRole('navigation', { name: 'Target' })).not.toBeInTheDocument()
-    expect(world.apiRequests).toEqual([])
+    // The overview reads its own fleet data; the context bar asks for no target or environment.
+    expect(
+      world.apiRequests.filter((path) => /\/(targets|projects|environments)(\/|\?|$)/.test(path)),
+    ).toEqual([])
   })
 
   it("lists the environments of the project with the chip of each one's tier field", async () => {
@@ -255,6 +274,20 @@ describe('the environment list is a truthful read', () => {
     await waitFor(() => expect(menu).not.toHaveTextContent('Showing an earlier read'))
   })
 
+  it('names what is missing when more environments exist than one read returns, never as a full list', async () => {
+    const user = userEvent.setup()
+    const world = new World()
+    project(world)
+    world.nextCursor = 'more'
+    mountApp('/t/shop/platform/staging', world)
+    const menu = await openSwitcher(user)
+    await waitFor(() =>
+      expect(menu).toHaveTextContent(
+        'Showing part of the environments. More environments exist than one read returns.',
+      ),
+    )
+  })
+
   it('says "found no environments" only after a read that succeeded', async () => {
     const user = userEvent.setup()
     const world = new World()
@@ -400,7 +433,7 @@ describe('switching environment remounts the target outlet', () => {
     const world = new World()
     project(world)
     mountApp('/t/shop/platform/staging/migrations', world)
-    await screen.findByRole('heading', { level: 2, name: 'Migrations is not available yet' })
+    await screen.findByRole('heading', { level: 2, name: 'Ledger' })
     const before = document.querySelector('[data-slot="target-outlet"]')
     expect(before).not.toBeNull()
     const menu = await openSwitcher(user)
@@ -408,7 +441,7 @@ describe('switching environment remounts the target outlet', () => {
     await waitFor(() =>
       expect(document.querySelector('[data-slot="target-layout"]')).toBeInTheDocument(),
     )
-    await screen.findByRole('heading', { level: 2, name: 'Migrations is not available yet' })
+    await screen.findByRole('heading', { level: 2, name: 'Ledger' })
     const after = document.querySelector('[data-slot="target-outlet"]')
     expect(after).not.toBeNull()
     expect(after).not.toBe(before)
@@ -419,7 +452,7 @@ describe('switching environment remounts the target outlet', () => {
     const world = new World()
     project(world)
     const { queryClient } = mountApp('/t/shop/platform/staging/migrations', world)
-    await screen.findByRole('heading', { level: 2, name: 'Migrations is not available yet' })
+    await screen.findByRole('heading', { level: 2, name: 'Ledger' })
     const before = document.querySelector('[data-slot="target-outlet"]')
     await queryClient.refetchQueries({ queryKey: ['targets', 'detail', 'shop/platform/staging'] })
     expect(document.querySelector('[data-slot="target-outlet"]')).toBe(before)

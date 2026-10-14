@@ -145,4 +145,86 @@ export const accountMessages = {
   'account.grant.use.rest': 'REST API',
   'account.grant.revoke': 'Revoke',
   'account.grant.revoked': 'Access revoked. Its tokens stopped working.',
+
+  'accountMenu.theme': 'Theme',
+  'accountMenu.preferences': 'Preferences',
+  'accountMenu.security': 'Security',
+  'accountMenu.applications': 'Connected applications',
+  'accountMenu.activity': 'Your activity',
+
+  'accountArea.nav': 'Account sections',
+  'accountArea.profile': 'Profile',
+  'profile.heading': 'Profile',
+  'profile.name.heading': 'Display name',
+  'profile.name.hint':
+    'The name you choose is shown instead of the name from your invitation. One line, at most 64 characters.',
+  'profile.name.label': 'Name to show',
+  'profile.name.save': 'Save name',
+  'profile.name.saved': 'Display name saved.',
+  'profile.name.cleared': 'Display name removed.',
+  'profile.name.tooLong': 'The display name can have at most 64 characters.',
+  'profile.name.conflict':
+    'Your profile changed elsewhere. The page shows the current profile now; check the name and save again.',
+  'profile.picture.heading': 'Profile picture',
+  'profile.picture.hint':
+    'A PNG, JPEG or WebP image of at most 256 KiB, 32 to 1024 pixels each way. The picture is stored by ExponetDB and is not animated.',
+  'profile.picture.choose': 'Choose a picture',
+  'profile.picture.label': 'Picture file',
+  'profile.picture.preview': 'Preview of the chosen picture',
+  'profile.picture.upload': 'Upload picture',
+  'profile.picture.uploaded': 'Profile picture saved.',
+  'profile.picture.remove': 'Remove picture',
+  'profile.picture.remove.title': 'Remove your profile picture?',
+  'profile.picture.remove.description':
+    'The picture is deleted. Your initials are shown instead. You can upload a new picture at any time.',
+  'profile.picture.remove.action': 'Remove picture',
+  'profile.picture.removed': 'Profile picture removed.',
+  'profile.picture.none': 'You have no profile picture. Your initials are shown.',
+  'profile.picture.current': 'Your profile picture',
+  'profile.picture.reason.unsupported_format':
+    'This file is not a PNG, JPEG or WebP image. SVG and GIF files are not accepted.',
+  'profile.picture.reason.type_mismatch':
+    'The file content does not match its image type. Choose the original image file.',
+  'profile.picture.reason.malformed': 'The image is damaged or incomplete. Choose another file.',
+  'profile.picture.reason.animated': 'Animated images are not accepted. Choose a still image.',
+  'profile.picture.reason.dimensions':
+    'The image must be between 32 and 1024 pixels wide and high.',
+  'profile.picture.reason.trailing_data':
+    'The file has extra data after the image. Export the image again and choose the new file.',
+  'profile.picture.reason.too_large': 'The picture is larger than 256 KiB. Choose a smaller one.',
+  'profile.picture.reason.empty': 'The file is empty. Choose another file.',
+  'profile.picture.reason.unknown': 'The server did not accept this picture. Choose another file.',
+
+  'preferences.heading': 'Preferences',
+  'preferences.note': 'These choices are kept in this browser only.',
+  'preferences.theme': 'Theme',
+  'preferences.sidebar': 'Sidebar',
+  'preferences.shortcuts': 'Keyboard shortcuts',
+  'preferences.shortcuts.letters': 'Use single-letter shortcuts',
+  'preferences.shortcuts.letters.hint':
+    'Sequences such as G then T. Turn them off if they clash with assistive technology.',
+  'preferences.shortcuts.show': 'Show keyboard shortcuts',
+
+  'security.heading': 'Security',
+
+  'applications.heading': 'Connected applications',
+
+  'account.activity.heading': 'Your activity',
+  'account.activity.description': 'Audit events with you as the actor, newest first.',
+  'account.activity.what': 'Your activity',
+  'account.activity.none': 'The audit has no event with you as the actor.',
+  'account.activity.time': 'When',
+  'account.activity.action': 'Action',
+  'account.activity.result': 'Result',
+  'account.activity.client': 'Through',
+  'account.activity.more': 'Show older events',
+  'account.activity.result.succeeded': 'Succeeded',
+  'account.activity.result.failed': 'Failed',
+  'account.activity.result.denied': 'Denied',
+  'account.activity.client.web': 'Web App',
+  'account.activity.client.rest': 'REST API',
+  'account.activity.client.mcp': 'MCP',
+  'account.activity.client.cli': 'CLI',
+  'account.activity.client.ci': 'CI',
+  'account.activity.client.system': 'System',
 } as const satisfies Readonly<Record<string, string>>

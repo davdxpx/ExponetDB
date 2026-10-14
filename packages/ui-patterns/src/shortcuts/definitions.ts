@@ -8,11 +8,12 @@
  * - a sequence is two letters and starts with `g` (go to) or `e` (environment);
  * - the only single-key shortcut is `?`;
  * - a chord is the platform modifier (Command on Apple platforms, Control
- *   elsewhere) plus one letter;
+ *   elsewhere) plus one letter, or plus Enter (`enter`, the run key of the SQL
+ *   editor);
  * - no two shortcuts share a binding.
  */
 
-/** Platform modifier plus one letter, for example `Mod+K`. */
+/** Platform modifier plus one letter (`Mod+K`) or plus Enter (`key: 'enter'`). */
 export interface ChordBinding {
   readonly type: 'chord'
   readonly key: string
@@ -32,7 +33,7 @@ export interface KeyBinding {
 
 export type ShortcutBinding = ChordBinding | SequenceBinding | KeyBinding
 
-export const SHORTCUT_GROUPS = ['General', 'Go to', 'Switch environment'] as const
+export const SHORTCUT_GROUPS = ['General', 'Go to', 'Switch environment', 'SQL editor'] as const
 export type ShortcutGroup = (typeof SHORTCUT_GROUPS)[number]
 
 export interface ShortcutDefinition {
@@ -120,6 +121,16 @@ export const SHORTCUT_DEFINITIONS = {
     binding: { type: 'sequence', keys: ['e', 'd'] },
     label: 'Switch to development',
     group: 'Switch environment',
+  },
+  'sql.run': {
+    binding: { type: 'chord', key: 'enter' },
+    label: 'Run the query',
+    group: 'SQL editor',
+  },
+  'sql.save': {
+    binding: { type: 'chord', key: 's' },
+    label: 'Save the query',
+    group: 'SQL editor',
   },
 } as const satisfies Record<string, ShortcutDefinition>
 

@@ -29,6 +29,20 @@ describe('returnTo (no open redirect): the Wave 3A cases', () => {
     expect(safeReturnTo(`/approvals#operation=${OP}`)).toBe(`/approvals#operation=${OP}`)
   })
 
+  it('accepts exactly the tabs of the account area', () => {
+    for (const tab of ['preferences', 'security', 'applications', 'activity']) {
+      expect(safeReturnTo(`/account/${tab}`)).toBe(`/account/${tab}`)
+    }
+    for (const other of [
+      '/account/',
+      '/account/other',
+      '/account/security/x',
+      '/account//security',
+    ]) {
+      expect(safeReturnTo(other), other).toBe('/account')
+    }
+  })
+
   it('accepts the consent page with a request handle, device entry and administration pages', () => {
     expect(safeReturnTo(`/oauth/consent#request=exar_${TOKEN}`)).toBe(
       `/oauth/consent#request=exar_${TOKEN}`,
@@ -118,7 +132,6 @@ describe('returnTo: the Wave 8 pages, by whole-path grammar', () => {
       '/access/people',
       '/access/roles',
       '/access/service-accounts',
-      '/access/api-keys',
       '/access/oauth-clients',
       '/access/connected-apps',
       '/audit',
@@ -135,6 +148,8 @@ describe('returnTo: the Wave 8 pages, by whole-path grammar', () => {
 
   it('refuses near misses: wrong ids, names, sections, depth, case and encodings', () => {
     for (const hostile of [
+      // API keys live on the service accounts page; there is no page of their own.
+      '/access/api-keys',
       '/changes/',
       '/changes/plans/',
       '/changes/plan',

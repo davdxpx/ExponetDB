@@ -27,27 +27,31 @@ import {
   PageHeaderMeta,
   PageHeaderSummary,
   PageHeaderTitle,
+  type PlanConfirmFacts,
   type Readable,
   ReadableView,
   readableValue,
   TierChip,
   UntrustedName,
   UntrustedText,
+  useLinkComponent,
 } from '@exponetdb/ui-patterns'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
-import { withReauth } from '../../lib/api/reauth.ts'
 import { describeError, type MessageKey, t } from '../../lib/i18n/i18n.ts'
 import { classifyFailure } from '../../lib/query/errors.ts'
 import { toReadable } from '../../lib/query/readable.ts'
 import { useMe } from '../../lib/session/guard.tsx'
 import { NotFoundPage } from '../../shell/not-found.tsx'
+import { operationPath } from '../changes/model.ts'
+import { VerifyAgainAction } from '../changes/operation-actions.tsx'
 import { ApplyAction, DecisionActions, type PageMessage } from './decision-actions.tsx'
-import { approvalQueueQuery, operationKeys, operationQuery, planKeys, planQuery } from './keys.ts'
+import { approvalQueueQuery, operationQuery, planKeys, planQuery } from './keys.ts'
 import {
   analysisOf,
   approvalEntriesOf,
+  confirmFactsOf,
   evidenceOf,
   filesOf,
   isPlanId,
@@ -345,6 +349,7 @@ function PlanReview({
           />
           <OperationOutcome
             operationId={operationId}
+            planFacts={confirmFactsOf(plan)}
             read={toReadable(operationRead)}
             busy={operationRead.isFetching}
             onRetry={() => void operationRead.refetch()}
@@ -405,19 +410,21 @@ function nextActionText(next: OperationNextAction | undefined): string | null {
 
 function OperationOutcome({
   operationId,
+  planFacts,
   read,
   busy,
   onRetry,
   onMessage,
 }: {
   readonly operationId: string | null
+  /** The confirmation facts of this plan ("Verify again" on production uses them). */
+  readonly planFacts: PlanConfirmFacts
   readonly read: Readable<OperationRead>
   readonly busy: boolean
   readonly onRetry: () => void
   readonly onMessage: PageMessage
 }): ReactNode {
-  const { client, confirmIdentity } = useApi()
-  const queryClient = useQueryClient()
+  const Link = useLinkComponent()
   const operation = readableValue(read)
   if (operationId === null) {
     return (
@@ -442,21 +449,8 @@ function OperationOutcome({
   }
   const attention =
     operation.state === 'needs_attention' || operation.state === 'needs_reconciliation'
-  const verifyAgain = async (): Promise<void> => {
-    try {
-      await withReauth(client, confirmIdentity, () =>
-        client.operation('retryOperationVerification', {
-          params: { operationId: operation.id },
-          body: {},
-        }),
-      )
-      onMessage('status', t('plans.verifyAgain.done', { id: operation.id }))
-    } catch (error) {
-      onMessage('alert', describeError(error))
-      throw error
-    }
-    await queryClient.invalidateQueries({ queryKey: operationKeys.detail(operation.id) })
-  }
+  const retryable = operation.retryable ?? null
+  const operationHref = operationPath(operation.id)
   return (
     <div data-operation-id={operation.id} className="flex flex-col gap-2">
       <p className="text-sm text-foreground-light">
@@ -465,6 +459,13 @@ function OperationOutcome({
           state: operation.state.replaceAll('_', ' '),
         })}
       </p>
+      {operationHref === undefined ? null : (
+        <p className="text-sm">
+          <Link href={operationHref} className="text-primary underline focus-ring">
+            {t('changes.operation.open')}
+          </Link>
+        </p>
+      )}
       {read.state === 'stale' ? (
         <p role="note" className="text-sm text-foreground-light">
           {t('plans.operation.stale')}
@@ -479,12 +480,14 @@ function OperationOutcome({
           attention
             ? {
                 nextAction: nextActionText(operation.nextAction),
-                retryable: operation.retryable ?? null,
+                retryable,
               }
             : null
         }
-        onVerifyAgain={read.state === 'stale' ? undefined : verifyAgain}
       />
+      {attention && retryable === true && read.state !== 'stale' ? (
+        <VerifyAgainAction operation={operation} planFacts={planFacts} onMessage={onMessage} />
+      ) : null}
       {operation.errorCode === null ? null : (
         <p className="text-sm">
           {t('plans.operation.errorCode')}{' '}

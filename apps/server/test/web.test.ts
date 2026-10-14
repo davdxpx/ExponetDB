@@ -47,6 +47,7 @@ beforeAll(async () => {
   await writeFile(join(dir, 'assets', 'chunks', 'route-AbC_9-x.js.gz'), gzipSync(CHUNK))
   await writeFile(join(dir, 'assets', 'files', 'inter-latin-400-Zz9.woff2'), 'wOF2')
   await writeFile(join(dir, 'assets', 'files', 'logo-Q1.svg'), '<svg/>')
+  await writeFile(join(dir, 'assets', 'third-party-licenses.txt'), 'MIT License\n')
   await writeFile(join(dir, 'assets', 'files', 'source-Map1.js.map'), '{}')
   await writeFile(join(dir, 'assets', 'files', 'data-1.json'), '{}')
   await writeFile(join(dir, 'assets', 'files', '.hidden.js'), 'x')
@@ -74,6 +75,7 @@ describe('the built Web App is loaded from an allowlist', () => {
       'files/inter-latin-400-Zz9.woff2',
       'files/logo-Q1.svg',
       'index.html',
+      'third-party-licenses.txt',
     ])
     expect(assets.get('files/inter-latin-400-Zz9.woff2')?.type).toBe('font/woff2')
     expect(assets.get('chunks/route-AbC_9-x.js')?.encodings?.br).toBeDefined()
@@ -225,6 +227,16 @@ describe('assets', () => {
     expect((await pub.request('/assets/app.js')).headers.get('content-type')).toBe(
       'text/javascript; charset=utf-8',
     )
+  })
+
+  it('serves the license notice as plain text under the strict headers, no-store', async () => {
+    const res = await app(assets).request('/assets/third-party-licenses.txt')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('text/plain; charset=utf-8')
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    expect(res.headers.get('content-security-policy')).toBe(WEB_CSP)
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(await res.text()).toBe('MIT License\n')
   })
 
   it('never serves a symbolic link, a hidden file, another page or a file nested too deep', async () => {

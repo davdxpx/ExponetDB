@@ -19,18 +19,48 @@ import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppSplatRouteImport } from './routes/_app/$'
 import { Route as AppAccountRouteImport } from './routes/_app/account'
 import { Route as AppApprovalsRouteImport } from './routes/_app/approvals'
+import { Route as AppAuditRouteImport } from './routes/_app/audit'
+import { Route as AppBackupsRouteImport } from './routes/_app/backups'
 import { Route as AppConnectRouteImport } from './routes/_app/connect'
 import { Route as SessionCredentialsRouteImport } from './routes/_session/credentials'
 import { Route as SessionStepUpRouteImport } from './routes/_session/step-up'
 import { Route as OauthErrorRouteImport } from './routes/oauth/error'
+import { Route as AppAccessConnectedAppsRouteImport } from './routes/_app/access/connected-apps'
 import { Route as AppAccessOauthClientsRouteImport } from './routes/_app/access/oauth-clients'
+import { Route as AppAccessPeopleRouteImport } from './routes/_app/access/people'
+import { Route as AppAccessRolesRouteImport } from './routes/_app/access/roles'
 import { Route as AppAccessServiceAccountsRouteImport } from './routes/_app/access/service-accounts'
+import { Route as AppAccountIndexRouteImport } from './routes/_app/account/index'
+import { Route as AppAccountActivityRouteImport } from './routes/_app/account/activity'
+import { Route as AppAccountApplicationsRouteImport } from './routes/_app/account/applications'
+import { Route as AppAccountPreferencesRouteImport } from './routes/_app/account/preferences'
+import { Route as AppAccountSecurityRouteImport } from './routes/_app/account/security'
 import { Route as AppAdminClientsRouteImport } from './routes/_app/admin/clients'
 import { Route as AppAdminServiceAccountsRouteImport } from './routes/_app/admin/service-accounts'
+import { Route as AppChangesIndexRouteImport } from './routes/_app/changes/index'
+import { Route as AppChangesPromotionRouteImport } from './routes/_app/changes/promotion'
+import { Route as AppInfrastructureIndexRouteImport } from './routes/_app/infrastructure/index'
+import { Route as AppInfrastructureCertificatesRouteImport } from './routes/_app/infrastructure/certificates'
+import { Route as AppSettingsBreakGlassRouteImport } from './routes/_app/settings/break-glass'
+import { Route as AppSettingsEnvironmentsRouteImport } from './routes/_app/settings/environments'
+import { Route as AppSettingsInstallationRouteImport } from './routes/_app/settings/installation'
+import { Route as AppSettingsNotificationsRouteImport } from './routes/_app/settings/notifications'
+import { Route as AppSettingsPoliciesRouteImport } from './routes/_app/settings/policies'
+import { Route as AppSettingsProductsRouteImport } from './routes/_app/settings/products'
+import { Route as AppTargetsIndexRouteImport } from './routes/_app/targets/index'
+import { Route as AppTargetsRegisterRouteImport } from './routes/_app/targets/register'
 import { Route as SessionOauthConsentRouteImport } from './routes/_session/oauth/consent'
 import { Route as SessionOauthDeviceRouteImport } from './routes/_session/oauth/device'
+import { Route as AppChangesOperationsIndexRouteImport } from './routes/_app/changes/operations/index'
+import { Route as AppChangesOperationsOperationIdRouteImport } from './routes/_app/changes/operations/$operationId'
 import { Route as AppChangesPlansIndexRouteImport } from './routes/_app/changes/plans/index'
 import { Route as AppChangesPlansPlanIdRouteImport } from './routes/_app/changes/plans/$planId'
+import { Route as AppInfrastructureClustersIndexRouteImport } from './routes/_app/infrastructure/clusters/index'
+import { Route as AppInfrastructureClustersClusterIdRouteImport } from './routes/_app/infrastructure/clusters/$clusterId'
+import { Route as AppInfrastructureNodesIndexRouteImport } from './routes/_app/infrastructure/nodes/index'
+import { Route as AppInfrastructureNodesNodeIdRouteImport } from './routes/_app/infrastructure/nodes/$nodeId'
+import { Route as AppInfrastructureServersIndexRouteImport } from './routes/_app/infrastructure/servers/index'
+import { Route as AppInfrastructureServersServerIdRouteImport } from './routes/_app/infrastructure/servers/$serverId'
 import { Route as AppTProductProjectEnvironmentRouteImport } from './routes/_app/t/$product/$project/$environment'
 import { Route as AppTProductProjectEnvironmentIndexRouteImport } from './routes/_app/t/$product/$project/$environment/index'
 import { Route as AppTProductProjectEnvironmentActivityRouteImport } from './routes/_app/t/$product/$project/$environment/activity'
@@ -95,6 +125,16 @@ const AppApprovalsRoute = AppApprovalsRouteImport.update({
   path: '/approvals',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAuditRoute = AppAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppBackupsRoute = AppBackupsRouteImport.update({
+  id: '/backups',
+  path: '/backups',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppConnectRoute = AppConnectRouteImport.update({
   id: '/connect',
   path: '/connect',
@@ -115,9 +155,24 @@ const OauthErrorRoute = OauthErrorRouteImport.update({
   path: '/oauth/error',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppAccessConnectedAppsRoute = AppAccessConnectedAppsRouteImport.update({
+  id: '/access/connected-apps',
+  path: '/access/connected-apps',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAccessOauthClientsRoute = AppAccessOauthClientsRouteImport.update({
   id: '/access/oauth-clients',
   path: '/access/oauth-clients',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAccessPeopleRoute = AppAccessPeopleRouteImport.update({
+  id: '/access/people',
+  path: '/access/people',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAccessRolesRoute = AppAccessRolesRouteImport.update({
+  id: '/access/roles',
+  path: '/access/roles',
   getParentRoute: () => AppRoute,
 } as any)
 const AppAccessServiceAccountsRoute =
@@ -126,6 +181,31 @@ const AppAccessServiceAccountsRoute =
     path: '/access/service-accounts',
     getParentRoute: () => AppRoute,
   } as any)
+const AppAccountIndexRoute = AppAccountIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppAccountRoute,
+} as any)
+const AppAccountActivityRoute = AppAccountActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
+  getParentRoute: () => AppAccountRoute,
+} as any)
+const AppAccountApplicationsRoute = AppAccountApplicationsRouteImport.update({
+  id: '/applications',
+  path: '/applications',
+  getParentRoute: () => AppAccountRoute,
+} as any)
+const AppAccountPreferencesRoute = AppAccountPreferencesRouteImport.update({
+  id: '/preferences',
+  path: '/preferences',
+  getParentRoute: () => AppAccountRoute,
+} as any)
+const AppAccountSecurityRoute = AppAccountSecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
+  getParentRoute: () => AppAccountRoute,
+} as any)
 const AppAdminClientsRoute = AppAdminClientsRouteImport.update({
   id: '/admin/clients',
   path: '/admin/clients',
@@ -134,6 +214,68 @@ const AppAdminClientsRoute = AppAdminClientsRouteImport.update({
 const AppAdminServiceAccountsRoute = AppAdminServiceAccountsRouteImport.update({
   id: '/admin/service-accounts',
   path: '/admin/service-accounts',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppChangesIndexRoute = AppChangesIndexRouteImport.update({
+  id: '/changes/',
+  path: '/changes/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppChangesPromotionRoute = AppChangesPromotionRouteImport.update({
+  id: '/changes/promotion',
+  path: '/changes/promotion',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppInfrastructureIndexRoute = AppInfrastructureIndexRouteImport.update({
+  id: '/infrastructure/',
+  path: '/infrastructure/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppInfrastructureCertificatesRoute =
+  AppInfrastructureCertificatesRouteImport.update({
+    id: '/infrastructure/certificates',
+    path: '/infrastructure/certificates',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppSettingsBreakGlassRoute = AppSettingsBreakGlassRouteImport.update({
+  id: '/settings/break-glass',
+  path: '/settings/break-glass',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsEnvironmentsRoute = AppSettingsEnvironmentsRouteImport.update({
+  id: '/settings/environments',
+  path: '/settings/environments',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsInstallationRoute = AppSettingsInstallationRouteImport.update({
+  id: '/settings/installation',
+  path: '/settings/installation',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsNotificationsRoute =
+  AppSettingsNotificationsRouteImport.update({
+    id: '/settings/notifications',
+    path: '/settings/notifications',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppSettingsPoliciesRoute = AppSettingsPoliciesRouteImport.update({
+  id: '/settings/policies',
+  path: '/settings/policies',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsProductsRoute = AppSettingsProductsRouteImport.update({
+  id: '/settings/products',
+  path: '/settings/products',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTargetsIndexRoute = AppTargetsIndexRouteImport.update({
+  id: '/targets/',
+  path: '/targets/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTargetsRegisterRoute = AppTargetsRegisterRouteImport.update({
+  id: '/targets/register',
+  path: '/targets/register',
   getParentRoute: () => AppRoute,
 } as any)
 const SessionOauthConsentRoute = SessionOauthConsentRouteImport.update({
@@ -146,6 +288,18 @@ const SessionOauthDeviceRoute = SessionOauthDeviceRouteImport.update({
   path: '/oauth/device',
   getParentRoute: () => SessionRoute,
 } as any)
+const AppChangesOperationsIndexRoute =
+  AppChangesOperationsIndexRouteImport.update({
+    id: '/changes/operations/',
+    path: '/changes/operations/',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppChangesOperationsOperationIdRoute =
+  AppChangesOperationsOperationIdRouteImport.update({
+    id: '/changes/operations/$operationId',
+    path: '/changes/operations/$operationId',
+    getParentRoute: () => AppRoute,
+  } as any)
 const AppChangesPlansIndexRoute = AppChangesPlansIndexRouteImport.update({
   id: '/changes/plans/',
   path: '/changes/plans/',
@@ -156,6 +310,42 @@ const AppChangesPlansPlanIdRoute = AppChangesPlansPlanIdRouteImport.update({
   path: '/changes/plans/$planId',
   getParentRoute: () => AppRoute,
 } as any)
+const AppInfrastructureClustersIndexRoute =
+  AppInfrastructureClustersIndexRouteImport.update({
+    id: '/infrastructure/clusters/',
+    path: '/infrastructure/clusters/',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppInfrastructureClustersClusterIdRoute =
+  AppInfrastructureClustersClusterIdRouteImport.update({
+    id: '/infrastructure/clusters/$clusterId',
+    path: '/infrastructure/clusters/$clusterId',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppInfrastructureNodesIndexRoute =
+  AppInfrastructureNodesIndexRouteImport.update({
+    id: '/infrastructure/nodes/',
+    path: '/infrastructure/nodes/',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppInfrastructureNodesNodeIdRoute =
+  AppInfrastructureNodesNodeIdRouteImport.update({
+    id: '/infrastructure/nodes/$nodeId',
+    path: '/infrastructure/nodes/$nodeId',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppInfrastructureServersIndexRoute =
+  AppInfrastructureServersIndexRouteImport.update({
+    id: '/infrastructure/servers/',
+    path: '/infrastructure/servers/',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppInfrastructureServersServerIdRoute =
+  AppInfrastructureServersServerIdRouteImport.update({
+    id: '/infrastructure/servers/$serverId',
+    path: '/infrastructure/servers/$serverId',
+    getParentRoute: () => AppRoute,
+  } as any)
 const AppTProductProjectEnvironmentRoute =
   AppTProductProjectEnvironmentRouteImport.update({
     id: '/t/$product/$project/$environment',
@@ -254,20 +444,50 @@ export interface FileRoutesByFullPath {
   '/recover': typeof RecoverRoute
   '/setup': typeof SetupRoute
   '/$': typeof AppSplatRoute
-  '/account': typeof AppAccountRoute
+  '/account': typeof AppAccountRouteWithChildren
   '/approvals': typeof AppApprovalsRoute
+  '/audit': typeof AppAuditRoute
+  '/backups': typeof AppBackupsRoute
   '/connect': typeof AppConnectRoute
   '/credentials': typeof SessionCredentialsRoute
   '/step-up': typeof SessionStepUpRoute
   '/oauth/error': typeof OauthErrorRoute
+  '/access/connected-apps': typeof AppAccessConnectedAppsRoute
   '/access/oauth-clients': typeof AppAccessOauthClientsRoute
+  '/access/people': typeof AppAccessPeopleRoute
+  '/access/roles': typeof AppAccessRolesRoute
   '/access/service-accounts': typeof AppAccessServiceAccountsRoute
+  '/account/activity': typeof AppAccountActivityRoute
+  '/account/applications': typeof AppAccountApplicationsRoute
+  '/account/preferences': typeof AppAccountPreferencesRoute
+  '/account/security': typeof AppAccountSecurityRoute
   '/admin/clients': typeof AppAdminClientsRoute
   '/admin/service-accounts': typeof AppAdminServiceAccountsRoute
+  '/changes/promotion': typeof AppChangesPromotionRoute
+  '/infrastructure/certificates': typeof AppInfrastructureCertificatesRoute
+  '/settings/break-glass': typeof AppSettingsBreakGlassRoute
+  '/settings/environments': typeof AppSettingsEnvironmentsRoute
+  '/settings/installation': typeof AppSettingsInstallationRoute
+  '/settings/notifications': typeof AppSettingsNotificationsRoute
+  '/settings/policies': typeof AppSettingsPoliciesRoute
+  '/settings/products': typeof AppSettingsProductsRoute
+  '/targets/register': typeof AppTargetsRegisterRoute
   '/oauth/consent': typeof SessionOauthConsentRoute
   '/oauth/device': typeof SessionOauthDeviceRoute
+  '/account/': typeof AppAccountIndexRoute
+  '/changes/': typeof AppChangesIndexRoute
+  '/infrastructure/': typeof AppInfrastructureIndexRoute
+  '/targets/': typeof AppTargetsIndexRoute
+  '/changes/operations/$operationId': typeof AppChangesOperationsOperationIdRoute
   '/changes/plans/$planId': typeof AppChangesPlansPlanIdRoute
+  '/infrastructure/clusters/$clusterId': typeof AppInfrastructureClustersClusterIdRoute
+  '/infrastructure/nodes/$nodeId': typeof AppInfrastructureNodesNodeIdRoute
+  '/infrastructure/servers/$serverId': typeof AppInfrastructureServersServerIdRoute
+  '/changes/operations/': typeof AppChangesOperationsIndexRoute
   '/changes/plans/': typeof AppChangesPlansIndexRoute
+  '/infrastructure/clusters/': typeof AppInfrastructureClustersIndexRoute
+  '/infrastructure/nodes/': typeof AppInfrastructureNodesIndexRoute
+  '/infrastructure/servers/': typeof AppInfrastructureServersIndexRoute
   '/t/$product/$project/$environment': typeof AppTProductProjectEnvironmentRouteWithChildren
   '/t/$product/$project/$environment/activity': typeof AppTProductProjectEnvironmentActivityRoute
   '/t/$product/$project/$environment/advisors': typeof AppTProductProjectEnvironmentAdvisorsRoute
@@ -291,20 +511,49 @@ export interface FileRoutesByTo {
   '/recover': typeof RecoverRoute
   '/setup': typeof SetupRoute
   '/$': typeof AppSplatRoute
-  '/account': typeof AppAccountRoute
   '/approvals': typeof AppApprovalsRoute
+  '/audit': typeof AppAuditRoute
+  '/backups': typeof AppBackupsRoute
   '/connect': typeof AppConnectRoute
   '/credentials': typeof SessionCredentialsRoute
   '/step-up': typeof SessionStepUpRoute
   '/oauth/error': typeof OauthErrorRoute
+  '/access/connected-apps': typeof AppAccessConnectedAppsRoute
   '/access/oauth-clients': typeof AppAccessOauthClientsRoute
+  '/access/people': typeof AppAccessPeopleRoute
+  '/access/roles': typeof AppAccessRolesRoute
   '/access/service-accounts': typeof AppAccessServiceAccountsRoute
+  '/account/activity': typeof AppAccountActivityRoute
+  '/account/applications': typeof AppAccountApplicationsRoute
+  '/account/preferences': typeof AppAccountPreferencesRoute
+  '/account/security': typeof AppAccountSecurityRoute
   '/admin/clients': typeof AppAdminClientsRoute
   '/admin/service-accounts': typeof AppAdminServiceAccountsRoute
+  '/changes/promotion': typeof AppChangesPromotionRoute
+  '/infrastructure/certificates': typeof AppInfrastructureCertificatesRoute
+  '/settings/break-glass': typeof AppSettingsBreakGlassRoute
+  '/settings/environments': typeof AppSettingsEnvironmentsRoute
+  '/settings/installation': typeof AppSettingsInstallationRoute
+  '/settings/notifications': typeof AppSettingsNotificationsRoute
+  '/settings/policies': typeof AppSettingsPoliciesRoute
+  '/settings/products': typeof AppSettingsProductsRoute
+  '/targets/register': typeof AppTargetsRegisterRoute
   '/oauth/consent': typeof SessionOauthConsentRoute
   '/oauth/device': typeof SessionOauthDeviceRoute
+  '/account': typeof AppAccountIndexRoute
+  '/changes': typeof AppChangesIndexRoute
+  '/infrastructure': typeof AppInfrastructureIndexRoute
+  '/targets': typeof AppTargetsIndexRoute
+  '/changes/operations/$operationId': typeof AppChangesOperationsOperationIdRoute
   '/changes/plans/$planId': typeof AppChangesPlansPlanIdRoute
+  '/infrastructure/clusters/$clusterId': typeof AppInfrastructureClustersClusterIdRoute
+  '/infrastructure/nodes/$nodeId': typeof AppInfrastructureNodesNodeIdRoute
+  '/infrastructure/servers/$serverId': typeof AppInfrastructureServersServerIdRoute
+  '/changes/operations': typeof AppChangesOperationsIndexRoute
   '/changes/plans': typeof AppChangesPlansIndexRoute
+  '/infrastructure/clusters': typeof AppInfrastructureClustersIndexRoute
+  '/infrastructure/nodes': typeof AppInfrastructureNodesIndexRoute
+  '/infrastructure/servers': typeof AppInfrastructureServersIndexRoute
   '/t/$product/$project/$environment/activity': typeof AppTProductProjectEnvironmentActivityRoute
   '/t/$product/$project/$environment/advisors': typeof AppTProductProjectEnvironmentAdvisorsRoute
   '/t/$product/$project/$environment/backups': typeof AppTProductProjectEnvironmentBackupsRoute
@@ -329,21 +578,51 @@ export interface FileRoutesById {
   '/recover': typeof RecoverRoute
   '/setup': typeof SetupRoute
   '/_app/$': typeof AppSplatRoute
-  '/_app/account': typeof AppAccountRoute
+  '/_app/account': typeof AppAccountRouteWithChildren
   '/_app/approvals': typeof AppApprovalsRoute
+  '/_app/audit': typeof AppAuditRoute
+  '/_app/backups': typeof AppBackupsRoute
   '/_app/connect': typeof AppConnectRoute
   '/_session/credentials': typeof SessionCredentialsRoute
   '/_session/step-up': typeof SessionStepUpRoute
   '/oauth/error': typeof OauthErrorRoute
   '/_app/': typeof AppIndexRoute
+  '/_app/access/connected-apps': typeof AppAccessConnectedAppsRoute
   '/_app/access/oauth-clients': typeof AppAccessOauthClientsRoute
+  '/_app/access/people': typeof AppAccessPeopleRoute
+  '/_app/access/roles': typeof AppAccessRolesRoute
   '/_app/access/service-accounts': typeof AppAccessServiceAccountsRoute
+  '/_app/account/activity': typeof AppAccountActivityRoute
+  '/_app/account/applications': typeof AppAccountApplicationsRoute
+  '/_app/account/preferences': typeof AppAccountPreferencesRoute
+  '/_app/account/security': typeof AppAccountSecurityRoute
   '/_app/admin/clients': typeof AppAdminClientsRoute
   '/_app/admin/service-accounts': typeof AppAdminServiceAccountsRoute
+  '/_app/changes/promotion': typeof AppChangesPromotionRoute
+  '/_app/infrastructure/certificates': typeof AppInfrastructureCertificatesRoute
+  '/_app/settings/break-glass': typeof AppSettingsBreakGlassRoute
+  '/_app/settings/environments': typeof AppSettingsEnvironmentsRoute
+  '/_app/settings/installation': typeof AppSettingsInstallationRoute
+  '/_app/settings/notifications': typeof AppSettingsNotificationsRoute
+  '/_app/settings/policies': typeof AppSettingsPoliciesRoute
+  '/_app/settings/products': typeof AppSettingsProductsRoute
+  '/_app/targets/register': typeof AppTargetsRegisterRoute
   '/_session/oauth/consent': typeof SessionOauthConsentRoute
   '/_session/oauth/device': typeof SessionOauthDeviceRoute
+  '/_app/account/': typeof AppAccountIndexRoute
+  '/_app/changes/': typeof AppChangesIndexRoute
+  '/_app/infrastructure/': typeof AppInfrastructureIndexRoute
+  '/_app/targets/': typeof AppTargetsIndexRoute
+  '/_app/changes/operations/$operationId': typeof AppChangesOperationsOperationIdRoute
   '/_app/changes/plans/$planId': typeof AppChangesPlansPlanIdRoute
+  '/_app/infrastructure/clusters/$clusterId': typeof AppInfrastructureClustersClusterIdRoute
+  '/_app/infrastructure/nodes/$nodeId': typeof AppInfrastructureNodesNodeIdRoute
+  '/_app/infrastructure/servers/$serverId': typeof AppInfrastructureServersServerIdRoute
+  '/_app/changes/operations/': typeof AppChangesOperationsIndexRoute
   '/_app/changes/plans/': typeof AppChangesPlansIndexRoute
+  '/_app/infrastructure/clusters/': typeof AppInfrastructureClustersIndexRoute
+  '/_app/infrastructure/nodes/': typeof AppInfrastructureNodesIndexRoute
+  '/_app/infrastructure/servers/': typeof AppInfrastructureServersIndexRoute
   '/_app/t/$product/$project/$environment': typeof AppTProductProjectEnvironmentRouteWithChildren
   '/_app/t/$product/$project/$environment/activity': typeof AppTProductProjectEnvironmentActivityRoute
   '/_app/t/$product/$project/$environment/advisors': typeof AppTProductProjectEnvironmentAdvisorsRoute
@@ -371,18 +650,48 @@ export interface FileRouteTypes {
     | '/$'
     | '/account'
     | '/approvals'
+    | '/audit'
+    | '/backups'
     | '/connect'
     | '/credentials'
     | '/step-up'
     | '/oauth/error'
+    | '/access/connected-apps'
     | '/access/oauth-clients'
+    | '/access/people'
+    | '/access/roles'
     | '/access/service-accounts'
+    | '/account/activity'
+    | '/account/applications'
+    | '/account/preferences'
+    | '/account/security'
     | '/admin/clients'
     | '/admin/service-accounts'
+    | '/changes/promotion'
+    | '/infrastructure/certificates'
+    | '/settings/break-glass'
+    | '/settings/environments'
+    | '/settings/installation'
+    | '/settings/notifications'
+    | '/settings/policies'
+    | '/settings/products'
+    | '/targets/register'
     | '/oauth/consent'
     | '/oauth/device'
+    | '/account/'
+    | '/changes/'
+    | '/infrastructure/'
+    | '/targets/'
+    | '/changes/operations/$operationId'
     | '/changes/plans/$planId'
+    | '/infrastructure/clusters/$clusterId'
+    | '/infrastructure/nodes/$nodeId'
+    | '/infrastructure/servers/$serverId'
+    | '/changes/operations/'
     | '/changes/plans/'
+    | '/infrastructure/clusters/'
+    | '/infrastructure/nodes/'
+    | '/infrastructure/servers/'
     | '/t/$product/$project/$environment'
     | '/t/$product/$project/$environment/activity'
     | '/t/$product/$project/$environment/advisors'
@@ -406,20 +715,49 @@ export interface FileRouteTypes {
     | '/recover'
     | '/setup'
     | '/$'
-    | '/account'
     | '/approvals'
+    | '/audit'
+    | '/backups'
     | '/connect'
     | '/credentials'
     | '/step-up'
     | '/oauth/error'
+    | '/access/connected-apps'
     | '/access/oauth-clients'
+    | '/access/people'
+    | '/access/roles'
     | '/access/service-accounts'
+    | '/account/activity'
+    | '/account/applications'
+    | '/account/preferences'
+    | '/account/security'
     | '/admin/clients'
     | '/admin/service-accounts'
+    | '/changes/promotion'
+    | '/infrastructure/certificates'
+    | '/settings/break-glass'
+    | '/settings/environments'
+    | '/settings/installation'
+    | '/settings/notifications'
+    | '/settings/policies'
+    | '/settings/products'
+    | '/targets/register'
     | '/oauth/consent'
     | '/oauth/device'
+    | '/account'
+    | '/changes'
+    | '/infrastructure'
+    | '/targets'
+    | '/changes/operations/$operationId'
     | '/changes/plans/$planId'
+    | '/infrastructure/clusters/$clusterId'
+    | '/infrastructure/nodes/$nodeId'
+    | '/infrastructure/servers/$serverId'
+    | '/changes/operations'
     | '/changes/plans'
+    | '/infrastructure/clusters'
+    | '/infrastructure/nodes'
+    | '/infrastructure/servers'
     | '/t/$product/$project/$environment/activity'
     | '/t/$product/$project/$environment/advisors'
     | '/t/$product/$project/$environment/backups'
@@ -445,19 +783,49 @@ export interface FileRouteTypes {
     | '/_app/$'
     | '/_app/account'
     | '/_app/approvals'
+    | '/_app/audit'
+    | '/_app/backups'
     | '/_app/connect'
     | '/_session/credentials'
     | '/_session/step-up'
     | '/oauth/error'
     | '/_app/'
+    | '/_app/access/connected-apps'
     | '/_app/access/oauth-clients'
+    | '/_app/access/people'
+    | '/_app/access/roles'
     | '/_app/access/service-accounts'
+    | '/_app/account/activity'
+    | '/_app/account/applications'
+    | '/_app/account/preferences'
+    | '/_app/account/security'
     | '/_app/admin/clients'
     | '/_app/admin/service-accounts'
+    | '/_app/changes/promotion'
+    | '/_app/infrastructure/certificates'
+    | '/_app/settings/break-glass'
+    | '/_app/settings/environments'
+    | '/_app/settings/installation'
+    | '/_app/settings/notifications'
+    | '/_app/settings/policies'
+    | '/_app/settings/products'
+    | '/_app/targets/register'
     | '/_session/oauth/consent'
     | '/_session/oauth/device'
+    | '/_app/account/'
+    | '/_app/changes/'
+    | '/_app/infrastructure/'
+    | '/_app/targets/'
+    | '/_app/changes/operations/$operationId'
     | '/_app/changes/plans/$planId'
+    | '/_app/infrastructure/clusters/$clusterId'
+    | '/_app/infrastructure/nodes/$nodeId'
+    | '/_app/infrastructure/servers/$serverId'
+    | '/_app/changes/operations/'
     | '/_app/changes/plans/'
+    | '/_app/infrastructure/clusters/'
+    | '/_app/infrastructure/nodes/'
+    | '/_app/infrastructure/servers/'
     | '/_app/t/$product/$project/$environment'
     | '/_app/t/$product/$project/$environment/activity'
     | '/_app/t/$product/$project/$environment/advisors'
@@ -557,6 +925,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppApprovalsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/audit': {
+      id: '/_app/audit'
+      path: '/audit'
+      fullPath: '/audit'
+      preLoaderRoute: typeof AppAuditRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/backups': {
+      id: '/_app/backups'
+      path: '/backups'
+      fullPath: '/backups'
+      preLoaderRoute: typeof AppBackupsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/connect': {
       id: '/_app/connect'
       path: '/connect'
@@ -585,11 +967,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OauthErrorRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/access/connected-apps': {
+      id: '/_app/access/connected-apps'
+      path: '/access/connected-apps'
+      fullPath: '/access/connected-apps'
+      preLoaderRoute: typeof AppAccessConnectedAppsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/access/oauth-clients': {
       id: '/_app/access/oauth-clients'
       path: '/access/oauth-clients'
       fullPath: '/access/oauth-clients'
       preLoaderRoute: typeof AppAccessOauthClientsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/access/people': {
+      id: '/_app/access/people'
+      path: '/access/people'
+      fullPath: '/access/people'
+      preLoaderRoute: typeof AppAccessPeopleRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/access/roles': {
+      id: '/_app/access/roles'
+      path: '/access/roles'
+      fullPath: '/access/roles'
+      preLoaderRoute: typeof AppAccessRolesRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/access/service-accounts': {
@@ -598,6 +1001,41 @@ declare module '@tanstack/react-router' {
       fullPath: '/access/service-accounts'
       preLoaderRoute: typeof AppAccessServiceAccountsRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_app/account/': {
+      id: '/_app/account/'
+      path: '/'
+      fullPath: '/account/'
+      preLoaderRoute: typeof AppAccountIndexRouteImport
+      parentRoute: typeof AppAccountRoute
+    }
+    '/_app/account/activity': {
+      id: '/_app/account/activity'
+      path: '/activity'
+      fullPath: '/account/activity'
+      preLoaderRoute: typeof AppAccountActivityRouteImport
+      parentRoute: typeof AppAccountRoute
+    }
+    '/_app/account/applications': {
+      id: '/_app/account/applications'
+      path: '/applications'
+      fullPath: '/account/applications'
+      preLoaderRoute: typeof AppAccountApplicationsRouteImport
+      parentRoute: typeof AppAccountRoute
+    }
+    '/_app/account/preferences': {
+      id: '/_app/account/preferences'
+      path: '/preferences'
+      fullPath: '/account/preferences'
+      preLoaderRoute: typeof AppAccountPreferencesRouteImport
+      parentRoute: typeof AppAccountRoute
+    }
+    '/_app/account/security': {
+      id: '/_app/account/security'
+      path: '/security'
+      fullPath: '/account/security'
+      preLoaderRoute: typeof AppAccountSecurityRouteImport
+      parentRoute: typeof AppAccountRoute
     }
     '/_app/admin/clients': {
       id: '/_app/admin/clients'
@@ -611,6 +1049,90 @@ declare module '@tanstack/react-router' {
       path: '/admin/service-accounts'
       fullPath: '/admin/service-accounts'
       preLoaderRoute: typeof AppAdminServiceAccountsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/changes/': {
+      id: '/_app/changes/'
+      path: '/changes'
+      fullPath: '/changes/'
+      preLoaderRoute: typeof AppChangesIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/changes/promotion': {
+      id: '/_app/changes/promotion'
+      path: '/changes/promotion'
+      fullPath: '/changes/promotion'
+      preLoaderRoute: typeof AppChangesPromotionRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/infrastructure/': {
+      id: '/_app/infrastructure/'
+      path: '/infrastructure'
+      fullPath: '/infrastructure/'
+      preLoaderRoute: typeof AppInfrastructureIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/infrastructure/certificates': {
+      id: '/_app/infrastructure/certificates'
+      path: '/infrastructure/certificates'
+      fullPath: '/infrastructure/certificates'
+      preLoaderRoute: typeof AppInfrastructureCertificatesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings/break-glass': {
+      id: '/_app/settings/break-glass'
+      path: '/settings/break-glass'
+      fullPath: '/settings/break-glass'
+      preLoaderRoute: typeof AppSettingsBreakGlassRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings/environments': {
+      id: '/_app/settings/environments'
+      path: '/settings/environments'
+      fullPath: '/settings/environments'
+      preLoaderRoute: typeof AppSettingsEnvironmentsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings/installation': {
+      id: '/_app/settings/installation'
+      path: '/settings/installation'
+      fullPath: '/settings/installation'
+      preLoaderRoute: typeof AppSettingsInstallationRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings/notifications': {
+      id: '/_app/settings/notifications'
+      path: '/settings/notifications'
+      fullPath: '/settings/notifications'
+      preLoaderRoute: typeof AppSettingsNotificationsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings/policies': {
+      id: '/_app/settings/policies'
+      path: '/settings/policies'
+      fullPath: '/settings/policies'
+      preLoaderRoute: typeof AppSettingsPoliciesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings/products': {
+      id: '/_app/settings/products'
+      path: '/settings/products'
+      fullPath: '/settings/products'
+      preLoaderRoute: typeof AppSettingsProductsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/targets/': {
+      id: '/_app/targets/'
+      path: '/targets'
+      fullPath: '/targets/'
+      preLoaderRoute: typeof AppTargetsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/targets/register': {
+      id: '/_app/targets/register'
+      path: '/targets/register'
+      fullPath: '/targets/register'
+      preLoaderRoute: typeof AppTargetsRegisterRouteImport
       parentRoute: typeof AppRoute
     }
     '/_session/oauth/consent': {
@@ -627,6 +1149,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SessionOauthDeviceRouteImport
       parentRoute: typeof SessionRoute
     }
+    '/_app/changes/operations/': {
+      id: '/_app/changes/operations/'
+      path: '/changes/operations'
+      fullPath: '/changes/operations/'
+      preLoaderRoute: typeof AppChangesOperationsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/changes/operations/$operationId': {
+      id: '/_app/changes/operations/$operationId'
+      path: '/changes/operations/$operationId'
+      fullPath: '/changes/operations/$operationId'
+      preLoaderRoute: typeof AppChangesOperationsOperationIdRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/changes/plans/': {
       id: '/_app/changes/plans/'
       path: '/changes/plans'
@@ -639,6 +1175,48 @@ declare module '@tanstack/react-router' {
       path: '/changes/plans/$planId'
       fullPath: '/changes/plans/$planId'
       preLoaderRoute: typeof AppChangesPlansPlanIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/infrastructure/clusters/': {
+      id: '/_app/infrastructure/clusters/'
+      path: '/infrastructure/clusters'
+      fullPath: '/infrastructure/clusters/'
+      preLoaderRoute: typeof AppInfrastructureClustersIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/infrastructure/clusters/$clusterId': {
+      id: '/_app/infrastructure/clusters/$clusterId'
+      path: '/infrastructure/clusters/$clusterId'
+      fullPath: '/infrastructure/clusters/$clusterId'
+      preLoaderRoute: typeof AppInfrastructureClustersClusterIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/infrastructure/nodes/': {
+      id: '/_app/infrastructure/nodes/'
+      path: '/infrastructure/nodes'
+      fullPath: '/infrastructure/nodes/'
+      preLoaderRoute: typeof AppInfrastructureNodesIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/infrastructure/nodes/$nodeId': {
+      id: '/_app/infrastructure/nodes/$nodeId'
+      path: '/infrastructure/nodes/$nodeId'
+      fullPath: '/infrastructure/nodes/$nodeId'
+      preLoaderRoute: typeof AppInfrastructureNodesNodeIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/infrastructure/servers/': {
+      id: '/_app/infrastructure/servers/'
+      path: '/infrastructure/servers'
+      fullPath: '/infrastructure/servers/'
+      preLoaderRoute: typeof AppInfrastructureServersIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/infrastructure/servers/$serverId': {
+      id: '/_app/infrastructure/servers/$serverId'
+      path: '/infrastructure/servers/$serverId'
+      fullPath: '/infrastructure/servers/$serverId'
+      preLoaderRoute: typeof AppInfrastructureServersServerIdRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/t/$product/$project/$environment': {
@@ -749,6 +1327,26 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppAccountRouteChildren {
+  AppAccountActivityRoute: typeof AppAccountActivityRoute
+  AppAccountApplicationsRoute: typeof AppAccountApplicationsRoute
+  AppAccountPreferencesRoute: typeof AppAccountPreferencesRoute
+  AppAccountSecurityRoute: typeof AppAccountSecurityRoute
+  AppAccountIndexRoute: typeof AppAccountIndexRoute
+}
+
+const AppAccountRouteChildren: AppAccountRouteChildren = {
+  AppAccountActivityRoute: AppAccountActivityRoute,
+  AppAccountApplicationsRoute: AppAccountApplicationsRoute,
+  AppAccountPreferencesRoute: AppAccountPreferencesRoute,
+  AppAccountSecurityRoute: AppAccountSecurityRoute,
+  AppAccountIndexRoute: AppAccountIndexRoute,
+}
+
+const AppAccountRouteWithChildren = AppAccountRoute._addFileChildren(
+  AppAccountRouteChildren,
+)
+
 interface AppTProductProjectEnvironmentRouteChildren {
   AppTProductProjectEnvironmentActivityRoute: typeof AppTProductProjectEnvironmentActivityRoute
   AppTProductProjectEnvironmentAdvisorsRoute: typeof AppTProductProjectEnvironmentAdvisorsRoute
@@ -805,31 +1403,82 @@ const AppTProductProjectEnvironmentRouteWithChildren =
 
 interface AppRouteChildren {
   AppSplatRoute: typeof AppSplatRoute
-  AppAccountRoute: typeof AppAccountRoute
+  AppAccountRoute: typeof AppAccountRouteWithChildren
   AppApprovalsRoute: typeof AppApprovalsRoute
+  AppAuditRoute: typeof AppAuditRoute
+  AppBackupsRoute: typeof AppBackupsRoute
   AppConnectRoute: typeof AppConnectRoute
   AppIndexRoute: typeof AppIndexRoute
+  AppAccessConnectedAppsRoute: typeof AppAccessConnectedAppsRoute
   AppAccessOauthClientsRoute: typeof AppAccessOauthClientsRoute
+  AppAccessPeopleRoute: typeof AppAccessPeopleRoute
+  AppAccessRolesRoute: typeof AppAccessRolesRoute
   AppAccessServiceAccountsRoute: typeof AppAccessServiceAccountsRoute
   AppAdminClientsRoute: typeof AppAdminClientsRoute
   AppAdminServiceAccountsRoute: typeof AppAdminServiceAccountsRoute
+  AppChangesPromotionRoute: typeof AppChangesPromotionRoute
+  AppInfrastructureCertificatesRoute: typeof AppInfrastructureCertificatesRoute
+  AppSettingsBreakGlassRoute: typeof AppSettingsBreakGlassRoute
+  AppSettingsEnvironmentsRoute: typeof AppSettingsEnvironmentsRoute
+  AppSettingsInstallationRoute: typeof AppSettingsInstallationRoute
+  AppSettingsNotificationsRoute: typeof AppSettingsNotificationsRoute
+  AppSettingsPoliciesRoute: typeof AppSettingsPoliciesRoute
+  AppSettingsProductsRoute: typeof AppSettingsProductsRoute
+  AppTargetsRegisterRoute: typeof AppTargetsRegisterRoute
+  AppChangesIndexRoute: typeof AppChangesIndexRoute
+  AppInfrastructureIndexRoute: typeof AppInfrastructureIndexRoute
+  AppTargetsIndexRoute: typeof AppTargetsIndexRoute
+  AppChangesOperationsOperationIdRoute: typeof AppChangesOperationsOperationIdRoute
   AppChangesPlansPlanIdRoute: typeof AppChangesPlansPlanIdRoute
+  AppInfrastructureClustersClusterIdRoute: typeof AppInfrastructureClustersClusterIdRoute
+  AppInfrastructureNodesNodeIdRoute: typeof AppInfrastructureNodesNodeIdRoute
+  AppInfrastructureServersServerIdRoute: typeof AppInfrastructureServersServerIdRoute
+  AppChangesOperationsIndexRoute: typeof AppChangesOperationsIndexRoute
   AppChangesPlansIndexRoute: typeof AppChangesPlansIndexRoute
+  AppInfrastructureClustersIndexRoute: typeof AppInfrastructureClustersIndexRoute
+  AppInfrastructureNodesIndexRoute: typeof AppInfrastructureNodesIndexRoute
+  AppInfrastructureServersIndexRoute: typeof AppInfrastructureServersIndexRoute
   AppTProductProjectEnvironmentRoute: typeof AppTProductProjectEnvironmentRouteWithChildren
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppSplatRoute: AppSplatRoute,
-  AppAccountRoute: AppAccountRoute,
+  AppAccountRoute: AppAccountRouteWithChildren,
   AppApprovalsRoute: AppApprovalsRoute,
+  AppAuditRoute: AppAuditRoute,
+  AppBackupsRoute: AppBackupsRoute,
   AppConnectRoute: AppConnectRoute,
   AppIndexRoute: AppIndexRoute,
+  AppAccessConnectedAppsRoute: AppAccessConnectedAppsRoute,
   AppAccessOauthClientsRoute: AppAccessOauthClientsRoute,
+  AppAccessPeopleRoute: AppAccessPeopleRoute,
+  AppAccessRolesRoute: AppAccessRolesRoute,
   AppAccessServiceAccountsRoute: AppAccessServiceAccountsRoute,
   AppAdminClientsRoute: AppAdminClientsRoute,
   AppAdminServiceAccountsRoute: AppAdminServiceAccountsRoute,
+  AppChangesPromotionRoute: AppChangesPromotionRoute,
+  AppInfrastructureCertificatesRoute: AppInfrastructureCertificatesRoute,
+  AppSettingsBreakGlassRoute: AppSettingsBreakGlassRoute,
+  AppSettingsEnvironmentsRoute: AppSettingsEnvironmentsRoute,
+  AppSettingsInstallationRoute: AppSettingsInstallationRoute,
+  AppSettingsNotificationsRoute: AppSettingsNotificationsRoute,
+  AppSettingsPoliciesRoute: AppSettingsPoliciesRoute,
+  AppSettingsProductsRoute: AppSettingsProductsRoute,
+  AppTargetsRegisterRoute: AppTargetsRegisterRoute,
+  AppChangesIndexRoute: AppChangesIndexRoute,
+  AppInfrastructureIndexRoute: AppInfrastructureIndexRoute,
+  AppTargetsIndexRoute: AppTargetsIndexRoute,
+  AppChangesOperationsOperationIdRoute: AppChangesOperationsOperationIdRoute,
   AppChangesPlansPlanIdRoute: AppChangesPlansPlanIdRoute,
+  AppInfrastructureClustersClusterIdRoute:
+    AppInfrastructureClustersClusterIdRoute,
+  AppInfrastructureNodesNodeIdRoute: AppInfrastructureNodesNodeIdRoute,
+  AppInfrastructureServersServerIdRoute: AppInfrastructureServersServerIdRoute,
+  AppChangesOperationsIndexRoute: AppChangesOperationsIndexRoute,
   AppChangesPlansIndexRoute: AppChangesPlansIndexRoute,
+  AppInfrastructureClustersIndexRoute: AppInfrastructureClustersIndexRoute,
+  AppInfrastructureNodesIndexRoute: AppInfrastructureNodesIndexRoute,
+  AppInfrastructureServersIndexRoute: AppInfrastructureServersIndexRoute,
   AppTProductProjectEnvironmentRoute:
     AppTProductProjectEnvironmentRouteWithChildren,
 }

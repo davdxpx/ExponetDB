@@ -14,4 +14,3 @@ coverage/
 .exdb-dev-targets/
 .exdb-dev-node/
 test-results/
-dist-app/
