@@ -367,6 +367,8 @@ describe('ShadowScrollArea in a table', () => {
     const outer = scroller.parentElement as HTMLElement
     expect(scroller.className).toContain('overflow-auto')
     expect(scroller.className).toContain('w-full')
+    // Positioned, so `sr-only` text of a far column scrolls with the box and never widens the page.
+    expect(scroller).toHaveClass('relative')
     // A flex or grid parent would otherwise size the region to the table's content.
     expect(outer.className).toContain('min-w-0')
     expect(outer.className).toContain('max-w-full')

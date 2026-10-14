@@ -106,7 +106,7 @@ function StatusBody({ status }: { readonly status: TargetMigrations }): ReactNod
         {last === undefined ? (
           <span>{t('overview.migrations.noneApplied')}</span>
         ) : (
-          <span>
+          <span className="min-w-0 max-w-full">
             {t('overview.migrations.lastApplied')}{' '}
             <UntrustedName name={last.name} mono label={t('overview.migrations.title')} />{' '}
             <ObservedTime observedAt={last.appliedAt} />

@@ -28,6 +28,7 @@ import {
   SidebarProvider,
   SidebarSeparator,
   SidebarTrigger,
+  useIsMobile,
   useSidebar,
 } from '@exponetdb/ui'
 import {
@@ -116,6 +117,7 @@ function ShellFrame({ children }: { readonly children: ReactNode }): ReactNode {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const mode = useSidebarMode()
   const Link = useLinkComponent()
+  const isMobile = useIsMobile()
   const section = sectionOf(pathname)
   const menu = section === undefined ? [] : sectionMenu(section.id)
   return (
@@ -173,7 +175,9 @@ function ShellFrame({ children }: { readonly children: ReactNode }): ReactNode {
             <AccountMenu />
           </div>
         </header>
-        {section !== undefined && menu.length > 0 ? (
+        {/* Below md the section menu lives in the off-canvas rail; a panel group would still reserve its
+            256 px (the panel's own inline `display: flex` beats a `hidden` class). */}
+        {section !== undefined && menu.length > 0 && !isMobile ? (
           <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
             <ResizablePanel
               id="section-menu"

@@ -64,17 +64,17 @@ function LedgerBody({ status }: { readonly status: MigrationStatus }): ReactNode
         ) : (
           <SourceLabel source={source} />
         )}
-        <span>
+        <span className="min-w-0 max-w-full">
           {t('migrations.ledger.observed')} <ObservedTime observedAt={status.observedAt} withDate />
         </span>
         {status.baselineId === null ? null : (
-          <span>
+          <span className="min-w-0 max-w-full">
             {t('migrations.ledger.baseline')}{' '}
             <UntrustedName name={status.baselineId} mono label={t('migrations.ledger.baseline')} />
           </span>
         )}
         {status.ledgerStateHash === null ? null : (
-          <span>
+          <span className="min-w-0 max-w-full">
             {t('migrations.ledger.hash')}{' '}
             <UntrustedName
               name={status.ledgerStateHash}

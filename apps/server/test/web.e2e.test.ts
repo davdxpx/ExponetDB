@@ -524,6 +524,182 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
       }
       await route.fallback()
     })
+    // The reads of the migrations and activity pages answer with real-looking, long values (ids,
+    // checksums, long names), so a wide cell or a nowrap row shows up as overflow.
+    const ulid = (n: number) => `01M4S9${String(n).padStart(20, '0')}`
+    const ago = (ms: number) => new Date(Date.now() - ms).toISOString()
+    const stagingPath = 'shop/platform/staging'
+    const subject = {
+      clusterId: null,
+      nodeId: null,
+      targetId: null,
+      targetPath: stagingPath,
+      tier: 'nonprod',
+    }
+    const environmentOf = (slug: string, tier: string, rank: number) => ({
+      slug,
+      displayName: slug,
+      tier,
+      evidenceFrom: rank === 0 ? null : 'development',
+      rank,
+      target: {
+        id: `tgt_${ulid(rank + 50)}`,
+        path: `shop/platform/${slug}`,
+        lifecycle: 'active',
+        generation: 1,
+      },
+      mirror: {
+        observedAt: ago(60_000),
+        ledgerStateHash: `sha256:${'e'.repeat(64)}`,
+        baselineId: null,
+        divergent: false,
+        divergence: null,
+        entriesOutsideStream: 0,
+      },
+    })
+    const cellOf = (slug: string, state: string) => ({
+      environment: slug,
+      state,
+      checksum: null,
+      checksumMatches: null,
+      appliedAt: state === 'not_applied' ? null : ago(120_000),
+      verification: null,
+      observedAt: ago(60_000),
+    })
+    const readBodies: ReadonlyArray<readonly [RegExp, unknown]> = [
+      [
+        /\/api\/v1\/targets\/[^/]+\/migrations$/,
+        {
+          applied: [1, 2, 3].map((n) => ({
+            appliedAt: ago(60_000 * n),
+            checksum: `sha256:c1:${String(n).padStart(64, 'a')}`,
+            migrationId: ulid(n),
+            name: `add_customer_orders_and_invoices_reconciliation_table_${n}`,
+            operationId: `op_${ulid(n)}`,
+            origin: 'exponetdb',
+            reverted: false,
+            verification: {
+              status: n === 2 ? 'pending' : 'passed',
+              verifiedAt: n === 2 ? null : ago(30_000 * n),
+              verifyDigest: null,
+            },
+          })),
+          baselineId: `bln_${ulid(7)}`,
+          ledgerStateHash: `sha256:${'b'.repeat(64)}`,
+          mirror: { inSync: false, checkedAt: ago(1000) },
+          observedAt: ago(1000),
+          pending: [
+            { checksum: `sha256:c1:${'c'.repeat(64)}`, migrationId: ulid(9), name: 'add_invoices' },
+          ],
+          source: 'live',
+          targetId: 'tgt_10000000000000000000000000',
+        },
+      ],
+      [
+        /\/api\/v1\/projects\/[^/]+\/migrations$/,
+        {
+          projectId: 'prj_00000000000000000000000001',
+          graph: { valid: true, errors: [] },
+          heads: [ulid(2)],
+          baselines: [],
+          bundles: [1, 2].map((n) => ({
+            migrationId: ulid(n),
+            name: `add_orders_${n}`,
+            revision: 1,
+            checksum: `sha256:c1:${'a'.repeat(64)}`,
+            dependsOn: n === 1 ? [] : [ulid(1)],
+            states: [
+              cellOf('development', 'verified'),
+              cellOf('staging', 'applied'),
+              cellOf('production', 'not_applied'),
+            ],
+          })),
+          bundleCount: 2,
+          truncated: false,
+          environments: [
+            environmentOf('development', 'nonprod', 0),
+            environmentOf('staging', 'nonprod', 1),
+            environmentOf('production', 'prod', 2),
+          ],
+          source: 'cached',
+          observedAt: ago(1000),
+        },
+      ],
+      [
+        /\/api\/v1\/plans\?/,
+        {
+          items: [1, 2].map((n) => ({
+            id: `pln_${ulid(n)}`,
+            kind: 'migration.plan',
+            class: 'standard',
+            state: 'active',
+            createdAt: ago(60_000),
+            subject,
+          })),
+          nextCursor: null,
+        },
+      ],
+      [/\/api\/v1\/targets\/[^/]+\/findings/, { items: [], nextCursor: null }],
+      [
+        /\/api\/v1\/operations\?/,
+        {
+          items: [1, 2].map((n) => ({
+            id: `op_${ulid(n)}`,
+            planId: `pln_${ulid(n)}`,
+            kind: 'migration.apply',
+            state: 'verification_failed',
+            applyOutcome: 'applied',
+            verificationOutcome: 'failed',
+            errorCode: 'VERIFICATION_FAILED',
+            actor: { identityId: `idn_${ulid(n)}`, kind: 'human', via: 'web' },
+            createdAt: ago(60_000 * n),
+            updatedAt: ago(30_000 * n),
+            approvalUrl: null,
+            steps: [],
+            subject,
+            waitingFor: null,
+          })),
+          nextCursor: null,
+        },
+      ],
+      [
+        /\/api\/v1\/audit-events\?/,
+        {
+          items: [1, 2].map((n) => ({
+            id: `aud_${ulid(n)}`,
+            action: 'migration.apply',
+            phase: 'completed',
+            actor: { identityId: null, kind: 'human', label: `human #${n}` },
+            client: { clientId: `cli_${ulid(n)}`, grantId: null, kind: 'mcp', sessionId: null },
+            denial: null,
+            occurredAt: ago(60_000 * n),
+            reason: 'Applying the orders change after review',
+            refs: {
+              jobId: null,
+              operationId: `op_${ulid(n)}`,
+              planHash: null,
+              planId: `pln_${ulid(n)}`,
+            },
+            result: { status: 'failed', errorCode: 'VERIFICATION_FAILED' },
+            subject,
+          })),
+          nextCursor: null,
+        },
+      ],
+    ]
+    await page.route('**/api/v1/**', async (route) => {
+      const url = route.request().url()
+      const hit = readBodies.find(([pattern]) => pattern.test(url))
+      if (hit === undefined || route.request().method() !== 'GET') {
+        await route.fallback()
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(hit[1]),
+      })
+    })
     const pages = [
       '/',
       '/approvals',
@@ -534,8 +710,11 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
       '/account/security',
       '/infrastructure/servers',
       '/infrastructure/clusters',
+      '/connect',
+      '/access/oauth-clients',
       '/t/shop/platform/staging',
       '/t/shop/platform/staging/migrations',
+      '/t/shop/platform/staging/activity',
       '/t/shop/platform/production',
     ]
     const measured: Record<string, unknown> = {}
@@ -544,11 +723,15 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
         await page.goto(`${origin}${path}`)
         await page.waitForSelector('header button[aria-label="Account"]')
         if (path.startsWith('/t/')) await page.waitForSelector('[data-slot="page-nav"]')
+        if (path.endsWith('/migrations')) await page.waitForSelector('[data-pending]')
+        if (path.endsWith('/activity')) await page.waitForSelector('[data-audit]')
         const result = await page.evaluate<{
           readonly scrollWidth: number
+          readonly height: number
           readonly innerWidth: number
           readonly overlaps: string[]
           readonly outside: string[]
+          readonly wide: string[]
         }>(`(() => {
           const header = document.querySelector('header')
           const boxes = [...header.querySelectorAll('a, button, input, [role=button]')]
@@ -569,15 +752,31 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
           const outside = boxes
             .filter(({ r }) => r.left < -0.5 || r.right > window.innerWidth + 0.5)
             .map(({ el }) => name(el))
+          const wide = [...document.querySelectorAll('body *')]
+            .filter((el) => el.getBoundingClientRect().right > window.innerWidth + 0.5)
+            .filter((el) => !el.parentElement || el.parentElement.getBoundingClientRect().right <= window.innerWidth + 0.5 || el.parentElement === document.body)
+            .slice(0, 5)
+            .map((el) => {
+              const chain = []
+              for (let n = el; n && n !== document.body && chain.length < 9; n = n.parentElement) {
+                chain.push(n.tagName.toLowerCase() + (n.dataset.slot ? '[' + n.dataset.slot + ']' : '') + '.' + String(n.className).slice(0, 40) + ' w' + Math.round(n.getBoundingClientRect().width))
+              }
+              return chain.join(' < ') + ' text=' + (el.textContent || '').slice(0, 30)
+            })
           return {
             scrollWidth: document.documentElement.scrollWidth,
+            height: document.documentElement.scrollHeight,
             innerWidth: window.innerWidth,
             overlaps,
             outside,
+            wide,
           }
         })()`)
         measured[path] = result
-        expect(result.scrollWidth, `${path} scrollWidth`).toBeLessThanOrEqual(result.innerWidth)
+        expect(
+          result.scrollWidth,
+          `${path} scrollWidth (wide: ${result.wide.join(' | ')})`,
+        ).toBeLessThanOrEqual(result.innerWidth)
         expect(result.overlaps, `${path} header overlaps`).toEqual([])
         expect(result.outside, `${path} header outside the viewport`).toEqual([])
       }
@@ -605,6 +804,7 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
       expect(tab.right).toBeLessThanOrEqual(390)
     } finally {
       console.info(`phone layout at 390x844: ${JSON.stringify(measured)}`)
+      await page.unroute('**/api/v1/**')
       await page.unroute('**/api/v1/targets**')
       await page.setViewportSize({ width: 1440, height: 900 })
     }

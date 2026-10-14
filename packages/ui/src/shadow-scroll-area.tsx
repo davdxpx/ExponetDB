@@ -79,7 +79,9 @@ const ShadowScrollArea = React.forwardRef<HTMLDivElement, ShadowScrollAreaProps>
         <div
           ref={setContainerRef}
           className={cn(
-            'w-full overflow-auto',
+            // `relative`: the scroll box is the containing block of absolutely positioned content in
+            // its cells (`sr-only` text), so that content scrolls with it instead of widening the page.
+            'relative w-full overflow-auto',
             stickyLastColumn && [
               '[&_tr>*:last-child]:sticky [&_tr>*:last-child]:z-38 [&_tr>*:last-child]:right-0',
               // Sticky cells need an opaque base. `bg-surface-200` / `--muted` is alpha-based,

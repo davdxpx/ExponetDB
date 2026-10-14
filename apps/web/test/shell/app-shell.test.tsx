@@ -130,6 +130,26 @@ describe('the icon rail and the section menu', () => {
     expect(screen.getByRole('separator', { name: 'Resize the section menu' })).toBeInTheDocument()
   })
 
+  it('below md the page takes the whole width: no section panel reserves space beside it', async () => {
+    const width = window.innerWidth
+    Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: 390 })
+    try {
+      mount('/infrastructure/clusters')
+      await screen.findByRole('heading', { level: 1, name: 'Clusters' })
+      await waitFor(() =>
+        expect(screen.queryByRole('separator', { name: 'Resize the section menu' })).toBeNull(),
+      )
+      expect(document.querySelector('[data-slot="resizable-panel-group"]')).toBeNull()
+      expect(screen.queryByRole('navigation', { name: 'Infrastructure pages' })).toBeNull()
+    } finally {
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        writable: true,
+        value: width,
+      })
+    }
+  })
+
   it('has no accessibility violations with the rail, the section menu and the header', async () => {
     mount('/access/not-a-page')
     await screen.findByRole('heading', { name: 'Page not found' })
