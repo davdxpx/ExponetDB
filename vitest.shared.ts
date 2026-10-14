@@ -31,6 +31,10 @@ export const sharedConfig = defineConfig({
     ],
     environment: 'node',
     reporters: ['default'],
+    // The default 5 s is too tight for the CI runner (two cores, every package in
+    // parallel): exhaustive and size-bound tests that take 1 to 2 s locally ran
+    // past it there. A hang still fails, after 30 s.
+    testTimeout: 30_000,
   },
 })
 

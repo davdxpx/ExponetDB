@@ -14,14 +14,16 @@ import { createPublicApp, httpMetrics } from '../src/interfaces/http/app.ts'
  * app's `/visual` frames, light and dark, at 1440x900 and 390x844, screenshotted
  * in Chromium and compared with committed baselines in `visual-baselines/`.
  *
- * - CI does not run this suite (no runner starts; G6 record). It runs locally
- *   through the e2e config.
- * - Baselines are Chromium-specific (the Chromium that playwright-core drives
- *   here); another browser build or operating system can differ in text
- *   anti-aliasing. The comparison tolerates that noise (per-channel difference
- *   up to CHANNEL_TOLERANCE, up to MAX_DIFF_RATIO of the pixels) and fails on a
- *   real layout, color or size change.
- * - `EXDB_UPDATE_VISUAL=1` rewrites the baselines instead of comparing.
+ * - Baselines are per rendering environment: the same Chromium build renders
+ *   text differently on another operating system image (fonts, hinting), so
+ *   each environment has its own set under `visual-baselines/<set>/`, chosen by
+ *   `EXDB_VISUAL_BASELINE_SET` (default `local`; CI uses `ci-ubuntu-24.04`).
+ *   Within one environment the comparison tolerates anti-aliasing noise
+ *   (per-channel difference up to CHANNEL_TOLERANCE, up to MAX_DIFF_RATIO of the
+ *   pixels) and fails on a real layout, color or size change.
+ * - `EXDB_UPDATE_VISUAL=1` rewrites the selected set instead of comparing.
+ * - `EXDB_VISUAL_ACTUAL_DIR` (CI) also writes every screenshot there, so a
+ *   failing run's images can be inspected or adopted as that environment's set.
  * - Rendering is deterministic: the fonts are the self-hosted ones (the page's
  *   own CSP forbids any other source), animations and the caret are off, and
  *   motion is reduced.
@@ -29,8 +31,13 @@ import { createPublicApp, httpMetrics } from '../src/interfaces/http/app.ts'
  *   no dependency is added.
  */
 const DIST = fileURLToPath(new URL('../../design-system/dist/', import.meta.url))
-const BASELINES = fileURLToPath(new URL('./visual-baselines/', import.meta.url))
+const BASELINE_SET = process.env['EXDB_VISUAL_BASELINE_SET'] ?? 'local'
+if (!/^[a-z0-9][a-z0-9.-]{0,63}$/.test(BASELINE_SET)) {
+  throw new Error(`EXDB_VISUAL_BASELINE_SET must be a short slug, not ${BASELINE_SET}`)
+}
+const BASELINES = fileURLToPath(new URL(`./visual-baselines/${BASELINE_SET}/`, import.meta.url))
 const UPDATE = process.env['EXDB_UPDATE_VISUAL'] === '1'
+const ACTUAL_DIR = process.env['EXDB_VISUAL_ACTUAL_DIR']
 const CHANNEL_TOLERANCE = 12
 const MAX_DIFF_RATIO = 0.002
 
@@ -146,6 +153,7 @@ beforeAll(async () => {
     bypassCSP: true,
   })
   await mkdir(BASELINES, { recursive: true })
+  if (ACTUAL_DIR !== undefined) await mkdir(ACTUAL_DIR, { recursive: true })
 })
 
 afterAll(async () => {
@@ -175,7 +183,9 @@ describe('visual regression of the design system /visual page', () => {
           expect(await frame.count(), `frame ${id}:${theme} exists`).toBe(1)
           await frame.scrollIntoViewIfNeeded()
           const png = await frame.screenshot({ animations: 'disabled', caret: 'hide' })
-          const file = `${BASELINES}${viewport.name}-${theme}-${slug(id)}.png`
+          const name = `${viewport.name}-${theme}-${slug(id)}.png`
+          const file = `${BASELINES}${name}`
+          if (ACTUAL_DIR !== undefined) await writeFile(`${ACTUAL_DIR}/${name}`, png)
           if (UPDATE) {
             await writeFile(file, png)
             continue
@@ -184,7 +194,9 @@ describe('visual regression of the design system /visual page', () => {
           try {
             baseline = await readFile(file)
           } catch {
-            failures.push(`${file}: no baseline (run with EXDB_UPDATE_VISUAL=1)`)
+            failures.push(
+              `${file}: no baseline in set ${BASELINE_SET} (run with EXDB_UPDATE_VISUAL=1, or adopt a run's actual images)`,
+            )
             continue
           }
           const args = JSON.stringify([
@@ -216,7 +228,11 @@ describe('visual regression of the design system /visual page', () => {
         for (const id of DEMOS) expected.add(`${v.name}-${t}-${slug(id)}.png`)
       }
     }
-    const present = (await readdir(BASELINES)).filter((f) => f.endsWith('.png'))
+    // A set that does not exist yet is reported by the comparison tests above.
+    const present = (await readdir(BASELINES).catch(() => [] as string[])).filter((f) =>
+      f.endsWith('.png'),
+    )
+    if (present.length === 0) return
     expect(new Set(present)).toEqual(expected)
   })
 })
