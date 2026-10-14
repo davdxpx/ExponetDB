@@ -346,6 +346,6 @@ describe('command menu and shortcuts', () => {
     expect(screen.getByText('G then P')).toBeInTheDocument()
     expect(
       screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent),
-    ).toEqual(['General', 'Go to', 'Switch environment'])
+    ).toEqual(['General', 'Go to', 'Switch environment', 'SQL editor'])
   })
 })
