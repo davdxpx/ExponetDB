@@ -220,9 +220,16 @@ async function upload(
   return { status: response.status, body: text === '' ? undefined : JSON.parse(text), text }
 }
 
-async function picture(person: Person | undefined, path: string) {
+async function picture(
+  person: Person | undefined,
+  path: string,
+  extra: Record<string, string> = {},
+) {
   const response = await app.request(`${ORIGIN}${path}`, {
-    headers: person === undefined ? {} : { 'user-agent': UA, cookie: cookies(person) },
+    headers: {
+      ...(person === undefined ? {} : { 'user-agent': UA, cookie: cookies(person) }),
+      ...extra,
+    },
   })
   return {
     status: response.status,
@@ -370,10 +377,28 @@ describe('the own picture', () => {
     expect(r.headers.get('content-type')).toBe('image/png')
     expect(r.headers.get('x-content-type-options')).toBe('nosniff')
     expect(r.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox")
-    expect(r.headers.get('cache-control')).toBe('private, max-age=31536000, immutable')
+    // Revalidated on every use, never kept as fresh: access that ends ends at once.
+    expect(r.headers.get('cache-control')).toBe('private, no-cache')
+    expect(r.headers.get('etag')).toBe(`"${sha(first).slice('sha256:'.length)}"`)
     expect(r.headers.get('content-disposition')).toBe('inline')
     expect(r.headers.get('cross-origin-resource-policy')).toBe('same-origin')
     expect(r.headers.get('set-cookie')).toBeNull()
+  })
+
+  it('answers a matching If-None-Match with 304 and no bytes, only to a caller who may read it', async () => {
+    const etag = `"${sha(first).slice('sha256:'.length)}"`
+    const same = await picture(alice, firstUrl, { 'if-none-match': etag })
+    expect(same.status).toBe(304)
+    expect(same.bytes.length).toBe(0)
+    expect(same.headers.get('etag')).toBe(etag)
+    expect(same.headers.get('cache-control')).toBe('private, no-cache')
+    expect((await picture(alice, firstUrl, { 'if-none-match': `W/${etag}, "x"` })).status).toBe(304)
+    const other = await picture(alice, firstUrl, { 'if-none-match': '"0000"' })
+    expect(other.status).toBe(200)
+    expect(other.bytes).toEqual(first)
+    // Revalidation never bypasses authorization: no 304 without access or without a session.
+    expect((await picture(vic, firstUrl, { 'if-none-match': etag })).status).toBe(404)
+    expect((await picture(undefined, firstUrl, { 'if-none-match': etag })).status).toBe(401)
   })
 
   it('is readable with access.read (the people list shows it), 404 for a viewer without it', async () => {
@@ -418,6 +443,36 @@ describe('the own picture', () => {
     const r2 = await upload(alice, w, 'image/webp')
     expect(r2.status, r2.text).toBe(200)
     expect((await picture(aud, r2.body.avatar.url)).headers.get('content-type')).toBe('image/webp')
+  })
+
+  it('stores, hashes and serves the picture without its metadata (GPS, text)', async () => {
+    const gps = 'GPSLatitude=48.137154;GPSLongitude=11.576124'
+    const clean = png(64, 64)
+    const tagged = png(64, 64, [
+      chunk('tEXt', [...ascii('Comment'), 0, ...ascii(gps)]),
+      chunk('eXIf', [...ascii('MM'), 0, 42, ...ascii(gps)]),
+    ])
+    const r = await upload(owner, tagged, 'image/png')
+    expect(r.status, r.text).toBe(200)
+    expect(r.body.avatar.sha256).toBe(sha(clean))
+    expect(r.body.avatar.url).toBe(`/api/v1/identities/${owner.identityId}/avatar?v=${sha(clean)}`)
+    const served = await picture(owner, r.body.avatar.url)
+    expect(served.bytes).toEqual(clean)
+    const stored = await db.asSuperuser(async (c) =>
+      (
+        await c.query(
+          'SELECT avatar, avatar_sha256 FROM profiles.identity_profiles WHERE identity_id = $1',
+          [owner.identityId],
+        )
+      ).rows.map((row) => ({
+        bytes: new Uint8Array(row.avatar),
+        sha256: String(row.avatar_sha256),
+      })),
+    )
+    expect(stored).toEqual([{ bytes: clean, sha256: sha(clean) }])
+    expect(Buffer.from(stored[0]?.bytes ?? []).toString('latin1')).not.toContain('GPS')
+    const removed = await owner.browser.call('DELETE', '/api/v1/me/avatar')
+    expect(removed.status, removed.text).toBe(200)
   })
 
   it.each([

@@ -2,9 +2,13 @@ import '@testing-library/jest-dom/vitest'
 import { isScramSha256Verifier } from '@exponetdb/contracts'
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
+import { planRoleVerifier } from '../../src/features/infrastructure/cluster-roles.tsx'
 import { infraKeys } from '../../src/features/infrastructure/keys.ts'
+import { actionError } from '../../src/features/plans/failure.ts'
+import { networkError } from '../../src/lib/api/errors.ts'
+import { en } from '../../src/lib/i18n/en.ts'
 import {
   BIDI,
   CLUSTER,
@@ -387,5 +391,46 @@ describe('the cluster page', () => {
         },
       ]),
     )
+  })
+})
+
+describe('the failure text of a role password change', () => {
+  const VERIFIER = 'SCRAM-SHA-256$4096:c2FsdA==$a2V5:a2V5'
+
+  it('says the verifier could not be computed only when the derivation failed, and sends nothing', async () => {
+    const send = vi.fn(async () => undefined)
+    const derive = vi.fn(async () => {
+      throw new TypeError('The password must be printable ASCII.')
+    })
+    expect(await planRoleVerifier(PASSWORD, send, derive)).toBe(en['infra.verifier.failed'])
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed request as a request failure, never as a verifier failure', async () => {
+    const derive = async (): Promise<string> => VERIFIER
+    // A fetch failure as the browser raises it, and as the plan request maps it.
+    const raw = await planRoleVerifier(
+      PASSWORD,
+      async () => {
+        throw new TypeError('Failed to fetch')
+      },
+      derive,
+    )
+    expect(raw).not.toBe(en['infra.verifier.failed'])
+    expect(raw).toBe(en['error.unknown'])
+    const mapped = await planRoleVerifier(
+      PASSWORD,
+      async () => {
+        throw actionError(networkError())
+      },
+      derive,
+    )
+    expect(mapped).toBe(en['error.network'])
+  })
+
+  it('answers with no alert when the plan was created, sending the derived verifier', async () => {
+    const send = vi.fn(async (_verifier: string) => undefined)
+    expect(await planRoleVerifier(PASSWORD, send, async () => VERIFIER)).toBe('')
+    expect(send).toHaveBeenCalledWith(VERIFIER)
   })
 })

@@ -20,6 +20,8 @@ import {
   verifySkeleton,
 } from '../../src/features/sql/sql-model.ts'
 import { loadTabs, saveTabs, storageKey } from '../../src/features/sql/tab-storage.ts'
+import { leaveForSignIn } from '../../src/lib/session/session.ts'
+import { forgetSqlTabs } from '../../src/lib/storage/sql-tabs.ts'
 import { BIDI, classifyText, TAG, ZWSP } from './support.tsx'
 
 const WORDS = {
@@ -147,8 +149,8 @@ describe('tabs and storage', () => {
       { tabs: [newTab('query', 'SELECT 1')], active: '' },
       newTab('draft', 'x', 'link'),
     )
-    saveTabs('tgt_1', state)
-    const raw = window.localStorage.getItem(storageKey('tgt_1')) ?? ''
+    saveTabs('idn_a', 'tgt_1', state)
+    const raw = window.localStorage.getItem(storageKey('idn_a', 'tgt_1')) ?? ''
     expect(JSON.parse(raw)).toEqual({
       tabs: [
         { mode: 'query', sql: 'SELECT 1', origin: 'new' },
@@ -156,8 +158,8 @@ describe('tabs and storage', () => {
       ],
       active: 1,
     })
-    expect(loadTabs('tgt_1')?.tabs.map((tab) => tab.sql)).toEqual(['SELECT 1', 'x'])
-    expect(loadTabs('tgt_2')).toBeUndefined()
+    expect(loadTabs('idn_a', 'tgt_1')?.tabs.map((tab) => tab.sql)).toEqual(['SELECT 1', 'x'])
+    expect(loadTabs('idn_a', 'tgt_2')).toBeUndefined()
 
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('quota')
@@ -165,16 +167,50 @@ describe('tabs and storage', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('denied')
     })
-    expect(() => saveTabs('tgt_1', state)).not.toThrow()
-    expect(loadTabs('tgt_1')).toBeUndefined()
+    expect(() => saveTabs('idn_a', 'tgt_1', state)).not.toThrow()
+    expect(loadTabs('idn_a', 'tgt_1')).toBeUndefined()
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new Error('denied')
+    })
+    expect(() => forgetSqlTabs()).not.toThrow()
+  })
+
+  it('keeps the tabs per person: another person on this browser never sees them', () => {
+    saveTabs('idn_a', 'tgt_1', { tabs: [newTab('query', 'SELECT secret')], active: '' })
+    expect(window.localStorage.getItem('exdb.sql.tabs.idn_a.tgt_1')).not.toBeNull()
+    expect(loadTabs('idn_a', 'tgt_1')?.tabs.map((tab) => tab.sql)).toEqual(['SELECT secret'])
+    expect(loadTabs('idn_b', 'tgt_1')).toBeUndefined()
+  })
+
+  it('never reads a key of the older shape (by target only) and removes it', () => {
+    window.localStorage.setItem(
+      'exdb.sql.tabs.tgt_1',
+      JSON.stringify({ tabs: [{ mode: 'query', sql: 'SELECT old', origin: 'new' }], active: 0 }),
+    )
+    expect(loadTabs('idn_a', 'tgt_1')).toBeUndefined()
+    expect(window.localStorage.getItem('exdb.sql.tabs.tgt_1')).toBeNull()
+  })
+
+  it('removes every kept tab when the session is gone, and nothing else', () => {
+    saveTabs('idn_a', 'tgt_1', { tabs: [newTab('query', 'SELECT 1')], active: '' })
+    saveTabs('idn_b', 'tgt_2', { tabs: [newTab('draft', 'SELECT 2')], active: '' })
+    window.localStorage.setItem('exdb.sql.tabs.tgt_3', '{}')
+    window.localStorage.setItem('exdb.theme', 'dark')
+    const clearCache = vi.fn()
+    leaveForSignIn({ location: { pathname: '/login', hash: '', assign: vi.fn() }, clearCache })
+    expect(clearCache).toHaveBeenCalledTimes(1)
+    const left = Object.keys(window.localStorage)
+    expect(left.filter((key) => key.startsWith('exdb.sql.tabs.'))).toEqual([])
+    expect(window.localStorage.getItem('exdb.theme')).toBe('dark')
+    expect(loadTabs('idn_a', 'tgt_1')).toBeUndefined()
   })
 
   it('ignores stored entries of another shape', () => {
     window.localStorage.setItem(
-      storageKey('tgt_3'),
+      storageKey('idn_a', 'tgt_3'),
       JSON.stringify({ tabs: [{ mode: 'write', sql: 'x', origin: 'new' }, 'junk'], active: 9 }),
     )
-    expect(loadTabs('tgt_3')).toBeUndefined()
+    expect(loadTabs('idn_a', 'tgt_3')).toBeUndefined()
   })
 })
 

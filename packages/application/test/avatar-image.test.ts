@@ -163,7 +163,13 @@ describe('checkAvatarImage accepts still pictures of the three formats', () => {
       64,
     ],
   ] as const)('%s', (_name, bytes, type, width, height) => {
-    expect(checkAvatarImage(bytes, type)).toEqual({ ok: true, mediaType: type, width, height })
+    expect(checkAvatarImage(bytes, type)).toEqual({
+      ok: true,
+      mediaType: type,
+      width,
+      height,
+      bytes: expect.any(Uint8Array),
+    })
   })
 
   it('tolerates a few padding bytes after the end of the image', () => {
@@ -266,5 +272,137 @@ describe('checkAvatarImage refuses', () => {
     ['more than 256 KiB', cat(goodPng, new Uint8Array(256 * 1024)), 'image/png', 'too_large'],
   ] as const)('%s', (_name, bytes, type, reason) => {
     expect(checkAvatarImage(bytes, type)).toEqual({ ok: false, reason })
+  })
+})
+
+// ----- metadata (OD-8): GPS, camera, text are stripped before storing -----
+
+/** A GPS-like payload: what a phone writes into a picture, here as plain text. */
+const GPS = 'GPSLatitude=48.137154;GPSLongitude=11.576124;Model=AcmePhone'
+const XMP = `<x:xmpmeta xmlns:x="adobe:ns:meta/"><exif:GPSLatitude>48,8.2N</exif:GPSLatitude></x:xmpmeta>`
+const exifTiff = (): number[] => [...ascii('Exif'), 0, 0, ...ascii('MM'), 0, 42, ...ascii(GPS)]
+const jpegSegment = (marker: number, payload: readonly number[]): number[] => [
+  0xff,
+  marker,
+  ((payload.length + 2) >> 8) & 0xff,
+  (payload.length + 2) & 0xff,
+  ...payload,
+]
+const text = (b: Uint8Array): string => String.fromCharCode(...b)
+
+function stripped(bytes: Uint8Array, type: string): Uint8Array {
+  const check = checkAvatarImage(bytes, type)
+  if (!check.ok) throw new Error(`refused: ${check.reason}`)
+  return check.bytes
+}
+
+/** The stripped picture holds none of the metadata, still validates, and strips to itself. */
+function expectClean(out: Uint8Array, type: string, width: number, height: number): void {
+  expect(text(out)).not.toContain('GPS')
+  expect(text(out)).not.toContain('AcmePhone')
+  expect(text(out)).not.toContain('xmpmeta')
+  expect(text(out)).not.toContain('Exif')
+  const again = checkAvatarImage(out, type)
+  expect(again).toEqual({ ok: true, mediaType: type, width, height, bytes: out })
+}
+
+describe('checkAvatarImage strips the metadata of the stored picture', () => {
+  it('drops eXIf, tEXt, iTXt, zTXt and tIME of a PNG; keeps the critical and color chunks', () => {
+    const color = [
+      pngChunk('gAMA', be32(45455)),
+      pngChunk('sRGB', [0]),
+      pngChunk('pHYs', [...be32(2835), ...be32(2835), 1]),
+    ]
+    const meta = [
+      pngChunk('eXIf', [...ascii('MM'), 0, 42, ...ascii(GPS)]),
+      pngChunk('tEXt', [...ascii('Comment'), 0, ...ascii(GPS)]),
+      pngChunk('iTXt', [...ascii('XML:com.adobe.xmp'), 0, 0, 0, 0, 0, ...ascii(XMP)]),
+      pngChunk('zTXt', [...ascii('Author'), 0, 0, ...deflateSync(Buffer.from(GPS))]),
+      pngChunk('tIME', [7, 234, 10, 13, 12, 0, 0]),
+    ]
+    const clean = png(64, 64, color)
+    const input = cat(png(64, 64, [...color, ...meta]), new Uint8Array(TRAILING_SLACK))
+    expect(text(input)).toContain('GPS')
+    const out = stripped(input, 'image/png')
+    expectClean(out, 'image/png', 64, 64)
+    expect(out).toEqual(clean)
+    for (const kept of ['IHDR', 'gAMA', 'sRGB', 'pHYs', 'IDAT', 'IEND']) {
+      expect(text(out)).toContain(kept)
+    }
+  })
+
+  it('drops APP1 Exif and XMP, APP13, COM, a JFIF thumbnail and JFXX of a JPEG; keeps ICC and Adobe', () => {
+    const base = jpeg(64, 48)
+    const soi = base.subarray(0, 2)
+    const app0 = base.subarray(2, 20)
+    const rest = base.subarray(20)
+    const icc = jpegSegment(0xe2, [...ascii('ICC_PROFILE'), 0, 1, 1, 9, 9, 9])
+    const adobe = jpegSegment(0xee, [...ascii('Adobe'), 0, 100, 0, 0, 0, 0, 1])
+    const input = cat(
+      soi,
+      app0,
+      jpegSegment(0xe1, exifTiff()),
+      jpegSegment(0xe1, [...ascii('http://ns.adobe.com/xap/1.0/'), 0, ...ascii(XMP)]),
+      icc,
+      jpegSegment(0xed, [...ascii('Photoshop 3.0'), 0, ...ascii(GPS)]),
+      jpegSegment(0xe0, [...ascii('JFXX'), 0, 0x10, ...ascii(GPS)]),
+      jpegSegment(0xe0, [...ascii('JFIF'), 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0xaa, 0xbb, 0xcc]),
+      jpegSegment(0xef, ascii(GPS)),
+      adobe,
+      jpegSegment(0xfe, ascii(GPS)),
+      rest,
+      new Uint8Array(TRAILING_SLACK),
+    )
+    const out = stripped(input, 'image/jpeg')
+    expectClean(out, 'image/jpeg', 64, 48)
+    expect(out).toEqual(cat(soi, app0, icc, adobe, rest))
+  })
+
+  it('drops EXIF and XMP chunks of a WebP, clears their VP8X flags and fixes the RIFF size', () => {
+    const iccp = webpChunk('ICCP', [1, 2, 3])
+    const alph = webpChunk('ALPH', [0, 1, 2])
+    const input = riff([
+      vp8x(64, 64, 0x20 | 0x10 | 0x08 | 0x04),
+      iccp,
+      alph,
+      vp8(),
+      webpChunk('EXIF', exifTiff()),
+      webpChunk('XMP ', ascii(XMP)),
+    ])
+    const out = stripped(input, 'image/webp')
+    expectClean(out, 'image/webp', 64, 64)
+    expect(out).toEqual(riff([vp8x(64, 64, 0x20 | 0x10), iccp, alph, vp8()]))
+    const size =
+      (out[4] ?? 0) | ((out[5] ?? 0) << 8) | ((out[6] ?? 0) << 16) | ((out[7] ?? 0) << 24)
+    expect(size).toBe(out.length - 8)
+  })
+
+  it('leaves a picture without metadata byte for byte as it was', () => {
+    for (const [bytes, type] of [
+      [png(), 'image/png'],
+      [jpeg(), 'image/jpeg'],
+      [riff([vp8x(80, 80), vp8l(80, 80)]), 'image/webp'],
+    ] as const) {
+      expect(stripped(bytes, type)).toEqual(bytes)
+    }
+  })
+
+  it('never accepts after stripping what it refuses before: the structural checks still hold', () => {
+    // Metadata does not hide a broken picture: a bad CRC in a dropped chunk is still refused.
+    const badText = pngChunk('tEXt', [...ascii('Comment'), 0, ...ascii(GPS)])
+    badText[badText.length - 1] = (badText[badText.length - 1] ?? 0) ^ 0xff
+    expect(checkAvatarImage(png(64, 64, [badText]), 'image/png')).toEqual({
+      ok: false,
+      reason: 'malformed',
+    })
+    // A truncated APP1 is refused, not dropped.
+    const base = jpeg()
+    const truncated = cat(base.subarray(0, 2), [0xff, 0xe1, 0x40, 0x00, ...ascii('Exif')])
+    expect(checkAvatarImage(truncated, 'image/jpeg').ok).toBe(false)
+    // EXIF in a simple (not extended) WebP is still refused.
+    expect(checkAvatarImage(riff([vp8(), webpChunk('EXIF', exifTiff())]), 'image/webp')).toEqual({
+      ok: false,
+      reason: 'malformed',
+    })
   })
 })

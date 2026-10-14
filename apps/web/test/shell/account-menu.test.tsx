@@ -162,6 +162,25 @@ describe('the account menu of the header', () => {
     await user.click(await screen.findByRole('menuitem', { name: en['shell.signOut'] }))
     await waitFor(() => expect(fake.to('POST', '/auth/logout')).toHaveLength(1))
   })
+
+  it('removes the SQL tabs kept in this browser on sign-out, and only them', async () => {
+    window.localStorage.setItem(`exdb.sql.tabs.${ids.identity}.tgt_1`, '{"tabs":[],"active":0}')
+    window.localStorage.setItem('exdb.sql.tabs.tgt_2', '{"tabs":[],"active":0}')
+    window.localStorage.setItem('exdb.keep', 'yes')
+    const fake = signedIn().answer('POST', '/auth/logout', 200, {})
+    mountApp('/', fake)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const user = userEvent.setup()
+    await user.click(await trigger())
+    await user.click(await screen.findByRole('menuitem', { name: en['shell.signOut'] }))
+    await waitFor(() => expect(fake.to('POST', '/auth/logout')).toHaveLength(1))
+    await waitFor(() =>
+      expect(
+        Object.keys(window.localStorage).filter((k) => k.startsWith('exdb.sql.tabs.')),
+      ).toEqual([]),
+    )
+    expect(window.localStorage.getItem('exdb.keep')).toBe('yes')
+  })
 })
 
 describe('the tabs of the account area', () => {

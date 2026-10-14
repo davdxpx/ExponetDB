@@ -1,4 +1,5 @@
 import { loginUrl } from '../navigation/links.ts'
+import { forgetSqlTabs } from '../storage/sql-tabs.ts'
 
 /**
  * Leaving for the sign-in page when the session is gone: the query cache is
@@ -11,6 +12,9 @@ import { loginUrl } from '../navigation/links.ts'
  * the sign-in page asks whether a session exists through the same client,
  * and an answer of "no session" there must never load the sign-in page
  * again (no loop), nor interrupt an enrollment in progress.
+ *
+ * Either way the SQL tabs this browser kept (`SQL_TABS_PREFIX`) are removed:
+ * the unsent text of an ended session never waits for the next person.
  */
 export interface SessionDeps {
   readonly location: Pick<Location, 'pathname' | 'hash' | 'assign'>
@@ -33,6 +37,7 @@ export function isSessionlessPath(pathname: string): boolean {
 
 export function leaveForSignIn(deps: SessionDeps): void {
   deps.clearCache()
+  forgetSqlTabs()
   if (isSessionlessPath(deps.location.pathname)) return
   deps.location.assign(loginUrl(deps.location.pathname + deps.location.hash))
 }

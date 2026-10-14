@@ -283,20 +283,15 @@ export class ProfileUseCases {
     const identityId = await this.#self(store, 'me.avatar.set', caller)
     const check = checkAvatarImage(upload.bytes, upload.mediaType)
     if (!check.ok) throw refused(check.reason)
-    const sha256 = `sha256:${createHash('sha256').update(upload.bytes).digest('hex')}`
+    // Stored, hashed and served without its metadata (GPS, camera, text; OD-8): the checked copy.
+    const bytes = check.bytes
+    const sha256 = `sha256:${createHash('sha256').update(bytes).digest('hex')}`
     try {
       return await store.transaction('application.profile.avatar.set', async (tx) => {
         const { rows } = await tx.query(
           'application.profile.set_avatar',
           'SELECT profiles.set_avatar($1, $2, $3, $4, $5, $6) AS revision',
-          [
-            identityId,
-            Buffer.from(upload.bytes),
-            check.mediaType,
-            sha256,
-            check.width,
-            check.height,
-          ],
+          [identityId, Buffer.from(bytes), check.mediaType, sha256, check.width, check.height],
         )
         const revision = rows[0]?.int('revision')
         if (revision === undefined) throw new RegistryError('INTERNAL')
@@ -307,7 +302,7 @@ export class ProfileUseCases {
           {
             revision,
             sha256,
-            bytes: upload.bytes.length,
+            bytes: bytes.length,
             mediaType: check.mediaType,
             width: check.width,
             height: check.height,

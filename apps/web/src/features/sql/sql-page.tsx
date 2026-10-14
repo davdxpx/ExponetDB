@@ -25,6 +25,7 @@ import { useApi } from '../../lib/api/context.tsx'
 import { ApiError } from '../../lib/api/errors.ts'
 import { withReauth } from '../../lib/api/reauth.ts'
 import { describeError, t } from '../../lib/i18n/i18n.ts'
+import { useMe } from '../../lib/session/guard.tsx'
 import { actionError } from '../plans/failure.ts'
 import type { TargetRoute } from '../target/params.ts'
 import { nounPhrase } from '../target/phrases.ts'
@@ -135,9 +136,13 @@ function applyLink(state: TabsState, search: string): { tabs: TabsState; note: L
 }
 
 /** The tabs on opening: the stored ones, plus what a `?sql=` or `?mode=` link asks for. */
-function initialState(targetId: string, search: string): { tabs: TabsState; note: LinkNote } {
+function initialState(
+  identityId: string,
+  targetId: string,
+  search: string,
+): { tabs: TabsState; note: LinkNote } {
   const fresh = newTab(parseSqlLink(search).mode ?? 'query')
-  return applyLink(loadTabs(targetId) ?? { tabs: [fresh], active: fresh.id }, search)
+  return applyLink(loadTabs(identityId, targetId) ?? { tabs: [fresh], active: fresh.id }, search)
 }
 
 function useDebounced<T>(value: T, ms: number): T {
@@ -157,7 +162,9 @@ export function SqlBody(props: {
   const { client, confirmIdentity } = useApi()
   const queryClient = useQueryClient()
   const search = useRouterState({ select: (state) => state.location.searchStr })
-  const [initial] = useState(() => initialState(target.id, search))
+  // The tabs are kept per person and target: another person on this browser never sees them.
+  const identityId = useMe().identity.id
+  const [initial] = useState(() => initialState(identityId, target.id, search))
   const [tabs, setTabs] = useState<TabsState>(initial.tabs)
   const [linkNote, setLinkNote] = useState<LinkNote>(initial.note)
   const [runs, setRuns] = useState<ReadonlyMap<string, RunState>>(() => new Map())
@@ -168,7 +175,7 @@ export function SqlBody(props: {
   const editorRef = useRef<EditorHandle>(null)
   const inFlight = useRef(new Set<string>())
 
-  useEffect(() => saveTabs(target.id, tabs), [target.id, tabs])
+  useEffect(() => saveTabs(identityId, target.id, tabs), [identityId, target.id, tabs])
 
   // A later link on the same page (the page stays mounted) opens its text the same way, never run.
   const appliedSearch = useRef(search)

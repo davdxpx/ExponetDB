@@ -421,12 +421,32 @@ bundle `01M4V7PRFXK2N9QB4ZH6WD3TME_identity-profiles`,
   most 256 KiB, 32 to 1024 pixels each way, checked by the server from its
   bytes (no image library, nothing decoded); SVG, GIF, animation, a type that
   does not match the bytes and data after the end of the image are refused
-  ([`threat-model.md`](./threat-model.md), Wave 8). It is stored in the
-  Control Store with its SHA-256 and served same-origin at
+  ([`threat-model.md`](./threat-model.md), Wave 8). **[DECIDED]** It is
+  stored **without its metadata** (personal data such as a camera's GPS
+  position, author or capture time;
+  [OD-8](../00-product/open-decisions.md#od-8-audit-retention-and-personal-data)):
+  PNG keeps its critical chunks and the drawing-relevant ancillary ones
+  (`tRNS`, `gAMA`, `cHRM`, `sRGB`, `iCCP`, `cICP`, `mDCV`, `cLLI`, `sBIT`,
+  `bKGD`, `pHYs`) and drops every other (`eXIf`, `tEXt`, `iTXt`, `zTXt`,
+  `tIME`, private chunks); JPEG keeps the image segments, a plain JFIF `APP0`
+  without a thumbnail, the `APP2` ICC profile and the 12-byte Adobe `APP14`
+  (its transform flag decides the colors) and drops every other `APP0` to
+  `APP15` segment (Exif, XMP, IPTC, thumbnails, MPF images) and every `COM`;
+  WebP drops `EXIF` and `XMP ` and clears their VP8X flags with a corrected
+  RIFF size; bytes after the end of the image are dropped too. The stripped
+  file passes the same structural check again. **[OBSERVED]**
+  (`packages/application/src/avatar-image.ts`,
+  `packages/application/test/avatar-image.test.ts`,
+  `apps/server/test/http-profile.int.test.ts`) The stored bytes, their SHA-256,
+  the audit's size and the served bytes are those of the stripped file. It is
+  stored in the Control Store with that SHA-256 and served same-origin at
   `/api/v1/identities/{identityId}/avatar?v=<sha256>` with the stored media
-  type, `nosniff`, `default-src 'none'; sandbox` and a year of private,
-  immutable caching keyed by the hash. A remote picture (a URL) is never
-  stored or shown.
+  type, `nosniff`, `default-src 'none'; sandbox` and `Cache-Control: private,
+  no-cache` with a strong `ETag`: a browser keeps the picture but asks again
+  each time, so a person who loses `access.read` or a removed picture stops
+  being shown at once, and an unchanged picture costs a `304` without the
+  bytes (only after authorization). A remote picture (a URL) is never stored
+  or shown.
 - **Who sees it.** The person (`GET /me` carries `displayName`, `avatar` and
   `profileRevision`), and callers with `access.read` (the identity reads carry
   `profileDisplayName` and `avatar`; the picture route answers them). Anyone

@@ -61,6 +61,7 @@ import {
   useThemePreference,
 } from '../lib/preferences/theme.ts'
 import { useMe } from '../lib/session/guard.tsx'
+import { forgetSqlTabs } from '../lib/storage/sql-tabs.ts'
 import { ShellCommands } from './commands.tsx'
 import {
   isCurrent,
@@ -339,8 +340,10 @@ function AccountMenu(): ReactNode {
       .ceremony('/auth/logout')
       .catch(() => undefined)
       .finally(() => {
-        // Signed out, or the session had already ended: nothing of it stays in memory.
+        // Signed out, or the session had already ended: nothing of it stays in memory,
+        // and no SQL tab text of it stays in this browser.
         queryClient.clear()
+        forgetSqlTabs()
         window.location.assign('/login')
       })
   }

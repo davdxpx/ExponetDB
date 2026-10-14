@@ -26,6 +26,26 @@ import {
  *   bytes (a picture with something appended, such as a second file, is
  *   refused: a cheap guard against polyglots).
  *
+ * The accepted picture is stored **without its metadata** ({@link AvatarCheck}
+ * `bytes`; personal data such as a camera's GPS position, OD-8): only what a
+ * browser needs to draw the image and its colors is kept, and the stripped
+ * file is checked again. Kept per format:
+ *
+ * - PNG: the critical chunks (`IHDR`, `PLTE`, `IDAT`, `IEND`) and the
+ *   ancillary chunks that change how pixels look ({@link PNG_KEPT}: `tRNS`,
+ *   `gAMA`, `cHRM`, `sRGB`, `iCCP`, `cICP`, `mDCV`, `cLLI`, `sBIT`, `bKGD`,
+ *   `pHYs`); every other ancillary chunk (`eXIf`, `tEXt`, `iTXt`, `zTXt`,
+ *   `tIME`, private chunks) is dropped;
+ * - JPEG: every segment of the image itself; of the application segments
+ *   only a plain JFIF `APP0` without a thumbnail, an `APP2` ICC profile
+ *   (colors) and the 12-byte Adobe `APP14` (its transform flag says whether
+ *   three components are RGB or YCbCr, so dropping it would change the
+ *   colors); every other `APP0`..`APP15` (Exif, XMP, JFXX or JFIF
+ *   thumbnails, MPF second images, IPTC) and every comment (`COM`) is dropped;
+ * - WebP: every chunk but `EXIF` and `XMP `, with the VP8X Exif and XMP
+ *   flags cleared and the RIFF size of the new file;
+ * - nothing after the end of the image (the tolerated slack is dropped too).
+ *
  * What it cannot prove: that the compressed pixel data decodes. A browser
  * shows a broken image then; it is served with `nosniff` and a sandboxing
  * policy, so it is never anything but an image.
@@ -36,6 +56,8 @@ export type AvatarCheck =
       readonly mediaType: AvatarMediaType
       readonly width: number
       readonly height: number
+      /** The picture without its metadata: the bytes to store, hash and serve. */
+      readonly bytes: Uint8Array
     }
   | { readonly ok: false; readonly reason: AvatarRefusal }
 
@@ -130,8 +152,46 @@ const PNG_DEPTHS: Readonly<Record<number, readonly number[]>> = {
   6: [8, 16],
 }
 
-function png(b: Uint8Array): { width: number; height: number } {
+/**
+ * The ancillary PNG chunks kept: transparency and the color, gamma, HDR and
+ * pixel-aspect information a browser uses to draw the pixels. None of them
+ * holds free text, a time or a position (`iCCP` holds a short profile name and
+ * the compressed profile).
+ */
+const PNG_KEPT = new Set([
+  'tRNS',
+  'gAMA',
+  'cHRM',
+  'sRGB',
+  'iCCP',
+  'cICP',
+  'mDCV',
+  'cLLI',
+  'sBIT',
+  'bKGD',
+  'pHYs',
+])
+
+/** A parsed picture: its size and the byte ranges `[from, to)` of the file that are kept. */
+interface Parsed {
+  readonly width: number
+  readonly height: number
+  readonly bytes: Uint8Array
+}
+
+function joined(b: Uint8Array, ranges: readonly (readonly [number, number])[]): Uint8Array {
+  const out = new Uint8Array(ranges.reduce((n, [from, to]) => n + (to - from), 0))
+  let at = 0
+  for (const [from, to] of ranges) {
+    out.set(b.subarray(from, to), at)
+    at += to - from
+  }
+  return out
+}
+
+function png(b: Uint8Array): Parsed {
   let at = PNG_SIGNATURE.length
+  const kept: [number, number][] = [[0, PNG_SIGNATURE.length]]
   let width = 0
   let height = 0
   let first = true
@@ -159,6 +219,8 @@ function png(b: Uint8Array): { width: number; height: number } {
     // A critical chunk (upper-case first letter) this check does not know is refused.
     if (type.charCodeAt(0) < 0x61 && !PNG_CRITICAL.has(type)) refuse('malformed')
     if (type === 'IDAT') images++
+    // Critical chunks and the drawing-relevant ancillary ones stay; text, Exif, time and the rest go.
+    if (type.charCodeAt(0) < 0x61 || PNG_KEPT.has(type)) kept.push([at, data + length + 4])
     at = data + length + 4
     if (type === 'IEND') {
       if (length !== 0 || images === 0) refuse('malformed')
@@ -166,18 +228,52 @@ function png(b: Uint8Array): { width: number; height: number } {
     }
   }
   if (b.length - at > TRAILING_SLACK) refuse('trailing_data')
-  return { width, height }
+  return { width, height, bytes: joined(b, kept) }
 }
 
 /** JPEG frame headers: baseline (SOF0) and progressive (SOF2) are accepted, every other is refused. */
 const JPEG_SOF_ACCEPTED = new Set([0xc0, 0xc2])
 const JPEG_SOF_OTHER = new Set([0xc1, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf])
 
-function jpeg(b: Uint8Array): { width: number; height: number } {
+const JPEG_APP0 = 0xe0
+const JPEG_APP2 = 0xe2
+const JPEG_APP14 = 0xee
+const JPEG_APP15 = 0xef
+const JPEG_COM = 0xfe
+
+function payloadStarts(b: Uint8Array, at: number, length: number, prefix: string): boolean {
+  return length - 2 >= prefix.length && ascii(b, at + 2, prefix.length) === prefix
+}
+
+/**
+ * Whether an application or comment segment stays: a plain JFIF `APP0` (16
+ * bytes, no thumbnail), an `APP2` ICC profile chunk and the fixed-size Adobe
+ * `APP14` (its transform flag decides the colors of a three-component image).
+ * `at` is the position of the segment's length field.
+ */
+function jpegKeeps(b: Uint8Array, marker: number, at: number, length: number): boolean {
+  if (marker === JPEG_COM) return false
+  if (marker < JPEG_APP0 || marker > JPEG_APP15) return true
+  if (marker === JPEG_APP0) {
+    return (
+      length === 16 &&
+      payloadStarts(b, at, length, 'JFIF\0') &&
+      b[at + 14] === 0 &&
+      b[at + 15] === 0
+    )
+  }
+  if (marker === JPEG_APP2) return payloadStarts(b, at, length, 'ICC_PROFILE\0')
+  if (marker === JPEG_APP14) return length === 14 && payloadStarts(b, at, length, 'Adobe')
+  return false
+}
+
+function jpeg(b: Uint8Array): Parsed {
   let at = 2
   let frame: { width: number; height: number } | undefined
   let scans = 0
+  const kept: [number, number][] = [[0, 2]]
   for (;;) {
+    const segment = at
     if (b[at] !== 0xff) refuse('malformed')
     // Fill bytes before a marker.
     while (b[at] === 0xff) at++
@@ -186,6 +282,7 @@ function jpeg(b: Uint8Array): { width: number; height: number } {
     at++
     if (marker === 0xd9) {
       if (frame === undefined || scans === 0) refuse('malformed')
+      kept.push([segment, at])
       break
     }
     if (
@@ -207,6 +304,7 @@ function jpeg(b: Uint8Array): { width: number; height: number } {
       if (length !== 8 + 3 * components) refuse('malformed')
       frame = { height: u16be(b, at + 3), width: u16be(b, at + 5) }
     }
+    const keep = jpegKeeps(b, marker, at, length)
     at += length
     if (marker === 0xda) {
       if (frame === undefined) refuse('malformed')
@@ -225,10 +323,12 @@ function jpeg(b: Uint8Array): { width: number; height: number } {
         at++
       }
     }
+    // A segment (with its fill bytes and, for a scan, its entropy-coded data) is kept whole or dropped.
+    if (keep) kept.push([segment, at])
   }
   if (frame === undefined) return refuse('malformed')
   if (b.length - at > TRAILING_SLACK) refuse('trailing_data')
-  return frame
+  return { ...frame, bytes: joined(b, kept) }
 }
 
 /** The chunks a still WebP may hold; anything else (ANIM, ANMF, unknown) is refused. */
@@ -259,7 +359,11 @@ function vp8l(b: Uint8Array, data: number, size: number): { width: number; heigh
   return { width, height }
 }
 
-function webp(b: Uint8Array): { width: number; height: number } {
+/** The WebP chunks of metadata, dropped with their VP8X flags (Exif 0x08, XMP 0x04). */
+const WEBP_METADATA = new Set(['EXIF', 'XMP '])
+const VP8X_METADATA_FLAGS = 0x08 | 0x04
+
+function webp(b: Uint8Array): Parsed {
   // The RIFF size covers the whole file after the first eight bytes: nothing may follow it.
   const riff = u32le(b, 4)
   if (riff + 8 < b.length) refuse('trailing_data')
@@ -268,6 +372,8 @@ function webp(b: Uint8Array): { width: number; height: number } {
   let canvas: { width: number; height: number } | undefined
   let image: { width: number; height: number } | undefined
   let index = 0
+  let flagsAt: number | undefined
+  const kept: [number, number][] = []
   while (at < b.length) {
     const fourcc = ascii(b, at, 4)
     const size = u32le(b, at + 4)
@@ -279,6 +385,7 @@ function webp(b: Uint8Array): { width: number; height: number } {
       if (index !== 0 || size !== 10) refuse('malformed')
       const flags = b[data] ?? 0
       if ((flags & 0x02) !== 0) refuse('animated')
+      flagsAt = data
       canvas = { width: u24le(b, data + 4) + 1, height: u24le(b, data + 7) + 1 }
     } else if (fourcc === 'VP8 ' || fourcc === 'VP8L') {
       if (image !== undefined) refuse('malformed')
@@ -287,14 +394,31 @@ function webp(b: Uint8Array): { width: number; height: number } {
       // ICCP, ALPH, EXIF and XMP exist only in the extended format.
       refuse('malformed')
     }
-    at = data + size + (size % 2)
+    const end = data + size + (size % 2)
+    if (!WEBP_METADATA.has(fourcc)) kept.push([at, end])
+    at = end
     index++
   }
   if (at !== b.length || image === undefined) return refuse('malformed')
   if (canvas !== undefined && (canvas.width !== image.width || canvas.height !== image.height)) {
     refuse('malformed')
   }
-  return image
+  // The new file: the RIFF header with the size of what is kept, the kept chunks, and the
+  // VP8X flags of the dropped metadata cleared.
+  const body = joined(b, kept)
+  const out = new Uint8Array(12 + body.length)
+  out.set(b.subarray(0, 12))
+  out.set(body, 12)
+  const riffSize = out.length - 8
+  out[4] = riffSize & 0xff
+  out[5] = (riffSize >>> 8) & 0xff
+  out[6] = (riffSize >>> 16) & 0xff
+  out[7] = (riffSize >>> 24) & 0xff
+  if (flagsAt !== undefined) {
+    // VP8X is the first chunk: its flag byte is at the same place in the new file.
+    out[flagsAt] = (out[flagsAt] ?? 0) & ~VP8X_METADATA_FLAGS
+  }
+  return { ...image, bytes: out }
 }
 
 function detect(b: Uint8Array): AvatarMediaType | undefined {
@@ -314,8 +438,18 @@ export function checkAvatarImage(bytes: Uint8Array, declared: string): AvatarChe
     const detected = detect(bytes)
     if (detected === undefined) return refuse('unsupported_format')
     if (detected !== declared) return refuse('type_mismatch')
-    const { width, height } =
-      detected === 'image/png' ? png(bytes) : detected === 'image/jpeg' ? jpeg(bytes) : webp(bytes)
+    const parse = detected === 'image/png' ? png : detected === 'image/jpeg' ? jpeg : webp
+    const { width, height, bytes: stripped } = parse(bytes)
+    // The stripped file passes the same check, at the same size, and has nothing left to strip.
+    const again = parse(stripped)
+    if (
+      again.width !== width ||
+      again.height !== height ||
+      again.bytes.length !== stripped.length ||
+      !again.bytes.every((v, i) => v === stripped[i])
+    ) {
+      return refuse('malformed')
+    }
     if (
       width < AVATAR_MIN_PIXELS ||
       height < AVATAR_MIN_PIXELS ||
@@ -324,7 +458,7 @@ export function checkAvatarImage(bytes: Uint8Array, declared: string): AvatarChe
     ) {
       return refuse('dimensions')
     }
-    return { ok: true, mediaType: detected, width, height }
+    return { ok: true, mediaType: detected, width, height, bytes: stripped }
   } catch (error) {
     if (error instanceof Refused) return { ok: false, reason: error.reason }
     throw error

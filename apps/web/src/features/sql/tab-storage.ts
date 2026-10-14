@@ -1,3 +1,4 @@
+import { SQL_TABS_PREFIX } from '../../lib/storage/sql-tabs.ts'
 import {
   MAX_STORED_SQL,
   MAX_TABS,
@@ -11,15 +12,20 @@ import {
 
 /**
  * The tabs of the SQL workspace kept in this browser (information-architecture.md
- * §2: client state keyed by target id): only their unsent text, mode and where
- * it came from, never a result or a classification. Every access is guarded:
- * storage that is unavailable, full or holding something else leaves the tabs
- * for the page only.
+ * §2: client state keyed by the signed-in person and the target id): only their
+ * unsent text, mode and where it came from, never a result or a classification.
+ * The key names the person, so another person signing in on the same browser
+ * never sees them; sign-out and an ended session remove them all
+ * (`forgetSqlTabs`). Every access is guarded: storage that is unavailable, full
+ * or holding something else leaves the tabs for the page only.
  */
-const STORAGE_PREFIX = 'exdb.sql.tabs.'
+export function storageKey(identityId: string, targetId: string): string {
+  return `${SQL_TABS_PREFIX}${identityId}.${targetId}`
+}
 
-export function storageKey(targetId: string): string {
-  return `${STORAGE_PREFIX}${targetId}`
+/** The key of the older shape, by target only: never read, removed when seen. */
+function legacyKey(targetId: string): string {
+  return `${SQL_TABS_PREFIX}${targetId}`
 }
 
 function storage(): Storage | undefined {
@@ -53,9 +59,14 @@ function readSaved(value: unknown): SavedRef | undefined {
  * or storage is unavailable or holds something else. Only text is kept: never
  * a result, never a classification.
  */
-export function loadTabs(targetId: string): TabsState | undefined {
+export function loadTabs(identityId: string, targetId: string): TabsState | undefined {
   try {
-    const raw = storage()?.getItem(storageKey(targetId))
+    storage()?.removeItem(legacyKey(targetId))
+  } catch {
+    // Storage refused: nothing of the older shape is read either.
+  }
+  try {
+    const raw = storage()?.getItem(storageKey(identityId, targetId))
     if (raw === null || raw === undefined) return undefined
     const parsed: unknown = JSON.parse(raw)
     if (typeof parsed !== 'object' || parsed === null) return undefined
@@ -88,7 +99,7 @@ export function loadTabs(targetId: string): TabsState | undefined {
 }
 
 /** Keeps the tabs' text in this browser; a refused or full storage keeps them for the page only. */
-export function saveTabs(targetId: string, state: TabsState): void {
+export function saveTabs(identityId: string, targetId: string, state: TabsState): void {
   try {
     const tabs = state.tabs
       .filter((tab) => tab.sql.length <= MAX_STORED_SQL)
@@ -104,7 +115,7 @@ export function saveTabs(targetId: string, state: TabsState): void {
         .filter((tab) => tab.sql.length <= MAX_STORED_SQL)
         .findIndex((t) => t.id === state.active),
     )
-    storage()?.setItem(storageKey(targetId), JSON.stringify({ tabs, active }))
+    storage()?.setItem(storageKey(identityId, targetId), JSON.stringify({ tabs, active }))
   } catch {
     // Storage refused: the tabs last for this page.
   }

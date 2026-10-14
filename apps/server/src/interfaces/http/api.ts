@@ -209,10 +209,30 @@ type Result =
       readonly body: Uint8Array
       readonly mediaType: string
       readonly headers: Readonly<Record<string, string>>
+      /**
+       * The strong entity tag of exactly these bytes. A request whose `If-None-Match`
+       * names it is answered `304 Not Modified` without the bytes, but only after the
+       * handler ran: the caller was authorized for the current bytes first.
+       */
+      readonly etag?: string
     }
   | { readonly kind: 'outcome'; readonly outcome: Outcome<unknown> }
 
 type Handler = (app: Application, call: Call) => Promise<Result>
+
+/**
+ * Whether an `If-None-Match` header names the entity tag (RFC 9110 §13.1.2:
+ * weak comparison, a list of tags or `*`). An absent or malformed header never
+ * matches, so the full answer is sent.
+ */
+function matchesEtag(header: string | undefined, etag: string): boolean {
+  if (header === undefined || header.length > 2048) return false
+  const opaque = etag.replace(/^W\//, '')
+  return header.split(',').some((part) => {
+    const tag = part.trim()
+    return tag === '*' || tag.replace(/^W\//, '') === opaque
+  })
+}
 
 const value = (v: unknown): Result => ({ kind: 'value', value: v })
 const outcome = (o: Outcome<unknown>): Result => ({ kind: 'outcome', outcome: o })
@@ -477,12 +497,16 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       kind: 'bytes',
       body: picture.bytes,
       mediaType: picture.mediaType,
+      // The entity tag is the stored hash of the bytes (an image without its metadata).
+      etag: `"${picture.sha256.slice('sha256:'.length)}"`,
       // An image only, whatever the bytes might look like to a sniffer (threat-model.md, Wave 8):
-      // never sniffed, never a document, cached privately under the hash its address names.
+      // never sniffed, never a document. Kept privately but revalidated on every use
+      // (`no-cache`), so a person who loses access, or a removed picture, stops being
+      // shown at once; an unchanged picture is a `304` without the bytes.
       headers: {
         'x-content-type-options': 'nosniff',
         'content-security-policy': "default-src 'none'; sandbox",
-        'cache-control': 'private, max-age=31536000, immutable',
+        'cache-control': 'private, no-cache',
         'content-disposition': 'inline',
         'cross-origin-resource-policy': 'same-origin',
       },
@@ -1872,10 +1896,15 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
             deps.logger.error('http.response_contract_violation', { route: route.operationId })
             return fail(new HttpRefusal('INTERNAL'))
           }
-          return new Response(result.body, {
-            status: route.response.status,
-            headers: new Headers({ ...result.headers, 'content-type': result.mediaType }),
-          })
+          const headers = new Headers({ ...result.headers, 'content-type': result.mediaType })
+          if (result.etag !== undefined) {
+            headers.set('etag', result.etag)
+            if (matchesEtag(c.req.header('if-none-match'), result.etag)) {
+              headers.delete('content-type')
+              return new Response(null, { status: 304, headers })
+            }
+          }
+          return new Response(result.body, { status: route.response.status, headers })
         }
         if (result.kind === 'text') {
           if (route.mediaType === undefined) {

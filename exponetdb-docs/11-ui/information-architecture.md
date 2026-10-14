@@ -159,7 +159,11 @@ packages (installed vs available), jobs history, enrollment and certificate.
   (pattern from Studio's route sanitization). Keyboard: `E` then the first
   letter of the environment.
 - Every target-scoped client state (tabs, filters, SQL tabs, grid state) is
-  keyed by target id; switching remounts the target outlet.
+  keyed by target id; switching remounts the target outlet. **[DECIDED]**
+  State kept in browser storage beyond the page is also keyed by the signed-in
+  person: the SQL tabs live under `exdb.sql.tabs.<identityId>.<targetId>`, and
+  sign-out or an ended session removes every `exdb.sql.tabs.*` key, so unsent
+  SQL text never waits for the next person on the same browser.
 - Route metadata declares requirements (`requires: ['target.reachable']`,
   `requires: ['capability:backup.list']`); the shell renders a named state
   (unreachable, suspended, node offline, not supported on this version) instead
@@ -223,7 +227,12 @@ Sensitive columns are masked unless the person has `data.read_sensitive`.
 section is built as decided above, in Studio's layout: a side panel (saved
 queries, own history), query tabs per target, the lazy CodeMirror editor
 (OD-40) and, below it, the result or the classification. The tabs' unsent
-text (never a result) is kept in this browser's `localStorage` per target id.
+text (never a result) is kept in this browser's `localStorage` per person and
+target id (`exdb.sql.tabs.<identityId>.<targetId>`; a key of the older
+by-target shape is never read and is removed when seen); sign-out (the account
+menu) and an ended session (the client's `onSessionGone`, `leaveForSignIn` in
+`apps/web/src/lib/session/session.ts`) remove every `exdb.sql.tabs.*` key, and
+every storage access tolerates a storage that throws.
 Query mode sends one statement (the selection, if any) to
 `POST /targets/{t}/queries` or `/explain` with a `qry_` id the page chooses;
 cancel is `POST /targets/{t}/queries/{qry}/cancel` (the Wave 7 contract names

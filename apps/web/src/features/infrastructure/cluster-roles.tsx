@@ -421,6 +421,31 @@ export const MIN_ROLE_PASSWORD_LENGTH = 16
 export const MAX_ROLE_PASSWORD_LENGTH = 256
 
 /**
+ * Derives the verifier, then sends it; the answer is the alert text ('' when the
+ * plan was created). Only a failure of the derivation itself is "could not
+ * compute the verifier" (nothing was sent); a failure of the request, a network
+ * failure included, keeps the text of the normal error path (`describeError`).
+ */
+export async function planRoleVerifier(
+  password: string,
+  send: (verifier: string) => Promise<unknown>,
+  derive: (password: string) => Promise<string> = scramSha256Verifier,
+): Promise<string> {
+  let verifier: string
+  try {
+    verifier = await derive(password)
+  } catch {
+    return t('infra.verifier.failed')
+  }
+  try {
+    await send(verifier)
+    return ''
+  } catch (error) {
+    return describeError(error)
+  }
+}
+
+/**
  * "Set a role's password": the person types the password twice; the page
  * empties both fields first, checks they match, have at least 16 printable
  * ASCII characters, derives the SCRAM-SHA-256 verifier with WebCrypto (4096
@@ -469,24 +494,19 @@ export function RoleVerifierForm({ cluster }: { readonly cluster: Cluster }): Re
     inFlight.current = true
     setBusy(true)
     setAlert('')
-    const derived = scramSha256Verifier(password)
+    const outcome = planRoleVerifier(password, (verifier) =>
+      request((client) =>
+        client.operation('submitRoleVerifier', {
+          params: { clusterId: cluster.id },
+          body: { role, verifier },
+        }),
+      ),
+    )
     password = ''
-    derived
-      .then((verifier) =>
-        request((client) =>
-          client.operation('submitRoleVerifier', {
-            params: { clusterId: cluster.id },
-            body: { role, verifier },
-          }),
-        ),
-      )
-      .catch((error: unknown) =>
-        setAlert(error instanceof TypeError ? t('infra.verifier.failed') : describeError(error)),
-      )
-      .finally(() => {
-        inFlight.current = false
-        setBusy(false)
-      })
+    outcome.then(setAlert).finally(() => {
+      inFlight.current = false
+      setBusy(false)
+    })
   }
 
   return (
