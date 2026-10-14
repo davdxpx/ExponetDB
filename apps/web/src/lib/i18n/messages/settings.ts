@@ -78,6 +78,8 @@ export const settingsMessages = {
   'settings.policies.manage.missing':
     'You can see the rules. Changing a setting needs the permission policy.manage.',
   'settings.policies.rules': 'Other rules',
+  'settings.policies.state.changed': 'Changed',
+  'settings.policies.state.default': 'Default',
   'settings.policies.version': 'Version {version}',
   'settings.policies.appliesTo': 'Applies to: {kinds}',
   'settings.policies.defaults': 'Defaults',

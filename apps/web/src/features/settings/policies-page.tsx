@@ -377,85 +377,98 @@ function RuleCard({
   const [open, setOpen] = useState(false)
   const formId = useId()
   const settings = latestSettings(rule)
+  const changed = settings.length > 0
   return (
-    <li
-      className="card flex flex-col gap-3 rounded-lg border border-default bg-surface-100 p-4"
-      data-rule={rule.id}
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-mono text-sm text-foreground">{rule.id}</h3>
-        <span className="flex items-center gap-2">
-          <Badge>{severityLabel(rule.severity)}</Badge>
-          <span className="text-xs text-foreground-lighter">
-            {t('settings.policies.version', { version: rule.version })}
+    <li data-rule={rule.id} data-state={changed ? 'changed' : 'default'}>
+      <details
+        className={`card group rounded-lg border bg-surface-100 ${changed ? 'border-warning-500' : 'border-default'}`}
+      >
+        <summary className="flex cursor-pointer flex-col gap-1 p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+          <span className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="font-mono text-sm text-foreground">{rule.id}</span>
+            <span className="flex items-center gap-2">
+              <Badge variant={changed ? 'warning' : 'default'}>
+                {changed
+                  ? t('settings.policies.state.changed')
+                  : t('settings.policies.state.default')}
+              </Badge>
+              <span className="text-xs text-foreground-lighter">
+                {t('settings.policies.version', { version: rule.version })}
+              </span>
+            </span>
           </span>
-        </span>
-      </div>
-      <p className="text-sm text-foreground-light">{rule.description}</p>
-      <p className="text-xs text-foreground-lighter">
-        {t('settings.policies.appliesTo', { kinds: rule.appliesTo.join(', ') })}
-      </p>
-      <div className="flex flex-col gap-1">
-        <p className="text-xs font-medium text-foreground">{t('settings.policies.defaults')}</p>
-        <UntrustedText
-          text={JSON.stringify(rule.defaults)}
-          mono
-          maxLines={6}
-          label={t('settings.policies.defaults')}
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <p className="text-xs font-medium text-foreground">{t('settings.policies.settings')}</p>
-        {settings.length === 0 ? (
-          <p className="text-sm text-foreground-lighter">{t('settings.policies.settings.none')}</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {settings.map((setting) => (
-              <li
-                key={`${setting.scopeKind}:${setting.scopeId}`}
-                className="flex flex-col gap-0.5 text-sm"
-              >
-                <span className="flex flex-wrap items-baseline gap-x-2">
-                  <code className="font-mono text-xs">
-                    {setting.scopeKind === 'installation'
-                      ? t('settings.policies.scope.installation')
-                      : `${setting.scopeKind} ${setting.scopeId}`}
-                  </code>
-                  <span className="text-foreground-lighter">
-                    {t('settings.policies.revision', { revision: setting.revision })}
-                  </span>
-                  <TimestampInfo timestamp={setting.createdAt} />
-                </span>
-                <UntrustedText
-                  text={JSON.stringify(setting.params)}
-                  mono
-                  maxLines={6}
-                  label={t('settings.policies.settings')}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      {canManage ? (
-        <div className="flex flex-col gap-2">
-          <div>
-            <Button
-              type="button"
-              variant="text"
-              size="tiny"
-              aria-expanded={open}
-              aria-controls={formId}
-              onClick={() => setOpen((value) => !value)}
-            >
-              {open ? t('settings.policies.change.hide') : t('settings.policies.change')}
-            </Button>
+          <span className="text-sm text-foreground-light">{rule.description}</span>
+        </summary>
+        <div className="flex flex-col gap-3 border-t border-default p-4">
+          <Badge className="self-start">{severityLabel(rule.severity)}</Badge>
+          <p className="text-xs text-foreground-lighter">
+            {t('settings.policies.appliesTo', { kinds: rule.appliesTo.join(', ') })}
+          </p>
+          <div className="flex flex-col gap-1">
+            <p className="text-xs font-medium text-foreground">{t('settings.policies.defaults')}</p>
+            <UntrustedText
+              text={JSON.stringify(rule.defaults)}
+              mono
+              maxLines={6}
+              label={t('settings.policies.defaults')}
+            />
           </div>
-          <div id={formId} hidden={!open}>
-            {open ? <RuleForm rule={rule} line={line} /> : null}
+          <div className="flex flex-col gap-1">
+            <p className="text-xs font-medium text-foreground">{t('settings.policies.settings')}</p>
+            {settings.length === 0 ? (
+              <p className="text-sm text-foreground-lighter">
+                {t('settings.policies.settings.none')}
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {settings.map((setting) => (
+                  <li
+                    key={`${setting.scopeKind}:${setting.scopeId}`}
+                    className="flex flex-col gap-0.5 text-sm"
+                  >
+                    <span className="flex flex-wrap items-baseline gap-x-2">
+                      <code className="font-mono text-xs">
+                        {setting.scopeKind === 'installation'
+                          ? t('settings.policies.scope.installation')
+                          : `${setting.scopeKind} ${setting.scopeId}`}
+                      </code>
+                      <span className="text-foreground-lighter">
+                        {t('settings.policies.revision', { revision: setting.revision })}
+                      </span>
+                      <TimestampInfo timestamp={setting.createdAt} />
+                    </span>
+                    <UntrustedText
+                      text={JSON.stringify(setting.params)}
+                      mono
+                      maxLines={6}
+                      label={t('settings.policies.settings')}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
+          {canManage ? (
+            <div className="flex flex-col gap-2">
+              <div>
+                <Button
+                  type="button"
+                  variant="text"
+                  size="tiny"
+                  aria-expanded={open}
+                  aria-controls={formId}
+                  onClick={() => setOpen((value) => !value)}
+                >
+                  {open ? t('settings.policies.change.hide') : t('settings.policies.change')}
+                </Button>
+              </div>
+              <div id={formId} hidden={!open}>
+                {open ? <RuleForm rule={rule} line={line} /> : null}
+              </div>
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </details>
     </li>
   )
 }

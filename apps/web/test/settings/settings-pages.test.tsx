@@ -281,6 +281,66 @@ describe('the policies page', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe(`/changes/plans/${PLAN}`))
   })
 
+  it('shows every rule but the data-read rule as a closed row that names its state', async () => {
+    const world = settingsWorld()
+    world.on('GET', '/api/v1/policy-settings', {
+      rules: [
+        dataReadRule({ settings: [] }),
+        {
+          appliesTo: ['plan.apply'],
+          defaults: { allowed: false },
+          description: 'Self approval of a human-initiated plan.',
+          id: 'approval.self-approval',
+          settings: [],
+          severity: 'require',
+          version: 1,
+        },
+        {
+          appliesTo: ['plan.create'],
+          defaults: { minutes: 30 },
+          description: 'How long a plan stays valid.',
+          id: 'plan.ttl',
+          settings: [
+            {
+              createdAt: T0,
+              operationId: null,
+              params: { minutes: 15 },
+              revision: 3,
+              scopeId: 'installation',
+              scopeKind: 'installation',
+            },
+          ],
+          severity: 'require',
+          version: 2,
+        },
+      ],
+    })
+    const { container } = mountApp('/settings/policies', world)
+    const changed = await waitFor(() => {
+      const row = document.querySelector<HTMLElement>('li[data-rule="plan.ttl"]')
+      if (row === null) throw new Error('no plan.ttl row')
+      return row
+    })
+    const unchanged = document.querySelector<HTMLElement>('li[data-rule="approval.self-approval"]')
+    expect(changed).toHaveAttribute('data-state', 'changed')
+    expect(unchanged).toHaveAttribute('data-state', 'default')
+    // The data-read rule keeps its own section and is not a row.
+    expect(document.querySelector('li[data-rule="data.read"]')).toBeNull()
+    for (const row of document.querySelectorAll('li[data-rule] > details')) {
+      expect(row).not.toHaveAttribute('open')
+    }
+    const summary = changed.querySelector('summary') as HTMLElement
+    expect(summary.textContent).toContain('plan.ttl')
+    expect(summary.textContent).toContain('How long a plan stays valid.')
+    expect(summary.textContent).toContain('Changed')
+    expect(summary.textContent).toMatch(/2/)
+    expect(unchanged?.querySelector('summary')?.textContent).not.toContain('Changed')
+    fireEvent.click(summary)
+    await waitFor(() => expect(changed.querySelector('details')).toHaveAttribute('open'))
+    expect(changed.textContent).toContain('Revision 3')
+    expect(await axeViolations(container)).toEqual([])
+  })
+
   it('offers no change without policy.manage', async () => {
     const world = settingsWorld()
     world.permissions = ['access.read']
