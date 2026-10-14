@@ -144,6 +144,19 @@ describe('the operation page', () => {
     )
   })
 
+  it('names the target by its id when the read gives no path, never as "no target"', async () => {
+    const world = worldWith({
+      subject: {
+        ...operationFor(OP).subject,
+        targetId: 'tgt_01M4S9000000000000000000AE',
+        targetPath: null,
+      },
+    })
+    const { frame } = await openOperation(world)
+    expect(within(frame).getAllByText('tgt_01M4S9000000000000000000AE').length).toBeGreaterThan(0)
+    expect(within(frame).queryByText('No target')).toBeNull()
+  })
+
   it('offers no Verify again when the server says the operation is not retryable', async () => {
     const world = worldWith({
       state: 'needs_attention',

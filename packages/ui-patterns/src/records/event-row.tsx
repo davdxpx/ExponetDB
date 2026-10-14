@@ -104,7 +104,7 @@ export function EventRow({
         className,
       )}
     >
-      <span className="w-48 shrink-0 text-foreground-lighter">
+      <span className="w-full shrink-0 text-foreground-lighter sm:w-48">
         <ObservedTime observedAt={occurredAt} withDate now={now} />
       </span>
       <span className="min-w-0 flex-1">
@@ -115,7 +115,7 @@ export function EventRow({
             <UntrustedName name={client} unverified label="client name" />
           </>
         )}{' '}
-        <code className="font-mono text-foreground">{action}</code>
+        <code className="font-mono break-all text-foreground">{action}</code>
         {subject !== undefined && (
           <>
             {' on '}

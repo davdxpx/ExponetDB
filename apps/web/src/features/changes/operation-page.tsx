@@ -226,11 +226,12 @@ export function TargetText({ subject }: { readonly subject: OperationRead['subje
     <span className="inline-flex flex-wrap items-center gap-2">
       {path === null ? (
         <span>
-          {subject.clusterId === null && subject.nodeId === null ? (
+          {subject.targetId === null && subject.clusterId === null && subject.nodeId === null ? (
             t('approvals.item.noTarget')
           ) : (
+            // The operation read names its target by id only; show the id, never "no target".
             <UntrustedName
-              name={subject.clusterId ?? subject.nodeId ?? ''}
+              name={subject.targetId ?? subject.clusterId ?? subject.nodeId ?? ''}
               mono
               label={t('changes.column.target')}
             />
@@ -271,7 +272,9 @@ export function ActorText({
         )}
       </span>
       {actor.identityId === null ? null : (
-        <code className="font-mono text-xs text-foreground-light">{actor.identityId}</code>
+        <code className="font-mono text-xs break-all text-foreground-light">
+          {actor.identityId}
+        </code>
       )}
       {clientName === null ? null : (
         <UntrustedName name={clientName} unverified label={t('changes.client.label')} />
@@ -417,7 +420,11 @@ function OperationFacts({
           {planHref === undefined ? (
             t('changes.facts.noPlan')
           ) : (
-            <Link href={planHref} className="text-primary underline focus-ring" data-plan-link="">
+            <Link
+              href={planHref}
+              className="break-all text-primary underline focus-ring"
+              data-plan-link=""
+            >
               {t('changes.facts.planLink', { id: operation.planId ?? '' })}
             </Link>
           )}
