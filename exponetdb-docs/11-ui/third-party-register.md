@@ -43,6 +43,24 @@ a registered file is ExponetDB code that is changed freely.
    `LICENSES/MIT-shadcn.txt` as they apply; every row is covered by
    `THIRD_PARTY_NOTICES.md`.
 
+## Notices shipped with the Web App
+
+**[OBSERVED]** The built Web App serves its license notice at
+`/assets/third-party-licenses.txt` (plain text, `no-store`, under the same
+strict headers and CSP as every asset). The Vite plugin
+`apps/web/scripts/notices-plugin.ts` writes it at build time from the modules
+the bundle actually contains (the JavaScript chunks and the CSS and font files
+they import): one section per bundled npm package with the text of its license
+file (or, when it ships none, its declared license), followed by
+`THIRD_PARTY_NOTICES.md` and the texts in `LICENSES/`. The build stops when a
+bundled package has neither a license file nor a declared license
+(`apps/web/scripts/notices.ts`, tested in `apps/web/test/build/notices.test.ts`);
+`apps/web/scripts/postbuild.ts` then fails when the file is missing, its
+package count differs from its sections, or the core packages and the
+repository notices are absent. `apps/server/src/composition/web-assets.ts`
+serves this one `.txt` file and no other. The dependency license policy
+(`bun run licenses`) still decides which licenses may ship at all.
+
 ## Register
 
 | ExponetDB path | Source path | Commit | License basis | Notices applied | Changes | Review |

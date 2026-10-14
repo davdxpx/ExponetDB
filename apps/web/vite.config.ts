@@ -3,6 +3,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import react from '@vitejs/plugin-react'
 import { defaultClientConditions, defineConfig } from 'vite'
+import { thirdPartyNotices } from './scripts/notices-plugin.ts'
 
 /**
  * A file name the server serves: every path segment starts with a letter
@@ -38,6 +39,7 @@ export default defineConfig({
     cspPrimitives(),
     react(),
     tailwindcss(),
+    thirdPartyNotices(),
   ],
   resolve: { conditions: ['@exponetdb/source', ...defaultClientConditions] },
   build: {

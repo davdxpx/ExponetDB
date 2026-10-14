@@ -10,7 +10,12 @@ const TYPES: Readonly<Record<string, string>> = {
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.woff2': 'font/woff2',
+  // Only the generated license notice is a text file (`NOTICE_KEY`).
+  '.txt': 'text/plain; charset=utf-8',
 }
+
+/** The generated license notice, `assets/third-party-licenses.txt`: the one `.txt` file served. */
+const NOTICE_KEY = 'third-party-licenses.txt'
 
 /** One path segment of a served file: what content hashes and file names need, nothing else. */
 const SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
@@ -65,10 +70,15 @@ async function collect(
       continue
     }
     const type = TYPES[extname(entry.name)]
-    if (!entry.isFile() || type === undefined || type.startsWith('text/html')) {
+    const key = `${prefix}${entry.name}`
+    if (
+      !entry.isFile() ||
+      type === undefined ||
+      type.startsWith('text/html') ||
+      (extname(entry.name) === '.txt' && key !== NOTICE_KEY)
+    ) {
       continue
     }
-    const key = `${prefix}${entry.name}`
     if (into.has(key)) {
       throw new Error(`the built Web App holds ${key} twice`)
     }
@@ -110,7 +120,8 @@ export async function loadWebAssets(
         !entry.isFile() ||
         !SEGMENT.test(entry.name) ||
         type === undefined ||
-        type.startsWith('text/html')
+        type.startsWith('text/html') ||
+        extname(entry.name) === '.txt'
       ) {
         continue
       }

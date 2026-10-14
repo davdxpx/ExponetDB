@@ -3,6 +3,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
+import { secretExposure } from '../security/secret-scan.ts'
 import { binding, grant, identity, ROLES } from './fixtures.ts'
 import {
   BIDI,
@@ -142,8 +143,11 @@ describe('the People page', () => {
     expect(cacheText(queryClient)).not.toContain('exiv_')
     // The link is text to copy, never a link to follow.
     expect(document.querySelector(`a[href*="exiv_"]`)).toBeNull()
+    // Besides the one element: in no attribute (title, data-*, aria-*), comment, text or storage.
+    expect(secretExposure(document.body, `exiv_${'L'.repeat(43)}`, '#invitation-link')).toEqual([])
     await user.click(screen.getByRole('button', { name: 'Hide link' }))
     expect(screen.queryByText(LINK)).toBeNull()
+    expect(secretExposure(document.body, `exiv_${'L'.repeat(43)}`, '#invitation-link')).toEqual([])
   })
 
   it('refuses a malformed address before any request', async () => {

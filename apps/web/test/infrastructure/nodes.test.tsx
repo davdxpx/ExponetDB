@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
 import { infraKeys } from '../../src/features/infrastructure/keys.ts'
+import { secretExposure } from '../security/secret-scan.ts'
 import {
   BIDI,
   cacheText,
@@ -288,9 +289,12 @@ describe('the enrollment token', () => {
       }
     }
     expect(await axeViolations(first.container)).toEqual([])
+    // Besides the one element: in no attribute (title, data-*, aria-*), comment, text or storage.
+    expect(secretExposure(document.body, TOKEN, '#enrollment-token')).toEqual([])
 
     await user.click(within(shown).getByRole('button', { name: 'Hide token' }))
     expect(screen.queryByText(TOKEN)).toBeNull()
+    expect(secretExposure(document.body, TOKEN, '#enrollment-token')).toEqual([])
 
     // A reload is a new page: the token is gone and the server does not reveal it again.
     first.unmount()

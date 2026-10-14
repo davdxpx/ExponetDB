@@ -1315,3 +1315,205 @@ describe('OAuth over HTTP (Wave 3B)', () => {
     })
   })
 })
+
+/**
+ * The browser surface (Wave 8 order section 10, Phase 15): what a browser can be made to do
+ * through the cookies, the headers, the request protection and the redirects of the program.
+ */
+describe('browser surface', () => {
+  const SURFACES: readonly [string, string, boolean][] = [
+    ['GET', '/login', true],
+    ['GET', '/oauth/consent', true],
+    ['GET', '/assets/app.js', true],
+    ['GET', '/api/v1/installation', false],
+    ['GET', '/api/v1/no-such-route', false],
+    ['POST', '/auth/login/passkey/options', false],
+    ['GET', '/oauth/authorize?client_id=nope', false],
+    ['POST', '/oauth/token', false],
+    ['GET', '/.well-known/oauth-authorization-server', false],
+  ]
+
+  /** A request without a body parser: pages answer HTML, assets JavaScript. */
+  const raw = async (method: string, path: string) => {
+    const response = await app.request(`${ORIGIN}${path}`, {
+      method,
+      headers: {
+        'user-agent': UA,
+        ...(method === 'POST' ? { origin: ORIGIN, 'content-type': 'application/json' } : {}),
+      },
+      ...(method === 'POST' ? { body: '{}' } : {}),
+    })
+    return { response, text: await response.text() }
+  }
+
+  const authorizeQuery = async (redirect: string): Promise<string> => {
+    const challenge = Buffer.from(
+      await crypto.subtle.digest('SHA-256', new TextEncoder().encode('v'.repeat(43))),
+    ).toString('base64url')
+    return new URLSearchParams({
+      response_type: 'code',
+      client_id: 'exponetdb-cli',
+      redirect_uri: redirect,
+      scope: 'targets.read',
+      state: 's',
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+      resource: `${ORIGIN}/api`,
+    }).toString()
+  }
+
+  it('every surface refuses framing, sniffing and referrers, and none answers a cross-origin read', async () => {
+    for (const [method, path, page] of SURFACES) {
+      const r = await raw(method, path)
+      const csp = r.response.headers.get('content-security-policy') ?? ''
+      expect(csp, `${method} ${path}`).toContain("frame-ancestors 'none'")
+      expect(csp, `${method} ${path}`).not.toMatch(/unsafe-|\*/)
+      expect(r.response.headers.get('x-content-type-options'), path).toBe('nosniff')
+      expect(r.response.headers.get('referrer-policy'), path).toBe('no-referrer')
+      expect(r.response.headers.has('access-control-allow-origin'), path).toBe(false)
+      expect(r.response.headers.has('access-control-allow-credentials'), path).toBe(false)
+      if (page) {
+        expect(r.response.headers.get('x-frame-options'), path).toBe('DENY')
+        expect(csp, path).toContain("script-src 'self'")
+      }
+      if (!path.startsWith('/assets/')) {
+        expect(r.response.headers.get('cache-control'), path).toContain('no-store')
+      }
+    }
+  })
+
+  it('answers a cross-origin preflight without any permission', async () => {
+    for (const path of ['/api/v1/me', '/auth/logout', '/oauth/token', '/auth/oauth/consent']) {
+      const r = await app.request(`${ORIGIN}${path}`, {
+        method: 'OPTIONS',
+        headers: {
+          origin: 'https://evil.example.test',
+          'access-control-request-method': 'POST',
+          'access-control-request-headers': 'x-csrf-token,content-type',
+        },
+      })
+      expect(r.headers.has('access-control-allow-origin'), path).toBe(false)
+      expect(r.headers.has('access-control-allow-headers'), path).toBe(false)
+      expect(r.status, path).toBeGreaterThanOrEqual(400)
+    }
+  })
+
+  it('every cookie is a __Host- cookie: Secure, Path=/, no Domain; only the CSRF cookie is readable by script', async () => {
+    const lines: string[] = []
+    const record = (r: { response: Response }) => lines.push(...r.response.headers.getSetCookie())
+    record(await new Browser().call('POST', '/auth/login/passkey/options', {}))
+    const browser = await signIn(owner.authenticator)
+    record(await browser.call('POST', '/auth/reauth/passkey/options', {}))
+    record(
+      await browser.call(
+        'GET',
+        `/oauth/authorize?${await authorizeQuery('http://127.0.0.1:51234/callback')}`,
+      ),
+    )
+    record(await browser.call('POST', '/auth/logout', {}))
+    expect(lines.length).toBeGreaterThanOrEqual(3)
+    for (const line of lines) {
+      const [pair = '', ...attributes] = line.split(';')
+      const name = pair.slice(0, pair.indexOf('='))
+      const flags = attributes.map((a) => a.trim().toLowerCase())
+      expect(name, line).toMatch(/^__Host-exdb_(session|csrf|ceremony|oauth)$/)
+      expect(flags, line).toContain('secure')
+      expect(flags, line).toContain('path=/')
+      expect(flags, line).toContain('samesite=strict')
+      expect(
+        flags.some((f) => f.startsWith('domain')),
+        line,
+      ).toBe(false)
+      expect(
+        flags.some((f) => f.startsWith('max-age=')),
+        line,
+      ).toBe(true)
+      if (name === '__Host-exdb_csrf') {
+        expect(flags, line).not.toContain('httponly')
+      } else {
+        expect(flags, line).toContain('httponly')
+      }
+    }
+    const names = new Set(lines.map((l) => l.slice(0, l.indexOf('='))))
+    expect(names.has('__Host-exdb_ceremony')).toBe(true)
+    expect(names.has('__Host-exdb_oauth')).toBe(true)
+    expect(names.has('__Host-exdb_session')).toBe(true)
+    expect(names.has('__Host-exdb_csrf')).toBe(true)
+  })
+
+  it('post-session ceremonies, consent and logout need the Origin and the CSRF token, and change nothing without them', async () => {
+    const browser = await signIn(owner.authenticator)
+    const token = browser.cookie('__Host-exdb_session')?.value ?? ''
+    const hostile: {
+      origin?: string | null
+      csrf?: string | null
+      headers?: Record<string, string>
+    }[] = [
+      { origin: null },
+      { origin: 'https://evil.example.test' },
+      { origin: `${ORIGIN}.evil.example.test` },
+      { origin: 'null' },
+      { csrf: null },
+      { csrf: `exck_${'A'.repeat(43)}` },
+      { headers: { 'sec-fetch-site': 'cross-site' } },
+    ]
+    // The Origin is judged before the body is read; the token of the session after it, so the
+    // token cases use the endpoints whose body is empty.
+    const originOnly = hostile.filter((o) => o.csrf === undefined)
+    for (const [path, cases] of [
+      ['/auth/logout', hostile],
+      ['/auth/reauth/passkey/options', hostile],
+      ['/api/v1/me/sessions/revoke-others', hostile],
+      ['/auth/oauth/consent', originOnly],
+      ['/auth/oauth/consent/view', originOnly],
+      ['/auth/oauth/device', originOnly],
+    ] as const) {
+      for (const options of cases) {
+        const r = await browser.call('POST', path, {}, options)
+        expect([r.status, r.body?.code], `${path} ${JSON.stringify(options)}`).toEqual([
+          403,
+          'CSRF_FAILED',
+        ])
+      }
+    }
+    // None of those attempts ended the session.
+    const replay = new Browser()
+    replay.jar.set('__Host-exdb_session', { value: token, attributes: '' })
+    expect((await replay.call('GET', '/api/v1/me')).status).toBe(200)
+    expect((await browser.call('POST', '/auth/logout', {})).status).toBe(200)
+  })
+
+  it('never redirects an authorization request to an address the client did not register', async () => {
+    for (const redirect of [
+      'https://evil.example.test/cb',
+      'http://127.0.0.1@evil.example.test/callback',
+      'http://127.0.0.1:51234.evil.example.test/callback',
+      '//evil.example.test/cb',
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+    ]) {
+      const r = await new Browser().call(
+        'GET',
+        `/oauth/authorize?${await authorizeQuery(redirect)}`,
+      )
+      const location = r.response.headers.get('location') ?? ''
+      expect(r.status, redirect).toBe(302)
+      expect(location, redirect).toMatch(new RegExp(`^${ORIGIN}/oauth/error\\?reason=[a-z_]+$`))
+      expect(location, redirect).not.toContain('evil')
+    }
+  })
+
+  it('serves the sign-in page for any returnTo and never redirects by it: the address is decided in the browser', async () => {
+    for (const returnTo of [
+      '//evil.example.test',
+      'https://evil.example.test',
+      '/\\evil.example.test',
+      'javascript:alert(1)',
+    ]) {
+      const r = await raw('GET', `/login?returnTo=${encodeURIComponent(returnTo)}`)
+      expect(r.response.status, returnTo).toBe(200)
+      expect(r.response.headers.has('location'), returnTo).toBe(false)
+      expect(r.text, returnTo).not.toContain('evil')
+    }
+  })
+})
