@@ -76,7 +76,7 @@ Plus:
 | Control Store | Coolify PostgreSQL resource on `reos-01` (V1) | [`../02-control-plane/control-database.md`](../02-control-plane/control-database.md) |
 | `exponetdb-node` | each database host, systemd | [`../07-node-agent/architecture.md`](../07-node-agent/architecture.md) |
 | CLI `exponetdb` | developer machines, CI | uses the REST API; shares bundle/checksum code with the server |
-| Web App | static SPA served by `serve` | talks only to `/api/v1` and `/oauth` like any client |
+| Web App | static SPA served by `serve` | talks only to `/api/v1`, `/auth` and `/oauth` like any client |
 
 ## 3. Layering inside the server
 

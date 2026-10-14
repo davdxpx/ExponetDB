@@ -321,3 +321,34 @@ the configured public origin:
 session is bound to a coarse device label) and cookies passed through
 unchanged; Phase 1 verifies it in Chromium and this section records the exact
 setup.
+
+### 7.1 Running the Web App's checks locally (Wave 8)
+
+**[OBSERVED]** (2026-10-14, Wave 8 part 2; commands from the root
+`package.json` and `apps/server/package.json`) CI has never run for this
+repository, so these local runs are the evidence:
+
+```sh
+node --version                                   # 24.x: the root `engines` asks for >=24 <25; run vitest under Node 24
+eval "$(bun run --silent dev:control-store)"     # Docker: the Control Store container, exports EXDB_TEST_PG_URL
+eval "$(bun run --silent dev:targets)"           # Docker: PostgreSQL 16, 17, 18 targets, exports EXDB_TEST_TARGETS
+node apps/server/node_modules/playwright-core/cli.js install chromium   # once per pinned version
+bun run --cwd apps/design-system build           # csp-ui-surface.e2e and visual-regression.e2e serve it
+bun run test:e2e                                 # builds apps/web and the CLI, then apps/server/test/*.e2e.test.ts
+# one suite, from apps/server:
+bunx vitest run --config vitest.e2e.config.ts test/web-axe.e2e.test.ts
+# rewrite the visual baselines (review the diff before committing them):
+EXDB_UPDATE_VISUAL=1 bunx vitest run --config vitest.e2e.config.ts test/visual-regression.e2e.test.ts
+```
+
+The browser suites are `web.e2e`, `web-review.e2e`, `mcp-approval.e2e`,
+`csp-ui-surface.e2e`, `web-cross-surface.e2e`, `web-hostile-content.e2e`,
+`web-browser-surface.e2e`, `web-axe.e2e` and `visual-regression.e2e`; each
+fails on any CSP violation the page reports. The visual baselines in
+`apps/server/test/visual-baselines/` are Chromium-specific (another Chromium
+build or operating system's font rendering needs them regenerated). The web
+build also checks the bundle budgets (`apps/web/scripts/budgets.ts`) and
+writes the license notices (`apps/web/scripts/notices.ts`). Component tests
+(`cd apps/web && bunx vitest run`) need no Docker. Every database is local
+and disposable, only synthetic addresses (`@example.test`) appear, and no
+real host or secret is used.

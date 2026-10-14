@@ -91,6 +91,37 @@ permanent review note after a confirmation and re-authentication; 409 shown
 in the dialog). Every settings page shows a banner while grants wait for
 their review. Break-glass activation is offered nowhere (OD-21).
 
+**[OBSERVED]** (Wave 8 Phases 9 to 13, `apps/web/src/routes/_app/**` and
+`apps/web/src/features/`) The remaining screens, one note each. Every list,
+card and chart renders loading, failed, stale, partial and empty as
+distinct states (§6); a failed read is never an empty list.
+
+| Route | Source | What the screen is |
+|---|---|---|
+| `/` | `features/fleet/` | Fleet overview from one `GET /fleet`: counts across every target the person may see, each with its source, age and a "at least" mark when it is a floor; a part the server could not count says why and is never zero; what needs a person (approvals, findings) and the Control Plane's own health |
+| `/targets` | `features/targets/` | Databases: search, filters and sort kept in the URL (validated), table and grid, cursor followed to a bound with a note when more exist; health per row is the one the list carries |
+| `/targets/register` | `features/targets/register-page.tsx` | Register a target: product, project, environment, cluster and database; shows the cluster's declared tier; creates a registration plan (`POST /targets`) and opens it for review |
+| `/changes` | `features/changes/changes-page.tsx` | Entry page to plans, operations and promotion; reads nothing itself |
+| `/changes/plans`, `/changes/plans/$planId` | `features/plans/` | Plan list and the plan review page (§5) |
+| `/changes/operations`, `/changes/operations/$operationId` | `features/changes/` | Operations list; operation page with applied and verified as separate indicators, "Verify again" when `retryable`, cancel where the operation allows it |
+| `/changes/promotion` | `features/changes/promotion-page.tsx` | Migration stream of one project against its environments in evidence order, from the Control Store mirrors (`source: cached`); a missing mirror cell is `unknown`, never "not applied" |
+| `/approvals` | `features/approvals/` | Approvals queue (earlier URL, §2.1 parity) |
+| `/infrastructure`, `/servers`, `/servers/$serverId` | `features/infrastructure/` | Servers of the registry with the agent's last report; register a server by plan |
+| `/infrastructure/clusters`, `/clusters/$clusterId` | `features/infrastructure/` | PostgreSQL clusters with management mode, declared tier, placements, desired roles; role-verifier hand-off (the browser computes a SCRAM-SHA-256 verifier, never sends a password) |
+| `/infrastructure/nodes`, `/nodes/$nodeId` | `features/infrastructure/` | Node agents, capabilities, jobs (never the job envelope), enrollment with a reveal-once token |
+| `/infrastructure/certificates` | `features/infrastructure/certificates-page.tsx` | Certificate authorities of the agent PKI and the PostgreSQL CA with expiry |
+| `/backups` | `features/wave9/` | Named "not available yet" state (Wave 9) |
+| `/t/<product>/<project>/<environment>` | `features/target-overview/` | Target overview: health in incident order, health history, migration head against the other environments, recent operations, open findings; each block reads and fails on its own |
+| `…/schema`, `…/schema/$kind` | `features/schema/` | Schema browser (status, fingerprint, object lists by kind, detail, visualizer with a table alternative); needs a name filter, because the API has no list-all endpoint |
+| `…/migrations` | `features/migrations/` | Ledger from the target, timeline across environments, plans, drift summary, legacy import; no "run now" |
+| `…/sql` | `features/sql/` | SQL workspace (§4) |
+| `…/drift`, `…/findings` | `features/drift/`, `features/findings/` | Drift: stored findings first, then the result of a check run from the page (expected and actual side by side); "Accept drift" only creates a plan. Findings: filters from the address, keyset "load more" |
+| `…/performance`, `…/advisors`, `…/backups` | `features/wave9/` | Named "not available yet" states (Wave 9) |
+| `…/connections`, `…/locks` | `features/connections/` | Sessions grouped by role and application, blockers, endpoints with probe results; the lock graph as tree and table; cancel and terminate are not controls (Wave 9); the raw statement view is human only and re-authenticated |
+| `…/configuration` | `features/configuration/` | Read-only: registry facts, the data-read policy that applies, PostgreSQL settings as a named state, the cluster's roles |
+| `…/activity` | `features/activity/` | Operations and audit events of the target (`audit.read`) |
+| `/settings/*`, `/access/*`, `/audit`, `/account/*` | see the paragraphs above | Settings, access, audit and the account tabs |
+
 **[DECIDED]** (Wave 8 order D6) Every earlier URL stays valid with the
 behavior it has today, because the server, the CLI and MCP emit links to them
 ([order Appendix C](../14-roadmap/orders/wave-8-order.md#appendix-c--what-the-rebuild-must-preserve-parity-oracle)):

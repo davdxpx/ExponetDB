@@ -114,8 +114,9 @@ The SDK never accepts or stores database credentials.
 §322 to §325; awaiting G4)
 
 `packages/sdk` is version `1.0.0-alpha.1` (private, not published; the major
-follows `/api/v1`). Node.js 22+ and Bun; no browser build (the planned
-`./operations` subpath of §5 is a table and types, not a client).
+follows `/api/v1`). Node.js 22+ and Bun; no browser build (the
+`./operations` subpath of §5, **[OBSERVED]** since Wave 8 Phase 1, is a table
+and types, not a client).
 
 **Generation.** `tooling/generators/sdk.ts` turns the committed
 `openapi.json` into `src/generated/api.ts`: one type per component schema, an
