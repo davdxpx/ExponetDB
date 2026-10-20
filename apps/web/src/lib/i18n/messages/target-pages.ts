@@ -27,6 +27,7 @@ const migrationsMessages = {
   'migrations.ledger.column.origin': 'Origin',
   'migrations.ledger.column.applied': 'Applied',
   'migrations.ledger.column.verification': 'Verification',
+  'migrations.ledger.column.sql': 'SQL',
   'migrations.ledger.operation': 'View operation',
   'migrations.ledger.reverted': 'Reverted',
   'migrations.verification.passed': 'Verified',
@@ -42,6 +43,7 @@ const migrationsMessages = {
     'Each bundle in dependency order, one column per environment. A cell with no record reads unknown, never not applied.',
   'migrations.timeline.what': 'Migration timeline',
   'migrations.timeline.environment': 'Environment',
+  'migrations.timeline.compare': 'Compare the schema with another environment',
   'migrations.timeline.graphInvalid':
     'The bundle graph is not valid, so the bundles are listed by id and not in dependency order.',
   'migrations.timeline.noTarget':

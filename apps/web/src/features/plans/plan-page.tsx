@@ -46,6 +46,7 @@ import { useMe } from '../../lib/session/guard.tsx'
 import { NotFoundPage } from '../../shell/not-found.tsx'
 import { operationPath } from '../changes/model.ts'
 import { VerifyAgainAction } from '../changes/operation-actions.tsx'
+import { ViewSqlButton } from '../migrations/bundle-sheet.tsx'
 import { ApplyAction, DecisionActions, type PageMessage } from './decision-actions.tsx'
 import { approvalQueueQuery, operationQuery, planKeys, planQuery } from './keys.ts'
 import {
@@ -59,6 +60,8 @@ import {
   requirementsOf,
   rulesOf,
 } from './plan-model.ts'
+import { planBundlesOf, StoredFilesBlock, useStoredFiles } from './stored-files.tsx'
+import { canOfferWithdraw, WithdrawAction } from './withdraw-action.tsx'
 
 /**
  * The plan review page `/changes/plans/<id>` (information-architecture.md
@@ -74,7 +77,10 @@ import {
  *
  * The plan comes from the approvals queue when an operation of it waits for
  * the person (the queue carries the review: the client's name and the stored
- * files), else from `GET /plans/{id}`. Whether the person may approve is the
+ * files), else from `GET /plans/{id}`; then the files come from the bundle
+ * store, matched by the revision and digest the plan binds, so every reader
+ * of the plan sees them (as text, in the same block). The person's own
+ * active plan can be withdrawn. Whether the person may approve is the
  * server's answer (the queue lists only what the person may decide). The
  * review keeps the DOM hooks of the Wave 7 approvals page
  * (`li.card.focused[data-operation]`, `.review`, `.computed`, `.raw`), so
@@ -230,6 +236,11 @@ function PlanReview({
   const analysis = analysisOf(plan)
   const evidence = evidenceOf(plan)
   const files = item?.review === undefined ? undefined : filesOf(item.review)
+  const isMigration = plan.kind.startsWith('migration.')
+  // Without the queue's review (not an approver, nothing waiting, the queue unreadable), every
+  // reader of the plan sees the files it runs from the bundle store, matched by its digest.
+  const stored = useStoredFiles(plan, isMigration && files === undefined)
+  const queryClient = useQueryClient()
   // Production unless the tier is exactly `nonprod` (fails closed).
   const production = isProductionTier(plan.subject.tier)
   const mine = item?.approvals.find(
@@ -242,7 +253,6 @@ function PlanReview({
     mine !== undefined && Date.parse(mine.notBefore) > Date.parse(mine.decidedAt)
       ? { notBefore: mine.notBefore }
       : undefined
-  const isMigration = plan.kind.startsWith('migration.')
 
   return (
     <ul className="cards flex flex-col" aria-label={t('plans.review.label')}>
@@ -277,12 +287,17 @@ function PlanReview({
                 expiresAt={plan.expiresAt}
                 stale={stale}
                 renderActions={(binding: PlanBinding) => (
-                  <ApplyAction
-                    plan={plan}
-                    planHash={binding.planHash}
-                    onMessage={onMessage}
-                    variant="primary"
-                  />
+                  <>
+                    <ApplyAction
+                      plan={plan}
+                      planHash={binding.planHash}
+                      onMessage={onMessage}
+                      variant="primary"
+                    />
+                    {canOfferWithdraw(plan, me.identity.id) ? (
+                      <WithdrawAction plan={plan} onMessage={onMessage} />
+                    ) : null}
+                  </>
                 )}
               />
               <PolicyDecisionBlock
@@ -310,7 +325,15 @@ function PlanReview({
                 />
               )}
             </ComputedFactsSection>
-            {isMigration ? (
+            {!isMigration ? (
+              <StoredChange plan={plan} />
+            ) : files === undefined && stored !== undefined ? (
+              <StoredFilesBlock
+                readable={stored}
+                collapsedLines={RAW_LINES_SHOWN}
+                onRetry={() => void queryClient.invalidateQueries({ queryKey: ['bundles'] })}
+              />
+            ) : (
               <RawPlanTextBlock
                 headingLevel={2}
                 files={files?.files ?? null}
@@ -318,8 +341,6 @@ function PlanReview({
                 runs={files?.runs ?? null}
                 collapsedLines={RAW_LINES_SHOWN}
               />
-            ) : (
-              <StoredChange plan={plan} />
             )}
           </div>
           <ApprovalsBlock
@@ -355,6 +376,7 @@ function PlanReview({
             onRetry={() => void operationRead.refetch()}
             onMessage={onMessage}
           />
+          {isMigration ? <PlanBundles plan={plan} /> : null}
         </PlanFrame>
       </li>
     </ul>
@@ -367,6 +389,54 @@ function PlanReview({
  * control, and the analysis lists every statement with its line first.
  */
 export const RAW_LINES_SHOWN = 1_000
+
+/**
+ * The bundles a migration plan names, each with "View SQL": the side panel
+ * of the stored bundle (its revisions, every file as numbered text, its runs
+ * on the plan's target). Buttons only; the panel opens outside the review.
+ */
+function PlanBundles({ plan }: { readonly plan: PlanSource }): ReactNode {
+  const bundles = planBundlesOf(plan)
+  if (bundles === undefined || bundles.items.length === 0) return null
+  const targetPath = plan.subject.targetPath ?? undefined
+  return (
+    <PlanBlock
+      title={t('plans.bundles.title')}
+      headingLevel={2}
+      data-plan-block="bundles"
+      description={t('plans.bundles.description')}
+    >
+      <ul className="m-0 flex list-none flex-col gap-2 p-0">
+        {bundles.items.map((item) => (
+          <li
+            key={item.migrationId}
+            data-plan-bundle={item.migrationId}
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
+          >
+            {item.name === null ? null : (
+              <UntrustedName name={item.name} label={t('plans.bundles.name')} />
+            )}
+            <span className="font-mono text-xs text-foreground-lighter">{item.migrationId}</span>
+            {item.revision === null ? null : (
+              <span className="text-xs text-foreground-light">
+                {t('plans.bundles.revision', { revision: item.revision })}
+              </span>
+            )}
+            <ViewSqlButton
+              bundle={{
+                projectId: bundles.projectId,
+                migrationId: item.migrationId,
+                name: item.name ?? undefined,
+                targetPath,
+                revision: item.revision ?? undefined,
+              }}
+            />
+          </li>
+        ))}
+      </ul>
+    </PlanBlock>
+  )
+}
 
 /** The stored change of a plan that is not a migration, as data. */
 function StoredChange({ plan }: { readonly plan: PlanSource }): ReactNode {

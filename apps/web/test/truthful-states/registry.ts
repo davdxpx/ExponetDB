@@ -107,6 +107,7 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/changes/operation-page.tsx': { tests: ['changes/operation-page.test.tsx'] },
   'src/features/changes/operations-page.tsx': { tests: ['changes/operations-page.test.tsx'] },
   'src/features/changes/promotion-page.tsx': { tests: ['changes/promotion-page.test.tsx'] },
+  'src/features/compare/compare-page.tsx': { tests: ['target-pages/compare.test.tsx'] },
   'src/features/configuration/configuration-page.tsx': {
     tests: ['target-pages/configuration.test.tsx'],
   },
@@ -130,6 +131,9 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/infrastructure/nodes-page.tsx': { tests: NODES },
   'src/features/infrastructure/server-detail.tsx': { tests: SERVERS },
   'src/features/infrastructure/servers-page.tsx': { tests: SERVERS },
+  'src/features/migrations/bundle-sheet.tsx': {
+    tests: ['target-pages/migration-actions.test.tsx'],
+  },
   'src/features/migrations/drift-summary.tsx': { tests: MIGRATIONS },
   'src/features/migrations/ledger-section.tsx': { tests: MIGRATIONS },
   'src/features/migrations/legacy-import.tsx': { tests: MIGRATIONS },
@@ -137,6 +141,13 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/migrations/timeline-section.tsx': { tests: MIGRATIONS },
   'src/features/plans/plan-list.tsx': { tests: ['plans/plan-list.test.tsx'] },
   'src/features/plans/plan-page.tsx': { tests: ['plans/plan-page.test.tsx'] },
+  'src/features/plans/stored-files.tsx': {
+    tests: ['plans/plan-actions.test.tsx'],
+    exempt: {
+      stale:
+        'useStoredFiles yields loading, failed, partial or ready only: a stored bundle revision never changes (bundles are append-only), so its files are read once and an earlier read is never out of date.',
+    },
+  },
   'src/features/schema/object-detail.tsx': { tests: SCHEMA },
   'src/features/schema/object-list.tsx': { tests: SCHEMA },
   'src/features/schema/schema-page.tsx': { tests: SCHEMA },

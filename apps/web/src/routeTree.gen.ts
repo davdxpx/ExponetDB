@@ -66,6 +66,7 @@ import { Route as AppTProductProjectEnvironmentIndexRouteImport } from './routes
 import { Route as AppTProductProjectEnvironmentActivityRouteImport } from './routes/_app/t/$product/$project/$environment/activity'
 import { Route as AppTProductProjectEnvironmentAdvisorsRouteImport } from './routes/_app/t/$product/$project/$environment/advisors'
 import { Route as AppTProductProjectEnvironmentBackupsRouteImport } from './routes/_app/t/$product/$project/$environment/backups'
+import { Route as AppTProductProjectEnvironmentCompareRouteImport } from './routes/_app/t/$product/$project/$environment/compare'
 import { Route as AppTProductProjectEnvironmentConfigurationRouteImport } from './routes/_app/t/$product/$project/$environment/configuration'
 import { Route as AppTProductProjectEnvironmentConnectionsRouteImport } from './routes/_app/t/$product/$project/$environment/connections'
 import { Route as AppTProductProjectEnvironmentDriftRouteImport } from './routes/_app/t/$product/$project/$environment/drift'
@@ -376,6 +377,12 @@ const AppTProductProjectEnvironmentBackupsRoute =
     path: '/backups',
     getParentRoute: () => AppTProductProjectEnvironmentRoute,
   } as any)
+const AppTProductProjectEnvironmentCompareRoute =
+  AppTProductProjectEnvironmentCompareRouteImport.update({
+    id: '/compare',
+    path: '/compare',
+    getParentRoute: () => AppTProductProjectEnvironmentRoute,
+  } as any)
 const AppTProductProjectEnvironmentConfigurationRoute =
   AppTProductProjectEnvironmentConfigurationRouteImport.update({
     id: '/configuration',
@@ -492,6 +499,7 @@ export interface FileRoutesByFullPath {
   '/t/$product/$project/$environment/activity': typeof AppTProductProjectEnvironmentActivityRoute
   '/t/$product/$project/$environment/advisors': typeof AppTProductProjectEnvironmentAdvisorsRoute
   '/t/$product/$project/$environment/backups': typeof AppTProductProjectEnvironmentBackupsRoute
+  '/t/$product/$project/$environment/compare': typeof AppTProductProjectEnvironmentCompareRoute
   '/t/$product/$project/$environment/configuration': typeof AppTProductProjectEnvironmentConfigurationRoute
   '/t/$product/$project/$environment/connections': typeof AppTProductProjectEnvironmentConnectionsRoute
   '/t/$product/$project/$environment/drift': typeof AppTProductProjectEnvironmentDriftRoute
@@ -557,6 +565,7 @@ export interface FileRoutesByTo {
   '/t/$product/$project/$environment/activity': typeof AppTProductProjectEnvironmentActivityRoute
   '/t/$product/$project/$environment/advisors': typeof AppTProductProjectEnvironmentAdvisorsRoute
   '/t/$product/$project/$environment/backups': typeof AppTProductProjectEnvironmentBackupsRoute
+  '/t/$product/$project/$environment/compare': typeof AppTProductProjectEnvironmentCompareRoute
   '/t/$product/$project/$environment/configuration': typeof AppTProductProjectEnvironmentConfigurationRoute
   '/t/$product/$project/$environment/connections': typeof AppTProductProjectEnvironmentConnectionsRoute
   '/t/$product/$project/$environment/drift': typeof AppTProductProjectEnvironmentDriftRoute
@@ -627,6 +636,7 @@ export interface FileRoutesById {
   '/_app/t/$product/$project/$environment/activity': typeof AppTProductProjectEnvironmentActivityRoute
   '/_app/t/$product/$project/$environment/advisors': typeof AppTProductProjectEnvironmentAdvisorsRoute
   '/_app/t/$product/$project/$environment/backups': typeof AppTProductProjectEnvironmentBackupsRoute
+  '/_app/t/$product/$project/$environment/compare': typeof AppTProductProjectEnvironmentCompareRoute
   '/_app/t/$product/$project/$environment/configuration': typeof AppTProductProjectEnvironmentConfigurationRoute
   '/_app/t/$product/$project/$environment/connections': typeof AppTProductProjectEnvironmentConnectionsRoute
   '/_app/t/$product/$project/$environment/drift': typeof AppTProductProjectEnvironmentDriftRoute
@@ -696,6 +706,7 @@ export interface FileRouteTypes {
     | '/t/$product/$project/$environment/activity'
     | '/t/$product/$project/$environment/advisors'
     | '/t/$product/$project/$environment/backups'
+    | '/t/$product/$project/$environment/compare'
     | '/t/$product/$project/$environment/configuration'
     | '/t/$product/$project/$environment/connections'
     | '/t/$product/$project/$environment/drift'
@@ -761,6 +772,7 @@ export interface FileRouteTypes {
     | '/t/$product/$project/$environment/activity'
     | '/t/$product/$project/$environment/advisors'
     | '/t/$product/$project/$environment/backups'
+    | '/t/$product/$project/$environment/compare'
     | '/t/$product/$project/$environment/configuration'
     | '/t/$product/$project/$environment/connections'
     | '/t/$product/$project/$environment/drift'
@@ -830,6 +842,7 @@ export interface FileRouteTypes {
     | '/_app/t/$product/$project/$environment/activity'
     | '/_app/t/$product/$project/$environment/advisors'
     | '/_app/t/$product/$project/$environment/backups'
+    | '/_app/t/$product/$project/$environment/compare'
     | '/_app/t/$product/$project/$environment/configuration'
     | '/_app/t/$product/$project/$environment/connections'
     | '/_app/t/$product/$project/$environment/drift'
@@ -1254,6 +1267,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTProductProjectEnvironmentBackupsRouteImport
       parentRoute: typeof AppTProductProjectEnvironmentRoute
     }
+    '/_app/t/$product/$project/$environment/compare': {
+      id: '/_app/t/$product/$project/$environment/compare'
+      path: '/compare'
+      fullPath: '/t/$product/$project/$environment/compare'
+      preLoaderRoute: typeof AppTProductProjectEnvironmentCompareRouteImport
+      parentRoute: typeof AppTProductProjectEnvironmentRoute
+    }
     '/_app/t/$product/$project/$environment/configuration': {
       id: '/_app/t/$product/$project/$environment/configuration'
       path: '/configuration'
@@ -1351,6 +1371,7 @@ interface AppTProductProjectEnvironmentRouteChildren {
   AppTProductProjectEnvironmentActivityRoute: typeof AppTProductProjectEnvironmentActivityRoute
   AppTProductProjectEnvironmentAdvisorsRoute: typeof AppTProductProjectEnvironmentAdvisorsRoute
   AppTProductProjectEnvironmentBackupsRoute: typeof AppTProductProjectEnvironmentBackupsRoute
+  AppTProductProjectEnvironmentCompareRoute: typeof AppTProductProjectEnvironmentCompareRoute
   AppTProductProjectEnvironmentConfigurationRoute: typeof AppTProductProjectEnvironmentConfigurationRoute
   AppTProductProjectEnvironmentConnectionsRoute: typeof AppTProductProjectEnvironmentConnectionsRoute
   AppTProductProjectEnvironmentDriftRoute: typeof AppTProductProjectEnvironmentDriftRoute
@@ -1372,6 +1393,8 @@ const AppTProductProjectEnvironmentRouteChildren: AppTProductProjectEnvironmentR
       AppTProductProjectEnvironmentAdvisorsRoute,
     AppTProductProjectEnvironmentBackupsRoute:
       AppTProductProjectEnvironmentBackupsRoute,
+    AppTProductProjectEnvironmentCompareRoute:
+      AppTProductProjectEnvironmentCompareRoute,
     AppTProductProjectEnvironmentConfigurationRoute:
       AppTProductProjectEnvironmentConfigurationRoute,
     AppTProductProjectEnvironmentConnectionsRoute:
