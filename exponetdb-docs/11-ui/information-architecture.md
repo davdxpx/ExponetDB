@@ -114,13 +114,15 @@ distinct states (§6); a failed read is never an empty list.
 | `/infrastructure/certificates` | `features/infrastructure/certificates-page.tsx` | Certificate authorities of the agent PKI and the PostgreSQL CA with expiry |
 | `/backups` | `features/wave9/` | Named "not available yet" state (Wave 9) |
 | `/t/<product>/<project>/<environment>` | `features/target-overview/` | Target overview: health in incident order, health history, migration head against the other environments, recent operations, open findings; each block reads and fails on its own |
-| `…/schema`, `…/schema/$kind` | `features/schema/` | Schema browser (status, fingerprint, object lists by kind, detail, visualizer with a table alternative); needs a name filter, because the API has no list-all endpoint |
+| `…/schema`, `…/schema/$kind` | `features/schema/` | Schema browser (status, fingerprint, object lists by kind from `GET /targets/{id}/schema/objects` with an optional name filter, detail, a read-only row browser, visualizer with a table alternative; §2.4) |
 | `…/migrations` | `features/migrations/` | Ledger from the target, timeline across environments, plans, drift summary, legacy import; no "run now" |
 | `…/sql` | `features/sql/` | SQL workspace (§4) |
-| `…/drift`, `…/findings` | `features/drift/`, `features/findings/` | Drift: stored findings first, then the result of a check run from the page (expected and actual side by side); "Accept drift" only creates a plan. Findings: filters from the address, keyset "load more" |
+| `…/drift`, `…/findings` | `features/drift/`, `features/findings/` | Drift: the last recorded check (`GET /targets/{id}/drift-checks`: who or the schedule, status, counts, fingerprints), stored findings, then the result of a check run from the page (expected and actual side by side); "Accept drift" only creates a plan. Findings: filters from the address, keyset "load more" |
+| `…/compare?to=<environment>` | `features/compare/` | Two environments of the project compared by schema (`POST /schema-diffs`), read-only, with named states for a fingerprint mismatch, a stale sample and environments that cannot be compared (§2.4) |
+| `/findings` | `features/global-findings/` | Findings across every target the person may see (`GET /findings`), keyset paging, validated filters; under Overview (§2.4) |
 | `…/performance`, `…/advisors`, `…/backups` | `features/wave9/` | Named "not available yet" states (Wave 9) |
 | `…/connections`, `…/locks` | `features/connections/` | Sessions grouped by role and application, blockers, endpoints with probe results; the lock graph as tree and table; cancel and terminate are not controls (Wave 9); the raw statement view is human only and re-authenticated |
-| `…/configuration` | `features/configuration/` | Read-only: registry facts, the data-read policy that applies, PostgreSQL settings as a named state, the cluster's roles |
+| `…/configuration` | `features/configuration/` | Registry facts with copy actions, the data-read policy that applies, PostgreSQL settings as a named state, the cluster's roles; for registry administrators a Connect panel without secrets and the target's lifecycle (suspend, resume, decommission) as plans (§2.4) |
 | `…/activity` | `features/activity/` | Operations and audit events of the target (`audit.read`) |
 | `/settings/*`, `/access/*`, `/audit`, `/account/*` | see the paragraphs above | Settings, access, audit and the account tabs |
 
@@ -181,6 +183,86 @@ WAL and archive status, replication, backups, restart and configuration plans.
 
 `/infrastructure/nodes/<id>`: agent status, capabilities, host metrics,
 packages (installed vs available), jobs history, enrollment and certificate.
+
+### 2.4 Studio parity (Wave 8 completion, 2026-10-20)
+
+**[OBSERVED]** What the Wave 8 completion added after comparing every area
+with Supabase Studio ([`studio-parity.md`](./studio-parity.md)); everything
+else on this page still holds.
+
+- **Shell.** A crash page is the router's default error component (Try
+  again, Reload, a copyable diagnostic of route id, time and app version;
+  the error itself is never read or shown). The command menu has go-to
+  commands for every target section and schema kind, "Query the database"
+  and "Draft a change" (`/sql?mode=`), and a "Switch database…" page. Target
+  pages have a database switcher in the context bar (grouped by product and
+  project with tier chips, keeping the section) and the last five targets per
+  person as "Recent" (`exdb.recent.targets.<identityId>`, removed at sign-out
+  and when a session ends, like the SQL drafts). The shell draws breadcrumbs
+  from the matched route for plan, operation, server, cluster, node and
+  schema-kind pages, from validated ids only. The target header carries a
+  health chip (state, source and age; "not read", "out of date" and "no
+  sample" are never green) and the Findings tab an open-findings badge after
+  a successful read. Rail tooltips show their shortcut keys; navigating to
+  another path scrolls to the top; the section menu width is kept per
+  browser; the account menu shows the app version once read. `G` then `T`
+  reads "Go to databases".
+- **Fleet and targets.** The overview lists up to ten targets that need
+  attention (worst health first, "at least" when the list is cut) and links
+  its findings to `/findings`. The targets list filters by product and
+  project on the server, copies a path or a target id, and remembers view and
+  sort per browser (the address wins).
+- **Settings and infrastructure.** `/settings/projects` lists projects,
+  creates one (`planProject`) and changes one (`planProjectChange`, with a
+  before/after table). Clusters: register an external cluster, its role
+  bootstrap SQL as read-only text, register a database, add and retire
+  endpoints, rotate an agent-managed credential; each is a plan.
+- **Configuration.** Suspend, resume (suspended targets only) and
+  decommission (typed exact path; "the path is never reused") with a reason
+  code and the audit warning; a Connect panel for registry administrators
+  only ([OD-41](../00-product/open-decisions.md#od-41-connection-details-for-people-without-registrymanage)):
+  host, port, database, TLS server name, `sslmode=verify-full`, the recorded
+  probes and a URI and `psql` line with `<role>` and `[YOUR-PASSWORD]`
+  placeholders; ExponetDB never holds application passwords.
+- **Schema.** Object lists by kind without a filter (an optional name filter,
+  "N of total", a partial snapshot named), policies grouped by table; a
+  read-only row browser for tables, views and materialized views
+  ([OD-42](../00-product/open-decisions.md#od-42-how-the-read-only-table-browser-reads-rows)):
+  one `SELECT` per press through `POST /targets/{id}/queries` (admitted,
+  masked, capped and audited by the server), identifiers from the schema read
+  always quoted, filter values as bind parameters, operators from a fixed
+  list, keyset paging on the primary key where it compares exactly, gated on
+  `data.read` and the data-read setting, a refusal shown as a refusal; deep
+  links (`q`, `schema`, the object, tab, sort, filters) with names never in
+  the path; copy name and link; key tokens and a foreign-key jump; "Query
+  this table", "Open definition in SQL editor" and "Draft a change" (opened,
+  never run); a searchable schema selector; the visualizer finds a table with
+  its neighbors and downloads an SVG built from the read (no
+  `foreignObject`, remote font, script or style) or copies Markdown.
+- **Migrations and changes.** "Plan on <environment>" plans bundles that are
+  already in the bundle store by their ids on another environment (the
+  promotion of a migration verified on staging), after showing each bundle's
+  evidence state for a production destination; a "View SQL" panel (the
+  bundle's revisions, `up.sql`, `verify.sql` and `down.sql` as numbered text
+  with hidden characters by code point, a revision diff, this target's
+  events and verification runs); every reader of a plan sees its files from
+  the bundle store; the plans list filters by state, kind, actor and target
+  ("My plans", "Awaiting approval") and loads more; "Withdraw plan" on an own
+  active plan made in the Web App (the server binds a withdrawal to the
+  plan's client); environments compared by schema (`…/compare`).
+- **Connections and overview.** See [`../10-observability/health.md` §9](../10-observability/health.md#9-surfaces).
+- **Access and audit.** Audit: quick ranges and local date-time inputs sent
+  as UTC, a target picker and a person filter (`identity`), "No match" with
+  Reset for a filtered search. Role bindings: scope pickers by name with the
+  tier each covers and the role's description. API keys and machine grants:
+  "Limit to targets" (all, or up to 64), shown on each key and grant, with a
+  warning when production is combined with all targets. Service accounts:
+  disable (reason, re-authentication), enable and erase by plan, revoke a
+  machine grant, the responsible person by name, and an "All API keys"
+  overview with last use and expiry. People: a text and state filter, "You",
+  the profile picture, "Assign a role" after an invitation. OAuth clients: a
+  state filter with the pending count, and each client's last use and active
+  grants (`lastUsedAt`, `activeGrantCount`).
 
 ## 3. Context bar and switching
 
@@ -285,10 +367,23 @@ safe); "Create migration" builds `migration.yaml` from the person's input,
 16,384 characters, read as a plain string) and `?mode=draft` open text in a
 new tab with an "opened from a link, not run" note that counts hidden and
 direction characters; history entries and saved queries open the same way.
-Completion asks the schema search endpoint for one page of names per word
-(no columns: the API has no column search). There is no formatter (no SQL
-formatter exists in the repository). `Mod+Enter` (run) and `Mod+S` (save)
-are registered shortcuts (group "SQL editor") and appear in the shortcut sheet.
+Completion asks the schema search endpoint for one page of names per word;
+**[OBSERVED]** (Wave 8 completion) after `x.` it resolves the qualifier from
+the text (a completion aid only) and reads that one object for its columns.
+There is no formatter: the only maintained PostgreSQL formatter depends on a
+Python-2.0 package the shipped-license gate refuses ([OD-48](../00-product/open-decisions.md#od-48-a-sql-formatter-in-the-web-app-given-its-license-closure)).
+`Mod+Enter` (run) and `Mod+S` (save) are registered shortcuts (group "SQL
+editor") and appear in the shortcut sheet, with platform-aware hints on the
+buttons. **[OBSERVED]** (Wave 8 completion) A row limit beside Run (100 to
+5,000, kept per browser, sent as `maxRows`); a failed run shows the
+SQLSTATE the server sends and copies code, SQLSTATE and catalog message;
+"Copy as" Markdown, CSV or JSON with the export's caps; "Run selected" while
+text is selected and, without a selection, the statement under the cursor
+by the server's offsets (the result names which); a Templates tab of
+read-only queries and change drafts, opened as "From a template, not run";
+the owner's menu on a saved query (rename, only me or shared in scope, save
+as copy), which reads the stored version first so an open tab's text is
+never written.
 
 ## 5. Plans, approvals and confirmations in the UI
 
