@@ -115,7 +115,8 @@ must I read?":
 
 ## Development
 
-Requires Bun 1.3.14, Node.js 24, Go 1.24 and Docker (the integration
+Requires Bun 1.3.14, Node.js 24, Go 1.26.9 (the `go` line of
+`agent/node/go.mod`) and Docker (the integration
 suites run against a PostgreSQL 17 Control Store, an S3-compatible test
 server and PostgreSQL 16, 17 and 18 as managed targets, all in containers).
 
