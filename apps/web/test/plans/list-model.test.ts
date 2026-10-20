@@ -164,9 +164,9 @@ describe('withdraw is offered on the person’s own active plan only', () => {
     // The server binds a withdrawal to the plan's client: an agent's or the CLI's plan is
     // withdrawn there, so the Web App does not offer a button the server would refuse.
     for (const via of ['mcp', 'cli', 'rest', 'ci']) {
-      expect(
-        canOfferWithdraw({ ...own, actor: { ...own.actor, via } } as PlanView, IDENTITY),
-      ).toBe(false)
+      expect(canOfferWithdraw({ ...own, actor: { ...own.actor, via } } as PlanView, IDENTITY)).toBe(
+        false,
+      )
     }
   })
 })

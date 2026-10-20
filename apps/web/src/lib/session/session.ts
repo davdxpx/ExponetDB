@@ -1,3 +1,4 @@
+import { forgetRecentTargets } from '../../features/target/recent.ts'
 import { loginUrl } from '../navigation/links.ts'
 import { forgetSqlTabs } from '../storage/sql-tabs.ts'
 
@@ -38,6 +39,7 @@ export function isSessionlessPath(pathname: string): boolean {
 export function leaveForSignIn(deps: SessionDeps): void {
   deps.clearCache()
   forgetSqlTabs()
+  forgetRecentTargets()
   if (isSessionlessPath(deps.location.pathname)) return
   deps.location.assign(loginUrl(deps.location.pathname + deps.location.hash))
 }

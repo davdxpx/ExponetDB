@@ -20,7 +20,9 @@ afterEach(() => {
 
 const IDENTITY = 'idn_00000000000000000000000001'
 const LIST_REQUEST = '/api/v1/targets?limit=200'
-const PAGE = '/audit'
+// A page that reads no targets itself (the audit page now reads them for its target
+// picker), so the switcher's own read can be told apart.
+const PAGE = '/settings/notifications'
 
 function fleet(): World {
   const world = new World()
@@ -31,7 +33,7 @@ function fleet(): World {
 }
 
 async function openPage(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
-  await screen.findByRole('heading', { level: 1, name: 'Audit' })
+  await screen.findByRole('heading', { level: 1, name: 'Notifications' })
   await user.keyboard('{Control>}k{/Control}')
   const dialog = await screen.findByRole('dialog')
   await user.click(await within(dialog).findByRole('option', { name: 'Switch database…' }))
@@ -48,7 +50,7 @@ describe('the command "Switch database…"', () => {
   it('is in the command menu on every page, and searchable by what a person would type', async () => {
     const user = userEvent.setup()
     mountApp(PAGE, fleet())
-    await screen.findByRole('heading', { level: 1, name: 'Audit' })
+    await screen.findByRole('heading', { level: 1, name: 'Notifications' })
     await user.keyboard('{Control>}k{/Control}')
     const dialog = await screen.findByRole('dialog')
     await user.type(within(dialog).getByRole('combobox'), 'switch data')
@@ -61,7 +63,7 @@ describe('the command "Switch database…"', () => {
     const user = userEvent.setup()
     const world = fleet()
     mountApp(PAGE, world)
-    await screen.findByRole('heading', { level: 1, name: 'Audit' })
+    await screen.findByRole('heading', { level: 1, name: 'Notifications' })
     await user.keyboard('{Control>}k{/Control}')
     const dialog = await screen.findByRole('dialog')
     await within(dialog).findByRole('option', { name: 'Switch database…' })

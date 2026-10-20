@@ -24,9 +24,7 @@ export function canOfferWithdraw(
   plan: Pick<PlanView, 'state' | 'actor'>,
   identityId: string,
 ): boolean {
-  return (
-    plan.state === 'active' && plan.actor.identityId === identityId && plan.actor.via === 'web'
-  )
+  return plan.state === 'active' && plan.actor.identityId === identityId && plan.actor.via === 'web'
 }
 
 /**

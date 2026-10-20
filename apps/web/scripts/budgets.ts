@@ -27,11 +27,15 @@ export interface Budgets {
 
 export const BUDGETS: Budgets = {
   entryJs: 268_000, // measured 232.7 kB on 2026-10-13
-  largestChunk: 190_000, // section-page, 165.1 kB
+  largestChunk: 190_000, // overview-page with the charts, 143.4 kB (was section-page, 165.1 kB)
   css: 35_000, // 29.8 kB
   lazyChunk: 51_000, // largest unnamed lazy chunk, app-*, 43.9 kB
   heavy: {
-    'section-page': 190_000, // the target section pages with their charts, 165.1 kB
+    // The target overview with its charts (recharts). Until 2026-10-20 the overview, the
+    // schema browser and the SQL workspace were one `section-page` chunk (165.1 kB, then
+    // 204.0 kB with the Studio parity work); each body now loads with its own section, so
+    // the charts' chunk is the overview's: 143.4 kB measured, plus 15 percent.
+    'overview-page': 165_000,
     // CodeMirror 6, shared by the SQL editor and the text diff since the migration SQL panel
     // (2026-10-20) uses the diff; Rolldown names the shared chunk after its first module. Was
     // `sql-editor` at 138.0 kB; the same library, 134.7 kB, so the ceiling is unchanged.

@@ -72,9 +72,10 @@ describe('the context bar', () => {
     mountApp('/', world)
     await screen.findByRole('heading', { level: 1, name: 'Overview' })
     expect(screen.queryByRole('navigation', { name: 'Target' })).not.toBeInTheDocument()
-    // The overview reads its own fleet data; the context bar asks for no target or environment.
+    // The overview reads its own fleet data (the list of targets for "needs attention"
+    // among it); the context bar asks for no target, project or environment.
     expect(
-      world.apiRequests.filter((path) => /\/(targets|projects|environments)(\/|\?|$)/.test(path)),
+      world.apiRequests.filter((path) => /\/(targets\/|projects|environments)/.test(path)),
     ).toEqual([])
   })
 

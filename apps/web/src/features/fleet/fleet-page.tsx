@@ -39,6 +39,7 @@ import { type FleetModel, fleetModel, type Part, partStale, unavailableKind } fr
 /** Where the operations list lives (information-architecture.md section 2: Changes, "Operations"). */
 export const OPERATIONS_PATH = '/changes/operations'
 export const APPROVALS_PATH = '/approvals'
+export const FINDINGS_PATH = '/findings'
 
 /**
  * The fleet overview (`/`): what the server counted across every target the
@@ -136,6 +137,8 @@ function FleetCards({ model }: { readonly model: FleetModel }): ReactNode {
             help={t('fleet.findings.help')}
             part={withFindings}
             now={now}
+            href={FINDINGS_PATH}
+            linkLabel={t('fleet.findings.link')}
             details={
               withFindings.kind === 'count' && withFindings.bySeverity !== undefined ? (
                 <p>
@@ -305,11 +308,20 @@ function HealthGrid({ targets }: { readonly targets: FleetModel['targets'] }): R
 function CriticalFindings(): ReactNode {
   const { client } = useApi()
   const findings = useQuery(criticalFindingsQuery(client))
+  const Link = useLinkComponent()
   return (
     <section aria-labelledby="fleet-critical" className="flex flex-col gap-3">
-      <h2 id="fleet-critical" className="text-lg font-medium">
-        {t('fleet.critical.title')}
-      </h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="fleet-critical" className="text-lg font-medium">
+          {t('fleet.critical.title')}
+        </h2>
+        <Link
+          href={`${FINDINGS_PATH}?severity=critical`}
+          className="text-sm text-foreground underline focus-ring"
+        >
+          {t('fleet.critical.all')}
+        </Link>
+      </div>
       <ReadableView
         readable={toReadable(findings, {
           missing: (value) => (value.nextCursor === null ? undefined : [t('fleet.critical.more')]),

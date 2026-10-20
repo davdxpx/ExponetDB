@@ -4,6 +4,7 @@ import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
+import { RECENT_TARGETS_PREFIX } from '../../src/features/target/recent.ts'
 import {
   DiagnosticsWorld,
   lockGraph,
@@ -173,7 +174,11 @@ describe('live, pause and refresh', () => {
     await user().click(
       within(screen.getByRole('group', { name: 'Updates' })).getByRole('button', { name: 'Pause' }),
     )
-    expect(window.localStorage.length).toBe(0)
+    // Nothing about updates is kept: the only key is the shell's list of recent targets.
+    const kept = Object.keys(window.localStorage).filter(
+      (key) => !key.startsWith(RECENT_TARGETS_PREFIX),
+    )
+    expect(kept).toEqual([])
     expect(window.sessionStorage.length).toBe(0)
     cleanup()
     mountDiagnostics(CONNECTIONS, world())
