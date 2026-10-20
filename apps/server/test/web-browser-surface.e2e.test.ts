@@ -20,8 +20,7 @@ import { ORIGIN, RP_ID } from './support/node-world.ts'
  * `/oauth/consent#request=`) never reach the server in an address or a header, never travel in a
  * `Referer`, and are not left in the address bar, the history, a storage or a cookie; and a
  * secret shown once (an API key, an invitation link, a node enrollment token) is in exactly one
- * element while it is shown
- * and nowhere in the document, an attribute or a storage afterwards.
+ * element while it is shown and nowhere in the document, an attribute or a storage afterwards.
  */
 const WEB_DIST =
   process.env['EXDB_TEST_WEB_DIST'] ?? fileURLToPath(new URL('../../web/dist/', import.meta.url))

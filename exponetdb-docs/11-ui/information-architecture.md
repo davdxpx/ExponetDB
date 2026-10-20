@@ -4,7 +4,7 @@
 |---|---|
 | Status | Baseline (Wave 0), accepted 2026-10-05; UI language **[DECIDED]** 2026-10-13: English strings behind typed message keys ([OD-1](../00-product/open-decisions.md#od-1-web-app-language), resolved) |
 | Applies to | Wave 8 (Web App), every wave that adds a surface |
-| Read before | [`supabase-reference-audit.md`](./supabase-reference-audit.md), [`design-system.md`](./design-system.md), [`../06-rest-api/resources.md`](../06-rest-api/resources.md) |
+| Read before | [`supabase-reference-audit.md`](./supabase-reference-audit.md), [`design-system.md`](./design-system.md), [`../06-rest-api/resources.md`](../06-rest-api/resources.md); where Studio still does more: [`studio-parity.md`](./studio-parity.md) |
 
 The Web App is one **interface** over the same application layer as REST and MCP
 (C-9). It contains no business logic: everything it shows comes from
