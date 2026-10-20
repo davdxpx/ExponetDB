@@ -5,6 +5,8 @@ import {
   type EndpointSample,
   type HealthSample,
   reduceHealth,
+  type StatusRecord,
+  targetHealthView,
 } from '../src/index.ts'
 
 /**
@@ -406,5 +408,86 @@ describe('activity and capacity rules (health.md §3)', () => {
     const s = sample({ endpoints: [direct(), pooler({ extended: timeout() })] })
     expect(reduceHealth(s)).toEqual(reduceHealth(s))
     expect(reduceHealth(s, DEFAULT_THRESHOLDS)).toEqual(reduceHealth(s))
+  })
+})
+
+describe('connection capacity (Wave 8 completion)', () => {
+  const stored = (r: ReturnType<typeof reduceHealth>, probe: string) =>
+    r.probes.find((p) => p.probe === probe)
+
+  it('stores the measured numbers with the successful settings and activity probes, whatever the thresholds', () => {
+    // 10 of 97 slots: no condition, yet the numbers are kept.
+    const r = reduceHealth(sample())
+    expect(r.conditions).toEqual([])
+    expect(stored(r, 'settings')?.values).toEqual({ usableSlots: 97 })
+    expect(stored(r, 'activity')?.values).toEqual({ clientBackends: 10 })
+  })
+
+  it('stores a measured zero as a zero and none for a read that failed or did not run', () => {
+    const zero = reduceHealth(
+      sample({
+        settings: { status: 'ok', value: { ...settings, usableSlots: 0 } },
+        activity: { status: 'ok', value: activity({ clientBackends: 0 }) },
+      }),
+    )
+    expect(stored(zero, 'settings')?.values).toEqual({ usableSlots: 0 })
+    expect(stored(zero, 'activity')?.values).toEqual({ clientBackends: 0 })
+    const failed = reduceHealth(
+      sample({
+        settings: { status: 'failed', errorClass: 'insufficient_privilege' },
+        activity: { status: 'failed', errorClass: 'query_timeout' },
+      }),
+    )
+    expect(stored(failed, 'settings')?.values).toBeUndefined()
+    expect(stored(failed, 'activity')?.values).toBeUndefined()
+    const notRun = reduceHealth(
+      sample({ settings: { status: 'not_run' }, activity: { status: 'not_run' } }),
+    )
+    expect(notRun.probes.some((p) => p.values !== undefined)).toBe(false)
+  })
+})
+
+describe('the health view and its capacity', () => {
+  const target = { targetId: 'tgt_01M48WRFNFYAY62E1146TGT001', state: 'active' } as never
+  const status = (over: Partial<StatusRecord> = {}): StatusRecord => ({
+    targetId: 'tgt_01M48WRFNFYAY62E1146TGT001',
+    state: 'healthy',
+    conditions: [],
+    probes: [],
+    unknownBecause: null,
+    capacity: { clientBackends: 12, usableSlots: 97 },
+    observedAt: AT,
+    ageMs: 5_000,
+    ...over,
+  })
+
+  it('shows the capacity with the time and the source of the sample that measured it', () => {
+    expect(targetHealthView(target, status()).capacity).toEqual({
+      clientBackends: 12,
+      usableSlots: 97,
+      source: 'sampled',
+      observedAt: AT,
+    })
+    // A sample older than two intervals is cached, and says so for the numbers as well.
+    expect(targetHealthView(target, status({ ageMs: 45_000 })).capacity).toMatchObject({
+      source: 'cached',
+      observedAt: AT,
+    })
+  })
+
+  it('has no capacity, not a zero, when the sample measured none or there is no sample', () => {
+    const none = targetHealthView(target, status({ capacity: null }))
+    expect('capacity' in none).toBe(false)
+    const never = targetHealthView(target, undefined)
+    expect('capacity' in never).toBe(false)
+    expect(never.unknownBecause).toBe('never_sampled')
+  })
+
+  it('keeps a measured zero', () => {
+    const view = targetHealthView(
+      target,
+      status({ capacity: { clientBackends: 0, usableSlots: 0 } }),
+    )
+    expect(view.capacity).toMatchObject({ clientBackends: 0, usableSlots: 0 })
   })
 })

@@ -1534,6 +1534,12 @@ export class Application {
       /** The client and the grant the events were made through (runbook RB-11). */
       readonly client?: string | undefined
       readonly grant?: string | undefined
+      /**
+       * Only events whose actor is this identity (Wave 8 completion, REST only).
+       * Combined with `actor: 'self'` both must hold: the caller's own events
+       * when this is the caller, nothing otherwise.
+       */
+      readonly identity?: string | undefined
       readonly limit?: number | undefined
       readonly cursor?: string | undefined
     },
@@ -1562,6 +1568,7 @@ export class Application {
             AND ($7::bigint IS NULL OR seq < $7)
             AND ($9::text IS NULL OR event::jsonb -> 'client' ->> 'clientId' = $9)
             AND ($10::text IS NULL OR event::jsonb -> 'client' ->> 'grantId' = $10)
+            AND ($11::text IS NULL OR actor_id = $11)
           ORDER BY seq DESC
           LIMIT $8`,
         [
@@ -1575,6 +1582,7 @@ export class Application {
           limit + 1,
           query.client ?? null,
           query.grant ?? null,
+          query.identity ?? null,
         ],
       )
       const page = rows.slice(0, limit)
@@ -1619,6 +1627,7 @@ export class Application {
             AND ($6::bigint IS NULL OR seq < $6)
             AND ($8::text IS NULL OR event::jsonb -> 'client' ->> 'clientId' = $8)
             AND ($9::text IS NULL OR event::jsonb -> 'client' ->> 'grantId' = $9)
+            AND ($10::text IS NULL OR actor_id = $10)
           ORDER BY seq DESC
           LIMIT $7`,
         [
@@ -1631,6 +1640,7 @@ export class Application {
           SCAN_LIMIT + 1,
           query.client ?? null,
           query.grant ?? null,
+          query.identity ?? null,
         ],
       )
       const decided = new Map<string, boolean>()
@@ -2764,11 +2774,11 @@ export class Application {
 
   async oauthClient(caller: Caller, clientId: OAuthClientId): Promise<OAuthClientView> {
     await this.#authorize(this.#d.auth.store, 'oauth.client.get', caller, INSTALLATION)
-    const client = await oauth.readClient(this.#d.auth.store, clientId)
-    if (client === undefined) {
+    const found = await oauth.readClientWithUse(this.#d.auth.store, clientId)
+    if (found === undefined) {
       throw new AuthError('NOT_FOUND')
     }
-    return oauth.clientView(client)
+    return oauth.clientView(found.client, found.use)
   }
 
   // ----- OAuth: client registry (OD-5) -----

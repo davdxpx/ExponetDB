@@ -79,16 +79,16 @@ error catalog (`Next step:` in the text;
 |---|---|---|---|---|---|---|
 | `targets_list` | `targets.read` | RO | filters: product, project, environment, tier, state | targets with path, tier, state, health summary, freshness | `GET /targets` | 7, served |
 | `target_get` | `targets.read` | RO | `target` | target detail: environment, tier, generation, placement summary (server/cluster display names, PostgreSQL version; no addresses), ledger head, open findings | `GET /targets/{id}` | 7, served |
-| `target_health` | `diagnostics.read` | RO | `target` | health state with sub-states (connectivity simple/extended, sessions, replication, disk, backups), each with source and timestamp | `GET /targets/{id}/health` | 7, served |
+| `target_health` | `diagnostics.read` | RO | `target` | health state with sub-states (connectivity simple/extended, sessions, replication, disk, backups), each with source and timestamp. **[OBSERVED]** (Wave 8 completion) The REST route also carries an optional `capacity` (connections in use and usable slots); the tool's output does not (REST only) | `GET /targets/{id}/health` | 7, served |
 
 ## 2. Schema
 
 | Tool | Scope | Ann. | Input | Output | REST | Wave |
 |---|---|---|---|---|---|---|
 | `schema_inspect` | `schema.read` | RO | `target`, optional `kind` and `object` (`schema.name`, a function with the arguments `schema_search` returns), optional `include` (`definition`, `policy_expressions`) | overview (schemas, counts) or object detail (columns, types, constraints, indexes, policies, grants, RLS, triggers, sizes); untrusted-text fields marked; function bodies, view definitions and policy expressions withheld unless included, then capped; `omitted` and `truncated` name what was withheld or cut ([schema-fingerprints.md §9](../03-database-model/schema-fingerprints.md#9-hostile-metadata)) | `GET /targets/{id}/schema[...]` | 7, served |
-| `schema_search` | `schema.read` | RO | `target`, name pattern, kinds | matching objects | `GET /targets/{id}/schema/search` | 7, served |
+| `schema_search` | `schema.read` | RO | `target`, name pattern, kinds | matching objects. **[OBSERVED]** (Wave 8 completion) Listing objects without a search term is REST only (`GET /targets/{id}/schema/objects`); the tool still requires the pattern | `GET /targets/{id}/schema/search` | 7, served |
 | `schema_diff` | `schema.read` | RO | `left` target (or fingerprint), `right` target (or fingerprint) | structural diff grouped by object class | `POST /schema-diffs` | 7, served |
-| `drift_check` | `schema.read` | — | `target` | drift findings by kind (A-E) with triage buckets. It changes **no database** but writes records in the Control Store (a drift check, a schema snapshot and the findings, in one transaction) and is not an audit event today ([OD-34](../00-product/open-decisions.md)) | `POST /targets/{id}/drift-checks` | 7, served |
+| `drift_check` | `schema.read` | — | `target` | drift findings by kind (A-E) with triage buckets. It changes **no database** but writes records in the Control Store (a drift check, a schema snapshot and the findings, in one transaction) and is not an audit event today ([OD-34](../00-product/open-decisions.md)). **[OBSERVED]** (Wave 8 completion) Reading the history of past checks is REST only (`GET /targets/{id}/drift-checks`) | `POST /targets/{id}/drift-checks` | 7, served |
 
 ## 3. SQL (read path)
 
@@ -195,7 +195,7 @@ of one person through one client wait for an approval at a time; a further
 
 | Tool | Scope | Ann. | Input | Output | REST | Wave |
 |---|---|---|---|---|---|---|
-| `audit_search` | `audit.read` | RO | filters (time, target, action, actor `self` or `any` (absent = any, as REST), result, `client` (`cli_…`), `grant` (`grt_…`), Wave 7 for runbook RB-11), cursor | audit events (pseudonymized actors; `denial` names the action, reason and tool of an `authz.denied`); a restricted grant without a target sees the events of the targets it covers, never installation-wide ones | `GET /audit-events` | 7, served |
+| `audit_search` | `audit.read` | RO | filters (time, target, action, actor `self` or `any` (absent = any, as REST), result, `client` (`cli_…`), `grant` (`grt_…`), Wave 7 for runbook RB-11), cursor | audit events (pseudonymized actors; `denial` names the action, reason and tool of an `authz.denied`); a restricted grant without a target sees the events of the targets it covers, never installation-wide ones. **[OBSERVED]** (Wave 8 completion) The REST route also filters by `identity` (an `idn_…` id); the tool has no such input (REST only) | `GET /audit-events` | 7, served |
 
 ## 11. Resources
 

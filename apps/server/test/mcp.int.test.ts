@@ -97,9 +97,19 @@ describe('read tools answer what their REST route answers', () => {
     expect(byPath.structuredContent).toEqual(target.structuredContent)
 
     const health = await reader.call('target_health', { target: t })
-    expect(health.structuredContent).toEqual(
-      (await w.rest(cli, 'GET', `/api/v1/targets/${t}/health`)).body,
-    )
+    // The REST route also carries the REST-only `capacity` (Wave 8 completion, measured by the
+    // sampler on this real server); the tool answers everything else exactly as the route does
+    // and keeps the announced shape, without it.
+    const { capacity, ...restHealth } = (await w.rest(cli, 'GET', `/api/v1/targets/${t}/health`))
+      .body
+    expect(health.structuredContent).toEqual(restHealth)
+    expect(health.structuredContent).not.toHaveProperty('capacity')
+    expect(capacity).toMatchObject({
+      clientBackends: expect.any(Number),
+      usableSlots: expect.any(Number),
+      source: 'sampled',
+      observedAt: restHealth.observedAt,
+    })
     expect(health.structuredContent).toMatchObject({
       source: 'sampled',
       observedAt: expect.any(String),

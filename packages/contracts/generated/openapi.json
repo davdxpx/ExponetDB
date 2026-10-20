@@ -3807,6 +3807,178 @@
         ],
         "type": "object"
       },
+      "DriftCheckSummary": {
+        "properties": {
+          "baselineFingerprint": {
+            "anyOf": [
+              {
+                "description": "Schema fingerprint fp<n>:<pg_major>:<hex>.",
+                "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "counts": {
+            "properties": {
+              "drifted": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "matched": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "opened": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "resolved": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "unmanaged": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "updated": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "drifted",
+              "matched",
+              "unmanaged",
+              "opened",
+              "updated",
+              "resolved"
+            ],
+            "type": "object"
+          },
+          "currentFingerprint": {
+            "anyOf": [
+              {
+                "description": "Schema fingerprint fp<n>:<pg_major>:<hex>.",
+                "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errorCode": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z][A-Z0-9_]{1,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "finishedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "generation": {
+            "description": "The target generation the check ran against; a check of an earlier generation is history of another identity stamp.",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "id": {
+            "description": "Entity id `^smp_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^smp_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "requestedBy": {
+            "description": "Who asked: the worker’s schedule, or the identity that ran the check on demand (a person or a service account; a delegated client acts as the identity that delegated). The client the call came through is not recorded with the check, and a drift check is not an audit event today (OD-34).",
+            "oneOf": [
+              {
+                "properties": {
+                  "kind": {
+                    "const": "schedule",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "identityId": {
+                    "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "identity",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "identityId"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "startedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "status": {
+            "description": "incomplete: the snapshot had a visibility gap, so nothing was compared (an incomplete fingerprint is never authoritative); not_comparable: the baseline and the current schema differ in canonicalizer or PostgreSQL major; failed: the read failed (errorCode), never shown as clean. None of these changes a finding.",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string",
+            "x-extensible-enum": [
+              "clean",
+              "drifted",
+              "incomplete",
+              "no_baseline",
+              "not_comparable",
+              "failed"
+            ]
+          },
+          "targetId": {
+            "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "targetId",
+          "status",
+          "baselineFingerprint",
+          "currentFingerprint",
+          "counts",
+          "errorCode",
+          "generation",
+          "requestedBy",
+          "startedAt",
+          "finishedAt"
+        ],
+        "type": "object"
+      },
       "DriftFinding": {
         "properties": {
           "actual": {
@@ -10362,6 +10534,12 @@
       },
       "OAuthClient": {
         "properties": {
+          "activeGrantCount": {
+            "description": "Wave 8 completion, additive, set with `lastUsedAt`: how many grants of this client are active now (not revoked, not expired), counted at the time of the request.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
           "applicationType": {
             "anyOf": [
               {
@@ -10466,6 +10644,20 @@
               "ci"
             ],
             "type": "string"
+          },
+          "lastUsedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Wave 8 completion, additive, set by `GET /oauth-clients` and `GET /oauth-clients/{id}` (absent in the answers of the decisions, which do not read it): the latest minute any grant of this client authenticated a request, from the same record as `Grant.lastUsedAt` (`oauth.grant_last_use`, at most one write a minute), over all of the client’s grants, also revoked and expired ones. null: no use is recorded for any grant, which is not proof that the client was never used (the record began with its deployment and a background write can be lost). A data basis for \"last used\", never an input to a decision."
           },
           "metadataExpiresAt": {
             "anyOf": [
@@ -15248,6 +15440,73 @@
         ],
         "type": "object"
       },
+      "SchemaObjectList": {
+        "properties": {
+          "complete": {
+            "description": "false when anything in the managed scope could not be read: the list may then miss objects (an incomplete fingerprint is never authoritative); `GET /targets/{target}/schema` says what.",
+            "type": "boolean"
+          },
+          "fingerprint": {
+            "description": "The fingerprint of the snapshot every page of this list is read from. Order is deterministic within a snapshot: schema, kind, name, signature.",
+            "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SchemaObjectRef"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cursor for the next page, null on the last page."
+          },
+          "observedAt": {
+            "description": "When the snapshot was taken.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.:-]*$",
+            "type": "string",
+            "x-extensible-enum": [
+              "live",
+              "sampled",
+              "cached",
+              "agent_reported",
+              "inferred"
+            ]
+          },
+          "total": {
+            "description": "How many objects of the snapshot match the filters, before paging (exact, not a lower bound).",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "total",
+          "fingerprint",
+          "complete",
+          "source",
+          "observedAt"
+        ],
+        "type": "object"
+      },
       "SchemaObjectRef": {
         "properties": {
           "key": {
@@ -16974,6 +17233,49 @@
         ],
         "type": "object"
       },
+      "TargetCapacity": {
+        "properties": {
+          "clientBackends": {
+            "description": "Client backends connected when the sample was taken (`pg_stat_activity` rows of backend type `client backend`, other than the session that read them).",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "observedAt": {
+            "description": "When the sample that measured both numbers was taken.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "source": {
+            "description": "Source of an observed state: live (read in this request), sampled (periodic sampler), cached (an earlier read served again), agent_reported (node agent), inferred (derived from other observations).",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.:-]*$",
+            "type": "string",
+            "x-extensible-enum": [
+              "live",
+              "sampled",
+              "cached",
+              "agent_reported",
+              "inferred"
+            ]
+          },
+          "usableSlots": {
+            "description": "`max_connections` minus `superuser_reserved_connections` and `reserved_connections`, never below 0: the connections ordinary roles can use. 0 is a measured value.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "clientBackends",
+          "usableSlots",
+          "source",
+          "observedAt"
+        ],
+        "type": "object"
+      },
       "TargetHealth": {
         "properties": {
           "backups": {
@@ -17259,6 +17561,22 @@
           "suspended"
         ],
         "type": "string"
+      },
+      "TargetHealthView": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/TargetHealth"
+          },
+          {
+            "properties": {
+              "capacity": {
+                "$ref": "#/components/schemas/TargetCapacity",
+                "description": "Wave 8 completion, additive: the connections in use and the usable slots from the latest sample, with that sample’s source and time. Absent when the latest sample did not measure them (never sampled, unreachable, a read that failed, or a sample taken before this member existed), never 0 as a stand-in. The database size is not sampled today and is not part of it."
+              }
+            },
+            "type": "object"
+          }
+        ]
       },
       "TargetRegisterRequest": {
         "additionalProperties": false,
@@ -18381,6 +18699,16 @@
             "schema": {
               "description": "Events made through this grant.",
               "pattern": "^grt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "identity",
+            "required": false,
+            "schema": {
+              "description": "Wave 8 completion, additive (REST only; `audit_search` has no such input): only events whose actor is this identity. Combined with `actor=self` it keeps the caller’s own events only when this is the caller.",
+              "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
               "type": "string"
             }
           },
@@ -30989,6 +31317,149 @@
       }
     },
     "/targets/{target}/drift-checks": {
+      "get": {
+        "operationId": "listDriftChecks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/DriftCheckSummary"
+                      },
+                      "type": "array"
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[A-Za-z0-9_-]{1,512}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Cursor for the next page, null on the last page."
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "diagnostics.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Past drift checks of a target, scheduled and requested, newest first (Wave 8 completion); a read of the Control Store, no database is touched.",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "target.finding.list",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
+      },
       "post": {
         "operationId": "runDriftCheck",
         "parameters": [
@@ -31463,7 +31934,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TargetHealth"
+                  "$ref": "#/components/schemas/TargetHealthView"
                 }
               }
             },
@@ -34098,6 +34569,205 @@
           "PERMISSION_DENIED",
           "RATE_LIMITED",
           "SAMPLE_STALE",
+          "TARGET_CREDENTIAL_INVALID",
+          "TARGET_IDENTITY_MISMATCH",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TARGET_TLS_FAILED",
+          "TARGET_UNAVAILABLE",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "4"
+      }
+    },
+    "/targets/{target}/schema/objects": {
+      "get": {
+        "operationId": "listSchemaObjects",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "explode": true,
+            "in": "query",
+            "name": "kinds",
+            "required": false,
+            "schema": {
+              "description": "Only objects of these kinds (repeat the parameter); the kinds `SchemaObjectRef.kind` shows.",
+              "items": {
+                "description": "Kind of a database object.",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_.:-]*$",
+                "type": "string",
+                "x-extensible-enum": [
+                  "schema",
+                  "table",
+                  "view",
+                  "materialized_view",
+                  "function",
+                  "procedure",
+                  "sequence",
+                  "type",
+                  "index",
+                  "policy",
+                  "trigger",
+                  "extension"
+                ]
+              },
+              "maxItems": 16,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "in": "query",
+            "name": "schema",
+            "required": false,
+            "schema": {
+              "description": "Only objects of this schema, by exact name (`SchemaObjectRef.schema`).",
+              "maxLength": 63,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "parent",
+            "required": false,
+            "schema": {
+              "description": "Only children of this relation, by the exact name `SchemaObjectRef.parent` shows (a column, constraint, index, trigger, policy or rule of that table, view or type). Combine with `schema` to name one relation.",
+              "maxLength": 63,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "description": "Only objects whose name contains this text, case-insensitively (the rule of `GET /targets/{target}/schema/search`).",
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "description": "The `nextCursor` of the previous page. Bound to the snapshot fingerprint and the filters: a cursor from another snapshot is refused with `SCHEMA_FINGERPRINT_MISMATCH`, one from other filters with `VALIDATION_FAILED`.",
+              "pattern": "^[A-Za-z0-9_-]{1,512}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchemaObjectList"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, SCHEMA_FINGERPRINT_MISMATCH, TARGET_IDENTITY_MISMATCH."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED, SAMPLE_STALE, TARGET_CREDENTIAL_INVALID, TARGET_TLS_FAILED, TARGET_UNAVAILABLE."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "schema.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Objects of the current schema snapshot without a search term (Wave 8 completion): filter by kind, schema, parent relation or name; ordered by schema, kind, name and signature; total, fingerprint, source and time.",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "schema.search",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CLUSTER_IDENTITY_MISMATCH",
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "SAMPLE_STALE",
+          "SCHEMA_FINGERPRINT_MISMATCH",
           "TARGET_CREDENTIAL_INVALID",
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",

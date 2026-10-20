@@ -148,6 +148,7 @@ import {
   BackupCatalogSchema,
   ClusterSchema,
   DriftCheckSchema,
+  DriftCheckSummarySchema,
   EnrollmentTokenRevealSchema,
   EnvironmentSchema,
   ExplainRequestSchema,
@@ -191,6 +192,8 @@ import {
   SchemaDiffSchema,
   SchemaFingerprintDocumentSchema,
   SchemaObjectKindSchema,
+  SchemaObjectListQuerySchema,
+  SchemaObjectListSchema,
   SchemaObjectRefSchema,
   SchemaObjectSchema,
   SchemaOverviewSchema,
@@ -201,7 +204,7 @@ import {
   TableStatsSchema,
   TargetHealthHistoryQuerySchema,
   TargetHealthHistorySchema,
-  TargetHealthSchema,
+  TargetHealthViewSchema,
   TargetSchema,
   TargetStateSchema,
   TargetSummarySchema,
@@ -435,7 +438,7 @@ export const ROUTES = [
       'Health with named conditions, probes, node and backup state, each with source and time.',
     action: 'target.health.get',
     pathParams: targetParams,
-    response: { status: 200, schema: TargetHealthSchema },
+    response: { status: 200, schema: TargetHealthViewSchema },
     errors: TARGET_ERRORS,
   },
   {
@@ -507,6 +510,18 @@ export const ROUTES = [
     errors: LIVE_TARGET_ERRORS,
   },
   {
+    operationId: 'listSchemaObjects',
+    method: 'get',
+    path: '/targets/{target}/schema/objects',
+    summary:
+      'Objects of the current schema snapshot without a search term (Wave 8 completion): filter by kind, schema, parent relation or name; ordered by schema, kind, name and signature; total, fingerprint, source and time.',
+    action: 'schema.search',
+    pathParams: targetParams,
+    query: SchemaObjectListQuerySchema,
+    response: { status: 200, schema: SchemaObjectListSchema },
+    errors: [...LIVE_TARGET_ERRORS, 'SCHEMA_FINGERPRINT_MISMATCH'],
+  },
+  {
     operationId: 'getSchemaFingerprint',
     method: 'get',
     path: '/targets/{target}/schema/fingerprint',
@@ -537,6 +552,18 @@ export const ROUTES = [
     body: z.strictObject({}),
     response: { status: 201, schema: DriftCheckSchema },
     errors: [...LIVE_TARGET_ERRORS, 'LEDGER_NOT_INITIALIZED'],
+  },
+  {
+    operationId: 'listDriftChecks',
+    method: 'get',
+    path: '/targets/{target}/drift-checks',
+    summary:
+      'Past drift checks of a target, scheduled and requested, newest first (Wave 8 completion); a read of the Control Store, no database is touched.',
+    action: 'target.finding.list',
+    pathParams: targetParams,
+    query: z.strictObject(page(200, 50)),
+    response: { status: 200, schema: pageSchema(DriftCheckSummarySchema) },
+    errors: TARGET_ERRORS,
   },
   {
     operationId: 'runQuery',
@@ -983,6 +1010,10 @@ export const ROUTES = [
         description: 'Events made through this client (runbook RB-11: list what a credential did).',
       }),
       grant: GrantIdSchema.optional().meta({ description: 'Events made through this grant.' }),
+      identity: IdentityIdSchema.optional().meta({
+        description:
+          'Wave 8 completion, additive (REST only; `audit_search` has no such input): only events whose actor is this identity. Combined with `actor=self` it keeps the caller’s own events only when this is the caller.',
+      }),
       ...page(500, 100),
     }),
     response: { status: 200, schema: pageSchema(AuditEventSchema) },

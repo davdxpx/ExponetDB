@@ -226,3 +226,13 @@ baseline).
 - Schedule: every 15 minutes for production targets and every 60 minutes for
   nonprod (§3), plus on demand (`POST /targets/{id}/drift-checks`). Drift
   never changes the database.
+- **[OBSERVED]** (Wave 8 completion) The history of the checks is readable:
+  `GET /targets/{id}/drift-checks` lists the rows of `observation.drift_checks`
+  of the target, newest first (`finished_at`, then the check id, on the index
+  `drift_checks_latest`), whatever started them (the worker's schedule or an
+  identity), with the status, both fingerprints, the six counts, the error
+  code of a failed check and the start and end times
+  ([`../06-rest-api/resources.md`](../06-rest-api/resources.md#schema-and-drift)).
+  The findings a check saw are not stored per check, so the list has none; a
+  finding names the checks that opened and resolved it. It needs
+  `diagnostics.read` at the target, like the findings. No MCP tool.

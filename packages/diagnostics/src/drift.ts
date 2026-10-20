@@ -1,4 +1,4 @@
-import type { DriftCheck, DriftFinding } from '@exponetdb/contracts'
+import type { DriftCheck, DriftCheckSummary, DriftFinding } from '@exponetdb/contracts'
 import {
   EXDB_LOCK_NAMESPACE,
   lockKey2,
@@ -25,9 +25,9 @@ import {
   type Snapshot,
   securityRelevant,
 } from '@exponetdb/postgres'
-import { brand, type TargetRecord } from '@exponetdb/registry'
+import { brand, type Page, type PageRequest, type TargetRecord } from '@exponetdb/registry'
 import { loadDocument } from './documents.ts'
-import { DocumentCorrupt, failureCodeOf } from './errors.ts'
+import { DiagnosticsError, DocumentCorrupt, failureCodeOf } from './errors.ts'
 import {
   clip,
   type FindingRecord,
@@ -628,6 +628,97 @@ export async function latestDriftCheck(
   )
   const row = rows[0]
   return row === undefined ? undefined : checkFrom(row)
+}
+
+const DRIFT_CHECK_CURSOR = 'dc1_'
+const CHECK_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/
+const CHECK_ID = /^smp_[0-7][0-9A-HJKMNP-TV-Z]{25}$/
+
+function encodeCheckCursor(last: Pick<DriftCheckRecord, 'checkId' | 'finishedAt'>): string {
+  return (
+    DRIFT_CHECK_CURSOR +
+    Buffer.from(`${last.finishedAt}|${last.checkId}`, 'utf8').toString('base64url')
+  )
+}
+
+/** The `[finished_at, check_id]` a cursor continues after, or `undefined` for the first page. */
+function decodeCheckCursor(
+  cursor: string | undefined,
+): readonly [finishedAt: string, checkId: string] | undefined {
+  if (cursor === undefined) return undefined
+  const [finishedAt, checkId, ...rest] = cursor.startsWith(DRIFT_CHECK_CURSOR)
+    ? Buffer.from(cursor.slice(DRIFT_CHECK_CURSOR.length), 'base64url').toString('utf8').split('|')
+    : []
+  if (
+    rest.length > 0 ||
+    finishedAt === undefined ||
+    checkId === undefined ||
+    !CHECK_TIME.test(finishedAt) ||
+    !CHECK_ID.test(checkId)
+  ) {
+    throw new DiagnosticsError('VALIDATION_FAILED', {
+      errors: [{ path: '/cursor', code: 'invalid', message: 'Unknown cursor.' }],
+    })
+  }
+  return [finishedAt, checkId]
+}
+
+/**
+ * The drift checks of a target, scheduled and requested, newest first
+ * (`finished_at`, then the check id: a total order on the index
+ * `drift_checks_latest`), over all generations. A keyset cursor continues
+ * after the last row returned, so a check recorded meanwhile never shifts a
+ * page. History is append-only, so nothing a cursor points at can vanish.
+ */
+export async function listDriftChecks(
+  q: Queryable,
+  target: Pick<TargetRecord, 'targetId'>,
+  request: PageRequest,
+): Promise<Page<DriftCheckRecord>> {
+  const limit = Math.min(Math.max(1, Math.trunc(request.limit)), 200)
+  const after = decodeCheckCursor(request.cursor)
+  const { rows } = await q.query(
+    'observation.drift.list',
+    `SELECT ${CHECK_COLUMNS} FROM observation.drift_checks d
+      WHERE d.target_id = $1
+        AND ($2::timestamptz IS NULL OR (d.finished_at, d.check_id) < ($2::timestamptz, $3::text))
+      ORDER BY d.finished_at DESC, d.check_id DESC
+      LIMIT $4`,
+    [target.targetId, after?.[0] ?? null, after?.[1] ?? null, limit + 1],
+  )
+  const items = rows.slice(0, limit).map(checkFrom)
+  const last = items[items.length - 1]
+  return {
+    items,
+    nextCursor: rows.length > limit && last !== undefined ? encodeCheckCursor(last) : null,
+  }
+}
+
+/** A past drift check as the history lists it (no findings: they are not stored per check). */
+export function driftCheckSummaryView(c: DriftCheckRecord): DriftCheckSummary {
+  return {
+    id: brand('smp', c.checkId),
+    targetId: brand('tgt', c.targetId),
+    generation: c.generation,
+    requestedBy:
+      c.requestedBy === 'schedule'
+        ? { kind: 'schedule' }
+        : { kind: 'identity', identityId: brand('idn', c.requestedBy) },
+    status: c.status,
+    baselineFingerprint: c.baselineFingerprint as DriftCheckSummary['baselineFingerprint'],
+    currentFingerprint: c.currentFingerprint as DriftCheckSummary['currentFingerprint'],
+    counts: {
+      drifted: c.drifted,
+      matched: c.matched,
+      unmanaged: c.unmanaged,
+      opened: c.opened,
+      updated: c.updated,
+      resolved: c.resolved,
+    },
+    errorCode: c.errorCode,
+    startedAt: c.startedAt,
+    finishedAt: c.finishedAt,
+  }
 }
 
 /** Default schedule (drift-detection.md §3): every 15 minutes for production, 60 for nonprod. */

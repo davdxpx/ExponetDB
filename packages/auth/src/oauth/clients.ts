@@ -132,6 +132,56 @@ export function clientFromRow(row: Row): OAuthClientRecord {
   }
 }
 
+/**
+ * How a client is used (Wave 8 completion): the latest recorded use over all
+ * of its grants and how many of them are active now. A data basis for the
+ * administrator's list, never an input to a decision.
+ */
+export interface ClientUse {
+  /** The minute of the latest recorded use (`oauth.grant_last_use`); `null`: none is recorded. */
+  readonly lastUsedAt: string | null
+  /** Grants that are neither revoked nor expired at the time of the read. */
+  readonly activeGrantCount: number
+}
+
+/**
+ * The use columns, from one lateral aggregate per client (one statement for a
+ * whole page, no query per client). An aggregate without GROUP BY always
+ * yields one row, so a client without grants has a count of 0 and no time.
+ */
+const CLIENT_USE_JOIN = `LEFT JOIN LATERAL (
+    SELECT (count(*) FILTER (WHERE g.state = 'active' AND g.expires_at > clock_timestamp()))::int
+             AS active_grant_count,
+           max(u.last_used_at) AS last_used
+      FROM oauth.grants g LEFT JOIN oauth.grant_last_use u ON u.grant_id = g.grant_id
+     WHERE g.client_id = c.client_id
+  ) gu ON true`
+
+const CLIENT_USE_COLUMNS = `gu.active_grant_count,
+  to_char(gu.last_used AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS last_used_at`
+
+function clientUseFromRow(row: Row): ClientUse {
+  return {
+    lastUsedAt: row.textOrNull('last_used_at'),
+    activeGrantCount: row.int('active_grant_count'),
+  }
+}
+
+/** One client with how it is used, or `undefined` when there is none. */
+export async function readClientWithUse(
+  q: Queryable,
+  clientId: OAuthClientId,
+): Promise<{ readonly client: OAuthClientRecord; readonly use: ClientUse } | undefined> {
+  const { rows } = await q.query(
+    'oauth.client.read_with_use',
+    `SELECT ${CLIENT_COLUMNS}, ${CLIENT_USE_COLUMNS} FROM oauth.clients c ${CLIENT_USE_JOIN}
+      WHERE c.client_id = $1`,
+    [clientId],
+  )
+  const row = rows[0]
+  return row === undefined ? undefined : { client: clientFromRow(row), use: clientUseFromRow(row) }
+}
+
 export async function readClient(
   q: Queryable,
   clientId: OAuthClientId,
@@ -170,13 +220,13 @@ export async function listClientViews(
 ): Promise<OAuthClientView[]> {
   const { rows } = await q.query(
     'oauth.client.list',
-    `SELECT ${CLIENT_COLUMNS} FROM oauth.clients c
+    `SELECT ${CLIENT_COLUMNS}, ${CLIENT_USE_COLUMNS} FROM oauth.clients c ${CLIENT_USE_JOIN}
       WHERE ($1::text IS NULL OR c.state = $1)
       ORDER BY (c.state = 'pending') DESC, c.created_at DESC, c.client_id DESC
       LIMIT $2`,
     [query.state ?? null, query.limit],
   )
-  return rows.map((row) => clientView(clientFromRow(row)))
+  return rows.map((row) => clientView(clientFromRow(row), clientUseFromRow(row)))
 }
 
 // ----- redirect URIs (oauth.md §3, RFC 8252 §7.3, OAuth 2.1 §2.3.1) -----
@@ -321,7 +371,11 @@ export function clientSummary(record: OAuthClientRecord) {
   }
 }
 
-export function clientView(record: OAuthClientRecord): OAuthClientView {
+/**
+ * The client as the API shows it. `use` is set by the reads that compute it
+ * (the list and one client); the answers of the decisions leave it out.
+ */
+export function clientView(record: OAuthClientRecord, use?: ClientUse): OAuthClientView {
   return {
     ...clientSummary(record),
     redirectUris: [...record.redirectUris],
@@ -348,6 +402,9 @@ export function clientView(record: OAuthClientRecord): OAuthClientView {
     clientUri: metadataText(record.metadata, 'client_uri', 512),
     softwareId: metadataText(record.metadata, 'software_id', 128),
     softwareVersion: metadataText(record.metadata, 'software_version', 64),
+    ...(use === undefined
+      ? {}
+      : { lastUsedAt: use.lastUsedAt, activeGrantCount: use.activeGrantCount }),
   }
 }
 

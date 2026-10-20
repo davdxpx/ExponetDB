@@ -71,6 +71,32 @@ The identity, settings and activity reads share one separate diagnostic
 session on a direct path and are recorded one by one: a read that fails is a
 failed probe with its class, the others still count.
 
+### 2.1 Connection capacity (Wave 8 completion)
+
+**[OBSERVED]** (`packages/diagnostics/src/reducer.ts` and `health.ts`) The
+connections in use and the connections available were always measured, but
+they reached a reader only inside a `connections_high` or
+`connections_critical` condition, when a threshold was crossed. The sampler now
+keeps them with the probe rows it already stores, so the latest sample answers
+"how many of how many" without a threshold: the successful `activity` probe
+carries `values.clientBackends`, the successful `settings` probe
+`values.usableSlots` (whole numbers, no text). No Control Store column was
+added; these members are not part of the public probe shape: the reader drops
+them from every probe it returns, so neither REST nor MCP shows a probe
+`values` member.
+
+`GET /targets/{id}/health` derives `capacity` from the latest status row
+only when **both** numbers are there, and then gives it that sample's
+`observedAt` and the view's `source` (`sampled`, or `cached` when the sample is
+older than two intervals; a lagging sampler still shows its last numbers with
+their age, next to `unknown` / `sampler_lagging`). It is absent, never `0`,
+when the latest sample did not measure them: the target was never sampled, was
+unreachable, the `settings` or the `activity` read failed, or the row was
+written before the numbers were stored (the next sample, within 15 seconds,
+has them). `usableSlots: 0` is a measured value (and `connections_critical`).
+The database size is not sampled today and is not part of the view; a probe
+for it is a later decision, not part of this change.
+
 ## 3. Named conditions
 
 **[DECIDED]** Conditions are machine-readable; UI text and MCP output are
@@ -276,12 +302,12 @@ one the read is `CAPABILITY_UNAVAILABLE`, never an empty result
 
 | Surface | Content |
 |---|---|
-| REST `GET /targets/{id}/health` | state, conditions, probes per endpoint, sources, timestamps |
+| REST `GET /targets/{id}/health` | state, conditions, probes per endpoint, sources, timestamps; **[OBSERVED]** (Wave 8 completion, additive) the optional `capacity` of the latest sample ([§2.1](#21-connection-capacity-wave-8-completion)) |
 | REST `GET /fleet` and `GET /findings` (Wave 8) | the fleet overview and the findings across targets ([§10](#10-fleet-overview-and-findings-across-targets)); REST only |
 | REST `GET /targets/{id}/health/history?from&to` (Wave 8) | sampled history: buckets with the worst state and the count of each state, and gaps with a derived cause ([§6](#6-failed-reads-and-gaps)); REST only |
 | REST `GET /targets/{id}/sessions` (Wave 4) | live: client backends of the target's database (filters: state, minimum age, application), statements always redacted with a digest of the redaction, capped with `truncated`, the ExponetDB operation behind an `exponetdb/…` application name |
 | REST `GET /targets/{id}/locks` (Wave 4) | live: waiting sessions with the pids blocking them (`pg_blocking_pids`), lock mode and relation; detection only, nothing is terminated |
-| MCP `target_health` | same, compact; untrusted fields (application names, statement text) labeled. **[OBSERVED]** (2026-10-13) Served since Wave 7 through the same use case as the REST route; state, conditions and probes keep their `source` and `observedAt`, and its contract text says a failed read is an error, never a healthy state (`packages/contracts/src/mcp/tools.ts`; parity with REST in `apps/server/test/mcp.int.test.ts`) |
+| MCP `target_health` | same, compact (without the REST-only `capacity`); untrusted fields (application names, statement text) labeled. **[OBSERVED]** (2026-10-13) Served since Wave 7 through the same use case as the REST route; state, conditions and probes keep their `source` and `observedAt`, and its contract text says a failed read is an error, never a healthy state (`packages/contracts/src/mcp/tools.ts`; parity with REST in `apps/server/test/mcp.int.test.ts`) |
 | MCP `sessions_list`, `locks_list` (Wave 7) | the same data as the two REST rows above; statements are redacted and at most 500 characters for MCP with `truncated` and the digest of the whole |
 | Web App target overview | three blocks in incident order (path, answers, stuck), then capacity, then history |
 | Status integration for consumers | read-only health summary per target for consumer status pages (for example REOSA's `/status/database` link-out, [`../13-integrations/reosa-integration.md`](../13-integrations/reosa-integration.md)) |
