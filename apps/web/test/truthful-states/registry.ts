@@ -123,6 +123,13 @@ export const COVERAGE: Record<string, Coverage> = {
     tests: ['connections/locks.test.tsx', 'connections/locks-join.test.tsx'],
   },
   'src/features/drift/drift-page.tsx': { tests: ['target-pages/drift.test.tsx', TARGET_PAGES] },
+  'src/features/drift/last-check.tsx': {
+    tests: ['target-pages/drift-last-check.test.tsx'],
+    exempt: {
+      partial:
+        'GET /targets/{target}/drift-checks answers the latest checks as one keyset page; the last check is its first row and is complete however many older ones exist, so the read cannot be partial (older ones are said in the history).',
+    },
+  },
   'src/features/findings/findings-page.tsx': {
     tests: ['target-pages/findings.test.tsx', TARGET_PAGES],
   },
@@ -199,6 +206,13 @@ export const COVERAGE: Record<string, Coverage> = {
     ],
   },
   'src/features/target-overview/activity-blocks.tsx': { tests: OVERVIEW },
+  'src/features/target-overview/capacity-row.tsx': {
+    tests: ['target-overview/capacity.test.tsx'],
+    exempt: {
+      partial:
+        'The connection slots are two numbers of one health sample (the capacity member): measured together or absent, so the row cannot hold some of them; absent is said as not reported.',
+    },
+  },
   'src/features/target-overview/health-block.tsx': { tests: OVERVIEW },
   'src/features/target-overview/history-block.tsx': {
     tests: [...OVERVIEW, 'target-overview/history.test.tsx'],

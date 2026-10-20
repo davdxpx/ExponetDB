@@ -60,10 +60,12 @@ export function diffRowOf(finding: DriftFinding): StructuredDiffRow {
   }
 }
 
-/** The counts of a check, the three buckets first. */
+/** The counts of a check, run just now or recorded, the three buckets first. */
 export type CountName = 'drifted' | 'unmanaged' | 'matched' | 'opened' | 'updated' | 'resolved'
 
-export function countsOf(check: DriftCheck): readonly (readonly [CountName, number])[] {
+export function countsOf(check: {
+  readonly counts: DriftCheck['counts']
+}): readonly (readonly [CountName, number])[] {
   const { counts } = check
   return [
     ['drifted', counts.drifted],
@@ -85,4 +87,30 @@ export function lastSeenOf(items: readonly { readonly lastSeenAt: string }[]): s
     }
   }
   return best?.at
+}
+
+/** The statuses of a recorded check this build knows; a newer server may add more. */
+export const CHECK_STATUSES = [
+  'clean',
+  'drifted',
+  'incomplete',
+  'no_baseline',
+  'not_comparable',
+  'failed',
+] as const
+export type CheckStatus = (typeof CHECK_STATUSES)[number]
+
+export function checkStatusOf(status: string): CheckStatus | undefined {
+  return CHECK_STATUSES.find((candidate) => candidate === status)
+}
+
+/**
+ * Whether a recorded check compared the two schemas. Only then do its counts
+ * mean anything: a check that was incomplete, had no baseline, could not
+ * compare or failed compared nothing, and its counts are not a result. A
+ * status this build does not know is not assumed to have compared.
+ */
+export function compared(status: string): boolean {
+  const known = checkStatusOf(status)
+  return known === 'clean' || known === 'drifted'
 }

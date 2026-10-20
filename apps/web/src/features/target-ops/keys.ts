@@ -15,6 +15,7 @@ export const opsKeys = {
   stream: (projectId: string) => ['target-ops', 'stream', projectId] as const,
   plans: (targetId: string) => ['target-ops', 'plans', targetId] as const,
   driftFindings: (path: string) => ['target-ops', 'drift-findings', path] as const,
+  driftChecks: (path: string) => ['target-ops', 'drift-checks', path] as const,
   findings: (path: string, filters: object) => ['target-ops', 'findings', path, filters] as const,
   report: (path: string, reportId: string) => ['target-ops', 'report', path, reportId] as const,
   operations: (targetId: string) => ['target-ops', 'operations', targetId] as const,
@@ -70,6 +71,28 @@ export function driftFindingsQuery(client: ApiClient, path: string) {
       client.operation('listTargetFindings', {
         params: { target: path },
         query: { kind: 'drift', limit: OPS_SUMMARY_LIMIT },
+        signal,
+      }),
+    enabled: isTargetPath(path),
+    refetchInterval: OPS_POLL_MS,
+  })
+}
+
+/** The checks the drift page reads: the last one in full and the ones before it in a short history. */
+export const DRIFT_HISTORY_LIMIT = 10
+
+/**
+ * The drift checks ExponetDB recorded for a target, newest first (scheduled
+ * and run on demand): a read of the Control Store, no database is touched. The
+ * first item is the last check. The findings of a check are not stored with it.
+ */
+export function driftChecksQuery(client: ApiClient, path: string) {
+  return queryOptions({
+    queryKey: opsKeys.driftChecks(path),
+    queryFn: ({ signal }) =>
+      client.operation('listDriftChecks', {
+        params: { target: path },
+        query: { limit: DRIFT_HISTORY_LIMIT },
         signal,
       }),
     enabled: isTargetPath(path),

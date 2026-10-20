@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { isReasonRequired } from '../../src/features/drift/accept-drift.tsx'
-import { bySeverity, lastSeenOf, triage } from '../../src/features/drift/drift-model.ts'
+import {
+  bySeverity,
+  checkStatusOf,
+  compared,
+  lastSeenOf,
+  triage,
+} from '../../src/features/drift/drift-model.ts'
 import {
   environmentNotes,
   isDecisionState,
@@ -144,6 +150,23 @@ describe('the drift helpers', () => {
       ]),
     ).toBe('2026-10-03T00:00:00Z')
     expect(lastSeenOf([])).toBeUndefined()
+  })
+
+  it('counts a recorded check only when it compared the schemas, and never assumes it for a status it does not know', () => {
+    expect(['clean', 'drifted'].map(compared)).toEqual([true, true])
+    for (const status of [
+      'incomplete',
+      'no_baseline',
+      'not_comparable',
+      'failed',
+      'new_status',
+      '',
+    ]) {
+      expect(compared(status)).toBe(false)
+    }
+    expect(checkStatusOf('no_baseline')).toBe('no_baseline')
+    expect(checkStatusOf('Clean')).toBeUndefined()
+    expect(checkStatusOf('new_status')).toBeUndefined()
   })
 
   it('recognizes the server refusal that asks for a reason, and only that one', () => {

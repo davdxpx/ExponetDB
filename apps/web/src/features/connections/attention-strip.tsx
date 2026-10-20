@@ -5,11 +5,13 @@ import {
   ObservedTime,
   type Readable,
   type ReadMeta,
+  type ReadSource,
   SourceLabel,
   UntrustedName,
 } from '@exponetdb/ui-patterns'
 import type { ReactNode } from 'react'
 import { type MessageKey, t } from '../../lib/i18n/i18n.ts'
+import { readSourceOf } from '../target/gate.ts'
 import {
   blockedSessionCount,
   type ConnectionFacts,
@@ -89,11 +91,17 @@ function cardState<T>(
   }
 }
 
+/** Where and when a figure was read; a source this page has no word for is left out, not guessed. */
+interface Observation {
+  readonly source?: ReadSource | undefined
+  readonly observedAt: string
+}
+
 /** The figure, what to know about it, and where and when it was read. */
 function ReadValue(props: {
   readonly main: Cell
   readonly note?: Cell
-  readonly meta: ReadMeta
+  readonly meta: Observation
 }): ReactNode {
   return (
     <>
@@ -107,7 +115,7 @@ function ReadValue(props: {
         className="mt-1 flex flex-wrap items-center gap-1.5 text-xs font-normal text-foreground-light"
         data-slot="read"
       >
-        <SourceLabel source={props.meta.source} />
+        {props.meta.source === undefined ? null : <SourceLabel source={props.meta.source} />}
         <span>
           {t('connections.observation')} <ObservedTime observedAt={props.meta.observedAt} seconds />
         </span>
@@ -382,6 +390,11 @@ function HealthCards({ health }: { readonly health: Readable<Health> }): ReactNo
   )
 }
 
+/** "N of M connection slots used": the numbers the sample measured, neutral unless the server raised a condition. */
+function capacityText(facts: Extract<ConnectionFacts, { kind: 'capacity' }>): string {
+  return t('connections.card.slots.capacity', { used: facts.used, usable: facts.usable })
+}
+
 function slotsText(facts: Extract<ConnectionFacts, { kind: 'slots' }>): string {
   if (facts.used === null) return t('connections.card.slots.unusedUnknown')
   return facts.usable === null
@@ -393,6 +406,17 @@ function SlotsCard({ health }: { readonly health: Readable<Health> }): ReactNode
   const state = cardState(health, (sample, meta) => {
     const facts = connectionFacts(sample)
     switch (facts.kind) {
+      case 'capacity':
+        return (
+          <ReadValue
+            // The measurement has its own source and time: they are what the figure is as old as.
+            meta={{ source: readSourceOf(facts.source), observedAt: facts.observedAt }}
+            main={capacityText(facts)}
+            {...(facts.severity === null
+              ? {}
+              : { note: <SeverityChip severity={facts.severity} /> })}
+          />
+        )
       case 'slots':
         return (
           <ReadValue

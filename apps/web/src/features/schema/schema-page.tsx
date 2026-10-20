@@ -103,6 +103,7 @@ function KindPage(props: { readonly target: TargetRoute; readonly kind: SchemaKi
             target={props.target}
             kinds={plan.kinds}
             what={t(plan.titleKey).toLowerCase()}
+            groupBy={plan.groupBy}
           />
         </section>
       )

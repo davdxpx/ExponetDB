@@ -23,7 +23,7 @@ import { diagramMarkdown, diagramSvg, type ExportMeta, exportFileName } from './
 import { ERD_MAX_TABLES } from './keys.ts'
 import { SchemaFilter, visibilityMissing } from './object-list.tsx'
 import { PlainName } from './plain-name.tsx'
-import { type SearchRead, useObjectSearch, useSchemaOverview, useTableDetails } from './queries.ts'
+import { type ListRead, useObjectList, useSchemaOverview, useTableDetails } from './queries.ts'
 import { buildErdData, type ErdBuild, neighborhood } from './schema-model.ts'
 import { useSchemaSearch } from './search-context.tsx'
 import { SearchForm } from './search-controls.tsx'
@@ -54,18 +54,24 @@ export function mapReadable<T, U>(readable: Readable<T>, map: (value: T) => U): 
 }
 
 /**
- * The tables that match a name filter (at most 30 are read), drawn with their
- * foreign keys. A table that could not be read is counted in a partial state;
- * a foreign key to a table outside the filter is counted as not drawn. The
- * filter and the schema live in the search of the page, so a link carries them.
+ * The tables of a schema, or whose name contains a filter (at most 30 are
+ * read), drawn with their foreign keys. The list is the server's: it is asked
+ * for the chosen schema and the filter, and its total says how many tables
+ * match in all. A table that could not be read is counted in a partial state;
+ * a foreign key to a table outside the list is counted as not drawn. The
+ * diagram waits for a schema or a filter, so the page never reads the details
+ * of 30 arbitrary tables of the whole database. The filter and the schema
+ * live in the search of the page, so a link carries them.
  */
 export function Visualizer(props: { readonly path: string }): ReactNode {
   const { search: current, setSearch } = useSchemaSearch()
   const term = current.q ?? ''
   const schema = current.schema ?? null
   const overview = useSchemaOverview(props.path, visibilityMissing)
-  const search = useObjectSearch(props.path, ['table'], term, (value) =>
-    value.hasMore ? [t('schema.list.more')] : undefined,
+  const list = useObjectList(
+    props.path,
+    { kinds: ['table'], schema, q: term },
+    term !== '' || schema !== null,
   )
   return (
     <div className="flex flex-col gap-4" data-slot="visualizer">
@@ -81,31 +87,27 @@ export function Visualizer(props: { readonly path: string }): ReactNode {
         value={schema}
         onChange={(next) => setSearch({ ...current, schema: next ?? undefined }, { replace: true })}
       />
-      {search.idle ? (
+      {list.idle ? (
         <p className="text-sm" data-slot="erd-idle">
           {t('schema.erd.idle')}
         </p>
       ) : (
-        <Diagram path={props.path} search={search} schema={schema} />
+        <Diagram path={props.path} search={list} />
       )}
     </div>
   )
 }
 
-function Diagram(props: {
-  readonly path: string
-  readonly search: SearchRead
-  readonly schema: string | null
-}): ReactNode {
+function Diagram(props: { readonly path: string; readonly search: ListRead }): ReactNode {
   const { search } = props
   const [focus, setFocus] = useState<string | null>(null)
-  const refs = useMemo(() => {
-    const value =
+  const refs = useMemo(
+    () =>
       search.readable.state === 'failed' || search.readable.state === 'loading'
         ? []
-        : search.readable.value.items
-    return props.schema === null ? value : value.filter((ref) => ref.schema === props.schema)
-  }, [search.readable, props.schema])
+        : search.readable.value.items,
+    [search.readable],
+  )
   const details = useTableDetails(props.path, search.readable.state === 'failed' ? [] : refs)
   const built = useMemo(
     () => mapReadable(details, (tables: readonly SchemaObject[]) => buildErdData(tables)),
@@ -125,8 +127,11 @@ function Diagram(props: {
         focused === null ? value.data : neighborhood(value.data, focused),
       )
   const undrawn = built.state === 'loading' || built.state === 'failed' ? 0 : built.value.undrawn
+  // The server's count of matching tables, not the number read so far.
   const total =
-    search.readable.state === 'failed' || search.readable.state === 'loading' ? 0 : refs.length
+    search.readable.state === 'failed' || search.readable.state === 'loading'
+      ? 0
+      : search.readable.value.total
   return (
     <div className="flex flex-col gap-2">
       {total > ERD_MAX_TABLES ? (
@@ -135,8 +140,8 @@ function Diagram(props: {
         </p>
       ) : null}
       {search.readable.state === 'partial' ? (
-        <p role="note" className="text-sm" data-slot="erd-more">
-          {t('schema.erd.moreMatch')}
+        <p role="note" className="text-sm" data-slot="erd-incomplete">
+          {t('schema.erd.incomplete')}
         </p>
       ) : null}
       {search.readable.state === 'stale' ? (
@@ -179,7 +184,7 @@ function Diagram(props: {
 }
 
 /** The search's own failure or loading, as a diagram state. */
-function mapSearchState(search: SearchRead): Readable<SchemaErdData> {
+function mapSearchState(search: ListRead): Readable<SchemaErdData> {
   const state = search.readable
   if (state.state === 'failed') return state
   return { state: 'loading' }

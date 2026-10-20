@@ -4,9 +4,6 @@
  * environments, recent operations and open findings.
  */
 export const targetOverviewMessages = {
-  'overview.intro':
-    'Health, migrations, operations and findings of this target. Every block is read on its own and fails on its own.',
-
   // Health, in incident order.
   'overview.health.title': 'Health',
   'overview.health.what': 'Target health',
@@ -14,11 +11,9 @@ export const targetOverviewMessages = {
     'In incident order: can we reach it, does it answer correctly, is anything stuck or about to break. Read from the latest sample; this page never probes.',
   'overview.health.state': 'State of the target',
   'overview.health.lifecycle': 'Lifecycle: {lifecycle}.',
-  'overview.health.observation': 'Source: {source}. Observed {age}.',
   'overview.health.unknownBecause': 'Why it is unknown:',
   'overview.health.unknownBecauseLabel': 'Reason',
   'overview.health.unknownBecauseNone': 'The sample does not say why it is unknown.',
-  'overview.health.notHealthy': 'The state is {state}, not healthy.',
   'overview.health.group.path': 'Can we reach it',
   'overview.health.group.answers': 'Does it answer correctly',
   'overview.health.group.stuck': 'Is anything stuck or about to break',
@@ -35,7 +30,6 @@ export const targetOverviewMessages = {
     'No probe of this kind is in the sample, so nothing here is reported as fine.',
   'overview.health.group.unknownOverall':
     'The sample as a whole is unknown, so a probe that passed is not read as healthy.',
-  'overview.health.probes': 'Probes',
   'overview.health.probe.caption': 'Probe results of the latest sample',
   'overview.health.probe.column.probe': 'Probe',
   'overview.health.probe.column.endpoint': 'Endpoint',
@@ -108,6 +102,7 @@ export const targetOverviewMessages = {
   'overview.health.fact.none': 'Not recorded',
   'overview.health.fact.noPlacement': 'No placement is recorded for this target.',
   'overview.health.fact.host': 'Host',
+  'overview.health.fact.slots': 'Connection slots',
   'overview.health.fact.generation': 'Target generation',
   'overview.health.fact.ledger': 'Ledger',
   'overview.health.fact.ledgerNone': 'No ledger state is recorded yet.',
@@ -176,7 +171,6 @@ export const targetOverviewMessages = {
 
   // Migration head against the other environments.
   'overview.migrations.title': 'Migration head',
-  'overview.migrations.what': 'Migration status',
   'overview.migrations.description':
     'What this target has applied, and how the same bundles stand in the other environments of the project. A state that was not read is unknown, never "not applied".',
   'overview.migrations.target.what': 'Migrations of this target',
@@ -241,13 +235,19 @@ export const targetOverviewMessages = {
   'overview.findings.column.code': 'Code',
   'overview.findings.column.summary': 'Summary',
   'overview.findings.column.seen': 'Last seen',
-  'overview.findings.column.occurrences': 'Seen',
   'overview.findings.occurrences': '{count} times',
   'overview.findings.security': 'Security relevant',
   'overview.findings.more': 'More findings exist than one read returns. The first are shown.',
   'overview.findings.link': 'Open findings',
   'overview.findings.empty': 'The read succeeded and found no open finding.',
-  'overview.findings.drift': 'Open drift',
+  // The connection slots of the facts.
+  'overview.capacity.locating': 'Reading the latest sample',
+  'overview.capacity.healthFailed':
+    'The health read failed ({reason}), so the slots are not known. This is not a count of zero.',
+  'overview.capacity.none':
+    'Not reported: the latest sample did not measure the slots. This is not a count of zero.',
+  'overview.capacity.value': '{used} of {usable} connection slots used',
+  'overview.capacity.measured': 'Measured',
   // The host of an agent-managed placement.
   'overview.host.what': 'Host values',
   'overview.host.external':

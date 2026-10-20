@@ -16,20 +16,18 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { type ReactNode, useId, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
-import { describeError, t } from '../../lib/i18n/i18n.ts'
+import { t } from '../../lib/i18n/i18n.ts'
 import { classifyFailure } from '../../lib/query/errors.ts'
 import { toReadable } from '../../lib/query/readable.ts'
 import { useMe } from '../../lib/session/guard.tsx'
 import { installationQuery } from '../settings/keys.ts'
 import { CimdForm } from './cimd-form.tsx'
 import { ClientCard } from './client-card.tsx'
-import { type ClientUseRead, clientUse } from './client-use.ts'
 import { Field, NativeSelect } from './fields.tsx'
 import { ACCESS_PAGE_LIMIT, type ClientStateFilter, oauthClientsQuery } from './keys.ts'
 import { ListView } from './list-view.tsx'
 import { canManageAccess, clientStateLabel } from './model.ts'
 import { NoMatch } from './no-match.tsx'
-import { grantsQuery } from './people-keys.ts'
 import { StatusLines, useStatusLine } from './status.tsx'
 
 const STATE_FILTERS: readonly ClientStateFilter[] = [
@@ -61,9 +59,9 @@ function stateFilterLabel(filter: ClientStateFilter): string {
  *
  * The list can be limited to one state (the API's `state` filter); when the
  * read shows clients waiting for review the page says how many. A client's
- * last use is not part of the client yet: until it is, the cards show the
- * latest recorded use and the active grants from `GET /grants`, labeled as
- * what that read could see, and say so when it failed or was cut.
+ * last use and its active grants are part of the client (`lastUsedAt`,
+ * `activeGrantCount`); a server that does not send them is said not to report
+ * them, and no use is ever turned into "never used".
  */
 export function OAuthClientsPage(): ReactNode {
   const { client } = useApi()
@@ -79,19 +77,6 @@ export function OAuthClientsPage(): ReactNode {
         ? undefined
         : [t('access.clients.more', { count: ACCESS_PAGE_LIMIT })],
   })
-  const grants = useQuery(grantsQuery(client, 'all'))
-  const grantsRead = toReadable(grants)
-  const use: ClientUseRead =
-    grantsRead.state === 'loading'
-      ? { state: 'loading' }
-      : grantsRead.state === 'failed'
-        ? { state: 'failed', reason: describeError(grants.error) }
-        : {
-            state: 'ready',
-            byClient: clientUse(grantsRead.value.items),
-            partial: grantsRead.value.nextCursor !== null,
-            stale: grantsRead.state === 'stale',
-          }
   const shown =
     readable.state === 'loading' || readable.state === 'failed' ? undefined : readable.value
   const pending = shown?.items.filter((item) => item.state === 'pending').length ?? 0
@@ -180,13 +165,7 @@ export function OAuthClientsPage(): ReactNode {
               ) : (
                 <ul id="client-list" className="cards flex flex-col gap-4">
                   {page.items.map((item) => (
-                    <ClientCard
-                      key={item.id}
-                      client={item}
-                      line={line}
-                      canManage={canManage}
-                      use={use}
-                    />
+                    <ClientCard key={item.id} client={item} line={line} canManage={canManage} />
                   ))}
                 </ul>
               )

@@ -12,17 +12,15 @@ import { useApi } from '../../lib/api/context.tsx'
 import { t } from '../../lib/i18n/i18n.ts'
 import { classifyFailure } from '../../lib/query/errors.ts'
 import { targetHref } from '../../shell/navigation.ts'
+import { readSourceOf } from '../target/gate.ts'
 import type { TargetRoute } from '../target/params.ts'
-import { SEARCH_MAX_LENGTH } from './keys.ts'
+import { SEARCH_MAX_LENGTH, TREE_PAGE_LIMIT } from './keys.ts'
 import { ObjectDetail } from './object-detail.tsx'
 import { visibilityMissing } from './object-list.tsx'
 import { useSchemaOverview } from './queries.ts'
 import { objectKeyOfRef, refKey } from './schema-model.ts'
 import { DEFAULT_PANEL_STATE, type PanelState } from './search.ts'
 import { SearchForm } from './search-controls.tsx'
-
-/** Largest page one class load asks for (the API's page maximum). */
-const CLASS_PAGE_LIMIT = 200
 
 /** The classes under a schema, and the kinds of the contract each one asks for. */
 interface TreeClass extends SchemaTreeClass {
@@ -54,9 +52,11 @@ function failedRead<T>(code: string, message: string): Readable<T> {
 
 /**
  * The schema tree: schemas, then the classes under each one, each read the
- * first time it opens. Objects are listed by name search (the only list the
- * API has), so the tree starts when a filter is applied; until then a class
- * says it cannot list without one, which is a failed read and not an empty class.
+ * first time it opens: the objects of that class in that schema, with the
+ * name filter above the tree (when one is applied) sent as `q`. A class is
+ * one page (the API's maximum); a class with more objects says how many there
+ * are and links to the full list of its kind, never presents the first page
+ * as the whole class.
  */
 export function TreePanel(props: { readonly target: TargetRoute }): ReactNode {
   const Link = useLinkComponent()
@@ -74,24 +74,35 @@ export function TreePanel(props: { readonly target: TargetRoute }): ReactNode {
   const load = useCallback<SchemaTreeLoader>(
     async ({ schema, classId }) => {
       const entry = classes.find((candidate) => candidate.id === classId)
-      if (term === '' || entry === undefined) {
-        return failedRead('SEARCH_TERM_REQUIRED', t('schema.tree.needsTerm'))
-      }
+      if (entry === undefined) return failedRead('UNKNOWN', t('error.unknown'))
       try {
-        const page = await client.operation('searchSchema', {
+        const page = await client.operation('listSchemaObjects', {
           params: { target: path },
-          query: { q: term, kinds: entry.kinds, limit: CLASS_PAGE_LIMIT },
+          query: {
+            kinds: entry.kinds,
+            schema,
+            ...(term === '' ? {} : { q: term }),
+            limit: TREE_PAGE_LIMIT,
+          },
         })
-        const refs = page.items.filter((ref) => ref.schema === schema)
-        for (const ref of refs) known.current.set(refKey(ref), ref)
-        const value = refs.map((ref) => ({
+        for (const ref of page.items) known.current.set(refKey(ref), ref)
+        const value = page.items.map((ref) => ({
           name: ref.signature === null ? ref.name : `${ref.name}(${ref.signature})`,
           key: refKey(ref),
         }))
-        const meta = { source: 'live' as const, observedAt: new Date().toISOString() }
-        return page.nextCursor === null
+        const meta = {
+          source: readSourceOf(page.source) ?? ('cached' as const),
+          observedAt: page.observedAt,
+        }
+        const missing = [
+          ...(page.nextCursor === null
+            ? []
+            : [t('schema.tree.more', { shown: page.items.length, total: page.total })]),
+          ...(page.complete ? [] : [t('schema.list.incomplete')]),
+        ]
+        return missing.length === 0
           ? { state: 'ready', value, ...meta }
-          : { state: 'partial', value, ...meta, missing: [t('schema.list.more')] }
+          : { state: 'partial', value, ...meta, missing }
       } catch (error) {
         const failure = classifyFailure(error)
         return failedRead(failure.code, failure.message)

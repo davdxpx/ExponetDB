@@ -13,6 +13,7 @@ import { type TargetHealth, type TargetRead, useTargetHealth } from '../target/q
 import { useTargetScope } from '../target/scope.tsx'
 import { FindingsBlock, OperationsBlock } from './activity-blocks.tsx'
 import { Block } from './block.tsx'
+import { CapacityValue } from './capacity-row.tsx'
 import { HealthBlock } from './health-block.tsx'
 import { HistoryBlock } from './history-block.tsx'
 import { HostValue } from './host-row.tsx'
@@ -117,6 +118,11 @@ function FactsBlock({
           },
         ]
   items.push(
+    {
+      id: 'slots',
+      label: t('overview.health.fact.slots'),
+      value: <CapacityValue health={health.readable} />,
+    },
     {
       id: 'generation',
       label: t('overview.health.fact.generation'),

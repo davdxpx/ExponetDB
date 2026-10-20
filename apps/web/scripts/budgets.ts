@@ -26,7 +26,11 @@ export interface Budgets {
 }
 
 export const BUDGETS: Budgets = {
-  entryJs: 268_000, // measured 232.7 kB on 2026-10-13
+  // 2026-10-20: 267.7 kB after the Studio parity work (database switcher, breadcrumbs, the
+  // command pages, the crash page and the copy of every new screen in the eagerly loaded
+  // message catalog, 62 kB of it); measured plus 15 percent. Splitting the catalog by area
+  // is the next way to shrink the entry. Was 268 kB, set from 232.7 kB on 2026-10-13.
+  entryJs: 308_000,
   largestChunk: 190_000, // overview-page with the charts, 143.4 kB (was section-page, 165.1 kB)
   css: 35_000, // 29.8 kB
   lazyChunk: 51_000, // largest unnamed lazy chunk, app-*, 43.9 kB

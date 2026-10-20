@@ -32,13 +32,15 @@ import { Section } from '../target-ops/section.tsx'
 import { TargetPage } from '../target-ops/target-page.tsx'
 import { AcceptDrift } from './accept-drift.tsx'
 import { bySeverity, countsOf, diffRowOf, lastSeenOf, triage } from './drift-model.ts'
+import { LastCheck } from './last-check.tsx'
 
 /**
  * `/t/<product>/<project>/<environment>/drift`: what differs between the
  * schema ExponetDB expects (the fingerprint the last applied migration or the
  * baseline recorded) and the schema the target has. Open drift findings first
- * (the server keeps them between checks), then the result of a check run from
- * this page with expected and actual side by side, triaged `drifted`,
+ * (the server keeps them between checks), the last check ExponetDB recorded
+ * (read on mount, with who ran it and when), then the result of a check run
+ * from this page with expected and actual side by side, triaged `drifted`,
  * `unmanaged`, `matched`. Accepting drift only creates a plan.
  */
 export function DriftPage(): ReactNode {
@@ -86,11 +88,8 @@ function DriftBody({ target }: { readonly target: Target }): ReactNode {
         {failure === undefined ? null : (
           <Admonition type="destructive" title={t('drift.check.failed')} description={failure} />
         )}
-        {check === undefined ? (
-          <p className="m-0 text-sm text-foreground-light">{t('drift.check.none')}</p>
-        ) : (
-          <CheckSummary check={check} />
-        )}
+        <LastCheck target={target} />
+        {check === undefined ? null : <CheckSummary check={check} />}
       </Section>
       <OpenFindings target={target} />
       {check === undefined ? null : <Triaged check={check} />}
@@ -110,6 +109,7 @@ const COUNT_LABELS = {
 function CheckSummary({ check }: { readonly check: DriftCheck }): ReactNode {
   return (
     <div className="flex flex-col gap-2 text-sm" data-drift-check={check.id}>
+      <h3 className="m-0 text-sm font-medium">{t('drift.check.thisRun')}</h3>
       <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-foreground-light">
         <SourceLabel source="live" />
         <span>

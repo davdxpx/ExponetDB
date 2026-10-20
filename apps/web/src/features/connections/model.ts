@@ -588,19 +588,33 @@ function worstCondition(health: Health, name: string): HealthCondition | undefin
 }
 
 /**
- * What the latest health sample says about connection capacity, from the
- * values the server's conditions carry (`connections_high` and
- * `connections_critical` send `clientBackends` and `usableSlots`). The server
- * decides what is high; this page never compares a number with a threshold.
- * A sample that reported no connection condition is "not flagged", which is
- * neither a number nor "fine": when the capacity could not be read
- * (`settings_unreadable`, `activity_unreadable`) the answer is "not judged".
+ * What the latest health sample says about connection capacity.
  *
- * Seam: when the health read carries the capacity itself (client backends and
- * usable slots in every sample), this is the one place that changes; the
- * cards read `ConnectionFacts` and nothing else.
+ * When the sample measured it, the health read carries the capacity itself
+ * (`capacity`: client backends in use and usable slots, with the source and
+ * time of the measurement): the facts are those two numbers, always, and the
+ * severity is the server's own judgment from its `connections_high` or
+ * `connections_critical` condition when it raised one, else none. When the
+ * sample did not measure it (the member is absent: never sampled, the target
+ * unreachable, a read that failed, a sample from an older server), the facts
+ * come from the values the server's conditions carry, as before. The server
+ * decides what is high; this page never compares a number with a threshold.
+ * A sample that reported no connection condition and no capacity is "not
+ * flagged", which is neither a number nor "fine": when the capacity could not
+ * be read (`settings_unreadable`, `activity_unreadable`) the answer is "not
+ * judged". An absent capacity is never read as zero.
  */
 export type ConnectionFacts =
+  | {
+      /** Both numbers were measured by the sample. */
+      readonly kind: 'capacity'
+      readonly used: number
+      readonly usable: number
+      /** The server's own judgment (a condition it raised), or `null`: not judged high. */
+      readonly severity: Severity | null
+      readonly source: string
+      readonly observedAt: string
+    }
   | {
       readonly kind: 'slots'
       readonly used: number | null
@@ -615,6 +629,17 @@ export function connectionFacts(health: Health): ConnectionFacts {
   if (health.state === 'unknown') return { kind: 'unknown', because: health.unknownBecause }
   const high =
     worstCondition(health, 'connections_critical') ?? worstCondition(health, 'connections_high')
+  const capacity = health.capacity
+  if (capacity !== undefined) {
+    return {
+      kind: 'capacity',
+      used: capacity.clientBackends,
+      usable: capacity.usableSlots,
+      severity: high?.severity ?? null,
+      source: capacity.source,
+      observedAt: capacity.observedAt,
+    }
+  }
   if (high !== undefined) {
     return {
       kind: 'slots',

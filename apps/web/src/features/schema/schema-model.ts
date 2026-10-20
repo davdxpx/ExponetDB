@@ -16,9 +16,11 @@ import { quoteIdent } from './identifiers.ts'
 export type KindPlan =
   | {
       readonly type: 'objects'
-      /** The kinds of the contract the search is limited to. */
+      /** The kinds of the contract the list is limited to. */
       readonly kinds: readonly string[]
       readonly titleKey: MessageKey
+      /** `parent` lists the objects under the relation they belong to (policies under their table). */
+      readonly groupBy?: 'parent'
     }
   | { readonly type: 'visualizer' }
   | { readonly type: 'unsupported'; readonly titleKey: MessageKey; readonly reasonKey: MessageKey }
@@ -54,7 +56,12 @@ export function kindPlan(kind: SchemaKind): KindPlan {
     case 'indexes':
       return { type: 'objects', kinds: ['index'], titleKey: 'schema.kind.indexes' }
     case 'policies':
-      return { type: 'objects', kinds: ['policy'], titleKey: 'schema.kind.policies' }
+      return {
+        type: 'objects',
+        kinds: ['policy'],
+        titleKey: 'schema.kind.policies',
+        groupBy: 'parent',
+      }
     case 'privileges':
       // Grants are part of an object's detail; the list is the objects that carry them.
       return {
@@ -130,6 +137,52 @@ export function qualifiedName(ref: ObjectKey): string | undefined {
 /** A stable identity of a reference in one list. */
 export function refKey(ref: ObjectKey): string {
   return JSON.stringify([ref.kind, ref.key])
+}
+
+// ----- grouping -----
+
+/** The objects of one parent relation (a policy's table), as one group of a list. */
+export interface ParentGroup {
+  /** A stable identity of the group in one list. */
+  readonly key: string
+  readonly schema: string
+  /** The relation's name, or `null` for objects that report none. */
+  readonly parent: string | null
+  readonly items: readonly SchemaObjectRef[]
+}
+
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
+/**
+ * The objects grouped by the relation they belong to: by schema, then by the
+ * relation's name, objects without a parent last in their schema; inside a
+ * group the order the server gave is kept. Only what was read is grouped, so a
+ * relation's other objects join its group when the pages that hold them load.
+ */
+export function groupByParent(items: readonly SchemaObjectRef[]): readonly ParentGroup[] {
+  const groups = new Map<
+    string,
+    { schema: string; parent: string | null; items: SchemaObjectRef[] }
+  >()
+  for (const ref of items) {
+    const key = JSON.stringify([ref.schema, ref.parent])
+    const group = groups.get(key)
+    if (group === undefined) {
+      groups.set(key, { schema: ref.schema, parent: ref.parent, items: [ref] })
+    } else {
+      group.items.push(ref)
+    }
+  }
+  return [...groups.entries()]
+    .map(([key, group]) => ({ key, ...group }))
+    .sort(
+      (a, b) =>
+        compareText(a.schema, b.schema) ||
+        (a.parent === null ? 1 : 0) - (b.parent === null ? 1 : 0) ||
+        compareText(a.parent ?? '', b.parent ?? ''),
+    )
 }
 
 // ----- hints from the object read -----

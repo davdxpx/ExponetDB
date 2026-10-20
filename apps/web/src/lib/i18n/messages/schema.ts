@@ -35,8 +35,7 @@ export const schemaMessages = {
   // The name filter and the schema selector.
   'schema.search.label': 'Filter by name',
   'schema.search.apply': 'Show matching objects',
-  'schema.search.hint':
-    'The Control Plane lists schema objects by name search. Enter part of a name (1 to 128 characters).',
+  'schema.search.hint': 'Optional. Enter part of a name (1 to 128 characters) to narrow the list.',
   'schema.selector.label': 'Schema',
   'schema.selector.all': 'All schemas',
   'schema.selector.search': 'Search schemas',
@@ -48,13 +47,24 @@ export const schemaMessages = {
     'The list of schemas could not be read, so schemas cannot be chosen here. The name filter still works.',
 
   // The lists.
-  'schema.list.idle':
-    'Enter part of a name to list objects. Nothing is listed until you do, and that is not the same as having none.',
   'schema.list.empty': 'The read succeeded and found no object with that name.',
-  'schema.list.noneInSchema': 'None of the objects read so far is in this schema.',
-  'schema.list.more': 'More objects match than one page shows. Load more to read them.',
+  'schema.list.emptyAll':
+    'The read succeeded and found no object of this kind in the schemas shown.',
+  'schema.list.noneRead':
+    'No object was read, and the snapshot is incomplete, so there may be some.',
+  'schema.list.incomplete': 'Part of the schema could not be read, so this list may miss objects.',
+  'schema.list.showing': 'Showing {shown} of {total} objects.',
+  'schema.list.showingAll': 'Showing all {total} objects.',
   'schema.list.loadMore': 'Load more objects',
-  'schema.list.caption': 'Objects that match the filter',
+  'schema.list.loadMoreFailed':
+    'Could not read the next objects: {message} ({code}). The objects above are unchanged.',
+  'schema.list.restarted':
+    'The schema changed while you were paging, so the list started again from the first page.',
+  'schema.list.groupNote':
+    'Grouped by table. Policies of a table on pages not loaded yet join its group when you load more.',
+  'schema.list.group.table': 'Table',
+  'schema.list.group.count': 'Policies read: {count}',
+  'schema.list.caption': 'Schema objects',
   'schema.list.name': 'Name',
   'schema.list.schema': 'Schema',
   'schema.list.parent': 'Belongs to',
@@ -183,20 +193,20 @@ export const schemaMessages = {
   'schema.tree.title': 'Browse by schema',
   'schema.tree.label': 'Schemas and their objects',
   'schema.tree.filter': 'Filter the tree by name',
-  'schema.tree.needsTerm':
-    'Objects are listed by name search. Enter part of a name above and open this class again. This does not mean the class is empty.',
+  'schema.tree.more':
+    'Showing the first {shown} of {total} objects of this class. Open the full list of this kind for the rest.',
   'schema.tree.openKind': 'Open the full list of this kind',
 
   // The diagram.
   'schema.erd.what': 'Schema diagram',
   'schema.erd.filter': 'Draw the tables whose name contains',
   'schema.erd.idle':
-    'Enter part of a table name to draw the matching tables with their foreign keys. At most 30 tables are drawn at once.',
+    'Choose a schema or enter part of a table name to draw tables with their foreign keys. At most 30 are drawn at once.',
   'schema.erd.capped': 'Drawing the first {shown} of {total} matching tables.',
   'schema.erd.undrawn':
     '{count} foreign keys are not drawn: they point at a table outside this filter, or their definition could not be read.',
   'schema.erd.unread': '{count} of {total} tables could not be read and are not drawn.',
-  'schema.erd.moreMatch': 'More tables match than the search returned. Narrow the filter.',
+  'schema.erd.incomplete': 'Part of the schema could not be read, so tables may be missing.',
   'schema.erd.stale': 'The list of tables is an earlier read.',
   'schema.erd.tools': 'Diagram tools',
   'schema.erd.find': 'Find a table',
@@ -245,7 +255,6 @@ export const schemaMessages = {
   'schema.columns.uq.long': 'Unique',
   'schema.columns.uq.composite': 'Unique together with other columns',
   'schema.columns.fk': 'FK',
-  'schema.columns.fk.long': 'Foreign key',
   'schema.columns.references': 'References',
 
   // The row browser.

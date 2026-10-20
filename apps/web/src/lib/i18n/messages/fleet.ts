@@ -16,7 +16,6 @@ export const fleetMessages = {
   'fleet.part.unavailable.permission_denied':
     'You do not have permission to see this part. It is not zero.',
   'fleet.part.unavailable.unknown': 'The server could not count this part. It is not zero.',
-  'fleet.part.openList': 'Open {label}',
   'fleet.targets.label': 'Targets',
   'fleet.targets.help': 'Targets you may list that are not decommissioned.',
   'fleet.targets.tiers': '{prod} production, {nonprod} non-production',
@@ -48,7 +47,6 @@ export const fleetMessages = {
   'fleet.operations.approval.link': 'Open the approvals queue',
   'fleet.operations.running.link': 'Show running operations',
   'fleet.operations.attention.link': 'Show operations that need attention',
-  'fleet.backups.label': 'Backups at risk',
   'fleet.backups.what': 'Backups at risk',
   'fleet.backups.reason':
     'Backup health arrives with Wave 9. Until then ExponetDB does not say whether any backup is at risk.',
@@ -61,7 +59,6 @@ export const fleetMessages = {
   'fleet.critical.column.finding': 'Finding',
   'fleet.critical.column.seen': 'Last seen',
   'fleet.critical.open': 'Open the findings of {target}',
-  'fleet.critical.badTarget': 'The server named this target in a form the page cannot link.',
   'fleet.attention.title': 'Targets that need attention',
   'fleet.attention.description':
     'The targets with the worst health, worst first. A target without a health sample counts as unknown. Healthy and suspended targets are not listed.',
@@ -207,9 +204,6 @@ export const fleetMessages = {
   'targets.column.tier': 'Tier',
   'targets.column.state': 'State',
   'targets.column.health': 'Health',
-  'targets.column.version': 'PostgreSQL',
-  'targets.version.notInList':
-    'Not in the list. The target page shows the version and its placement.',
   'targets.open': 'Open {target}',
   'targets.actions': 'Actions',
   'targets.actions.label': 'Actions for {target}',
@@ -255,8 +249,6 @@ export const fleetMessages = {
   'register.database': 'Database',
   'register.database.placeholder': 'Choose a database',
   'register.database.none': 'This cluster has no database that is free to register.',
-  'register.database.truncated':
-    'More databases exist than the server listed. Only the listed ones can be chosen here.',
   'register.authority':
     'A database on a cluster declared production, or not declared, needs production authority to register, whatever the environment says. The server decides; the plan shows what it needs.',
   'register.summary.title': 'Summary',
@@ -268,8 +260,6 @@ export const fleetMessages = {
     'The plan registers the database as a target. It stamps the database with its identity and initializes an empty ledger when it is applied. Nothing runs until the plan is applied.',
   'register.confirm.action': 'Create plan',
   'register.confirm.cancel': 'Cancel',
-  'register.failed': 'The plan was not created: {reason}',
-  'register.badPlan': 'The server answered without a plan the page can open.',
   'register.choose': 'Choose one.',
   'register.choices.more':
     'More {what} exist than the server listed. Only the listed ones can be chosen here.',

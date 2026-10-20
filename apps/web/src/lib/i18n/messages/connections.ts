@@ -60,7 +60,6 @@ export const connectionsMessages = {
   'locks.tree.waiting': 'Process {pid} has waited {wait}',
   'locks.tree.waitingUnknown': 'Process {pid} waits',
   'locks.tree.alsoBlockedBy': 'Also blocked by process {pids}',
-  'locks.tree.shownAbove': 'Shown above',
   'locks.tree.cycle':
     'These sessions wait for each other, and none of them holds the others up first',
   'locks.table.title': 'Lock waits',
@@ -188,8 +187,8 @@ export const connectionsMessages = {
   'connections.card.ageUnknown': 'Age not reported',
   'connections.card.noneInSample': 'None in the first {cap}',
   'connections.card.slots': 'Connection slots',
-  'connections.card.slots.help':
-    'Client connections in use against the slots clients may use. The server reports it only when it is high.',
+  'connections.card.slots.help': 'Client connections in use against the slots clients may use.',
+  'connections.card.slots.capacity': '{used} of {usable} connection slots used',
   'connections.card.slots.value': '{used} of {usable} slots',
   'connections.card.slots.usedOnly': '{used} slots in use',
   'connections.card.slots.unusedUnknown': 'Slots in use not reported',

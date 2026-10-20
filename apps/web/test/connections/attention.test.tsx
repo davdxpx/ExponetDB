@@ -318,6 +318,108 @@ describe('the health conditions about connections', () => {
     expect(slots.querySelector('[data-slot="read"]')).toHaveTextContent('Sampled')
   })
 
+  it('shows N of M connection slots used from the measured capacity, with its source and time, in no color', async () => {
+    const w = incident()
+    w.sample(TARGET, {
+      state: 'healthy',
+      capacity: {
+        clientBackends: 37,
+        usableSlots: 97,
+        source: 'sampled',
+        observedAt: new Date(Date.now() - 2 * 60_000 - 20_000).toISOString(),
+      },
+    })
+    mountDiagnostics(PATH, w)
+    const slots = await card('Connection slots')
+    await waitFor(() => expect(slots).toHaveTextContent('37 of 97 connection slots used'))
+    // The server raised no condition: nothing is colored, and the page compares no limit.
+    expect(slots.querySelector('[data-severity]')).toBeNull()
+    expect(slots).not.toHaveTextContent('Not flagged')
+    const read = slots.querySelector('[data-slot="read"]') as HTMLElement
+    expect(read).toHaveTextContent('Sampled')
+    expect(read).toHaveTextContent('Observed 2 min ago')
+  })
+
+  it('takes the color of the measured capacity only from the condition the server raised', async () => {
+    const w = incident()
+    w.sample(TARGET, {
+      state: 'degraded',
+      capacity: { clientBackends: 80, usableSlots: 97, source: 'sampled', observedAt: at() },
+      conditions: [
+        {
+          condition: 'connections_high',
+          severity: 'warning',
+          count: 80,
+          observedAt: at(),
+          values: { clientBackends: 80, usableSlots: 97 },
+        },
+      ],
+    })
+    mountDiagnostics(PATH, w)
+    const slots = await card('Connection slots')
+    await waitFor(() => expect(slots).toHaveTextContent('80 of 97 connection slots used'))
+    const chip = slots.querySelector('[data-severity]') as HTMLElement
+    expect(chip).toHaveAttribute('data-severity', 'warning')
+  })
+
+  it('shows a measured zero as zero, and names no source it has no word for', async () => {
+    const w = incident()
+    w.sample(TARGET, {
+      state: 'healthy',
+      capacity: { clientBackends: 0, usableSlots: 97, source: 'quantum', observedAt: at() },
+    })
+    mountDiagnostics(PATH, w)
+    const slots = await card('Connection slots')
+    await waitFor(() => expect(slots).toHaveTextContent('0 of 97 connection slots used'))
+    const read = slots.querySelector('[data-slot="read"]') as HTMLElement
+    expect(read.querySelector('[data-source]')).toBeNull()
+    expect(read).toHaveTextContent('Observed')
+  })
+
+  it('keeps the text of the conditions when the sample carries no capacity, and never reads that as zero', async () => {
+    const w = incident()
+    w.sample(TARGET, {
+      state: 'degraded',
+      conditions: [
+        {
+          condition: 'connections_high',
+          severity: 'warning',
+          count: 212,
+          observedAt: at(),
+          values: { clientBackends: 212, usableSlots: 400 },
+        },
+      ],
+    })
+    mountDiagnostics(PATH, w)
+    const slots = await card('Connection slots')
+    await waitFor(() => expect(slots).toHaveTextContent('212 of 400 slots'))
+    expect(slots).not.toHaveTextContent('connection slots used')
+    cleanup()
+    mountDiagnostics(PATH, incident())
+    const quiet = await card('Connection slots')
+    await waitFor(() => expect(quiet).toHaveTextContent('Not flagged'))
+    expect(quiet).not.toHaveTextContent('0 of')
+  })
+
+  it('shows the capacity of an old health sample as a stale card with the figure it had', async () => {
+    const w = incident()
+    w.sample(TARGET, {
+      state: 'healthy',
+      observedAt: new Date(Date.now() - 10 * 60_000).toISOString(),
+      capacity: {
+        clientBackends: 12,
+        usableSlots: 97,
+        source: 'sampled',
+        observedAt: new Date(Date.now() - 10 * 60_000 - 20_000).toISOString(),
+      },
+    })
+    mountDiagnostics(PATH, w)
+    const slots = await card('Connection slots')
+    await waitFor(() => expect(slots).toHaveAttribute('data-state', 'stale'))
+    expect(slots).toHaveTextContent('12 of 97 connection slots used')
+    expect(slots.querySelector('[data-slot="read"]')).toHaveTextContent('Observed 10 min ago')
+  })
+
   it('shows the count and the oldest age of a session condition, and only the conditions that were reported', async () => {
     const w = incident()
     w.sample(TARGET, {

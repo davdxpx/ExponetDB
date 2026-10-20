@@ -285,8 +285,6 @@ export const infrastructureMessages = {
   'infra.credential.rotate.body':
     'The plan rotates the password of {role} on this cluster: the worker generates a new password, sets its verifier through the node agent and logs in with it. Nobody sees the password. Nothing changes until the plan is applied.',
   'infra.credential.rotate.action': 'Create rotation plan',
-  'infra.credential.rotate.agent':
-    'On a cluster managed by a node agent the worker can rotate a password itself.',
 
   // Roles.
   'infra.roles.title': 'Roles',

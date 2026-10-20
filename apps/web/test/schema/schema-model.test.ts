@@ -5,6 +5,7 @@ import {
   columnKeys,
   erdTableId,
   formatBytes,
+  groupByParent,
   invalidIndexes,
   isBrowsableKind,
   kindPlan,
@@ -90,6 +91,41 @@ describe('kindPlan: every route kind has a plan', () => {
     expect(kindPlan('functions')).toMatchObject({ kinds: ['function', 'procedure'] })
     expect(kindPlan('roles').type).toBe('unsupported')
     expect(kindPlan('visualizer').type).toBe('visualizer')
+  })
+
+  it('groups policies by their table and no other kind', () => {
+    expect(kindPlan('policies')).toMatchObject({ type: 'objects', groupBy: 'parent' })
+    for (const kind of SCHEMA_KINDS.filter((candidate) => candidate !== 'policies')) {
+      expect(kindPlan(kind)).not.toHaveProperty('groupBy')
+    }
+  })
+})
+
+describe('groupByParent', () => {
+  const policy = (name: string, parent: string | null, schema = 'public') =>
+    ref({ kind: 'policy', name, parent, schema, key: [schema, String(parent), name] })
+
+  it('groups by schema, then table name, keeps the server order inside a group and puts no parent last', () => {
+    const groups = groupByParent([
+      policy('b', 'users'),
+      policy('a', 'orders'),
+      policy('c', 'users'),
+      policy('z', null),
+      policy('d', 'orders', 'app'),
+      policy('e', 'orders'),
+    ])
+    expect(groups.map((g) => [g.schema, g.parent, g.items.map((i) => i.name)])).toEqual([
+      ['app', 'orders', ['d']],
+      ['public', 'orders', ['a', 'e']],
+      ['public', 'users', ['b', 'c']],
+      ['public', null, ['z']],
+    ])
+  })
+
+  it('tells two tables of the same name in different schemas apart, and an empty list has no groups', () => {
+    const groups = groupByParent([policy('a', 'orders', 'one'), policy('a', 'orders', 'two')])
+    expect(new Set(groups.map((g) => g.key)).size).toBe(2)
+    expect(groupByParent([])).toEqual([])
   })
 })
 

@@ -58,6 +58,15 @@ export class World extends TargetWorld {
   /** What a search finds: every ref whose name contains the term and whose kind is asked for. */
   refs: SchemaObjectRef[] = []
   searchNext: string | null = null
+  /** The fingerprint of the snapshot `GET /schema/objects` reads; a cursor made under another one is a 409. */
+  objectsFingerprint = `fp1:17:${'ab'.repeat(32)}`
+  /** Smaller than the client's page size when a test needs a second page without 100 refs. */
+  objectsPageSize: number | undefined
+  /** `complete` of the snapshot the list reads. */
+  objectsComplete = true
+  objectsSource = 'live'
+  /** `observedAt` of the snapshot the list reads; unset, now. */
+  objectsObservedAt: string | undefined
   /** Object details by `kind|qualifiedName`. */
   readonly objects = new Map<string, SchemaObject>()
   readonly extra: string[] = []
@@ -115,6 +124,57 @@ export function answerMore(world: World, input: string | URL | Request): Respons
       return mine(world.overview) as Response
     case 'schema/fingerprint':
       return mine(world.fingerprint) as Response
+    case 'schema/objects': {
+      world.requests.push(request)
+      world.extra.push(request)
+      for (const [part, failure] of world.failures) {
+        if (request.includes(part)) {
+          return json(failure.status, {
+            code: failure.code,
+            message: failure.message ?? `${failure.code} happened.`,
+          })
+        }
+      }
+      const q = (url.searchParams.get('q') ?? '').toLowerCase()
+      const kinds = url.searchParams.getAll('kinds')
+      const schema = url.searchParams.get('schema')
+      const parent = url.searchParams.get('parent')
+      const cursor = url.searchParams.get('cursor')
+      let offset = 0
+      if (cursor !== null) {
+        const [at, snapshot] = cursor.split('_')
+        if (snapshot !== world.objectsFingerprint.slice(-8)) {
+          return json(409, {
+            code: 'SCHEMA_FINGERPRINT_MISMATCH',
+            message: 'The schema changed between the pages. Start again.',
+          })
+        }
+        offset = Number(at)
+      }
+      const matches = world.refs
+        .filter(
+          (ref) =>
+            ref.name.toLowerCase().includes(q) &&
+            (kinds.length === 0 || kinds.includes(ref.kind)) &&
+            (schema === null || ref.schema === schema) &&
+            (parent === null || ref.parent === parent),
+        )
+        .sort((a, b) => (a.schema + a.kind + a.name < b.schema + b.kind + b.name ? -1 : 1))
+      const limit = Math.min(
+        Number(url.searchParams.get('limit') ?? '100'),
+        world.objectsPageSize ?? 200,
+      )
+      const next = offset + limit
+      return json(200, {
+        items: matches.slice(offset, next),
+        nextCursor: next < matches.length ? `${next}_${world.objectsFingerprint.slice(-8)}` : null,
+        total: matches.length,
+        fingerprint: world.objectsFingerprint,
+        complete: world.objectsComplete,
+        source: world.objectsSource,
+        observedAt: world.objectsObservedAt ?? NOW(),
+      })
+    }
     case 'schema/search': {
       const q = (url.searchParams.get('q') ?? '').toLowerCase()
       const kinds = url.searchParams.getAll('kinds')

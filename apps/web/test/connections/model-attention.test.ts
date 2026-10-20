@@ -374,6 +374,60 @@ describe('what the health sample says about connections', () => {
     expect(facts).toEqual({ kind: 'slots', used: 390, usable: null, severity: 'critical' })
   })
 
+  it('reads the slots from the capacity the sample measured, without a severity the server did not give', () => {
+    const capacity = { clientBackends: 37, usableSlots: 97, source: 'sampled', observedAt: NOW }
+    expect(connectionFacts(health([], { capacity }))).toEqual({
+      kind: 'capacity',
+      used: 37,
+      usable: 97,
+      severity: null,
+      source: 'sampled',
+      observedAt: NOW,
+    })
+  })
+
+  it('takes the severity of a measured capacity from the condition the server raised, and the numbers from the capacity', () => {
+    const facts = connectionFacts(
+      health(
+        [
+          condition({
+            condition: 'connections_critical',
+            severity: 'critical',
+            count: 390,
+            values: { clientBackends: 1, usableSlots: 2 },
+          }),
+        ],
+        { capacity: { clientBackends: 390, usableSlots: 400, source: 'live', observedAt: NOW } },
+      ),
+    )
+    expect(facts).toEqual({
+      kind: 'capacity',
+      used: 390,
+      usable: 400,
+      severity: 'critical',
+      source: 'live',
+      observedAt: NOW,
+    })
+  })
+
+  it('keeps a measured zero, and lets an unknown sample say it is unknown before anything else', () => {
+    const zero = connectionFacts(
+      health([], {
+        capacity: { clientBackends: 0, usableSlots: 0, source: 'sampled', observedAt: NOW },
+      }),
+    )
+    expect(zero).toMatchObject({ kind: 'capacity', used: 0, usable: 0 })
+    expect(
+      connectionFacts(
+        health([], {
+          state: 'unknown',
+          unknownBecause: 'no_sample',
+          capacity: { clientBackends: 5, usableSlots: 9, source: 'sampled', observedAt: NOW },
+        }),
+      ),
+    ).toEqual({ kind: 'unknown', because: 'no_sample' })
+  })
+
   it('does not call a sample without a connection condition healthy, nor judge what it could not read', () => {
     expect(connectionFacts(health([]))).toEqual({ kind: 'not_flagged' })
     expect(connectionFacts(health([condition({ condition: 'settings_unreadable' })]))).toEqual({

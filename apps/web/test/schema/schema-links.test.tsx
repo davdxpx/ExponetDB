@@ -129,12 +129,16 @@ async function search(term: string) {
 }
 
 describe('a link carries the object, the filter and the schema', () => {
-  it('opens the object of a link without the list that found it, and reads no search', async () => {
+  it('opens the object of a link without the list that found it, and lists the kind without a filter', async () => {
     const w = world()
     mountBrowse(link(['public', 'orders']), w)
     const panel = await detail()
     expect(within(panel).getByRole('table', { name: 'Columns' })).toBeInTheDocument()
-    expect(screen.getByText(/Enter part of a name to list objects/)).toBeInTheDocument()
+    // The list is read from the page alone: no filter is needed for it.
+    expect(await screen.findByRole('table', { name: 'Schema objects' })).toBeInTheDocument()
+    const listed = w.requests.filter((r) => r.includes('/schema/objects?'))
+    expect(listed.length).toBeGreaterThan(0)
+    expect(listed.every((r) => !r.includes('q='))).toBe(true)
     expect(w.requests.some((r) => r.includes('/schema/search'))).toBe(false)
     expect(
       w.requests.some((r) => r.includes('/schema/objects/table/%22public%22.%22orders%22')),
@@ -145,7 +149,7 @@ describe('a link carries the object, the filter and the schema', () => {
     const w = world()
     const { router } = mountBrowse(`${SCHEMA}/tables`, w)
     const user = await search('ord')
-    const table = await screen.findByRole('table', { name: 'Objects that match the filter' })
+    const table = await screen.findByRole('table', { name: 'Schema objects' })
     await user.click(within(table).getByRole('button', { name: 'orders' }))
     await detail()
     expect(router.state.location.search).toMatchObject({
@@ -167,12 +171,14 @@ describe('a link carries the object, the filter and the schema', () => {
   it('keeps the name filter and the schema in the link, and reads the list from them', async () => {
     const w = world()
     mountBrowse(`${SCHEMA}/tables?q=ord&schema=public`, w)
-    const table = await screen.findByRole('table', { name: 'Objects that match the filter' })
+    const table = await screen.findByRole('table', { name: 'Schema objects' })
     expect(within(table).getByRole('button', { name: 'orders' })).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Filter by name' })).toHaveValue('ord')
     expect(screen.getByRole('combobox', { name: /Schema public/ })).toBeInTheDocument()
-    const request = w.requests.find((r) => r.includes('/schema/search')) ?? ''
+    const request = w.requests.find((r) => r.includes('/schema/objects?')) ?? ''
     expect(request).toContain('q=ord')
+    expect(request).toContain('schema=public')
+    expect(request).toContain('kinds=table')
   })
 
   it('applies a new filter to the link, and drops the object of the old one', async () => {
@@ -198,7 +204,7 @@ describe('a link carries the object, the filter and the schema', () => {
       w,
     )
     await screen.findByRole('button', { name: 'Read rows' })
-    const table = await screen.findByRole('table', { name: 'Objects that match the filter' })
+    const table = await screen.findByRole('table', { name: 'Schema objects' })
     const user = userEvent.setup()
     await user.click(within(table).getByRole('button', { name: 'users' }))
     await waitFor(() =>
@@ -211,7 +217,7 @@ describe('a link carries the object, the filter and the schema', () => {
     expect(search.q).toBe('r')
   })
 
-  it('ignores hostile parameters: nothing is read, nothing is shown', async () => {
+  it('ignores hostile parameters: they reach no request, nothing else is shown', async () => {
     const w = world()
     const hostile = [
       `q=${encodeURIComponent(`a${BIDI}b`)}`,
@@ -223,11 +229,16 @@ describe('a link carries the object, the filter and the schema', () => {
       `schema=${encodeURIComponent('a\u0000b')}`,
     ].join('&')
     const { router } = mountBrowse(`${SCHEMA}/tables?${hostile}`, w)
-    expect(await screen.findByText(/Enter part of a name to list objects/)).toBeInTheDocument()
+    // The list is the unfiltered one: the hostile filter and schema were dropped before any request.
+    expect(await screen.findByRole('table', { name: 'Schema objects' })).toBeInTheDocument()
     expect(document.querySelector('[data-slot="object-detail"]')).toBeNull()
+    const listed = w.requests.filter((r) => r.includes('/schema/objects'))
+    expect(listed.length).toBeGreaterThan(0)
     expect(
-      w.requests.some((r) => r.includes('/schema/search') || r.includes('/schema/objects')),
-    ).toBe(false)
+      listed.every((r) => !r.includes('q=') && !r.includes('schema=') && !r.includes('cursor=')),
+    ).toBe(true)
+    expect(w.requests.some((r) => r.includes('/schema/objects/'))).toBe(false)
+    expect(w.requests.some((r) => r.includes('/schema/search'))).toBe(false)
     expect(w.runs()).toHaveLength(0)
     expect(router.state.location.search.object).toBeUndefined()
     expect(router.state.location.search.q).toBeUndefined()
@@ -564,7 +575,7 @@ describe('the schema selector', () => {
     const w = schemasWorld()
     const { router } = mountBrowse(`${SCHEMA}/tables?q=ord`, w)
     const user = userEvent.setup()
-    const table = await screen.findByRole('table', { name: 'Objects that match the filter' })
+    const table = await screen.findByRole('table', { name: 'Schema objects' })
     expect(within(table).getAllByRole('button')).toHaveLength(2)
     await user.click(screen.getByRole('combobox', { name: /Schema/ }))
     await user.type(await screen.findByPlaceholderText('Search schemas'), 'EXPO')
@@ -573,7 +584,7 @@ describe('the schema selector', () => {
     await user.click(options[0] as HTMLElement)
     await waitFor(() => expect(router.state.location.search.schema).toBe('exponetdb'))
     expect(
-      within(screen.getByRole('table', { name: 'Objects that match the filter' }))
+      within(screen.getByRole('table', { name: 'Schema objects' }))
         .getAllByRole('button')
         .map((b) => b.textContent),
     ).toEqual(['orders_log'])
@@ -634,9 +645,7 @@ describe('the schema selector', () => {
     expect(await screen.findByText(/The list of schemas could not be read/)).toBeInTheDocument()
     expect(screen.queryByRole('combobox', { name: /Schema/ })).toBeNull()
     // The list itself still works.
-    expect(
-      await screen.findByRole('table', { name: 'Objects that match the filter' }),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('table', { name: 'Schema objects' })).toBeInTheDocument()
   })
 })
 
@@ -713,6 +722,56 @@ describe('the diagram: find a table and export', () => {
       screen.getByRole('textbox', { name: 'Draw the tables whose name contains' }),
     ).toHaveValue('r')
     expect(router.state.location.search).toMatchObject({ q: 'r', schema: 'public' })
+  })
+
+  it('draws the tables of a schema chosen without a filter, asking the server for that schema', async () => {
+    const w = diagramWorld()
+    mountBrowse(`${SCHEMA}/visualizer?schema=public`, w)
+    const erd = await screen.findByTestId('erd')
+    await waitFor(() => expect(erd).toHaveAttribute('data-state', 'ready'))
+    expect(erd).toHaveTextContent('3 tables, 1 relations')
+    const request = w.requests.find((r) => r.includes('/schema/objects?')) ?? ''
+    expect(request).toContain('schema=public')
+    expect(request).toContain('kinds=table')
+    expect(request).not.toContain('q=')
+    expect(screen.queryByText(/Choose a schema or enter part of a table name/)).toBeNull()
+  })
+
+  it('draws the first 30 tables and says how many match in all, from the server count', async () => {
+    const w = diagramWorld()
+    const many = Array.from({ length: 35 }, (_, n) =>
+      ref({
+        name: `t${String(n).padStart(2, '0')}`,
+        schema: 'wide',
+        key: ['wide', `t${String(n).padStart(2, '0')}`],
+      }),
+    )
+    w.refs = many
+    for (const table of many) {
+      w.objects.set(
+        `table|"wide"."${table.name}"`,
+        objectFixture(table, { columns: [], constraints: [] }),
+      )
+    }
+    mountBrowse(`${SCHEMA}/visualizer?schema=wide`, w)
+    expect(
+      await screen.findByText('Drawing the first 30 of 35 matching tables.'),
+    ).toBeInTheDocument()
+    const erd = await screen.findByTestId('erd')
+    await waitFor(() => expect(erd).toHaveAttribute('data-state', 'ready'))
+    expect(erd).toHaveTextContent('30 tables')
+    // Only the details of the 30 drawn tables were read.
+    expect(w.requests.filter((r) => r.includes('/schema/objects/table/')).length).toBe(30)
+  })
+
+  it('says part of the schema could not be read when the snapshot is incomplete', async () => {
+    const w = diagramWorld()
+    w.objectsComplete = false
+    mountBrowse(`${SCHEMA}/visualizer?schema=public`, w)
+    expect(
+      await screen.findByText(/Part of the schema could not be read, so tables may be missing/),
+    ).toBeInTheDocument()
+    expect(await screen.findByTestId('erd')).toBeInTheDocument()
   })
 
   describe('exports', () => {
@@ -800,10 +859,10 @@ describe('the diagram: find a table and export', () => {
 
   it('has no export tools while the tables are loading or when the search failed', async () => {
     const w = diagramWorld()
-    w.failures.set('/schema/search', {
+    w.failures.set('/schema/objects?', {
       status: 500,
       code: 'INTERNAL_ERROR',
-      message: 'Search is down.',
+      message: 'The list is down.',
     })
     mountBrowse(`${SCHEMA}/visualizer`, w)
     await search('r')

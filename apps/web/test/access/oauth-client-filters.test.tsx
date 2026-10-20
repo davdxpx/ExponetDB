@@ -1,10 +1,9 @@
 import '@testing-library/jest-dom/vitest'
-import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
-import { peopleKeys } from '../../src/features/access/people-keys.ts'
-import { grantItem, mountApp, oauthClient, World } from './support.tsx'
+import { mountApp, oauthClient, World } from './support.tsx'
 
 afterEach(cleanup)
 
@@ -20,25 +19,6 @@ const ids = (): string[] =>
   [...document.querySelectorAll<HTMLElement>('li[data-client]')].map(
     (li) => li.getAttribute('data-client') ?? '',
   )
-
-/** The grant of a client, as the grants read carries it. */
-function grantOf(
-  client: ReturnType<typeof oauthClient>,
-  over: Parameters<typeof grantItem>[0] = {},
-): ReturnType<typeof grantItem> {
-  return grantItem({
-    client: {
-      clientId: client.clientId,
-      firstParty: false,
-      id: client.id,
-      kind: 'mcp',
-      name: client.name,
-      registration: 'dcr',
-      state: 'active',
-    },
-    ...over,
-  })
-}
 
 describe('the state filter of the OAuth clients', () => {
   function clientsWorld() {
@@ -152,103 +132,119 @@ describe('the state filter of the OAuth clients', () => {
   })
 })
 
-describe('the last use of an OAuth client, from the grants this page could read', () => {
-  it('shows the latest recorded use and the active grants of the client, labeled as what the read could see', async () => {
+describe('the last use of an OAuth client, from the client itself', () => {
+  function use(id: string): HTMLElement {
+    const found = card(id).querySelector<HTMLElement>('[data-use]')
+    if (found === null) throw new Error(`no use summary on ${id}`)
+    return found
+  }
+
+  it('shows the last use and the active grants the client carries, and reads no grants for them', async () => {
     const world = new World()
-    const agent = oauthClient({ name: 'Agent', state: 'active', approvedBy: null })
-    const other = oauthClient({ name: 'Other agent', state: 'active', approvedBy: null })
+    const agent = oauthClient({
+      name: 'Agent',
+      state: 'active',
+      approvedBy: null,
+      lastUsedAt: '2026-10-13T10:15:00Z',
+      activeGrantCount: 2,
+    })
+    const other = oauthClient({
+      name: 'Other agent',
+      state: 'active',
+      approvedBy: null,
+      lastUsedAt: '2026-10-01T00:00:00Z',
+      activeGrantCount: 1,
+    })
     world.clients = [agent, other]
-    world.grants = [
-      grantOf(agent, { lastUsedAt: '2026-10-13T10:15:00Z', lastUseClass: 'plan' }),
-      grantOf(agent, {
-        state: 'revoked',
-        revokedAt: '2026-10-14T09:00:00Z',
-        lastUsedAt: '2026-10-14T08:00:00Z',
-        lastUseClass: 'rest',
-      }),
-      grantOf(agent, { lastUsedAt: null, lastUseClass: null }),
-      grantOf(other, { lastUsedAt: '2026-10-01T00:00:00Z', lastUseClass: 'read' }),
-    ]
     const { container } = mountApp('/access/oauth-clients', world)
-    await waitFor(() => expect(card(agent.id).querySelector('[data-use="ready"]')).not.toBeNull())
-    const use = card(agent.id).querySelector('[data-use="ready"]') as HTMLElement
-    // The newest of the three uses, with how it came in; the other client's use is not mixed in.
-    expect(use.textContent).toContain('REST API')
-    expect(use.textContent).not.toContain('Plan')
-    expect(use.textContent).not.toContain('Read')
-    expect(use.textContent).toContain('Active grants: 2')
-    expect(use.textContent).toContain('From the grants this page could read.')
-    const otherUse = card(other.id).querySelector('[data-use="ready"]') as HTMLElement
-    expect(otherUse.textContent).toContain('Active grants: 1')
-    expect(otherUse.textContent).toContain('Read')
-    // The old placeholder is gone.
-    expect(document.body.textContent).not.toContain('Not reported by the server yet')
-    // All states are read, as the Connected applications page's "All grants" does.
-    expect(world.requests.some((r) => r.path === '/api/v1/grants?limit=200')).toBe(true)
+    await waitFor(() => expect(card(agent.id).querySelector('[data-use]')).not.toBeNull())
+    const first = use(agent.id)
+    expect(first).toHaveAttribute('data-use', 'reported')
+    expect(within(first).getByRole('button').textContent).toMatch(/2026/)
+    expect(first.querySelector('[data-slot="active-grants"]')).toHaveTextContent('2 active grants')
+    expect(first.textContent).toContain('revoked and expired ones too')
+    // Each client shows its own numbers.
+    const second = use(other.id)
+    expect(second.querySelector('[data-slot="active-grants"]')).toHaveTextContent('1 active grant')
+    expect(second.querySelector('[data-slot="active-grants"]')).not.toHaveTextContent(
+      '1 active grants',
+    )
+    expect(within(second).getByRole('button').textContent).toMatch(/2026/)
+    // The interim aggregate is gone: the grants are not read for this page, and no label of it remains.
+    expect(world.requests.some((r) => r.path.startsWith('/api/v1/grants'))).toBe(false)
+    expect(document.body.textContent).not.toContain('From the grants this page could read')
     expect(await axeViolations(container)).toEqual([])
   })
 
-  it('says no use is recorded, never "never used", for a client whose grants hold none', async () => {
+  it('says no use is recorded, never "never used", for a client whose use is null, and shows a zero count', async () => {
     const world = new World()
-    const agent = oauthClient({ name: 'Agent', state: 'active', approvedBy: null })
-    const unused = oauthClient({ name: 'Unused agent', state: 'active', approvedBy: null })
-    world.clients = [agent, unused]
-    world.grants = [grantOf(agent, { lastUsedAt: null, lastUseClass: null })]
-    mountApp('/access/oauth-clients', world)
-    await waitFor(() => expect(card(agent.id).querySelector('[data-use="ready"]')).not.toBeNull())
-    for (const client of [agent, unused]) {
-      const text = card(client.id).querySelector('[data-use="ready"]')?.textContent ?? ''
-      expect(text).toContain(
-        'No use recorded in the grants this page could read. This does not mean it was never used.',
-      )
-    }
-    expect(card(agent.id).textContent).toContain('Active grants: 1')
-    expect(card(unused.id).textContent).toContain('Active grants: 0')
-    expect(document.body.textContent).not.toMatch(/\bnever used\b(?!\.)/i)
-  })
-
-  it('says the last use could not be read when the grants read failed, and nothing else about use', async () => {
-    const world = new World()
-    const agent = oauthClient({ name: 'Agent', state: 'active', approvedBy: null })
-    world.clients = [agent]
-    world.failures.set('GET /api/v1/grants', BOOM)
-    mountApp('/access/oauth-clients', world)
-    await waitFor(() => expect(card(agent.id).querySelector('[data-use="failed"]')).not.toBeNull())
-    const text = card(agent.id).querySelector('[data-use="failed"]')?.textContent ?? ''
-    expect(text).toContain('The last use could not be read: The server failed. (INTERNAL)')
-    expect(text).toContain('This does not mean the client was never used.')
-    expect(card(agent.id).textContent).not.toContain('Active grants')
-    expect(card(agent.id).textContent).not.toContain('No use recorded')
-  })
-
-  it('marks the aggregate partial when the grants read was cut', async () => {
-    const world = new World()
-    const agent = oauthClient({ name: 'Agent', state: 'active', approvedBy: null })
-    world.clients = [agent]
-    world.grants = [grantOf(agent, { lastUsedAt: '2026-10-13T10:15:00Z', lastUseClass: 'plan' })]
-    world.cursors.set('/api/v1/grants', 'more')
-    mountApp('/access/oauth-clients', world)
-    await waitFor(() => expect(card(agent.id).querySelector('[data-use="ready"]')).not.toBeNull())
-    const text = card(agent.id).querySelector('[data-use="ready"]')?.textContent ?? ''
-    expect(text).toContain('Active grants: at least 1')
-    expect(text).toContain('Only the first 200 grants were read, so this may be incomplete.')
-  })
-
-  it('says an earlier read of the grants is old when a refresh failed, and keeps what it showed', async () => {
-    const world = new World()
-    const agent = oauthClient({ name: 'Agent', state: 'active', approvedBy: null })
-    world.clients = [agent]
-    world.grants = [grantOf(agent, { lastUsedAt: '2026-10-13T10:15:00Z', lastUseClass: 'plan' })]
-    const { queryClient } = mountApp('/access/oauth-clients', world)
-    await waitFor(() => expect(card(agent.id).querySelector('[data-use="ready"]')).not.toBeNull())
-    world.failures.set('GET /api/v1/grants', BOOM)
-    await act(async () => {
-      await queryClient.refetchQueries({ queryKey: peopleKeys.grantsAll })
+    const agent = oauthClient({
+      name: 'Agent',
+      state: 'active',
+      approvedBy: null,
+      lastUsedAt: null,
+      activeGrantCount: 0,
     })
-    await waitFor(() =>
-      expect(card(agent.id).textContent).toContain('This is an earlier read of the grants.'),
+    world.clients = [agent]
+    mountApp('/access/oauth-clients', world)
+    await waitFor(() => expect(card(agent.id).querySelector('[data-use]')).not.toBeNull())
+    const text = use(agent.id).textContent ?? ''
+    expect(text).toContain('No use recorded.')
+    expect(text).toContain('That does not mean the client was never used')
+    expect(use(agent.id).querySelector('[data-slot="active-grants"]')).toHaveTextContent(
+      '0 active grants',
     )
-    expect(card(agent.id).textContent).toContain('Plan')
-    expect(card(agent.id).textContent).toContain('Active grants: 1')
+    expect(text).not.toContain('not reported')
+    expect(text.replace('That does not mean the client was never used', '')).not.toMatch(
+      /never used/i,
+    )
+  })
+
+  it('says not reported, and shows no zero, when the server sends neither field', async () => {
+    const world = new World()
+    const agent = oauthClient({ name: 'Agent', state: 'active', approvedBy: null })
+    world.clients = [agent]
+    mountApp('/access/oauth-clients', world)
+    await waitFor(() => expect(card(agent.id).querySelector('[data-use]')).not.toBeNull())
+    const summary = use(agent.id)
+    expect(summary).toHaveAttribute('data-use', 'unreported')
+    expect(summary.textContent).toContain('Not reported by this server.')
+    expect(summary.textContent).toContain('Active grants: not reported by this server.')
+    expect(summary.textContent).not.toContain('No use recorded')
+    expect(summary.textContent).not.toMatch(/\b0 active grants/)
+    // No claim about where a figure came from when there is no figure.
+    expect(summary.textContent).not.toContain('revoked and expired ones too')
+  })
+
+  it('says each field the server did not send is not reported on its own', async () => {
+    const world = new World()
+    const onlyGrants = oauthClient({
+      name: 'A',
+      state: 'active',
+      approvedBy: null,
+      activeGrantCount: 3,
+    })
+    const onlyUse = oauthClient({
+      name: 'B',
+      state: 'active',
+      approvedBy: null,
+      lastUsedAt: '2026-10-13T10:15:00Z',
+    })
+    world.clients = [onlyGrants, onlyUse]
+    mountApp('/access/oauth-clients', world)
+    await waitFor(() => expect(card(onlyUse.id).querySelector('[data-use]')).not.toBeNull())
+    expect(use(onlyGrants.id).textContent).toContain('Not reported by this server.')
+    expect(use(onlyGrants.id).textContent).toContain('3 active grants')
+    expect(use(onlyUse.id).textContent).toContain('Active grants: not reported by this server.')
+    expect(within(use(onlyUse.id)).getByRole('button').textContent).toMatch(/2026/)
+  })
+
+  it('shows a failed list read as failed, with no use and no count for any client', async () => {
+    const world = new World()
+    world.failures.set('GET /api/v1/oauth-clients', BOOM)
+    mountApp('/access/oauth-clients', world)
+    expect(await screen.findByText(/Could not read OAuth client list/)).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('No use recorded')
+    expect(document.body.textContent).not.toContain('active grants')
   })
 })

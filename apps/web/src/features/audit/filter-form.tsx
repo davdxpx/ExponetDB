@@ -4,10 +4,16 @@ import { useQuery } from '@tanstack/react-query'
 import { type FormEvent, type ReactNode, useId, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { type MessageKey, t } from '../../lib/i18n/i18n.ts'
+import { useMe } from '../../lib/session/guard.tsx'
 import { ChoiceSelect } from '../access/choice-select.tsx'
-import { Field, NativeSelect } from '../access/fields.tsx'
+import { Field, holds, NativeSelect } from '../access/fields.tsx'
 import { tierLabel } from '../access/model.ts'
-import { targetChoicesQuery } from '../access/scope-reads.ts'
+import { identityName, identityStateLabel } from '../access/people-model.ts'
+import {
+  type IdentityChoice,
+  identityChoicesQuery,
+  targetChoicesQuery,
+} from '../access/scope-reads.ts'
 import { inlineName } from '../consent/inline-name.ts'
 import { type AuditSearch, auditHref, filterProblem, hasFilters } from './search.ts'
 import {
@@ -28,12 +34,18 @@ import {
  * own time zone and are sent as UTC (`…Z`); a time that came from the address
  * and was not touched is sent exactly as it was. A target is chosen by name
  * from the registry or typed as its ID; either way the value is the `tgt_`
- * ID, checked by the same rule as before.
+ * ID, checked by the same rule as before. A person is chosen the same way,
+ * by name from the identities (for people who may read them) or typed as the
+ * `idn_` ID; it is sent as `identity`, and together with "Only me" both apply.
  */
-type TextFilter = 'client' | 'grant' | 'action' | 'target'
+type TextFilter = 'client' | 'grant' | 'action' | 'target' | 'identity'
 type TimeFilter = 'from' | 'to'
 
-const TEXT_FILTERS: readonly { name: TextFilter; label: MessageKey; hint: MessageKey }[] = [
+const TEXT_FILTERS: readonly {
+  name: Exclude<TextFilter, 'target' | 'identity'>
+  label: MessageKey
+  hint: MessageKey
+}[] = [
   { name: 'action', label: 'audit.filter.action', hint: 'audit.filter.action.hint' },
   { name: 'client', label: 'audit.filter.client', hint: 'audit.filter.client.hint' },
   { name: 'grant', label: 'audit.filter.grant', hint: 'audit.filter.grant.hint' },
@@ -47,11 +59,29 @@ const QUICK_LABEL: Readonly<Record<QuickRangeId, MessageKey>> = {
   month: 'audit.filter.quick.month',
 }
 
+/** A person or service account as an option: the name as plain text, what it is, and its state when it is not active. */
+function personLabel(identity: IdentityChoice): string {
+  const name = inlineName(identityName(identity), 80) ?? identity.id
+  if (identity.state !== 'active') {
+    return t('audit.filter.person.stateOption', {
+      name,
+      state: identityStateLabel(identity.state).toLowerCase(),
+    })
+  }
+  return identity.kind === 'service'
+    ? t('audit.filter.person.service', { name })
+    : t('audit.filter.person.human', { name })
+}
+
 export function FilterForm({ search }: { readonly search: AuditSearch }): ReactNode {
   const navigate = useNavigate()
   const { client } = useApi()
+  const me = useMe()
   const id = useId()
   const targets = useQuery(targetChoicesQuery(client))
+  // Choosing a person by name needs to read the identities; without the permission the ID is typed.
+  const canReadPeople = holds(me, 'access.read')
+  const people = useQuery(identityChoicesQuery(client, canReadPeople))
   const [actor, setActor] = useState<string>(search.actor ?? '')
   const [result, setResult] = useState<string>(search.result ?? '')
   const [values, setValues] = useState<Record<TextFilter, string>>({
@@ -59,6 +89,7 @@ export function FilterForm({ search }: { readonly search: AuditSearch }): ReactN
     grant: search.grant ?? '',
     action: search.action ?? '',
     target: search.target ?? '',
+    identity: search.identity ?? '',
   })
   const [times, setTimes] = useState<Record<TimeFilter, string>>({
     from: utcToLocalInput(search.from),
@@ -71,6 +102,7 @@ export function FilterForm({ search }: { readonly search: AuditSearch }): ReactN
   })
   const [errors, setErrors] = useState<Partial<Record<TextFilter | TimeFilter, string>>>({})
   const chosenTarget = targets.data?.items.find((target) => target.id === values.target.trim())
+  const chosenPerson = people.data?.items.find((person) => person.id === values.identity.trim())
 
   const setTime = (name: TimeFilter, value: string): void => {
     setTimes((current) => ({ ...current, [name]: value }))
@@ -96,6 +128,9 @@ export function FilterForm({ search }: { readonly search: AuditSearch }): ReactN
     }
     if (filterProblem('target', values.target) !== undefined) {
       next.target = t('audit.filter.invalid', { hint: t('audit.filter.target.hint') })
+    }
+    if (filterProblem('identity', values.identity) !== undefined) {
+      next.identity = t('audit.filter.invalid', { hint: t('audit.filter.identity.hint') })
     }
     const raw: Record<string, string> = { actor, result }
     for (const name of ['from', 'to'] as const) {
@@ -125,6 +160,7 @@ export function FilterForm({ search }: { readonly search: AuditSearch }): ReactN
     if (Object.keys(next).length > 0) return
     for (const filter of TEXT_FILTERS) raw[filter.name] = values[filter.name].trim()
     raw['target'] = values.target.trim()
+    raw['identity'] = values.identity.trim()
     navigate(auditHref(raw as AuditSearch))
   }
 
@@ -271,6 +307,71 @@ export function FilterForm({ search }: { readonly search: AuditSearch }): ReactN
             }
           />
         </Field>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-2">
+            {canReadPeople ? (
+              <ChoiceSelect
+                id={`${id}-person-choice`}
+                label={t('audit.filter.person')}
+                what={t('choice.what.people')}
+                permission="access.read"
+                query={people}
+                choices={(page) =>
+                  page.items.map((person) => ({ value: person.id, label: personLabel(person) }))
+                }
+                placeholder={t('audit.filter.person.any')}
+                value={values.identity.trim()}
+                onChange={(value) => setValues((current) => ({ ...current, identity: value }))}
+              />
+            ) : (
+              <p className="text-xs text-foreground-light" data-slot="person-no-read">
+                {t('audit.filter.person.noRead')}
+              </p>
+            )}
+            {chosenPerson === undefined ? null : (
+              // The option above is plain text; the whole name is shown here as untrusted text.
+              <p
+                className="flex flex-wrap items-center gap-2 text-xs text-foreground-light"
+                data-chosen-person=""
+              >
+                <UntrustedName
+                  name={identityName(chosenPerson)}
+                  maxCodePoints={200}
+                  label={t('audit.filter.person')}
+                />
+              </p>
+            )}
+          </div>
+          <Field
+            id={`${id}-identity`}
+            label={t('audit.filter.identity')}
+            description={t('audit.filter.identity.hint')}
+            error={errors.identity}
+          >
+            <Input
+              id={`${id}-identity`}
+              name="identity"
+              autoComplete="off"
+              spellCheck={false}
+              className="font-mono"
+              maxLength={64}
+              value={values.identity}
+              aria-invalid={errors.identity !== undefined}
+              aria-describedby={`${id}-identity-description`}
+              onChange={(event) =>
+                setValues((current) => ({ ...current, identity: event.target.value }))
+              }
+            />
+          </Field>
+        </div>
+        {actor === 'self' && values.identity.trim() !== '' ? (
+          <p role="note" className="text-xs text-foreground-light" data-slot="actor-self-note">
+            {t('audit.filter.person.withSelf')}
+          </p>
+        ) : null}
       </div>
 
       <fieldset className="flex flex-col gap-3">

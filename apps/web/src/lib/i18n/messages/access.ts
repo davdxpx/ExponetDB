@@ -21,6 +21,7 @@ export const accessMessages = {
   'choice.what.projects': 'Project list',
   'choice.what.environments': 'Environment list',
   'choice.what.targets': 'Target list',
+  'choice.what.people': 'Person list',
 
   // ----- a filter that leaves nothing of a list that was read -----
   'noMatch.title': 'No match',
@@ -87,17 +88,14 @@ export const accessMessages = {
   'access.client.registered': 'Registered',
   'access.client.stateSince': 'State since',
   'access.client.lastUsed': 'Last used',
-  'access.client.lastUsed.loading': 'Loading the grants this page can read',
-  'access.client.lastUsed.failed':
-    'The last use could not be read: {reason} This does not mean the client was never used.',
+  'access.client.lastUsed.notReported': 'Not reported by this server.',
   'access.client.lastUsed.none':
-    'No use recorded in the grants this page could read. This does not mean it was never used.',
-  'access.client.use.activeGrants': 'Active grants: {count}',
-  'access.client.use.activeGrants.atLeast': 'Active grants: at least {count}',
-  'access.client.use.source': 'From the grants this page could read.',
-  'access.client.use.partial':
-    'Only the first {count} grants were read, so this may be incomplete.',
-  'access.client.use.stale': 'This is an earlier read of the grants.',
+    'No use recorded. That does not mean the client was never used: recording began with its deployment, and a write can be lost.',
+  'access.client.use.activeGrants.one': '1 active grant',
+  'access.client.use.activeGrants.many': '{count} active grants',
+  'access.client.use.activeGrants.notReported': 'Active grants: not reported by this server.',
+  'access.client.use.source':
+    'The latest use covers every grant of this client, revoked and expired ones too.',
 
   'access.client.approve': 'Approve this exact client',
   'access.client.approve.title': 'Approve this exact client',

@@ -5,8 +5,17 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
 import { localInputToUtc, toLocalInput } from '../../src/features/audit/time-range.ts'
 import type { ResponseOf } from '../../src/lib/api/client.ts'
-import { chain, event } from '../admin/fixtures.ts'
-import { BIDI, expectInert, HOSTILE, mountApp, problem, T0, World } from '../admin/support.tsx'
+import { chain, event, identity } from '../admin/fixtures.ts'
+import {
+  BIDI,
+  expectInert,
+  HOSTILE,
+  mountApp,
+  OTHER,
+  problem,
+  T0,
+  World,
+} from '../admin/support.tsx'
 
 afterEach(cleanup)
 
@@ -40,11 +49,23 @@ const VERIFIED = chain({
   verifiedEvents: 21,
 })
 
-function auditWorld(targets: unknown = { items: [target()], nextCursor: null }): World {
+const SERVICE = 'idn_01JZ0000000000000000000003'
+
+function auditWorld(
+  targets: unknown = { items: [target()], nextCursor: null },
+  people: unknown = {
+    items: [
+      identity(),
+      identity({ id: SERVICE, kind: 'service', displayName: 'ci-bot', label: 'service #3' }),
+    ],
+    nextCursor: null,
+  },
+): World {
   const world = new World()
   world.on('GET', '/api/v1/audit-events/chain', VERIFIED)
   world.on('GET', '/api/v1/audit-events', { items: [event()], nextCursor: null })
   world.on('GET', '/api/v1/targets', targets as object)
+  world.on('GET', '/api/v1/identities', people as object)
   return world
 }
 
@@ -327,5 +348,211 @@ describe('a search that finds nothing', () => {
     mountApp('/audit?result=denied', world)
     expect(await screen.findByText('Could not read Audit events')).toBeInTheDocument()
     expect(screen.queryByText('No match')).toBeNull()
+  })
+})
+
+describe('the person of the audit search', () => {
+  it('picks a person by name and sends the identity ID, shown beside the choice as text', async () => {
+    const user = userEvent.setup()
+    const world = auditWorld()
+    const { router, container } = mountApp('/audit', world)
+    const form = await filters()
+    await within(form).findByRole('option', { name: 'Grace (Person)' })
+    expect(
+      within(form).getByRole('option', { name: 'ci-bot (Service account)' }),
+    ).toBeInTheDocument()
+    expect(form.querySelector('[data-chosen-person]')).toBeNull()
+    await user.selectOptions(within(form).getByLabelText('Person'), OTHER)
+    expect(within(form).getByLabelText('Person ID')).toHaveValue(OTHER)
+    expect(form.querySelector('[data-chosen-person]')).toHaveTextContent('Grace')
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    await waitFor(() => expect(router.state.location.href).toBe(`/audit?identity=${OTHER}`))
+    await waitFor(() =>
+      expect(world.reads('/api/v1/audit-events').at(-1)?.search.get('identity')).toBe(OTHER),
+    )
+    // The chosen person stays chosen after the search.
+    expect(within(await filters()).getByLabelText('Person')).toHaveValue(OTHER)
+    expect(await axeViolations(container)).toEqual([])
+  })
+
+  it('reads the people once, with the API maximum, and only when the session holds access.read', async () => {
+    const world = auditWorld()
+    mountApp('/audit', world)
+    const form = await filters()
+    await within(form).findByRole('option', { name: 'Grace (Person)' })
+    const reads = world.reads('/api/v1/identities')
+    expect(reads).toHaveLength(1)
+    expect(reads[0]?.search.get('limit')).toBe('200')
+    cleanup()
+
+    const without = auditWorld()
+    without.permissions = ['audit.read']
+    mountApp('/audit', without)
+    const bare = await filters()
+    expect(
+      await within(bare).findByText(/Choosing a person by name needs access\.read/),
+    ).toBeInTheDocument()
+    expect(without.reads('/api/v1/identities')).toHaveLength(0)
+    // The ID can still be typed and is sent.
+    expect(within(bare).queryByLabelText('Person')).toBeNull()
+    fireEvent.change(within(bare).getByLabelText('Person ID'), { target: { value: OTHER } })
+    const user = userEvent.setup()
+    await user.click(within(bare).getByRole('button', { name: 'Search audit events' }))
+    await waitFor(() =>
+      expect(without.reads('/api/v1/audit-events').at(-1)?.search.get('identity')).toBe(OTHER),
+    )
+  })
+
+  it('still accepts a typed ID, also one the list does not hold, and refuses a malformed one', async () => {
+    const user = userEvent.setup()
+    const world = auditWorld()
+    const { router } = mountApp('/audit', world)
+    const form = await filters()
+    await within(form).findByRole('option', { name: 'Grace (Person)' })
+    fireEvent.change(within(form).getByLabelText('Person ID'), { target: { value: 'idn_nope' } })
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    expect(await within(form).findByText(/Expected: An idn_ ID/)).toBeInTheDocument()
+    expect(router.state.location.searchStr).toBe('')
+
+    const unlisted = 'idn_01JZ0000000000000000000099'
+    fireEvent.change(within(form).getByLabelText('Person ID'), { target: { value: unlisted } })
+    expect(within(form).getByLabelText('Person')).toHaveValue('')
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    await waitFor(() => expect(router.state.location.href).toBe(`/audit?identity=${unlisted}`))
+  })
+
+  it('takes the person from the address, fills the field and sends it, and drops one of the wrong shape', async () => {
+    const world = auditWorld()
+    mountApp(`/audit?identity=${OTHER}`, world)
+    const form = await filters()
+    expect(within(form).getByLabelText('Person ID')).toHaveValue(OTHER)
+    await waitFor(() =>
+      expect(world.reads('/api/v1/audit-events').at(-1)?.search.get('identity')).toBe(OTHER),
+    )
+    cleanup()
+
+    const bad = auditWorld()
+    mountApp('/audit?identity=idn_nope%3Cscript%3E', bad)
+    const empty = await filters()
+    expect(within(empty).getByLabelText('Person ID')).toHaveValue('')
+    await within(empty).findByRole('option', { name: 'Grace (Person)' })
+    expect(bad.reads('/api/v1/audit-events').every((read) => !read.search.has('identity'))).toBe(
+      true,
+    )
+  })
+
+  it('applies together with Only me, says so, and sends both', async () => {
+    const user = userEvent.setup()
+    const world = auditWorld()
+    const { router } = mountApp('/audit', world)
+    const form = await filters()
+    await within(form).findByRole('option', { name: 'Grace (Person)' })
+    await user.selectOptions(within(form).getByLabelText('Actor'), 'self')
+    // Only me alone says nothing about a person.
+    expect(form.querySelector('[data-slot="actor-self-note"]')).toBeNull()
+    await user.selectOptions(within(form).getByLabelText('Person'), OTHER)
+    expect(form.querySelector('[data-slot="actor-self-note"]')).toHaveTextContent(
+      'With “Only me” chosen, both filters apply: events match only if that person is you.',
+    )
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    await waitFor(() =>
+      expect(router.state.location.href).toBe(`/audit?actor=self&identity=${OTHER}`),
+    )
+    await waitFor(() => {
+      const last = world.reads('/api/v1/audit-events').at(-1)?.search
+      expect(last?.get('actor')).toBe('self')
+      expect(last?.get('identity')).toBe(OTHER)
+    })
+  })
+
+  it('shows a hostile person name as plain text with its hidden characters named', async () => {
+    const world = auditWorld(undefined, {
+      items: [identity({ displayName: `${BIDI}${HOSTILE}`, label: 'grace' })],
+      nextCursor: null,
+    })
+    const { container } = mountApp('/audit', world)
+    const form = await filters()
+    const option = await waitFor(() => {
+      const found = form.querySelector('option[value^="idn_"]')
+      if (found === null) throw new Error('no option yet')
+      return found
+    })
+    expect(option.textContent).toContain('<script>')
+    expect(option.textContent).toContain('⟨U+202E⟩')
+    expect(option.textContent).not.toContain(String.fromCodePoint(0x202e))
+    fireEvent.change(within(form).getByLabelText('Person'), { target: { value: OTHER } })
+    const chosen = await waitFor(() => {
+      const found = form.querySelector('[data-chosen-person]')
+      if (found === null) throw new Error('no chosen person yet')
+      return found
+    })
+    expect(chosen.textContent).toContain('<script>')
+    expect(chosen.textContent).toContain('⟨U+202E⟩')
+    expectInert(container)
+  })
+
+  it('names a person who is not active in the option, and an erased one by its label', async () => {
+    const world = auditWorld(undefined, {
+      items: [
+        identity({ state: 'disabled' }),
+        identity({
+          id: 'idn_01JZ0000000000000000000004',
+          displayName: null,
+          email: null,
+          label: 'human #4',
+          state: 'erased',
+        }),
+      ],
+      nextCursor: null,
+    })
+    mountApp('/audit', world)
+    const form = await filters()
+    expect(
+      await within(form).findByRole('option', { name: 'Grace (disabled)' }),
+    ).toBeInTheDocument()
+    expect(within(form).getByRole('option', { name: 'human #4 (erased)' })).toBeInTheDocument()
+  })
+
+  it('says a failed person read failed, never that there are no people, and the ID can still be typed', async () => {
+    const user = userEvent.setup()
+    const world = auditWorld()
+    world.on('GET', '/api/v1/identities', () => problem(500, 'INTERNAL', 'The server failed.'))
+    const { router, container } = mountApp('/audit', world)
+    const form = await filters()
+    expect(await within(form).findByText(/Could not read Person list/)).toBeInTheDocument()
+    expect(within(form).queryByText(/The read succeeded/)).toBeNull()
+    expect(within(form).getByLabelText('Person')).toBeDisabled()
+    expect(await axeViolations(container)).toEqual([])
+    fireEvent.change(within(form).getByLabelText('Person ID'), { target: { value: OTHER } })
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    await waitFor(() => expect(router.state.location.href).toBe(`/audit?identity=${OTHER}`))
+  })
+
+  it('names the permission when the server refuses the person read', async () => {
+    const world = auditWorld()
+    world.on('GET', '/api/v1/identities', () => problem(403, 'PERMISSION_DENIED', 'Not permitted.'))
+    mountApp('/audit', world)
+    const form = await filters()
+    expect(
+      await within(form).findByText(
+        /You do not have access to Person list\. It needs the permission access\.read/,
+      ),
+    ).toBeInTheDocument()
+    expect(within(form).getByLabelText('Person ID')).toBeEnabled()
+  })
+
+  it('says a cut person list is partial and a list with nobody is empty only after a successful read', async () => {
+    const partial = auditWorld(undefined, { items: [identity()], nextCursor: 'more' })
+    mountApp('/audit', partial)
+    expect(
+      await within(await filters()).findByText(/Only the first 200 are listed/),
+    ).toBeInTheDocument()
+    cleanup()
+
+    const empty = auditWorld(undefined, { items: [], nextCursor: null })
+    mountApp('/audit', empty)
+    expect(
+      await within(await filters()).findByText(/The read succeeded and Person list is empty/),
+    ).toBeInTheDocument()
   })
 })

@@ -69,6 +69,17 @@ export const auditMessages = {
   'audit.filter.client.hint': 'A cli_ ID',
   'audit.filter.grant': 'Grant ID',
   'audit.filter.grant.hint': 'A grt_ ID',
+  'audit.filter.person': 'Person',
+  'audit.filter.person.any': 'Any person',
+  'audit.filter.person.human': '{name} (Person)',
+  'audit.filter.person.service': '{name} (Service account)',
+  'audit.filter.person.stateOption': '{name} ({state})',
+  'audit.filter.person.noRead':
+    'Choosing a person by name needs access.read. Enter the person ID instead.',
+  'audit.filter.person.withSelf':
+    'With “Only me” chosen, both filters apply: events match only if that person is you.',
+  'audit.filter.identity': 'Person ID',
+  'audit.filter.identity.hint': 'An idn_ ID',
   'audit.filter.targetChoice': 'Target',
   'audit.filter.targetChoice.any': 'Any target',
   'audit.filter.range': 'Time range',

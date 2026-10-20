@@ -19,10 +19,8 @@ import { SEARCH_MAX_LENGTH } from './keys.ts'
 import { PlainName } from './plain-name.tsx'
 
 /**
- * The name filter of the schema browser. The Control Plane lists schema
- * objects by name search only (`searchSchema` takes 1 to 128 characters), so
- * a list starts when a person applies a filter; the page says so and never
- * reads "nothing typed" as "no objects".
+ * The name filter of the schema browser: optional, 1 to 128 characters, sent
+ * as `q`. Without one the list shows every object of the kind.
  */
 export function SearchForm(props: {
   readonly applied: string
