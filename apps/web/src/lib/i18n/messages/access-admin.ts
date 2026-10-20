@@ -1,8 +1,8 @@
 /**
  * Messages of People, Roles and Connected applications
  * (`src/features/access/{people,roles,connected-apps}-page.tsx`), and the
- * OD-5 registration rules on the OAuth clients page (both modes; no read
- * says which one the installation runs).
+ * OD-5 registration rules on the OAuth clients page (both modes and the
+ * one this installation runs, read from `GET /installation`).
  */
 export const accessAdminMessages = {
   // ----- OAuth client registration (OD-5, revised 2026-10-13) -----
@@ -11,7 +11,14 @@ export const accessAdminMessages = {
   'oauthRegistration.review':
     'Review: a new client waits on this page until an administrator approves the exact client (its client ID and the fingerprint of its metadata). Every person still consents as well.',
   'oauthRegistration.setting':
-    'The mode is set on the server by EXPONETDB_OAUTH_CLIENT_REGISTRATION (open or review). No read of this page tells which mode this installation uses; a client marked "Automatically, under open registration" shows that open registration admitted it.',
+    'The mode is set on the server by EXPONETDB_OAUTH_CLIENT_REGISTRATION (open or review). A client marked "Automatically, under open registration" shows that open registration admitted it.',
+  'oauthRegistration.current.loading': 'Reading which mode this installation uses…',
+  'oauthRegistration.current.open': 'This installation uses open registration.',
+  'oauthRegistration.current.review': 'This installation uses review registration.',
+  'oauthRegistration.current.unreported':
+    'This installation’s server does not report its mode. Ask an operator for the value of EXPONETDB_OAUTH_CLIENT_REGISTRATION.',
+  'oauthRegistration.current.failed':
+    'Could not read which mode this installation uses: {reason}. This does not mean either mode.',
 
   // ----- People -----
   'people.title': 'People',
@@ -23,6 +30,18 @@ export const accessAdminMessages = {
     'Only the first {count} identities are shown. Others exist but are not listed here.',
   'people.empty.title': 'No people yet',
   'people.empty.body': 'The read succeeded and found no people. Invite one to start.',
+  'people.you': 'You',
+  'people.filter.text': 'Filter people',
+  'people.filter.text.hint': 'Matches a name, an address or an ID.',
+  'people.filter.state': 'State',
+  'people.filter.state.all': 'All states',
+  'people.filter.count': 'Showing {shown} of {total} people.',
+  'people.assign.open': 'Assign a role',
+  'people.assign.region': 'Assign a role',
+  'people.assign.title': 'Assign a role to',
+  'people.assign.description':
+    'This creates a plan to bind the role. Nothing changes until the plan is approved and applied; its review page opens next.',
+  'people.assign.close': 'Close role form',
   'people.name': 'Name',
   'people.email': 'Address',
   'people.email.none': 'None (erased)',
@@ -66,6 +85,22 @@ export const accessAdminMessages = {
   'people.binding.scopeId.invalid':
     'Enter an ID that starts with {prefix} followed by 26 characters.',
   'people.binding.submit': 'Create plan to bind role',
+  'people.binding.role.failed': 'The role description could not be read.',
+  'people.binding.role.loading': 'Loading the role description',
+  'people.binding.role.unlisted': 'The role catalog has no description for this role.',
+  'scope.pick.product': 'Product',
+  'scope.pick.product.placeholder': 'Choose a product',
+  'scope.pick.project': 'Project',
+  'scope.pick.project.placeholder': 'Choose a project',
+  'scope.pick.environment.product': 'Product of the environment',
+  'scope.pick.environment': 'Environment',
+  'scope.pick.environment.placeholder': 'Choose an environment',
+  'scope.pick.environment.needsProduct': 'Choose a product to list its environments.',
+  'scope.pick.target': 'Target',
+  'scope.pick.target.placeholder': 'Choose a target',
+  'scope.coverage.production': 'This scope includes production.',
+  'scope.coverage.nonprod': 'This scope covers non-production only.',
+  'scope.coverage.unknown': 'Whether this scope includes production is not known.',
   'people.binding.remove': 'Remove',
   'people.binding.remove.label': 'Remove role {role} at {scope}',
   'people.binding.remove.title': 'Plan removing this role binding',

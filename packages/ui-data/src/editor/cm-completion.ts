@@ -15,6 +15,7 @@ import type { SqlCompletionKind, SqlCompletionProvider } from './types.ts'
 
 const MAX_ITEMS = 500
 const MAX_BEFORE = 2000
+const MAX_AFTER = 2000
 const MAX_LABEL = 256
 const MAX_DETAIL = 120
 /** Identifier characters and the dots that qualify them: `public.us`. */
@@ -79,9 +80,15 @@ export function providerCompletionSource(
     if (match === null || (match.from === match.to && !context.explicit)) return null
     const statement = context.state.sliceDoc(Math.max(0, match.from - MAX_BEFORE), match.from)
     const before = statement.slice(statement.lastIndexOf(';') + 1)
+    const rest = context.state.sliceDoc(
+      match.to,
+      Math.min(context.state.doc.length, match.to + MAX_AFTER),
+    )
+    const semicolon = rest.indexOf(';')
+    const after = semicolon < 0 ? rest : rest.slice(0, semicolon)
     let raw: unknown
     try {
-      raw = await provider({ word: match.text, before })
+      raw = await provider({ word: match.text, before, after })
     } catch {
       return null
     }

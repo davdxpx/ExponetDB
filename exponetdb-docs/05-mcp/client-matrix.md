@@ -75,7 +75,7 @@ step: a CIMD client is fetched and recorded when it first reaches
 `/oauth/authorize` and is approved automatically, a DCR registration is active
 at once. Every person still signs in and consents to the client, the scopes
 and the tiers. An administrator can **disable** a client or **reject** a
-pending one on **Admin → Clients** (`/admin/clients`); such a client is never
+pending one on **Access → OAuth clients** (`/access/oauth-clients`); such a client is never
 approved automatically and stays refused (`client_not_approved`). Under
 `EXPONETDB_OAUTH_CLIENT_REGISTRATION=review` (the previous behavior, OD-5
 (a), "no silent pre-trust") every client needs one administrator approval of

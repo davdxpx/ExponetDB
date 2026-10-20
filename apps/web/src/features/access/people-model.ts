@@ -163,6 +163,25 @@ export function bindingsOf(
   )
 }
 
+/** True when the identity matches what was typed into the filter: its name, address, audit label or ID. */
+export function identityMatches(
+  identity: Pick<Identity, 'id' | 'label' | 'displayName' | 'email'> & {
+    /** Typed `unknown` in the generated SDK; only a string is searched. */
+    readonly profileDisplayName?: unknown
+  },
+  text: string,
+): boolean {
+  const needle = text.trim().toLowerCase()
+  if (needle === '') return true
+  return [
+    identity.displayName,
+    identity.profileDisplayName,
+    identity.email,
+    identity.label,
+    identity.id,
+  ].some((field) => typeof field === 'string' && field.toLowerCase().includes(needle))
+}
+
 /** What the invitation's delivery means for the person who invited. */
 export function deliveryText(delivery: Invitation['invitation']['delivery']): string {
   switch (delivery.status) {

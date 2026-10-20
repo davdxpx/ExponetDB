@@ -62,7 +62,8 @@ export const NAV_SECTIONS: readonly NavSection[] = [
     id: 'overview',
     label: 'Overview',
     path: '/',
-    prefixes: [],
+    // The fleet overview is `/` alone; the findings across every database sit beside it.
+    prefixes: ['/findings'],
     icon: LayoutDashboard,
     shortcut: 'nav.overview',
     block: 1,
@@ -147,6 +148,10 @@ export interface NavItem {
 
 export const GLOBAL_NAV: readonly NavItem[] = [
   { id: 'overview', label: 'Overview', path: '/', section: 'overview', requires: [] },
+  // What needs a person across the fleet (`GET /findings`). It belongs to the overview, whose
+  // purpose is the same, and not to Databases: a section menu there would sit beside every
+  // target page.
+  { id: 'findings', label: 'Findings', path: '/findings', section: 'overview', requires: [] },
   { id: 'targets', label: 'Databases', path: '/targets', section: 'targets', requires: [] },
   { id: 'changes', label: 'All changes', path: '/changes', section: 'changes', requires: [] },
   {
@@ -261,6 +266,14 @@ export const GLOBAL_NAV: readonly NavItem[] = [
     section: 'settings',
     requires: [],
   },
+  // The page itself is built by another change; this is its entry in the section menu.
+  {
+    id: 'projects',
+    label: 'Projects',
+    path: '/settings/projects',
+    section: 'settings',
+    requires: [],
+  },
   {
     id: 'environments',
     label: 'Environments',
@@ -358,6 +371,9 @@ export const TARGET_NAV: readonly TargetNavItem[] = [
   { id: 'configuration', label: 'Configuration', suffix: '/configuration', requires: [] },
   { id: 'findings', label: 'Findings', suffix: '/findings', requires: [] },
   { id: 'drift', label: 'Drift', suffix: '/drift', requires: [] },
+  // The environments of the project side by side. The page is built by another change; its
+  // route is `/t/<product>/<project>/<environment>/compare`.
+  { id: 'compare', label: 'Compare environments', suffix: '/compare', requires: [] },
   { id: 'advisors', label: 'Advisors', suffix: '/advisors', requires: ['wave9'], wave: '9' },
   { id: 'activity', label: 'Activity', suffix: '/activity', requires: [] },
 ]
@@ -373,16 +389,19 @@ export function targetHref(target: TargetPath, suffix = ''): string {
   return `/t/${encodeURIComponent(target.product)}/${encodeURIComponent(target.project)}/${encodeURIComponent(target.environment)}${suffix}`
 }
 
+/** `/t/<product>/<project>/<environment>`, then at most a section and one more segment. */
+const TARGET_PAGE = /^\/t\/([^/]+)\/([^/]+)\/[^/]+(\/[^/]+)?(\/[^/]+)?/
+
 /**
- * The same page on another environment of the same project ("switching
- * environment keeps the page", IA §3): only the section and a schema kind
- * survive the switch; anything deeper (an object name) is dropped, because
- * it may not exist there.
+ * What of a target page survives a switch to another target: the section
+ * (`/migrations`) and a schema kind (`/schema/tables`), nothing deeper (an
+ * object name may not exist there) and nothing for a path that names no
+ * section of the navigation. `undefined` when `pathname` is no target page.
  */
-export function switchEnvironment(pathname: string, environment: string): string | undefined {
-  const m = /^\/t\/([^/]+)\/([^/]+)\/[^/]+(\/[^/]+)?(\/[^/]+)?/.exec(pathname)
+function keptSuffix(pathname: string): string | undefined {
+  const m = TARGET_PAGE.exec(pathname)
   if (m === null) return undefined
-  const [, product = '', project = '', section, sub] = m
+  const [, , , section, sub] = m
   const sectionName = section?.slice(1)
   const keepSection = TARGET_NAV.some((s) => s.suffix !== '' && s.suffix === section)
   const keepSub =
@@ -390,5 +409,29 @@ export function switchEnvironment(pathname: string, environment: string): string
     sectionName === 'schema' &&
     sub !== undefined &&
     (SCHEMA_KINDS as readonly string[]).includes(sub.slice(1))
-  return `/t/${product}/${project}/${encodeURIComponent(environment)}${keepSection ? section : ''}${keepSub ? sub : ''}`
+  return `${keepSection ? section : ''}${keepSub ? sub : ''}`
+}
+
+/**
+ * The same page on another environment of the same project ("switching
+ * environment keeps the page", IA §3): only the section and a schema kind
+ * survive the switch; anything deeper (an object name) is dropped, because
+ * it may not exist there.
+ */
+export function switchEnvironment(pathname: string, environment: string): string | undefined {
+  const m = TARGET_PAGE.exec(pathname)
+  const kept = keptSuffix(pathname)
+  if (m === null || kept === undefined) return undefined
+  const [, product = '', project = ''] = m
+  return `/t/${product}/${project}/${encodeURIComponent(environment)}${kept}`
+}
+
+/**
+ * The same page on another database ("Switch database"): the section and a
+ * schema kind of the page the person is on carry over, as they do for an
+ * environment switch. From a page that is no target page, or whose section
+ * the navigation does not know, the way leads to the target's overview.
+ */
+export function switchTarget(pathname: string, target: TargetPath): string {
+  return targetHref(target, keptSuffix(pathname) ?? '')
 }

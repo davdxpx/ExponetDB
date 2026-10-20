@@ -1,6 +1,6 @@
 // Derived from supabase/supabase packages/ui-patterns/src/PageNav/index.tsx @ 8b9af568. Apache-2.0 (Copyright 2024 Supabase); package declared MIT. Modified for ExponetDB.
 import { cn, NavMenu, NavMenuItem } from '@exponetdb/ui'
-import { type ComponentProps, useEffect, useRef } from 'react'
+import { type ComponentProps, type ReactNode, useEffect, useRef } from 'react'
 
 import { PageContainer } from '../page-container/index.tsx'
 import { useLinkComponent } from '../seams/index.ts'
@@ -14,6 +14,13 @@ export interface PageNavItem {
   readonly href: string
   /** True for the page the person is on: the link gets `aria-current="page"`. */
   readonly active: boolean
+  /**
+   * A small count or mark after the label ("3"). Part of the link, so its text is part of the
+   * link's accessible name: the caller adds visually hidden words that say what it counts. Omit
+   * it (or pass `undefined`) when there is nothing to say; a count that could not be read is
+   * never passed as 0.
+   */
+  readonly badge?: ReactNode
 }
 
 export type PageNavProps = Omit<ComponentProps<'div'>, 'children'> & {
@@ -70,6 +77,14 @@ const PageNav = ({ label, items, className, ...props }: PageNavProps) => {
               linkComponent={linkComponent}
             >
               {item.label}
+              {item.badge === undefined || item.badge === null || item.badge === false ? null : (
+                <>
+                  {/* A space of its own, so the label and the badge's words never run together in the link's name. */}{' '}
+                  <span data-slot="page-nav-badge" className="ml-0.5 inline-flex items-center">
+                    {item.badge}
+                  </span>
+                </>
+              )}
             </NavMenuItem>
           ))}
         </NavMenu>

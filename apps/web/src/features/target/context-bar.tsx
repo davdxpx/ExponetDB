@@ -22,14 +22,17 @@ import {
 } from '@exponetdb/ui-patterns'
 import { useMatch, useRouterState } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
-import { type MessageKey, t } from '../../lib/i18n/i18n.ts'
+import { t } from '../../lib/i18n/i18n.ts'
+import { useMe } from '../../lib/session/guard.tsx'
+import { DatabaseSwitcher } from './database-switcher.tsx'
 import {
   type Environment,
   type EnvironmentList,
   environmentHref,
-  type Lifecycle,
+  lifecycleLabelKey,
   type Tier,
 } from './environments.ts'
+import { TargetHealthChip } from './health-chip.tsx'
 import { parseTargetParams, type TargetRoute } from './params.ts'
 import { type Target, useProjectEnvironments, useTarget } from './queries.ts'
 
@@ -37,15 +40,19 @@ import { type Target, useProjectEnvironments, useTarget } from './queries.ts'
 const TARGET_ROUTE_ID = '/_app/t/$product/$project/$environment' as const
 
 /**
- * `Product / Project / Environment ▾` for the header of a target page
- * (information-architecture.md section 3). Product and project are text (their
- * slugs); the environment is a menu of the project's environments, each with
- * the chip of its tier, and the current environment always shows its own
- * chip: the production cue of the header. The tier is the target's `tier`
- * field, never a guess from the slug. Choosing an environment goes to the
- * same page there (the section and a schema kind stay, an object name does
- * not). Renders nothing outside a target page, for a target the server says
- * is not there, and for route parameters that fail the slug grammar.
+ * `Product / Project ▾ / Environment ▾` and the health chip for the header of
+ * a target page (information-architecture.md section 3). Product and project
+ * are the slugs of the route, together the trigger of the database switcher (a
+ * popover with a search over every database, recent ones first); the
+ * environment is a menu of the project's environments, each with the chip of
+ * its tier, and the current environment always shows its own chip: the
+ * production cue of the header. The tier is the target's `tier` field, never a
+ * guess from the slug. Choosing an environment or a database goes to the same
+ * page there (the section and a schema kind stay, an object name does not).
+ * The chip after them is the health of the target from the read the layout
+ * already makes, with its source and age on hover. Renders nothing outside a
+ * target page, for a target the server says is not there, and for route
+ * parameters that fail the slug grammar.
  */
 export function TargetContextBar(): ReactNode {
   const match = useMatch({ from: TARGET_ROUTE_ID, shouldThrow: false })
@@ -75,31 +82,36 @@ function ContextBar({ target }: { readonly target: TargetRoute }): ReactNode {
   const read = useTarget(target.path)
   const environments = useProjectEnvironments(target.product, target.project)
   const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const identityId = useMe().identity.id
   // The target does not exist or is not visible: the page says so and nothing more.
   if (read.notFound) return null
   return (
-    <Breadcrumb
-      aria-label={t('target.bar.label')}
-      data-slot="target-context-bar"
-      className="min-w-0 shrink"
-    >
-      <BreadcrumbList className="flex-nowrap">
-        {/* On a phone the product and project move into the environment menu (it names them). */}
-        <BreadcrumbItem className="max-md:hidden">{target.product}</BreadcrumbItem>
-        <BreadcrumbSeparator className="max-md:hidden">/</BreadcrumbSeparator>
-        <BreadcrumbItem className="max-md:hidden">{target.project}</BreadcrumbItem>
-        <BreadcrumbSeparator className="max-md:hidden">/</BreadcrumbSeparator>
-        <BreadcrumbItem className="min-w-0">
-          <EnvironmentSwitcher
-            target={target}
-            tier={currentTier(read.readable, environments.readable, target)}
-            environments={environments.readable}
-            pathname={pathname}
-            onRetry={environments.refetch}
-          />
-        </BreadcrumbItem>
-      </BreadcrumbList>
-    </Breadcrumb>
+    <>
+      <Breadcrumb
+        aria-label={t('target.bar.label')}
+        data-slot="target-context-bar"
+        className="min-w-0 shrink"
+      >
+        <BreadcrumbList className="flex-nowrap">
+          {/* On a phone the product and project move into the environment menu (it names them);
+              the command menu has "Switch database…" there. */}
+          <BreadcrumbItem className="max-md:hidden">
+            <DatabaseSwitcher target={target} identityId={identityId} pathname={pathname} />
+          </BreadcrumbItem>
+          <BreadcrumbSeparator className="max-md:hidden">/</BreadcrumbSeparator>
+          <BreadcrumbItem className="min-w-0">
+            <EnvironmentSwitcher
+              target={target}
+              tier={currentTier(read.readable, environments.readable, target)}
+              environments={environments.readable}
+              pathname={pathname}
+              onRetry={environments.refetch}
+            />
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+      <TargetHealthChip read={read.readable} />
+    </>
   )
 }
 
@@ -244,13 +256,6 @@ function EnvironmentItems(props: {
   ))
 }
 
-const LIFECYCLE_LABELS: Readonly<Record<Lifecycle, MessageKey | undefined>> = {
-  registered: 'target.lifecycle.registered',
-  active: undefined,
-  suspended: 'target.lifecycle.suspended',
-  decommissioned: 'target.lifecycle.decommissioned',
-}
-
 function EnvironmentItem(props: {
   readonly environment: Environment
   readonly current: boolean
@@ -258,7 +263,7 @@ function EnvironmentItem(props: {
 }): ReactNode {
   const { environment, current, href } = props
   const Link = useLinkComponent()
-  const lifecycle = LIFECYCLE_LABELS[environment.state]
+  const lifecycle = lifecycleLabelKey(environment.state)
   const content = (
     <span className="flex w-full min-w-0 items-center gap-2">
       <span className="min-w-0 flex-1 truncate">{environment.slug}</span>

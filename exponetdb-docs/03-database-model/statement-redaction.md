@@ -38,6 +38,11 @@ the default everywhere is the redacted form.
    (options), `CREATE SERVER … OPTIONS`, `SET`/`set_config` of parameters whose
    name contains `password`, `secret`, `token`, `key`, `COPY … PROGRAM`.
    Example: `ALTER ROLE <name> PASSWORD <redacted>`.
+   **[OBSERVED]** (Wave 8 completion, 2026-10-20, `packages/postgres/src/parser/redact.ts`)
+   `ALTER SYSTEM`, `ALTER DATABASE … SET` and `ALTER ROLE … SET` of such a
+   parameter give `ALTER … SET <setting> <redacted>` as well; before, the
+   tree's untyped `setstmt` was missed, so their value was masked as a
+   literal but no summary was given (G8 record §8).
 3. **Lexer fallback.** If parsing fails (most often because PostgreSQL truncated
    the text at `track_activity_query_size`), a PostgreSQL-rules lexer replaces
    every literal token, including an unterminated trailing literal, with `$?`,

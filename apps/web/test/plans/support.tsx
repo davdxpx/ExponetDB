@@ -66,6 +66,14 @@ export class World {
   credentialsTruncated = false
   /** The cursor the plan list answers with (a longer list than one read returns). */
   plansNextCursor: string | null = null
+  /** Pages of `GET /plans` by cursor (`''` is the first page); when empty, `plans` answers. */
+  readonly planPages = new Map<string, { items: PlanRead[]; nextCursor: string | null }>()
+  /** What `GET /operations` answers (the plan list's "Awaiting approval" view). */
+  listedOperations: OperationRead[] = []
+  /** Stored bundles by `<projectId>/<migrationId>`. */
+  readonly bundles = new Map<string, unknown>()
+  /** Stored files by `<projectId>/<migrationId>/<revision>/<file>`. */
+  readonly bundleFiles = new Map<string, unknown>()
   /** Answers that fail, by a substring of `METHOD path` (first match wins). */
   readonly failures = new Map<string, FailureSpec>()
   /** Mutations answer `REAUTH_REQUIRED` until a TOTP proof was given. */
@@ -180,8 +188,34 @@ export function answer(world: World, sent: Sent): Response {
   if (m !== null && method === 'POST') {
     return json(202, operationFor(OP, { state: 'queued' }))
   }
+  m = /^\/api\/v1\/plans\/([^/]+)\/withdraw$/.exec(p)
+  if (m !== null && method === 'POST') {
+    const id = decodeURIComponent(m[1] ?? '')
+    const plan = world.plans.get(id)
+    if (plan === undefined) return NOT_FOUND('PLAN_NOT_FOUND')
+    const withdrawn = { ...plan, state: 'withdrawn' } as PlanRead
+    world.plans.set(id, withdrawn)
+    return json(200, withdrawn)
+  }
   if (p === '/api/v1/plans' && method === 'GET') {
+    if (world.planPages.size > 0) {
+      const page = world.planPages.get(url.searchParams.get('cursor') ?? '')
+      return json(200, page ?? { items: [], nextCursor: null })
+    }
     return json(200, { items: [...world.plans.values()], nextCursor: world.plansNextCursor })
+  }
+  if (p === '/api/v1/operations' && method === 'GET') {
+    return json(200, { items: world.listedOperations, nextCursor: null })
+  }
+  m = /^\/api\/v1\/projects\/([^/]+)\/bundles\/([^/]+)$/.exec(p)
+  if (m !== null && method === 'GET') {
+    const stored = world.bundles.get(`${m[1]}/${m[2]}`)
+    return stored === undefined ? NOT_FOUND() : json(200, stored)
+  }
+  m = /^\/api\/v1\/projects\/([^/]+)\/bundles\/([^/]+)\/revisions\/([^/]+)\/files\/([^/]+)$/.exec(p)
+  if (m !== null && method === 'GET') {
+    const stored = world.bundleFiles.get(`${m[1]}/${m[2]}/${m[3]}/${m[4]}`)
+    return stored === undefined ? NOT_FOUND() : json(200, stored)
   }
   m = /^\/api\/v1\/operations\/([^/]+)$/.exec(p)
   if (m !== null && method === 'GET') {
@@ -425,6 +459,56 @@ const source = (file: 'up.sql' | 'verify.sql', text: string) => ({
   bytes: text.length,
   truncated: false,
 })
+
+export const PROJECT = 'prj_01M4S9000000000000000000AF'
+export const BUNDLE_DIGEST = `sha256:c1:${'12'.repeat(32)}`
+
+/**
+ * Stores the hostile plan's bundle in the world's bundle store: revision 1 with the
+ * bundle digest `digest` (the plan binds `BUNDLE_DIGEST` when it names one) and the files given.
+ */
+export function storeBundle(
+  world: World,
+  files: Readonly<Record<string, string>> = { 'up.sql': UP_SQL, 'verify.sql': VERIFY_SQL },
+  digest = BUNDLE_DIGEST,
+): void {
+  world.bundles.set(`${PROJECT}/${MIGRATION}`, {
+    projectId: PROJECT,
+    migrationId: MIGRATION,
+    name: 'add-notes',
+    checksum: `sha256:c1:${'ef'.repeat(32)}`,
+    transactional: true,
+    dependsOn: [],
+    revisions: [
+      {
+        revision: 1,
+        bundleDigest: digest,
+        verifyDigest: null,
+        rollbackDigest: null,
+        sourceDigest: `sha256:${'34'.repeat(32)}`,
+        files: Object.fromEntries(
+          Object.entries(files).map(([file, text]) => [
+            file,
+            { bytes: text.length, digest: `sha256:${'56'.repeat(32)}` },
+          ]),
+        ),
+        source: null,
+        ingestedAt: '2026-10-13T07:00:00.000Z',
+      },
+    ],
+    superseded: [],
+  })
+  for (const [file, text] of Object.entries(files)) {
+    world.bundleFiles.set(`${PROJECT}/${MIGRATION}/1/${file}`, {
+      migrationId: MIGRATION,
+      revision: 1,
+      file,
+      text,
+      bytes: text.length,
+      digest: `sha256:${'56'.repeat(32)}`,
+    })
+  }
+}
 
 /** The queue item of the hostile plan: the review carries the plan, the client's name and the files. */
 export function hostileItem(over: Partial<ApprovalQueueItem> = {}): ApprovalQueueItem {

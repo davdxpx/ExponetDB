@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import type { ApiClient } from '../../lib/api/client.ts'
 import { isTargetPath } from '../target/params.ts'
+import { type HistorySelection, historyWindow, selectionKey } from './history-range.ts'
 
 /**
  * Query keys and options of the target overview blocks. Every block has its
@@ -9,22 +10,15 @@ import { isTargetPath } from '../target/params.ts'
  * and every query is disabled for anything else.
  */
 export const overviewKeys = {
-  history: (path: string, range: HistoryRange) => ['overview', 'history', path, range] as const,
+  history: (path: string, selection: HistorySelection) =>
+    ['overview', 'history', path, selectionKey(selection)] as const,
   findings: (path: string) => ['overview', 'findings', path] as const,
   migrations: (path: string) => ['overview', 'migrations', path] as const,
   stream: (projectId: string) => ['overview', 'stream', projectId] as const,
   operations: (path: string) => ['overview', 'operations', path] as const,
 }
 
-/** The ranges the history offers; the server keeps 3 to 60 days and answers 24 hours without a range. */
-export const HISTORY_RANGES = ['24h', '7d', '14d'] as const
-export type HistoryRange = (typeof HISTORY_RANGES)[number]
-
-const RANGE_MS: Readonly<Record<HistoryRange, number>> = {
-  '24h': 24 * 3_600_000,
-  '7d': 7 * 24 * 3_600_000,
-  '14d': 14 * 24 * 3_600_000,
-}
+// The ranges the history offers, and how a choice becomes a request, are in `history-range.ts`.
 
 export const OVERVIEW_POLL_MS = 30_000
 /** The history is sampled every 15 seconds and bucketed; a minute is often enough. */
@@ -39,17 +33,17 @@ export function isProjectId(value: unknown): value is string {
   return typeof value === 'string' && PROJECT_ID.test(value)
 }
 
-export function historyQuery(client: ApiClient, path: string, range: HistoryRange) {
+export function historyQuery(client: ApiClient, path: string, selection: HistorySelection) {
   return queryOptions({
-    queryKey: overviewKeys.history(path, range),
+    queryKey: overviewKeys.history(path, selection),
     queryFn: ({ signal }) => {
-      // The server refuses a time in the future: `to` is the request moment in whole seconds.
-      const to = new Date()
-      to.setMilliseconds(0)
-      const from = new Date(to.getTime() - RANGE_MS[range])
+      // The server refuses a time in the future and a range longer than it keeps; the window
+      // is computed when the request is made, so a preset that is polled moves with the clock.
+      const window = historyWindow(selection, Date.now())
+      if (window === undefined) throw new RangeError('The chosen range is empty.')
       return client.operation('getTargetHealthHistory', {
         params: { target: path },
-        query: { from: from.toISOString(), to: to.toISOString() },
+        query: { from: window.from.toISOString(), to: window.to.toISOString() },
         signal,
       })
     },

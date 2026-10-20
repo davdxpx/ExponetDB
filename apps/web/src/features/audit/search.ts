@@ -8,6 +8,8 @@ import type { Query } from '../../lib/api/client.ts'
  */
 export interface AuditSearch {
   readonly actor?: 'self' | 'any'
+  /** Only events made by this identity (`idn_…`); with `actor=self` both apply. */
+  readonly identity?: string
   readonly client?: string
   readonly grant?: string
   readonly action?: string
@@ -19,6 +21,7 @@ export interface AuditSearch {
 
 export const AUDIT_FILTERS = [
   'actor',
+  'identity',
   'client',
   'grant',
   'action',
@@ -29,6 +32,7 @@ export const AUDIT_FILTERS = [
 ] as const satisfies readonly (keyof AuditSearch)[]
 
 const ULID = '[0-7][0-9A-HJKMNP-TV-Z]{25}'
+const IDENTITY = new RegExp(`^idn_${ULID}$`)
 const CLIENT = new RegExp(`^cli_${ULID}$`)
 const GRANT = new RegExp(`^grt_${ULID}$`)
 const TARGET = new RegExp(`^tgt_${ULID}$`)
@@ -54,6 +58,8 @@ export function auditSearch(raw: Readonly<Record<string, unknown>>): AuditSearch
   if (actor === 'self' || actor === 'any') search.actor = actor
   const result = text(raw['result'])
   if (result === 'succeeded' || result === 'failed' || result === 'denied') search.result = result
+  const identity = text(raw['identity'])
+  if (identity !== undefined && IDENTITY.test(identity)) search.identity = identity
   const client = text(raw['client'])
   if (client !== undefined && CLIENT.test(client)) search.client = client
   const grant = text(raw['grant'])

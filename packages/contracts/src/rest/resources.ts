@@ -295,6 +295,49 @@ export const TargetHealthSchema = z
   })
   .meta({ id: 'TargetHealth' })
 
+/**
+ * The connection capacity of a target as the latest health sample measured it
+ * (Wave 8 completion, additive, REST only). Both numbers come from one sample
+ * (the activity summary and the capacity settings); a sample that could not
+ * read either of them has no capacity, and a missing one is never zero.
+ */
+export const TargetCapacitySchema = z
+  .object({
+    clientBackends: z.int().min(0).meta({
+      description:
+        'Client backends connected when the sample was taken (`pg_stat_activity` rows of backend type `client backend`, other than the session that read them).',
+    }),
+    usableSlots: z.int().min(0).meta({
+      description:
+        '`max_connections` minus `superuser_reserved_connections` and `reserved_connections`, never below 0: the connections ordinary roles can use. 0 is a measured value.',
+    }),
+    source: ObservationSourceSchema,
+    observedAt: TimestampSchema.meta({
+      description: 'When the sample that measured both numbers was taken.',
+    }),
+  })
+  .meta({ id: 'TargetCapacity' })
+
+/**
+ * `GET /targets/{target}/health` (REST): the `TargetHealth` and, beside it,
+ * the optional `capacity`. An intersection, so that `TargetHealth` stays one
+ * schema with one definition: the MCP tool `target_health` keeps answering
+ * with {@link TargetHealthSchema} (its catalog is frozen for this change, and
+ * the extra member is stripped from its output by that schema), and the
+ * OpenAPI document keeps its `TargetHealth` component unchanged.
+ */
+export const TargetHealthViewSchema = z
+  .intersection(
+    TargetHealthSchema,
+    z.object({
+      capacity: TargetCapacitySchema.optional().meta({
+        description:
+          'Wave 8 completion, additive: the connections in use and the usable slots from the latest sample, with that sample’s source and time. Absent when the latest sample did not measure them (never sampled, unreachable, a read that failed, or a sample taken before this member existed), never 0 as a stand-in. The database size is not sampled today and is not part of it.',
+      }),
+    }),
+  )
+  .meta({ id: 'TargetHealthView' })
+
 // ----- targets -----
 
 export const TargetSummarySchema = z
@@ -434,6 +477,41 @@ export const DriftCheckSchema = z
   })
   .meta({ id: 'DriftCheck' })
 
+/**
+ * One past drift check as the history lists it (Wave 8 completion, additive,
+ * REST only). The status, fingerprints, counts and error code are the
+ * `DriftCheck` members of the same names; the findings a check recorded are
+ * not stored per check (a finding keeps the checks that opened and resolved
+ * it, and the findings reads list them), so a history entry has none.
+ */
+export const DriftCheckSummarySchema = DriftCheckSchema.pick({
+  id: true,
+  targetId: true,
+  status: true,
+  baselineFingerprint: true,
+  currentFingerprint: true,
+  counts: true,
+  errorCode: true,
+})
+  .extend({
+    generation: z.int().min(1).meta({
+      description:
+        'The target generation the check ran against; a check of an earlier generation is history of another identity stamp.',
+    }),
+    requestedBy: z
+      .discriminatedUnion('kind', [
+        z.object({ kind: z.literal('schedule') }),
+        z.object({ kind: z.literal('identity'), identityId: IdentityIdSchema }),
+      ])
+      .meta({
+        description:
+          'Who asked: the worker’s schedule, or the identity that ran the check on demand (a person or a service account; a delegated client acts as the identity that delegated). The client the call came through is not recorded with the check, and a drift check is not an audit event today (OD-34).',
+      }),
+    startedAt: TimestampSchema,
+    finishedAt: TimestampSchema,
+  })
+  .meta({ id: 'DriftCheckSummary' })
+
 // ----- schema -----
 
 export const SchemaObjectKindSchema = openEnum(
@@ -470,6 +548,58 @@ export const SchemaObjectRefSchema = z
       .meta({ description: 'The canonical fp1 key of the object (schema-fingerprints.md §3).' }),
   })
   .meta({ id: 'SchemaObjectRef' })
+
+/**
+ * `GET /targets/{target}/schema/objects` (Wave 8 completion, additive, REST
+ * only; the MCP tool `schema_search` keeps its own input). Every filter is
+ * optional and they combine with AND; a request without any lists every
+ * object of the snapshot.
+ */
+export const SchemaObjectListQuerySchema = z.strictObject({
+  kinds: z.array(SchemaObjectKindSchema).max(16).optional().meta({
+    description:
+      'Only objects of these kinds (repeat the parameter); the kinds `SchemaObjectRef.kind` shows.',
+  }),
+  schema: z.string().min(1).max(63).optional().meta({
+    description: 'Only objects of this schema, by exact name (`SchemaObjectRef.schema`).',
+  }),
+  parent: z.string().min(1).max(63).optional().meta({
+    description:
+      'Only children of this relation, by the exact name `SchemaObjectRef.parent` shows (a column, constraint, index, trigger, policy or rule of that table, view or type). Combine with `schema` to name one relation.',
+  }),
+  q: z.string().min(1).max(128).optional().meta({
+    description:
+      'Only objects whose name contains this text, case-insensitively (the rule of `GET /targets/{target}/schema/search`).',
+  }),
+  limit: limitSchema(200, 100).optional(),
+  cursor: CursorSchema.optional().meta({
+    description:
+      'The `nextCursor` of the previous page. Bound to the snapshot fingerprint and the filters: a cursor from another snapshot is refused with `SCHEMA_FINGERPRINT_MISMATCH`, one from other filters with `VALIDATION_FAILED`.',
+  }),
+})
+
+export const SchemaObjectListSchema = z
+  .object({
+    items: z.array(SchemaObjectRefSchema),
+    nextCursor: CursorSchema.nullable().meta({
+      description: 'Cursor for the next page, null on the last page.',
+    }),
+    total: z.int().min(0).meta({
+      description:
+        'How many objects of the snapshot match the filters, before paging (exact, not a lower bound).',
+    }),
+    fingerprint: SchemaFingerprintSchema.meta({
+      description:
+        'The fingerprint of the snapshot every page of this list is read from. Order is deterministic within a snapshot: schema, kind, name, signature.',
+    }),
+    complete: z.boolean().meta({
+      description:
+        'false when anything in the managed scope could not be read: the list may then miss objects (an incomplete fingerprint is never authoritative); `GET /targets/{target}/schema` says what.',
+    }),
+    source: ObservationSourceSchema,
+    observedAt: TimestampSchema.meta({ description: 'When the snapshot was taken.' }),
+  })
+  .meta({ id: 'SchemaObjectList' })
 
 export const VisibilityReportSchema = z
   .object({
@@ -1679,6 +1809,10 @@ export const InstallationSchema = z
       projectConfig: z.literal('exponetdb.project/v1'),
     }),
     features: z.array(z.string().regex(/^[a-z][a-z0-9_.-]{0,63}$/)),
+    oauthClientRegistration: z.enum(['open', 'review']).optional().meta({
+      description:
+        'How this installation admits a new OAuth client (Wave 8, additive; `EXPONETDB_OAUTH_CLIENT_REGISTRATION`, OD-5): `open` approves a new CIMD or DCR client automatically, `review` waits for an administrator. A person still consents in both modes. Absent when the serving process does not report it.',
+    }),
   })
   .meta({ id: 'Installation' })
 export type Installation = z.infer<typeof InstallationSchema>
@@ -2431,6 +2565,8 @@ export type HealthSummary = z.infer<typeof HealthSummarySchema>
 export type HealthCondition = z.infer<typeof HealthConditionSchema>
 export type ProbeResult = z.infer<typeof ProbeResultSchema>
 export type TargetHealth = z.infer<typeof TargetHealthSchema>
+export type TargetCapacity = z.infer<typeof TargetCapacitySchema>
+export type TargetHealthView = z.infer<typeof TargetHealthViewSchema>
 export type InstallationHealth = z.infer<typeof InstallationHealthSchema>
 export type TargetHealthHistory = z.infer<typeof TargetHealthHistorySchema>
 export type AuditChain = z.infer<typeof AuditChainSchema>
@@ -2438,7 +2574,9 @@ export type TargetHealthState = z.infer<typeof TargetHealthStateSchema>
 export type Finding = z.infer<typeof FindingSchema>
 export type DriftFinding = z.infer<typeof DriftFindingSchema>
 export type DriftCheck = z.infer<typeof DriftCheckSchema>
+export type DriftCheckSummary = z.infer<typeof DriftCheckSummarySchema>
 export type SchemaObjectRef = z.infer<typeof SchemaObjectRefSchema>
+export type SchemaObjectList = z.infer<typeof SchemaObjectListSchema>
 export type SchemaObject = z.infer<typeof SchemaObjectSchema>
 export type SchemaOverview = z.infer<typeof SchemaOverviewSchema>
 export type SchemaFingerprintResult = z.infer<typeof SchemaFingerprintDocumentSchema>

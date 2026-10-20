@@ -2,12 +2,14 @@ import type {
   SchemaDiff,
   SchemaFingerprintResult,
   SchemaObject,
+  SchemaObjectList,
   SchemaObjectRef,
   SchemaOverview,
   VisibilityReport,
 } from '@exponetdb/contracts'
 import type { Queryable } from '@exponetdb/control-store'
-import { isJsonObject, type JsonValue } from '@exponetdb/kernel'
+import { compareUtf8, isJsonObject, type JsonValue } from '@exponetdb/kernel'
+import { sha256Hex } from '@exponetdb/kernel/hash'
 import {
   type CanonicalDocument,
   type CanonicalEntry,
@@ -198,6 +200,15 @@ function decodeOffset(cursor: string | undefined): number {
   return n
 }
 
+/** Whether the entry's name (its last key element, or the shown `name`) contains the lower-cased `needle`. */
+function nameMatches(entry: CanonicalEntry, ref: SchemaObjectRef, needle: string): boolean {
+  const name =
+    entry.class === 'schema'
+      ? (entry.key[0] ?? '')
+      : (entry.key[entry.class === 'function' ? 1 : entry.key.length - 1] ?? '')
+  return name.toLowerCase().includes(needle) || ref.name.toLowerCase().includes(needle)
+}
+
 /** Objects whose name contains `q` (case-insensitive), in document order. */
 export function searchSchemaView(
   current: CurrentSchema,
@@ -214,11 +225,7 @@ export function searchSchemaView(
   for (const e of current.document.entries) {
     if (kinds !== null && !kinds.has(objectKind(e))) continue
     const ref = objectRef(e)
-    const name =
-      e.class === 'schema'
-        ? (e.key[0] ?? '')
-        : (e.key[e.class === 'function' ? 1 : e.key.length - 1] ?? '')
-    if (!name.toLowerCase().includes(needle) && !ref.name.toLowerCase().includes(needle)) continue
+    if (!nameMatches(e, ref, needle)) continue
     if (seen++ < offset) continue
     if (matches.length === limit) {
       more = true
@@ -231,6 +238,163 @@ export function searchSchemaView(
     nextCursor: more
       ? SEARCH_CURSOR + Buffer.from(String(offset + limit), 'utf8').toString('base64url')
       : null,
+  }
+}
+
+// ----- list (no search term) -----
+
+/** The filters of {@link listSchemaObjectsView}; all optional, combined with AND. */
+export interface SchemaObjectFilter {
+  readonly kinds?: readonly string[] | undefined
+  /** Exact `SchemaObjectRef.schema`. */
+  readonly schema?: string | undefined
+  /** Exact `SchemaObjectRef.parent` (the parent relation's name). */
+  readonly parent?: string | undefined
+  /** Case-insensitive substring of the name (the rule of the search). */
+  readonly q?: string | undefined
+}
+
+const LIST_CURSOR = 'd2_'
+const LIST_MAX_OFFSET = 100_000_000
+
+const invalidListCursor = () =>
+  new DiagnosticsError('VALIDATION_FAILED', {
+    errors: [{ path: '/cursor', code: 'invalid', message: 'Unknown cursor.' }],
+  })
+
+/** A short digest of the normalized filters, so a cursor is only used with the filters it was made for. */
+function filterDigest(filter: SchemaObjectFilter): string {
+  const kinds =
+    filter.kinds === undefined || filter.kinds.length === 0
+      ? null
+      : [...new Set(filter.kinds)].sort(compareUtf8)
+  return sha256Hex(
+    JSON.stringify([
+      kinds,
+      filter.schema ?? null,
+      filter.parent ?? null,
+      filter.q === undefined ? null : filter.q.toLowerCase(),
+    ]),
+  ).slice(0, 16)
+}
+
+function encodeListCursor(fingerprint: string, digest: string, offset: number): string {
+  return (
+    LIST_CURSOR +
+    Buffer.from(JSON.stringify([fingerprint, digest, offset]), 'utf8').toString('base64url')
+  )
+}
+
+function decodeListCursor(cursor: string): {
+  readonly fingerprint: string
+  readonly digest: string
+  readonly offset: number
+} {
+  if (!cursor.startsWith(LIST_CURSOR)) throw invalidListCursor()
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(Buffer.from(cursor.slice(LIST_CURSOR.length), 'base64url').toString('utf8'))
+  } catch {
+    throw invalidListCursor()
+  }
+  if (!Array.isArray(parsed) || parsed.length !== 3) throw invalidListCursor()
+  const [fingerprint, digest, offset] = parsed as unknown[]
+  if (
+    typeof fingerprint !== 'string' ||
+    typeof digest !== 'string' ||
+    typeof offset !== 'number' ||
+    !Number.isSafeInteger(offset) ||
+    offset < 0 ||
+    offset > LIST_MAX_OFFSET
+  ) {
+    throw invalidListCursor()
+  }
+  return { fingerprint, digest, offset }
+}
+
+/**
+ * The bytes a ref sorts by: schema, kind, name, signature, then parent and
+ * canonical key (so the order is total), joined by NUL, which no catalog name
+ * contains. Comparing these bytes is comparing the fields one after the other
+ * in UTF-8 byte order (a field that is a prefix of another sorts first), and
+ * it is encoded once per ref, not once per comparison.
+ */
+function sortKeyOf(ref: SchemaObjectRef): Buffer {
+  return Buffer.from(
+    [ref.schema, ref.kind, ref.name, ref.signature ?? '', ref.parent ?? '', ...ref.key].join(
+      '\u0000',
+    ),
+    'utf8',
+  )
+}
+
+/**
+ * The objects of the target's current snapshot that match the filters, in a
+ * deterministic order (schema, kind, name, signature), one page of them, and
+ * how many match in all. The same snapshot the search reads
+ * ({@link currentSchema}); no search term is needed.
+ *
+ * The cursor carries the snapshot's fingerprint and a digest of the filters:
+ * one from another fingerprint is `SCHEMA_FINGERPRINT_MISMATCH` (the schema
+ * changed between the pages; start again), one from other filters or one
+ * that is not ours is `VALIDATION_FAILED`. Within one fingerprint the
+ * document, and so the order, is the same, which is what makes an offset
+ * safe here.
+ */
+export function listSchemaObjectsView(
+  current: CurrentSchema,
+  filter: SchemaObjectFilter,
+  page: { readonly limit: number; readonly cursor?: string | undefined },
+): SchemaObjectList {
+  const fingerprint = current.snapshot.fingerprint
+  const digest = filterDigest(filter)
+  let offset = 0
+  if (page.cursor !== undefined) {
+    const decoded = decodeListCursor(page.cursor)
+    if (decoded.fingerprint !== fingerprint) {
+      throw new DiagnosticsError('SCHEMA_FINGERPRINT_MISMATCH')
+    }
+    if (decoded.digest !== digest) {
+      throw new DiagnosticsError('VALIDATION_FAILED', {
+        errors: [
+          {
+            path: '/cursor',
+            code: 'filter_mismatch',
+            message: 'The cursor belongs to other filters.',
+          },
+        ],
+      })
+    }
+    offset = decoded.offset
+  }
+  const limit = Math.min(Math.max(1, Math.trunc(page.limit)), 200)
+  const kinds =
+    filter.kinds === undefined || filter.kinds.length === 0 ? null : new Set(filter.kinds)
+  const needle = filter.q?.toLowerCase()
+  const matches: SchemaObjectRef[] = []
+  for (const e of current.document.entries) {
+    const ref = objectRef(e)
+    if (kinds !== null && !kinds.has(ref.kind)) continue
+    if (filter.schema !== undefined && ref.schema !== filter.schema) continue
+    if (filter.parent !== undefined && ref.parent !== filter.parent) continue
+    if (needle !== undefined && !nameMatches(e, ref, needle)) continue
+    matches.push(ref)
+  }
+  const ordered = matches
+    .map((ref) => ({ ref, sort: sortKeyOf(ref) }))
+    .sort((a, b) => Buffer.compare(a.sort, b.sort))
+    .map((entry) => entry.ref)
+  return {
+    items: ordered.slice(offset, offset + limit),
+    nextCursor:
+      offset + limit < ordered.length
+        ? encodeListCursor(fingerprint, digest, offset + limit)
+        : null,
+    total: ordered.length,
+    fingerprint: fingerprint as SchemaObjectList['fingerprint'],
+    complete: current.snapshot.complete,
+    source: current.source,
+    observedAt: current.snapshot.takenAt,
   }
 }
 

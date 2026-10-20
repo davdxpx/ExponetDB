@@ -21,11 +21,21 @@ function pollUnless(error: unknown): number | false {
   return kind === 'not_permitted' || kind === 'session' ? false : ACCESS_POLL_MS
 }
 
-export function identitiesQuery(client: ApiClient) {
+export type IdentityStateFilter = 'all' | 'invited' | 'active' | 'disabled' | 'erased'
+
+/**
+ * The identity list, all states or one (`state` is the API's own filter). The
+ * key of a state sits under the list's key, so a change to a person reads
+ * every state again.
+ */
+export function identitiesQuery(client: ApiClient, state: IdentityStateFilter = 'all') {
   return queryOptions({
-    queryKey: peopleKeys.identities,
+    queryKey: state === 'all' ? peopleKeys.identities : [...peopleKeys.identities, state],
     queryFn: ({ signal }) =>
-      client.operation('listIdentities', { query: { limit: ACCESS_PAGE_LIMIT }, signal }),
+      client.operation('listIdentities', {
+        query: state === 'all' ? { limit: ACCESS_PAGE_LIMIT } : { state, limit: ACCESS_PAGE_LIMIT },
+        signal,
+      }),
     refetchInterval: (query) => pollUnless(query.state.error),
   })
 }

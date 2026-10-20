@@ -13,6 +13,8 @@ export const accessKeys = {
   all: ['access'] as const,
   oauthClients: ['access', 'oauth-clients'] as const,
   serviceAccounts: ['access', 'service-accounts'] as const,
+  /** Under the service accounts' key: a change of an account or a key reads the overview again too. */
+  apiKeys: ['access', 'service-accounts', 'api-keys'] as const,
 }
 
 /** The most items one list read asks for (the API's page maximum). */
@@ -30,11 +32,21 @@ function pollUnless(error: unknown): number | false {
   return kind === 'not_permitted' || kind === 'session' ? false : ACCESS_POLL_MS
 }
 
-export function oauthClientsQuery(client: ApiClient) {
+export type ClientStateFilter = 'all' | 'pending' | 'active' | 'rejected' | 'disabled'
+
+/**
+ * The OAuth client list, all states or one (`state` is the API's own filter).
+ * The key of a state sits under the list's key, so a decision on a client
+ * reads every state again.
+ */
+export function oauthClientsQuery(client: ApiClient, state: ClientStateFilter = 'all') {
   return queryOptions({
-    queryKey: accessKeys.oauthClients,
+    queryKey: state === 'all' ? accessKeys.oauthClients : [...accessKeys.oauthClients, state],
     queryFn: ({ signal }) =>
-      client.operation('listOAuthClients', { query: { limit: ACCESS_PAGE_LIMIT }, signal }),
+      client.operation('listOAuthClients', {
+        query: state === 'all' ? { limit: ACCESS_PAGE_LIMIT } : { state, limit: ACCESS_PAGE_LIMIT },
+        signal,
+      }),
     refetchInterval: (query) => pollUnless(query.state.error),
   })
 }
@@ -44,6 +56,16 @@ export function serviceAccountsQuery(client: ApiClient) {
     queryKey: accessKeys.serviceAccounts,
     queryFn: ({ signal }) =>
       client.operation('listServiceAccounts', { query: { limit: ACCESS_PAGE_LIMIT }, signal }),
+    refetchInterval: (query) => pollUnless(query.state.error),
+  })
+}
+
+/** Every API key of every service account (metadata only; a secret is shown once, at creation). */
+export function apiKeysQuery(client: ApiClient) {
+  return queryOptions({
+    queryKey: accessKeys.apiKeys,
+    queryFn: ({ signal }) =>
+      client.operation('listApiKeys', { query: { limit: ACCESS_PAGE_LIMIT }, signal }),
     refetchInterval: (query) => pollUnless(query.state.error),
   })
 }

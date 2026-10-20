@@ -112,6 +112,9 @@ database guard (bundle `oauth-open-registration`) admits an approval
 without an approver only for a CIMD or DCR client that is new or pending,
 and a re-approval of an active CIMD client with a changed fingerprint.
 Under `review` the rule of 2026-10-06 below applies unchanged.
+**[OBSERVED]** (Wave 8 completion, 2026-10-20) `GET /installation` reports
+the running mode as `oauthClientRegistration`, and the OAuth clients page
+names it.
 
 **[DECIDED]** ([OD-5](../00-product/open-decisions.md#od-5-mcp-client-registration-policy),
 resolved 2026-10-06, option a; the `review` policy since 2026-10-13.) Three
@@ -353,7 +356,15 @@ the grant row that a refresh or a revocation takes. **[OBSERVED]**
 return it as the optional `lastUsedAt` and `lastUseClass` of the grant view
 (`packages/auth/src/oauth/grants.ts`, a left join: `null` means no use is
 recorded, not that the grant was never used, because the record began with
-its deployment and the background write can be lost).
+its deployment and the background write can be lost). **[OBSERVED]**
+(2026-10-20, Wave 8 completion, REST only) `GET /oauth-clients` and
+`GET /oauth-clients/{id}` aggregate the same record per client: `lastUsedAt`
+is the latest minute any grant of the client authenticated a request (over
+all of its grants, revoked and expired ones too; `null` with the same meaning
+as above) and `activeGrantCount` the grants that are neither revoked nor
+expired now. The list computes both in the statement that reads the page
+(`packages/auth/src/oauth/clients.ts`, one lateral aggregate per client); the
+answers of the client decisions leave them out. Still a data basis only.
 
 **Device flow and the CLI.** **[DECIDED]** (Wave 3B,
 `packages/auth/src/oauth/device.ts`, `apps/cli`.) The first-party CLI signs

@@ -11,6 +11,7 @@ import type { ApiClient, ResponseOf } from '../../lib/api/client.ts'
 export const SETTINGS_PAGE_LIMIT = 200
 
 export type Product = ResponseOf<'listProducts'>['items'][number]
+export type Project = ResponseOf<'listProjects'>['items'][number]
 export type Environment = ResponseOf<'listProductEnvironments'>['items'][number]
 export type PolicyRule = ResponseOf<'getPolicySettings'>['rules'][number]
 export type TargetItem = ResponseOf<'listTargets'>['items'][number]
@@ -23,6 +24,7 @@ export type ReviewFilter = 'all' | 'open' | 'done'
 
 export const settingsKeys = {
   products: ['settings', 'products'] as const,
+  projects: ['settings', 'projects'] as const,
   environments: (productId: string) => ['settings', 'environments', productId] as const,
   policies: ['settings', 'policies'] as const,
   targets: ['settings', 'targets'] as const,
@@ -37,6 +39,14 @@ export function productsQuery(client: ApiClient) {
     queryKey: settingsKeys.products,
     queryFn: ({ signal }) =>
       client.operation('listProducts', { query: { limit: SETTINGS_PAGE_LIMIT }, signal }),
+  })
+}
+
+export function projectsQuery(client: ApiClient) {
+  return queryOptions({
+    queryKey: settingsKeys.projects,
+    queryFn: ({ signal }) =>
+      client.operation('listProjects', { query: { limit: SETTINGS_PAGE_LIMIT }, signal }),
   })
 }
 

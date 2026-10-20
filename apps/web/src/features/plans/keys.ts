@@ -1,6 +1,7 @@
-import { queryOptions } from '@tanstack/react-query'
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
 import type { ApiClient } from '../../lib/api/client.ts'
 import { classifyFailure } from '../../lib/query/errors.ts'
+import { awaitingQueryOf, type PlanListSearch, planListQueryOf } from './list-model.ts'
 import { isOperationId, isPlanId, operationActive } from './plan-model.ts'
 
 /**
@@ -13,7 +14,17 @@ import { isOperationId, isPlanId, operationActive } from './plan-model.ts'
 export const planKeys = {
   all: ['plans'] as const,
   detail: (planId: string) => ['plans', 'detail', planId] as const,
-  list: () => ['plans', 'list'] as const,
+  list: (search: PlanListSearch = {}) =>
+    [
+      'plans',
+      'list',
+      search.state ?? '',
+      search.kind ?? '',
+      search.actor ?? 'any',
+      search.target ?? '',
+    ] as const,
+  awaiting: (search: PlanListSearch = {}) =>
+    ['plans', 'awaiting', search.kind ?? '', search.actor ?? 'any', search.target ?? ''] as const,
 }
 
 export const approvalKeys = {
@@ -66,11 +77,44 @@ export function operationQuery(client: ApiClient, operationId: string) {
   })
 }
 
-export function planListQuery(client: ApiClient) {
-  return queryOptions({
-    queryKey: planKeys.list(),
-    queryFn: ({ signal }) =>
-      client.operation('listPlans', { query: { limit: PLAN_LIST_LIMIT }, signal }),
+/** The plans of a validated search, newest first, one page per read; "Load more" follows the cursor. */
+export function planListQuery(client: ApiClient, search: PlanListSearch = {}) {
+  return infiniteQueryOptions({
+    queryKey: planKeys.list(search),
+    queryFn: ({ signal, pageParam }) =>
+      client.operation('listPlans', {
+        query: {
+          ...planListQueryOf(search),
+          limit: PLAN_LIST_LIMIT,
+          ...(pageParam === null ? {} : { cursor: pageParam }),
+        },
+        signal,
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    refetchInterval: PLAN_POLL_MS,
+  })
+}
+
+/**
+ * The operations that wait for an approval (`GET /operations?state=awaiting_approval`)
+ * with the same kind, actor and target filters: the "Awaiting approval" view
+ * of the plan list lists their plans. A plan has no such state of its own.
+ */
+export function awaitingPlansQuery(client: ApiClient, search: PlanListSearch = {}) {
+  return infiniteQueryOptions({
+    queryKey: planKeys.awaiting(search),
+    queryFn: ({ signal, pageParam }) =>
+      client.operation('listOperations', {
+        query: {
+          ...awaitingQueryOf(search),
+          limit: PLAN_LIST_LIMIT,
+          ...(pageParam === null ? {} : { cursor: pageParam }),
+        },
+        signal,
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
     refetchInterval: PLAN_POLL_MS,
   })
 }

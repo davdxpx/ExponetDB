@@ -9,13 +9,16 @@ import {
 import type { ReactNode } from 'react'
 import { t } from '../../lib/i18n/i18n.ts'
 import { readSourceOf } from '../target/gate.ts'
-import { useTargetHealth } from '../target/queries.ts'
+import { type TargetHealth, type TargetRead, useTargetHealth } from '../target/queries.ts'
 import { useTargetScope } from '../target/scope.tsx'
 import { FindingsBlock, OperationsBlock } from './activity-blocks.tsx'
 import { Block } from './block.tsx'
+import { CapacityValue } from './capacity-row.tsx'
 import { HealthBlock } from './health-block.tsx'
 import { HistoryBlock } from './history-block.tsx'
+import { HostValue } from './host-row.tsx'
 import { MigrationsBlock } from './migrations-block.tsx'
+import { RefreshBar } from './overview-refresh.tsx'
 
 /**
  * The body of the target overview (information-architecture.md §2.2): health
@@ -30,8 +33,9 @@ export function TargetOverviewBody(props: { readonly target: Target }): ReactNod
   const health = useTargetHealth(scope.target.path)
   return (
     <div className="flex flex-col gap-10" data-page="target-overview">
+      <RefreshBar />
       <HealthBlock health={health} />
-      <FactsBlock target={props.target} />
+      <FactsBlock target={props.target} health={health} />
       <HistoryBlock path={scope.target.path} />
       <MigrationsBlock target={scope.target} projectId={props.target.projectId} />
       <OperationsBlock path={scope.target.path} />
@@ -41,7 +45,13 @@ export function TargetOverviewBody(props: { readonly target: Target }): ReactNod
 }
 
 /** What the target record says about where the target lives and how far its ledger is. */
-function FactsBlock({ target }: { readonly target: Target }): ReactNode {
+function FactsBlock({
+  target,
+  health,
+}: {
+  readonly target: Target
+  readonly health: TargetRead<TargetHealth>
+}): ReactNode {
   const placement = target.placement
   const known = target.ledger === null ? undefined : readSourceOf(target.ledger.source)
   const items: KeyValueItem[] =
@@ -101,8 +111,18 @@ function FactsBlock({ target }: { readonly target: Target }): ReactNode {
             label: t('overview.health.fact.mode'),
             value: placement.managementMode,
           },
+          {
+            id: 'host',
+            label: t('overview.health.fact.host'),
+            value: <HostValue placement={placement} health={health.readable} />,
+          },
         ]
   items.push(
+    {
+      id: 'slots',
+      label: t('overview.health.fact.slots'),
+      value: <CapacityValue health={health.readable} />,
+    },
     {
       id: 'generation',
       label: t('overview.health.fact.generation'),

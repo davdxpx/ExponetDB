@@ -12,6 +12,7 @@ import {
   PageSectionMeta,
   PageSectionSummary,
   PageSectionTitle,
+  readableValue,
 } from '@exponetdb/ui-patterns'
 import { useQuery } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
@@ -20,9 +21,12 @@ import { t } from '../../lib/i18n/i18n.ts'
 import { toReadable } from '../../lib/query/readable.ts'
 import { useMe } from '../../lib/session/guard.tsx'
 import type { RevealedKey } from './api-key-secret.tsx'
+import { ApiKeysOverview } from './api-keys-overview.tsx'
 import { ACCESS_PAGE_LIMIT, serviceAccountsQuery } from './keys.ts'
 import { ListView } from './list-view.tsx'
 import { canManageAccess } from './model.ts'
+import { identitiesQuery } from './people-keys.ts'
+import { identityIndex } from './people-model.ts'
 import { ServiceAccountCard } from './service-account-card.tsx'
 import { ServiceCreateForm } from './service-create-form.tsx'
 import { StatusLines, useStatusLine } from './status.tsx'
@@ -48,6 +52,10 @@ export function ServiceAccountsPage(): ReactNode {
         ? undefined
         : [t('access.services.more', { count: ACCESS_PAGE_LIMIT })],
   })
+  // The responsible person is shown by name when the people read gave it, else by ID.
+  const people = useQuery(identitiesQuery(client))
+  const index = identityIndex(readableValue(toReadable(people))?.items ?? [])
+  const accounts = readableValue(readable)?.items
 
   return (
     <>
@@ -85,7 +93,10 @@ export function ServiceAccountsPage(): ReactNode {
         ) : (
           <p className="pt-6 text-sm text-foreground-light">{t('access.manage.missing')}</p>
         )}
-        <section aria-label={t('access.services.list')} className="flex flex-col gap-4 pt-12 pb-12">
+        <section aria-label={t('access.services.overview')} className="pt-8">
+          <ApiKeysOverview accounts={accounts} />
+        </section>
+        <section aria-label={t('access.services.list')} className="flex flex-col gap-4 pt-8 pb-12">
           <ListView
             readable={readable}
             error={query.error}
@@ -103,6 +114,7 @@ export function ServiceAccountsPage(): ReactNode {
                   <ServiceAccountCard
                     key={account.id}
                     account={account}
+                    responsible={index.get(account.responsibleIdentityId)}
                     line={line}
                     canManage={canManage}
                     revealed={revealed}

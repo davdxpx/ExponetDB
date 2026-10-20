@@ -21,71 +21,14 @@ vi.mock('../../src/shell/app-shell.tsx', async () => ({
   AppShell: (await import('../target/test-shell.tsx')).TestShell,
 }))
 
-// The editor is a lazy CodeMirror chunk (tested in packages/ui-data); here a text area stands in
-// and records what the page gives it: the mode, the diagnostics and whether Mod+Enter runs.
-vi.mock('@exponetdb/ui-data/editor/sql-editor', async () => {
-  const React = await import('react')
-  return {
-    SqlEditor: (props: {
-      value: string
-      onChange?: (value: string) => void
-      mode: string
-      label: string
-      diagnostics?: readonly { line: number; severity: string; message: string }[]
-      onRun?: () => void
-      ref?: React.Ref<unknown>
-    }) => {
-      React.useImperativeHandle(props.ref, () => ({
-        focus() {},
-        setSelection() {},
-        getSelectionText: () => '',
-      }))
-      return React.createElement('textarea', {
-        'aria-label': props.label,
-        'data-mode': props.mode,
-        'data-diagnostics': JSON.stringify(props.diagnostics ?? []),
-        value: props.value,
-        onChange: (event: { target: { value: string } }) => props.onChange?.(event.target.value),
-        onKeyDown: (event: {
-          key: string
-          ctrlKey: boolean
-          metaKey: boolean
-          preventDefault(): void
-        }) => {
-          if (
-            (event.ctrlKey || event.metaKey) &&
-            event.key === 'Enter' &&
-            props.onRun !== undefined
-          ) {
-            event.preventDefault()
-            props.onRun()
-          }
-        },
-      })
-    },
-  }
-})
-
-// The grid is a lazy TanStack chunk (tested in packages/ui-data); the stand-in shows what it got.
-vi.mock('@exponetdb/ui-data/grid/data-grid', async () => {
-  const React = await import('react')
-  return {
-    DataGrid: (props: {
-      columns: readonly { name: string; masked?: boolean }[]
-      rows: { state: string; value?: readonly unknown[] }
-      truncated?: { reason: string }
-    }) =>
-      React.createElement(
-        'div',
-        {
-          'data-testid': 'grid',
-          'data-state': props.rows.state,
-          'data-masked': props.columns.filter((c) => c.masked === true).length,
-        },
-        `${props.columns.length} columns, ${props.rows.value?.length ?? 0} rows`,
-      ),
-  }
-})
+// The editor and the grid are lazy chunks (tested in packages/ui-data); stand-ins that record what
+// the page gives them (see stand-ins.tsx).
+vi.mock('@exponetdb/ui-data/editor/sql-editor', async () =>
+  (await import('./stand-ins.tsx')).editorModule(),
+)
+vi.mock('@exponetdb/ui-data/grid/data-grid', async () =>
+  (await import('./stand-ins.tsx')).gridModule(),
+)
 
 const STAGING = 'shop/platform/staging'
 const SQL = '/t/shop/platform/staging/sql'

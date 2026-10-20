@@ -10,20 +10,24 @@ import {
   UntrustedText,
 } from '@exponetdb/ui-patterns'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useId, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { withReauth } from '../../lib/api/reauth.ts'
-import { t } from '../../lib/i18n/i18n.ts'
+import { describeError, t } from '../../lib/i18n/i18n.ts'
 import { toReadable } from '../../lib/query/readable.ts'
 import { actionError } from '../plans/failure.ts'
 import { nounPhrase } from '../target/phrases.ts'
 import { historyQuery, savedQuery, sqlKeys } from './keys.ts'
+import { SaveDialog, type SaveInput } from './save-dialog.tsx'
+import { RenameDialog, type SavedChange, SavedMenu, useSavedChanges } from './saved-menu.tsx'
+import { copyName } from './sql-model.ts'
+import { DRAFT_TEMPLATES, QUERY_TEMPLATES, type SqlTemplate } from './templates.ts'
 
 /**
  * The side of the workspace (Studio's SQL editor sidebar): the saved queries
- * of this target and its project, and the person's own read history of this
- * target from the audit. Opening an entry opens its text in a new tab and
- * never runs it.
+ * of this target and its project, the person's own read history of this
+ * target from the audit, and a few templates. Opening an entry opens its text
+ * in a new tab and never runs it.
  */
 interface Paged<T> {
   readonly items: readonly T[]
@@ -57,28 +61,47 @@ function usePaged<T>(
   }
 }
 
+type SideTab = 'saved' | 'history' | 'templates'
+
+function sideTabOf(value: string): SideTab {
+  return value === 'history' || value === 'templates' ? value : 'saved'
+}
+
 export function SidePanel(props: {
   readonly path: string
+  readonly projectId: string
   readonly onOpenText: (sql: string, origin: 'history') => void
   readonly onOpenSaved: (saved: SavedQuery) => void
+  readonly onOpenTemplate: (template: SqlTemplate) => void
+  /** A rename or a change of visibility was made; open tabs holding the query follow. */
+  readonly onSavedChanged: (change: SavedChange) => void
 }): ReactNode {
-  const [tab, setTab] = useState<'saved' | 'history'>('saved')
+  const [tab, setTab] = useState<SideTab>('saved')
   return (
     <aside
       aria-label={t('sql.side.label')}
       className="flex min-w-0 flex-col gap-3"
       data-block="sql-side"
     >
-      <Tabs value={tab} onValueChange={(next) => setTab(next === 'history' ? 'history' : 'saved')}>
+      <Tabs value={tab} onValueChange={(next) => setTab(sideTabOf(next))}>
         <TabsList>
           <TabsTrigger value="saved">{t('sql.saved.title')}</TabsTrigger>
           <TabsTrigger value="history">{t('sql.history.title')}</TabsTrigger>
+          <TabsTrigger value="templates">{t('sql.templates.title')}</TabsTrigger>
         </TabsList>
         <TabsContent value="saved" className="pt-3">
-          <SavedList path={props.path} onOpen={props.onOpenSaved} />
+          <SavedList
+            path={props.path}
+            projectId={props.projectId}
+            onOpen={props.onOpenSaved}
+            onChanged={props.onSavedChanged}
+          />
         </TabsContent>
         <TabsContent value="history" className="pt-3">
           <HistoryList path={props.path} onOpen={(sql) => props.onOpenText(sql, 'history')} />
+        </TabsContent>
+        <TabsContent value="templates" className="pt-3">
+          <TemplatesList onOpen={props.onOpenTemplate} />
         </TabsContent>
       </Tabs>
     </aside>
@@ -164,7 +187,9 @@ function HistoryItem(props: {
 
 function SavedList(props: {
   readonly path: string
+  readonly projectId: string
   readonly onOpen: (saved: SavedQuery) => void
+  readonly onChanged: (change: SavedChange) => void
 }): ReactNode {
   const { client } = useApi()
   const query = useInfiniteQuery(savedQuery(client, props.path))
@@ -183,7 +208,14 @@ function SavedList(props: {
           <div className="flex flex-col gap-2">
             <ul className="m-0 flex list-none flex-col gap-2 p-0">
               {value.items.map((saved) => (
-                <SavedItem key={saved.id} saved={saved} path={props.path} onOpen={props.onOpen} />
+                <SavedItem
+                  key={saved.id}
+                  saved={saved}
+                  path={props.path}
+                  projectId={props.projectId}
+                  onOpen={props.onOpen}
+                  onChanged={props.onChanged}
+                />
               ))}
             </ul>
             {value.hasMore ? (
@@ -198,14 +230,67 @@ function SavedList(props: {
   )
 }
 
+type ItemNote =
+  | { readonly kind: 'done'; readonly text: string }
+  | { readonly kind: 'failed'; readonly text: string }
+
 function SavedItem(props: {
   readonly saved: SavedQuery
   readonly path: string
+  readonly projectId: string
   readonly onOpen: (saved: SavedQuery) => void
+  readonly onChanged: (change: SavedChange) => void
 }): ReactNode {
   const { client, confirmIdentity } = useApi()
   const queryClient = useQueryClient()
+  const changes = useSavedChanges(props.path)
+  const nameId = useId()
+  const [dialog, setDialog] = useState<'rename' | 'copy' | undefined>(undefined)
+  const [note, setNote] = useState<ItemNote | undefined>(undefined)
+  const [busy, setBusy] = useState(false)
   const { saved } = props
+  const changeVisibility = async (visibility: SavedQuery['visibility']): Promise<void> => {
+    if (visibility === saved.visibility || busy) return
+    setBusy(true)
+    setNote(undefined)
+    try {
+      const change = await changes.setVisibility(saved.id, visibility)
+      props.onChanged(change)
+      setNote({
+        kind: 'done',
+        text:
+          change.after.visibility === 'personal'
+            ? t('sql.saved.nowPersonal', { revision: change.after.revision })
+            : t('sql.saved.nowShared', { revision: change.after.revision }),
+      })
+    } catch (error) {
+      setNote({ kind: 'failed', text: describeError(error) })
+    } finally {
+      setBusy(false)
+    }
+  }
+  const saveCopy = async (input: SaveInput): Promise<SavedQuery> => {
+    try {
+      const copy = await withReauth(client, confirmIdentity, () =>
+        client.operation('createSavedQuery', {
+          body: {
+            name: input.name,
+            sql: saved.sql,
+            visibility: input.visibility,
+            scope:
+              input.scope === 'target'
+                ? { kind: 'target', target: props.path }
+                : { kind: 'project', projectId: props.projectId },
+          },
+        }),
+      )
+      await queryClient.invalidateQueries({ queryKey: sqlKeys.saved(props.path) })
+      setNote({ kind: 'done', text: t('sql.saved.copySaved') })
+      return copy
+    } catch (error) {
+      throw actionError(error)
+    }
+  }
   const remove = async (): Promise<void> => {
     try {
       await withReauth(client, confirmIdentity, () =>
@@ -221,12 +306,14 @@ function SavedItem(props: {
       className="flex flex-col gap-1 rounded-md border border-default p-2 text-sm"
       data-saved={saved.id}
     >
-      <UntrustedName
-        name={saved.name}
-        maxCodePoints={120}
-        label={t('sql.saved.name')}
-        className="font-medium"
-      />
+      <span id={nameId}>
+        <UntrustedName
+          name={saved.name}
+          maxCodePoints={120}
+          label={t('sql.saved.name')}
+          className="font-medium"
+        />
+      </span>
       <p className="m-0 text-xs text-foreground-light">
         {[
           saved.visibility === 'project' ? t('sql.saved.project') : t('sql.saved.personal'),
@@ -258,6 +345,120 @@ function SavedItem(props: {
             onConfirm={remove}
           />
         ) : null}
+        {saved.ownedByCaller ? (
+          <SavedMenu
+            label={t('sql.saved.menu')}
+            describedBy={nameId}
+            visibility={saved.visibility}
+            busy={busy}
+            onRename={() => setDialog('rename')}
+            onVisibility={(visibility) => void changeVisibility(visibility)}
+            onCopy={() => setDialog('copy')}
+          />
+        ) : null}
+      </div>
+      {note === undefined ? null : (
+        <p
+          role={note.kind === 'failed' ? 'alert' : 'status'}
+          className="m-0 text-xs"
+          data-saved-note={note.kind}
+        >
+          {note.kind === 'failed' ? `${t('sql.saved.changeFailedTitle')}: ${note.text}` : note.text}
+        </p>
+      )}
+      {dialog === 'rename' ? (
+        <RenameDialog
+          open
+          onOpenChange={(open) => setDialog(open ? 'rename' : undefined)}
+          initialName={saved.name}
+          onRename={async (name) => {
+            const change = await changes.rename(saved.id, name)
+            props.onChanged(change)
+            setNote({
+              kind: 'done',
+              text: t('sql.saved.renamed', { revision: change.after.revision }),
+            })
+          }}
+        />
+      ) : null}
+      {dialog === 'copy' ? (
+        <SaveDialog
+          open
+          variant="copy"
+          onOpenChange={(open) => setDialog(open ? 'copy' : undefined)}
+          initialName={copyName(saved.name, (name) => t('sql.saved.copyName', { name }))}
+          initialVisibility={saved.visibility}
+          initialScope={saved.scope.kind}
+          onSave={saveCopy}
+        />
+      ) : null}
+    </li>
+  )
+}
+
+function TemplatesList(props: { readonly onOpen: (template: SqlTemplate) => void }): ReactNode {
+  return (
+    <div className="flex flex-col gap-3" data-block="sql-templates">
+      <p className="text-xs text-foreground-lighter">{t('sql.templates.note')}</p>
+      <TemplateGroup
+        heading={t('sql.templates.queryGroup')}
+        templates={QUERY_TEMPLATES}
+        onOpen={props.onOpen}
+      />
+      <TemplateGroup
+        heading={t('sql.templates.draftGroup')}
+        templates={DRAFT_TEMPLATES}
+        onOpen={props.onOpen}
+      />
+    </div>
+  )
+}
+
+function TemplateGroup(props: {
+  readonly heading: string
+  readonly templates: readonly SqlTemplate[]
+  readonly onOpen: (template: SqlTemplate) => void
+}): ReactNode {
+  const headingId = useId()
+  return (
+    <section aria-labelledby={headingId} className="flex flex-col gap-2">
+      <h3 id={headingId} className="m-0 text-xs font-medium">
+        {props.heading}
+      </h3>
+      <ul className="m-0 flex list-none flex-col gap-2 p-0">
+        {props.templates.map((template) => (
+          <TemplateItem key={template.id} template={template} onOpen={props.onOpen} />
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function TemplateItem(props: {
+  readonly template: SqlTemplate
+  readonly onOpen: (template: SqlTemplate) => void
+}): ReactNode {
+  const { template } = props
+  const titleId = useId()
+  return (
+    <li
+      className="flex flex-col gap-1 rounded-md border border-default p-2 text-sm"
+      data-template={template.id}
+      data-template-mode={template.mode}
+    >
+      <span id={titleId} className="font-medium">
+        {t(template.titleKey)}
+      </span>
+      <p className="m-0 text-xs text-foreground-light">{t(template.descriptionKey)}</p>
+      <div>
+        <Button
+          variant="outline"
+          size="tiny"
+          aria-describedby={titleId}
+          onClick={() => props.onOpen(template)}
+        >
+          {t('sql.templates.open')}
+        </Button>
       </div>
     </li>
   )

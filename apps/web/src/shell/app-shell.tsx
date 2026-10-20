@@ -29,25 +29,36 @@ import {
   SidebarSeparator,
   SidebarTrigger,
   useIsMobile,
+  usePanelRef,
   useSidebar,
 } from '@exponetdb/ui'
 import {
   CommandMenu,
   CommandMenuTriggerInput,
   CommandProvider,
+  ShortcutKeys,
   ShortcutProvider,
   UntrustedName,
+  useActiveShortcuts,
   useLinkComponent,
   useNavigate,
 } from '@exponetdb/ui-patterns'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouterState } from '@tanstack/react-router'
-import { Fragment, type ReactNode } from 'react'
+import { Fragment, type ReactNode, type RefObject, useEffect, useRef, useState } from 'react'
 import { ProfileAvatar } from '../features/account/avatar.tsx'
 import { displayNameOf, type ProfileMe } from '../features/account/profile-model.ts'
+import { installationQuery } from '../features/settings/keys.ts'
 import { TargetContextBar } from '../features/target/context-bar.tsx'
+import { forgetRecentTargets, pruneRecentTargets } from '../features/target/recent-storage.ts'
 import { useApi } from '../lib/api/context.tsx'
 import { t } from '../lib/i18n/i18n.ts'
+import {
+  readSectionMenuWidth,
+  rememberSectionMenuWidth,
+  SECTION_MENU_MAX_WIDTH,
+  SECTION_MENU_MIN_WIDTH,
+} from '../lib/preferences/section-menu.ts'
 import { setLetterShortcuts, useLetterShortcuts } from '../lib/preferences/shortcuts.ts'
 import {
   parseSidebarMode,
@@ -62,6 +73,7 @@ import {
 } from '../lib/preferences/theme.ts'
 import { useMe } from '../lib/session/guard.tsx'
 import { forgetSqlTabs } from '../lib/storage/sql-tabs.ts'
+import { ShellBreadcrumbs } from './breadcrumbs.tsx'
 import { ShellCommands } from './commands.tsx'
 import {
   isCurrent,
@@ -121,6 +133,19 @@ function ShellFrame({ children }: { readonly children: ReactNode }): ReactNode {
   const isMobile = useIsMobile()
   const section = sectionOf(pathname)
   const menu = section === undefined ? [] : sectionMenu(section.id)
+  const identityId = useMe().identity.id
+  const pageScroller = useRef<HTMLDivElement>(null)
+  // A recent-databases list belongs to the person who opened the databases: another person's
+  // list, left by a session that ended without a sign-out, goes when this person's page opens.
+  useEffect(() => pruneRecentTargets(identityId), [identityId])
+  // A new page starts at its top (a change of the address only, never of its query string).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the path is the trigger, not an input
+  useEffect(() => {
+    if (pageScroller.current !== null) pageScroller.current.scrollTop = 0
+    // `scrollingElement` is null (or, in some environments, undefined) without a rendered document.
+    const page = document.scrollingElement as Element | null | undefined
+    if (page) page.scrollTop = 0
+  }, [pathname])
   return (
     <SidebarProvider open={mode === 'open'} onOpenChange={toggleSidebarMode}>
       <a
@@ -179,30 +204,75 @@ function ShellFrame({ children }: { readonly children: ReactNode }): ReactNode {
         {/* Below md the section menu lives in the off-canvas rail; a panel group would still reserve its
             256 px (the panel's own inline `display: flex` beats a `hidden` class). */}
         {section !== undefined && menu.length > 0 && !isMobile ? (
-          <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
-            <ResizablePanel
-              id="section-menu"
-              defaultSize={256}
-              minSize={200}
-              maxSize={400}
-              groupResizeBehavior="preserve-pixel-size"
-              className="hidden md:block"
-            >
-              <SectionMenu section={section} items={menu} pathname={pathname} />
-            </ResizablePanel>
-            <ResizableHandle
-              className="hidden md:flex"
-              aria-label={t('shell.sectionMenu.resize')}
-            />
-            <ResizablePanel id="page" className="min-w-0">
-              <div className="h-full min-w-0 overflow-auto">{children}</div>
-            </ResizablePanel>
-          </ResizablePanelGroup>
+          <SectionMenuFrame
+            section={section}
+            items={menu}
+            pathname={pathname}
+            scroller={pageScroller}
+          >
+            {children}
+          </SectionMenuFrame>
         ) : (
-          <div className="min-w-0 flex-1">{children}</div>
+          <div ref={pageScroller} className="min-w-0 flex-1">
+            <ShellBreadcrumbs />
+            {children}
+          </div>
         )}
       </SidebarInset>
     </SidebarProvider>
+  )
+}
+
+/**
+ * The section menu beside the page, in a resizable panel. Its width is read when the panel
+ * appears and then left alone (the library takes `defaultSize` as the starting size); the width a
+ * person drags it to is kept per browser, and layouts the library sets itself (on mount, on a
+ * change of the window) are not a choice and are not kept.
+ */
+function SectionMenuFrame({
+  section,
+  items,
+  pathname,
+  scroller,
+  children,
+}: {
+  readonly section: NavSection
+  readonly items: readonly NavItem[]
+  readonly pathname: string
+  /** The element whose scroll position resets when the address changes. */
+  readonly scroller: RefObject<HTMLDivElement | null>
+  readonly children: ReactNode
+}): ReactNode {
+  const panel = usePanelRef()
+  const [width] = useState(readSectionMenuWidth)
+  return (
+    <ResizablePanelGroup
+      orientation="horizontal"
+      className="min-h-0 flex-1"
+      onLayoutChanged={(_layout, meta) => {
+        const pixels = panel.current?.getSize().inPixels
+        if (meta.isUserInteraction && pixels !== undefined) rememberSectionMenuWidth(pixels)
+      }}
+    >
+      <ResizablePanel
+        id="section-menu"
+        panelRef={panel}
+        defaultSize={width}
+        minSize={SECTION_MENU_MIN_WIDTH}
+        maxSize={SECTION_MENU_MAX_WIDTH}
+        groupResizeBehavior="preserve-pixel-size"
+        className="hidden md:block"
+      >
+        <SectionMenu section={section} items={items} pathname={pathname} />
+      </ResizablePanel>
+      <ResizableHandle className="hidden md:flex" aria-label={t('shell.sectionMenu.resize')} />
+      <ResizablePanel id="page" className="min-w-0">
+        <div ref={scroller} className="h-full min-w-0 overflow-auto">
+          <ShellBreadcrumbs />
+          {children}
+        </div>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   )
 }
 
@@ -217,11 +287,31 @@ function RailItem({
 }): ReactNode {
   const Link = useLinkComponent()
   const { isMobile } = useSidebar()
+  const letters = useLetterShortcuts()
+  const active = useActiveShortcuts()
   // On a small screen the rail is a sheet: the section pages are listed under their section.
   const pages = isMobile ? sectionMenu(section.id) : []
+  // The keys go in the tooltip only while they work: the letter shortcuts are on and the
+  // shortcut has a handler on this page (the registry knows the keys and the platform).
+  const hint = letters && active.includes(section.shortcut)
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild isActive={current} tooltip={section.label}>
+      <SidebarMenuButton
+        asChild
+        isActive={current}
+        tooltip={
+          hint
+            ? {
+                children: (
+                  <span className="flex items-center gap-3">
+                    <span>{section.label}</span>
+                    <ShortcutKeys shortcut={section.shortcut} />
+                  </span>
+                ),
+              }
+            : section.label
+        }
+      >
         <Link href={section.path} aria-current={currentness(section.path, pathname, current)}>
           <section.icon aria-hidden="true" />
           <span>{section.label}</span>
@@ -344,6 +434,7 @@ function AccountMenu(): ReactNode {
         // and no SQL tab text of it stays in this browser.
         queryClient.clear()
         forgetSqlTabs()
+        forgetRecentTargets()
         window.location.assign('/login')
       })
   }
@@ -411,7 +502,30 @@ function AccountMenu(): ReactNode {
         <DropdownMenuItem id="sign-out" onSelect={signOut}>
           {t('shell.signOut')}
         </DropdownMenuItem>
+        <AccountVersion />
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+/**
+ * The version of the app at the foot of the account menu, from the installation read made
+ * when the menu opens. It shows only while that read holds: a read that failed or has not
+ * arrived shows nothing here (Settings, Installation says what is wrong with it).
+ */
+function AccountVersion(): ReactNode {
+  const { client } = useApi()
+  const installation = useQuery(installationQuery(client))
+  if (!installation.isSuccess) return null
+  return (
+    <>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel
+        data-slot="app-version"
+        className="text-xs font-normal text-foreground-lighter"
+      >
+        {t('shell.account.version', { version: installation.data.version })}
+      </DropdownMenuLabel>
+    </>
   )
 }

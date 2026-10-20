@@ -60,6 +60,10 @@ describe('the activity page', () => {
     const w = world()
     const { queryClient } = mountOps(`/t/${TARGET}/activity`, w)
     await screen.findByRole('list', { name: 'Audit events of this target, newest first' })
+    // Both reads must have succeeded once before they fail: on a loaded machine the
+    // operations read could still be in its first fetch, which would then fail with no
+    // earlier read to show (a failed state, rightly not a stale one).
+    await screen.findByRole('table', { name: 'Operations on this target, newest first' })
     await staleAfterFailure(w, queryClient, [AUDIT, OPERATIONS], 'Audit events')
     expect(
       screen.getByRole('list', { name: 'Audit events of this target, newest first' }),

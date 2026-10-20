@@ -20,6 +20,7 @@ import {
   serverFor,
   type TestServer,
   testTargets,
+  withSuperuser,
 } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
@@ -42,7 +43,9 @@ import {
   findingView,
   type HealthDeps,
   latestSnapshot,
+  listDriftChecks,
   listFindings,
+  listSchemaObjectsView,
   listSessions,
   loadDocument,
   lockGraph,
@@ -118,6 +121,33 @@ async function fresh(t: TargetRecord): Promise<TargetRecord> {
   const found = await findTarget(h.worker, t.targetId)
   if (found === undefined) throw new Error('target vanished')
   return found
+}
+
+// Sessions a few seconds short of a health condition (idle in a transaction or waiting on a
+// lock for 10 s, active for 30 s or more; health.md §3).
+const NEAR_A_CONDITION = `SELECT pid, datname, application_name, state, wait_event_type
+  FROM pg_catalog.pg_stat_activity
+ WHERE backend_type = 'client backend' AND pid <> pg_catalog.pg_backend_pid()
+   AND ((state IN ('idle in transaction', 'idle in transaction (aborted)') OR wait_event_type = 'Lock')
+          AND clock_timestamp() - state_change >= interval '2 seconds'
+        OR state = 'active' AND clock_timestamp() - query_start >= interval '20 seconds')`
+
+/**
+ * The activity probe reads the whole cluster, and pg17 is shared with the other suites: a
+ * migration test holding a table lock in an open transaction makes every target on it
+ * degraded while it holds. A sample that must find the cluster quiet waits until no session
+ * is near a condition, so none can reach one before the sample reads.
+ */
+async function quietCluster(): Promise<void> {
+  const deadline = Date.now() + 30_000
+  await withSuperuser(pg17, 'postgres', async (c) => {
+    for (;;) {
+      const busy = (await c.query(NEAR_A_CONDITION)).rows
+      if (busy.length === 0) return
+      if (Date.now() > deadline) throw new Error(`pg17 stayed busy: ${JSON.stringify(busy)}`)
+      await new Promise((r) => setTimeout(r, 250))
+    }
+  })
 }
 
 async function registerTarget(envSlug: string, label: string): Promise<TargetRecord> {
@@ -244,6 +274,54 @@ describe('schema reads', () => {
     expect(paged.nextCursor).not.toBeNull()
     const next = searchSchemaView(current, { q: 'o' }, { limit: 1, cursor: paged.nextCursor ?? '' })
     expect(next.items[0]).not.toEqual(paged.items[0])
+  })
+
+  it('lists the objects of the live snapshot without a search term, hostile names as data, filters and parents included', async () => {
+    const current = await currentSchema(snapshotDeps(), target)
+    const all = listSchemaObjectsView(current, {}, { limit: 200 })
+    expect(all.total).toBe(current.document.entries.length)
+    expect(all).toMatchObject({
+      nextCursor: null,
+      fingerprint: current.snapshot.fingerprint,
+      complete: true,
+      source: current.source,
+      observedAt: current.snapshot.takenAt,
+    })
+    expect(all.items.map((i) => i.name)).toContain(HOSTILE)
+    const tables = listSchemaObjectsView(
+      current,
+      { kinds: ['table'], schema: 'public' },
+      { limit: 1 },
+    )
+    expect(tables.total).toBe(2)
+    expect(tables.items).toHaveLength(1)
+    const rest = listSchemaObjectsView(
+      current,
+      { kinds: ['table'], schema: 'public' },
+      { limit: 5, cursor: tables.nextCursor ?? '' },
+    )
+    expect([...tables.items, ...rest.items].map((i) => i.name)).toEqual(
+      ['accounts', HOSTILE].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b))),
+    )
+    // The children of one table (columns, constraints, its index, its policy) name it as the parent.
+    const children = listSchemaObjectsView(
+      current,
+      { schema: 'public', parent: 'accounts' },
+      { limit: 50 },
+    )
+    expect(children.items.length).toBeGreaterThanOrEqual(5)
+    expect(children.items.every((i) => i.parent === 'accounts' && i.schema === 'public')).toBe(true)
+    expect(new Set(children.items.map((i) => i.kind))).toEqual(
+      new Set(['column', 'constraint', 'index', 'policy']),
+    )
+    // The schema outside the managed scope is not part of the snapshot, so it lists nothing.
+    expect(listSchemaObjectsView(current, { schema: 'audit_archive' }, { limit: 5 }).total).toBe(0)
+    // The same rule as the search finds the same objects.
+    const found = searchSchemaView(current, { q: 'ACCOUNTS' }, { limit: 200 }).items
+    const listed = listSchemaObjectsView(current, { q: 'ACCOUNTS' }, { limit: 200 }).items
+    expect(listed.map((i) => JSON.stringify(i.key)).sort()).toEqual(
+      found.map((i) => JSON.stringify(i.key)).sort(),
+    )
   })
 
   it('details a table from the document with its comment and size read live', async () => {
@@ -392,6 +470,56 @@ describe('drift against the registration baseline', () => {
   })
 })
 
+describe('the history of the drift checks', () => {
+  it('lists every check of the target newest first, with who asked, the stored counts and the failures', async () => {
+    const page = await listDriftChecks(h.serve, target, { limit: 50 })
+    // The checks above, in the order they ran, newest first.
+    expect(page.items.map((c) => c.status)).toEqual([
+      'failed',
+      'clean',
+      'failed',
+      'drifted',
+      'drifted',
+      'clean',
+    ])
+    expect(page.nextCursor).toBeNull()
+    expect(page.items.every((c) => c.requestedBy === 'schedule' && c.generation === 1)).toBe(true)
+    const [broke, resolved, readFailed, second, first] = page.items
+    // A check that broke outside the read knows neither fingerprint; a read that failed still knows its baseline.
+    expect(broke).toMatchObject({
+      errorCode: 'INTERNAL',
+      baselineFingerprint: null,
+      currentFingerprint: null,
+    })
+    expect(readFailed).toMatchObject({ errorCode: 'TARGET_UNAVAILABLE', currentFingerprint: null })
+    expect(readFailed?.baselineFingerprint).toMatch(/^fp1:17:[0-9a-f]{64}$/)
+    expect(resolved).toMatchObject({ drifted: 0, resolved: 2, opened: 0 })
+    expect(second).toMatchObject({ drifted: 2, opened: 0, updated: 2 })
+    expect(first).toMatchObject({ drifted: 2, opened: 2, updated: 0 })
+    // Times are the stored ones: ordered, and a check ends no earlier than it began.
+    const ends = page.items.map((c) => Date.parse(c.finishedAt))
+    expect(ends).toEqual([...ends].sort((x, y) => y - x))
+    expect(page.items.every((c) => Date.parse(c.finishedAt) >= Date.parse(c.startedAt))).toBe(true)
+    // Paging continues after the last row shown, without a repeat or a gap.
+    const one = await listDriftChecks(h.serve, target, { limit: 4 })
+    expect(one.items).toHaveLength(4)
+    const two = await listDriftChecks(h.serve, target, { limit: 4, cursor: one.nextCursor ?? '' })
+    expect([...one.items, ...two.items].map((c) => c.checkId)).toEqual(
+      page.items.map((c) => c.checkId),
+    )
+    expect(two.nextCursor).toBeNull()
+    // Another target's checks are not part of it, and a target never checked has none.
+    const other = await registerTarget('nochecks', 'diag_nochecks')
+    expect(await listDriftChecks(h.serve, other, { limit: 5 })).toEqual({
+      items: [],
+      nextCursor: null,
+    })
+    await expect(
+      listDriftChecks(h.serve, target, { limit: 5, cursor: 'garbage' }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' })
+  })
+})
+
 describe('drift finding cap', () => {
   it('keeps an open finding when the cap leaves its replacement out of the check', async () => {
     const capped = await registerTarget('cap', 'diag_cap')
@@ -433,6 +561,7 @@ describe('health sampler', () => {
   })
 
   it('samples a healthy target on every path and records status and history', async () => {
+    await quietCluster()
     const o = await sampleTarget(healthDeps(), await fresh(target))
     expect(o?.result.state).toBe('healthy')
     const status = (await readStatuses(h.serve, [target.targetId])).get(target.targetId)
@@ -450,6 +579,17 @@ describe('health sampler', () => {
       'settings',
       'simple',
     ])
+    // The connections the sample measured, with its time: real numbers from the server, not a threshold.
+    expect(view.capacity).toMatchObject({
+      source: 'sampled',
+      observedAt: status?.observedAt,
+      clientBackends: expect.any(Number),
+      usableSlots: expect.any(Number),
+    })
+    expect(view.capacity?.usableSlots).toBeGreaterThan(0)
+    expect(view.conditions.some((c) => c.condition.startsWith('connections_'))).toBe(false)
+    // What carries the numbers in the stored probes never reaches the public probe shape.
+    expect(view.probes.every((p) => !('values' in p))).toBe(true)
     const { rows } = await h.worker.query(
       'test.diag.samples',
       'SELECT count(*)::int AS n FROM observation.health_samples WHERE target_id = $1',
@@ -478,6 +618,7 @@ describe('health sampler', () => {
         : ''
     proxy.setMode({ kind: 'hang_extended' })
     try {
+      await quietCluster()
       const o = await sampleTarget(healthDeps({ probeDeadlineMs: 800 }), await fresh(target))
       expect(o?.result.state).toBe('unhealthy')
       expect(o?.result.conditions).toEqual([
@@ -541,6 +682,10 @@ describe('health sampler', () => {
       expect(o?.result.conditions.map((c) => c.condition)).toContain('activity_unreadable')
       const activity = o?.result.probes.filter((p) => p.probe === 'activity')
       expect(activity?.every((p) => p.outcome !== 'ok')).toBe(true)
+      // Without the activity read there are no connections to report: absent, not 0.
+      const status = (await readStatuses(h.serve, [target.targetId])).get(target.targetId)
+      expect(status?.capacity).toBeNull()
+      expect('capacity' in targetHealthView(await fresh(target), status)).toBe(false)
     } finally {
       await runAsSuperuser(pg17, database, [
         'GRANT SELECT ON pg_catalog.pg_stat_activity TO PUBLIC',
@@ -548,6 +693,7 @@ describe('health sampler', () => {
     }
     const live = await listSessions(snapshotDeps(), await fresh(target))
     expect(live).toMatchObject({ source: 'live', truncated: false })
+    await quietCluster()
     const back = await sampleTarget(healthDeps(), await fresh(target))
     expect(back?.result.state).toBe('healthy')
   })
@@ -557,6 +703,7 @@ describe('health sampler', () => {
     await runAsSuperuser(pg17, other.placement?.databaseName ?? '', [
       'DROP SCHEMA exponetdb CASCADE',
     ])
+    await quietCluster()
     const o = await sampleTarget(healthDeps(), await fresh(other))
     expect(o).toMatchObject({ suspensionRequested: true, result: { state: 'suspended' } })
     // A second sample before the worker ran plans nothing new.

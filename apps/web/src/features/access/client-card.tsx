@@ -29,7 +29,10 @@ import { actionFailed, type StatusLine } from './status.tsx'
  * name carries "name not verified" unless the client is first party. Each
  * decision goes through a confirmation that states its consequence, then
  * through re-authentication when the server asks for a fresh proof; the
- * outcome is said in the page's status line.
+ * outcome is said in the page's status line. The last use and the number of
+ * active grants are the client's own fields (`lastUsedAt`, `activeGrantCount`,
+ * set by the list read); a server that sends neither is said not to report
+ * them, and a client with no recorded use is never called "never used".
  */
 /**
  * A client_id or a redirect URI is shown whole, up to the contract's limit:
@@ -145,9 +148,7 @@ export function ClientCard({
     {
       id: 'last-used',
       label: t('access.client.lastUsed'),
-      value: (
-        <span className="text-foreground-lighter">{t('access.client.lastUsed.unreported')}</span>
-      ),
+      value: <UseSummary client={client} />,
     },
   ]
 
@@ -176,6 +177,43 @@ export function ClientCard({
         <ClientActions client={client} decisions={decisions} line={line} hosts={hosts} />
       ) : null}
     </li>
+  )
+}
+
+/**
+ * The last use and the active grants of a client, from the client itself:
+ * the latest minute any of its grants authenticated a request (also revoked
+ * and expired grants count) and how many grants are active. A field the
+ * server did not send is "not reported", never zero or "never"; a recorded
+ * `null` is "no use recorded", which is not proof the client was never used.
+ */
+function UseSummary({ client }: { readonly client: OAuthClient }): ReactNode {
+  const { lastUsedAt, activeGrantCount } = client
+  return (
+    <span
+      className="flex flex-col gap-0.5"
+      data-use={lastUsedAt === undefined ? 'unreported' : 'reported'}
+    >
+      <span data-slot="last-used">
+        {lastUsedAt === undefined ? (
+          <span className="text-foreground-lighter">{t('access.client.lastUsed.notReported')}</span>
+        ) : lastUsedAt === null ? (
+          <span className="text-foreground-lighter">{t('access.client.lastUsed.none')}</span>
+        ) : (
+          <TimestampInfo timestamp={lastUsedAt} />
+        )}
+      </span>
+      <span data-slot="active-grants">
+        {activeGrantCount === undefined
+          ? t('access.client.use.activeGrants.notReported')
+          : activeGrantCount === 1
+            ? t('access.client.use.activeGrants.one')
+            : t('access.client.use.activeGrants.many', { count: activeGrantCount })}
+      </span>
+      {lastUsedAt === undefined && activeGrantCount === undefined ? null : (
+        <span className="text-xs text-foreground-lighter">{t('access.client.use.source')}</span>
+      )}
+    </span>
   )
 }
 

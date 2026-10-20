@@ -4,10 +4,13 @@ import {
   type KeyValueItem,
   KeyValueList,
   TimestampInfo,
+  TypedConfirmDialog,
   UntrustedName,
 } from '@exponetdb/ui-patterns'
-import type { ReactNode } from 'react'
+import { type ReactNode, useId, useState } from 'react'
+import { usePlanAction } from '../../lib/api/plan-action.ts'
 import { t } from '../../lib/i18n/i18n.ts'
+import { nounPhrase } from '../target/phrases.ts'
 import { useAccessAction } from './actions.ts'
 import { ApiKeySecret, type RevealedKey } from './api-key-secret.tsx'
 import { toApiKeyRequest, toGrantRequest } from './authority.ts'
@@ -18,21 +21,34 @@ import {
   apiKeyLine,
   grantLine,
   keySummary,
+  type MachineGrant,
+  restrictionsLine,
   type ServiceAccount,
   serviceStateLabel,
+  targetsText,
 } from './model.ts'
+import { peopleKeys } from './people-keys.ts'
+import { type Identity, identityName, reasonBody } from './people-model.ts'
 import { PublicKeysForm } from './public-keys-form.tsx'
+import { ReasonField } from './reason-field.tsx'
 import { actionFailed, type StatusLine } from './status.tsx'
 
 /**
  * One service account (`li[data-service]`, identity.md §5): its client and
- * public keys, its machine grant and its API keys. Every change needs
- * `access.manage` and a fresh proof; a new API key's secret is shown once in
- * this card (`#api-key-secret`) and held by the page, not here, so a refresh
- * of the list cannot drop or repeat it.
+ * public keys, its machine grant and its API keys, and the lifecycle of the
+ * account itself. Every change needs `access.manage` and a fresh proof; a new
+ * API key's secret is shown once in this card (`#api-key-secret`) and held by
+ * the page, not here, so a refresh of the list cannot drop or repeat it.
+ *
+ * Disabling is inline (a confirmation with an optional audit reason and a
+ * fresh proof); enabling again and erasing are plans, and erasing asks for
+ * the account's name to be typed. The responsible person is shown by name
+ * when the people read gave one, else by ID.
  */
 export interface ServiceAccountCardProps {
   readonly account: ServiceAccount
+  /** The responsible person, when the identities read has them. */
+  readonly responsible: Identity | undefined
   readonly line: StatusLine
   readonly canManage: boolean
   /** The secret to show once, when it belongs to this account. */
@@ -44,6 +60,7 @@ export interface ServiceAccountCardProps {
 
 export function ServiceAccountCard({
   account,
+  responsible,
   line,
   canManage,
   revealed,
@@ -65,7 +82,13 @@ export function ServiceAccountCard({
     {
       id: 'responsible',
       label: t('access.service.responsible'),
-      value: <code className="font-mono text-xs">{account.responsibleIdentityId}</code>,
+      value:
+        responsible === undefined ? (
+          <code className="font-mono text-xs">{account.responsibleIdentityId}</code>
+        ) : (
+          <UntrustedName name={identityName(responsible)} label={t('access.service.responsible')} />
+        ),
+      copyText: account.responsibleIdentityId,
     },
     {
       id: 'created',
@@ -126,11 +149,9 @@ export function ServiceAccountCard({
         {account.grants.length === 0 ? (
           <p className="text-sm text-foreground-lighter">{t('access.service.grants.none')}</p>
         ) : (
-          <ul className="list flex flex-col gap-1 text-sm">
+          <ul className="list flex flex-col gap-2 text-sm">
             {account.grants.map((grant) => (
-              <li key={grant.id} className="font-mono text-xs text-foreground">
-                {grantLine(grant)}
-              </li>
+              <GrantRow key={grant.id} grant={grant} canManage={canManage} line={line} />
             ))}
           </ul>
         )}
@@ -228,6 +249,10 @@ export function ServiceAccountCard({
           <ApiKeySecret revealed={revealed} onHide={onHideSecret} />
         ) : null}
       </section>
+
+      {canManage && account.state !== 'erased' ? (
+        <AccountActions account={account} line={line} />
+      ) : null}
     </li>
   )
 }
@@ -252,6 +277,9 @@ function ApiKeyRow({
           )}
         </span>
         <span className="meta font-mono text-xs text-foreground-light">{apiKeyLine(apiKey)}</span>
+        <span className="restriction text-xs text-foreground-light">
+          {restrictionsLine(apiKey.restrictions)}
+        </span>
       </span>
       {canManage && apiKey.state === 'active' ? (
         <ConfirmDialog
@@ -273,5 +301,189 @@ function ApiKeyRow({
         />
       ) : null}
     </li>
+  )
+}
+
+/**
+ * A machine grant of the account: its scopes, tiers and expiry, where it may
+ * act, and, while it is active, the way to end it at once (an optional
+ * reason is kept in the audit, permanently). Revoking ends every token of the
+ * grant, as on the Connected applications page.
+ */
+function GrantRow({
+  grant,
+  canManage,
+  line,
+}: {
+  readonly grant: MachineGrant
+  readonly canManage: boolean
+  readonly line: StatusLine
+}): ReactNode {
+  const action = useAccessAction()
+  const reasonId = useId()
+  const [reason, setReason] = useState('')
+  return (
+    <li
+      className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"
+      data-machine-grant={grant.id}
+    >
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="font-mono text-xs text-foreground">{grantLine(grant)}</span>
+        <span className="restriction text-xs text-foreground-light">
+          {targetsText(grant.restrictions)}
+        </span>
+      </span>
+      {canManage && grant.state === 'active' ? (
+        <ConfirmDialog
+          trigger={
+            <Button
+              type="button"
+              variant="text"
+              size="tiny"
+              aria-label={t('access.service.grant.revoke.label', { id: grant.id })}
+            >
+              {t('access.service.grant.revoke')}
+            </Button>
+          }
+          title={t('access.service.grant.revoke.title')}
+          description={t('access.service.grant.revoke.body')}
+          actionLabel={t('access.service.grant.revoke.action')}
+          destructive
+          onOpenChange={(open) => {
+            if (!open) setReason('')
+          }}
+          onConfirm={async () => {
+            line.clear()
+            try {
+              await action.run(
+                () =>
+                  action.client.operation('revokeGrant', {
+                    params: { grantId: grant.id },
+                    body: reasonBody(reason),
+                  }),
+                accessKeys.serviceAccounts,
+              )
+            } catch (error) {
+              throw actionFailed(error)
+            }
+            setReason('')
+            // The same grant is on the Connected applications page: that list is read again too.
+            void action.refresh(peopleKeys.grantsAll)
+            line.say(t('access.service.grant.revoke.done'))
+          }}
+        >
+          <ReasonField id={reasonId} value={reason} onChange={setReason} maxLength={500} />
+        </ConfirmDialog>
+      ) : null}
+    </li>
+  )
+}
+
+/**
+ * The lifecycle of the account, as the People page has it for a person:
+ * disable at once (confirmation, optional reason, fresh proof), plan enabling
+ * again, plan erasing with the account's name typed. Plans open their review
+ * page; nothing changes until a plan is approved and applied there.
+ */
+function AccountActions({
+  account,
+  line,
+}: {
+  readonly account: ServiceAccount
+  readonly line: StatusLine
+}): ReactNode {
+  const action = useAccessAction()
+  const createPlan = usePlanAction()
+  const reasonId = useId()
+  const [reason, setReason] = useState('')
+  const params = { identityId: account.id }
+  // An empty name cannot be typed: the audit label stands in for it.
+  const typedName =
+    account.displayName !== null && account.displayName !== '' ? account.displayName : account.label
+
+  const plan = async (create: () => Promise<{ readonly id: string }>): Promise<void> => {
+    line.clear()
+    try {
+      await createPlan(create)
+    } catch (error) {
+      throw actionFailed(error)
+    }
+  }
+
+  return (
+    <section className="flex flex-col gap-3">
+      <h3 className="text-sm font-medium text-foreground">{t('access.service.lifecycle.title')}</h3>
+      <p className="text-sm text-foreground-light">{t('access.service.lifecycle.description')}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        {account.state === 'active' || account.state === 'invited' ? (
+          <ConfirmDialog
+            trigger={
+              <Button type="button" variant="danger" size="small">
+                {t('access.service.disable')}
+              </Button>
+            }
+            title={t('access.service.disable.title')}
+            description={t('access.service.disable.body')}
+            actionLabel={t('access.service.disable.action')}
+            destructive
+            onOpenChange={(open) => {
+              if (!open) setReason('')
+            }}
+            onConfirm={async () => {
+              line.clear()
+              try {
+                await action.run(
+                  () =>
+                    action.client.operation('disableIdentity', {
+                      params,
+                      body: reasonBody(reason),
+                    }),
+                  accessKeys.serviceAccounts,
+                )
+              } catch (error) {
+                throw actionFailed(error)
+              }
+              setReason('')
+              void action.refresh(peopleKeys.identities)
+              line.say(t('access.service.disable.done'))
+            }}
+          >
+            <ReasonField id={reasonId} value={reason} onChange={setReason} maxLength={1000} />
+          </ConfirmDialog>
+        ) : null}
+        {account.state === 'disabled' ? (
+          <ConfirmDialog
+            trigger={
+              <Button type="button" variant="default" size="small">
+                {t('access.service.enable')}
+              </Button>
+            }
+            title={t('access.service.enable.title')}
+            description={t('access.service.enable.body')}
+            actionLabel={t('access.service.enable.action')}
+            onConfirm={() =>
+              plan(() => action.client.operation('planIdentityEnable', { params, body: {} }))
+            }
+          />
+        ) : null}
+        <TypedConfirmDialog
+          trigger={
+            <Button type="button" variant="text" size="small">
+              {t('access.service.erase')}
+            </Button>
+          }
+          title={t('access.service.erase.title')}
+          description={t('access.service.erase.body')}
+          actionLabel={t('access.service.erase.action')}
+          destructive
+          expectedText={typedName}
+          expectedTextName={nounPhrase('access.service.erase.typed')}
+          resetKey={account.id}
+          onConfirm={() =>
+            plan(() => action.client.operation('planIdentityErasure', { params, body: {} }))
+          }
+        />
+      </div>
+    </section>
   )
 }

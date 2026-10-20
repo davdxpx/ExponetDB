@@ -1,10 +1,15 @@
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
 import { BIDI, iso, mountApp, targetFixture, World } from '../fleet/support.tsx'
 
-afterEach(cleanup)
+// The sort and the view a person chooses are remembered by the browser: no test starts with another's.
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+  window.localStorage.clear()
+})
 
 function seeded(): World {
   const world = new World()
@@ -66,7 +71,12 @@ describe('the targets list', () => {
     const world = seeded()
     mountApp('/targets', world)
     await screen.findByRole('table', { name: 'Targets' })
-    expect(world.apiRequests.map((r) => r.path)).toEqual(['/api/v1/targets?limit=200'])
+    const paths = world.apiRequests.map((r) => r.path)
+    // One list read, however many targets; the filters read the product and project lists once.
+    expect(paths.filter((path) => path.startsWith('/api/v1/targets'))).toEqual([
+      '/api/v1/targets?limit=200',
+    ])
+    expect(paths.filter((path) => /\/targets\/[^?]/.test(path))).toEqual([])
   })
 
   it('follows the cursor to the next page of the list', async () => {
@@ -146,7 +156,7 @@ describe('the targets list', () => {
     expect(await screen.findByRole('table', { name: 'Targets' })).toBeInTheDocument()
   })
 
-  it('names the infrastructure entry points and says where their forms come from', async () => {
+  it('links the infrastructure pages where servers, clusters and nodes are registered, with no note that they are missing', async () => {
     mountApp('/targets', seeded())
     await screen.findByRole('table', { name: 'Targets' })
     const nav = screen.getByRole('navigation', { name: 'Register' })
@@ -162,7 +172,8 @@ describe('the targets list', () => {
       'href',
       '/infrastructure/nodes',
     )
-    expect(nav.textContent).toContain('come with the infrastructure screens')
+    expect(document.body.textContent).not.toContain('come with the infrastructure screens')
+    expect(nav.textContent).not.toMatch(/come with|not available/)
   })
 })
 

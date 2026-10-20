@@ -14,7 +14,7 @@ import { configure, render } from '@testing-library/react'
 import { vi } from 'vitest'
 import { AppProviders } from '../../src/app/providers.tsx'
 import { createReauthBridge } from '../../src/features/reauth/reauth.tsx'
-import { ApiClient } from '../../src/lib/api/client.ts'
+import { ApiClient, type ResponseOf } from '../../src/lib/api/client.ts'
 import { createQueryClient } from '../../src/lib/query/client.ts'
 import { routeTree } from '../../src/routeTree.gen.ts'
 import { answer, World as TargetWorld } from '../target/support.tsx'
@@ -41,7 +41,11 @@ const minutesAgo = (minutes: number): string =>
 
 export { minutesAgo }
 
+export type NodeStatus = ResponseOf<'getNode'>
+
 export class World extends TargetWorld {
+  /** Node status by node id (`getNode`). */
+  readonly nodes = new Map<string, NodeStatus>()
   history: TargetHealthHistory | undefined
   findings: Finding[] = []
   findingsNext: string | null = null
@@ -54,6 +58,15 @@ export class World extends TargetWorld {
   /** What a search finds: every ref whose name contains the term and whose kind is asked for. */
   refs: SchemaObjectRef[] = []
   searchNext: string | null = null
+  /** The fingerprint of the snapshot `GET /schema/objects` reads; a cursor made under another one is a 409. */
+  objectsFingerprint = `fp1:17:${'ab'.repeat(32)}`
+  /** Smaller than the client's page size when a test needs a second page without 100 refs. */
+  objectsPageSize: number | undefined
+  /** `complete` of the snapshot the list reads. */
+  objectsComplete = true
+  objectsSource = 'live'
+  /** `observedAt` of the snapshot the list reads; unset, now. */
+  objectsObservedAt: string | undefined
   /** Object details by `kind|qualifiedName`. */
   readonly objects = new Map<string, SchemaObject>()
   readonly extra: string[] = []
@@ -111,6 +124,57 @@ export function answerMore(world: World, input: string | URL | Request): Respons
       return mine(world.overview) as Response
     case 'schema/fingerprint':
       return mine(world.fingerprint) as Response
+    case 'schema/objects': {
+      world.requests.push(request)
+      world.extra.push(request)
+      for (const [part, failure] of world.failures) {
+        if (request.includes(part)) {
+          return json(failure.status, {
+            code: failure.code,
+            message: failure.message ?? `${failure.code} happened.`,
+          })
+        }
+      }
+      const q = (url.searchParams.get('q') ?? '').toLowerCase()
+      const kinds = url.searchParams.getAll('kinds')
+      const schema = url.searchParams.get('schema')
+      const parent = url.searchParams.get('parent')
+      const cursor = url.searchParams.get('cursor')
+      let offset = 0
+      if (cursor !== null) {
+        const [at, snapshot] = cursor.split('_')
+        if (snapshot !== world.objectsFingerprint.slice(-8)) {
+          return json(409, {
+            code: 'SCHEMA_FINGERPRINT_MISMATCH',
+            message: 'The schema changed between the pages. Start again.',
+          })
+        }
+        offset = Number(at)
+      }
+      const matches = world.refs
+        .filter(
+          (ref) =>
+            ref.name.toLowerCase().includes(q) &&
+            (kinds.length === 0 || kinds.includes(ref.kind)) &&
+            (schema === null || ref.schema === schema) &&
+            (parent === null || ref.parent === parent),
+        )
+        .sort((a, b) => (a.schema + a.kind + a.name < b.schema + b.kind + b.name ? -1 : 1))
+      const limit = Math.min(
+        Number(url.searchParams.get('limit') ?? '100'),
+        world.objectsPageSize ?? 200,
+      )
+      const next = offset + limit
+      return json(200, {
+        items: matches.slice(offset, next),
+        nextCursor: next < matches.length ? `${next}_${world.objectsFingerprint.slice(-8)}` : null,
+        total: matches.length,
+        fingerprint: world.objectsFingerprint,
+        complete: world.objectsComplete,
+        source: world.objectsSource,
+        observedAt: world.objectsObservedAt ?? NOW(),
+      })
+    }
     case 'schema/search': {
       const q = (url.searchParams.get('q') ?? '').toLowerCase()
       const kinds = url.searchParams.getAll('kinds')
@@ -123,6 +187,8 @@ export function answerMore(world: World, input: string | URL | Request): Respons
     default:
       break
   }
+  const node = /^\/api\/v1\/nodes\/([^/]+)$/.exec(url.pathname)
+  if (node?.[1] !== undefined) return mine(world.nodes.get(decodeURIComponent(node[1]))) as Response
   const object = /^\/api\/v1\/targets\/[^/]+\/schema\/objects\/([^/]+)\/(.+)$/.exec(url.pathname)
   if (object?.[1] !== undefined && object[2] !== undefined) {
     const key = `${decodeURIComponent(object[1])}|${decodeURIComponent(object[2])}`
@@ -173,6 +239,44 @@ export function mountApp(initialPath: string, world: World) {
 // ----- fixtures -----
 
 export const PROJECT_ID = 'prj_00000000000000000000000001'
+export const NODE_ID = 'nod_00000000000000000000000001'
+
+/** A node that reports its host: load, memory and disk, with the time of the report. */
+export function nodeFixture(over: Partial<NodeStatus> = {}): NodeStatus {
+  return {
+    id: NODE_ID,
+    serverId: 'srv_00000000000000000000000001',
+    state: 'active',
+    agentVersion: '1.0.0',
+    protocolMajor: 1,
+    lastHeartbeatAt: NOW(),
+    clockSkewMs: 12,
+    capabilities: [],
+    clusters: [],
+    host: {
+      loadAverage1m: 0.42,
+      memoryUsedBytes: Math.round(3.1 * 1024 ** 3),
+      diskUsedPercent: 61,
+    },
+    nodeCertificateExpiresAt: null,
+    source: 'agent_reported',
+    observedAt: NOW(),
+    ...over,
+  }
+}
+
+/** The placement of a target whose cluster a node agent manages (or an external one). */
+export function placementFixture(mode: 'agent' | 'external' = 'agent') {
+  return {
+    clusterId: 'cls_00000000000000000000000001',
+    clusterName: 'main',
+    generation: 1,
+    managementMode: mode,
+    postgresVersion: '17.2',
+    serverName: 'db-01',
+    since: '2026-10-01T00:00:00.000Z',
+  } as const
+}
 
 export function historyFixture(over: Partial<TargetHealthHistory> = {}): TargetHealthHistory {
   const base = Date.parse('2026-10-13T10:00:00.000Z')

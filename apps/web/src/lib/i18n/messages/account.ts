@@ -154,7 +154,6 @@ export const accountMessages = {
 
   'accountArea.nav': 'Account sections',
   'accountArea.profile': 'Profile',
-  'profile.heading': 'Profile',
   'profile.name.heading': 'Display name',
   'profile.name.hint':
     'The name you choose is shown instead of the name from your invitation. One line, at most 64 characters.',
@@ -168,7 +167,6 @@ export const accountMessages = {
   'profile.picture.heading': 'Profile picture',
   'profile.picture.hint':
     'A PNG, JPEG or WebP image of at most 256 KiB, 32 to 1024 pixels each way. The picture is stored by ExponetDB and is not animated.',
-  'profile.picture.choose': 'Choose a picture',
   'profile.picture.label': 'Picture file',
   'profile.picture.preview': 'Preview of the chosen picture',
   'profile.picture.upload': 'Upload picture',
@@ -195,7 +193,6 @@ export const accountMessages = {
   'profile.picture.reason.empty': 'The file is empty. Choose another file.',
   'profile.picture.reason.unknown': 'The server did not accept this picture. Choose another file.',
 
-  'preferences.heading': 'Preferences',
   'preferences.note': 'These choices are kept in this browser only.',
   'preferences.theme': 'Theme',
   'preferences.sidebar': 'Sidebar',
@@ -205,15 +202,10 @@ export const accountMessages = {
     'Sequences such as G then T. Turn them off if they clash with assistive technology.',
   'preferences.shortcuts.show': 'Show keyboard shortcuts',
 
-  'security.heading': 'Security',
-
-  'applications.heading': 'Connected applications',
-
   'account.activity.heading': 'Your activity',
   'account.activity.description': 'Audit events with you as the actor, newest first.',
   'account.activity.what': 'Your activity',
   'account.activity.none': 'The audit has no event with you as the actor.',
-  'account.activity.time': 'When',
   'account.activity.action': 'Action',
   'account.activity.result': 'Result',
   'account.activity.client': 'Through',

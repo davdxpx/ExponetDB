@@ -42,7 +42,7 @@ export class SqlWorld extends TargetWorld {
   readonly sent: Sent[] = []
   /** The classification of a text; the default classifies statement by statement. */
   classify: (sql: string) => Answer = (sql) => ({ status: 200, body: classifyText(sql) })
-  run: (body: { sql: string; queryId: string }) => Answer = (body) => ({
+  run: (body: { sql: string; queryId: string; maxRows?: number }) => Answer = (body) => ({
     status: 200,
     body: resultFixture({ queryId: body.queryId }),
   })
@@ -62,7 +62,13 @@ export class SqlWorld extends TargetWorld {
   })
   updateSaved: (id: string, body: Record<string, unknown>) => Answer = (id, body) => ({
     status: 200,
-    body: savedFixture({ id, sql: String(body['sql']), revision: Number(body['revision']) + 1 }),
+    body: savedFixture({
+      id,
+      name: String(body['name']),
+      sql: String(body['sql']),
+      visibility: body['visibility'] === 'project' ? 'project' : 'personal',
+      revision: Number(body['revision']) + 1,
+    }),
   })
   getSaved: (id: string) => Answer = (id) => ({ status: 200, body: savedFixture({ id }) })
   lint: Answer = {
@@ -117,7 +123,9 @@ async function sqlAnswer(world: SqlWorld, input: string | URL | Request, init?: 
     return reply(world.classify((body as { sql: string }).sql))
   }
   const target = /^\/api\/v1\/targets\/[^/]+\/queries$/.test(p)
-  if (method === 'POST' && target) return reply(world.run(body as { sql: string; queryId: string }))
+  if (method === 'POST' && target) {
+    return reply(world.run(body as { sql: string; queryId: string; maxRows?: number }))
+  }
   if (method === 'POST' && /^\/api\/v1\/targets\/[^/]+\/explain$/.test(p)) {
     return reply(world.explain(body as { sql: string; queryId: string }))
   }

@@ -17,13 +17,17 @@ import { t } from '../../lib/i18n/i18n.ts'
 import {
   AUTHORITY_DEFAULTS,
   AUTHORITY_MAX_DAYS,
+  AUTHORITY_MAX_TARGETS,
   type AuthorityValues,
   authoritySchema,
   isProductionWrite,
+  productionWithAllTargets,
   type ScopeEffect,
   scopesByEffect,
 } from './authority.ts'
+import { NativeSelect } from './fields.tsx'
 import { tierLabel, tiersLabel } from './model.ts'
+import { TargetChecklist } from './target-checklist.tsx'
 
 /**
  * The authority of a machine grant or an API key (identity.md §5). The
@@ -66,6 +70,7 @@ function messages() {
     tierOf: (scope: string, tier: 'prod' | 'nonprod') =>
       t('access.authority.error.tierOf', { scope, tier: tierLabel(tier) }),
     production: t('access.authority.error.production'),
+    targets: t('access.authority.error.targets', { max: AUTHORITY_MAX_TARGETS }),
     days: t('access.authority.error.days', { max: AUTHORITY_MAX_DAYS }),
     label: t('access.authority.error.label'),
   }
@@ -171,18 +176,36 @@ export function AuthorityForm({
 
 /** The current choice in one line, always visible next to the button. */
 function Summary({ control }: { readonly control: Control<AuthorityValues> }): ReactNode {
-  const [scopes, tiers, days] = useWatch({ control, name: ['scopes', 'tiers', 'days'] })
+  const [scopes, tiers, days, targetMode, targetIds] = useWatch({
+    control,
+    name: ['scopes', 'tiers', 'days', 'targetMode', 'targetIds'],
+  })
   const params = {
     scopes: scopes.length === 0 ? t('access.authority.none') : scopes.join(' '),
     tiers: tiers.length === 0 ? t('access.authority.none') : tiersLabel(tiers),
     days: days.trim(),
   }
+  const targets =
+    targetMode === 'list'
+      ? t('access.authority.summary.targets.list', { count: targetIds.length })
+      : t('access.authority.summary.targets.all')
   return (
-    <p className="text-sm text-foreground-light">
-      {params.days === ''
-        ? t('access.authority.summary.noDays', params)
-        : t('access.authority.summary', params)}
-    </p>
+    <div className="flex flex-col gap-2">
+      <p className="text-sm text-foreground-light">
+        {params.days === ''
+          ? t('access.authority.summary.noDays', params)
+          : t('access.authority.summary', params)}{' '}
+        {targets}
+      </p>
+      {productionWithAllTargets(tiers, targetMode) ? (
+        <p
+          className="border-l-2 border-warning-500 pl-3 text-sm text-foreground"
+          data-warning="production-all-targets"
+        >
+          {t('access.authority.warn.productionAll')}
+        </p>
+      ) : null}
+    </div>
   )
 }
 
@@ -194,7 +217,10 @@ function Choice({
   readonly kind: 'grant' | 'apiKey'
 }): ReactNode {
   const baseId = useId()
-  const [scopes, tiers] = useWatch({ control, name: ['scopes', 'tiers'] })
+  const [scopes, tiers, targetMode] = useWatch({
+    control,
+    name: ['scopes', 'tiers', 'targetMode'],
+  })
   const productionWrite = isProductionWrite(scopes, tiers)
   return (
     <>
@@ -276,6 +302,44 @@ function Choice({
           </FormItem>
         )}
       />
+      <FormField
+        control={control}
+        name="targetMode"
+        render={({ field }) => (
+          <FormItem>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`${baseId}-targets`} className="text-sm text-foreground">
+                {t('access.authority.targets')}
+              </Label>
+              <NativeSelect
+                id={`${baseId}-targets`}
+                value={field.value}
+                aria-describedby={`${baseId}-targets-description`}
+                options={[
+                  { value: 'all', label: t('access.authority.targets.all') },
+                  { value: 'list', label: t('access.authority.targets.list') },
+                ]}
+                onChange={(event) => field.onChange(event.target.value === 'list' ? 'list' : 'all')}
+              />
+              <p id={`${baseId}-targets-description`} className="text-xs text-foreground-lighter">
+                {t('access.authority.targets.description')}
+              </p>
+            </div>
+          </FormItem>
+        )}
+      />
+      {targetMode === 'list' ? (
+        <FormField
+          control={control}
+          name="targetIds"
+          render={({ field }) => (
+            <FormItem>
+              <TargetChecklist value={field.value} onChange={field.onChange} tiers={tiers} />
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      ) : null}
       {productionWrite ? (
         <FormField
           control={control}

@@ -95,3 +95,22 @@ statements of §1 to §4 stay as they were on the Wave 7 branch.
   Criterion 7 stays **not met**, with one operation fewer to resolve.
 - `info.description` of the OpenAPI document says that an operation that is
   not served yet answers `404 NOT_FOUND`.
+
+## 6. Update 2026-10-20: Wave 8 completion (five additive changes)
+
+**[OBSERVED]** Five changes for the Web App, all additive and REST only (the
+MCP announcements, their digests and `toolVersion` did not move):
+
+- Two new reads under existing actions, so no new permission:
+  `GET /targets/{target}/schema/objects` (`listSchemaObjects`, action
+  `schema.search`: the objects of the snapshot without a search term) and
+  `GET /targets/{target}/drift-checks` (`listDriftChecks`, action
+  `target.finding.list`: the history of past drift checks).
+- Optional members and parameters on existing answers: `capacity` on the
+  target health, `lastUsedAt` and `activeGrantCount` on the OAuth client reads,
+  and the `identity` filter of `GET /audit-events`. The OpenAPI component
+  `TargetHealth` is unchanged; the route answers with `TargetHealthView`, which
+  is `TargetHealth` plus the optional `capacity`.
+- Counted on this branch: 159 documented operations, 154 served; the five that
+  are not served are the ones listed in §1, so criterion 7 is unchanged
+  (**not met**). The totals in §1 to §5 are those of the dates they carry.

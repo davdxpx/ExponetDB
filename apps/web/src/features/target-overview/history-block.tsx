@@ -11,6 +11,8 @@ import {
 } from '@exponetdb/ui'
 import {
   type BreakdownSegment,
+  DatePicker,
+  type DatePickerRange,
   ObservedTime,
   ReadableView,
   StackedBreakdown,
@@ -31,12 +33,25 @@ import {
   seriesLabelKey,
   worstOf,
 } from './health-model.ts'
-import { HISTORY_RANGES, type HistoryRange } from './keys.ts'
+import {
+  DEFAULT_SELECTION,
+  dayString,
+  HISTORY_MAX_DAYS,
+  HISTORY_RANGES,
+  type HistoryRange,
+  type HistorySelection,
+  historyWindow,
+  pickableDays,
+  RETENTION_DEFAULT_DAYS,
+  RETENTION_MIN_DAYS,
+} from './history-range.ts'
 import { type BlockRead, type HealthHistory, useHealthHistory } from './queries.ts'
 
 const HEADING = 3
 
 const RANGE_LABEL = {
+  '1h': 'overview.history.range.1h',
+  '6h': 'overview.history.range.6h',
   '24h': 'overview.history.range.24h',
   '7d': 'overview.history.range.7d',
   '14d': 'overview.history.range.14d',
@@ -64,12 +79,21 @@ const SEGMENTS: readonly BreakdownSegment[] = SERIES_KEYS.map((key) => ({
  * table (the chart's own data-table alternative) and a list of the gaps.
  */
 export function HistoryBlock(props: { readonly path: string }): ReactNode {
-  const [range, setRange] = useState<HistoryRange>('24h')
-  const read = useHealthHistory(props.path, range, (value) =>
+  const [selection, setSelection] = useState<HistorySelection>(DEFAULT_SELECTION)
+  // The days the person is choosing in the calendar; a custom range is applied once both are chosen.
+  const [picked, setPicked] = useState<DatePickerRange | undefined>(undefined)
+  const read = useHealthHistory(props.path, selection, (value) =>
     value.gapsTruncated
       ? [t('overview.history.gaps.truncated', { count: value.gaps.length })]
       : undefined,
   )
+  const days = pickableDays(Date.now())
+  const customWindow =
+    selection.kind === 'custom' ? historyWindow(selection, Date.now()) : undefined
+  const choosePreset = (range: HistoryRange): void => {
+    setPicked(undefined)
+    setSelection({ kind: 'preset', range })
+  }
   return (
     <Block
       id="history"
@@ -83,14 +107,50 @@ export function HistoryBlock(props: { readonly path: string }): ReactNode {
             key={value}
             type="button"
             size="tiny"
-            variant={range === value ? 'default' : 'outline'}
-            aria-pressed={range === value}
-            onClick={() => setRange(value)}
+            variant={
+              selection.kind === 'preset' && selection.range === value ? 'default' : 'outline'
+            }
+            aria-pressed={selection.kind === 'preset' && selection.range === value}
+            onClick={() => choosePreset(value)}
           >
             {t(RANGE_LABEL[value])}
           </Button>
         ))}
+        <DatePicker
+          mode="range"
+          label={t('overview.history.custom')}
+          value={picked}
+          minDate={days.min}
+          maxDate={days.max}
+          onValueChange={(range) => {
+            setPicked(range)
+            if (range?.from !== undefined && range.to !== undefined) {
+              setSelection({
+                kind: 'custom',
+                fromDay: dayString(range.from),
+                toDay: dayString(range.to),
+              })
+            }
+          }}
+        />
       </fieldset>
+      <p className="text-xs text-foreground-light" data-slot="retention">
+        {t('overview.history.retention', {
+          defaultDays: RETENTION_DEFAULT_DAYS,
+          minDays: RETENTION_MIN_DAYS,
+          maxDays: HISTORY_MAX_DAYS,
+        })}
+      </p>
+      {selection.kind === 'custom' ? (
+        <p className="text-xs text-foreground-light" data-slot="custom-range">
+          {customWindow === undefined
+            ? t('overview.history.custom.empty')
+            : t('overview.history.custom.note')}
+          {customWindow?.clamped === true
+            ? ` ${t('overview.history.custom.clamped', { maxDays: HISTORY_MAX_DAYS })}`
+            : ''}
+        </p>
+      ) : null}
       <HistoryView read={read} />
     </Block>
   )

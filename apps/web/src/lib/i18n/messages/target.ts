@@ -18,6 +18,43 @@ export const targetMessages = {
   'target.switcher.missing.more': 'More environments exist than one read returns.',
   'target.switcher.missing.unreadable': 'Some environments have a path the page cannot show.',
   'target.switcher.current': 'Current environment',
+  // The database switcher of the context bar and the "Switch database" command page.
+  'target.switch.trigger': 'Switch database',
+  'target.switch.search': 'Search databases',
+  'target.switch.recent': 'Recent',
+  'target.switch.current': 'Current database',
+  'target.switch.loading': 'Loading databases',
+  'target.switch.failed':
+    'Could not read the databases: {reason} This does not mean there are no other databases.',
+  'target.switch.empty': 'The read succeeded and found no databases.',
+  'target.switch.stale': 'Showing an earlier read of the databases, observed',
+  'target.switch.partial': 'Showing part of the databases. {missing}',
+  'target.switch.missing.more':
+    'More databases exist than one read returns. Open the Databases page for the rest.',
+  'target.switch.missing.unreadable': 'Some databases have a path the page cannot show.',
+  'target.switch.noMatch': 'No database matches your search.',
+  'target.switch.noMatchPartial':
+    'No database in this part of the list matches your search. Others may exist.',
+  'target.switch.page': 'Switch database',
+  'target.switch.command': 'Switch database…',
+  // Commands for the sections of the target the person is on.
+  'target.command.goTo': 'Go to {section}',
+  'target.command.schemaKind': 'Schema: {kind}',
+  'target.command.query': 'Query the database',
+  'target.command.draft': 'Draft a change',
+  'target.command.notAvailable': 'Not available yet',
+  // The health chip of the context bar.
+  'target.health.label': 'Health',
+  'target.health.notRead': 'Health not read',
+  'target.health.notReadWhy':
+    'The target could not be read, so ExponetDB cannot tell its health. This does not mean it is unhealthy.',
+  'target.health.stale': 'Health out of date',
+  'target.health.staleWhy':
+    'The latest read of this target failed. The last health read was {state}, {source}. It is not shown as current.',
+  'target.health.noSample': 'No health sample',
+  'target.health.noSampleWhy': 'The target has not been sampled yet, so its health is not known.',
+  // The count on the Findings tab.
+  'target.nav.findingsOpen': '{count} open findings',
   'target.lifecycle.registered': 'Registered',
   'target.lifecycle.suspended': 'Suspended',
   'target.lifecycle.decommissioned': 'Decommissioned',

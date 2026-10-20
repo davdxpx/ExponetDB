@@ -5,7 +5,8 @@
  * hostile inputs (the Wave 3A rules of `safe.ts`, extended for the Wave 8
  * routes without ever becoming a prefix match).
  */
-const ULID = '[0-7][0-9A-HJKMNP-TV-Z]{25}'
+/** The body of a ULID (the id grammar after `pln_`, `op_`, `srv_` and the like). */
+export const ULID = '[0-7][0-9A-HJKMNP-TV-Z]{25}'
 const SLUG = '[a-z][a-z0-9-]{0,38}'
 
 const OPERATION_FRAGMENT = new RegExp(`^#operation=op_${ULID}$`)
@@ -32,6 +33,7 @@ export const TARGET_SECTIONS = [
   'activity',
   'findings',
   'drift',
+  'compare',
 ] as const
 
 /** Kinds of schema objects a return may name below `/schema` (never an object's own name). */
@@ -66,6 +68,7 @@ const RETURN_PATHS: readonly RegExp[] = [
   /^\/oauth\/device$/,
   /^\/admin\/(?:clients|service-accounts)$/,
   /^\/approvals$/,
+  /^\/findings$/,
   /^\/targets$/,
   /^\/changes(?:\/(?:plans|operations|promotion))?$/,
   new RegExp(`^/changes/plans/pln_${ULID}$`),
@@ -75,7 +78,7 @@ const RETURN_PATHS: readonly RegExp[] = [
   /^\/backups$/,
   /^\/access\/(?:people|roles|service-accounts|oauth-clients|connected-apps)$/,
   /^\/audit$/,
-  /^\/settings\/(?:products|environments|policies|notifications|installation|break-glass)$/,
+  /^\/settings\/(?:products|projects|environments|policies|notifications|installation|break-glass)$/,
   /^\/connect$/,
   new RegExp(
     `^/t/${SLUG}/${SLUG}/${SLUG}(?:/(?:${alternatives(TARGET_SECTIONS)})|/schema/(?:${alternatives(SCHEMA_KINDS)}))?$`,

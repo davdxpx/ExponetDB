@@ -42,6 +42,18 @@ describe('useIsMobile', () => {
     expect(result.current).toBe(true)
   })
 
+  it('has the phone value in the first render, so no desktop frame is drawn on a phone', () => {
+    stubViewport(390)
+    const seen: boolean[] = []
+    renderHook(() => {
+      const value = useIsMobile()
+      seen.push(value)
+      return value
+    })
+    expect(seen[0]).toBe(true)
+    expect(seen.every((v) => v)).toBe(true)
+  })
+
   it('is false at and above the breakpoint', () => {
     stubViewport(768)
 

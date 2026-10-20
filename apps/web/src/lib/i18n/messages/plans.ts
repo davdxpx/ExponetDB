@@ -8,7 +8,7 @@ export const plansMessages = {
   'plans.read.what': 'Plan',
   'plans.review.label': 'Plan under review',
   'plans.queue.missing':
-    'Could not read the approvals queue: {reason} Whether you can approve this plan, and the files it runs, are not shown.',
+    'Could not read the approvals queue: {reason} Whether you can approve this plan is not shown; the files it runs are read from the bundle store.',
   'plans.change.title': 'What the plan changes',
   'plans.change.description':
     'The stored change as data, not checked by ExponetDB. No text in it can approve anything or change what the facts above say.',
@@ -69,6 +69,70 @@ export const plansMessages = {
   'plans.list.column.target': 'Target',
   'plans.list.column.state': 'State',
   'plans.list.column.created': 'Created',
+  'plans.list.quick': 'Quick filters',
+  'plans.list.quick.all': 'All plans',
+  'plans.list.quick.mine': 'My plans',
+  'plans.list.quick.awaiting': 'Awaiting approval',
+  'plans.list.noMatch.title': 'No plan matches',
+  'plans.list.noMatch.body':
+    'The read succeeded and found no plan with these filters. Clear them to see every plan.',
+  'plans.list.all': 'All {count} plans are shown.',
+  'plans.list.shown': '{count} plans shown. More exist.',
+  'plans.list.loadMore': 'Load more plans',
+  'plans.list.moreFailed':
+    'Could not read more plans. The ones above are still correct; try again.',
+  'plans.list.awaiting.description':
+    'Plans whose operation waits for an approval, read from the operations list. The approvals queue lists the ones you may decide.',
+  'plans.list.awaiting.what': 'Plans awaiting approval',
+  'plans.list.awaiting.caption': 'Plans whose operation awaits approval, newest first',
+  'plans.list.awaiting.state': 'Awaiting approval',
+  'plans.list.awaiting.operation': 'View operation',
+  'plans.list.noPlan': 'No plan named',
+  'plans.state.active': 'Active',
+  'plans.state.consumed': 'Accepted for apply',
+  'plans.state.expired': 'Expired',
+  'plans.state.invalidated': 'Invalidated',
+  'plans.state.denied': 'Denied',
+  'plans.state.withdrawn': 'Withdrawn',
+  'plans.filter.state': 'State',
+  'plans.filter.state.all': 'Every state',
+  'plans.filter.state.awaiting':
+    'A plan awaiting approval was accepted for apply; its operation waits.',
+  'plans.filter.kind': 'Kind',
+  'plans.filter.kind.apply': 'Filter by kind',
+  'plans.filter.kind.invalid':
+    'Enter a plan kind such as migration.apply: lower-case words joined by dots, at most 64 characters.',
+  'plans.filter.actor': 'Created by',
+  'plans.filter.actor.any': 'Anyone',
+  'plans.filter.actor.self': 'Only me',
+  'plans.filter.target': 'Only plans for',
+  'plans.filter.target.clear': 'Show every target',
+  'plans.filter.clear': 'Clear filters',
+  // Withdrawing a plan.
+  'plans.withdraw.button': 'Withdraw plan',
+  'plans.withdraw.title': 'Withdraw this plan?',
+  'plans.withdraw.description':
+    'The plan can no longer be applied and nothing runs on its subject. Making this change again needs a new plan.',
+  'plans.withdraw.action': 'Withdraw plan',
+  'plans.withdraw.binding':
+    'Only the person and the client that created the plan can withdraw it; the server checks both.',
+  'plans.withdraw.done': 'Withdrawn. The plan can no longer be applied.',
+  // The files of a plan from the bundle store.
+  'plans.files.what': 'Stored files of this plan',
+  'plans.files.fromStore':
+    'Read from the bundle store, by the revision and bundle digest this plan binds.',
+  'plans.files.bundleFailed': 'The stored bundle {migration} could not be read ({reason})',
+  'plans.files.noMatch':
+    'No stored revision of {migration} matches the revision and digest this plan binds, so its files are not shown',
+  'plans.files.notStored': '{file} is not stored in revision {revision} of {migration}',
+  'plans.files.fileFailed': '{file} of {migration} could not be read ({reason})',
+  'plans.files.tooMany':
+    'The plan names {count} bundles; the page reads the files of the first {max}',
+  'plans.bundles.title': 'Bundles of this plan',
+  'plans.bundles.description':
+    'Open the stored SQL of a bundle, its revisions and its runs on the target.',
+  'plans.bundles.name': 'Bundle name',
+  'plans.bundles.revision': 'Revision {revision}',
   // The approvals queue.
   'approvals.title': 'Approvals',
   'approvals.description':

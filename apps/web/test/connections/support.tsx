@@ -51,14 +51,17 @@ export function session(over: Partial<Session> = {}): Session {
   }
 }
 
-export function sessionList(sessions: Session[], over: Partial<SessionList> = {}): SessionList {
+export function sessionList(
+  sessions: readonly Session[],
+  over: Partial<SessionList> = {},
+): SessionList {
   return {
     targetId: 'tgt_00000000000000000000000001',
     source: 'live',
     observedAt: NOW_ISO(),
     cap: 500,
     truncated: false,
-    sessions,
+    sessions: [...sessions],
     ...over,
   }
 }
@@ -88,6 +91,12 @@ export function wait(over: Partial<LockGraph['waits'][number]> = {}): LockGraph[
 
 export class DiagnosticsWorld extends World {
   sessions: SessionList | undefined
+  /**
+   * What the target answers when the sessions are asked for with a filter (`state`, `application`
+   * or `minAgeSeconds`): the unfiltered list is `sessions`, a filtered one comes from here. Without
+   * it every request gets `sessions`.
+   */
+  sessionsFor: ((query: URLSearchParams) => SessionList) | undefined
   locks: LockGraph | undefined
   endpoints: ResponseOf<'listClusterEndpoints'> | undefined
   raw: RawStatement | undefined
@@ -130,6 +139,13 @@ function respond(world: DiagnosticsWorld, input: string, body: unknown): Respons
     return json(400, { code: 'REAUTH_FAILED', message: 'The proof was not accepted.' })
   }
   if (url.pathname.endsWith('/sessions')) {
+    const filtered =
+      url.searchParams.has('state') ||
+      url.searchParams.has('application') ||
+      url.searchParams.has('minAgeSeconds')
+    if (filtered && world.sessionsFor !== undefined) {
+      return json(200, world.sessionsFor(url.searchParams))
+    }
     return world.sessions === undefined
       ? json(404, { code: 'NOT_FOUND', message: 'Not found.' })
       : json(200, world.sessions)

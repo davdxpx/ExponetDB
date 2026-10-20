@@ -8,6 +8,8 @@ import type {
   OAuthClient,
   ServiceAccount,
 } from '../../src/features/access/model.ts'
+import type { Identity } from '../../src/features/access/people-model.ts'
+import type { TargetChoice } from '../../src/features/access/scope-reads.ts'
 import { createReauthBridge } from '../../src/features/reauth/reauth.tsx'
 import { ApiClient } from '../../src/lib/api/client.ts'
 import { createQueryClient } from '../../src/lib/query/client.ts'
@@ -102,6 +104,69 @@ export function serviceAccount(over: Partial<ServiceAccount> = {}): ServiceAccou
   }
 }
 
+/** A target of the registry, as the list read answers it. */
+export function targetItem(over: Partial<TargetChoice> = {}): TargetChoice {
+  return {
+    environmentId: 'env_01JZ0000000000000000000001',
+    generation: 1,
+    health: null,
+    id: ulid('tgt'),
+    path: 'shop/app/production',
+    productId: 'prd_01JZ0000000000000000000001',
+    projectId: 'prj_01JZ0000000000000000000001',
+    state: 'active',
+    tier: 'prod',
+    ...over,
+  }
+}
+
+/** A grant as `GET /grants` and a service account's machine grant carry it. */
+export function grantItem(over: Partial<MachineGrant> = {}): MachineGrant {
+  return {
+    client: {
+      clientId: `exdb-dcr-${'c'.repeat(43)}`,
+      firstParty: false,
+      id: 'cli_01JZ0000000000000000000001',
+      kind: 'mcp',
+      name: 'Agent',
+      registration: 'dcr',
+      state: 'active',
+    },
+    consentAt: T0,
+    createdAt: T0,
+    expiresAt: '2027-01-11T09:00:00Z',
+    id: ulid('grt'),
+    identityId: 'idn_01JZ0000000000000000000001',
+    kind: 'delegated',
+    lastTokenAt: null,
+    resource: 'mcp',
+    resourceUri: 'http://localhost/mcp',
+    restrictions: { tiers: ['nonprod'], targets: { kind: 'all' } },
+    revokeReason: null,
+    revokedAt: null,
+    scopes: ['targets.read'],
+    state: 'active',
+    ...over,
+  }
+}
+
+/** An identity as the people read answers it. */
+export function identityItem(over: Partial<Identity> = {}): Identity {
+  return {
+    activatedAt: T0,
+    createdAt: T0,
+    displayName: 'Ada',
+    email: 'owner@example.test',
+    factors: { passkeys: 1, password: true, recoveryCodesRemaining: 10, totp: true },
+    id: 'idn_01JZ0000000000000000000001',
+    kind: 'human',
+    label: 'owner',
+    recoveryRequired: false,
+    state: 'active',
+    ...over,
+  }
+}
+
 export type Permission = Me['effectivePermissions'][number]['permission']
 
 export function meWith(permissions: readonly Permission[]): Me {
@@ -150,6 +215,14 @@ export interface FailureSpec {
 export class World {
   clients: OAuthClient[] = []
   accounts: ServiceAccount[] = []
+  /** The registry's targets, for the pickers and the key overview. */
+  targets: TargetChoice[] = []
+  /** `GET /grants`, all states; the read filters by the `state` query. */
+  grants: MachineGrant[] = []
+  /** `GET /identities`, all states; the read filters by the `state` query. */
+  identities: Identity[] = []
+  /** A cursor for the list read at this path (a list with more entries than one read). */
+  readonly cursors = new Map<string, string>()
   permissions: Permission[] = ['access.read', 'access.manage']
   /** Changes answer REAUTH_REQUIRED until the authenticator code was sent. */
   needsProof = false
@@ -219,10 +292,32 @@ export function answer(world: World, input: string | URL | Request, init?: Reque
     return json(200, { reauthenticatedAt: new Date().toISOString() })
   }
   if (method === 'GET' && path === '/api/v1/oauth-clients') {
-    return json(200, { items: world.clients, nextCursor: world.nextCursor })
+    const state = url.searchParams.get('state')
+    const items = state === null ? world.clients : world.clients.filter((c) => c.state === state)
+    return json(200, { items, nextCursor: world.cursors.get(path) ?? world.nextCursor })
   }
   if (method === 'GET' && path === '/api/v1/service-accounts') {
     return json(200, { items: world.accounts, nextCursor: world.nextCursor })
+  }
+  if (method === 'GET' && path === '/api/v1/api-keys') {
+    return json(200, {
+      items: world.accounts.flatMap((account) => account.apiKeys),
+      nextCursor: world.cursors.get(path) ?? null,
+    })
+  }
+  if (method === 'GET' && path === '/api/v1/grants') {
+    const state = url.searchParams.get('state')
+    const items = state === null ? world.grants : world.grants.filter((g) => g.state === state)
+    return json(200, { items, nextCursor: world.cursors.get(path) ?? null })
+  }
+  if (method === 'GET' && path === '/api/v1/identities') {
+    const state = url.searchParams.get('state')
+    const items =
+      state === null ? world.identities : world.identities.filter((i) => i.state === state)
+    return json(200, { items, nextCursor: world.cursors.get(path) ?? null })
+  }
+  if (method === 'GET' && path === '/api/v1/targets') {
+    return json(200, { items: world.targets, nextCursor: world.cursors.get(path) ?? null })
   }
   if (method === 'GET') return problem(404, 'NOT_FOUND', 'Not found.')
   if (world.needsProof && !world.proven) {
@@ -356,6 +451,33 @@ function change(
         return json(201, { apiKey: created, secret: SECRET })
       }
     }
+  }
+  const identityChange =
+    /^\/api\/v1\/identities\/([^/]+)\/(disable|enable-plans|erasure-plans)$/.exec(path)
+  if (identityChange?.[1] !== undefined) {
+    const account = world.accounts.find((entry) => entry.id === identityChange[1])
+    if (account === undefined) return problem(404, 'NOT_FOUND', 'Not found.')
+    if (identityChange[2] === 'disable') {
+      world.replaceAccount({ ...account, state: 'disabled' })
+      return json(200, identityItem({ id: account.id, kind: 'service', state: 'disabled' }))
+    }
+    return json(201, { id: 'pln_01JZ0000000000000000000001' })
+  }
+  const grantRevoke = /^\/api\/v1\/grants\/([^/]+)\/revoke$/.exec(path)
+  if (grantRevoke?.[1] !== undefined) {
+    for (const account of world.accounts) {
+      if (account.grants.some((grant) => grant.id === grantRevoke[1])) {
+        world.replaceAccount({
+          ...account,
+          grants: account.grants.map((grant) =>
+            grant.id === grantRevoke[1]
+              ? { ...grant, state: 'revoked' as const, revokedAt: T0 }
+              : grant,
+          ),
+        })
+      }
+    }
+    return json(200, { revoked: true })
   }
   const revoke = /^\/api\/v1\/api-keys\/([^/]+)\/revoke$/.exec(path)
   if (revoke !== null) {

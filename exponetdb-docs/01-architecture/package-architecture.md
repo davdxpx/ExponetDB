@@ -159,8 +159,9 @@ wave.
 
 Toolchain as pinned in the root `package.json` (OD-3): Bun 1.3.14 workspaces
 with the isolated linker, Turborepo 2.11.7, TypeScript 6.0.3, Biome 2.5.15,
-Vitest 5.0.3, Zod 4.6.5, dependency-cruiser 18.5.0; Node.js 24 in CI; Go 1.26.8
-(the `go` line of `agent/node/go.mod`, which CI installs exactly).
+Vitest 5.0.3, Zod 4.6.5, dependency-cruiser 18.5.0; Node.js 24 in CI; Go 1.26.9
+(the `go` line of `agent/node/go.mod`, which CI installs exactly; moved from
+1.26.8 on 2026-10-13 for nine standard-library fixes govulncheck reported).
 Every dependency is pinned to an exact version; the boundary checker refuses
 ranges.
 

@@ -1,11 +1,21 @@
-import { diffDocuments, makeDocument, makeEntry, scopeHeader } from '@exponetdb/postgres'
+import {
+  diffDocuments,
+  fingerprintOf,
+  makeDocument,
+  makeEntry,
+  scopeHeader,
+} from '@exponetdb/postgres'
 import { describe, expect, it } from 'vitest'
 import {
+  type CurrentSchema,
   capDriftItems,
   clip,
+  type DriftCheckRecord,
   dedupKeyOf,
+  driftCheckSummaryView,
   driftItems,
   encodeDocument,
+  listSchemaObjectsView,
   MAX_DIFF_ITEMS,
   objectLabel,
   objectRef,
@@ -324,6 +334,229 @@ describe('stored documents', () => {
     const shuffled = makeDocument(header, [...expected.entries].reverse())
     expect(encodeDocument(shuffled)).toEqual(encodeDocument(expected))
     expect(encodeDocument(expected).digest).toMatch(/^sha256:[0-9a-f]{64}$/)
+  })
+})
+
+describe('listing the objects of a snapshot without a search term (Wave 8 completion)', () => {
+  const index = (t: string, name: string) =>
+    makeEntry('index', ['public', name], { table: ['public', t], unique: false } as never)
+  const document = makeDocument(header, [
+    makeEntry('schema', ['public'], { owner: 'owner' } as never),
+    makeEntry('schema', ['billing'], { owner: 'owner' } as never),
+    table('accounts'),
+    table('notes'),
+    makeEntry('table', ['billing', 'invoices'], { owner: 'owner', acl: [] } as never),
+    column('accounts', 'email'),
+    column('accounts', 'name'),
+    column('notes', 'body'),
+    index('accounts', 'accounts_email_idx'),
+    fn('helper'),
+    fn('Zeta'),
+  ])
+  const current = (doc = document, takenAt = '2026-10-20T10:00:00.000000Z'): CurrentSchema => ({
+    document: doc,
+    snapshot: {
+      snapshotId: 'smp_01M48WRFNFYAY62E1146SMP001',
+      targetId: 'tgt_01M48WRFNFYAY62E1146TGT001',
+      generation: 1,
+      fingerprint: fingerprintOf(doc),
+      complete: true,
+      visibility: [],
+      missingSchemas: [],
+      excludedSchemas: [],
+      serverVersionNum: 170004,
+      purpose: 'read',
+      durationMs: 5,
+      operationId: null,
+      takenAt,
+    },
+    source: 'cached',
+  })
+  const list = (
+    filter: Parameters<typeof listSchemaObjectsView>[1] = {},
+    page: { limit: number; cursor?: string } = { limit: 100 },
+    c = current(),
+  ) => listSchemaObjectsView(c, filter, page)
+  const labels = (items: readonly { kind: string; schema: string; name: string }[]) =>
+    items.map((i) => `${i.schema}.${i.kind}.${i.name}`)
+
+  it('lists every object when no filter is given, in schema, kind, name, signature order', () => {
+    const all = list()
+    expect(all.total).toBe(document.entries.length)
+    expect(all.items).toHaveLength(document.entries.length)
+    expect(labels(all.items).slice(0, 4)).toEqual([
+      'billing.schema.billing',
+      'billing.table.invoices',
+      'public.column.body',
+      'public.column.email',
+    ])
+    // Sorted by schema, then kind, then name (UTF-8 byte order: upper case before lower case).
+    const sorted = [...all.items].sort(
+      (a, b) =>
+        Buffer.compare(Buffer.from(a.schema), Buffer.from(b.schema)) ||
+        Buffer.compare(Buffer.from(a.kind), Buffer.from(b.kind)) ||
+        Buffer.compare(Buffer.from(a.name), Buffer.from(b.name)),
+    )
+    expect(labels(all.items)).toEqual(labels(sorted))
+    expect(all.items.findIndex((i) => i.name === 'Zeta')).toBeLessThan(
+      all.items.findIndex((i) => i.name === 'helper'),
+    )
+    expect(all).toMatchObject({
+      nextCursor: null,
+      fingerprint: fingerprintOf(document),
+      complete: true,
+      source: 'cached',
+      observedAt: '2026-10-20T10:00:00.000000Z',
+    })
+  })
+
+  it('filters by kind, schema, parent and name, combined with AND, and counts what matches before paging', () => {
+    expect(labels(list({ kinds: ['table'] }).items)).toEqual([
+      'billing.table.invoices',
+      'public.table.accounts',
+      'public.table.notes',
+    ])
+    expect(labels(list({ kinds: ['table', 'schema'], schema: 'billing' }).items)).toEqual([
+      'billing.schema.billing',
+      'billing.table.invoices',
+    ])
+    const children = list({ schema: 'public', parent: 'accounts' })
+    expect(labels(children.items)).toEqual([
+      'public.column.email',
+      'public.column.name',
+      'public.index.accounts_email_idx',
+    ])
+    expect(children.total).toBe(3)
+    expect(list({ parent: 'nothing' }).total).toBe(0)
+    // The name rule is the search's: a case-insensitive substring.
+    expect(labels(list({ q: 'EMAIL' }).items)).toEqual([
+      'public.column.email',
+      'public.index.accounts_email_idx',
+    ])
+    expect(list({ q: 'email', kinds: ['column'] }).total).toBe(1)
+    expect(list({ kinds: [] }).total).toBe(document.entries.length)
+  })
+
+  it('pages with a cursor, once through the list and without a repeat', () => {
+    const seen: string[] = []
+    let cursor: string | undefined
+    let pages = 0
+    do {
+      const page = list({}, { limit: 5, ...(cursor === undefined ? {} : { cursor }) })
+      expect(page.total).toBe(document.entries.length)
+      expect(page.items.length).toBeLessThanOrEqual(5)
+      seen.push(...labels(page.items))
+      cursor = page.nextCursor ?? undefined
+      pages++
+    } while (cursor !== undefined)
+    expect(pages).toBe(Math.ceil(document.entries.length / 5))
+    expect(seen).toEqual(labels(list().items))
+    expect(new Set(seen).size).toBe(seen.length)
+  })
+
+  it('refuses a cursor from another snapshot, other filters or a stranger', () => {
+    const first = list({ kinds: ['table'] }, { limit: 1 })
+    expect(first.nextCursor).not.toBeNull()
+    const cursor = first.nextCursor ?? ''
+    expect(cursor).toMatch(/^[A-Za-z0-9_-]{1,512}$/)
+    // Same snapshot, same filters: continues.
+    expect(list({ kinds: ['table'] }, { limit: 1, cursor }).items).toHaveLength(1)
+    // The schema changed between the pages: a different fingerprint.
+    const changed = makeDocument(header, [...document.entries, table('added')])
+    expect(() => list({ kinds: ['table'] }, { limit: 1, cursor }, current(changed))).toThrow(
+      expect.objectContaining({ code: 'SCHEMA_FINGERPRINT_MISMATCH' }),
+    )
+    // Other filters.
+    expect(() => list({ kinds: ['view'] }, { limit: 1, cursor })).toThrow(
+      expect.objectContaining({ code: 'VALIDATION_FAILED' }),
+    )
+    // Not a cursor of this list: the search's, garbage, a changed payload.
+    for (const bad of [
+      'd1_MQ',
+      'r1_abc',
+      'd2_',
+      'd2_!!',
+      `d2_${Buffer.from('[1,2,3]').toString('base64url')}`,
+    ]) {
+      expect(() => list({}, { limit: 1, cursor: bad }), bad).toThrow(
+        expect.objectContaining({ code: 'VALIDATION_FAILED' }),
+      )
+    }
+  })
+
+  it('says when the snapshot is incomplete and never invents the time', () => {
+    const view = list(
+      {},
+      { limit: 1 },
+      { ...current(), snapshot: { ...current().snapshot, complete: false } },
+    )
+    expect(view.complete).toBe(false)
+    expect(view.observedAt).toBe('2026-10-20T10:00:00.000000Z')
+  })
+})
+
+describe('the drift check history entry', () => {
+  const record = (over: Partial<DriftCheckRecord> = {}): DriftCheckRecord => ({
+    checkId: 'smp_01M48WRFNFYAY62E1146CHK001',
+    targetId: 'tgt_01M48WRFNFYAY62E1146TGT001',
+    generation: 2,
+    requestedBy: 'schedule',
+    status: 'drifted',
+    baselineFingerprint: `fp1:17:${'a'.repeat(64)}`,
+    currentFingerprint: `fp1:17:${'b'.repeat(64)}`,
+    snapshotId: 'smp_01M48WRFNFYAY62E1146SMP001',
+    drifted: 3,
+    matched: 40,
+    unmanaged: 1,
+    opened: 2,
+    updated: 1,
+    resolved: 0,
+    errorCode: null,
+    startedAt: '2026-10-20T10:00:00.000000Z',
+    finishedAt: '2026-10-20T10:00:02.500000Z',
+    ...over,
+  })
+
+  it('names the schedule or the identity that asked, and carries every stored count', () => {
+    expect(driftCheckSummaryView(record())).toEqual({
+      id: 'smp_01M48WRFNFYAY62E1146CHK001',
+      targetId: 'tgt_01M48WRFNFYAY62E1146TGT001',
+      generation: 2,
+      requestedBy: { kind: 'schedule' },
+      status: 'drifted',
+      baselineFingerprint: `fp1:17:${'a'.repeat(64)}`,
+      currentFingerprint: `fp1:17:${'b'.repeat(64)}`,
+      counts: { drifted: 3, matched: 40, unmanaged: 1, opened: 2, updated: 1, resolved: 0 },
+      errorCode: null,
+      startedAt: '2026-10-20T10:00:00.000000Z',
+      finishedAt: '2026-10-20T10:00:02.500000Z',
+    })
+    expect(
+      driftCheckSummaryView(record({ requestedBy: 'idn_01M48WRFNFYAY62E1146JDN001' })).requestedBy,
+    ).toEqual({ kind: 'identity', identityId: 'idn_01M48WRFNFYAY62E1146JDN001' })
+  })
+
+  it('shows a failed check with its error code and no fingerprint it never had', () => {
+    const failed = driftCheckSummaryView(
+      record({
+        status: 'failed',
+        errorCode: 'TARGET_UNAVAILABLE',
+        baselineFingerprint: null,
+        currentFingerprint: null,
+        drifted: 0,
+        matched: 0,
+        unmanaged: 0,
+        opened: 0,
+        updated: 0,
+        resolved: 0,
+      }),
+    )
+    expect(failed).toMatchObject({
+      status: 'failed',
+      errorCode: 'TARGET_UNAVAILABLE',
+      baselineFingerprint: null,
+      currentFingerprint: null,
+    })
   })
 })
 

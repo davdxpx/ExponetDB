@@ -556,6 +556,32 @@ export type DriftCheck = {
   readonly truncated: boolean
 }
 
+export type DriftCheckSummary = {
+  readonly baselineFingerprint: string | null
+  readonly counts: {
+    readonly drifted: number
+    readonly matched: number
+    readonly opened: number
+    readonly resolved: number
+    readonly unmanaged: number
+    readonly updated: number
+  }
+  readonly currentFingerprint: string | null
+  readonly errorCode: string | null
+  readonly finishedAt: string
+  readonly generation: number
+  readonly id: string
+  readonly requestedBy: ({
+    readonly kind: "schedule"
+  }) | ({
+    readonly identityId: string
+    readonly kind: "identity"
+  })
+  readonly startedAt: string
+  readonly status: string
+  readonly targetId: string
+}
+
 export type DriftFinding = {
   readonly actual: string | null
   readonly bucket: "drifted" | "matched" | "unmanaged"
@@ -919,6 +945,7 @@ export type Installation = {
   }
   readonly features: readonly string[]
   readonly installationId?: string
+  readonly oauthClientRegistration?: "open" | "review"
   readonly version: string
 }
 
@@ -1542,6 +1569,7 @@ export type NodeStatus = {
 }
 
 export type OAuthClient = {
+  readonly activeGrantCount?: number
   readonly applicationType: "web" | "native" | null
   readonly approvedAt: string | null
   readonly approvedBy: string | null
@@ -1554,6 +1582,7 @@ export type OAuthClient = {
   readonly id: string
   readonly keys: readonly JwkView[]
   readonly kind: "web" | "cli" | "mcp" | "ci"
+  readonly lastUsedAt?: string | null
   readonly metadataExpiresAt: string | null
   readonly metadataFetchedAt: string | null
   readonly metadataFingerprint: string
@@ -2179,6 +2208,16 @@ export type SchemaObject = {
   readonly source: string
 }
 
+export type SchemaObjectList = {
+  readonly complete: boolean
+  readonly fingerprint: string
+  readonly items: readonly SchemaObjectRef[]
+  readonly nextCursor: string | null
+  readonly observedAt: string
+  readonly source: string
+  readonly total: number
+}
+
 export type SchemaObjectRef = {
   readonly key: readonly string[]
   readonly kind: string
@@ -2432,6 +2471,13 @@ export type Target = {
   readonly tier: "prod" | "nonprod"
 }
 
+export type TargetCapacity = {
+  readonly clientBackends: number
+  readonly observedAt: string
+  readonly source: string
+  readonly usableSlots: number
+}
+
 export type TargetHealth = {
   readonly backups: ({
     readonly observedAt: string
@@ -2470,6 +2516,10 @@ export type TargetHealthHistory = {
 }
 
 export type TargetHealthState = "healthy" | "degraded" | "unhealthy" | "unreachable" | "unknown" | "suspended"
+
+export type TargetHealthView = TargetHealth & {
+  readonly capacity?: TargetCapacity
+}
 
 export type TargetRegisterRequest = {
   readonly databaseId: string
@@ -2870,7 +2920,7 @@ export interface Operations {
     readonly params: { readonly target: string }
     readonly query: Record<string, never>
     readonly body: never
-    readonly response: TargetHealth
+    readonly response: TargetHealthView
   }
   getTargetHealthHistory: {
     readonly params: { readonly target: string }
@@ -2979,6 +3029,15 @@ export interface Operations {
     readonly body: never
     readonly response: {
       readonly items: readonly Cluster[]
+      readonly nextCursor: string | null
+    }
+  }
+  listDriftChecks: {
+    readonly params: { readonly target: string }
+    readonly query: { readonly cursor?: string; readonly limit?: number }
+    readonly body: never
+    readonly response: {
+      readonly items: readonly DriftCheckSummary[]
       readonly nextCursor: string | null
     }
   }
@@ -3142,6 +3201,12 @@ export interface Operations {
     readonly query: { readonly cursor?: string; readonly limit?: number; readonly target?: string }
     readonly body: never
     readonly response: SavedQueryList
+  }
+  listSchemaObjects: {
+    readonly params: { readonly target: string }
+    readonly query: { readonly cursor?: string; readonly kinds?: readonly string[]; readonly limit?: number; readonly parent?: string; readonly q?: string; readonly schema?: string }
+    readonly body: never
+    readonly response: SchemaObjectList
   }
   listServers: {
     readonly params: Record<string, never>
@@ -3519,7 +3584,7 @@ export interface Operations {
   }
   searchAuditEvents: {
     readonly params: Record<string, never>
-    readonly query: { readonly action?: string; readonly actor?: "self" | "any"; readonly client?: string; readonly cursor?: string; readonly from?: string; readonly grant?: string; readonly limit?: number; readonly result?: "succeeded" | "failed" | "denied"; readonly target?: string; readonly to?: string }
+    readonly query: { readonly action?: string; readonly actor?: "self" | "any"; readonly client?: string; readonly cursor?: string; readonly from?: string; readonly grant?: string; readonly identity?: string; readonly limit?: number; readonly result?: "succeeded" | "failed" | "denied"; readonly target?: string; readonly to?: string }
     readonly body: never
     readonly response: {
       readonly items: readonly AuditEvent[]
@@ -3651,6 +3716,7 @@ export const OPERATIONS = {
   listClusterDatabases: { method: "GET", path: "/clusters/{clusterId}/databases", status: 200, wave: "4", action: "database.list", shape: "object" },
   listClusterEndpoints: { method: "GET", path: "/clusters/{clusterId}/endpoints", status: 200, wave: "4", action: "endpoint.list", shape: "object" },
   listClusters: { method: "GET", path: "/clusters", status: 200, wave: "4", action: "cluster.list", shape: "paged" },
+  listDriftChecks: { method: "GET", path: "/targets/{target}/drift-checks", status: 200, wave: "4", action: "target.finding.list", shape: "paged" },
   listFindings: { method: "GET", path: "/findings", status: 200, wave: "8", action: "finding.list", shape: "paged" },
   listGrants: { method: "GET", path: "/grants", status: 200, wave: "3B", action: "oauth.grant.list", shape: "paged" },
   listIdentities: { method: "GET", path: "/identities", status: 200, wave: "3A", action: "identity.list", shape: "paged" },
@@ -3671,6 +3737,7 @@ export const OPERATIONS = {
   listRoleBindings: { method: "GET", path: "/role-bindings", status: 200, wave: "3A", action: "role_binding.list", shape: "paged" },
   listRoles: { method: "GET", path: "/roles", status: 200, wave: "3A", action: "role.list", shape: "object" },
   listSavedQueries: { method: "GET", path: "/saved-queries", status: 200, wave: "8", action: "saved_query.list", shape: "paged" },
+  listSchemaObjects: { method: "GET", path: "/targets/{target}/schema/objects", status: 200, wave: "4", action: "schema.search", shape: "paged" },
   listServers: { method: "GET", path: "/servers", status: 200, wave: "4", action: "server.list", shape: "paged" },
   listServiceAccounts: { method: "GET", path: "/service-accounts", status: 200, wave: "3B", action: "service_account.list", shape: "paged" },
   listSessions: { method: "GET", path: "/targets/{target}/sessions", status: 200, wave: "4", action: "session.list", shape: "object" },

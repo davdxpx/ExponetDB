@@ -39,6 +39,8 @@ import { useApi } from '../../lib/api/context.tsx'
 import { withReauth } from '../../lib/api/reauth.ts'
 import { t } from '../../lib/i18n/i18n.ts'
 import { toReadable } from '../../lib/query/readable.ts'
+import { useMe } from '../../lib/session/guard.tsx'
+import { holds } from '../access/fields.tsx'
 import { actionError } from '../plans/failure.ts'
 import { planPath } from '../plans/plan-model.ts'
 import {
@@ -86,6 +88,7 @@ export function RegisterTargetPage(): ReactNode {
   const { client, confirmIdentity } = useApi()
   const navigate = useNavigate()
   const Link = useLinkComponent()
+  const me = useMe()
   const schema = useMemo(() => {
     const required = t('register.choose')
     return z.object({
@@ -188,6 +191,14 @@ export function RegisterTargetPage(): ReactNode {
                   label={t('register.project')}
                   placeholder={t('register.project.placeholder')}
                   none={t('register.project.none')}
+                  noneAction={
+                    // Only a person who may plan a project is offered the page that does it.
+                    holds(me, 'registry.manage') ? (
+                      <Link href="/settings/projects" className="underline focus-ring">
+                        {t('register.project.create')}
+                      </Link>
+                    ) : undefined
+                  }
                   what={t('register.project')}
                   query={projects}
                   options={(projects.data?.items ?? [])
@@ -358,6 +369,8 @@ function Choice(props: {
   readonly label: string
   readonly placeholder: string
   readonly none: string
+  /** What the person can do about an empty list (a link), if anything. */
+  readonly noneAction?: ReactNode
   readonly what: string
   readonly query: {
     readonly data: unknown
@@ -420,7 +433,12 @@ function Choice(props: {
       headingLevel={3}
       empty={{
         isEmpty: () => props.options.length === 0,
-        content: <p className="text-sm text-foreground-light">{props.none}</p>,
+        content: (
+          <p className="flex flex-wrap items-baseline gap-x-2 text-sm text-foreground-light">
+            <span>{props.none}</span>
+            {props.noneAction}
+          </p>
+        ),
       }}
       ready={() => select(false)}
     />

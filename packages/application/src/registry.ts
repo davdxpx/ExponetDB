@@ -18,6 +18,7 @@ import type {
   DatabaseView,
   DriftAcceptRequest,
   DriftCheck,
+  DriftCheckSummary,
   EndpointRequest,
   EndpointView,
   Environment,
@@ -37,14 +38,15 @@ import type {
   SchemaDiff,
   SchemaFingerprintResult,
   SchemaObject,
+  SchemaObjectList,
   SchemaObjectRef,
   SchemaOverview,
   Server,
   ServerCreateRequest,
   SessionList,
   Target,
-  TargetHealth,
   TargetHealthHistory,
+  TargetHealthView,
   TargetRegisterRequest,
   TargetStateChangeRequest,
   TargetSummary,
@@ -55,6 +57,7 @@ import {
   currentSchema,
   DocumentCorrupt,
   documentByFingerprint,
+  driftCheckSummaryView,
   driftCheckView,
   type FindingFilter,
   type FleetFindingFilter,
@@ -66,8 +69,10 @@ import {
   getFinding,
   HISTORY_MAX_RANGE_MS,
   healthSummary,
+  listDriftChecks,
   listFindings,
   listFleetFindings,
+  listSchemaObjectsView,
   listSessions,
   lockGraph,
   openFindingCount,
@@ -76,6 +81,7 @@ import {
   readStatuses,
   runDriftCheck,
   SAMPLE_PERIOD_SECONDS,
+  type SchemaObjectFilter,
   type SessionFilter,
   type SnapshotDeps,
   schemaDiffView,
@@ -434,7 +440,7 @@ export class RegistryUseCases {
     )
   }
 
-  async targetHealth(caller: CallerLike, ref: string): Promise<TargetHealth> {
+  async targetHealth(caller: CallerLike, ref: string): Promise<TargetHealthView> {
     const target = await this.#authorizedTarget('target.health.get', caller, ref)
     const statuses = await readStatuses(this.#h.store, [target.targetId])
     return targetHealthView(target, statuses.get(target.targetId))
@@ -985,6 +991,24 @@ export class RegistryUseCases {
     )
   }
 
+  /**
+   * `schema.search` (Wave 8 completion): the objects of the current snapshot
+   * without a search term, filtered by kind, schema, parent relation or name,
+   * in a deterministic order, with the total, the snapshot's fingerprint, and
+   * a cursor bound to that fingerprint and the filters. The authorization is
+   * the search's: `schema.read` at the target.
+   */
+  async listSchemaObjects(
+    caller: CallerLike,
+    ref: string,
+    filter: SchemaObjectFilter,
+    request: PageRequest,
+  ): Promise<SchemaObjectList> {
+    const target = await this.#authorizedTarget('schema.search', caller, ref)
+    const current = await currentSchema(this.#services().observation, target)
+    return listSchemaObjectsView(current, filter, request)
+  }
+
   async schemaObject(
     caller: CallerLike,
     ref: string,
@@ -1049,6 +1073,22 @@ export class RegistryUseCases {
       this.#h.identityOf(caller),
     )
     return driftCheckView(result)
+  }
+
+  /**
+   * The past drift checks of a target, scheduled and requested, newest
+   * first (Wave 8 completion). A read of the Control Store's append-only
+   * history with the permission of the findings reads (`diagnostics.read` at
+   * the target): no database is touched, and an empty list means no check
+   * was ever recorded.
+   */
+  async driftChecks(
+    caller: CallerLike,
+    ref: string,
+    request: PageRequest,
+  ): Promise<{ items: DriftCheckSummary[]; nextCursor: string | null }> {
+    const target = await this.#authorizedTarget('target.finding.list', caller, ref)
+    return page(await listDriftChecks(this.#h.store, target, request), driftCheckSummaryView)
   }
 
   // ----- live sessions and locks -----

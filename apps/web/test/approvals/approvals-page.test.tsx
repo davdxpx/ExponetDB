@@ -97,7 +97,8 @@ describe('the approvals queue', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: /Plan review/ }),
     ).toBeInTheDocument()
-    expect(await screen.findByText(`${PLAN}`)).toBeInTheDocument()
+    // The id is on the page (its breadcrumb names it too).
+    expect((await screen.findAllByText(`${PLAN}`)).length).toBeGreaterThan(0)
     // The queue named the plan: the operation itself was not needed for the redirect.
     expect(world.gets(`/api/v1/operations/${OP}`).length).toBeLessThanOrEqual(1)
   })

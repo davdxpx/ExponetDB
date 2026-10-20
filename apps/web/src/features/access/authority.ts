@@ -75,13 +75,31 @@ export function scopesByEffect(): { effect: ScopeEffect; scopes: MachineScope[] 
 export const AUTHORITY_DEFAULT_DAYS = 90
 export const AUTHORITY_MAX_DAYS = 365
 
+/**
+ * The most target IDs a restriction may name (`OAUTH_LIMITS.maxTargetRestrictions`;
+ * kept equal to the contracts by `test/access/model.test.ts`).
+ */
+export const AUTHORITY_MAX_TARGETS = 64
+
 const TIERS = ['nonprod', 'prod'] as const
+const TARGET_ID = /^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$/
+
+export function isTargetId(value: string): boolean {
+  return TARGET_ID.test(value)
+}
+
+/** Where the authority applies: every target the roles reach, or only the targets named. */
+export type TargetMode = 'all' | 'list'
 
 /** The form's values. `days` is text: the empty field is `''`, never `NaN`. */
 export interface AuthorityValues {
   /** Scope names as the form holds them; only known machine scopes are ever sent. */
   scopes: string[]
   tiers: Tier[]
+  /** `all`: every target the roles reach (the default). `list`: only `targetIds`. */
+  targetMode: TargetMode
+  /** Target IDs of a restriction; only used with `targetMode: 'list'`. */
+  targetIds: string[]
   acknowledgeProduction: boolean
   days: string
   /** The label of an API key (optional); a machine grant has none. */
@@ -91,9 +109,20 @@ export interface AuthorityValues {
 export const AUTHORITY_DEFAULTS: AuthorityValues = {
   scopes: ['targets.read'],
   tiers: ['nonprod'],
+  targetMode: 'all',
+  targetIds: [],
   acknowledgeProduction: false,
   days: String(AUTHORITY_DEFAULT_DAYS),
   label: '',
+}
+
+/**
+ * Whether the production tier is allowed without a limit to named targets: the
+ * key or grant would reach every production target its roles allow. Not an
+ * error (the roles remain the ceiling); the form says it in words.
+ */
+export function productionWithAllTargets(tiers: readonly Tier[], mode: TargetMode): boolean {
+  return tiers.includes('prod') && mode === 'all'
 }
 
 /**
@@ -117,6 +146,7 @@ export interface AuthorityMessages {
   readonly tiers: string
   readonly tierOf: (scope: string, tier: Tier) => string
   readonly production: string
+  readonly targets: string
   readonly days: string
   readonly label: string
 }
@@ -133,6 +163,8 @@ export function authoritySchema(messages: AuthorityMessages) {
     .object({
       scopes: z.array(z.string()).min(1, messages.scopes),
       tiers: z.array(z.enum(TIERS)).min(1, messages.tiers),
+      targetMode: z.enum(['all', 'list']),
+      targetIds: z.array(z.string()),
       acknowledgeProduction: z.boolean(),
       days: z.string().refine((text) => {
         const trimmed = text.trim()
@@ -157,6 +189,17 @@ export function authoritySchema(messages: AuthorityMessages) {
           })
         }
       }
+      if (values.targetMode === 'list') {
+        const ids = values.targetIds
+        if (
+          ids.length < 1 ||
+          ids.length > AUTHORITY_MAX_TARGETS ||
+          new Set(ids).size !== ids.length ||
+          !ids.every(isTargetId)
+        ) {
+          ctx.addIssue({ code: 'custom', path: ['targetIds'], message: messages.targets })
+        }
+      }
       if (isProductionWrite(values.scopes, values.tiers) && !values.acknowledgeProduction) {
         ctx.addIssue({
           code: 'custom',
@@ -168,17 +211,29 @@ export function authoritySchema(messages: AuthorityMessages) {
 }
 
 /**
+ * The target restriction of the request: every target the roles reach, or
+ * the named targets once each. A `list` choice never turns into `all` here: a
+ * list without a valid ID is sent as it is and refused by the server.
+ */
+export function toTargetRestriction(
+  values: Pick<AuthorityValues, 'targetMode' | 'targetIds'>,
+): Body<'createMachineGrant'>['restrictions']['targets'] {
+  if (values.targetMode !== 'list') return { kind: 'all' }
+  return { kind: 'list', targetIds: [...new Set(values.targetIds.filter(isTargetId))] }
+}
+
+/**
  * The request body of a machine grant: only known scopes, the tiers in a
- * fixed order, every target the roles reach (`all`), and the production
- * acknowledgement only for production write authority the person
- * acknowledged.
+ * fixed order, the target restriction (every target the roles reach unless
+ * the person named some), and the production acknowledgement only for
+ * production write authority the person acknowledged.
  */
 export function toGrantRequest(values: AuthorityValues): Body<'createMachineGrant'> {
   const scopes = values.scopes.filter(isMachineScope)
   const tiers = TIERS.filter((tier) => values.tiers.includes(tier))
   return {
     scopes,
-    restrictions: { tiers, targets: { kind: 'all' } },
+    restrictions: { tiers, targets: toTargetRestriction(values) },
     lifetimeDays: Number(values.days.trim()),
     ...(values.acknowledgeProduction && isProductionWrite(scopes, tiers)
       ? { acknowledgeProductionWrite: true as const }

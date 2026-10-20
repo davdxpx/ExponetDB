@@ -1,0 +1,558 @@
+import '@testing-library/jest-dom/vitest'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it } from 'vitest'
+import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
+import { localInputToUtc, toLocalInput } from '../../src/features/audit/time-range.ts'
+import type { ResponseOf } from '../../src/lib/api/client.ts'
+import { chain, event, identity } from '../admin/fixtures.ts'
+import {
+  BIDI,
+  expectInert,
+  HOSTILE,
+  mountApp,
+  OTHER,
+  problem,
+  T0,
+  World,
+} from '../admin/support.tsx'
+
+afterEach(cleanup)
+
+type Target = ResponseOf<'listTargets'>['items'][number]
+
+const PROD = 'tgt_01JZ0000000000000000000011'
+const STAGING = 'tgt_01JZ0000000000000000000012'
+
+function target(over: Partial<Target> = {}): Target {
+  return {
+    environmentId: 'env_01JZ0000000000000000000001',
+    generation: 1,
+    health: null,
+    id: PROD,
+    path: 'shop/app/production',
+    productId: 'prd_01JZ0000000000000000000001',
+    projectId: 'prj_01JZ0000000000000000000001',
+    state: 'active',
+    tier: 'prod',
+    ...over,
+  }
+}
+
+const VERIFIED = chain({
+  anchorCheckpointSeq: 100,
+  fromSeq: 100,
+  scope: 'from_checkpoint',
+  status: 'verified',
+  throughSeq: 120,
+  verifiedAt: T0,
+  verifiedEvents: 21,
+})
+
+const SERVICE = 'idn_01JZ0000000000000000000003'
+
+function auditWorld(
+  targets: unknown = { items: [target()], nextCursor: null },
+  people: unknown = {
+    items: [
+      identity(),
+      identity({ id: SERVICE, kind: 'service', displayName: 'ci-bot', label: 'service #3' }),
+    ],
+    nextCursor: null,
+  },
+): World {
+  const world = new World()
+  world.on('GET', '/api/v1/audit-events/chain', VERIFIED)
+  world.on('GET', '/api/v1/audit-events', { items: [event()], nextCursor: null })
+  world.on('GET', '/api/v1/targets', targets as object)
+  world.on('GET', '/api/v1/identities', people as object)
+  return world
+}
+
+async function filters(): Promise<HTMLElement> {
+  return waitFor(() => {
+    const found = document.getElementById('audit-filters')
+    if (found === null) throw new Error('no filters')
+    return found
+  })
+}
+
+/** The UTC text of a local date and time, as the page sends it. */
+const utcOf = (local: string): string => new Date(local).toISOString().replace(/\.\d{3}Z$/, 'Z')
+
+describe('the time of the audit search', () => {
+  it('converts a date and time in the viewer’s zone to UTC and says what is sent', async () => {
+    const user = userEvent.setup()
+    const world = auditWorld()
+    const { router } = mountApp('/audit', world)
+    const form = await filters()
+    fireEvent.change(within(form).getByLabelText('From'), { target: { value: '2026-10-13T09:15' } })
+    fireEvent.change(within(form).getByLabelText('Until'), {
+      target: { value: '2026-10-13T17:45' },
+    })
+    expect(
+      within(form).getByText(`Searched as ${utcOf('2026-10-13T09:15')} (UTC).`),
+    ).toBeInTheDocument()
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    const from = utcOf('2026-10-13T09:15')
+    const to = utcOf('2026-10-13T17:45')
+    await waitFor(() => expect(router.state.location.search).toEqual({ from, to }))
+    await waitFor(() => {
+      const last = world.reads('/api/v1/audit-events').at(-1)?.search
+      expect(last?.get('from')).toBe(from)
+      expect(last?.get('to')).toBe(to)
+    })
+    expect(from).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00Z$/)
+  })
+
+  it('fills the start from a quick range, leaves the end open and sends nothing until searched', async () => {
+    const user = userEvent.setup()
+    const world = auditWorld()
+    const { router } = mountApp('/audit', world)
+    const form = await filters()
+    fireEvent.change(within(form).getByLabelText('Until'), {
+      target: { value: '2026-10-13T17:45' },
+    })
+    const before = Date.now()
+    await user.click(within(form).getByRole('button', { name: 'Last 24 hours' }))
+    const after = Date.now()
+    expect(within(form).getByLabelText('Until')).toHaveValue('')
+    expect(within(form).getByLabelText('From')).not.toHaveValue('')
+    // A quick range only fills the field: the address and the read are unchanged.
+    expect(router.state.location.searchStr).toBe('')
+
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    await waitFor(() => expect(router.state.location.search).toHaveProperty('from'))
+    const sent = (router.state.location.search as { from?: string }).from ?? ''
+    expect(sent).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00Z$/)
+    const day = 24 * 60 * 60_000
+    expect(Date.parse(sent)).toBeGreaterThanOrEqual(Math.floor((before - day) / 60_000) * 60_000)
+    expect(Date.parse(sent)).toBeLessThanOrEqual(after - day)
+    expect(router.state.location.search).not.toHaveProperty('to')
+  })
+
+  it('offers the quick ranges the order names, as buttons that do not submit the form', async () => {
+    const world = auditWorld()
+    mountApp('/audit', world)
+    const form = await filters()
+    const group = within(form).getByRole('group', { name: 'Quick ranges' })
+    expect(
+      within(group)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['Last hour', 'Last 6 hours', 'Last 24 hours', 'Last 7 days', 'Last 30 days'])
+    for (const button of within(group).getAllByRole('button')) {
+      expect(button).toHaveAttribute('type', 'button')
+    }
+  })
+
+  it('sends a time from the address exactly as it came until the person changes it', async () => {
+    const user = userEvent.setup()
+    const world = auditWorld()
+    const { router } = mountApp('/audit?from=2026-10-13T09:00:07Z', world)
+    const form = await filters()
+    // The field shows the minute in the viewer's zone; the seconds of the link are not lost.
+    expect(within(form).getByLabelText('From')).toHaveValue(
+      toLocalInput(new Date('2026-10-13T09:00:07Z')),
+    )
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    await waitFor(() =>
+      expect(router.state.location.search).toHaveProperty('from', '2026-10-13T09:00:07Z'),
+    )
+
+    fireEvent.change(within(await filters()).getByLabelText('From'), {
+      target: { value: '2026-10-13T10:00' },
+    })
+    await user.click(within(await filters()).getByRole('button', { name: 'Search audit events' }))
+    await waitFor(() =>
+      expect(router.state.location.search).toHaveProperty('from', utcOf('2026-10-13T10:00')),
+    )
+  })
+
+  it('refuses an end that is not after the start and keeps the address as it was', async () => {
+    const user = userEvent.setup()
+    const world = auditWorld()
+    const { router } = mountApp('/audit', world)
+    const form = await filters()
+    fireEvent.change(within(form).getByLabelText('From'), { target: { value: '2026-10-13T12:00' } })
+    fireEvent.change(within(form).getByLabelText('Until'), {
+      target: { value: '2026-10-13T11:00' },
+    })
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    expect(await within(form).findByText('The end must be after the start.')).toBeInTheDocument()
+    expect(router.state.location.searchStr).toBe('')
+  })
+
+  it('refuses a date that the calendar does not have instead of moving it to another day', () => {
+    expect(localInputToUtc('2026-02-31T10:00')).toBeUndefined()
+    expect(localInputToUtc('2026-13-01T10:00')).toBeUndefined()
+    expect(localInputToUtc('2026-10-13 09:00')).toBeUndefined()
+    expect(localInputToUtc('yesterday')).toBeUndefined()
+    expect(localInputToUtc('')).toBeUndefined()
+    expect(localInputToUtc('2026-10-13T09:15')).toBe(utcOf('2026-10-13T09:15'))
+    expect(localInputToUtc('2026-10-13T09:15')).toMatch(/Z$/)
+  })
+})
+
+describe('the target of the audit search', () => {
+  it('picks a target by its path and sends its ID, shown beside the path as text', async () => {
+    const user = userEvent.setup()
+    const world = auditWorld({
+      items: [target(), target({ id: STAGING, path: 'shop/app/staging', tier: 'nonprod' })],
+      nextCursor: null,
+    })
+    const { router, container } = mountApp('/audit', world)
+    const form = await filters()
+    const choice = await within(form).findByRole('option', {
+      name: 'shop/app/production (Production)',
+    })
+    expect(choice).toBeInTheDocument()
+    expect(
+      within(form).getByRole('option', { name: 'shop/app/staging (Non-production)' }),
+    ).toBeInTheDocument()
+    expect(form.querySelector('[data-chosen-target]')).toBeNull()
+    await user.selectOptions(within(form).getByLabelText('Target'), PROD)
+    expect(within(form).getByLabelText('Target ID')).toHaveValue(PROD)
+    // The chosen target's path and tier are shown beside the choice, as text.
+    const chosen = form.querySelector('[data-chosen-target]')
+    expect(chosen).toHaveTextContent('shop/app/production')
+    expect(chosen?.querySelector('[data-tier="production"]')).not.toBeNull()
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    await waitFor(() => expect(router.state.location.href).toBe(`/audit?target=${PROD}`))
+    await waitFor(() =>
+      expect(world.reads('/api/v1/audit-events').at(-1)?.search.get('target')).toBe(PROD),
+    )
+    // The chosen target stays chosen after the search.
+    expect(within(await filters()).getByLabelText('Target')).toHaveValue(PROD)
+    expect(await axeViolations(container)).toEqual([])
+  })
+
+  it('still accepts a typed ID, also one the list does not hold, and refuses a malformed one', async () => {
+    const user = userEvent.setup()
+    const world = auditWorld()
+    const { router } = mountApp('/audit', world)
+    const form = await filters()
+    await within(form).findByRole('option', { name: 'shop/app/production (Production)' })
+    fireEvent.change(within(form).getByLabelText('Target ID'), { target: { value: 'tgt_nope' } })
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    expect(await within(form).findByText(/Expected: A tgt_ ID/)).toBeInTheDocument()
+    expect(router.state.location.searchStr).toBe('')
+
+    const unlisted = 'tgt_01JZ0000000000000000000099'
+    fireEvent.change(within(form).getByLabelText('Target ID'), { target: { value: unlisted } })
+    // An ID that is not in the list shows no choice, not a wrong one.
+    expect(within(form).getByLabelText('Target')).toHaveValue('')
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    await waitFor(() => expect(router.state.location.href).toBe(`/audit?target=${unlisted}`))
+  })
+
+  it('shows a hostile target path as plain text with its hidden characters named', async () => {
+    const world = auditWorld({
+      items: [target({ path: `shop/${BIDI}${HOSTILE}/production` })],
+      nextCursor: null,
+    })
+    const { container } = mountApp('/audit', world)
+    const form = await filters()
+    const option = await waitFor(() => {
+      const found = form.querySelector('option[value^="tgt_"]')
+      if (found === null) throw new Error('no option yet')
+      return found
+    })
+    expect(option.textContent).toContain('<script>')
+    expect(option.textContent).toContain('⟨U+202E⟩')
+    expect(option.textContent).not.toContain(String.fromCodePoint(0x202e))
+    // Chosen, the whole path is shown through the untrusted-name pattern.
+    fireEvent.change(within(form).getByLabelText('Target'), { target: { value: PROD } })
+    const chosen = await waitFor(() => {
+      const found = form.querySelector('[data-chosen-target]')
+      if (found === null) throw new Error('no chosen target yet')
+      return found
+    })
+    expect(chosen.textContent).toContain('<script>')
+    expect(chosen.textContent).toContain('⟨U+202E⟩')
+    expectInert(container)
+  })
+
+  it('says a failed target read failed, never that there are no targets, and the ID can still be typed', async () => {
+    const user = userEvent.setup()
+    const world = auditWorld()
+    world.on('GET', '/api/v1/targets', () => problem(500, 'INTERNAL', 'The server failed.'))
+    const { router, container } = mountApp('/audit', world)
+    const form = await filters()
+    expect(await within(form).findByText(/Could not read Target list/)).toBeInTheDocument()
+    expect(within(form).queryByText(/The read succeeded/)).toBeNull()
+    expect(within(form).getByLabelText('Target')).toBeDisabled()
+    expect(await axeViolations(container)).toEqual([])
+    // Trying again reads again.
+    const reads = world.reads('/api/v1/targets').length
+    await user.click(within(form).getByRole('button', { name: 'Try again' }))
+    await waitFor(() => expect(world.reads('/api/v1/targets').length).toBeGreaterThan(reads))
+
+    fireEvent.change(within(form).getByLabelText('Target ID'), { target: { value: PROD } })
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    await waitFor(() => expect(router.state.location.href).toBe(`/audit?target=${PROD}`))
+  })
+
+  it('names the missing permission when the server refuses the target read', async () => {
+    const world = auditWorld()
+    world.on('GET', '/api/v1/targets', () => problem(403, 'PERMISSION_DENIED', 'Not permitted.'))
+    mountApp('/audit', world)
+    const form = await filters()
+    expect(
+      await within(form).findByText(
+        /You do not have access to Target list\. It needs the permission targets\.read/,
+      ),
+    ).toBeInTheDocument()
+    expect(within(form).queryByRole('button', { name: 'Try again' })).toBeNull()
+  })
+
+  it('says a cut target list is partial and an empty registry is empty only after a successful read', async () => {
+    const partial = auditWorld({ items: [target()], nextCursor: 'more' })
+    mountApp('/audit', partial)
+    expect(
+      await within(await filters()).findByText(/Only the first 200 are listed/),
+    ).toBeInTheDocument()
+    cleanup()
+
+    const empty = auditWorld({ items: [], nextCursor: null })
+    mountApp('/audit', empty)
+    expect(
+      await within(await filters()).findByText(/The read succeeded and Target list is empty/),
+    ).toBeInTheDocument()
+  })
+})
+
+describe('a search that finds nothing', () => {
+  it('says "No match" with a Reset for a filter, and "No audit events yet" only for an empty log', async () => {
+    const user = userEvent.setup()
+    const filtered = auditWorld()
+    filtered.on('GET', '/api/v1/audit-events', { items: [], nextCursor: null })
+    const { router } = mountApp('/audit?result=denied', filtered)
+    expect(await screen.findByText('No match')).toBeInTheDocument()
+    expect(screen.queryByText('No audit events yet')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Reset filters' }))
+    await waitFor(() => expect(router.state.location.searchStr).toBe(''))
+    cleanup()
+
+    const log = auditWorld()
+    log.on('GET', '/api/v1/audit-events', { items: [], nextCursor: null })
+    mountApp('/audit', log)
+    expect(await screen.findByText('No audit events yet')).toBeInTheDocument()
+    expect(screen.queryByText('No match')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Reset filters' })).toBeNull()
+  })
+
+  it('never shows "No match" for a search that failed', async () => {
+    const world = auditWorld()
+    world.on('GET', '/api/v1/audit-events', () => problem(500, 'INTERNAL', 'The server failed.'))
+    mountApp('/audit?result=denied', world)
+    expect(await screen.findByText('Could not read Audit events')).toBeInTheDocument()
+    expect(screen.queryByText('No match')).toBeNull()
+  })
+})
+
+describe('the person of the audit search', () => {
+  it('picks a person by name and sends the identity ID, shown beside the choice as text', async () => {
+    const user = userEvent.setup()
+    const world = auditWorld()
+    const { router, container } = mountApp('/audit', world)
+    const form = await filters()
+    await within(form).findByRole('option', { name: 'Grace (Person)' })
+    expect(
+      within(form).getByRole('option', { name: 'ci-bot (Service account)' }),
+    ).toBeInTheDocument()
+    expect(form.querySelector('[data-chosen-person]')).toBeNull()
+    await user.selectOptions(within(form).getByLabelText('Person'), OTHER)
+    expect(within(form).getByLabelText('Person ID')).toHaveValue(OTHER)
+    expect(form.querySelector('[data-chosen-person]')).toHaveTextContent('Grace')
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    await waitFor(() => expect(router.state.location.href).toBe(`/audit?identity=${OTHER}`))
+    await waitFor(() =>
+      expect(world.reads('/api/v1/audit-events').at(-1)?.search.get('identity')).toBe(OTHER),
+    )
+    // The chosen person stays chosen after the search.
+    expect(within(await filters()).getByLabelText('Person')).toHaveValue(OTHER)
+    expect(await axeViolations(container)).toEqual([])
+  })
+
+  it('reads the people once, with the API maximum, and only when the session holds access.read', async () => {
+    const world = auditWorld()
+    mountApp('/audit', world)
+    const form = await filters()
+    await within(form).findByRole('option', { name: 'Grace (Person)' })
+    const reads = world.reads('/api/v1/identities')
+    expect(reads).toHaveLength(1)
+    expect(reads[0]?.search.get('limit')).toBe('200')
+    cleanup()
+
+    const without = auditWorld()
+    without.permissions = ['audit.read']
+    mountApp('/audit', without)
+    const bare = await filters()
+    expect(
+      await within(bare).findByText(/Choosing a person by name needs access\.read/),
+    ).toBeInTheDocument()
+    expect(without.reads('/api/v1/identities')).toHaveLength(0)
+    // The ID can still be typed and is sent.
+    expect(within(bare).queryByLabelText('Person')).toBeNull()
+    fireEvent.change(within(bare).getByLabelText('Person ID'), { target: { value: OTHER } })
+    const user = userEvent.setup()
+    await user.click(within(bare).getByRole('button', { name: 'Search audit events' }))
+    await waitFor(() =>
+      expect(without.reads('/api/v1/audit-events').at(-1)?.search.get('identity')).toBe(OTHER),
+    )
+  })
+
+  it('still accepts a typed ID, also one the list does not hold, and refuses a malformed one', async () => {
+    const user = userEvent.setup()
+    const world = auditWorld()
+    const { router } = mountApp('/audit', world)
+    const form = await filters()
+    await within(form).findByRole('option', { name: 'Grace (Person)' })
+    fireEvent.change(within(form).getByLabelText('Person ID'), { target: { value: 'idn_nope' } })
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    expect(await within(form).findByText(/Expected: An idn_ ID/)).toBeInTheDocument()
+    expect(router.state.location.searchStr).toBe('')
+
+    const unlisted = 'idn_01JZ0000000000000000000099'
+    fireEvent.change(within(form).getByLabelText('Person ID'), { target: { value: unlisted } })
+    expect(within(form).getByLabelText('Person')).toHaveValue('')
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    await waitFor(() => expect(router.state.location.href).toBe(`/audit?identity=${unlisted}`))
+  })
+
+  it('takes the person from the address, fills the field and sends it, and drops one of the wrong shape', async () => {
+    const world = auditWorld()
+    mountApp(`/audit?identity=${OTHER}`, world)
+    const form = await filters()
+    expect(within(form).getByLabelText('Person ID')).toHaveValue(OTHER)
+    await waitFor(() =>
+      expect(world.reads('/api/v1/audit-events').at(-1)?.search.get('identity')).toBe(OTHER),
+    )
+    cleanup()
+
+    const bad = auditWorld()
+    mountApp('/audit?identity=idn_nope%3Cscript%3E', bad)
+    const empty = await filters()
+    expect(within(empty).getByLabelText('Person ID')).toHaveValue('')
+    await within(empty).findByRole('option', { name: 'Grace (Person)' })
+    expect(bad.reads('/api/v1/audit-events').every((read) => !read.search.has('identity'))).toBe(
+      true,
+    )
+  })
+
+  it('applies together with Only me, says so, and sends both', async () => {
+    const user = userEvent.setup()
+    const world = auditWorld()
+    const { router } = mountApp('/audit', world)
+    const form = await filters()
+    await within(form).findByRole('option', { name: 'Grace (Person)' })
+    await user.selectOptions(within(form).getByLabelText('Actor'), 'self')
+    // Only me alone says nothing about a person.
+    expect(form.querySelector('[data-slot="actor-self-note"]')).toBeNull()
+    await user.selectOptions(within(form).getByLabelText('Person'), OTHER)
+    expect(form.querySelector('[data-slot="actor-self-note"]')).toHaveTextContent(
+      'With “Only me” chosen, both filters apply: events match only if that person is you.',
+    )
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    await waitFor(() =>
+      expect(router.state.location.href).toBe(`/audit?actor=self&identity=${OTHER}`),
+    )
+    await waitFor(() => {
+      const last = world.reads('/api/v1/audit-events').at(-1)?.search
+      expect(last?.get('actor')).toBe('self')
+      expect(last?.get('identity')).toBe(OTHER)
+    })
+  })
+
+  it('shows a hostile person name as plain text with its hidden characters named', async () => {
+    const world = auditWorld(undefined, {
+      items: [identity({ displayName: `${BIDI}${HOSTILE}`, label: 'grace' })],
+      nextCursor: null,
+    })
+    const { container } = mountApp('/audit', world)
+    const form = await filters()
+    const option = await waitFor(() => {
+      const found = form.querySelector('option[value^="idn_"]')
+      if (found === null) throw new Error('no option yet')
+      return found
+    })
+    expect(option.textContent).toContain('<script>')
+    expect(option.textContent).toContain('⟨U+202E⟩')
+    expect(option.textContent).not.toContain(String.fromCodePoint(0x202e))
+    fireEvent.change(within(form).getByLabelText('Person'), { target: { value: OTHER } })
+    const chosen = await waitFor(() => {
+      const found = form.querySelector('[data-chosen-person]')
+      if (found === null) throw new Error('no chosen person yet')
+      return found
+    })
+    expect(chosen.textContent).toContain('<script>')
+    expect(chosen.textContent).toContain('⟨U+202E⟩')
+    expectInert(container)
+  })
+
+  it('names a person who is not active in the option, and an erased one by its label', async () => {
+    const world = auditWorld(undefined, {
+      items: [
+        identity({ state: 'disabled' }),
+        identity({
+          id: 'idn_01JZ0000000000000000000004',
+          displayName: null,
+          email: null,
+          label: 'human #4',
+          state: 'erased',
+        }),
+      ],
+      nextCursor: null,
+    })
+    mountApp('/audit', world)
+    const form = await filters()
+    expect(
+      await within(form).findByRole('option', { name: 'Grace (disabled)' }),
+    ).toBeInTheDocument()
+    expect(within(form).getByRole('option', { name: 'human #4 (erased)' })).toBeInTheDocument()
+  })
+
+  it('says a failed person read failed, never that there are no people, and the ID can still be typed', async () => {
+    const user = userEvent.setup()
+    const world = auditWorld()
+    world.on('GET', '/api/v1/identities', () => problem(500, 'INTERNAL', 'The server failed.'))
+    const { router, container } = mountApp('/audit', world)
+    const form = await filters()
+    expect(await within(form).findByText(/Could not read Person list/)).toBeInTheDocument()
+    expect(within(form).queryByText(/The read succeeded/)).toBeNull()
+    expect(within(form).getByLabelText('Person')).toBeDisabled()
+    expect(await axeViolations(container)).toEqual([])
+    fireEvent.change(within(form).getByLabelText('Person ID'), { target: { value: OTHER } })
+    await user.click(within(form).getByRole('button', { name: 'Search audit events' }))
+    await waitFor(() => expect(router.state.location.href).toBe(`/audit?identity=${OTHER}`))
+  })
+
+  it('names the permission when the server refuses the person read', async () => {
+    const world = auditWorld()
+    world.on('GET', '/api/v1/identities', () => problem(403, 'PERMISSION_DENIED', 'Not permitted.'))
+    mountApp('/audit', world)
+    const form = await filters()
+    expect(
+      await within(form).findByText(
+        /You do not have access to Person list\. It needs the permission access\.read/,
+      ),
+    ).toBeInTheDocument()
+    expect(within(form).getByLabelText('Person ID')).toBeEnabled()
+  })
+
+  it('says a cut person list is partial and a list with nobody is empty only after a successful read', async () => {
+    const partial = auditWorld(undefined, { items: [identity()], nextCursor: 'more' })
+    mountApp('/audit', partial)
+    expect(
+      await within(await filters()).findByText(/Only the first 200 are listed/),
+    ).toBeInTheDocument()
+    cleanup()
+
+    const empty = auditWorld(undefined, { items: [], nextCursor: null })
+    mountApp('/audit', empty)
+    expect(
+      await within(await filters()).findByText(/The read succeeded and Person list is empty/),
+    ).toBeInTheDocument()
+  })
+})

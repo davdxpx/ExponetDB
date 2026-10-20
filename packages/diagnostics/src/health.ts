@@ -3,6 +3,7 @@ import type {
   HealthSummary,
   ProbeResult,
   TargetHealth,
+  TargetHealthView,
 } from '@exponetdb/contracts'
 import {
   type ControlStore,
@@ -420,6 +421,13 @@ export interface StatusRecord {
   readonly conditions: HealthCondition[]
   readonly probes: ProbeResult[]
   readonly unknownBecause: string | null
+  /**
+   * The connections the sample measured: client backends and usable slots,
+   * both from the same sample; `null` when it measured either of them not
+   * (a failed read, an unreachable target, a row written before the numbers
+   * were stored). Never zero as a stand-in.
+   */
+  readonly capacity: { readonly clientBackends: number; readonly usableSlots: number } | null
   readonly observedAt: string
   readonly ageMs: number
 }
@@ -433,10 +441,27 @@ const HEALTH_STATES: readonly TargetHealth['state'][] = [
   'suspended',
 ]
 
+/** A whole, non-negative number a successful read stored with its probe (see {@link StoredProbe}), or `null`. */
+function storedNumber(probes: readonly JsonObject[], probe: string, key: string): number | null {
+  const found = probes.find((p) => p['probe'] === probe && p['outcome'] === 'ok')
+  const values = found?.['values']
+  const value = isJsonObject(values) ? values[key] : undefined
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
+}
+
+/** The probe without what only the capacity reads: the public probe shape. */
+function publicProbe(probe: JsonObject): ProbeResult {
+  const { values: _values, ...rest } = probe
+  return rest as unknown as ProbeResult
+}
+
 function statusFrom(row: Row): StatusRecord {
   const state = row.text('state')
   const conditions = row.json('conditions')
-  const probes = row.json('probes')
+  const stored = row.json('probes')
+  const probes = Array.isArray(stored) ? stored.filter(isJsonObject) : []
+  const clientBackends = storedNumber(probes, 'activity', 'clientBackends')
+  const usableSlots = storedNumber(probes, 'settings', 'usableSlots')
   return {
     targetId: row.text('target_id'),
     state: (HEALTH_STATES as readonly string[]).includes(state)
@@ -445,8 +470,10 @@ function statusFrom(row: Row): StatusRecord {
     conditions: Array.isArray(conditions)
       ? (conditions.filter(isJsonObject) as unknown as HealthCondition[])
       : [],
-    probes: Array.isArray(probes) ? (probes.filter(isJsonObject) as unknown as ProbeResult[]) : [],
+    probes: probes.map(publicProbe),
     unknownBecause: row.textOrNull('unknown_because'),
+    capacity:
+      clientBackends === null || usableSlots === null ? null : { clientBackends, usableSlots },
     observedAt: row.text('observed_at'),
     ageMs: Math.max(0, Math.round(Number(row.text('age_ms')))),
   }
@@ -485,12 +512,17 @@ export function healthSummary(status: StatusRecord | undefined): HealthSummary |
   }
 }
 
-/** The health of a target as the latest sample shows it (health.md §1, §9). */
+/**
+ * The health of a target as the latest sample shows it (health.md §1, §9).
+ * The REST view adds `capacity` (the MCP tool's schema drops it): present
+ * only when the sample measured the connections, with that sample's source
+ * and time.
+ */
 export function targetHealthView(
   target: TargetRecord,
   status: StatusRecord | undefined,
   now: string = new Date().toISOString(),
-): TargetHealth {
+): TargetHealthView {
   const base = {
     targetId: brand('tgt', target.targetId),
     lifecycle: target.state,
@@ -509,13 +541,17 @@ export function targetHealthView(
     }
   }
   const lagging = status.ageMs > LAGGING_AFTER_MS
+  const source = status.ageMs > STALE_AFTER_MS ? 'cached' : 'sampled'
   return {
     ...base,
     state: lagging ? 'unknown' : status.state,
-    source: status.ageMs > STALE_AFTER_MS ? 'cached' : 'sampled',
+    source,
     observedAt: status.observedAt,
     conditions: status.conditions,
     unknownBecause: lagging ? 'sampler_lagging' : status.unknownBecause,
     probes: status.probes,
+    ...(status.capacity === null
+      ? {}
+      : { capacity: { ...status.capacity, source, observedAt: status.observedAt } }),
   }
 }

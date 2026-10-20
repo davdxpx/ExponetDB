@@ -6,6 +6,7 @@ import {
   csvField,
   DEFAULT_EXPORT_LIMIT,
   guardFormula,
+  markdownCell,
   rowToTsv,
   safeFileName,
   tsvField,
@@ -368,6 +369,189 @@ describe('buildExport: JSON', () => {
   it('needs no formula guard', () => {
     const result = json(TEXT, [['=1+1']])
     expect(JSON.parse(result.text)).toEqual([{ v: '=1+1' }])
+  })
+})
+
+function markdown(
+  columns: readonly GridColumn[],
+  rows: readonly (readonly CellValue[])[],
+  extra: {
+    limit?: { rows: number; bytes: number }
+    moreRows?: boolean
+    purpose?: 'export' | 'copy'
+  } = {},
+) {
+  return buildExport({
+    columns: describeColumns(columns),
+    rows,
+    format: 'markdown',
+    limit: extra.limit ?? BIG,
+    moreRows: extra.moreRows ?? false,
+    ...(extra.purpose === undefined ? {} : { purpose: extra.purpose }),
+  })
+}
+
+describe('markdownCell', () => {
+  it('escapes the pipe and the backslash', () => {
+    expect(markdownCell('a|b')).toBe('a\\|b')
+    expect(markdownCell('C:\\dir')).toBe('C:\\\\dir')
+    expect(markdownCell('\\|')).toBe('\\\\\\|')
+  })
+
+  it('turns every kind of line break into <br>', () => {
+    expect(markdownCell('a\nb\r\nc\rd')).toBe('a<br>b<br>c<br>d')
+  })
+
+  it('writes NULL as an empty cell and leaves other text as it is', () => {
+    expect(markdownCell(null)).toBe('')
+    expect(markdownCell('')).toBe('')
+    expect(markdownCell('<b>x</b> *y* `z`')).toBe('<b>x</b> *y* `z`')
+  })
+})
+
+describe('buildExport: Markdown', () => {
+  const columns: GridColumn[] = [
+    { name: 'id', type: 'int8' },
+    { name: 'note', type: 'text' },
+    { name: 'ok', type: 'bool' },
+  ]
+
+  it('writes a header, an alignment row that right-aligns numbers, and one line per row', () => {
+    const result = markdown(columns, [
+      [1, 'a | b', true],
+      [2, null, false],
+      [3, 'line\nbreak', true],
+    ])
+    expect(result.text).toBe(
+      [
+        '| id | note | ok |',
+        '| ---: | --- | --- |',
+        '| 1 | a \\| b | true |',
+        '| 2 |  | false |',
+        '| 3 | line<br>break | true |',
+        '',
+      ].join('\n'),
+    )
+    expect(result.format).toBe('markdown')
+    expect(result.rowsExported).toBe(3)
+    expect(result.bytes).toBe(utf8Length(result.text))
+    expect(result.message).toBe('Exported 3 rows.')
+  })
+
+  it('escapes the names of the columns too', () => {
+    const result = markdown([{ name: 'a|b\\c\nd', type: 'text' }], [['x']])
+    expect(result.text.split('\n')[0]).toBe('| a\\|b\\\\c<br>d |')
+  })
+
+  it('writes no rows as the header alone', () => {
+    const result = markdown(columns, [])
+    expect(result.text).toBe('| id | note | ok |\n| ---: | --- | --- |\n')
+    expect(result.rowsExported).toBe(0)
+  })
+
+  it('has no formula guard: a table is not a spreadsheet format', () => {
+    const result = markdown(TEXT, [['=1+1'], ['-5'], ['@x']])
+    expect(result.text).toBe('| v |\n| --- |\n| =1+1 |\n| -5 |\n| @x |\n')
+  })
+
+  it('writes a masked column empty and says so', () => {
+    const result = markdown(
+      [
+        { name: 'a', type: 'text', masked: true },
+        { name: 'b', type: 'text' },
+      ],
+      [['secret', 'open']],
+    )
+    expect(result.text).toBe('| a | b |\n| --- | --- |\n|  | open |\n')
+    expect(result.message).toBe('Exported 1 row. Masked columns are exported empty.')
+  })
+
+  it('writes a value the server cut as its preview and says so', () => {
+    const result = markdown(TEXT, [[{ truncated: true, preview: 'abc|', bytes: 9_000 }]])
+    expect(result.text).toBe('| v |\n| --- |\n| abc\\|…[truncated: 9000 bytes] |\n')
+    expect(result.truncatedValues).toBe(1)
+  })
+
+  it('keeps hostile text as text and characters that need no escape as they are', () => {
+    const hostile = '<script>alert(1)</script>\u202E[x](javascript:alert(1))'
+    const result = markdown(TEXT, [[hostile]])
+    expect(result.text).toBe(`| v |\n| --- |\n| ${hostile} |\n`)
+  })
+
+  it('applies the row and byte caps and says which one ended it', () => {
+    const rows = Array.from({ length: 10 }, (_, i): CellValue[] => [`row ${i}`])
+    const byRows = markdown(TEXT, rows, { limit: { rows: 4, bytes: 1_000_000 } })
+    expect(byRows.rowsExported).toBe(4)
+    expect(byRows.cappedBy).toBe('rows')
+    expect(byRows.text.split('\n')).toHaveLength(2 + 4 + 1)
+    // Header "| v |\n" is 6 bytes, the rule "| --- |\n" 8, each row "| row N |\n" 12.
+    const byBytes = markdown(TEXT, rows, { limit: { rows: 100, bytes: 6 + 8 + 12 * 3 + 2 } })
+    expect(byBytes.rowsExported).toBe(3)
+    expect(byBytes.cappedBy).toBe('bytes')
+    expect(byBytes.bytes).toBeLessThanOrEqual(6 + 8 + 12 * 3 + 2)
+    expect(byBytes.text.endsWith('| row 2 |\n')).toBe(true)
+  })
+})
+
+describe('buildExport: the words of a copy', () => {
+  const rows = Array.from({ length: 10 }, (_, i): CellValue[] => [i])
+  const one: GridColumn[] = [{ name: 'n', type: 'int4' }]
+
+  it('names the format for the clipboard', () => {
+    expect(markdown(one, rows.slice(0, 3), { purpose: 'copy' }).message).toBe(
+      'Copied 3 rows as Markdown.',
+    )
+    expect(
+      buildExport({
+        columns: describeColumns(one),
+        rows: rows.slice(0, 1),
+        format: 'csv',
+        limit: BIG,
+        moreRows: false,
+        purpose: 'copy',
+      }).message,
+    ).toBe('Copied 1 row as CSV.')
+    expect(
+      buildExport({
+        columns: describeColumns(one),
+        rows: rows.slice(0, 2),
+        format: 'json',
+        limit: BIG,
+        moreRows: false,
+        purpose: 'copy',
+      }).message,
+    ).toBe('Copied 2 rows as JSON.')
+  })
+
+  it('says what a copy left out, in the words of a copy', () => {
+    expect(
+      markdown(one, rows, { purpose: 'copy', limit: { rows: 4, bytes: 1_000_000 } }).message,
+    ).toBe('Copied the first 4 rows as Markdown; the result has more.')
+    expect(markdown(one, rows.slice(0, 2), { purpose: 'copy', moreRows: true }).message).toBe(
+      'Copied the 2 loaded rows as Markdown; the result has more.',
+    )
+    expect(markdown(one, rows, { purpose: 'copy', limit: { rows: 100, bytes: 5 } }).message).toBe(
+      'Copied no rows; the first row is larger than the copy size limit of 5 bytes.',
+    )
+    expect(
+      markdown(one, rows, { purpose: 'copy', limit: { rows: 100, bytes: 6 + 8 + 6 * 2 + 2 } })
+        .message,
+    ).toMatch(/^Copied the first 2 rows as Markdown; the copy reached its size limit of \d+ bytes/)
+    const cut = markdown(
+      [
+        { name: 'v', type: 'text' },
+        { name: 'w', type: 'text', masked: true },
+      ],
+      [[{ truncated: true, preview: 'a', bytes: 5 }, null]],
+      { purpose: 'copy' },
+    )
+    expect(cut.message).toBe(
+      'Copied 1 row as Markdown. 1 value cut by the server is copied as a preview. Masked columns are copied empty.',
+    )
+  })
+
+  it('keeps the words of an export unless a copy is asked for', () => {
+    expect(markdown(one, rows.slice(0, 3)).message).toBe('Exported 3 rows.')
   })
 })
 

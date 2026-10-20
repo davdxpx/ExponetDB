@@ -3,9 +3,9 @@ import { useQuery } from '@tanstack/react-query'
 import type { ResponseOf } from '../../lib/api/client.ts'
 import { useApi } from '../../lib/api/context.tsx'
 import { type QueryLike, toReadable } from '../../lib/query/readable.ts'
+import type { HistorySelection } from './history-range.ts'
 import {
   findingsQuery,
-  type HistoryRange,
   historyQuery,
   migrationStreamQuery,
   operationsQuery,
@@ -38,11 +38,11 @@ export type Operations = ResponseOf<'listOperations'>
 
 export function useHealthHistory(
   path: string,
-  range: HistoryRange,
+  selection: HistorySelection,
   missing: (value: HealthHistory) => readonly string[] | undefined,
 ): BlockRead<HealthHistory> {
   const { client } = useApi()
-  return block(useQuery(historyQuery(client, path, range)), missing)
+  return block(useQuery(historyQuery(client, path, selection)), missing)
 }
 
 export function useTargetFindings(

@@ -27,12 +27,17 @@ import { useApi } from '../../lib/api/context.tsx'
 import { describeError, t } from '../../lib/i18n/i18n.ts'
 import { classifyFailure } from '../../lib/query/errors.ts'
 import { toReadable } from '../../lib/query/readable.ts'
+import { useMe } from '../../lib/session/guard.tsx'
 import { targetHref } from '../../shell/navigation.ts'
 import { NotFoundPage } from '../../shell/not-found.tsx'
+import { holds } from '../access/fields.tsx'
 import { ACCESS_ROLES } from '../credentials/keys.ts'
 import { usePlanRequest } from './actions.ts'
+import { BootstrapSql } from './bootstrap-sql.tsx'
 import { DesiredRolesForm, ObservedRoles, RoleVerifierForm } from './cluster-roles.tsx'
 import { ClusterHealth, DeclaredTier } from './clusters-page.tsx'
+import { RegisterDatabase } from './database-registration.tsx'
+import { AddEndpoint, RetireEndpoint } from './endpoint-actions.tsx'
 import {
   clusterDatabasesQuery,
   clusterEndpointsQuery,
@@ -43,6 +48,7 @@ import {
 } from './keys.ts'
 import { credentialsPath, nodePath, serverPath, servingNode } from './model.ts'
 import { InfraPage, InfraSection, NodeStateBadge, ObjectLink } from './parts.tsx'
+import { RotateCredential } from './rotate-credential.tsx'
 
 /**
  * `/infrastructure/clusters/<cls_…>` (information-architecture.md §2.3):
@@ -50,8 +56,11 @@ import { InfraPage, InfraSection, NodeStateBadge, ObjectLink } from './parts.tsx
  * targets on them), its endpoints (addresses: `registry.manage` only, as the
  * server decides), the declared intended tier ("Declare tier", OD-22), roles
  * as cluster-wide desired state, a role's password as a verifier, the
- * hand-off of ExponetDB's own credentials, and the confirmation of a pending
- * cluster. Every change is a plan reviewed on `/changes/plans/<id>`.
+ * hand-off of ExponetDB's own credentials (and their rotation on an
+ * agent-managed cluster), the role bootstrap SQL of an external cluster, the
+ * registration of a database, adding and retiring endpoints, and the
+ * confirmation of a pending cluster. Every change is a plan reviewed on
+ * `/changes/plans/<id>`.
  */
 export function ClusterDetailPage({ clusterId }: { readonly clusterId: string }): ReactNode {
   if (!isClusterId(clusterId)) return <NotFoundPage />
@@ -205,8 +214,21 @@ function ClusterSections({
   readonly cluster: Cluster
   readonly tier: 'prod' | 'nonprod'
 }): ReactNode {
+  // An external cluster's role bootstrap SQL is run by a person before the cluster is
+  // confirmed (so it comes first while pending) and again after a database is registered.
+  const bootstrap =
+    cluster.managementMode === 'external' && cluster.state !== 'retired' ? (
+      <InfraSection
+        id="cluster-bootstrap"
+        title={t('infra.bootstrap.title')}
+        description={t('infra.bootstrap.description')}
+      >
+        <BootstrapSql cluster={cluster} />
+      </InfraSection>
+    ) : null
   return (
     <>
+      {cluster.state === 'pending' ? bootstrap : null}
       {cluster.state === 'pending' ? (
         <InfraSection
           id="cluster-confirm"
@@ -225,13 +247,14 @@ function ClusterSections({
       </InfraSection>
       <InfraSection id="cluster-placements" title={t('infra.cluster.placements.title')}>
         <Placements cluster={cluster} />
+        <RegisterDatabase cluster={cluster} />
       </InfraSection>
       <InfraSection
         id="cluster-endpoints"
         title={t('infra.cluster.endpoints.title')}
         description={t('infra.cluster.endpoints.description')}
       >
-        <Endpoints cluster={cluster} />
+        <Endpoints cluster={cluster} tier={tier} />
       </InfraSection>
       <InfraSection
         id="cluster-roles"
@@ -245,8 +268,9 @@ function ClusterSections({
         title={t('infra.cluster.credentials.title')}
         description={t('infra.cluster.credentials.description')}
       >
-        <CredentialsHandOff cluster={cluster} />
+        <CredentialsHandOff cluster={cluster} tier={tier} />
       </InfraSection>
+      {cluster.state === 'pending' ? null : bootstrap}
     </>
   )
 }
@@ -519,7 +543,13 @@ function DatabaseTable({
   )
 }
 
-function Endpoints({ cluster }: { readonly cluster: Cluster }): ReactNode {
+function Endpoints({
+  cluster,
+  tier,
+}: {
+  readonly cluster: Cluster
+  readonly tier: 'prod' | 'nonprod'
+}): ReactNode {
   const { client } = useApi()
   const endpoints = useQuery(clusterEndpointsQuery(client, cluster.id))
   if (endpoints.isError && classifyFailure(endpoints.error).kind === 'not_permitted') {
@@ -532,27 +562,39 @@ function Endpoints({ cluster }: { readonly cluster: Cluster }): ReactNode {
     )
   }
   return (
-    <ReadableView
-      readable={toReadable(endpoints, {
-        missing: (v) => (v.truncated ? [t('infra.cluster.endpoints.truncated')] : undefined),
-      })}
-      what={t('infra.cluster.endpoints.what')}
-      onRetry={() => void endpoints.refetch()}
-      onRefresh={() => void endpoints.refetch()}
-      busy={endpoints.isFetching}
-      headingLevel={3}
-      empty={{
-        isEmpty: (v) => v.items.length === 0,
-        content: (
-          <p className="text-sm text-foreground-light">{t('infra.cluster.endpoints.none')}</p>
-        ),
-      }}
-      ready={(v) => <EndpointTable endpoints={v.items} />}
-    />
+    <>
+      <ReadableView
+        readable={toReadable(endpoints, {
+          missing: (v) => (v.truncated ? [t('infra.cluster.endpoints.truncated')] : undefined),
+        })}
+        what={t('infra.cluster.endpoints.what')}
+        onRetry={() => void endpoints.refetch()}
+        onRefresh={() => void endpoints.refetch()}
+        busy={endpoints.isFetching}
+        headingLevel={3}
+        empty={{
+          isEmpty: (v) => v.items.length === 0,
+          content: (
+            <p className="text-sm text-foreground-light">{t('infra.cluster.endpoints.none')}</p>
+          ),
+        }}
+        ready={(v) => <EndpointTable endpoints={v.items} cluster={cluster} tier={tier} />}
+      />
+      <AddEndpoint cluster={cluster} />
+    </>
   )
 }
 
-function EndpointTable({ endpoints }: { readonly endpoints: readonly EndpointView[] }): ReactNode {
+function EndpointTable({
+  endpoints,
+  cluster,
+  tier,
+}: {
+  readonly endpoints: readonly EndpointView[]
+  readonly cluster: Cluster
+  readonly tier: 'prod' | 'nonprod'
+}): ReactNode {
+  const canChange = holds(useMe(), 'registry.manage')
   return (
     <Table>
       <TableCaption className="sr-only">{t('infra.cluster.endpoints.what')}</TableCaption>
@@ -563,6 +605,11 @@ function EndpointTable({ endpoints }: { readonly endpoints: readonly EndpointVie
           <TableHead scope="col">{t('infra.cluster.endpoints.address')}</TableHead>
           <TableHead scope="col">{t('infra.cluster.endpoints.tls')}</TableHead>
           <TableHead scope="col">{t('infra.cluster.endpoints.state')}</TableHead>
+          {canChange ? (
+            <TableHead scope="col">
+              <span className="sr-only">{t('infra.endpoint.actions')}</span>
+            </TableHead>
+          ) : null}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -596,6 +643,11 @@ function EndpointTable({ endpoints }: { readonly endpoints: readonly EndpointVie
               />
             </TableCell>
             <TableCell>{t(`infra.cluster.endpoint.${endpoint.state}`)}</TableCell>
+            {canChange ? (
+              <TableCell>
+                <RetireEndpoint cluster={cluster} endpoint={endpoint} tier={tier} />
+              </TableCell>
+            ) : null}
           </TableRow>
         ))}
       </TableBody>
@@ -663,7 +715,13 @@ function RolesSection({
   )
 }
 
-function CredentialsHandOff({ cluster }: { readonly cluster: Cluster }): ReactNode {
+function CredentialsHandOff({
+  cluster,
+  tier,
+}: {
+  readonly cluster: Cluster
+  readonly tier: 'prod' | 'nonprod'
+}): ReactNode {
   const Link = useLinkComponent()
   return (
     <ul className="flex flex-col gap-1 text-sm">
@@ -677,6 +735,7 @@ function CredentialsHandOff({ cluster }: { readonly cluster: Cluster }): ReactNo
                 {t('infra.cluster.credentials.link', { role })}
               </Link>
             )}
+            <RotateCredential cluster={cluster} role={role} tier={tier} />
           </li>
         )
       })}

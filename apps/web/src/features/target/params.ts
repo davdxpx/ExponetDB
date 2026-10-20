@@ -45,6 +45,16 @@ export function parseTargetParams(params: Partial<TargetParams>): TargetRoute | 
   return { product, project, environment, path: `${product}/${project}/${environment}` }
 }
 
+const TARGET_PREFIX = /^\/t\/([^/]+)\/([^/]+)\/([^/]+)/
+
+/** The target a page address (`/t/<product>/<project>/<environment>…`) names, if it is a valid one. */
+export function targetOfPathname(pathname: string): TargetRoute | undefined {
+  const m = TARGET_PREFIX.exec(pathname)
+  if (m === null) return undefined
+  const [, product, project, environment] = m
+  return parseTargetParams({ product, project, environment })
+}
+
 /** The target a registry path names, or `undefined` when it is not three slugs. */
 export function splitTargetPath(path: string): TargetRoute | undefined {
   if (!isTargetPath(path)) return undefined

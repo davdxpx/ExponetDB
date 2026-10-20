@@ -56,6 +56,11 @@ const CORPUS: readonly (readonly [string, string])[] = [
   [`SELECT set_config('app.secret_token', '${SECRET}', false)`, 'summary'],
   [`COPY t TO PROGRAM 'curl -d ${SECRET} http://x'`, 'summary'],
   [`ALTER ROLE app PASSWORD '${SECRET}`, 'summary'],
+  // ALTER … SET of a secret-named setting (the setstmt has no type wrapper in the tree)
+  [`ALTER SYSTEM SET app.api_password = '${SECRET}'`, 'summary'],
+  [`ALTER DATABASE d SET app.secret_token = '${SECRET}'`, 'summary'],
+  [`ALTER ROLE app SET app.api_key TO '${SECRET}'`, 'summary'],
+  [`ALTER ROLE app IN DATABASE d SET app.api_password = ${SECRET}`, 'summary'],
   // a setting's value written as a bare or quoted word (G4 review R1)
   [`SET app.claims = ${SECRET}`, 'parse'],
   [`SET app.claims TO ${SECRET}`, 'parse'],

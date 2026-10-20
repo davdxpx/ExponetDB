@@ -157,8 +157,8 @@ describe('the icon rail and the section menu', () => {
   })
 
   it('shows no section menu for a section with one page', async () => {
-    mount('/')
-    await screen.findByRole('heading', { name: 'Overview' })
+    mount('/audit')
+    await screen.findByRole('heading', { level: 1, name: 'Audit' })
     expect(screen.queryByRole('navigation', { name: /pages$/ })).not.toBeInTheDocument()
   })
 
@@ -178,8 +178,9 @@ describe('the icon rail and the section menu', () => {
   it('keeps the chosen sidebar mode in the preferences of this browser', async () => {
     const user = userEvent.setup()
     window.localStorage.removeItem('exdb.sidebar.mode')
-    mount('/')
-    await screen.findByRole('heading', { name: 'Overview' })
+    // A page with no section menu: beside a section menu the resizable group takes pointer-down in jsdom.
+    mount('/audit')
+    await screen.findByRole('heading', { level: 1, name: 'Audit' })
     await user.click(screen.getByRole('button', { name: 'Sidebar' }))
     await user.click(await screen.findByRole('menuitemradio', { name: 'Always open' }))
     expect(window.localStorage.getItem('exdb.sidebar.mode')).toBe('open')

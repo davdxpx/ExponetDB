@@ -13,6 +13,7 @@ import { targetHref } from '../../shell/navigation.ts'
 import { readSourceOf } from '../target/gate.ts'
 import type { TargetRoute } from '../target/params.ts'
 import { nounPhrase } from '../target/phrases.ts'
+import { draftHref } from './links.ts'
 import {
   type DriftFindings,
   type FingerprintRead,
@@ -22,11 +23,6 @@ import {
 } from './queries.ts'
 
 const HEADING = 3
-
-/** The link to the SQL page in draft mode: the only place a change starts from the schema browser. */
-export function draftHref(target: TargetRoute): string {
-  return `${targetHref(target, '/sql')}?mode=draft`
-}
 
 /**
  * The top of the schema browser: the `fp1` fingerprint of the schema, what the

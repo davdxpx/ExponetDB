@@ -657,6 +657,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
           status === 'succeeded' || status === 'failed' || status === 'denied' ? status : undefined,
         client: optionalText(call.query, 'client'),
         grant: optionalText(call.query, 'grant'),
+        identity: optionalText(call.query, 'identity'),
         ...pageOf(call.query),
       }),
     )
@@ -1514,12 +1515,39 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       ),
     )
   },
+  // Wave 8 completion: the objects of the snapshot without a search term (REST only).
+  listSchemaObjects: async (app, call) => {
+    const kinds = field(call.query, 'kinds')
+    const limit = field(call.query, 'limit')
+    const cursor = optionalText(call.query, 'cursor')
+    return value(
+      await app.registry.listSchemaObjects(
+        caller(call),
+        target(call),
+        {
+          kinds: Array.isArray(kinds)
+            ? kinds.map((k) => SchemaObjectKindSchema.parse(k))
+            : undefined,
+          schema: optionalText(call.query, 'schema'),
+          parent: optionalText(call.query, 'parent'),
+          q: optionalText(call.query, 'q'),
+        },
+        {
+          limit: typeof limit === 'number' ? limit : 100,
+          ...(cursor === undefined ? {} : { cursor }),
+        },
+      ),
+    )
+  },
   getSchemaFingerprint: async (app, call) =>
     value(await app.registry.schemaFingerprint(caller(call), target(call))),
   createSchemaDiff: async (app, call) =>
     value(await app.registry.schemaDiff(caller(call), SchemaDiffRequestSchema.parse(call.body))),
   runDriftCheck: async (app, call) =>
     value(await app.registry.runDriftCheck(caller(call), target(call))),
+  // Wave 8 completion: the past drift checks of a target (REST only).
+  listDriftChecks: async (app, call) =>
+    value(await app.registry.driftChecks(caller(call), target(call), pageOf(call.query))),
   // ----- data reads (Wave 7, ADR-0028): the same use cases as sql_query, sql_explain, sql_cancel -----
   runQuery: async (app, call) =>
     value(

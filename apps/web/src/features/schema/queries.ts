@@ -1,7 +1,7 @@
 import type { SchemaObject, SchemaObjectRef } from '@exponetdb/sdk/operations'
-import type { Readable } from '@exponetdb/ui-patterns'
-import { useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import type { Readable, ReadFailure } from '@exponetdb/ui-patterns'
+import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
 import type { ResponseOf } from '../../lib/api/client.ts'
 import { useApi } from '../../lib/api/context.tsx'
 import { t } from '../../lib/i18n/i18n.ts'
@@ -11,12 +11,14 @@ import {
   driftFindingsQuery,
   ERD_MAX_TABLES,
   fingerprintQuery,
+  type ObjectFilter,
   objectQuery,
+  objectsQuery,
   overviewQuery,
+  SNAPSHOT_CHANGED,
   schemaKeys,
-  searchQuery,
 } from './keys.ts'
-import { qualifiedName } from './schema-model.ts'
+import { type ObjectKey, qualifiedName } from './schema-model.ts'
 
 export type SchemaOverviewRead = ResponseOf<'getSchemaOverview'>
 export type FingerprintRead = ResponseOf<'getSchemaFingerprint'>
@@ -67,45 +69,114 @@ export function useDriftFindings(
   return read(useQuery(driftFindingsQuery(client, path)), missing)
 }
 
-/** The objects of the given kinds whose name contains `q`, page by page. Nothing is asked for an empty `q`. */
-export interface ObjectSearch {
+/**
+ * The objects a list has read so far, with what the last page said about the
+ * whole: how many match in all (exact), whether more pages follow, and
+ * whether the snapshot was complete. `source` and `observedAt` are the
+ * snapshot's, the same for every page of one list.
+ */
+export interface ObjectList {
   readonly items: readonly SchemaObjectRef[]
+  /** How many objects match the filters before paging (exact, from the server). */
+  readonly total: number
   readonly hasMore: boolean
+  /** False when something in the managed scope could not be read: the list may miss objects. */
+  readonly complete: boolean
+  readonly source: string
+  readonly observedAt: string
 }
 
-export interface SearchRead extends SchemaRead<ObjectSearch> {
-  /** No search was made: `q` is empty. Not a read, so no state of one. */
+export interface ListRead extends SchemaRead<ObjectList> {
+  /** The list was not asked for (the caller turned it off): not a read, so no state of one. */
   readonly idle: boolean
   readonly loadMore: () => void
   readonly loadingMore: boolean
+  /** Why the page after the ones above could not be read; the pages above are still the ones that were. */
+  readonly loadMoreFailure: ReadFailure | undefined
+  /**
+   * A page was asked for with a cursor of an older snapshot (409
+   * `SCHEMA_FINGERPRINT_MISMATCH`): the schema changed between two pages, so
+   * the list started again from the first page.
+   */
+  readonly restarted: boolean
 }
 
-export function useObjectSearch(
-  path: string,
-  kinds: readonly string[],
-  q: string,
-  missing: (value: ObjectSearch) => readonly string[] | undefined,
-): SearchRead {
+function listMissing(value: ObjectList): readonly string[] | undefined {
+  return value.complete ? undefined : [t('schema.list.incomplete')]
+}
+
+/**
+ * The objects of the given kinds, with or without a name filter, 100 at a
+ * time. The state is the truthful one of the read: `partial` when the
+ * snapshot was incomplete, `stale` for an old snapshot, `failed` for a
+ * failure on the first page. A failure on a later page keeps the pages read
+ * and is told separately (`loadMoreFailure`), and a cursor the schema outgrew
+ * restarts the list from its first page (`restarted`).
+ */
+export function useObjectList(path: string, filter: ObjectFilter, enabled = true): ListRead {
   const { client } = useApi()
+  const queryClient = useQueryClient()
+  const options = objectsQuery(client, path, filter, enabled)
+  const identity = JSON.stringify(options.queryKey)
+  const [restartedFor, setRestartedFor] = useState<string | null>(null)
   const query = useInfiniteQuery({
-    ...searchQuery(client, path, kinds, q),
-    select: (data): ObjectSearch => ({
-      items: data.pages.flatMap((page) => page.items),
-      hasMore: data.pages[data.pages.length - 1]?.nextCursor != null,
-    }),
+    ...options,
+    select: (data): ObjectList => {
+      const first = data.pages[0]
+      const last = data.pages[data.pages.length - 1]
+      return {
+        items: data.pages.flatMap((page) => page.items),
+        total: last?.total ?? 0,
+        hasMore: last?.nextCursor != null,
+        complete: data.pages.every((page) => page.complete),
+        source: first?.source ?? 'cached',
+        observedAt: first?.observedAt ?? new Date().toISOString(),
+      }
+    },
   })
-  return {
-    ...read(query, missing),
-    idle: q.length === 0,
-    loadMore: () => void query.fetchNextPage(),
-    loadingMore: query.isFetchingNextPage,
+  const nextPageFailed = query.isFetchNextPageError
+  const loadMore = (): void => {
+    setRestartedFor(null)
+    void query.fetchNextPage().then(async (result) => {
+      if (result.isError && classifyFailure(result.error).code === SNAPSHOT_CHANGED) {
+        await queryClient.resetQueries({ queryKey: options.queryKey, exact: true })
+        setRestartedFor(identity)
+      }
+    })
   }
+  return {
+    // A failure on a later page is not a failure of the read: the pages read are still the answer.
+    ...read(
+      {
+        data: query.data,
+        error: query.error,
+        isError: query.isError && !nextPageFailed,
+        dataUpdatedAt: query.dataUpdatedAt,
+        isFetching: query.isFetching,
+        refetch: query.refetch,
+      },
+      listMissing,
+    ),
+    idle: !enabled,
+    loadMore,
+    loadingMore: query.isFetchingNextPage,
+    loadMoreFailure:
+      nextPageFailed && classifyFailure(query.error).code !== SNAPSHOT_CHANGED
+        ? failureOf(query.error)
+        : undefined,
+    restarted: restartedFor === identity,
+  }
+}
+
+function failureOf(error: unknown): ReadFailure {
+  const failure = classifyFailure(error)
+  return { code: failure.code, message: failure.message }
 }
 
 /** The detail of one object. Nothing is asked for a reference without a key. */
 export function useSchemaObject(
   path: string,
-  ref: SchemaObjectRef | undefined,
+  ref: ObjectKey | undefined,
 ): SchemaRead<SchemaObject> {
   const { client } = useApi()
   const name = ref === undefined ? undefined : qualifiedName(ref)

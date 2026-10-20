@@ -37,6 +37,64 @@ export const settingsMessages = {
     'This creates a plan. Nothing exists until the plan is approved and applied; its review page opens next.',
   'settings.products.create.submit': 'Create plan to add product',
 
+  // ----- projects -----
+  'settings.projects.title': 'Projects',
+  'settings.projects.description':
+    'The projects of each product: the second part of every target path, with the schemas a fingerprint and a drift check cover. A new project and every change are plans.',
+  'settings.projects.list': 'Projects',
+  'settings.projects.what': 'Project list',
+  'settings.projects.more':
+    'Only the first {count} projects are shown. Others exist but are not listed here.',
+  'settings.projects.empty.title': 'No projects yet',
+  'settings.projects.empty.body':
+    'The read succeeded and found no projects. A target needs a project, so add one below.',
+  'settings.projects.revision': 'Revision {revision}',
+  'settings.projects.scope': 'Managed schemas',
+  'settings.projects.scope.all': 'Every schema except the system schemas',
+  'settings.projects.scope.include': 'Only',
+  'settings.projects.scope.exclude': 'Excluded:',
+  'settings.projects.scope.include.label': 'Included schemas',
+  'settings.projects.scope.include.hint':
+    'One schema name per line. Leave it empty to cover every schema except the system schemas.',
+  'settings.projects.scope.exclude.label': 'Excluded schemas',
+  'settings.projects.scope.exclude.hint':
+    'One schema name per line. pg_catalog, information_schema and exponetdb are always excluded.',
+  'settings.projects.scope.invalid':
+    'Use 1 to 63 characters per name without control characters, and at most 256 names.',
+  'settings.projects.evidence': 'Evidence chain',
+  'settings.projects.evidence.follows': 'Follows the evidence chain of its product',
+  'settings.projects.evidence.skipped': 'Skips the evidence chain for',
+  'settings.projects.edit': 'Edit project',
+  'settings.projects.edit.hide': 'Hide the form',
+  'settings.projects.edit.form': 'Change project {path}',
+  'settings.projects.edit.submit': 'Create project change plan',
+  'settings.projects.edit.noChange':
+    'Nothing changed yet. Change a field to see what the plan would do.',
+  'settings.projects.diff.title': 'What the plan would change',
+  'settings.projects.diff.caption': 'Fields of project {path} that the plan would change',
+  'settings.projects.diff.column.field': 'Field',
+  'settings.projects.diff.column.before': 'Now',
+  'settings.projects.diff.column.after': 'After the plan',
+  'settings.projects.diff.name': 'Display name',
+  'settings.projects.diff.include': 'Included schemas',
+  'settings.projects.diff.exclude': 'Excluded schemas',
+  'settings.projects.diff.allSchemas': 'Every schema except the system schemas',
+  'settings.projects.diff.nothing': 'None',
+  'settings.projects.diff.note':
+    'This is what you typed against what the registry holds now. The plan review shows what the server decides, including how much approval the change needs.',
+  'settings.projects.create.title': 'Add a project',
+  'settings.projects.create.description':
+    'This creates a plan. Nothing exists until the plan is approved and applied; its review page opens next.',
+  'settings.projects.create.product': 'Product',
+  'settings.projects.create.product.placeholder': 'Choose a product',
+  'settings.projects.create.product.required': 'Choose a product.',
+  'settings.projects.create.product.none':
+    'No product is registered, so there is nothing to add a project to.',
+  'settings.projects.create.product.link': 'Add a product',
+  'settings.projects.create.product.hint':
+    'The product is the first part of every target path of the project.',
+  'settings.projects.create.submit': 'Create project plan',
+
   // ----- environments -----
   'settings.environments.title': 'Environments',
   'settings.environments.description':

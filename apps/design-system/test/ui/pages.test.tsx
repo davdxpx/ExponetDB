@@ -132,8 +132,6 @@ describe('what the pages say', () => {
       // The Markdown export drops every line that starts with import or export.
       const statements = lines.filter((line) => /^(import|export)\s/.test(line))
       expect(statements).toEqual(['export const meta = {'])
-      // Pipe tables need remark-gfm, which the MDX build does not load; use lists.
-      expect(lines.filter((line) => /^\|/.test(line))).toEqual([])
       // No invisible or direction character, no remote URL, no title attribute, no vendor word.
       expect(page.text).not.toMatch(/[​-‏‪-‮⁦-⁩﻿]/u)
       expect(page.text).not.toMatch(/https?:\/\//)

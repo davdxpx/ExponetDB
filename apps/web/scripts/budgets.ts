@@ -26,13 +26,24 @@ export interface Budgets {
 }
 
 export const BUDGETS: Budgets = {
-  entryJs: 268_000, // measured 232.7 kB on 2026-10-13
-  largestChunk: 190_000, // section-page, 165.1 kB
+  // 2026-10-20: 267.7 kB after the Studio parity work (database switcher, breadcrumbs, the
+  // command pages, the crash page and the copy of every new screen in the eagerly loaded
+  // message catalog, 62 kB of it); measured plus 15 percent. Splitting the catalog by area
+  // is the next way to shrink the entry. Was 268 kB, set from 232.7 kB on 2026-10-13.
+  entryJs: 308_000,
+  largestChunk: 190_000, // overview-page with the charts, 143.4 kB (was section-page, 165.1 kB)
   css: 35_000, // 29.8 kB
   lazyChunk: 51_000, // largest unnamed lazy chunk, app-*, 43.9 kB
   heavy: {
-    'section-page': 190_000, // the target section pages with their charts, 165.1 kB
-    'sql-editor': 159_000, // CodeMirror 6 and the SQL editor, 138.0 kB
+    // The target overview with its charts (recharts). Until 2026-10-20 the overview, the
+    // schema browser and the SQL workspace were one `section-page` chunk (165.1 kB, then
+    // 204.0 kB with the Studio parity work); each body now loads with its own section, so
+    // the charts' chunk is the overview's: 143.4 kB measured, plus 15 percent.
+    'overview-page': 165_000,
+    // CodeMirror 6, shared by the SQL editor and the text diff since the migration SQL panel
+    // (2026-10-20) uses the diff; Rolldown names the shared chunk after its first module. Was
+    // `sql-editor` at 138.0 kB; the same library, 134.7 kB, so the ceiling is unchanged.
+    'cm-untrusted': 159_000,
     'schema-erd': 85_000, // @xyflow/react and the schema diagram, 73.1 kB
   },
 }

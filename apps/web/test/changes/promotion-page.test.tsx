@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
 import {
@@ -164,6 +165,90 @@ describe('the promotion view', () => {
     await waitFor(() => expect(timeline()?.querySelector('[data-marker-state]')).not.toBeNull())
     await act(async () => {})
     expect(await axeViolations(document.body)).toEqual([])
+  })
+})
+
+describe('the promotion view: plan bundles on an environment', () => {
+  async function panel(): Promise<HTMLElement> {
+    return waitFor(() => {
+      const element = document.querySelector(`[data-promote="${PROJECT}"]`)
+      if (!(element instanceof HTMLElement)) throw new Error('no promotion panel yet')
+      return element
+    })
+  }
+
+  it('plans the bundles production lacks by id, names the evidence, and opens the plan', async () => {
+    const user = userEvent.setup()
+    const world = promotionWorld()
+    const { router } = await openPromotion(world)
+    const root = await panel()
+    // Staging holds every bundle; production lacks add_notes (no record), so it opens there.
+    expect(within(root).getByLabelText('Environment')).toHaveValue('production')
+    const table = within(root).getByRole('table', { name: 'Bundles not applied on production' })
+    const row = table.querySelector(`[data-candidate="${M2}"]`) as HTMLElement
+    expect(within(row).getByText('Not known (the mirror holds no record)')).toBeInTheDocument()
+    // Staging has no mirror in this read: the evidence is not known here, and the server decides.
+    expect(within(row).getByText(/Not known whether it is verified on staging/)).toBeInTheDocument()
+    // create_accounts is divergent on production: it is not offered.
+    expect(table.querySelector(`[data-candidate="${M1}"]`)).toBeNull()
+    await user.click(within(row).getByRole('checkbox', { name: `Select migration ${M2}` }))
+    await user.click(within(root).getByRole('button', { name: 'Plan on production' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Plan on production?' })
+    expect(dialog.querySelector('[data-slot="confirm-frame"]')).toHaveAttribute('data-tier', 'prod')
+    expect(within(dialog).getByText('shop/platform/production')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Create plan' }))
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe('/changes/plans/pln_01M4S9000000000000000000AA'),
+    )
+    const sent = world.posts('/migrations/plans')
+    expect(sent).toHaveLength(1)
+    expect(sent[0]?.path).toBe('/api/v1/targets/shop%2Fplatform%2Fproduction/migrations/plans')
+    expect(sent[0]?.body).toEqual({ migrationIds: [M2] })
+  })
+
+  it('lists another environment’s bundles when it is picked, and says when none waits there', async () => {
+    const user = userEvent.setup()
+    await openPromotion(promotionWorld())
+    const root = await panel()
+    await user.selectOptions(within(root).getByLabelText('Environment'), 'staging')
+    expect(
+      await within(root).findByText(/No bundle in this read is waiting for staging/),
+    ).toBeInTheDocument()
+    expect(within(root).getByRole('button', { name: 'Plan on staging' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+  })
+
+  it('links the compare page of production against its evidence environment', async () => {
+    await openPromotion(promotionWorld())
+    const root = await panel()
+    expect(
+      within(root).getByRole('link', { name: 'Compare the schema of production with staging' }),
+    ).toHaveAttribute('href', '/t/shop/platform/production/compare?to=staging')
+  })
+
+  it('opens the stored SQL of a bundle from the promotion view', async () => {
+    const user = userEvent.setup()
+    const world = promotionWorld()
+    await openPromotion(world)
+    const root = await panel()
+    await user.click(within(root).getByRole('button', { name: `View SQL of migration ${M2}` }))
+    expect(await screen.findByRole('dialog', { name: 'Migration SQL' })).toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        world
+          .gets(`/projects/${PROJECT}/bundles/${M2}`)
+          .map((s) => s.path)
+          .sort(),
+      ).toEqual(
+        [
+          `/api/v1/projects/${PROJECT}/bundles/${M2}`,
+          `/api/v1/projects/${PROJECT}/bundles/${M2}/revisions/1/files/up.sql`,
+          `/api/v1/projects/${PROJECT}/bundles/${M2}/revisions/1/files/verify.sql`,
+        ].sort(),
+      ),
+    )
   })
 })
 

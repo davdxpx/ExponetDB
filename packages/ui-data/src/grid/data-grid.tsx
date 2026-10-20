@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ChevronsUpDown, Copy, Lock } from '@exponetdb/icons'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronsUpDown, Copy, Lock } from '@exponetdb/icons'
 import {
   Alert,
   AlertDescription,
@@ -6,6 +6,10 @@ import {
   Button,
   cn,
   copyToClipboard,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   toast,
 } from '@exponetdb/ui'
 import {
@@ -418,7 +422,12 @@ function GridContent({
   // --- copy and export ---------------------------------------------------------------------------
   const announce = (message: string) => setNotice({ text: message, rows })
 
-  const writeToClipboard = async (text: string, copied: string, extra?: string) => {
+  const writeToClipboard = async (
+    text: string,
+    copied: string,
+    extra?: string,
+    level: 'success' | 'warning' = 'success',
+  ) => {
     const hidden = countHiddenCharacters(text)
     const ok = await copyToClipboard(text)
     if (!ok) {
@@ -435,7 +444,9 @@ function GridContent({
         : undefined,
     ].filter((note): note is string => note !== undefined)
     announce([copied, ...notes].join(' '))
-    toast.success(copied, notes.length === 0 ? undefined : { description: notes.join(' ') })
+    const options = notes.length === 0 ? undefined : { description: notes.join(' ') }
+    if (level === 'warning') toast.warning(copied, options)
+    else toast.success(copied, options)
   }
 
   const copyCell = (row: number, col: number) => {
@@ -461,6 +472,28 @@ function GridContent({
     void writeToClipboard(rowToTsv(values, metas), 'Copied the row as tab-separated values.')
   }
 
+  /**
+   * Copies the loaded rows to the clipboard as a Markdown table, CSV or JSON,
+   * up to the same caps as an export. The message says how many rows were
+   * copied and what was left out, as an export does.
+   */
+  const copyAs = (format: ExportFormat) => {
+    const result = buildExport({
+      columns: metas,
+      rows,
+      format,
+      limit: exportLimit ?? DEFAULT_EXPORT_LIMIT,
+      moreRows: truncated !== undefined || page?.hasMore === true,
+      purpose: 'copy',
+    })
+    void writeToClipboard(
+      result.text,
+      result.message,
+      undefined,
+      result.incomplete || result.truncatedValues > 0 ? 'warning' : 'success',
+    )
+  }
+
   const runExport = (format: ExportFormat) => {
     const result = buildExport({
       columns: metas,
@@ -473,7 +506,11 @@ function GridContent({
       downloadText(
         result.text,
         safeFileName(fileName, format),
-        format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8',
+        format === 'csv'
+          ? 'text/csv;charset=utf-8'
+          : format === 'markdown'
+            ? 'text/markdown;charset=utf-8'
+            : 'application/json;charset=utf-8',
       )
     } catch {
       announce('Could not create the file.')
@@ -586,6 +623,23 @@ function GridContent({
           >
             Copy row
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                icon={<Copy />}
+                iconRight={<ChevronDown className="size-3" />}
+              >
+                Copy as
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem onSelect={() => copyAs('markdown')}>Markdown</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => copyAs('csv')}>CSV</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => copyAs('json')}>JSON</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button type="button" variant="outline" onClick={() => runExport('csv')}>
             Export CSV
           </Button>
@@ -783,10 +837,11 @@ function GridContent({
  * - Values are text (C-26): invisible and direction characters appear as code
  *   points, NULL, an empty string, a masked value and a missing one look
  *   different, a long value is cut in the cell and opens whole in a side sheet.
- * - Copy a cell or a row (tab-separated), export the loaded rows as CSV or JSON
- *   up to `exportLimit`; an export that ends early or leaves rows on the server
- *   says so, in the status line and in a toast. CSV and the copied row guard
- *   against spreadsheet formulas (see `guardFormula`).
+ * - Copy a cell or a row (tab-separated), copy the loaded rows as a Markdown
+ *   table, CSV or JSON ("Copy as"), or export them as CSV or JSON, up to
+ *   `exportLimit`; a copy or an export that ends early or leaves rows on the
+ *   server says so, in the status line and in a toast. CSV and the copied row
+ *   guard against spreadsheet formulas (see `guardFormula`).
  * - Sorting is the server's: headers are sortable only when `sort` is passed.
  * - More rows are read only when the person presses "Load more rows" (`page`):
  *   every read of a target is an audited action, so scrolling never causes one.

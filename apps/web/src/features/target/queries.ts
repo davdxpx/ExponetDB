@@ -5,6 +5,8 @@ import type { ResponseOf } from '../../lib/api/client.ts'
 import { useApi } from '../../lib/api/context.tsx'
 import { classifyFailure } from '../../lib/query/errors.ts'
 import { toReadable } from '../../lib/query/readable.ts'
+import { targetListQuery } from '../targets/keys.ts'
+import { type DatabaseGroups, toDatabaseGroups } from './databases.ts'
 import { type EnvironmentList, toEnvironmentList } from './environments.ts'
 import { environmentsQuery, targetHealthQuery, targetQuery } from './keys.ts'
 
@@ -77,6 +79,27 @@ export function useProjectEnvironments(
   return {
     readable: toReadable(query, {
       missing: (list) => (list.missing.length === 0 ? undefined : list.missing),
+    }),
+    notFound: false,
+    refetch: () => void query.refetch(),
+    fetching: query.isFetching,
+  }
+}
+
+/**
+ * Every database the person may see, grouped by product and project, for the
+ * switcher. The read is the one the Databases page makes (the same cache
+ * entry), so opening the switcher after that page costs nothing. Partial when
+ * the server has more targets than the read follows or a path cannot be
+ * shown; a failed read is a failed state, never an empty list. Mount it only
+ * where the list is shown: nothing is requested until then.
+ */
+export function useDatabases(): TargetRead<DatabaseGroups> {
+  const { client } = useApi()
+  const query = useQuery({ ...targetListQuery(client), select: toDatabaseGroups })
+  return {
+    readable: toReadable(query, {
+      missing: (groups) => (groups.missing.length === 0 ? undefined : groups.missing),
     }),
     notFound: false,
     refetch: () => void query.refetch(),

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -60,6 +60,14 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-38 | License basis of copied Supabase UI files (Apache-2.0 repository vs MIT package declarations) | open | comply with the superset: Apache-2.0 text, retained copyright line, prominent change notice in every header, and the MIT notice text ([ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md) §4) | release of the Wave 8 Web App (not its development) | yes |
 | OD-39 | Hosting of the design-system app | open | (a) not deployed: built and checked locally and in CI only, until a reader outside the repository needs it | publishing `apps/design-system`; not G8 | yes |
 | OD-40 | The SQL editor component under the Web App's CSP | **resolved 2026-10-13** | option (a): CodeMirror 6 mounted in a shadow root behind the editor interface, built to work and look like Supabase's SQL editor (tabs, completion, formatting, results grid, shortcuts); the CSP stays strict; Monaco is not used | (was the SQL section and the diff viewers) | decided |
+| OD-41 | Connection details for people without `registry.manage` | open | (a) keep endpoint addresses to registry administrators; the Connect panel (secret-free) is built for them; revisit with option (c) (non-production only) when a consumer team asks | a Connect panel for other readers | yes |
+| OD-42 | How the read-only table browser reads rows | open | (a) one data-read path: the Web App sends a `SELECT` built from catalog identifiers (always quoted) and bind parameters through the existing query endpoint, which admits, masks, caps and audits it | nothing (built on (a)) | yes |
+| OD-43 | A read of a cluster's PostgreSQL roles and its permission | open | (b) `nodes.read`, the permission that already shows the cluster's desired roles; attributes, connection limits and memberships, never verifiers | the Roles page of the schema browser | yes |
+| OD-44 | Server-side DDL generated for display | open | (a) not in V1: definitions are shown as the catalog stores them; no generated `CREATE` text and no migration drafted from a schema diff | table definitions, ERD "copy as SQL", "draft from this diff" | yes |
+| OD-45 | A person's own activity without `audit.read` | open | (b) every person reads their own events (`actor=self`) with a reduced field set | the activity page for viewers and developers | yes |
+| OD-46 | Host metrics history and a PostgreSQL log tail | open | (a) neither in V1: host values stay latest-only; a log tail waits for a redaction and retention decision | Studio-like report charts and a log page | yes |
+| OD-47 | Changing a person's sign-in address | open | (a) as today: erase and invite again; an address change needs a verified delivery channel (OD-21) | an address change on the account page | yes |
+| OD-48 | A SQL formatter in the Web App, given its license closure | open | (c) no formatter until one without a Python-2.0 dependency exists or the owner allows it; (a) would allow `Python-2.0` for the formatter's `argparse` (used only by its command line) | "Format SQL" in the SQL editor | yes |
 
 ---
 
@@ -1211,6 +1219,141 @@ nothing is implemented. Line references are to commit `1966cf4`.
   editor interface of `packages/ui-data`, and the CSP of D9 unchanged.
 - **Source.** the owner, in the Wave 8 session on 2026-10-13
   ([G8 record §3](../14-roadmap/gates/8.md#3-owner-decisions-of-the-wave-8-order)).
+
+## OD-41. Connection details for people without `registry.manage`
+
+- **Added.** 2026-10-20 (Wave 8 completion, Studio parity audit;
+  [`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)).
+- **Question.** May people who read a target (`targets.read`) but do not
+  administer the registry see how to reach its database: endpoint host,
+  port, database name and TLS server name (never a credential), as Studio's
+  Connect sheet shows them?
+- **Why it matters.** Applications connect to databases directly, never
+  through ExponetDB, so the people who configure them need the address; but
+  [`resources.md`](../06-rest-api/resources.md) shows endpoint addresses
+  only to `registry.manage`, and an address list of production databases
+  helps an attacker map the fleet. The Wave 8 completion builds a secret-free
+  Connect panel for registry administrators only (URI and `psql` line with a
+  password placeholder, `sslmode=verify-full`).
+- **Options.** (a) keep: registry administrators only; (b) a new read
+  `GET /targets/{id}/connection` for `targets.read` on every tier; (c) (b)
+  for non-production tiers only. Each option leaves the CA certificate that
+  `verify-full` needs ([OD-17](#od-17-ca-strategy-for-postgresql-server-certificates))
+  to the operator's channel.
+- **Recommendation.** (a) until a consumer team asks, then (c).
+- **Blocks.** A Connect panel for readers who are not registry administrators.
+- **Owner decision needed.** Yes.
+
+## OD-42. How the read-only table browser reads rows
+
+- **Added.** 2026-10-20 (Wave 8 completion, Studio parity audit).
+- **Question.** Studio's most used page is the table editor. ExponetDB has
+  no row editing, but a read-only browser of a table's rows is in reach: does
+  the Web App build the `SELECT` and send it through the existing data-read
+  query endpoint, or does a typed rows endpoint build it on the server?
+- **Why it matters.** Through the query endpoint there is one data-read
+  path: the server parses and admits the statement, masks sensitive
+  columns, caps rows and bytes and audits each read; the browser only quotes
+  catalog identifiers and passes filter values as bind parameters. A typed
+  endpoint would add a distinct audit action and server-side paging, at the
+  cost of a second data-read path to review and keep equal.
+- **Options.** (a) the query endpoint (as built); (b) a typed
+  `GET /targets/{id}/tables/{name}/rows`.
+- **Recommendation.** (a).
+- **Blocks.** Nothing; the browser is built on (a) and changes course if the
+  owner chooses (b).
+- **Owner decision needed.** Yes.
+
+## OD-43. A read of a cluster's PostgreSQL roles and its permission
+
+- **Added.** 2026-10-20 (Wave 8 completion, Studio parity audit).
+- **Question.** Studio lists a database's roles with their attributes and
+  connection limits. ExponetDB reads them only into the cluster fingerprint
+  and shows the desired roles of a cluster; should a read of the actual
+  roles (attributes, connection limit, memberships; never verifiers) exist,
+  and which permission covers it?
+- **Options.** (a) none (the schema browser's Roles page stays "not
+  supported"); (b) `nodes.read`, which already shows a cluster's desired
+  roles; (c) `schema.read` per target.
+- **Recommendation.** (b): roles are cluster-wide, like the desired state.
+- **Blocks.** The Roles page of the schema browser.
+- **Owner decision needed.** Yes.
+
+## OD-44. Server-side DDL generated for display
+
+- **Added.** 2026-10-20 (Wave 8 completion, Studio parity audit).
+- **Question.** Studio shows a table's `CREATE` statement, copies an ERD as
+  SQL and turns a branch diff into a migration. Should ExponetDB generate
+  DDL text on the server (a clean-room deparse; DDL generation is a
+  clean-room area under C-2) for display, and later as a migration draft?
+- **Options.** (a) not in V1; (b) display only (definition tab, "copy as
+  SQL"); (c) (b) plus "draft a migration from this diff", always a draft
+  that goes through lint, plan, approval and the evidence rule.
+- **Recommendation.** (a): drafts written by people stay the only source of
+  migrations until the migration engine has run in production.
+- **Blocks.** A definition tab for tables, ERD "copy as SQL", drafting from
+  the environment comparison.
+- **Owner decision needed.** Yes.
+
+## OD-45. A person's own activity without `audit.read`
+
+- **Added.** 2026-10-20 (Wave 8 completion, Studio parity audit).
+- **Question.** The account page's activity (`actor=self`) needs
+  `audit.read`, so viewers and developers see "not permitted" for their own
+  actions. Should every person read their own events?
+- **Options.** (a) keep `audit.read`; (b) `actor=self` for every person,
+  with the pseudonymized field set `audit.read` already gives.
+- **Recommendation.** (b).
+- **Blocks.** The activity page for people without `audit.read`.
+- **Owner decision needed.** Yes.
+
+## OD-46. Host metrics history and a PostgreSQL log tail
+
+- **Added.** 2026-10-20 (Wave 8 completion, Studio parity audit).
+- **Question.** Studio's reports chart CPU, memory, disk and connections over
+  time and show PostgreSQL logs. ExponetDB keeps the latest host values from
+  the node agent and health samples with their conditions; should it store
+  host metrics over time, and read redacted PostgreSQL log lines through the
+  node's log inspection?
+- **Options.** (a) neither in V1; (b) connection counts in the health
+  history only (no new store; the samples already measure them); (c) (b) plus
+  a metrics store and a redacted log tail.
+- **Recommendation.** (a) for host metrics and logs; (b) can follow without
+  a new store.
+- **Blocks.** Report charts beyond health states, a log page.
+- **Owner decision needed.** Yes.
+
+## OD-47. Changing a person's sign-in address
+
+- **Added.** 2026-10-20 (Wave 8 completion, Studio parity audit).
+- **Question.** Studio lets a person change their email address. In
+  ExponetDB the address anchors the invitation and sign-in; should a person
+  (or an administrator) be able to change it?
+- **Options.** (a) as today: erase the identity and invite again;
+  (b) an address change by plan, confirmed through the new address, which
+  needs a delivery channel ([OD-21](#od-21-delivery-channel-for-invitations-and-security-notifications)).
+- **Recommendation.** (a) until OD-21 is decided.
+- **Blocks.** An address change on the account page.
+- **Owner decision needed.** Yes.
+
+## OD-48. A SQL formatter in the Web App, given its license closure
+
+- **Added.** 2026-10-20 (Wave 8 completion, Studio parity; the SQL editor's
+  "Format SQL").
+- **Question.** Studio formats SQL with `sql-formatter` (MIT). Every release
+  of it since 3.1.0 depends on `argparse` 2.0.1, which is licensed
+  Python-2.0; the dependency license scan (`bun run licenses`, ADR-0030 §5)
+  allows Python-2.0 only for development tools, so the formatter cannot
+  ship in the browser bundle. May the Web App format SQL, and how?
+- **Options.** (a) allow `Python-2.0` in the shipped closure for this one
+  package (it is used only by the formatter's command line, never in the
+  browser); (b) another formatter (`@sqltools/formatter` is MIT without
+  dependencies but unmaintained since 2022 and has no PostgreSQL dialect);
+  (c) no formatter; (d) a native formatter written for ExponetDB.
+- **Recommendation.** (c) for now; (a) is defensible but changes the license
+  policy for a convenience.
+- **Blocks.** "Format SQL" in the SQL editor.
+- **Owner decision needed.** Yes.
 
 ## Decisions of the Wave 8 order (2026-10-13)
 

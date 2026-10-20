@@ -124,9 +124,14 @@ describe('the words of the guidance', () => {
     }
   })
 
-  it('use lists, not pipe tables (the MDX build has no GFM plugin)', () => {
+  it('write every pipe table with a header separator, so the GFM build renders it as a table', () => {
     for (const file of files) {
-      expect(prose(file.source), file.name).not.toMatch(/^\|.*\|\s*$/m)
+      const lines = prose(file.source).split('\n')
+      lines.forEach((line, index) => {
+        const starts = /^\|.*\|\s*$/.test(line) && !/^\|.*\|\s*$/.test(lines[index - 1] ?? '')
+        if (starts)
+          expect(lines[index + 1] ?? '', `${file.name}:${index + 1}`).toMatch(/^\|[\s:|-]+\|\s*$/)
+      })
     }
   })
 

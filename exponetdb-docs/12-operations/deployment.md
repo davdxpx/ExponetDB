@@ -247,8 +247,8 @@ runs. What changes on `reos-01`:
    `/.well-known/oauth-authorization-server` answer `200`; the MCP
    Inspector lists the tools with a token.
 5. **Clients.** No third-party client is trusted at installation: each is
-   approved once by an administrator on **Admin → Clients**
-   (`/admin/clients`); see [`../05-mcp/client-matrix.md`](../05-mcp/client-matrix.md).
+   approved once by an administrator on **Access → OAuth clients**
+   (`/access/oauth-clients`); see [`../05-mcp/client-matrix.md`](../05-mcp/client-matrix.md).
 6. **Keys.** The MCP keys are created on first use; rotation is
    `exponetdb keyring rotate-mcp-key` (§2, runbook RB-15).
 
