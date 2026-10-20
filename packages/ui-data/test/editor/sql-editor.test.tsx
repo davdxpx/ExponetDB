@@ -1,7 +1,8 @@
 import '@testing-library/jest-dom/vitest'
 import { startCompletion } from '@codemirror/autocomplete'
-import { deleteCharBackward, insertNewlineAndIndent } from '@codemirror/commands'
+import { deleteCharBackward, insertNewlineAndIndent, undo } from '@codemirror/commands'
 import { openSearchPanel } from '@codemirror/search'
+import { EditorSelection } from '@codemirror/state'
 import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
 import { createRef, StrictMode } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -440,7 +441,11 @@ describe('SqlEditor: completion from the injected provider', () => {
     const completion = provider()
     const { root } = await complete({ completion }, 'select 1;\nselect * from us')
     await waitFor(() => expect(completion).toHaveBeenCalled())
-    expect(completion).toHaveBeenCalledWith({ word: 'us', before: '\nselect * from ' })
+    expect(completion).toHaveBeenCalledWith({
+      word: 'us',
+      before: '\nselect * from ',
+      after: '',
+    })
     await waitFor(() => {
       const options = Array.from(root.querySelectorAll('.cm-tooltip-autocomplete [role="option"]'))
       expect(options.map((o) => o.textContent)).toEqual(
@@ -455,11 +460,70 @@ describe('SqlEditor: completion from the injected provider', () => {
     expect(root.querySelector('.cm-tooltip-autocomplete')).toHaveTextContent('public.users')
   })
 
+  it('also gives the provider the rest of the statement, cut at the next semicolon', async () => {
+    const completion = provider([])
+    const value = 'select u. from users u where x = 1; select 2'
+    const view = renderEditor({ mode: 'draft', value, completion })
+    view.editor.focus()
+    view.editor.dispatch({ selection: { anchor: 'select u.'.length } })
+    await act(async () => {
+      startCompletion(view.editor)
+    })
+    await waitFor(() => expect(completion).toHaveBeenCalled())
+    expect(completion).toHaveBeenCalledWith({
+      word: 'u.',
+      before: 'select ',
+      after: ' from users u where x = 1',
+    })
+  })
+
+  it('bounds the rest of the statement it gives the provider', async () => {
+    const completion = provider([])
+    const value = `select u. from ${'x'.repeat(5_000)}`
+    const view = renderEditor({ mode: 'draft', value, completion })
+    view.editor.focus()
+    view.editor.dispatch({ selection: { anchor: 'select u.'.length } })
+    await act(async () => {
+      startCompletion(view.editor)
+    })
+    await waitFor(() => expect(completion).toHaveBeenCalled())
+    const context = completion.mock.calls[0]?.[0]
+    expect(context?.after?.length).toBe(2000)
+  })
+
+  it('offers column items from the provider with the type as detail, hidden characters as code points', async () => {
+    const completion = provider([
+      { label: 'id', kind: 'column', detail: 'bigint' },
+      { label: 'email', kind: 'column', detail: 'text\u202E' },
+    ])
+    const view = renderEditor({ mode: 'draft', value: 'select u.', completion })
+    view.editor.focus()
+    view.editor.dispatch({ selection: { anchor: 'select u.'.length } })
+    await act(async () => {
+      startCompletion(view.editor)
+    })
+    await waitFor(() => {
+      const options = Array.from(
+        view.root.querySelectorAll('.cm-tooltip-autocomplete [role="option"]'),
+      )
+      expect(options.map((o) => o.textContent)).toEqual(
+        expect.arrayContaining([expect.stringContaining('bigint')]),
+      )
+    })
+    const tooltip = view.root.querySelector('.cm-tooltip-autocomplete')
+    expect(tooltip?.textContent).not.toContain('\u202E')
+    expect(tooltip?.textContent).toContain('⟨U+202E⟩')
+  })
+
   it('replaces only the part after the last dot', async () => {
     const completion = provider([{ label: 'users', kind: 'table' }])
     const { editor, root } = await complete({ completion }, 'select * from public.us')
     await waitFor(() =>
-      expect(completion).toHaveBeenCalledWith({ word: 'public.us', before: 'select * from ' }),
+      expect(completion).toHaveBeenCalledWith({
+        word: 'public.us',
+        before: 'select * from ',
+        after: '',
+      }),
     )
     await waitFor(() =>
       expect(root.querySelector('.cm-tooltip-autocomplete [role="option"]')).not.toBeNull(),
@@ -676,6 +740,38 @@ describe('SqlEditor: handle', () => {
     expect(handle?.getSelectionText()).toBe('select')
   })
 
+  it('tells where the cursor is, in UTF-16 units', () => {
+    const ref = createRef<EditorHandle>()
+    const text = "select '😀';\nselect 2"
+    const { editor } = renderEditor({ value: text, ref })
+    expect(ref.current?.getCursorOffset()).toBe(0)
+    editor.dispatch({ selection: { anchor: 10 } })
+    expect(ref.current?.getCursorOffset()).toBe(10)
+    editor.dispatch({ selection: { anchor: 3, head: 7 } })
+    expect(ref.current?.getCursorOffset()).toBe(7)
+    editor.dispatch({ selection: { anchor: editor.state.doc.length } })
+    expect(ref.current?.getCursorOffset()).toBe(text.length)
+  })
+
+  it('lists the selected ranges, not the empty ones', () => {
+    const ref = createRef<EditorHandle>()
+    const { editor } = renderEditor({ value: 'select 1;\nselect 2', ref })
+    expect(ref.current?.getSelectionRanges()).toEqual([])
+    editor.dispatch({ selection: { anchor: 0, head: 6 } })
+    expect(ref.current?.getSelectionRanges()).toEqual([{ from: 0, to: 6 }])
+    editor.dispatch({
+      selection: EditorSelection.create([
+        EditorSelection.range(0, 6),
+        EditorSelection.cursor(8),
+        EditorSelection.range(10, 16),
+      ]),
+    })
+    expect(ref.current?.getSelectionRanges()).toEqual([
+      { from: 0, to: 6 },
+      { from: 10, to: 16 },
+    ])
+  })
+
   it('clamps a position outside the text', () => {
     const ref = createRef<EditorHandle>()
     const { editor } = renderEditor({ value: 'ab\ncd', ref })
@@ -690,6 +786,96 @@ describe('SqlEditor: handle', () => {
     const { editor } = renderEditor({ mode: 'readonly', value: 'ab\ncd', ref })
     ref.current?.setSelection(2, 2)
     expect(editor.state.selection.main.head).toBe(4)
+  })
+})
+
+describe('SqlEditor: selection changes', () => {
+  it('reports when a selection appears and when it goes, not every cursor move', () => {
+    const onSelectionChange = vi.fn()
+    const { editor } = renderEditor({ value: 'select 1;\nselect 2', onSelectionChange })
+    editor.dispatch({ selection: { anchor: 3 } })
+    editor.dispatch({ selection: { anchor: 5 } })
+    expect(onSelectionChange).not.toHaveBeenCalled()
+    editor.dispatch({ selection: { anchor: 0, head: 6 } })
+    expect(onSelectionChange).toHaveBeenCalledTimes(1)
+    expect(onSelectionChange).toHaveBeenLastCalledWith(true)
+    editor.dispatch({ selection: { anchor: 0, head: 8 } })
+    expect(onSelectionChange).toHaveBeenCalledTimes(1)
+    editor.dispatch({ selection: { anchor: 4 } })
+    expect(onSelectionChange).toHaveBeenCalledTimes(2)
+    expect(onSelectionChange).toHaveBeenLastCalledWith(false)
+  })
+
+  it('reports a selection that an edit removes', () => {
+    const onSelectionChange = vi.fn()
+    const { editor } = renderEditor({ value: 'select 1', onSelectionChange })
+    editor.dispatch({ selection: { anchor: 0, head: 6 } })
+    editor.dispatch({
+      changes: { from: 0, to: 6, insert: 'x' },
+      selection: { anchor: 1 },
+      userEvent: 'input.type',
+    })
+    expect(onSelectionChange).toHaveBeenLastCalledWith(false)
+  })
+
+  it('calls the current callback after a re-render', () => {
+    const first = vi.fn()
+    const second = vi.fn()
+    const view = renderEditor({ value: 'select 1', onSelectionChange: first })
+    view.rerender(
+      <SqlEditor value="select 1" mode="draft" label="Migration SQL" onSelectionChange={second} />,
+    )
+    view.editor.dispatch({ selection: { anchor: 0, head: 3 } })
+    expect(first).not.toHaveBeenCalled()
+    expect(second).toHaveBeenCalledWith(true)
+  })
+})
+
+describe('SqlEditor: replacing a range', () => {
+  it('replaces a range that still holds the expected text, as an edit that undo reverts', () => {
+    const onChange = vi.fn()
+    const ref = createRef<EditorHandle>()
+    const { editor } = renderEditor({ value: 'select  1', onChange, ref })
+    expect(ref.current?.replaceRange(0, 9, 'select  1', 'select 1')).toBe(true)
+    expect(editor.state.doc.toString()).toBe('select 1')
+    expect(onChange).toHaveBeenLastCalledWith('select 1')
+    undo(editor)
+    expect(editor.state.doc.toString()).toBe('select  1')
+  })
+
+  it('changes only the part that differs, so the cursor after it stays', () => {
+    const ref = createRef<EditorHandle>()
+    const { editor } = renderEditor({ value: 'select  1\nfrom t', ref })
+    editor.dispatch({ selection: { anchor: editor.state.doc.length } })
+    expect(ref.current?.replaceRange(0, 9, 'select  1', 'select 1')).toBe(true)
+    expect(editor.state.selection.main.head).toBe('select 1\nfrom t'.length)
+  })
+
+  it('refuses a range whose text changed meanwhile, and a range outside the text', () => {
+    const onChange = vi.fn()
+    const ref = createRef<EditorHandle>()
+    const { editor } = renderEditor({ value: 'select 1', onChange, ref })
+    expect(ref.current?.replaceRange(0, 8, 'select 2', 'x')).toBe(false)
+    expect(ref.current?.replaceRange(0, 99, 'select 1', 'x')).toBe(false)
+    expect(ref.current?.replaceRange(-1, 3, 'sel', 'x')).toBe(false)
+    expect(ref.current?.replaceRange(5, 2, '', 'x')).toBe(false)
+    expect(editor.state.doc.toString()).toBe('select 1')
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('treats an unchanged replacement as done and changes nothing', () => {
+    const onChange = vi.fn()
+    const ref = createRef<EditorHandle>()
+    renderEditor({ value: 'select 1', onChange, ref })
+    expect(ref.current?.replaceRange(0, 8, 'select 1', 'select 1')).toBe(true)
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('shows CR and CRLF in the new text as line breaks', () => {
+    const ref = createRef<EditorHandle>()
+    const { editor } = renderEditor({ value: 'a', ref })
+    expect(ref.current?.replaceRange(0, 1, 'a', 'a\r\nb\rc')).toBe(true)
+    expect(editor.state.doc.toString()).toBe('a\nb\nc')
   })
 })
 

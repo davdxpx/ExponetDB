@@ -1,6 +1,6 @@
 import type { SqlClassification, SqlPosition } from '@exponetdb/sdk/operations'
 import type { SqlDiagnostic, SqlDiagnosticSeverity } from '@exponetdb/ui-data'
-import { isInvisible } from '@exponetdb/ui-patterns'
+import { codePointLabel, isInvisible } from '@exponetdb/ui-patterns'
 
 /**
  * The pure part of the SQL workspace (information-architecture.md §4): the
@@ -13,11 +13,14 @@ import { isInvisible } from '@exponetdb/ui-patterns'
 
 export type SqlMode = 'query' | 'draft'
 
-/** Where the text of a tab came from. A tab opened from a link, the history or a saved query never runs on opening. */
-export type TabOrigin = 'new' | 'link' | 'history' | 'saved'
+/**
+ * Where the text of a tab came from. A tab opened from a link, the history, a
+ * saved query or a template never runs on opening.
+ */
+export type TabOrigin = 'new' | 'link' | 'history' | 'saved' | 'template'
 
 export const SQL_MODES: readonly SqlMode[] = ['query', 'draft']
-export const TAB_ORIGINS: readonly TabOrigin[] = ['new', 'link', 'history', 'saved']
+export const TAB_ORIGINS: readonly TabOrigin[] = ['new', 'link', 'history', 'saved', 'template']
 
 export interface SavedRef {
   readonly id: string
@@ -95,6 +98,36 @@ export function updateTab(state: TabsState, id: string, change: Partial<SqlTab>)
   }
 }
 
+/**
+ * Carries a rename or a change of visibility to the open tabs that hold the
+ * same saved query. A tab takes the new name and visibility; it takes the new
+ * revision only when it was based on the revision the change was made
+ * against, so a tab based on an older one still meets the conflict when it
+ * saves (its text was never merged).
+ */
+export function applySavedChange(
+  state: TabsState,
+  before: { readonly id: string; readonly revision: number },
+  after: Pick<SavedRef, 'id' | 'name' | 'visibility' | 'revision'>,
+): TabsState {
+  return {
+    ...state,
+    tabs: state.tabs.map((tab) => {
+      const saved = tab.saved
+      if (saved === undefined || saved.id !== before.id) return tab
+      return {
+        ...tab,
+        saved: {
+          ...saved,
+          name: after.name,
+          visibility: after.visibility,
+          revision: saved.revision === before.revision ? after.revision : saved.revision,
+        },
+      }
+    }),
+  }
+}
+
 export function activeTab(state: TabsState): SqlTab {
   const found = state.tabs.find((tab) => tab.id === state.active) ?? state.tabs[0]
   return found ?? newTab('query')
@@ -137,6 +170,20 @@ export function normalizeBreaks(text: string): string {
   return text.replace(/\r\n?/g, '\n')
 }
 
+/**
+ * The text with every hidden, control or direction character (line breaks and
+ * tabs excepted) written as its code point, `⟨U+202E⟩`: what a server message
+ * shows, so a message can never reorder or hide what is read.
+ */
+export function markHidden(text: string): string {
+  let out = ''
+  for (const char of text) {
+    const point = char.codePointAt(0) ?? 0
+    out += char !== '\n' && char !== '\t' && isInvisible(point) ? codePointLabel(point) : char
+  }
+  return out
+}
+
 /** How many hidden, control or direction characters the text holds (the editor shows each as its code point). */
 export function hiddenCharacterCount(text: string): number {
   let count = 0
@@ -149,6 +196,114 @@ export function hiddenCharacterCount(text: string): number {
 
 export function lineCount(text: string): number {
   return text.length === 0 ? 0 : text.split('\n').length
+}
+
+// --- Saved query names and failed runs. ----------------------------------------------------
+
+/** The longest name of a saved query, in code points (`SavedQuery.name`). */
+export const SAVED_NAME_MAX = 120
+
+export type SavedNameCheck = 'ok' | 'empty' | 'too_long'
+
+/** The name rules of the save and rename dialogs; the server checks the name again. */
+export function checkSavedName(name: string): SavedNameCheck {
+  const trimmed = name.trim()
+  if (trimmed.length === 0) return 'empty'
+  return [...trimmed].length > SAVED_NAME_MAX ? 'too_long' : 'ok'
+}
+
+/**
+ * The name of a copy: the name with the suffix, cut (by code points, in the
+ * name) so the result still fits the name rules.
+ */
+export function copyName(name: string, suffix: (name: string) => string): string {
+  const whole = suffix(name)
+  if ([...whole].length <= SAVED_NAME_MAX) return whole
+  const overshoot = [...whole].length - SAVED_NAME_MAX
+  const kept = [...name].slice(0, Math.max(0, [...name].length - overshoot)).join('')
+  return suffix(kept)
+}
+
+const SQLSTATE = /^[0-9A-Z]{5}$/
+
+/**
+ * The SQLSTATE a failed data read carries: `details.sqlstate` of a
+ * `QUERY_FAILED` problem, only when it has the five characters of a SQLSTATE.
+ * Anything else, and every other code, has none (the page shows nothing the
+ * server did not send).
+ */
+export function sqlstateOf(code: string, details: unknown): string | undefined {
+  if (code !== 'QUERY_FAILED' || typeof details !== 'object' || details === null) return undefined
+  const value: unknown = 'sqlstate' in details ? details.sqlstate : undefined
+  return typeof value === 'string' && SQLSTATE.test(value) ? value : undefined
+}
+
+// --- Which text a run sends. ---------------------------------------------------------------
+
+/** What a run sent: all of the text, the selected text, or one statement of several. */
+export type RunScope =
+  | { readonly kind: 'all' }
+  | { readonly kind: 'selection' }
+  | {
+      readonly kind: 'statement'
+      /** 1-based position of the statement among `count`. */
+      readonly n: number
+      readonly count: number
+      /** The line the statement starts on. */
+      readonly line: number
+    }
+
+export interface StatementPick {
+  readonly scope: Extract<RunScope, { kind: 'statement' }>
+  /** The statement's own text, sliced by the server's offsets. */
+  readonly text: string
+}
+
+/**
+ * The statement under the cursor of a text the server classified into several
+ * statements, by the offsets of that classification (UTF-16, as the editor
+ * counts). `result` must be the classification of exactly `text`. A cursor
+ * inside a statement, at its end or just after its semicolon is in it; a
+ * cursor in the white space or comments between statements takes the
+ * statement before it, or the first when none is. A single statement and a
+ * text that did not parse pick nothing: the whole text is sent and the
+ * server decides.
+ *
+ * This chooses which text to send, nothing more. It is never a safety
+ * decision: the server classifies and admits what is sent.
+ */
+export function statementAtCursor(
+  text: string,
+  result: SqlClassification,
+  offset: number,
+): StatementPick | undefined {
+  if (result.status !== 'parsed' || result.statements.length < 2) return undefined
+  const { statements } = result
+  const at = Math.min(Math.max(0, Math.trunc(offset)), text.length)
+  let chosen: ClassifiedStatement | undefined
+  for (const statement of statements) {
+    const reach = statement.end.offset + (text.charAt(statement.end.offset) === ';' ? 1 : 0)
+    if (at >= statement.start.offset && at <= reach) {
+      chosen = statement
+      break
+    }
+  }
+  if (chosen === undefined) {
+    for (const statement of statements) if (statement.end.offset <= at) chosen = statement
+  }
+  chosen ??= statements[0]
+  if (chosen === undefined) return undefined
+  const sliced = statementText(text, chosen.start, chosen.end).trim()
+  if (sliced.length === 0) return undefined
+  return {
+    scope: {
+      kind: 'statement',
+      n: statements.indexOf(chosen) + 1,
+      count: statements.length,
+      line: lineColumnAt(text, chosen.start.offset).line,
+    },
+    text: sliced,
+  }
 }
 
 // --- Classification on the editor. ---------------------------------------------------------

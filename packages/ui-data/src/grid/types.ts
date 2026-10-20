@@ -82,7 +82,12 @@ export interface ExportLimit {
   readonly bytes: number
 }
 
-export type ExportFormat = 'csv' | 'json'
+/**
+ * `markdown` is a table for pasting into a document or a chat; it is only
+ * copied, never downloaded. CSV and JSON are downloaded as files and can be
+ * copied too.
+ */
+export type ExportFormat = 'csv' | 'json' | 'markdown'
 
 /** What an export produced and what it left out. */
 export interface ExportResult {

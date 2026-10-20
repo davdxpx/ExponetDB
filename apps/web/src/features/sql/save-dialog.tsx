@@ -13,6 +13,7 @@ import {
 } from '@exponetdb/ui'
 import { type FormEvent, type ReactNode, useId, useState } from 'react'
 import { describeError, t } from '../../lib/i18n/i18n.ts'
+import { checkSavedName, SAVED_NAME_MAX } from './sql-model.ts'
 
 /**
  * "Save query" for a tab that holds no saved query of the person's own: a
@@ -26,22 +27,30 @@ export interface SaveInput {
   readonly scope: 'target' | 'project'
 }
 
-export const SAVED_NAME_MAX = 120
-
 export function SaveDialog(props: {
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
   readonly initialName: string
   readonly onSave: (input: SaveInput) => Promise<SavedQuery>
+  /** The dialog for a copy says so; the default is the dialog that saves the tab's own query. */
+  readonly variant?: 'save' | 'copy'
+  /** Who sees it to start with; a copy starts as the original is. Default only me. */
+  readonly initialVisibility?: SaveInput['visibility']
+  /** The scope to start with; a copy starts as the original is. Default this target. */
+  readonly initialScope?: SaveInput['scope']
 }): ReactNode {
   const id = useId()
   const [name, setName] = useState(props.initialName)
-  const [visibility, setVisibility] = useState<'personal' | 'project'>('personal')
-  const [scope, setScope] = useState<'target' | 'project'>('target')
+  const [visibility, setVisibility] = useState<'personal' | 'project'>(
+    props.initialVisibility ?? 'personal',
+  )
+  const [scope, setScope] = useState<'target' | 'project'>(props.initialScope ?? 'target')
   const [error, setError] = useState<string | undefined>(undefined)
   const [pending, setPending] = useState(false)
   const trimmed = name.trim()
-  const tooLong = [...trimmed].length > SAVED_NAME_MAX
+  const check = checkSavedName(name)
+  const tooLong = check === 'too_long'
+  const copy = props.variant === 'copy'
 
   const submit = async (event: FormEvent): Promise<void> => {
     event.preventDefault()
@@ -63,8 +72,10 @@ export function SaveDialog(props: {
       <DialogContent size="small">
         <form onSubmit={(event) => void submit(event)}>
           <DialogHeader>
-            <DialogTitle>{t('sql.save.title')}</DialogTitle>
-            <DialogDescription>{t('sql.save.description')}</DialogDescription>
+            <DialogTitle>{copy ? t('sql.save.copyTitle') : t('sql.save.title')}</DialogTitle>
+            <DialogDescription>
+              {copy ? t('sql.save.copyDescription') : t('sql.save.description')}
+            </DialogDescription>
           </DialogHeader>
           <DialogSection className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
@@ -141,7 +152,7 @@ export function SaveDialog(props: {
               variant="primary"
               disabled={pending || trimmed.length === 0 || tooLong}
             >
-              {t('sql.save.submit')}
+              {copy ? t('sql.save.copySubmit') : t('sql.save.submit')}
             </Button>
           </DialogFooter>
         </form>
