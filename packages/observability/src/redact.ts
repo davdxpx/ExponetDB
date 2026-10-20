@@ -22,9 +22,12 @@ export const SECRET_PATTERNS: readonly SecretPattern[] = [
       /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)/g,
   },
   // A URL with user information: keep the scheme and the user, drop the password.
+  // Every repetition is bounded (scheme 32, user 256, password 1024 characters),
+  // so text with many `://` or long runs of scheme characters is scanned in
+  // linear time instead of rescanning the rest of the run from every start.
   {
     name: 'url_credentials',
-    pattern: /\b([a-z][a-z0-9+.-]*:\/\/[^\s/:@'"]*:)[^\s@'"]*(?=@)/gi,
+    pattern: /\b([a-z][a-z0-9+.-]{0,31}:\/\/[^\s/:@'"]{0,256}:)[^\s@'"]{0,1024}(?=@)/gi,
     keepGroup: 1,
   },
   {
@@ -33,7 +36,12 @@ export const SECRET_PATTERNS: readonly SecretPattern[] = [
   },
   { name: 'cookie', pattern: /\b(?:set-cookie|cookie)\b\s*[:=]\s*[^\r\n]*/gi },
   { name: 'bearer', pattern: /\b(?:bearer|basic|token)\s+[A-Za-z0-9._~+/=-]{8,}/gi },
-  { name: 'jwt', pattern: /\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*/g },
+  // A JWT starts a run of base64url characters (not after `-`, which would let
+  // every `eyJ` inside one long run rescan it to its end).
+  {
+    name: 'jwt',
+    pattern: /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*/g,
+  },
   // Every ExponetDB token kind: access, refresh, API key, authorization code,
   // device code, authorization-request handle, OAuth browser binding (Wave
   // 3B), session, CSRF, setup, invitation, recovery link, ceremony (Wave 3A).
@@ -60,10 +68,14 @@ export const SECRET_PATTERNS: readonly SecretPattern[] = [
   { name: 'stripe_key', pattern: /\b[rsp]k_(?:live|test)_[A-Za-z0-9]{16,}/g },
   { name: 'google_api_key', pattern: /\bAIza[0-9A-Za-z_-]{30,}/g },
   // key=value and key: value forms, quoted or not, including query strings and conninfo.
+  // A strong key names a secret wherever it appears in a name (`db_password`,
+  // `password_hash`); a short key only as a whole name segment (`session_id`,
+  // never `inside`). Name runs are bounded and an unterminated quote runs to
+  // the end, so no failed attempt rescans the rest of the text (linear time).
   {
     name: 'secret_assignment',
     pattern:
-      /\b((?:[a-z0-9]+[_-])*(?:password|passwd|pwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|session(?:[_-]?id)?|sid|credentials?|signature|sig|code_verifier|user[_-]?code|device[_-]?code|client[_-]?assertion|refresh[_-]?token|access[_-]?token|client[_-]?secret|keyring|totp(?:[_-]?code)?|otp|one[_-]?time[_-]?code|recovery[_-]?codes?)\b"?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s&,;)}\]]+)/gi,
+      /((?:(?:password|passwd|pwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|credentials?|signature|code_verifier|client[_-]?assertion|client[_-]?secret|keyring)[a-z0-9_-]{0,64}|(?<![a-z0-9])(?:[a-z0-9]{1,32}[_-]){0,8}(?:session(?:[_-]?id)?|sid|sig|user[_-]?code|device[_-]?code|totp(?:[_-]?code)?|otp|one[_-]?time[_-]?code|recovery[_-]?codes?)(?![a-z0-9]))"?\s{0,16}[:=]\s{0,16})(?:"[^"]*(?:"|$)|'[^']*(?:'|$)|[^\s&,;)}\]]+)/gi,
     keepGroup: 1,
   },
   {

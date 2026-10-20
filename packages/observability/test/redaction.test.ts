@@ -228,6 +228,60 @@ describe('redaction corpus: denylist', () => {
   })
 })
 
+describe('redaction corpus: shapes the bounded patterns keep', () => {
+  it.each([
+    ['a prefixed key', 'db_password=hunter2-secret', 'db_password=[REDACTED:secret_assignment]'],
+    [
+      'a key with a suffix',
+      'password_hash: "abc123"',
+      'password_hash: [REDACTED:secret_assignment]',
+    ],
+    ['a refresh token', 'refresh_token=rt-value-1', 'refresh_token=[REDACTED:secret_assignment]'],
+    ['a short key as a segment', 'x_session_id=s1', 'x_session_id=[REDACTED:secret_assignment]'],
+    [
+      'a JSON member',
+      '{"client_secret": "cs-1"}',
+      '{"client_secret": [REDACTED:secret_assignment]}',
+    ],
+    ['an unterminated quote', 'token="abc def', 'token=[REDACTED:secret_assignment]'],
+    [
+      'a URL password',
+      'postgres://app:pw-1@db.internal:5432/x',
+      'postgres://app:[REDACTED:url_credentials]@db.internal:5432/x',
+    ],
+  ])('%s', (_name, input, output) => {
+    expect(redactText(input)).toBe(output)
+  })
+
+  it('leaves a short key inside another word alone', () => {
+    expect(redactText('inside=1 consider=2')).toBe('inside=1 consider=2')
+  })
+
+  it('redacts a JWT after white space, an equals sign or a quote', () => {
+    const jwt = `eyJhbGciOiJIUzI1NiJ9.${'e'.repeat(20)}.${'s'.repeat(20)}`
+    for (const text of [`Bearer ${jwt}`, `jwt=${jwt}`, `"${jwt}"`]) {
+      expect(redactText(text)).not.toContain(jwt)
+    }
+  })
+})
+
+describe('redaction stays linear on adversarial text', () => {
+  // About 180 KB each; the unbounded patterns took 4 to 10 seconds on these.
+  const N = 180_000
+  it.each([
+    ['many URL schemes', 'a://b:'.repeat(N / 6)],
+    ['a long run of scheme characters', 'a.'.repeat(N / 2)],
+    ['a long run of name segments', 'a-'.repeat(N / 2)],
+    ['unterminated quoted values', 'password="'.repeat(N / 10)],
+    ['many JWT starts in one run', 'eyJ-'.repeat(N / 4)],
+    ['white space after a key', `password${' '.repeat(N)}`],
+  ])('%s', (_name, text) => {
+    const started = performance.now()
+    redactText(text)
+    expect(performance.now() - started).toBeLessThan(1500)
+  })
+})
+
 function capture(): { lines: string[]; write: (line: string) => void } {
   const lines: string[] = []
   return { lines, write: (line) => lines.push(line) }
