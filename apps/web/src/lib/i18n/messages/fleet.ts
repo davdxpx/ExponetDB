@@ -62,6 +62,25 @@ export const fleetMessages = {
   'fleet.critical.column.seen': 'Last seen',
   'fleet.critical.open': 'Open the findings of {target}',
   'fleet.critical.badTarget': 'The server named this target in a form the page cannot link.',
+  'fleet.attention.title': 'Targets that need attention',
+  'fleet.attention.description':
+    'The targets with the worst health, worst first. A target without a health sample counts as unknown. Healthy and suspended targets are not listed.',
+  'fleet.attention.caption': 'Targets with the worst health',
+  'fleet.attention.column.target': 'Target',
+  'fleet.attention.column.tier': 'Tier',
+  'fleet.attention.column.health': 'Health',
+  'fleet.attention.count':
+    'Needing attention: {count} of {total} targets read. Showing the worst {shown}.',
+  'fleet.attention.count.atLeast':
+    'Needing attention: at least {count} of {total} targets read, and more targets exist than this page reads. Showing the worst {shown}.',
+  'fleet.attention.more':
+    'More targets exist than the {count} this page reads, so a worse target may not be listed.',
+  'fleet.attention.empty':
+    'The read succeeded and no target needs attention: every target you may see is healthy or suspended.',
+  'fleet.attention.noneRead':
+    'None of the targets read needs attention, but more targets exist than were read.',
+  'fleet.attention.showAll': 'Show all {state} targets',
+  'fleet.attention.showAll.none': 'Show all targets without a health sample',
   'fleet.cp.title': 'Control Plane',
   'fleet.cp.what': 'Control Plane health',
   'fleet.cp.state': 'Overall: {state}',
@@ -157,8 +176,25 @@ export const fleetMessages = {
   'targets.view.table': 'Table',
   'targets.view.grid': 'Grid',
   'targets.filter.clear': 'Clear filters',
+  'targets.filter.product': 'Product',
+  'targets.filter.product.all': 'All products',
+  'targets.filter.product.plural': 'Products',
+  'targets.filter.project.plural': 'Projects',
+  'targets.filter.project': 'Project',
+  'targets.filter.project.all': 'All projects',
+  'targets.filter.project.choose': 'Choose a product first',
+  'targets.filter.loading': 'Reading {what}.',
+  'targets.filter.failed':
+    'Could not read {what}: {reason}. This does not mean there are none; the filter stays as the address says.',
+  'targets.filter.stale': 'Showing an earlier read of {what}.',
+  'targets.filter.more': 'More {what} exist than this list shows.',
+  'targets.filter.none.products': 'The read succeeded and no product is registered.',
+  'targets.filter.none.projects': 'The read succeeded and no project is registered.',
+  'targets.filter.notListed': '{slug} (not in the list)',
   'targets.count': 'Showing {shown} of {total} targets',
   'targets.noResults.title': 'No target matches',
+  'targets.noResults.filtered':
+    'The read succeeded and the server lists no target for this product and project.',
   'targets.noResults.body':
     'The list was read and holds {total} targets, none of which match these filters.',
   'targets.empty.title': 'No target is registered',
@@ -175,6 +211,10 @@ export const fleetMessages = {
   'targets.version.notInList':
     'Not in the list. The target page shows the version and its placement.',
   'targets.open': 'Open {target}',
+  'targets.actions': 'Actions',
+  'targets.actions.label': 'Actions for {target}',
+  'targets.actions.copyPath': 'Copy path',
+  'targets.actions.copyId': 'Copy target ID',
   'targets.badPath': 'Not linked: the server sent a path the page cannot link.',
   'targets.state.registered': 'Registered',
   'targets.state.active': 'Active',
@@ -187,9 +227,6 @@ export const fleetMessages = {
   'targets.entry.server': 'Add server',
   'targets.entry.cluster': 'Register cluster',
   'targets.entry.node': 'Enroll node',
-  'targets.entry.infrastructure':
-    'Servers, clusters and node enrollment come with the infrastructure screens.',
-  'targets.entry.infrastructureLink': 'Open infrastructure',
   // Register target.
   'register.title': 'Register target',
   'register.description':
@@ -203,6 +240,7 @@ export const fleetMessages = {
   'register.project': 'Project',
   'register.project.placeholder': 'Choose a project',
   'register.project.none': 'This product has no project.',
+  'register.project.create': 'Create a project',
   'register.environment': 'Environment',
   'register.environment.placeholder': 'Choose an environment',
   'register.environment.none': 'This product has no environment.',

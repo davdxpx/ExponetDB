@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  defaultsOf,
   filterTargets,
+  shownSort,
+  shownView,
   sortTargets,
   targetHrefOf,
   targetPathParts,
@@ -78,6 +81,29 @@ describe('the search of the targets list', () => {
     expect(targetsSearch({ q: '' }).q).toBeUndefined()
   })
 
+  it('keeps a product and project slug, and a project only together with its product', () => {
+    expect(targetsSearch({ product: 'shop', project: 'platform' })).toMatchObject({
+      product: 'shop',
+      project: 'platform',
+    })
+    expect(targetsSearch({ project: 'platform' }).project).toBeUndefined()
+    for (const bad of [
+      'Shop',
+      '1shop',
+      'shop/platform',
+      '../x',
+      'a b',
+      '',
+      'x'.repeat(40),
+      7,
+      {},
+    ]) {
+      expect(targetsSearch({ product: bad, project: 'platform' }).product).toBeUndefined()
+      expect(targetsSearch({ product: bad, project: 'platform' }).project).toBeUndefined()
+      expect(targetsSearch({ product: 'shop', project: bad }).project).toBeUndefined()
+    }
+  })
+
   it('removes the defaults from the URL', () => {
     expect(withSearch({}, { q: '', sort: 'path', view: 'table' })).toEqual({
       q: undefined,
@@ -86,6 +112,55 @@ describe('the search of the targets list', () => {
       health: undefined,
       sort: undefined,
       view: undefined,
+    })
+  })
+})
+
+describe('the defaults of the list', () => {
+  it('takes the remembered sort and view, else the built-in ones, and the address wins', () => {
+    expect(defaultsOf({})).toEqual({ sort: 'path', view: 'table' })
+    expect(defaultsOf({ sort: 'health', view: 'grid' })).toEqual({ sort: 'health', view: 'grid' })
+    const defaults = defaultsOf({ sort: 'health', view: 'grid' })
+    expect(shownSort({}, defaults)).toBe('health')
+    expect(shownView({}, defaults)).toBe('grid')
+    expect(shownSort({ sort: 'path' }, defaults)).toBe('path')
+    expect(shownView({ view: 'table' }, defaults)).toBe('table')
+  })
+
+  it('names a sort or view in the address only when it differs from the default', () => {
+    const defaults = defaultsOf({ sort: 'health', view: 'grid' })
+    expect(withSearch({}, { sort: 'health', view: 'grid' }, defaults)).toMatchObject({
+      sort: undefined,
+      view: undefined,
+    })
+    expect(withSearch({}, { sort: 'path', view: 'table' }, defaults)).toMatchObject({
+      sort: 'path',
+      view: 'table',
+    })
+    // Nothing else changes what the address already says.
+    expect(withSearch({ sort: 'tier' }, { q: 'x' }, defaults)).toMatchObject({
+      sort: 'tier',
+      q: 'x',
+    })
+  })
+
+  it('drops a project when the product changes, keeps it when only the project changes', () => {
+    const base = { product: 'shop', project: 'platform' }
+    expect(withSearch(base, { product: 'acme' })).toMatchObject({
+      product: 'acme',
+      project: undefined,
+    })
+    expect(withSearch(base, { project: 'billing' })).toMatchObject({
+      product: 'shop',
+      project: 'billing',
+    })
+    expect(withSearch(base, { product: undefined })).toMatchObject({
+      product: undefined,
+      project: undefined,
+    })
+    expect(withSearch(base, { product: 'shop' })).toMatchObject({
+      product: 'shop',
+      project: 'platform',
     })
   })
 })

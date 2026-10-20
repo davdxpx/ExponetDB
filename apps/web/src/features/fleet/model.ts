@@ -1,4 +1,5 @@
-import type { Fleet } from '@exponetdb/sdk/operations'
+import type { Fleet, TargetSummary } from '@exponetdb/sdk/operations'
+import { HEALTH_RANK, type HealthFilter, healthOf } from '../targets/model.ts'
 import { PART_STALE_AFTER_MS } from './keys.ts'
 
 /**
@@ -95,4 +96,54 @@ export function partStale(observedAt: string, now: number): boolean {
 /** The messages for the reasons the server gives for an unavailable part. */
 export function unavailableKind(reason: string): 'permission_denied' | 'unknown' {
   return reason === 'permission_denied' ? 'permission_denied' : 'unknown'
+}
+
+// ----- targets that need attention -----
+
+/** The targets the overview lists as needing attention. */
+export const ATTENTION_LIMIT = 10
+
+/** Health states that need no person: a deliberate suspension is not a problem, a healthy target is not one. */
+const NO_ATTENTION: ReadonlySet<HealthFilter> = new Set<HealthFilter>(['healthy', 'suspended'])
+
+export interface Attention {
+  /** The worst targets, worst first, at most `limit`. */
+  readonly rows: readonly TargetSummary[]
+  /** How many of the targets read need attention (a floor when the read was cut off). */
+  readonly count: number
+  /** The health word of the worst target: what "show all" filters the list by. */
+  readonly worst: HealthFilter | undefined
+}
+
+/**
+ * The targets with the worst health: `unhealthy`, `unreachable`, `degraded`,
+ * `unknown` and targets with no health sample at all (an unobserved target is
+ * never healthy), in the severity order the app uses everywhere, then the
+ * oldest observation first (the one least recently confirmed), then by path.
+ * Decommissioned targets are not listed, nor are healthy or suspended ones.
+ */
+export function needsAttention(
+  targets: readonly TargetSummary[],
+  limit: number = ATTENTION_LIMIT,
+): Attention {
+  const needing = targets.filter(
+    (target) => target.state !== 'decommissioned' && !NO_ATTENTION.has(healthOf(target)),
+  )
+  const observed = (target: TargetSummary): number => {
+    // A target with no sample, or a time that cannot be read, was confirmed never: oldest of all.
+    const time = target.health === null ? Number.NaN : Date.parse(target.health.observedAt)
+    return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time
+  }
+  const ordered = [...needing].sort(
+    (a, b) =>
+      (HEALTH_RANK[healthOf(a)] ?? 0) - (HEALTH_RANK[healthOf(b)] ?? 0) ||
+      observed(a) - observed(b) ||
+      a.path.localeCompare(b.path),
+  )
+  const first = ordered[0]
+  return {
+    rows: ordered.slice(0, limit),
+    count: needing.length,
+    worst: first === undefined ? undefined : healthOf(first),
+  }
 }

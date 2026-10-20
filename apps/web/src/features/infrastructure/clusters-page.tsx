@@ -18,12 +18,14 @@ import { ListView } from '../access/list-view.tsx'
 import { clustersQuery } from './keys.ts'
 import { clusterPath, serverPath } from './model.ts'
 import { InfraPage, InfraSection, ObjectLink } from './parts.tsx'
+import { RegisterClusterSection } from './register-cluster.tsx'
 
 /**
  * `/infrastructure/clusters`: the PostgreSQL clusters of the registry
  * (`GET /clusters`, `nodes.read`) with their management mode, state,
  * version, derived and declared tier (an undeclared cluster is treated as
- * production for registry authority, OD-22) and health with its source.
+ * production for registry authority, OD-22) and health with its source, and
+ * the form that registers an external cluster as a plan.
  */
 export function ClustersPage(): ReactNode {
   const { client } = useApi()
@@ -47,6 +49,9 @@ export function ClustersPage(): ReactNode {
         >
           {(value) => (value.items.length === 0 ? null : <ClusterTable clusters={value.items} />)}
         </ListView>
+      </InfraSection>
+      <InfraSection id="cluster-register" title={t('infra.register.title')}>
+        <RegisterClusterSection />
       </InfraSection>
     </InfraPage>
   )

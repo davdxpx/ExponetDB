@@ -2,6 +2,13 @@ import type { TargetSummary } from '@exponetdb/sdk/operations'
 import { queryOptions } from '@tanstack/react-query'
 import type { ApiClient } from '../../lib/api/client.ts'
 
+export interface TargetFilter {
+  /** Slug of a product: the server lists only its targets. */
+  readonly product?: string | undefined
+  /** Slug of a project (of `product`): the server lists only its targets. */
+  readonly project?: string | undefined
+}
+
 /**
  * Query keys and options of the targets list and the registration choices.
  * The list follows the cursor up to a bound and says when more exist; the
@@ -9,7 +16,8 @@ import type { ApiClient } from '../../lib/api/client.ts'
  * number of requests does not grow with the number of targets.
  */
 export const targetListKeys = {
-  list: ['targets', 'list'] as const,
+  list: (filter: TargetFilter = {}) =>
+    ['targets', 'list', filter.product ?? '', filter.project ?? ''] as const,
   products: ['registry', 'products'] as const,
   projects: ['registry', 'projects'] as const,
   environments: (productId: string) => ['registry', 'environments', productId] as const,
@@ -30,15 +38,25 @@ export interface TargetList {
   readonly more: boolean
 }
 
-export function targetListQuery(client: ApiClient) {
+/**
+ * The targets the person may list, optionally of one product or one project
+ * (the server filters; the page never filters by name what the server could).
+ * Follows the cursor to a bound and says when more exist.
+ */
+export function targetListQuery(client: ApiClient, filter: TargetFilter = {}) {
   return queryOptions({
-    queryKey: targetListKeys.list,
+    queryKey: targetListKeys.list(filter),
     queryFn: async ({ signal }): Promise<TargetList> => {
       const items: TargetSummary[] = []
       let cursor: string | undefined
       for (let page = 0; page < TARGET_MAX_PAGES; page++) {
         const answer = await client.operation('listTargets', {
-          query: { limit: TARGET_PAGE_LIMIT, ...(cursor === undefined ? {} : { cursor }) },
+          query: {
+            limit: TARGET_PAGE_LIMIT,
+            ...(filter.product === undefined ? {} : { product: filter.product }),
+            ...(filter.project === undefined ? {} : { project: filter.project }),
+            ...(cursor === undefined ? {} : { cursor }),
+          },
           signal,
         })
         items.push(...answer.items)

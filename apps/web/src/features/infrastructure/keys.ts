@@ -34,6 +34,7 @@ export const infraKeys = {
   cluster: (id: string) => ['infrastructure', 'clusters', id] as const,
   databases: (id: string) => ['infrastructure', 'clusters', id, 'databases'] as const,
   endpoints: (id: string) => ['infrastructure', 'clusters', id, 'endpoints'] as const,
+  bootstrap: (id: string) => ['infrastructure', 'clusters', id, 'bootstrap-sql'] as const,
   nodes: () => ['infrastructure', 'nodes'] as const,
   node: (id: string) => ['infrastructure', 'nodes', id] as const,
   jobs: (id: string) => ['infrastructure', 'nodes', id, 'jobs'] as const,
@@ -113,6 +114,21 @@ export function clusterEndpointsQuery(client: ApiClient, clusterId: string) {
     queryKey: infraKeys.endpoints(clusterId),
     queryFn: ({ signal }) =>
       client.operation('listClusterEndpoints', { params: { clusterId }, signal }),
+    enabled: isClusterId(clusterId),
+    refetchInterval: poll(INFRA_POLL_MS),
+  })
+}
+
+/**
+ * The role bootstrap SQL of an external cluster: read-only text for a person
+ * to run. It holds no password. It lists the registered databases, so it is
+ * read again like the other registry reads and an old copy shows as stale.
+ */
+export function bootstrapSqlQuery(client: ApiClient, clusterId: string) {
+  return queryOptions({
+    queryKey: infraKeys.bootstrap(clusterId),
+    queryFn: ({ signal }) =>
+      client.operation('getClusterBootstrapSql', { params: { clusterId }, signal }),
     enabled: isClusterId(clusterId),
     refetchInterval: poll(INFRA_POLL_MS),
   })

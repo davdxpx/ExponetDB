@@ -31,6 +31,7 @@ import { useApi } from '../../lib/api/context.tsx'
 import { t } from '../../lib/i18n/i18n.ts'
 import { toReadable } from '../../lib/query/readable.ts'
 import { targetHrefOf } from '../targets/model.ts'
+import { AttentionSection } from './attention.tsx'
 import { HEALTH_STATES, HealthChip } from './health.tsx'
 import { controlPlaneQuery, criticalFindingsQuery, fleetQuery } from './keys.ts'
 import { type FleetModel, fleetModel, type Part, partStale, unavailableKind } from './model.ts'
@@ -41,9 +42,11 @@ export const APPROVALS_PATH = '/approvals'
 
 /**
  * The fleet overview (`/`): what the server counted across every target the
- * person may see, what needs a person, and how the Control Plane itself is
- * doing. One request counts the fleet (`GET /fleet`), so the cost does not
- * grow with the number of targets. Every number carries its source and its
+ * person may see, what needs a person (the targets with the worst health, the
+ * newest critical findings, operations), and how the Control Plane itself is
+ * doing. One request counts the fleet (`GET /fleet`), so the counts do not
+ * cost more with the number of targets; the worst targets come from the one
+ * cached list read of the Databases page. Every number carries its source and its
  * age; a count that is a floor says "at least"; a part the server could not
  * count says why and is never zero; a failed read is an error, not a card of
  * zeros (C-28).
@@ -71,6 +74,7 @@ export function FleetPage(): ReactNode {
           headingLevel={2}
           ready={(value) => <FleetCards model={fleetModel(value)} />}
         />
+        <AttentionSection />
         <CriticalFindings />
         <ControlPlane />
       </PageContainer>

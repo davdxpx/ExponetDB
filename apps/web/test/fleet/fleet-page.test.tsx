@@ -43,9 +43,12 @@ describe('the fleet overview', () => {
         name: 'Show operations that need attention',
       }),
     ).toHaveAttribute('href', '/changes/operations?state=needs_attention')
-    // One request each, however many targets there are: no read per target.
+    // One request each, however many targets there are: no read per target. The worst targets
+    // come from one list read (the one the Databases page shares), never from a read per row.
     expect(world.gets('/api/v1/fleet')).toHaveLength(1)
-    expect(world.apiRequests.every((r) => !/\/targets/.test(r.path))).toBe(true)
+    expect(world.apiRequests.every((r) => !/\/targets\/[^?]/.test(r.path))).toBe(true)
+    await screen.findByText('Targets that need attention')
+    expect(world.gets('/api/v1/targets')).toHaveLength(1)
   })
 
   it('says "at least N" when the server marks a count as a lower bound, with its reason', async () => {

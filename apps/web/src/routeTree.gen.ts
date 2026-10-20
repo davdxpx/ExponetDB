@@ -48,6 +48,7 @@ import { Route as AppSettingsInstallationRouteImport } from './routes/_app/setti
 import { Route as AppSettingsNotificationsRouteImport } from './routes/_app/settings/notifications'
 import { Route as AppSettingsPoliciesRouteImport } from './routes/_app/settings/policies'
 import { Route as AppSettingsProductsRouteImport } from './routes/_app/settings/products'
+import { Route as AppSettingsProjectsRouteImport } from './routes/_app/settings/projects'
 import { Route as AppTargetsIndexRouteImport } from './routes/_app/targets/index'
 import { Route as AppTargetsRegisterRouteImport } from './routes/_app/targets/register'
 import { Route as SessionOauthConsentRouteImport } from './routes/_session/oauth/consent'
@@ -275,6 +276,11 @@ const AppSettingsProductsRoute = AppSettingsProductsRouteImport.update({
   path: '/settings/products',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSettingsProjectsRoute = AppSettingsProjectsRouteImport.update({
+  id: '/settings/projects',
+  path: '/settings/projects',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppTargetsIndexRoute = AppTargetsIndexRouteImport.update({
   id: '/targets/',
   path: '/targets/',
@@ -485,6 +491,7 @@ export interface FileRoutesByFullPath {
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/policies': typeof AppSettingsPoliciesRoute
   '/settings/products': typeof AppSettingsProductsRoute
+  '/settings/projects': typeof AppSettingsProjectsRoute
   '/targets/register': typeof AppTargetsRegisterRoute
   '/oauth/consent': typeof SessionOauthConsentRoute
   '/oauth/device': typeof SessionOauthDeviceRoute
@@ -553,6 +560,7 @@ export interface FileRoutesByTo {
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/policies': typeof AppSettingsPoliciesRoute
   '/settings/products': typeof AppSettingsProductsRoute
+  '/settings/projects': typeof AppSettingsProjectsRoute
   '/targets/register': typeof AppTargetsRegisterRoute
   '/oauth/consent': typeof SessionOauthConsentRoute
   '/oauth/device': typeof SessionOauthDeviceRoute
@@ -624,6 +632,7 @@ export interface FileRoutesById {
   '/_app/settings/notifications': typeof AppSettingsNotificationsRoute
   '/_app/settings/policies': typeof AppSettingsPoliciesRoute
   '/_app/settings/products': typeof AppSettingsProductsRoute
+  '/_app/settings/projects': typeof AppSettingsProjectsRoute
   '/_app/targets/register': typeof AppTargetsRegisterRoute
   '/_session/oauth/consent': typeof SessionOauthConsentRoute
   '/_session/oauth/device': typeof SessionOauthDeviceRoute
@@ -695,6 +704,7 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/settings/policies'
     | '/settings/products'
+    | '/settings/projects'
     | '/targets/register'
     | '/oauth/consent'
     | '/oauth/device'
@@ -763,6 +773,7 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/settings/policies'
     | '/settings/products'
+    | '/settings/projects'
     | '/targets/register'
     | '/oauth/consent'
     | '/oauth/device'
@@ -833,6 +844,7 @@ export interface FileRouteTypes {
     | '/_app/settings/notifications'
     | '/_app/settings/policies'
     | '/_app/settings/products'
+    | '/_app/settings/projects'
     | '/_app/targets/register'
     | '/_session/oauth/consent'
     | '/_session/oauth/device'
@@ -1153,6 +1165,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsProductsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/settings/projects': {
+      id: '/_app/settings/projects'
+      path: '/settings/projects'
+      fullPath: '/settings/projects'
+      preLoaderRoute: typeof AppSettingsProjectsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/targets/': {
       id: '/_app/targets/'
       path: '/targets'
@@ -1467,6 +1486,7 @@ interface AppRouteChildren {
   AppSettingsNotificationsRoute: typeof AppSettingsNotificationsRoute
   AppSettingsPoliciesRoute: typeof AppSettingsPoliciesRoute
   AppSettingsProductsRoute: typeof AppSettingsProductsRoute
+  AppSettingsProjectsRoute: typeof AppSettingsProjectsRoute
   AppTargetsRegisterRoute: typeof AppTargetsRegisterRoute
   AppChangesIndexRoute: typeof AppChangesIndexRoute
   AppInfrastructureIndexRoute: typeof AppInfrastructureIndexRoute
@@ -1508,6 +1528,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSettingsNotificationsRoute: AppSettingsNotificationsRoute,
   AppSettingsPoliciesRoute: AppSettingsPoliciesRoute,
   AppSettingsProductsRoute: AppSettingsProductsRoute,
+  AppSettingsProjectsRoute: AppSettingsProjectsRoute,
   AppTargetsRegisterRoute: AppTargetsRegisterRoute,
   AppChangesIndexRoute: AppChangesIndexRoute,
   AppInfrastructureIndexRoute: AppInfrastructureIndexRoute,

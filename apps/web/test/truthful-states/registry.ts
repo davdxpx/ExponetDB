@@ -111,6 +111,9 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/configuration/configuration-page.tsx': {
     tests: ['target-pages/configuration.test.tsx'],
   },
+  'src/features/configuration/connect-section.tsx': {
+    tests: ['target-pages/configuration-connect.test.tsx'],
+  },
   'src/features/connections/attention-strip.tsx': { tests: ['connections/attention.test.tsx'] },
   'src/features/connections/endpoints-view.tsx': { tests: ['connections/connections.test.tsx'] },
   'src/features/connections/live-read.tsx': {
@@ -123,12 +126,20 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/findings/findings-page.tsx': {
     tests: ['target-pages/findings.test.tsx', TARGET_PAGES],
   },
+  'src/features/fleet/attention.tsx': { tests: ['fleet/attention.test.tsx'] },
   'src/features/fleet/fleet-page.tsx': { tests: ['fleet/fleet-page.test.tsx'] },
   'src/features/global-findings/findings-page.tsx': {
     tests: ['global-findings/findings-page.test.tsx'],
   },
   'src/features/infrastructure/certificates-page.tsx': {
     tests: ['infrastructure/certificates.test.tsx'],
+  },
+  'src/features/infrastructure/bootstrap-sql.tsx': {
+    tests: ['infrastructure/registration.test.tsx'],
+    exempt: {
+      partial:
+        'GET /clusters/{id}/bootstrap-sql answers one script with its roles and databases and no cursor or truncation flag, so the read cannot be partial.',
+    },
   },
   'src/features/infrastructure/cluster-detail.tsx': { tests: CLUSTERS },
   'src/features/infrastructure/cluster-roles.tsx': { tests: CLUSTERS },
@@ -177,6 +188,7 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/settings/products-page.tsx': {
     tests: ['settings/settings-pages.test.tsx', SETTINGS_STATES],
   },
+  'src/features/settings/projects-page.tsx': { tests: ['settings/projects.test.tsx'] },
   'src/features/sql/side-panel.tsx': { tests: ['sql/sql-page.test.tsx'] },
   'src/features/target-ops/read-section.tsx': {
     tests: [
@@ -208,5 +220,7 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/target/scope.tsx': { tests: TARGET_FRAME, exempt: ONE_OBJECT },
   'src/features/target/target-nav.tsx': { tests: ['target/target-nav.test.tsx'] },
   'src/features/targets/register-page.tsx': { tests: ['targets/register-page.test.tsx'] },
-  'src/features/targets/targets-page.tsx': { tests: ['targets/targets-page.test.tsx'] },
+  'src/features/targets/targets-page.tsx': {
+    tests: ['targets/targets-page.test.tsx', 'targets/targets-filters.test.tsx'],
+  },
 }
