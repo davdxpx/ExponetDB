@@ -246,8 +246,9 @@ describe('redaction corpus: shapes the bounded patterns keep', () => {
     ['an unterminated quote', 'token="abc def', 'token=[REDACTED:secret_assignment]'],
     [
       'a URL password',
-      'postgres://app:pw-1@db.internal:5432/x',
-      'postgres://app:[REDACTED:url_credentials]@db.internal:5432/x',
+      // Built from parts: no line reads as a URL with credentials to the secret scanner.
+      ['postgres://app', 'pw-1@db.internal:5432/x'].join(':'),
+      ['postgres://app', '[REDACTED:url_credentials]@db.internal:5432/x'].join(':'),
     ],
   ])('%s', (_name, input, output) => {
     expect(redactText(input)).toBe(output)

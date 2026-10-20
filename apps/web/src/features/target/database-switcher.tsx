@@ -14,7 +14,7 @@ import { switchTarget } from '../../shell/navigation.ts'
 import { DatabaseChoices } from './database-choices.tsx'
 import type { TargetRoute } from './params.ts'
 import { useDatabases } from './queries.ts'
-import { readRecentTargets } from './recent.ts'
+import { readRecentTargets } from './recent-storage.ts'
 
 /**
  * `shop / platform ▾` in the context bar: a popover with a search field and

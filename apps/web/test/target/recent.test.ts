@@ -6,7 +6,7 @@ import {
   RECENT_TARGETS_PREFIX,
   readRecentTargets,
   rememberTarget,
-} from '../../src/features/target/recent.ts'
+} from '../../src/features/target/recent-storage.ts'
 
 const ME = 'idn_01JZ0000000000000000000001'
 const OTHER = 'idn_01JZ0000000000000000000002'

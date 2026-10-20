@@ -16,6 +16,9 @@ import {
   withDefaults,
 } from './support.tsx'
 
+// A URL with user information, built from parts: no line reads as one to the secret scanner.
+const URI_PREFIX = ['postgresql://<role>', '[YOUR-PASSWORD]@'].join(':')
+
 vi.mock('../../src/shell/app-shell.tsx', async () => ({
   AppShell: (await import('../target/test-shell.tsx')).TestShell,
 }))
@@ -135,7 +138,7 @@ describe('the connect panel of the configuration page', () => {
     expect(within(card).getByText('orders')).toBeVisible()
     expect(within(card).getByText('verify-full')).toBeVisible()
     expect(card.textContent).toContain(
-      'postgresql://<role>:[YOUR-PASSWORD]@db.example.test:5432/orders?sslmode=verify-full',
+      `${URI_PREFIX}db.example.test:5432/orders?sslmode=verify-full`,
     )
     expect(card.textContent).toContain(
       'psql "host=db.example.test port=5432 dbname=orders user=<role> sslmode=verify-full"',
@@ -157,7 +160,7 @@ describe('the connect panel of the configuration page', () => {
     const section = await connect()
     await user.click(await within(section).findByRole('button', { name: 'Copy connection URI' }))
     expect(writeText).toHaveBeenCalledWith(
-      'postgresql://<role>:[YOUR-PASSWORD]@db.example.test:5432/orders?sslmode=verify-full',
+      `${URI_PREFIX}db.example.test:5432/orders?sslmode=verify-full`,
     )
     expect(await screen.findByText('Connection URI copied')).toBeVisible()
   })

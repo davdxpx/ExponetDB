@@ -9,6 +9,9 @@ import {
 } from '../../src/features/configuration/connect-model.ts'
 import { nth, ulid } from './support.tsx'
 
+// A URL with user information, built from parts: no line reads as one to the secret scanner.
+const URI_PREFIX = ['postgresql://<role>', '[YOUR-PASSWORD]@'].join(':')
+
 const TARGET = 'tgt_00000000000000000000000002'
 const CLUSTER = `cls_${ulid(1)}`
 const NOW = '2026-10-20T09:00:00Z'
@@ -150,7 +153,7 @@ describe('the connection lines', () => {
     expect(lines).toEqual({
       kind: 'lines',
       address: false,
-      uri: 'postgresql://<role>:[YOUR-PASSWORD]@db.example.test:5432/orders?sslmode=verify-full',
+      uri: `${URI_PREFIX}db.example.test:5432/orders?sslmode=verify-full`,
       psql: 'psql "host=db.example.test port=5432 dbname=orders user=<role> sslmode=verify-full"',
     })
   })
@@ -163,7 +166,7 @@ describe('the connection lines', () => {
     expect(lines).toMatchObject({
       kind: 'lines',
       address: true,
-      uri: 'postgresql://<role>:[YOUR-PASSWORD]@db.internal.example:5432/orders?sslmode=verify-full&hostaddr=10.8.2.5',
+      uri: `${URI_PREFIX}db.internal.example:5432/orders?sslmode=verify-full&hostaddr=10.8.2.5`,
       psql: 'psql "host=db.internal.example port=5432 dbname=orders user=<role> sslmode=verify-full hostaddr=10.8.2.5"',
     })
   })

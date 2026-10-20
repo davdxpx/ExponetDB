@@ -3,7 +3,7 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
-import { RECENT_TARGETS_PREFIX } from '../../src/features/target/recent.ts'
+import { RECENT_TARGETS_PREFIX } from '../../src/features/target/recent-storage.ts'
 import { mountApp, World } from '../target/support.tsx'
 
 /**

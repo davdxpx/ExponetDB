@@ -50,7 +50,7 @@ import { ProfileAvatar } from '../features/account/avatar.tsx'
 import { displayNameOf, type ProfileMe } from '../features/account/profile-model.ts'
 import { installationQuery } from '../features/settings/keys.ts'
 import { TargetContextBar } from '../features/target/context-bar.tsx'
-import { forgetRecentTargets, pruneRecentTargets } from '../features/target/recent.ts'
+import { forgetRecentTargets, pruneRecentTargets } from '../features/target/recent-storage.ts'
 import { useApi } from '../lib/api/context.tsx'
 import { t } from '../lib/i18n/i18n.ts'
 import {

@@ -24,7 +24,7 @@ import {
   RECENT_TARGETS_PREFIX,
   readRecentTargets,
   rememberTarget,
-} from '../../src/features/target/recent.ts'
+} from '../../src/features/target/recent-storage.ts'
 import { leaveForSignIn } from '../../src/lib/session/session.ts'
 import { forgetSqlTabs } from '../../src/lib/storage/sql-tabs.ts'
 import { BIDI, classifyText, TAG, ZWSP } from './support.tsx'

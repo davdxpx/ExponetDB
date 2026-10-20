@@ -15,7 +15,7 @@ import { switchTarget } from '../../shell/navigation.ts'
 import { DatabaseChoices } from './database-choices.tsx'
 import { targetOfPathname } from './params.ts'
 import { useDatabases } from './queries.ts'
-import { readRecentTargets } from './recent.ts'
+import { readRecentTargets } from './recent-storage.ts'
 
 /**
  * The command page "Switch database…" of the command menu: the same list as

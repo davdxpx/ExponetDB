@@ -1,4 +1,4 @@
-import { forgetRecentTargets } from '../../features/target/recent.ts'
+import { forgetRecentTargets } from '../../features/target/recent-storage.ts'
 import { loginUrl } from '../navigation/links.ts'
 import { forgetSqlTabs } from '../storage/sql-tabs.ts'
 

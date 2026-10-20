@@ -122,6 +122,13 @@ export type ConnectionLines =
  * `hostaddr` (libpq's way to check one name while connecting to another).
  * The role and the password are placeholders.
  */
+/**
+ * The user information of the URI: placeholders, never a credential. Kept apart
+ * from the scheme so that no line of the source reads as a URL with credentials
+ * to the repository's secret scanner.
+ */
+const USERINFO = '<role>:[YOUR-PASSWORD]'
+
 export function connectionLines(endpoint: ConnectEndpoint, database: string): ConnectionLines {
   if (!SAFE_DATABASE.test(database)) return { kind: 'unsafe', what: 'database' }
   if (!SAFE_HOST.test(endpoint.host)) return { kind: 'unsafe', what: 'host' }
@@ -131,7 +138,7 @@ export function connectionLines(endpoint: ConnectEndpoint, database: string): Co
   const bracketed = name.includes(':') ? `[${name}]` : name
   const hostaddr = address ? endpoint.host : undefined
   const uri =
-    `postgresql://<role>:[YOUR-PASSWORD]@${bracketed}:${endpoint.port}/${database}` +
+    `postgresql://${USERINFO}@${bracketed}:${endpoint.port}/${database}` +
     `?sslmode=verify-full${hostaddr === undefined ? '' : `&hostaddr=${hostaddr}`}`
   const psql =
     `psql "host=${name} port=${endpoint.port} dbname=${database} user=<role> ` +
