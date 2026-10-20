@@ -2,6 +2,7 @@ import type { SchemaObject, SchemaObjectRef } from '@exponetdb/sdk/operations'
 import type { ErdRelation, ErdTable, SchemaErdData } from '@exponetdb/ui-data'
 import type { MessageKey } from '../../lib/i18n/i18n.ts'
 import type { SchemaKind } from '../target/params.ts'
+import { quoteIdent } from './identifiers.ts'
 
 /**
  * The pure part of the schema browser: which object kinds of the contract a
@@ -95,8 +96,19 @@ export const KIND_ORDER: readonly SchemaKind[] = [
 
 // ----- names -----
 
-function quote(part: string): string {
-  return `"${part.replaceAll('"', '""')}"`
+/**
+ * An object as a link and the detail read name it: its kind and the parts of
+ * its canonical key (`['public', 'orders']`; a function has its identity
+ * arguments as the third part). Names are not route-safe, so a key travels in
+ * a validated search parameter and in a request path only percent-encoded.
+ */
+export interface ObjectKey {
+  readonly kind: string
+  readonly key: readonly string[]
+}
+
+export function objectKeyOfRef(ref: SchemaObjectRef): ObjectKey {
+  return { kind: ref.kind, key: ref.key }
 }
 
 /**
@@ -106,17 +118,17 @@ function quote(part: string): string {
  * every part means a name with dots, quotes, `$$` or spaces stays one part.
  * Returns `undefined` for a reference without a key (nothing to ask for).
  */
-export function qualifiedName(ref: SchemaObjectRef): string | undefined {
+export function qualifiedName(ref: ObjectKey): string | undefined {
   const key = ref.key
   if (key.length === 0) return undefined
   if ((ref.kind === 'function' || ref.kind === 'procedure') && key.length >= 3) {
-    return `${quote(key[0] ?? '')}.${quote(key[1] ?? '')}(${key[2] ?? ''})`
+    return `${quoteIdent(key[0] ?? '')}.${quoteIdent(key[1] ?? '')}(${key[2] ?? ''})`
   }
-  return key.map(quote).join('.')
+  return key.map(quoteIdent).join('.')
 }
 
 /** A stable identity of a reference in one list. */
-export function refKey(ref: SchemaObjectRef): string {
+export function refKey(ref: ObjectKey): string {
   return JSON.stringify([ref.kind, ref.key])
 }
 
@@ -326,4 +338,121 @@ export function parsePrimaryKey(definition: string): readonly string[] {
   const head = /^\s*PRIMARY KEY\s*/i.exec(definition)
   if (head === null) return []
   return identifierList(definition.slice(head[0].length))?.names ?? []
+}
+
+/** The columns of a `UNIQUE (a, b)` definition (`UNIQUE NULLS NOT DISTINCT (a)` too); empty when the text does not have that shape. */
+export function parseUniqueColumns(definition: string): readonly string[] {
+  const head = /^\s*UNIQUE\s*(?:NULLS\s+NOT\s+DISTINCT\s*)?/i.exec(definition)
+  if (head === null) return []
+  return identifierList(definition.slice(head[0].length))?.names ?? []
+}
+
+/**
+ * The primary key of an object as the browser orders by it: the columns of its
+ * `primary_key` constraint, in key order, when every one of them is a column
+ * of the object; else empty (an unreadable definition, or a column the read
+ * does not list, is no key to order or page by).
+ */
+export function primaryKeyOf(object: SchemaObject): readonly string[] {
+  const constraint = (object.constraints ?? []).find((entry) => entry.type === 'primary_key')
+  if (constraint === undefined) return []
+  const names = parsePrimaryKey(constraint.definition)
+  const columns = new Set((object.columns ?? []).map((column) => column.name))
+  return names.length > 0 && names.every((name) => columns.has(name)) ? names : []
+}
+
+/** Where a foreign key column points. */
+export interface ReferenceTarget {
+  readonly constraint: string
+  readonly schema: string
+  readonly table: string
+  /** The column of the referenced table, when the definition pairs it. */
+  readonly column: string | null
+}
+
+export interface ColumnKeys {
+  readonly primary: boolean
+  /** The unique constraints the column is part of, by constraint name. */
+  readonly unique: readonly { readonly name: string; readonly composite: boolean }[]
+  readonly references: readonly ReferenceTarget[]
+}
+
+/**
+ * The key tokens of the columns of an object (PK, UQ, FK), from its
+ * constraints. A definition that does not parse gives no token and no link:
+ * nothing is guessed. A reference without a schema in its definition is read
+ * as the schema of the object itself, as the diagram reads it.
+ */
+export function columnKeys(object: SchemaObject): ReadonlyMap<string, ColumnKeys> {
+  const keys = new Map<string, ColumnKeys>()
+  const edit = (column: string, change: (current: ColumnKeys) => ColumnKeys): void => {
+    keys.set(column, change(keys.get(column) ?? { primary: false, unique: [], references: [] }))
+  }
+  for (const constraint of object.constraints ?? []) {
+    switch (constraint.type) {
+      case 'primary_key':
+        for (const column of parsePrimaryKey(constraint.definition)) {
+          edit(column, (current) => ({ ...current, primary: true }))
+        }
+        break
+      case 'unique': {
+        const columns = parseUniqueColumns(constraint.definition)
+        for (const column of columns) {
+          edit(column, (current) => ({
+            ...current,
+            unique: [...current.unique, { name: constraint.name, composite: columns.length > 1 }],
+          }))
+        }
+        break
+      }
+      case 'foreign_key': {
+        const parsed = parseForeignKey(constraint.definition)
+        if (parsed === undefined) break
+        for (const [index, column] of parsed.fromColumns.entries()) {
+          edit(column, (current) => ({
+            ...current,
+            references: [
+              ...current.references,
+              {
+                constraint: constraint.name,
+                schema: parsed.toSchema ?? object.ref.schema,
+                table: parsed.toTable,
+                column: parsed.toColumns[index] ?? null,
+              },
+            ],
+          }))
+        }
+        break
+      }
+      default:
+        break
+    }
+  }
+  return keys
+}
+
+/** The kinds whose rows the row browser reads: a table, a view or a materialized view. */
+export function isBrowsableKind(kind: string): boolean {
+  return kind === 'table' || kind === 'view' || kind === 'materialized_view'
+}
+
+/**
+ * The diagram of one table in its surroundings: the table, the tables it
+ * references and the tables that reference it, with the foreign keys among
+ * them. An id that is not in the read gives the data unchanged (nothing to
+ * focus on is not an empty diagram).
+ */
+export function neighborhood(data: SchemaErdData, id: string): SchemaErdData {
+  if (!data.tables.some((table) => table.id === id)) return data
+  const near = new Set<string>([id])
+  for (const relation of data.relations) {
+    if (relation.fromTable === id) near.add(relation.toTable)
+    if (relation.toTable === id) near.add(relation.fromTable)
+  }
+  return {
+    tables: data.tables.filter((table) => near.has(table.id)),
+    relations: data.relations.filter(
+      (relation) => near.has(relation.fromTable) && near.has(relation.toTable),
+    ),
+  }
 }

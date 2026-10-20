@@ -16,7 +16,7 @@ import {
   schemaKeys,
   searchQuery,
 } from './keys.ts'
-import { qualifiedName } from './schema-model.ts'
+import { type ObjectKey, qualifiedName } from './schema-model.ts'
 
 export type SchemaOverviewRead = ResponseOf<'getSchemaOverview'>
 export type FingerprintRead = ResponseOf<'getSchemaFingerprint'>
@@ -105,7 +105,7 @@ export function useObjectSearch(
 /** The detail of one object. Nothing is asked for a reference without a key. */
 export function useSchemaObject(
   path: string,
-  ref: SchemaObjectRef | undefined,
+  ref: ObjectKey | undefined,
 ): SchemaRead<SchemaObject> {
   const { client } = useApi()
   const name = ref === undefined ? undefined : qualifiedName(ref)

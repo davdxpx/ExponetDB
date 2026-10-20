@@ -100,7 +100,7 @@ function KindPage(props: { readonly target: TargetRoute; readonly kind: SchemaKi
           <ObjectList
             // A new kind starts a new list.
             key={props.kind}
-            path={props.target.path}
+            target={props.target}
             kinds={plan.kinds}
             what={t(plan.titleKey).toLowerCase()}
           />

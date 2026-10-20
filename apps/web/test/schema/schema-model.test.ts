@@ -2,12 +2,17 @@ import type { SchemaObject, SchemaObjectRef } from '@exponetdb/sdk/operations'
 import { describe, expect, it } from 'vitest'
 import {
   buildErdData,
+  columnKeys,
   erdTableId,
   formatBytes,
   invalidIndexes,
+  isBrowsableKind,
   kindPlan,
+  neighborhood,
   parseForeignKey,
   parsePrimaryKey,
+  parseUniqueColumns,
+  primaryKeyOf,
   qualifiedName,
   refKey,
   rlsWithoutPolicy,
@@ -271,5 +276,185 @@ describe('foreign keys for the diagram', () => {
       },
     ])
     expect(undrawn).toBe(2)
+  })
+})
+
+describe('key tokens and the primary key', () => {
+  const column = (name: string) => ({
+    name,
+    type: 'uuid',
+    nullable: false,
+    default: null,
+    generated: null,
+    identity: null,
+  })
+
+  function orders(constraints: SchemaObject['constraints'], names = ['id', 'user_id', 'sku']) {
+    return objectFixture(ref({ name: 'orders' }), { columns: names.map(column), constraints })
+  }
+
+  it('reads UNIQUE definitions, with or without NULLS NOT DISTINCT', () => {
+    expect(parseUniqueColumns('UNIQUE (sku)')).toEqual(['sku'])
+    expect(parseUniqueColumns('UNIQUE (a, "b c")')).toEqual(['a', 'b c'])
+    expect(parseUniqueColumns('UNIQUE NULLS NOT DISTINCT (sku)')).toEqual(['sku'])
+    expect(parseUniqueColumns('CHECK (x > 0)')).toEqual([])
+    expect(parseUniqueColumns('UNIQUE (a')).toEqual([])
+  })
+
+  it('marks PK, UQ and FK on the columns they name, from the constraints only', () => {
+    const keys = columnKeys(
+      orders([
+        { name: 'o_pk', type: 'primary_key', definition: 'PRIMARY KEY (id)', validated: true },
+        { name: 'o_sku', type: 'unique', definition: 'UNIQUE (sku)', validated: true },
+        {
+          name: 'o_two',
+          type: 'unique',
+          definition: 'UNIQUE (user_id, sku)',
+          validated: true,
+        },
+        {
+          name: 'o_user',
+          type: 'foreign_key',
+          definition: 'FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE',
+          validated: true,
+        },
+      ]),
+    )
+    expect(keys.get('id')).toEqual({ primary: true, unique: [], references: [] })
+    expect(keys.get('sku')?.unique).toEqual([
+      { name: 'o_sku', composite: false },
+      { name: 'o_two', composite: true },
+    ])
+    expect(keys.get('user_id')).toEqual({
+      primary: false,
+      unique: [{ name: 'o_two', composite: true }],
+      references: [{ constraint: 'o_user', schema: 'auth', table: 'users', column: 'id' }],
+    })
+  })
+
+  it('reads a reference without a schema as the schema of the table itself', () => {
+    const keys = columnKeys(
+      orders([
+        {
+          name: 'o_user',
+          type: 'foreign_key',
+          definition: 'FOREIGN KEY (user_id) REFERENCES users(id)',
+          validated: true,
+        },
+      ]),
+    )
+    expect(keys.get('user_id')?.references).toEqual([
+      { constraint: 'o_user', schema: 'public', table: 'users', column: 'id' },
+    ])
+  })
+
+  it('pairs each column of a composite foreign key with its own referenced column', () => {
+    const keys = columnKeys(
+      orders([
+        {
+          name: 'o_fk',
+          type: 'foreign_key',
+          definition: 'FOREIGN KEY (id, sku) REFERENCES public.items(a, b)',
+          validated: true,
+        },
+      ]),
+    )
+    expect(keys.get('id')?.references[0]?.column).toBe('a')
+    expect(keys.get('sku')?.references[0]?.column).toBe('b')
+  })
+
+  it('gives no token for a definition that does not parse', () => {
+    const keys = columnKeys(
+      orders([
+        { name: 'a', type: 'foreign_key', definition: 'garbled', validated: true },
+        { name: 'b', type: 'primary_key', definition: 'PRIMARY KEY (id', validated: true },
+        { name: 'c', type: 'check', definition: 'CHECK (id IS NOT NULL)', validated: true },
+      ]),
+    )
+    expect(keys.size).toBe(0)
+  })
+
+  it('keeps a hostile column name as one name', () => {
+    const name = 'a"; DROP TABLE x; --'
+    const keys = columnKeys(
+      orders(
+        [
+          {
+            name: 'o_pk',
+            type: 'primary_key',
+            definition: `PRIMARY KEY ("a""; DROP TABLE x; --")`,
+            validated: true,
+          },
+        ],
+        [name],
+      ),
+    )
+    expect(keys.get(name)?.primary).toBe(true)
+  })
+
+  it('takes the primary key in key order, only when every column is a column of the object', () => {
+    expect(
+      primaryKeyOf(
+        orders([
+          {
+            name: 'o_pk',
+            type: 'primary_key',
+            definition: 'PRIMARY KEY (user_id, id)',
+            validated: true,
+          },
+        ]),
+      ),
+    ).toEqual(['user_id', 'id'])
+    expect(
+      primaryKeyOf(
+        orders([
+          { name: 'o_pk', type: 'primary_key', definition: 'PRIMARY KEY (ghost)', validated: true },
+        ]),
+      ),
+    ).toEqual([])
+    expect(primaryKeyOf(orders(null))).toEqual([])
+    expect(primaryKeyOf(orders([]))).toEqual([])
+  })
+
+  it('browses tables, views and materialized views only', () => {
+    expect(['table', 'view', 'materialized_view'].every(isBrowsableKind)).toBe(true)
+    expect(['function', 'index', 'schema', 'sequence', 'trigger'].some(isBrowsableKind)).toBe(false)
+  })
+})
+
+describe('neighborhood: one table with the tables next to it', () => {
+  const data = {
+    tables: ['a', 'b', 'c', 'd'].map((name) => ({
+      id: name,
+      schema: 'public',
+      name,
+      columns: [],
+    })),
+    relations: [
+      { name: 'ab', fromTable: 'a', fromColumns: ['x'], toTable: 'b', toColumns: ['id'] },
+      { name: 'cb', fromTable: 'c', fromColumns: ['x'], toTable: 'b', toColumns: ['id'] },
+      { name: 'cd', fromTable: 'c', fromColumns: ['y'], toTable: 'd', toColumns: ['id'] },
+    ],
+  }
+
+  it('keeps the table, the tables it references and the tables that reference it', () => {
+    const near = neighborhood(data, 'b')
+    expect(near.tables.map((t) => t.id)).toEqual(['a', 'b', 'c'])
+    expect(near.relations.map((r) => r.name)).toEqual(['ab', 'cb'])
+  })
+
+  it('keeps the relations among the neighbors too', () => {
+    const near = neighborhood(data, 'c')
+    expect(near.tables.map((t) => t.id)).toEqual(['b', 'c', 'd'])
+    expect(near.relations.map((r) => r.name)).toEqual(['cb', 'cd'])
+  })
+
+  it('is just the table when nothing points at it', () => {
+    const lone = neighborhood({ ...data, relations: [] }, 'a')
+    expect(lone.tables.map((t) => t.id)).toEqual(['a'])
+  })
+
+  it('leaves the data as it is for a table that is not in it', () => {
+    expect(neighborhood(data, 'ghost')).toBe(data)
   })
 })

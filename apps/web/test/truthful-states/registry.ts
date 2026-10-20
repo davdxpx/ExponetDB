@@ -152,6 +152,7 @@ export const COVERAGE: Record<string, Coverage> = {
         'useStoredFiles yields loading, failed, partial or ready only: a stored bundle revision never changes (bundles are append-only), so its files are read once and an earlier read is never out of date.',
     },
   },
+  'src/features/schema/browse-panel.tsx': { tests: ['schema/browse.test.tsx'] },
   'src/features/schema/object-detail.tsx': { tests: SCHEMA },
   'src/features/schema/object-list.tsx': { tests: SCHEMA },
   'src/features/schema/schema-page.tsx': { tests: SCHEMA },

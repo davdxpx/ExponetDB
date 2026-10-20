@@ -1,4 +1,4 @@
-import type { SchemaObject, SchemaObjectRef } from '@exponetdb/sdk/operations'
+import type { SchemaObject } from '@exponetdb/sdk/operations'
 import {
   Table,
   TableBody,
@@ -7,6 +7,10 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
 } from '@exponetdb/ui'
 import {
   Admonition,
@@ -14,18 +18,33 @@ import {
   ReadableView,
   UntrustedName,
   UntrustedText,
+  useLinkComponent,
 } from '@exponetdb/ui-patterns'
 import type { ReactNode } from 'react'
 import { t } from '../../lib/i18n/i18n.ts'
+import type { TargetRoute } from '../target/params.ts'
 import { nounPhrase } from '../target/phrases.ts'
+import { BrowsePanel, type BrowseSession, useBrowseSession } from './browse-panel.tsx'
+import { ObjectActions } from './object-actions.tsx'
+import { PlainName } from './plain-name.tsx'
 import { type SchemaRead, useSchemaObject } from './queries.ts'
 import {
+  type ColumnKeys,
+  columnKeys,
   formatBytes,
   invalidIndexes,
+  isBrowsableKind,
+  type ObjectKey,
+  objectKeyOfRef,
+  refKey,
   rlsWithoutPolicy,
   securityDefinerWithoutSearchPath,
   unvalidatedConstraints,
 } from './schema-model.ts'
+import { objectHref, type PanelState } from './search.ts'
+
+/** How the panel of an object changes its own state (the tab, the row browser's sort and filters). */
+export type OnPanelState = (next: PanelState, options?: { readonly replace?: boolean }) => void
 
 const HEADING = 4
 /** Longest definition, default or expression a table cell shows before "Show all". */
@@ -43,14 +62,32 @@ const DEFINITION_LINES = 40
  * header of a function definition only.
  */
 export function ObjectDetail(props: {
-  readonly path: string
-  readonly object: SchemaObjectRef
+  readonly target: TargetRoute
+  readonly object: ObjectKey
+  readonly state: PanelState
+  readonly onState: OnPanelState
 }): ReactNode {
-  const read = useSchemaObject(props.path, props.object)
-  return <ObjectDetailView read={read} />
+  const read = useSchemaObject(props.target.path, props.object)
+  // The rows the browser has read belong here, above the read state of the object (see `BrowseSession`).
+  const session = useBrowseSession()
+  return (
+    <ObjectDetailView
+      read={read}
+      session={session}
+      target={props.target}
+      state={props.state}
+      onState={props.onState}
+    />
+  )
 }
 
-export function ObjectDetailView(props: { readonly read: SchemaRead<SchemaObject> }): ReactNode {
+export function ObjectDetailView(props: {
+  readonly read: SchemaRead<SchemaObject>
+  readonly session: BrowseSession
+  readonly target: TargetRoute
+  readonly state: PanelState
+  readonly onState: OnPanelState
+}): ReactNode {
   const { read } = props
   return (
     <ReadableView
@@ -60,7 +97,17 @@ export function ObjectDetailView(props: { readonly read: SchemaRead<SchemaObject
       onRefresh={read.refetch}
       busy={read.fetching}
       headingLevel={HEADING}
-      ready={(value) => <ObjectBody object={value} />}
+      ready={(value) => (
+        <ObjectBody
+          // Another object starts with a clean panel: its own tab, its own rows.
+          key={refKey(objectKeyOfRef(value.ref))}
+          object={value}
+          session={props.session}
+          target={props.target}
+          state={props.state}
+          onState={props.onState}
+        />
+      )}
     />
   )
 }
@@ -104,7 +151,16 @@ function Hints({ object }: { readonly object: SchemaObject }): ReactNode {
   return <div className="flex flex-col gap-2">{hints}</div>
 }
 
-function ObjectBody({ object }: { readonly object: SchemaObject }): ReactNode {
+function ObjectBody(props: {
+  readonly object: SchemaObject
+  readonly session: BrowseSession
+  readonly target: TargetRoute
+  readonly state: PanelState
+  readonly onState: OnPanelState
+}): ReactNode {
+  const { object, target, state, onState } = props
+  // The rows of a table, view or materialized view can be browsed when the read lists its columns.
+  const browsable = isBrowsableKind(object.ref.kind) && object.columns !== null
   return (
     <div className="flex flex-col gap-4" data-slot="object-detail" data-kind={object.ref.kind}>
       <Hints object={object} />
@@ -161,6 +217,50 @@ function ObjectBody({ object }: { readonly object: SchemaObject }): ReactNode {
               ]),
         ]}
       />
+      <ObjectActions target={target} object={object} state={state} />
+      {browsable ? (
+        <Tabs
+          value={state.tab}
+          onValueChange={(next) =>
+            onState({ ...state, tab: next === 'rows' ? 'rows' : 'details' }, { replace: true })
+          }
+        >
+          <TabsList aria-label={t('schema.tabs.label')}>
+            <TabsTrigger value="details" className="px-3">
+              {t('schema.tabs.details')}
+            </TabsTrigger>
+            <TabsTrigger value="rows" className="px-3">
+              {t('schema.tabs.rows')}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="details" className="flex flex-col gap-4">
+            <Structure object={object} target={target} />
+          </TabsContent>
+          <TabsContent value="rows">
+            <BrowsePanel
+              route={target}
+              object={object}
+              session={props.session}
+              state={state}
+              onState={onState}
+            />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <Structure object={object} target={target} />
+      )}
+    </div>
+  )
+}
+
+/** Everything the schema read says about the object: comment, columns, constraints, indexes, policies, grants, definition. */
+function Structure(props: {
+  readonly object: SchemaObject
+  readonly target: TargetRoute
+}): ReactNode {
+  const { object, target } = props
+  return (
+    <>
       {object.comment === null ? null : (
         <div>
           <h4 className="text-sm font-medium">{t('schema.object.comment')}</h4>
@@ -172,14 +272,14 @@ function ObjectBody({ object }: { readonly object: SchemaObject }): ReactNode {
           />
         </div>
       )}
-      <Columns object={object} />
+      <Columns object={object} target={target} />
       <Constraints object={object} />
       <Indexes object={object} />
       <Policies object={object} />
       <Grants object={object} />
       <Definition object={object} />
       <Gaps object={object} />
-    </div>
+    </>
   )
 }
 
@@ -196,11 +296,100 @@ function Code({ text, label }: { readonly text: string; readonly label: string }
   )
 }
 
-function Columns({ object }: { readonly object: SchemaObject }): ReactNode {
+/** A key marker in the column list: the letters for the eye, the words for a screen reader. */
+function KeyToken(props: { readonly short: string; readonly long: string }): ReactNode {
+  return (
+    <span className="shrink-0 rounded-sm border border-default px-1 text-[10px] leading-4 text-foreground-light">
+      {props.short}
+      <span className="sr-only"> {props.long}</span>
+    </span>
+  )
+}
+
+/**
+ * The key tokens of a column: PK, UQ for each unique constraint it is part
+ * of, and for each foreign key the table it references as a link to that
+ * table's detail (the link carries the table as a validated key in the
+ * search, never in the path). A definition that does not parse gives no token.
+ */
+function KeyTokens(props: {
+  readonly keys: ColumnKeys | undefined
+  readonly target: TargetRoute
+}): ReactNode {
+  const Link = useLinkComponent()
+  const { keys } = props
+  if (
+    keys === undefined ||
+    (!keys.primary && keys.unique.length === 0 && keys.references.length === 0)
+  ) {
+    return <span className="text-foreground-light">{t('schema.columns.keysNone')}</span>
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" data-slot="key-tokens">
+      {keys.primary ? (
+        <KeyToken short={t('schema.columns.pk')} long={t('schema.columns.pk.long')} />
+      ) : null}
+      {keys.unique.map((unique, index) => (
+        <KeyToken
+          // A column can be part of two unique constraints of the same name only in a corrupt read.
+          // biome-ignore lint/suspicious/noArrayIndexKey: tokens have no identity of their own
+          key={index}
+          short={t('schema.columns.uq')}
+          long={unique.composite ? t('schema.columns.uq.composite') : t('schema.columns.uq.long')}
+        />
+      ))}
+      {keys.references.map((reference, index) => {
+        const href = objectHref(props.target, {
+          kind: 'table',
+          key: [reference.schema, reference.table],
+        })
+        const label = (
+          <>
+            <PlainName text={`${reference.schema}.${reference.table}`} mono max={48} />
+            {reference.column === null ? null : (
+              <>
+                {' ('}
+                <PlainName text={reference.column} mono max={32} />
+                {')'}
+              </>
+            )}
+          </>
+        )
+        return (
+          <span
+            // biome-ignore lint/suspicious/noArrayIndexKey: tokens have no identity of their own
+            key={index}
+            className="inline-flex flex-wrap items-center gap-1"
+            data-slot="foreign-key"
+          >
+            <KeyToken short={t('schema.columns.fk')} long={t('schema.columns.references')} />
+            {href === undefined ? (
+              <span className="text-xs">{label}</span>
+            ) : (
+              <Link href={href} className="text-xs underline">
+                {label}
+              </Link>
+            )}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+function Columns({
+  object,
+  target,
+}: {
+  readonly object: SchemaObject
+  readonly target: TargetRoute
+}): ReactNode {
   if (object.columns === null) return null
   if (object.columns.length === 0) {
     return <p className="text-sm">{t('schema.columns.none')}</p>
   }
+  // Key tokens come from the constraints; an object whose read lists none (a view) has no such column.
+  const keys = object.constraints === null ? undefined : columnKeys(object)
   return (
     <Table>
       <TableCaption className="sr-only">{t('schema.columns.caption')}</TableCaption>
@@ -208,6 +397,9 @@ function Columns({ object }: { readonly object: SchemaObject }): ReactNode {
         <TableRow>
           <TableHead scope="col">{t('schema.columns.name')}</TableHead>
           <TableHead scope="col">{t('schema.columns.type')}</TableHead>
+          {keys === undefined ? null : (
+            <TableHead scope="col">{t('schema.columns.keys')}</TableHead>
+          )}
           <TableHead scope="col">{t('schema.columns.nullable')}</TableHead>
           <TableHead scope="col">{t('schema.columns.default')}</TableHead>
         </TableRow>
@@ -221,6 +413,11 @@ function Columns({ object }: { readonly object: SchemaObject }): ReactNode {
             <TableCell>
               <UntrustedName name={column.type} mono label={t('schema.columns.type')} />
             </TableCell>
+            {keys === undefined ? null : (
+              <TableCell>
+                <KeyTokens keys={keys.get(column.name)} target={target} />
+              </TableCell>
+            )}
             <TableCell>{column.nullable ? t('schema.yes') : t('schema.no')}</TableCell>
             <TableCell>
               {column.default === null && column.generated === null && column.identity === null ? (

@@ -17,7 +17,8 @@ import { SEARCH_MAX_LENGTH } from './keys.ts'
 import { ObjectDetail } from './object-detail.tsx'
 import { visibilityMissing } from './object-list.tsx'
 import { useSchemaOverview } from './queries.ts'
-import { refKey } from './schema-model.ts'
+import { objectKeyOfRef, refKey } from './schema-model.ts'
+import { DEFAULT_PANEL_STATE, type PanelState } from './search.ts'
 import { SearchForm } from './search-controls.tsx'
 
 /** Largest page one class load asks for (the API's page maximum). */
@@ -62,6 +63,8 @@ export function TreePanel(props: { readonly target: TargetRoute }): ReactNode {
   const { client } = useApi()
   const [term, setTerm] = useState('')
   const [selected, setSelected] = useState<SchemaObjectRef | undefined>()
+  // The tree is not a page of its own: the tab and the row browser's sort and filters stay in the page.
+  const [panel, setPanel] = useState<PanelState>(DEFAULT_PANEL_STATE)
   const [kind, setKind] = useState<string | undefined>()
   const known = useRef(new Map<string, SchemaObjectRef>())
   const overview = useSchemaOverview(props.target.path, visibilityMissing)
@@ -99,6 +102,7 @@ export function TreePanel(props: { readonly target: TargetRoute }): ReactNode {
   const onSelect = (selection: SchemaTreeSelection): void => {
     if (selection.kind === 'object') {
       setSelected(known.current.get(selection.key))
+      setPanel(DEFAULT_PANEL_STATE)
       setKind(undefined)
     } else if (selection.kind === 'class') {
       setSelected(undefined)
@@ -143,7 +147,13 @@ export function TreePanel(props: { readonly target: TargetRoute }): ReactNode {
           className="rounded-md border border-default p-4"
           data-slot="tree-object"
         >
-          <ObjectDetail path={path} object={selected} />
+          <ObjectDetail
+            key={refKey(selected)}
+            target={props.target}
+            object={objectKeyOfRef(selected)}
+            state={panel}
+            onState={(next) => setPanel(next)}
+          />
         </section>
       )}
     </div>

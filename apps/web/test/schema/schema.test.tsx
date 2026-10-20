@@ -472,7 +472,8 @@ describe('the object lists', () => {
     mountApp(`${SCHEMA}/tables`, world)
     const user = await search('ord')
     await screen.findByRole('table', { name: 'Objects that match the filter' })
-    await user.click(screen.getByRole('button', { name: 'exponetdb' }))
+    await user.click(screen.getByRole('combobox', { name: /Schema/ }))
+    await user.click(await screen.findByRole('option', { name: 'exponetdb' }))
     const table = screen.getByRole('table', { name: 'Objects that match the filter' })
     expect(
       within(table)

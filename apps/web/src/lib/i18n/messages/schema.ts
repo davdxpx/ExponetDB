@@ -39,7 +39,13 @@ export const schemaMessages = {
     'The Control Plane lists schema objects by name search. Enter part of a name (1 to 128 characters).',
   'schema.selector.label': 'Schema',
   'schema.selector.all': 'All schemas',
-  'schema.selector.more': '{count} more schemas exist. Use the name filter to reach their objects.',
+  'schema.selector.search': 'Search schemas',
+  'schema.selector.empty': 'No schema matches.',
+  'schema.selector.managed': 'Managed by ExponetDB',
+  'schema.selector.others': 'Other schemas',
+  'schema.selector.shown': 'Showing the first {shown} of {total} schemas. Type to narrow the list.',
+  'schema.selector.failed':
+    'The list of schemas could not be read, so schemas cannot be chosen here. The name filter still works.',
 
   // The lists.
   'schema.list.idle':
@@ -192,4 +198,146 @@ export const schemaMessages = {
   'schema.erd.unread': '{count} of {total} tables could not be read and are not drawn.',
   'schema.erd.moreMatch': 'More tables match than the search returned. Narrow the filter.',
   'schema.erd.stale': 'The list of tables is an earlier read.',
+  'schema.erd.tools': 'Diagram tools',
+  'schema.erd.find': 'Find a table',
+  'schema.erd.find.search': 'Search tables',
+  'schema.erd.find.empty': 'No table matches.',
+  'schema.erd.find.shown': 'Showing the first {shown} of {total} tables. Type to narrow the list.',
+  'schema.erd.focus.prefix': 'Focused on',
+  'schema.erd.focus.suffix':
+    'The diagram shows it with its {count} connected tables: the ones it references and the ones that reference it.',
+  'schema.erd.focus.clear': 'Show all tables',
+  'schema.erd.exportSvg': 'Download as SVG',
+  'schema.erd.copyMarkdown': 'Copy as Markdown',
+  'schema.erd.exported': 'Downloaded the {tables} tables drawn here as an SVG file.',
+  'schema.erd.copiedMarkdown': 'Copied the {tables} tables drawn here as Markdown.',
+  'schema.erd.copyFailed': 'Could not copy to the clipboard. Download the SVG instead.',
+  'schema.erd.exportNote':
+    'The exports hold the tables drawn here and the foreign keys between them, as read at the time shown.',
+
+  // Tabs and actions of one object.
+  'schema.tabs.label': 'Views of this object',
+  'schema.tabs.details': 'Details',
+  'schema.tabs.rows': 'Browse rows',
+  'schema.actions.label': 'Actions for this object',
+  'schema.actions.copyName': 'Copy name',
+  'schema.actions.copyLink': 'Copy link',
+  'schema.actions.copiedName': 'Copied the name.',
+  'schema.actions.copiedLink': 'Copied the link.',
+  'schema.actions.copyFailed':
+    'Could not copy to the clipboard. Select the text and copy it yourself.',
+  'schema.actions.queryTable': 'Query this table',
+  'schema.actions.queryView': 'Query this view',
+  'schema.actions.queryMaterializedView': 'Query this materialized view',
+  'schema.actions.openDefinition': 'Open definition in SQL editor',
+  'schema.actions.definitionTooLong':
+    'The definition is too long to open from a link ({length} characters, at most {max}). Copy it from the definition below.',
+  'schema.actions.draft': 'Draft a change to this object',
+  'schema.actions.note':
+    'These links open the SQL page with the text in a new tab. Nothing runs until you press Run there, and a change always goes through a draft.',
+
+  // Key tokens and the jump along a foreign key.
+  'schema.columns.keys': 'Keys',
+  'schema.columns.keysNone': 'None',
+  'schema.columns.pk': 'PK',
+  'schema.columns.pk.long': 'Primary key',
+  'schema.columns.uq': 'UQ',
+  'schema.columns.uq.long': 'Unique',
+  'schema.columns.uq.composite': 'Unique together with other columns',
+  'schema.columns.fk': 'FK',
+  'schema.columns.fk.long': 'Foreign key',
+  'schema.columns.references': 'References',
+
+  // The row browser.
+  'schema.browse.what': 'Rows',
+  'schema.browse.title': 'Rows of this object',
+  'schema.browse.intro':
+    'Reads one page of rows with a read-only SELECT. Every read is a data read: it is audited, sensitive columns are masked and the server decides what it admits. Nothing is read until you press Read rows.',
+  'schema.browse.production': 'This is a production target. Each read is audited under your name.',
+  'schema.browse.noColumns':
+    'The schema read lists no column for this object, so no statement can be built. This does not mean the object has no rows.',
+  'schema.browse.gate.what': 'Rows of this object',
+  'schema.browse.off.title': 'Data reads are off for this target',
+  'schema.browse.off.body':
+    'The data-read setting of this target is disabled, so rows cannot be read here. This does not mean the object has no rows.',
+  'schema.browse.off.link': 'Open the target configuration',
+  'schema.browse.policyUnread':
+    'Could not read the data-read setting of this target ({reason}). The server decides when you read.',
+  'schema.browse.read': 'Read rows',
+  'schema.browse.readAgain': 'Read again',
+  'schema.browse.openSql': 'Open in SQL editor',
+  'schema.browse.openSqlNote':
+    'The editor gets the first page with the filter values written into the text. It opens and never runs.',
+  'schema.browse.statement': 'The statement',
+  'schema.browse.statementNote':
+    'Filter values travel as parameters ($1 and on), not in the text. One more row than a page is asked for, to know whether there are more.',
+  'schema.browse.refusal.no_columns': 'The schema read lists no column, so no statement was built.',
+  'schema.browse.refusal.unquotable_name':
+    'A name in the schema read cannot be written as a PostgreSQL identifier, so no statement was built.',
+  'schema.browse.refusal.bad_cursor':
+    'The place where the next page starts is not valid, so nothing was sent.',
+
+  // Sort and filters.
+  'schema.browse.filter.title': 'Filter rows',
+  'schema.browse.filter.column': 'Column',
+  'schema.browse.filter.choose': 'Choose a column',
+  'schema.browse.filter.operator': 'Operator',
+  'schema.browse.filter.value': 'Value',
+  'schema.browse.filter.add': 'Add filter',
+  'schema.browse.filter.remove': 'Remove filter',
+  'schema.browse.filter.none': 'No filter. All rows of the object are read, a page at a time.',
+  'schema.browse.filter.list': 'Filters, all of which must hold',
+  'schema.browse.filter.max': 'At most {max} filters.',
+  'schema.browse.filter.ilikeHint': 'Use % for any text and _ for one character.',
+  'schema.browse.filter.ignoredTag': 'Ignored',
+  'schema.browse.filter.ignored.unknown_column':
+    'This column is not in the object, so the filter is ignored.',
+  'schema.browse.filter.ignored.bad_operator':
+    'This operator is not allowed, so the filter is ignored.',
+  'schema.browse.filter.ignored.bad_value': 'This value is not valid, so the filter is ignored.',
+  'schema.browse.filter.ignored.too_many':
+    'There are more filters than the browser takes, so this one is ignored.',
+  'schema.browse.sort.by': 'Sorted by',
+  'schema.browse.sort.asc': 'Ascending',
+  'schema.browse.sort.desc': 'Descending',
+  'schema.browse.sort.clear': 'Clear sort',
+  'schema.browse.sort.ignored':
+    'The sort in the link is not a column of this object and is ignored.',
+  'schema.op.eq': 'Is equal to',
+  'schema.op.ne': 'Is not equal to',
+  'schema.op.lt': 'Is less than',
+  'schema.op.le': 'Is at most',
+  'schema.op.gt': 'Is greater than',
+  'schema.op.ge': 'Is at least',
+  'schema.op.isNull': 'Is null',
+  'schema.op.isNotNull': 'Is not null',
+  'schema.op.ilike': 'Matches, ignoring case',
+
+  // Order, paging and what a result says about itself.
+  'schema.browse.order.primary_key': 'Ordered by the primary key.',
+  'schema.browse.order.sort': 'Ordered by the sort you chose.',
+  'schema.browse.order.none':
+    'This object has no primary key and no sort is chosen, so the order of rows is not defined. Pages may repeat or skip rows.',
+  'schema.browse.paging.keyset':
+    'More rows continue after the last key value, so pages do not shift.',
+  'schema.browse.paging.offset':
+    'More rows are read with an offset, so rows may shift between pages if the data changes.',
+  'schema.browse.paging.fellBack':
+    'The key value of the last row could not be sent back (it is masked, cut or missing), so the next page uses an offset and rows may shift.',
+  'schema.browse.meta': '{rows} rows read in {ms} ms, {total} loaded so far.',
+  'schema.browse.truncation.rows': 'The {cap} row limit',
+  'schema.browse.truncation.bytes': 'The {cap} byte limit',
+  'schema.browse.truncation.unknown': 'A limit of the server',
+  'schema.browse.masked':
+    '{count} columns are masked by the server: their values are hidden, not empty.',
+  'schema.browse.rls':
+    'The reader bypasses row level security, so these rows are complete. Row level security is on for {count} relations in this read, so applications see fewer rows.',
+  'schema.browse.partialMissing': 'Only the first {count} rows are read; more rows exist.',
+  'schema.browse.limit': 'The browser stops at {max} loaded rows. Add a filter to narrow the rows.',
+  'schema.browse.gridLabel': 'Rows of the object',
+  'schema.browse.loadMoreFailed':
+    'Could not read the next rows: {message} ({code}). The rows above are still the ones that were read.',
+  'schema.browse.retryMore': 'Try again',
+  'schema.browse.refused.title': 'The server refused this read',
+  'schema.browse.refused.body': 'Nothing was read. This is not an empty table.',
 } as const
