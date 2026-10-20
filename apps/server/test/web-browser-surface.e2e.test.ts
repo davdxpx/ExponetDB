@@ -1,5 +1,7 @@
 import { createHash, generateKeyPairSync } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import { systemClock } from '@exponetdb/kernel'
+import { initPki } from '@exponetdb/nodes'
 import {
   type Browser,
   type BrowserContext,
@@ -17,7 +19,8 @@ import { ORIGIN, RP_ID } from './support/node-world.ts'
  * a `returnTo` never leaves the origin; the tokens carried in a fragment (`/invite#token=`,
  * `/oauth/consent#request=`) never reach the server in an address or a header, never travel in a
  * `Referer`, and are not left in the address bar, the history, a storage or a cookie; and a
- * secret shown once (an API key, an invitation link) is in exactly one element while it is shown
+ * secret shown once (an API key, an invitation link, a node enrollment token) is in exactly one
+ * element while it is shown
  * and nowhere in the document, an attribute or a storage afterwards.
  */
 const WEB_DIST =
@@ -33,6 +36,7 @@ interface Sent {
 
 let w: McpWorld
 let fragmentLink = ''
+let enrollServerId = ''
 let browser: Browser
 let context: BrowserContext
 let page: Page
@@ -173,6 +177,30 @@ beforeAll(async () => {
   })
   expect(invited.status, invited.text).toBe(201)
   fragmentLink = invited.body.invitation.link
+  // A server and an applied node enrollment plan, whose token the page reveals once (the apply
+  // needs a fresh proof of the test client's own passkey, so it happens before the browser). A
+  // token is anchored to the node PKI's job keys, so the PKI is initialized first.
+  await w.db.store('exdb_worker').transaction('test.pki', (tx) =>
+    initPki(tx, w.keyring, systemClock, {
+      gatewayUrl: 'https://10.8.2.2:7443',
+      serverName: 'gateway.exdb.test',
+    }),
+  )
+  await w.planAndApply('/api/v1/servers', { displayName: 'surface host', provider: 'other' })
+  const servers = await w.owner.browser.call('GET', '/api/v1/servers')
+  enrollServerId = servers.body.items.find(
+    (s: { displayName: string }) => s.displayName === 'surface host',
+  ).id
+  const enrolled = await w.planAndApply(
+    `/api/v1/servers/${enrollServerId}/nodes/enroll`,
+    {},
+    { reauth: true },
+  )
+  const operation = await w.owner.browser.call(
+    'GET',
+    `/api/v1/operations/${(enrolled.operation as { id: string }).id}`,
+  )
+  expect(operation.body.state, JSON.stringify(operation.body)).toBe('succeeded')
   browser = await chromium.launch({ headless: true })
   context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
   await context.addInitScript({
@@ -423,6 +451,47 @@ describe('secrets shown once', () => {
     await page.locator('li[data-service]', { hasText: 'Surface checks' }).waitFor()
     expect(await exposure(next, '#none')).toEqual([])
     expect(await exposure(secret, '#none')).toEqual([])
+  })
+})
+
+describe('secrets shown once: node enrollment', () => {
+  it('an enrollment token is in one element while it is shown, nowhere once hidden or left, and never twice', async () => {
+    await signIn()
+    await page.goto(`${ORIGIN}/infrastructure/servers/${enrollServerId}`)
+    const row = page.locator('li[data-token]')
+    await row.first().waitFor()
+    const from = sent.length
+    await row.first().getByRole('button', { name: 'Reveal token' }).click()
+    const shown = page.locator('#enrollment-token')
+    await withPasskeyIfAsked(shown)
+    const token = ((await shown.textContent()) ?? '').trim()
+    expect(token).toMatch(/^exdbt1\./)
+    expect(await exposure(token, '#enrollment-token')).toEqual([])
+    // It came back in exactly one response body and was asked for nowhere else.
+    expect(receivedOutsideBody(from, token)).toEqual([])
+    // The row now says it was revealed; the server would refuse a second reveal anyway.
+    expect(await row.first().getByRole('button', { name: 'Reveal token' }).count()).toBe(0)
+
+    await page.getByRole('button', { name: 'Copy token' }).click()
+    await page.waitForTimeout(300)
+    expect(await exposure(token, '#enrollment-token')).toEqual([])
+
+    await page.getByRole('button', { name: 'Hide token' }).click()
+    await shown.waitFor({ state: 'detached' })
+    expect(await exposure(token, '#none')).toEqual([])
+    expect(await page.content()).not.toContain(token)
+
+    // Left through the app, returned to and reloaded: gone, and not offered again.
+    await page.locator('a[href="/audit"]').first().click()
+    await page.waitForURL(`${ORIGIN}/audit`)
+    await page.goBack()
+    await page.waitForURL(`${ORIGIN}/infrastructure/servers/${enrollServerId}`)
+    await row.first().waitFor()
+    expect(await page.locator('#enrollment-token').count()).toBe(0)
+    expect(await exposure(token, '#none')).toEqual([])
+    await page.reload()
+    await row.first().waitFor()
+    expect(await exposure(token, '#none')).toEqual([])
   })
 })
 
