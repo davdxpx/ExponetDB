@@ -20,6 +20,7 @@ import {
   serverFor,
   type TestServer,
   testTargets,
+  withSuperuser,
 } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
@@ -120,6 +121,33 @@ async function fresh(t: TargetRecord): Promise<TargetRecord> {
   const found = await findTarget(h.worker, t.targetId)
   if (found === undefined) throw new Error('target vanished')
   return found
+}
+
+// Sessions a few seconds short of a health condition (idle in a transaction or waiting on a
+// lock for 10 s, active for 30 s or more; health.md §3).
+const NEAR_A_CONDITION = `SELECT pid, datname, application_name, state, wait_event_type
+  FROM pg_catalog.pg_stat_activity
+ WHERE backend_type = 'client backend' AND pid <> pg_catalog.pg_backend_pid()
+   AND ((state IN ('idle in transaction', 'idle in transaction (aborted)') OR wait_event_type = 'Lock')
+          AND clock_timestamp() - state_change >= interval '2 seconds'
+        OR state = 'active' AND clock_timestamp() - query_start >= interval '20 seconds')`
+
+/**
+ * The activity probe reads the whole cluster, and pg17 is shared with the other suites: a
+ * migration test holding a table lock in an open transaction makes every target on it
+ * degraded while it holds. A sample that must find the cluster quiet waits until no session
+ * is near a condition, so none can reach one before the sample reads.
+ */
+async function quietCluster(): Promise<void> {
+  const deadline = Date.now() + 30_000
+  await withSuperuser(pg17, 'postgres', async (c) => {
+    for (;;) {
+      const busy = (await c.query(NEAR_A_CONDITION)).rows
+      if (busy.length === 0) return
+      if (Date.now() > deadline) throw new Error(`pg17 stayed busy: ${JSON.stringify(busy)}`)
+      await new Promise((r) => setTimeout(r, 250))
+    }
+  })
 }
 
 async function registerTarget(envSlug: string, label: string): Promise<TargetRecord> {
@@ -533,6 +561,7 @@ describe('health sampler', () => {
   })
 
   it('samples a healthy target on every path and records status and history', async () => {
+    await quietCluster()
     const o = await sampleTarget(healthDeps(), await fresh(target))
     expect(o?.result.state).toBe('healthy')
     const status = (await readStatuses(h.serve, [target.targetId])).get(target.targetId)
@@ -589,6 +618,7 @@ describe('health sampler', () => {
         : ''
     proxy.setMode({ kind: 'hang_extended' })
     try {
+      await quietCluster()
       const o = await sampleTarget(healthDeps({ probeDeadlineMs: 800 }), await fresh(target))
       expect(o?.result.state).toBe('unhealthy')
       expect(o?.result.conditions).toEqual([
@@ -663,6 +693,7 @@ describe('health sampler', () => {
     }
     const live = await listSessions(snapshotDeps(), await fresh(target))
     expect(live).toMatchObject({ source: 'live', truncated: false })
+    await quietCluster()
     const back = await sampleTarget(healthDeps(), await fresh(target))
     expect(back?.result.state).toBe('healthy')
   })
@@ -672,6 +703,7 @@ describe('health sampler', () => {
     await runAsSuperuser(pg17, other.placement?.databaseName ?? '', [
       'DROP SCHEMA exponetdb CASCADE',
     ])
+    await quietCluster()
     const o = await sampleTarget(healthDeps(), await fresh(other))
     expect(o).toMatchObject({ suspensionRequested: true, result: { state: 'suspended' } })
     // A second sample before the worker ran plans nothing new.
