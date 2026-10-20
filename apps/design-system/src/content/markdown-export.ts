@@ -50,28 +50,80 @@ export function readMeta(source: string, where: string) {
   throw new Error(`${where}: meta has no closing "}" line`)
 }
 
-/** MDX to Markdown: `import` and `export` statements dropped, `<Demo id="…" />` replaced by a line naming the demo. */
+/**
+ * MDX to Markdown: `import` and `export` statements dropped, `<Demo id="…" />`
+ * replaced by a line naming the demo, and links to other pages of the site
+ * (`/ui/table`, `/guidance/forms#errors`) rewritten to the exported Markdown
+ * file next to this one (`../ui/table.md`). Fenced code blocks are copied
+ * untouched: an `import` line or a `<Demo>` inside a fence is an example, not
+ * a statement, and a link inside code is text. Inline code spans are left as
+ * they are too.
+ */
 export function toMarkdown(source: string): string {
   const lines: string[] = []
   let inStatement = false
+  let fence: string | undefined
   for (const line of source.split('\n')) {
+    if (fence !== undefined) {
+      lines.push(line)
+      if (closesFence(line, fence)) fence = undefined
+      continue
+    }
     if (inStatement) {
       // A multi-line statement ends at its closing brace line.
       if (/^\}/.test(line)) inStatement = false
+      continue
+    }
+    const opened = FENCE_OPEN.exec(line)
+    if (opened?.[1] !== undefined) {
+      fence = opened[1]
+      lines.push(line)
       continue
     }
     if (/^(import|export)\s/.test(line)) {
       inStatement = /\{\s*$/.test(line)
       continue
     }
-    lines.push(
-      line.replace(
-        /<Demo\s+id="([a-z0-9/.-]+)"\s*\/>/g,
-        (_, id: string) => `> Live demo \`${id}\` (in the design-system app).`,
-      ),
-    )
+    lines.push(rewriteProse(line))
   }
   return `${lines.join('\n').trim()}\n`
+}
+
+/** A fence opens with three or more backticks or tildes, indented by at most three spaces. */
+const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/
+
+/** A fence closes with at least as many of the same character and nothing else on the line. */
+function closesFence(line: string, fence: string): boolean {
+  const m = /^ {0,3}(`{3,}|~{3,})\s*$/.exec(line)
+  const close = m?.[1]
+  return close !== undefined && close[0] === fence[0] && close.length >= fence.length
+}
+
+/** A link to a page of this site: `/<area>/<slug>` with an optional `#fragment`. */
+const SITE_LINK = new RegExp(
+  `\\]\\(/(${AREAS.join('|')})/([a-z0-9][a-z0-9-]*)(#[A-Za-z0-9_-]+)?\\)`,
+  'g',
+)
+
+/** Demos and site links in one line of prose; inline code spans are kept as they are. */
+function rewriteProse(line: string): string {
+  return line
+    .split(/(`+[^`]*`+)/)
+    .map((part, index) =>
+      index % 2 === 1
+        ? part
+        : part
+            .replace(
+              /<Demo\s+id="([a-z0-9/.-]+)"\s*\/>/g,
+              (_, id: string) => `> Live demo \`${id}\` (in the design-system app).`,
+            )
+            .replace(
+              SITE_LINK,
+              (_, area: string, slug: string, fragment: string | undefined) =>
+                `](../${area}/${slug}.md${fragment ?? ''})`,
+            ),
+    )
+    .join('')
 }
 
 export function buildMarkdownIndex(sources: readonly MdxSource[]): readonly IndexFile[] {

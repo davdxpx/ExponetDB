@@ -110,6 +110,69 @@ describe('the agent-readable index', () => {
     expect(md).toBe('# A\n\n> Live demo `ui/a/b` (in the design-system app).\n')
   })
 
+  it('keeps fenced code as it is: an import line or a demo inside a fence is an example', () => {
+    const source = [
+      'export const meta = {',
+      '  title: "A",',
+      '}',
+      '',
+      '# A',
+      '',
+      '```tsx',
+      "import { Button } from '@exponetdb/ui'",
+      'export function X() {',
+      '  return <Demo id="ui/a/b" />',
+      '}',
+      '```',
+      '',
+      '~~~~',
+      '```',
+      'export const inner = 1',
+      '~~~~',
+      '',
+      'See the [table](/ui/table) and `[raw](/ui/table)`.',
+      '',
+    ].join('\n')
+    expect(toMarkdown(source)).toBe(
+      [
+        '# A',
+        '',
+        '```tsx',
+        "import { Button } from '@exponetdb/ui'",
+        'export function X() {',
+        '  return <Demo id="ui/a/b" />',
+        '}',
+        '```',
+        '',
+        '~~~~',
+        '```',
+        'export const inner = 1',
+        '~~~~',
+        '',
+        'See the [table](../ui/table.md) and `[raw](/ui/table)`.',
+        '',
+      ].join('\n'),
+    )
+  })
+
+  it('rewrites links to other pages to the exported Markdown files, fragments kept', () => {
+    expect(
+      toMarkdown(
+        'Read [forms](/guidance/forms#errors), [select](/ui/select), [x](/elsewhere/y) and [ext](/ui/Bad).\n',
+      ),
+    ).toBe(
+      'Read [forms](../guidance/forms.md#errors), [select](../ui/select.md), [x](/elsewhere/y) and [ext](/ui/Bad).\n',
+    )
+  })
+
+  it('renders a pipe table of a page as a table', () => {
+    render(<App />)
+    act(() => navigate('/ui-data/plan-decision'))
+    const tables = document.querySelectorAll('main table')
+    expect(tables.length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toContain('Apply')
+  })
+
   it('lists every page in llms.txt with its Markdown file', () => {
     const files = buildMarkdownIndex([
       {

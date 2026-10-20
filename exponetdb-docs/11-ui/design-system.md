@@ -201,6 +201,16 @@ An agent-readable index (Markdown) lets coding agents look up the pattern
 before building a screen (the same role `.agents/skills` plays in the Supabase
 reference).
 
+**[OBSERVED]** (Wave 8 completion, 2026-10-20, `apps/design-system/vite.config.ts`,
+`src/content/markdown-export.ts`) Pages are MDX with GitHub-flavored tables
+(`remark-gfm`, a build-time dependency only; nothing is parsed in the
+browser). The build writes `llms.txt` and one Markdown file per page under
+`md/<area>/<slug>.md`: `import` and `export` statements are dropped, a live
+demo becomes a line naming it, links to other pages of the site
+(`/ui/table#states`) point at the exported file next to it
+(`../ui/table.md#states`), and fenced code blocks and inline code are copied
+untouched (an `import` line or a demo inside a fence is an example).
+
 ## 6. Quality gates for UI work
 
 - Visual regression snapshots for every pattern state (light and dark).
