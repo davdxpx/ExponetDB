@@ -13,17 +13,20 @@ import { subjectTextOf } from './plan-model.ts'
 
 /**
  * Whether the page offers "Withdraw plan": the contract withdraws an own
- * active plan (`POST /plans/{id}/withdraw`), so the button is shown on an
- * active plan the signed-in person created. The server still decides: it
- * binds the withdrawal to the plan's identity and client (a plan an agent
- * made through MCP is withdrawn by that client), and a refusal is shown in
- * the dialog with its catalog text and code.
+ * active plan (`POST /plans/{id}/withdraw`), and the server binds the
+ * withdrawal to the plan's identity and client (`PLAN_BINDING_ACTOR`): a plan
+ * made through MCP, the CLI or REST is withdrawn by that client. So the button
+ * is shown only on an active plan the signed-in person created in the Web
+ * App. The server still decides; a refusal is shown in the dialog with its
+ * catalog text and code.
  */
 export function canOfferWithdraw(
   plan: Pick<PlanView, 'state' | 'actor'>,
   identityId: string,
 ): boolean {
-  return plan.state === 'active' && plan.actor.identityId === identityId
+  return (
+    plan.state === 'active' && plan.actor.identityId === identityId && plan.actor.via === 'web'
+  )
 }
 
 /**

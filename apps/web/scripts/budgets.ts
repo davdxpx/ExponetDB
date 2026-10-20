@@ -32,7 +32,10 @@ export const BUDGETS: Budgets = {
   lazyChunk: 51_000, // largest unnamed lazy chunk, app-*, 43.9 kB
   heavy: {
     'section-page': 190_000, // the target section pages with their charts, 165.1 kB
-    'sql-editor': 159_000, // CodeMirror 6 and the SQL editor, 138.0 kB
+    // CodeMirror 6, shared by the SQL editor and the text diff since the migration SQL panel
+    // (2026-10-20) uses the diff; Rolldown names the shared chunk after its first module. Was
+    // `sql-editor` at 138.0 kB; the same library, 134.7 kB, so the ceiling is unchanged.
+    'cm-untrusted': 159_000,
     'schema-erd': 85_000, // @xyflow/react and the schema diagram, 73.1 kB
   },
 }

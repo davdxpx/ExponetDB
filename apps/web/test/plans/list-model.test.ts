@@ -148,7 +148,7 @@ describe('the bundles of a plan and the stored revision it runs', () => {
 })
 
 describe('withdraw is offered on the person’s own active plan only', () => {
-  it('follows the contract: own and active', () => {
+  it('follows the contract: own, active and made in the Web App', () => {
     const own = { state: 'active', actor: { identityId: IDENTITY, kind: 'human', via: 'web' } }
     expect(canOfferWithdraw(own as PlanView, IDENTITY)).toBe(true)
     expect(canOfferWithdraw({ ...own, state: 'consumed' } as PlanView, IDENTITY)).toBe(false)
@@ -161,5 +161,12 @@ describe('withdraw is offered on the person’s own active plan only', () => {
     expect(
       canOfferWithdraw({ ...own, actor: { ...own.actor, identityId: null } } as PlanView, IDENTITY),
     ).toBe(false)
+    // The server binds a withdrawal to the plan's client: an agent's or the CLI's plan is
+    // withdrawn there, so the Web App does not offer a button the server would refuse.
+    for (const via of ['mcp', 'cli', 'rest', 'ci']) {
+      expect(
+        canOfferWithdraw({ ...own, actor: { ...own.actor, via } } as PlanView, IDENTITY),
+      ).toBe(false)
+    }
   })
 })
