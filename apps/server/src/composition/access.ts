@@ -192,6 +192,7 @@ export function composeAccess(
       version: BUILD.version,
       features: INSTALLATION_FEATURES,
       installationId: config.installationId,
+      oauthClientRegistration: config.clientRegistration,
     },
     // Client metadata documents go through the hardened fetcher only (oauth.md §7).
     oauth: { network: oauth.systemNetwork() },

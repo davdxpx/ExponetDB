@@ -71,8 +71,10 @@ Connected applications (`/access/connected-apps`, `GET /grants` with client,
 person, resource, scopes, tiers, expiry and `lastUsedAt`/`lastUseClass`,
 revoke after a confirmation and re-authentication). The OAuth clients page
 states both OD-5 rules (`open`, `review`) and that
-`EXPONETDB_OAUTH_CLIENT_REGISTRATION` sets the mode; no read reports the
-current mode, so the page does not claim one. **Audit** (`/audit`): the
+`EXPONETDB_OAUTH_CLIENT_REGISTRATION` sets the mode; **[OBSERVED]** (Wave 8
+completion, 2026-10-20) the page names the mode this installation runs from
+`GET /installation` (`oauthClientRegistration`), and a failed or missing read
+says so instead of claiming a mode. **Audit** (`/audit`): the
 chain indicator over `GET /audit-events/chain` (verified through sequence N
 at time T, broken with sequence and reason, "not verified yet" with the
 reason, a failed read never shown as intact), the search with its filters as

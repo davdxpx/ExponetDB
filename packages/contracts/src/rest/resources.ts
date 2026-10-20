@@ -1679,6 +1679,10 @@ export const InstallationSchema = z
       projectConfig: z.literal('exponetdb.project/v1'),
     }),
     features: z.array(z.string().regex(/^[a-z][a-z0-9_.-]{0,63}$/)),
+    oauthClientRegistration: z.enum(['open', 'review']).optional().meta({
+      description:
+        'How this installation admits a new OAuth client (Wave 8, additive; `EXPONETDB_OAUTH_CLIENT_REGISTRATION`, OD-5): `open` approves a new CIMD or DCR client automatically, `review` waits for an administrator. A person still consents in both modes. Absent when the serving process does not report it.',
+    }),
   })
   .meta({ id: 'Installation' })
 export type Installation = z.infer<typeof InstallationSchema>

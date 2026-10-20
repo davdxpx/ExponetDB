@@ -17,8 +17,10 @@ import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { t } from '../../lib/i18n/i18n.ts'
+import { classifyFailure } from '../../lib/query/errors.ts'
 import { toReadable } from '../../lib/query/readable.ts'
 import { useMe } from '../../lib/session/guard.tsx'
+import { installationQuery } from '../settings/keys.ts'
 import { CimdForm } from './cimd-form.tsx'
 import { ClientCard } from './client-card.tsx'
 import { ACCESS_PAGE_LIMIT, oauthClientsQuery } from './keys.ts'
@@ -29,9 +31,11 @@ import { StatusLines, useStatusLine } from './status.tsx'
 /**
  * `/access/oauth-clients` (was `/admin/clients`): the OAuth clients of the
  * installation, with their review (OD-5 as revised on 2026-10-13: open
- * registration is the default and a person still consents). No read says
- * which mode this installation runs (`EXPONETDB_OAUTH_CLIENT_REGISTRATION`
- * is server configuration), so the page states both rules and never guesses. Reading needs
+ * registration is the default and a person still consents). The page states
+ * both rules and the mode this installation runs, read from
+ * `GET /installation` (`oauthClientRegistration`, set on the server by
+ * `EXPONETDB_OAUTH_CLIENT_REGISTRATION`); a failed or missing read says so
+ * and never guesses a mode. Reading needs
  * `access.read`; every change needs `access.manage`, a confirmation and a
  * fresh proof of identity, and the server decides each again.
  */
@@ -68,6 +72,7 @@ export function OAuthClientsPage(): ReactNode {
                 <p>{t('oauthRegistration.open')}</p>
                 <p>{t('oauthRegistration.review')}</p>
                 <p>{t('oauthRegistration.setting')}</p>
+                <RegistrationMode />
               </div>
             }
           />
@@ -111,5 +116,33 @@ export function OAuthClientsPage(): ReactNode {
         </section>
       </PageContainer>
     </>
+  )
+}
+
+/** The mode this installation runs, from `GET /installation`; never a guess. */
+function RegistrationMode(): ReactNode {
+  const { client } = useApi()
+  const query = useQuery(installationQuery(client))
+  let text: string
+  if (query.isPending) {
+    text = t('oauthRegistration.current.loading')
+  } else if (query.isError) {
+    const failure = classifyFailure(query.error)
+    text = t('oauthRegistration.current.failed', {
+      reason: `${failure.message} (${failure.code})`,
+    })
+  } else {
+    const mode = query.data.oauthClientRegistration
+    text =
+      mode === 'open'
+        ? t('oauthRegistration.current.open')
+        : mode === 'review'
+          ? t('oauthRegistration.current.review')
+          : t('oauthRegistration.current.unreported')
+  }
+  return (
+    <p id="registration-current" className="font-medium text-foreground" aria-live="polite">
+      {text}
+    </p>
   )
 }

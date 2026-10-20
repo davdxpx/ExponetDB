@@ -239,7 +239,7 @@ label and recorded ID, never a server or a registered target
   2026-10-13, OD-5 revised) The lab runs with
   `EXPONETDB_OAUTH_CLIENT_REGISTRATION=open`, so the registration is
   approved automatically: the output reports `state: active` and
-  `clientsAt: <server>/admin/clients` (the client list, where an
+  `clientsAt: <server>/access/oauth-clients` (the client list, where an
   administrator can still disable it), and there is no approval step; you
   consent at sign-in. `exponetdb dev up` serves
   `/mcp` in the lab, and `exponetdb dev test smoke` checks that it answers

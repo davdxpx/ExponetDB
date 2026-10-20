@@ -1,8 +1,8 @@
 /**
  * Messages of People, Roles and Connected applications
  * (`src/features/access/{people,roles,connected-apps}-page.tsx`), and the
- * OD-5 registration rules on the OAuth clients page (both modes; no read
- * says which one the installation runs).
+ * OD-5 registration rules on the OAuth clients page (both modes and the
+ * one this installation runs, read from `GET /installation`).
  */
 export const accessAdminMessages = {
   // ----- OAuth client registration (OD-5, revised 2026-10-13) -----
@@ -11,7 +11,14 @@ export const accessAdminMessages = {
   'oauthRegistration.review':
     'Review: a new client waits on this page until an administrator approves the exact client (its client ID and the fingerprint of its metadata). Every person still consents as well.',
   'oauthRegistration.setting':
-    'The mode is set on the server by EXPONETDB_OAUTH_CLIENT_REGISTRATION (open or review). No read of this page tells which mode this installation uses; a client marked "Automatically, under open registration" shows that open registration admitted it.',
+    'The mode is set on the server by EXPONETDB_OAUTH_CLIENT_REGISTRATION (open or review). A client marked "Automatically, under open registration" shows that open registration admitted it.',
+  'oauthRegistration.current.loading': 'Reading which mode this installation uses…',
+  'oauthRegistration.current.open': 'This installation uses open registration.',
+  'oauthRegistration.current.review': 'This installation uses review registration.',
+  'oauthRegistration.current.unreported':
+    'This installation’s server does not report its mode. Ask an operator for the value of EXPONETDB_OAUTH_CLIENT_REGISTRATION.',
+  'oauthRegistration.current.failed':
+    'Could not read which mode this installation uses: {reason}. This does not mean either mode.',
 
   // ----- People -----
   'people.title': 'People',

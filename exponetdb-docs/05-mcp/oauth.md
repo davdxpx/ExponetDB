@@ -112,6 +112,9 @@ database guard (bundle `oauth-open-registration`) admits an approval
 without an approver only for a CIMD or DCR client that is new or pending,
 and a re-approval of an active CIMD client with a changed fingerprint.
 Under `review` the rule of 2026-10-06 below applies unchanged.
+**[OBSERVED]** (Wave 8 completion, 2026-10-20) `GET /installation` reports
+the running mode as `oauthClientRegistration`, and the OAuth clients page
+names it.
 
 **[DECIDED]** ([OD-5](../00-product/open-decisions.md#od-5-mcp-client-registration-policy),
 resolved 2026-10-06, option a; the `review` policy since 2026-10-13.) Three
