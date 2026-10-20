@@ -116,6 +116,11 @@ export function ReadableView<T>({
           className={className}
         />
       )
+    // A value is rendered in one shape whatever its banner: the same wrapper with
+    // the content second (`{null}` holds the banner's place), so a read that turns
+    // old or partial, or fresh again, never mounts the content again and nothing a
+    // person typed, focused or pressed in it is lost. Without a banner the wrapper
+    // takes no box (`display: contents`).
     case 'stale':
       return (
         <div className={cn('flex flex-col gap-3', className)}>
@@ -153,10 +158,15 @@ export function ReadableView<T>({
         </div>
       )
     case 'ready':
-      return body(
-        readable.value,
-        { state: 'ready', source: readable.source, observedAt: readable.observedAt },
-        true,
+      return (
+        <div className="contents">
+          {null}
+          {body(
+            readable.value,
+            { state: 'ready', source: readable.source, observedAt: readable.observedAt },
+            true,
+          )}
+        </div>
       )
     default:
       return (

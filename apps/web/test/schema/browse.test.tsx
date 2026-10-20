@@ -514,8 +514,8 @@ describe('what a result says about itself', () => {
     expect(mounted.router).toBeDefined()
   })
 
-  it('keeps the rows and the press when the read of the object turns old and the panel is built again', async () => {
-    // An object read older than a minute is shown under a banner, which is another place in the tree.
+  it('keeps the rows and the press when the read of the object turns old', async () => {
+    // An object read older than a minute is shown under a banner above the panel.
     vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
     const world = readyWorld()
     const mounted = mountBrowse(rowsPath(), world)
@@ -529,7 +529,7 @@ describe('what a result says about itself', () => {
     await waitFor(() =>
       expect(mounted.router.state.location.search).toMatchObject({ sort: 'status' }),
     )
-    // The object read is now an earlier one, under a banner: the tree above the panel changed shape.
+    // The object read is now an earlier one, under a banner; the panel below keeps what it read.
     expect(await screen.findByText(/Showing an earlier read of object details/)).toBeInTheDocument()
     await waitFor(() => expect(world.runs()).toHaveLength(2))
     expect(body(world.runs()[1]).sql).toContain('ORDER BY "status" ASC, "id" ASC')
