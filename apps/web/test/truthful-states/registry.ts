@@ -124,6 +124,9 @@ export const COVERAGE: Record<string, Coverage> = {
     tests: ['target-pages/findings.test.tsx', TARGET_PAGES],
   },
   'src/features/fleet/fleet-page.tsx': { tests: ['fleet/fleet-page.test.tsx'] },
+  'src/features/global-findings/findings-page.tsx': {
+    tests: ['global-findings/findings-page.test.tsx'],
+  },
   'src/features/infrastructure/certificates-page.tsx': {
     tests: ['infrastructure/certificates.test.tsx'],
   },
@@ -198,7 +201,12 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/target-overview/migrations-block.tsx': { tests: OVERVIEW },
   'src/features/target/content-wrapper.tsx': { tests: TARGET_FRAME, exempt: ONE_OBJECT },
   'src/features/target/context-bar.tsx': { tests: ['target/context-bar.test.tsx'] },
+  'src/features/target/database-choices.tsx': {
+    tests: ['target/database-switcher.test.tsx', 'shell/switch-database-command.test.tsx'],
+  },
+  'src/features/target/health-chip.tsx': { tests: ['target/health-chip.test.tsx'] },
   'src/features/target/scope.tsx': { tests: TARGET_FRAME, exempt: ONE_OBJECT },
+  'src/features/target/target-nav.tsx': { tests: ['target/target-nav.test.tsx'] },
   'src/features/targets/register-page.tsx': { tests: ['targets/register-page.test.tsx'] },
   'src/features/targets/targets-page.tsx': { tests: ['targets/targets-page.test.tsx'] },
 }

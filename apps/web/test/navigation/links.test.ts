@@ -135,7 +135,9 @@ describe('returnTo: the Wave 8 pages, by whole-path grammar', () => {
       '/access/oauth-clients',
       '/access/connected-apps',
       '/audit',
+      '/findings',
       '/settings/products',
+      '/settings/projects',
       '/settings/installation',
       '/connect',
       '/t/acme/platform/production',
@@ -150,6 +152,12 @@ describe('returnTo: the Wave 8 pages, by whole-path grammar', () => {
     for (const hostile of [
       // API keys live on the service accounts page; there is no page of their own.
       '/access/api-keys',
+      // The findings page takes its filters from the address, never from a return target.
+      '/findings?severity=critical',
+      '/findings/',
+      '/findings/x',
+      '/settings/projects/x',
+      '/t/acme/platform/production/compare/x',
       '/changes/',
       '/changes/plans/',
       '/changes/plan',

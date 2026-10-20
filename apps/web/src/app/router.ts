@@ -1,6 +1,7 @@
 import { createBrowserHistory, createRouter, type RouterHistory } from '@tanstack/react-router'
 import { parseSearch, stringifySearch } from '../lib/navigation/search.ts'
 import { routeTree } from '../routeTree.gen.ts'
+import { RouteErrorPage } from './error-page.tsx'
 
 /**
  * The router of the Web App, the same in the page and in the tests.
@@ -14,6 +15,10 @@ import { routeTree } from '../routeTree.gen.ts'
  *   fragment against an exact grammar (`useRawHash`), so an encoded handle
  *   must not become a valid one by the router's rewrite.
  *
+ * - A route that fails to render shows the crash page (`RouteErrorPage`), in
+ *   place of the page only, so the shell around it stays; the router's own
+ *   fallback would print the exception's message, which can hold data.
+ *
  * One-time link tokens never reach the router: `holdOneTimeLink` removes
  * them from the address bar and the history before it is created.
  */
@@ -21,6 +26,7 @@ export function createAppRouter(history: RouterHistory = createBrowserHistory())
   return createRouter({
     routeTree,
     history: keepRawFragment(history),
+    defaultErrorComponent: RouteErrorPage,
     defaultPreload: 'intent',
     parseSearch,
     stringifySearch,

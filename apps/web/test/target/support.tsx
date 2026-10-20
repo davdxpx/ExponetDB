@@ -37,6 +37,12 @@ export class World {
   nextCursor: string | null = null
   /** The body `listTargets` answers with, instead of the targets of the world. */
   listOverride: unknown
+  /** The page `listTargets` answers with for a cursor, instead of the targets of the world. */
+  listPage: ((cursor: string | null) => unknown) | undefined
+  /** The body `GET /installation` answers with; unset, the path is a 404 like any other unknown one. */
+  installation: unknown
+  /** What `GET /findings` answers with for a request; unset, the path is a 404. */
+  globalFindings: ((url: URL) => unknown) | undefined
   /** The requests received, as `path?query`. */
   readonly requests: string[] = []
   private nextId = 1
@@ -151,6 +157,12 @@ export function answer(world: World, input: string | URL | Request): Response {
     }
   }
   if (url.pathname === '/api/v1/me') return json(200, me(world))
+  if (url.pathname === '/api/v1/installation' && world.installation !== undefined) {
+    return json(200, world.installation)
+  }
+  if (url.pathname === '/api/v1/findings' && world.globalFindings !== undefined) {
+    return json(200, world.globalFindings(url))
+  }
   if (url.pathname === '/api/v1/targets') {
     const product = url.searchParams.get('product')
     const project = url.searchParams.get('project')
@@ -160,6 +172,8 @@ export function answer(world: World, input: string | URL | Request): Response {
         return (product === null || p === product) && (project === null || q === project)
       })
       .map(summaryOf)
+    if (world.listPage !== undefined)
+      return json(200, world.listPage(url.searchParams.get('cursor')))
     return json(200, world.listOverride ?? { items, nextCursor: world.nextCursor })
   }
   const detail = /^\/api\/v1\/targets\/([^/]+)$/.exec(url.pathname)

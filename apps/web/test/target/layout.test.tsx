@@ -32,6 +32,8 @@ const BUILT_SECTIONS: readonly string[] = [
   'activity',
   'connections',
   'locks',
+  // Built by another change (`/t/…/compare`); its tests are in its own folder.
+  'compare',
 ]
 
 const pageNotFound = () => screen.findByRole('heading', { level: 1, name: 'Page not found' })

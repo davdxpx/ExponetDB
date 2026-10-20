@@ -22,6 +22,7 @@ import { Route as AppApprovalsRouteImport } from './routes/_app/approvals'
 import { Route as AppAuditRouteImport } from './routes/_app/audit'
 import { Route as AppBackupsRouteImport } from './routes/_app/backups'
 import { Route as AppConnectRouteImport } from './routes/_app/connect'
+import { Route as AppFindingsRouteImport } from './routes/_app/findings'
 import { Route as SessionCredentialsRouteImport } from './routes/_session/credentials'
 import { Route as SessionStepUpRouteImport } from './routes/_session/step-up'
 import { Route as OauthErrorRouteImport } from './routes/oauth/error'
@@ -139,6 +140,11 @@ const AppBackupsRoute = AppBackupsRouteImport.update({
 const AppConnectRoute = AppConnectRouteImport.update({
   id: '/connect',
   path: '/connect',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFindingsRoute = AppFindingsRouteImport.update({
+  id: '/findings',
+  path: '/findings',
   getParentRoute: () => AppRoute,
 } as any)
 const SessionCredentialsRoute = SessionCredentialsRouteImport.update({
@@ -456,6 +462,7 @@ export interface FileRoutesByFullPath {
   '/audit': typeof AppAuditRoute
   '/backups': typeof AppBackupsRoute
   '/connect': typeof AppConnectRoute
+  '/findings': typeof AppFindingsRoute
   '/credentials': typeof SessionCredentialsRoute
   '/step-up': typeof SessionStepUpRoute
   '/oauth/error': typeof OauthErrorRoute
@@ -523,6 +530,7 @@ export interface FileRoutesByTo {
   '/audit': typeof AppAuditRoute
   '/backups': typeof AppBackupsRoute
   '/connect': typeof AppConnectRoute
+  '/findings': typeof AppFindingsRoute
   '/credentials': typeof SessionCredentialsRoute
   '/step-up': typeof SessionStepUpRoute
   '/oauth/error': typeof OauthErrorRoute
@@ -592,6 +600,7 @@ export interface FileRoutesById {
   '/_app/audit': typeof AppAuditRoute
   '/_app/backups': typeof AppBackupsRoute
   '/_app/connect': typeof AppConnectRoute
+  '/_app/findings': typeof AppFindingsRoute
   '/_session/credentials': typeof SessionCredentialsRoute
   '/_session/step-up': typeof SessionStepUpRoute
   '/oauth/error': typeof OauthErrorRoute
@@ -663,6 +672,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/backups'
     | '/connect'
+    | '/findings'
     | '/credentials'
     | '/step-up'
     | '/oauth/error'
@@ -730,6 +740,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/backups'
     | '/connect'
+    | '/findings'
     | '/credentials'
     | '/step-up'
     | '/oauth/error'
@@ -798,6 +809,7 @@ export interface FileRouteTypes {
     | '/_app/audit'
     | '/_app/backups'
     | '/_app/connect'
+    | '/_app/findings'
     | '/_session/credentials'
     | '/_session/step-up'
     | '/oauth/error'
@@ -957,6 +969,13 @@ declare module '@tanstack/react-router' {
       path: '/connect'
       fullPath: '/connect'
       preLoaderRoute: typeof AppConnectRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/findings': {
+      id: '/_app/findings'
+      path: '/findings'
+      fullPath: '/findings'
+      preLoaderRoute: typeof AppFindingsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_session/credentials': {
@@ -1431,6 +1450,7 @@ interface AppRouteChildren {
   AppAuditRoute: typeof AppAuditRoute
   AppBackupsRoute: typeof AppBackupsRoute
   AppConnectRoute: typeof AppConnectRoute
+  AppFindingsRoute: typeof AppFindingsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppAccessConnectedAppsRoute: typeof AppAccessConnectedAppsRoute
   AppAccessOauthClientsRoute: typeof AppAccessOauthClientsRoute
@@ -1471,6 +1491,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAuditRoute: AppAuditRoute,
   AppBackupsRoute: AppBackupsRoute,
   AppConnectRoute: AppConnectRoute,
+  AppFindingsRoute: AppFindingsRoute,
   AppIndexRoute: AppIndexRoute,
   AppAccessConnectedAppsRoute: AppAccessConnectedAppsRoute,
   AppAccessOauthClientsRoute: AppAccessOauthClientsRoute,

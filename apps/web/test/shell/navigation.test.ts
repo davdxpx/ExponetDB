@@ -8,6 +8,7 @@ import {
   sectionMenu,
   sectionOf,
   switchEnvironment,
+  switchTarget,
   TARGET_NAV,
   targetHref,
 } from '../../src/shell/navigation.ts'
@@ -143,5 +144,100 @@ describe('the navigation model', () => {
     expect(switchEnvironment('/t/shop/app/staging', 'dev')).toBe('/t/shop/app/dev')
     expect(switchEnvironment('/t/shop/app/staging/unknown', 'dev')).toBe('/t/shop/app/dev')
     expect(switchEnvironment('/targets', 'dev')).toBeUndefined()
+  })
+})
+
+describe('the entries other pages need in the navigation', () => {
+  it('lists the findings across every database under the overview, a safe return target', () => {
+    const item = GLOBAL_NAV.find((entry) => entry.id === 'findings')
+    expect(item).toMatchObject({ label: 'Findings', path: '/findings', section: 'overview' })
+    expect(safeReturnTo('/findings')).toBe('/findings')
+    expect(sectionOf('/findings')?.id).toBe('overview')
+    expect(sectionOf('/findingsx')).toBeUndefined()
+    // The overview then has a section menu of its own: the fleet overview and its findings.
+    expect(sectionMenu('overview').map((entry) => entry.path)).toEqual(['/', '/findings'])
+    // The page of the section the rail item goes to stays the fleet overview.
+    expect(NAV_SECTIONS[0]?.path).toBe('/')
+    expect(isCurrent('/', '/findings')).toBe(false)
+  })
+
+  it('lists the Projects page in the settings section menu, a safe return target', () => {
+    const item = GLOBAL_NAV.find((entry) => entry.id === 'projects')
+    expect(item).toMatchObject({
+      label: 'Projects',
+      path: '/settings/projects',
+      section: 'settings',
+      requires: [],
+    })
+    expect(safeReturnTo('/settings/projects')).toBe('/settings/projects')
+    expect(sectionMenu('settings').map((entry) => entry.label)).toEqual([
+      'Products',
+      'Projects',
+      'Environments',
+      'Policies',
+      'Notifications',
+      'Installation',
+      'Break-glass',
+    ])
+    expect(sectionOf('/settings/projects')?.id).toBe('settings')
+  })
+
+  it('lists "Compare environments" among the target sections, a safe return target', () => {
+    const item = TARGET_NAV.find((entry) => entry.id === 'compare')
+    expect(item).toMatchObject({
+      label: 'Compare environments',
+      suffix: '/compare',
+      requires: [],
+    })
+    expect(TARGET_SECTIONS).toContain('compare')
+    const target = { product: 'shop', project: 'app', environment: 'staging' }
+    expect(targetHref(target, '/compare')).toBe('/t/shop/app/staging/compare')
+    expect(safeReturnTo('/t/shop/app/staging/compare')).toBe('/t/shop/app/staging/compare')
+    // It stays when the environment switches: the section is one of the navigation's.
+    expect(switchEnvironment('/t/shop/app/staging/compare', 'production')).toBe(
+      '/t/shop/app/production/compare',
+    )
+  })
+})
+
+describe('switching to another database', () => {
+  const production = { product: 'billing', project: 'api', environment: 'production' }
+
+  it('keeps the section and a schema kind of the page the person is on', () => {
+    expect(switchTarget('/t/shop/app/staging/locks', production)).toBe(
+      '/t/billing/api/production/locks',
+    )
+    expect(switchTarget('/t/shop/app/staging/schema/indexes', production)).toBe(
+      '/t/billing/api/production/schema/indexes',
+    )
+    expect(switchTarget('/t/shop/app/staging/migrations', production)).toBe(
+      '/t/billing/api/production/migrations',
+    )
+  })
+
+  it('drops an object name and goes to the overview for a section the navigation does not know', () => {
+    expect(switchTarget('/t/shop/app/staging/schema/tables/public.users', production)).toBe(
+      '/t/billing/api/production/schema/tables',
+    )
+    expect(switchTarget('/t/shop/app/staging/unknown', production)).toBe(
+      '/t/billing/api/production',
+    )
+    expect(switchTarget('/t/shop/app/staging', production)).toBe('/t/billing/api/production')
+  })
+
+  it('goes to the overview of the database from a page that is no target page', () => {
+    for (const pathname of ['/', '/audit', '/changes/plans', '/targets', '/findings']) {
+      expect(switchTarget(pathname, production), pathname).toBe('/t/billing/api/production')
+    }
+  })
+
+  it('builds the address from encoded slugs, never from free text', () => {
+    expect(
+      switchTarget('/t/shop/app/staging/sql', {
+        product: 'a',
+        project: 'b',
+        environment: 'c/../d',
+      }),
+    ).toBe('/t/a/b/c%2F..%2Fd/sql')
   })
 })
