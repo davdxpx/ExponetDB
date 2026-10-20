@@ -250,6 +250,11 @@ describe('redaction corpus: shapes the bounded patterns keep', () => {
       ['postgres://app', 'pw-1@db.internal:5432/x'].join(':'),
       ['postgres://app', '[REDACTED:url_credentials]@db.internal:5432/x'].join(':'),
     ],
+    [
+      'a URL password with an encoded slash (a raw one ends the authority)',
+      ['postgres://app', 'p%2Fw-1@db.internal/x'].join(':'),
+      ['postgres://app', '[REDACTED:url_credentials]@db.internal/x'].join(':'),
+    ],
   ])('%s', (_name, input, output) => {
     expect(redactText(input)).toBe(output)
   })
@@ -267,7 +272,10 @@ describe('redaction corpus: shapes the bounded patterns keep', () => {
 })
 
 describe('redaction stays linear on adversarial text', () => {
-  // About 180 KB each; the unbounded patterns took 4 to 10 seconds on these.
+  // About 180 KB each. The unbounded patterns took 8 to 10 seconds on each of these
+  // on a developer machine; the linear ones take 3 to 30 ms there. A loaded two-core
+  // CI runner was measured some 25 times slower, so the bound sits between the two:
+  // far above linear on a slow runner, far below a return to the quadratic patterns.
   const N = 180_000
   it.each([
     ['many URL schemes', 'a://b:'.repeat(N / 6)],
@@ -279,7 +287,7 @@ describe('redaction stays linear on adversarial text', () => {
   ])('%s', (_name, text) => {
     const started = performance.now()
     redactText(text)
-    expect(performance.now() - started).toBeLessThan(1500)
+    expect(performance.now() - started).toBeLessThan(5000)
   })
 })
 

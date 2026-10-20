@@ -22,12 +22,13 @@ export const SECRET_PATTERNS: readonly SecretPattern[] = [
       /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)/g,
   },
   // A URL with user information: keep the scheme and the user, drop the password.
-  // Every repetition is bounded (scheme 32, user 256, password 1024 characters),
-  // so text with many `://` or long runs of scheme characters is scanned in
-  // linear time instead of rescanning the rest of the run from every start.
+  // The password ends at a `/` as the authority does for every URL parser (libpq,
+  // WHATWG): a raw `/` in a password is not a working URL. So no part can run over
+  // the next `://`, the scans of consecutive URLs never overlap, and text with
+  // many `://` is read in linear time; every repetition is bounded as well.
   {
     name: 'url_credentials',
-    pattern: /\b([a-z][a-z0-9+.-]{0,31}:\/\/[^\s/:@'"]{0,256}:)[^\s@'"]{0,1024}(?=@)/gi,
+    pattern: /\b([a-z][a-z0-9+.-]{0,31}:\/\/[^\s/:@'"]{0,256}:)[^\s/@'"]{0,1024}(?=@)/gi,
     keepGroup: 1,
   },
   {
