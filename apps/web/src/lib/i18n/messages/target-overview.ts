@@ -75,6 +75,9 @@ export const targetOverviewMessages = {
     'ExponetDB itself is degraded, so the database may be fine and only unobserved',
   'overview.health.condition.tls_expiring': 'The server certificate expires soon',
   'overview.health.condition.count': '{count} affected',
+  'overview.health.condition.slots': 'Slots: {used} of {usable} in use',
+  'overview.health.condition.oldest': 'Oldest: {duration}',
+  'overview.health.condition.xidAge': 'Transaction ID age: {age}',
   'overview.health.condition.unknown': 'A condition this page does not know',
   'overview.health.node': 'Node {state}, source {source}, observed',
   'overview.health.noNode': 'No node is attached to this target.',
@@ -104,6 +107,7 @@ export const targetOverviewMessages = {
   'overview.health.fact.mode': 'Management mode',
   'overview.health.fact.none': 'Not recorded',
   'overview.health.fact.noPlacement': 'No placement is recorded for this target.',
+  'overview.health.fact.host': 'Host',
   'overview.health.fact.generation': 'Target generation',
   'overview.health.fact.ledger': 'Ledger',
   'overview.health.fact.ledgerNone': 'No ledger state is recorded yet.',
@@ -119,9 +123,19 @@ export const targetOverviewMessages = {
   'overview.history.description':
     'One sample about every 15 seconds. A stretch without samples is drawn as a gap with its cause; nothing is drawn across it.',
   'overview.history.range': 'Range',
+  'overview.history.range.1h': 'Last hour',
+  'overview.history.range.6h': 'Last 6 hours',
   'overview.history.range.24h': 'Last 24 hours',
   'overview.history.range.7d': 'Last 7 days',
   'overview.history.range.14d': 'Last 14 days',
+  'overview.history.custom': 'Custom range',
+  'overview.history.custom.note':
+    'A custom range covers whole days in your time zone and ends now when its last day is today.',
+  'overview.history.custom.empty': 'That range is empty, so nothing was asked for.',
+  'overview.history.custom.clamped':
+    'It starts later than you chose: the server serves at most {maxDays} days back.',
+  'overview.history.retention':
+    'ExponetDB keeps health samples for {defaultDays} days by default; an installation sets {minDays} to {maxDays} days. A range reaches back at most {maxDays} days, and nothing before the first kept sample is a gap.',
   'overview.history.chart': 'Samples per state',
   'overview.history.chart.name': 'Samples by health state',
   'overview.history.chart.empty': 'No sample in this range',
@@ -234,4 +248,28 @@ export const targetOverviewMessages = {
   'overview.findings.link': 'Open findings',
   'overview.findings.empty': 'The read succeeded and found no open finding.',
   'overview.findings.drift': 'Open drift',
+  // The host of an agent-managed placement.
+  'overview.host.what': 'Host values',
+  'overview.host.external':
+    'Not reported. This cluster is external: no node agent reports its host.',
+  'overview.host.locating': 'Looking for the node of this cluster',
+  'overview.host.healthFailed':
+    'Not located. The health read failed ({reason}), so the node of this cluster is not known. This does not mean the host is fine.',
+  'overview.host.noNode': 'Not reported. No node agent is bound to this cluster.',
+  'overview.host.badNode': 'Not reported. The node of this cluster could not be identified.',
+  'overview.host.notReported': 'Not reported. The node agent has sent no host values.',
+  'overview.host.value': 'Load {load} (1 min), {memory} of memory used, {disk} % of the disk used',
+  'overview.host.diskCondition': 'Server condition for the disk: {severity}.',
+  'overview.host.reported': 'Reported by the node agent',
+  'overview.host.checked': 'Node status read',
+  'overview.host.nodeState': 'Node state: {state}.',
+
+  // Refresh.
+  'overview.refresh.group': 'Refresh the reads of this page',
+  'overview.refresh.button': 'Refresh',
+  'overview.refresh.updated': 'Updated',
+  'overview.refresh.someFailed':
+    '{failed} of {total} reads failed. Each block shows its own state.',
+  'overview.refresh.allFailed': 'Nothing was updated: all {total} reads failed.',
+  'overview.refresh.running': 'Reading again',
 } as const

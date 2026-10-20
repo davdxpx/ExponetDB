@@ -8,14 +8,23 @@ import {
   TableHeader,
   TableRow,
 } from '@exponetdb/ui'
-import { ObservedTime, ReadableView, SourceLabel, UntrustedName } from '@exponetdb/ui-patterns'
+import {
+  formatCount,
+  ObservedTime,
+  ReadableView,
+  SourceLabel,
+  UntrustedName,
+} from '@exponetdb/ui-patterns'
 import type { ReactNode } from 'react'
 import { t } from '../../lib/i18n/i18n.ts'
+import { formatDuration } from '../connections/model.ts'
 import { readSourceOf } from '../target/gate.ts'
 import { nounPhrase } from '../target/phrases.ts'
 import type { TargetHealth, TargetRead } from '../target/queries.ts'
 import { Block, HealthStateChip, NotObservedChip } from './block.tsx'
 import {
+  type ConditionDetail,
+  conditionDetails,
   conditionKey,
   type GroupVerdict,
   type IncidentGroup,
@@ -243,6 +252,22 @@ function severityText(severity: HealthCondition['severity']): string {
   }
 }
 
+function detailText(detail: ConditionDetail): string {
+  switch (detail.kind) {
+    case 'slots':
+      return t('overview.health.condition.slots', {
+        used: formatCount(detail.used),
+        usable: formatCount(detail.usable),
+      })
+    case 'oldest':
+      return t('overview.health.condition.oldest', {
+        duration: formatDuration(detail.seconds * 1_000),
+      })
+    case 'xidAge':
+      return t('overview.health.condition.xidAge', { age: formatCount(detail.age) })
+  }
+}
+
 function ConditionList(props: { readonly conditions: readonly HealthCondition[] }): ReactNode {
   return (
     <ul className="flex flex-col gap-1 text-sm" aria-label={t('overview.health.conditions')}>
@@ -270,6 +295,17 @@ function ConditionList(props: { readonly conditions: readonly HealthCondition[] 
                 ({t('overview.health.condition.count', { count: condition.count })})
               </span>
             )}
+            {conditionDetails(condition).map((detail) => (
+              <span
+                key={detail.kind}
+                className="text-foreground-light"
+                data-slot="condition-detail"
+                data-detail={detail.kind}
+              >
+                {' '}
+                ({detailText(detail)})
+              </span>
+            ))}
           </li>
         )
       })}

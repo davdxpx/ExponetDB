@@ -111,9 +111,13 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/configuration/configuration-page.tsx': {
     tests: ['target-pages/configuration.test.tsx'],
   },
+  'src/features/connections/attention-strip.tsx': { tests: ['connections/attention.test.tsx'] },
   'src/features/connections/endpoints-view.tsx': { tests: ['connections/connections.test.tsx'] },
   'src/features/connections/live-read.tsx': {
     tests: ['connections/connections.test.tsx', 'connections/locks.test.tsx'],
+  },
+  'src/features/connections/locks-view.tsx': {
+    tests: ['connections/locks.test.tsx', 'connections/locks-join.test.tsx'],
   },
   'src/features/drift/drift-page.tsx': { tests: ['target-pages/drift.test.tsx', TARGET_PAGES] },
   'src/features/findings/findings-page.tsx': {
@@ -180,7 +184,16 @@ export const COVERAGE: Record<string, Coverage> = {
   },
   'src/features/target-overview/activity-blocks.tsx': { tests: OVERVIEW },
   'src/features/target-overview/health-block.tsx': { tests: OVERVIEW },
-  'src/features/target-overview/history-block.tsx': { tests: OVERVIEW },
+  'src/features/target-overview/history-block.tsx': {
+    tests: [...OVERVIEW, 'target-overview/history.test.tsx'],
+  },
+  'src/features/target-overview/host-row.tsx': {
+    tests: ['target-overview/host.test.tsx'],
+    exempt: {
+      partial:
+        'GET /nodes/{nodeId} answers one node object with no cursor or truncation flag, so the host read cannot be partial; a node that sent no host values is the "not reported" state, tested as empty.',
+    },
+  },
   'src/features/target-overview/migrations-block.tsx': { tests: OVERVIEW },
   'src/features/target/content-wrapper.tsx': { tests: TARGET_FRAME, exempt: ONE_OBJECT },
   'src/features/target/context-bar.tsx': { tests: ['target/context-bar.test.tsx'] },

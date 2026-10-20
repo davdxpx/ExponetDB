@@ -14,7 +14,7 @@ import { configure, render } from '@testing-library/react'
 import { vi } from 'vitest'
 import { AppProviders } from '../../src/app/providers.tsx'
 import { createReauthBridge } from '../../src/features/reauth/reauth.tsx'
-import { ApiClient } from '../../src/lib/api/client.ts'
+import { ApiClient, type ResponseOf } from '../../src/lib/api/client.ts'
 import { createQueryClient } from '../../src/lib/query/client.ts'
 import { routeTree } from '../../src/routeTree.gen.ts'
 import { answer, World as TargetWorld } from '../target/support.tsx'
@@ -41,7 +41,11 @@ const minutesAgo = (minutes: number): string =>
 
 export { minutesAgo }
 
+export type NodeStatus = ResponseOf<'getNode'>
+
 export class World extends TargetWorld {
+  /** Node status by node id (`getNode`). */
+  readonly nodes = new Map<string, NodeStatus>()
   history: TargetHealthHistory | undefined
   findings: Finding[] = []
   findingsNext: string | null = null
@@ -123,6 +127,8 @@ export function answerMore(world: World, input: string | URL | Request): Respons
     default:
       break
   }
+  const node = /^\/api\/v1\/nodes\/([^/]+)$/.exec(url.pathname)
+  if (node?.[1] !== undefined) return mine(world.nodes.get(decodeURIComponent(node[1]))) as Response
   const object = /^\/api\/v1\/targets\/[^/]+\/schema\/objects\/([^/]+)\/(.+)$/.exec(url.pathname)
   if (object?.[1] !== undefined && object[2] !== undefined) {
     const key = `${decodeURIComponent(object[1])}|${decodeURIComponent(object[2])}`
@@ -173,6 +179,44 @@ export function mountApp(initialPath: string, world: World) {
 // ----- fixtures -----
 
 export const PROJECT_ID = 'prj_00000000000000000000000001'
+export const NODE_ID = 'nod_00000000000000000000000001'
+
+/** A node that reports its host: load, memory and disk, with the time of the report. */
+export function nodeFixture(over: Partial<NodeStatus> = {}): NodeStatus {
+  return {
+    id: NODE_ID,
+    serverId: 'srv_00000000000000000000000001',
+    state: 'active',
+    agentVersion: '1.0.0',
+    protocolMajor: 1,
+    lastHeartbeatAt: NOW(),
+    clockSkewMs: 12,
+    capabilities: [],
+    clusters: [],
+    host: {
+      loadAverage1m: 0.42,
+      memoryUsedBytes: Math.round(3.1 * 1024 ** 3),
+      diskUsedPercent: 61,
+    },
+    nodeCertificateExpiresAt: null,
+    source: 'agent_reported',
+    observedAt: NOW(),
+    ...over,
+  }
+}
+
+/** The placement of a target whose cluster a node agent manages (or an external one). */
+export function placementFixture(mode: 'agent' | 'external' = 'agent') {
+  return {
+    clusterId: 'cls_00000000000000000000000001',
+    clusterName: 'main',
+    generation: 1,
+    managementMode: mode,
+    postgresVersion: '17.2',
+    serverName: 'db-01',
+    since: '2026-10-01T00:00:00.000Z',
+  } as const
+}
 
 export function historyFixture(over: Partial<TargetHealthHistory> = {}): TargetHealthHistory {
   const base = Date.parse('2026-10-13T10:00:00.000Z')

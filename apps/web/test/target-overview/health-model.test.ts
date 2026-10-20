@@ -1,6 +1,7 @@
 import type { ProbeResult, TargetHealth } from '@exponetdb/sdk/operations'
 import { describe, expect, it } from 'vitest'
 import {
+  conditionDetails,
   conditionGroup,
   gapCauseKey,
   historyBreakdown,
@@ -210,5 +211,47 @@ describe('the migration matrix', () => {
       'create_orders',
       'add_orders_index',
     ])
+  })
+})
+
+describe('conditionDetails', () => {
+  const base = {
+    condition: 'connections_high',
+    severity: 'warning',
+    count: 212,
+    observedAt: NOW,
+  } as const
+
+  it('reads the slots, the oldest age and the transaction age from the values the server sent', () => {
+    expect(
+      conditionDetails({ ...base, values: { clientBackends: 212, usableSlots: 400 } }),
+    ).toEqual([{ kind: 'slots', used: 212, usable: 400 }])
+    expect(
+      conditionDetails({
+        ...base,
+        condition: 'idle_in_transaction',
+        values: { oldestSeconds: 720 },
+      }),
+    ).toEqual([{ kind: 'oldest', seconds: 720 }])
+    expect(
+      conditionDetails({ ...base, condition: 'xid_age_high', values: { xidAge: 512_000_000 } }),
+    ).toEqual([{ kind: 'xidAge', age: 512_000_000 }])
+  })
+
+  it('shows nothing for a condition without values, and nothing it cannot read as a number', () => {
+    expect(conditionDetails(base)).toEqual([])
+    expect(conditionDetails({ ...base, values: { clientBackends: 212 } })).toEqual([])
+    expect(
+      conditionDetails({
+        ...base,
+        values: { clientBackends: null, usableSlots: true, oldestSeconds: -1, xidAge: Number.NaN },
+      }),
+    ).toEqual([])
+  })
+
+  it('keeps a zero, which is a value the server sent', () => {
+    expect(
+      conditionDetails({ ...base, condition: 'long_running', values: { oldestSeconds: 0 } }),
+    ).toEqual([{ kind: 'oldest', seconds: 0 }])
   })
 })

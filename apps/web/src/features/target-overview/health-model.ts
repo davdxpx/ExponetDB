@@ -83,6 +83,34 @@ const KNOWN_CONDITIONS: ReadonlySet<string> = new Set([
   'activity_unreadable',
 ])
 
+/**
+ * The numbers a condition carries besides its count (`values`: numbers and
+ * flags only, never text from the database). They are the server's
+ * observations, shown as they came: this page compares none of them with a
+ * limit, for the limits are set on the server (health.md, "rules shared").
+ */
+export type ConditionDetail =
+  | { readonly kind: 'slots'; readonly used: number; readonly usable: number }
+  | { readonly kind: 'oldest'; readonly seconds: number }
+  | { readonly kind: 'xidAge'; readonly age: number }
+
+function finite(condition: HealthCondition, key: string): number | undefined {
+  const value = condition.values?.[key]
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
+}
+
+export function conditionDetails(condition: HealthCondition): readonly ConditionDetail[] {
+  const details: ConditionDetail[] = []
+  const used = finite(condition, 'clientBackends')
+  const usable = finite(condition, 'usableSlots')
+  if (used !== undefined && usable !== undefined) details.push({ kind: 'slots', used, usable })
+  const oldest = finite(condition, 'oldestSeconds')
+  if (oldest !== undefined) details.push({ kind: 'oldest', seconds: oldest })
+  const age = finite(condition, 'xidAge')
+  if (age !== undefined) details.push({ kind: 'xidAge', age })
+  return details
+}
+
 export function conditionKey(condition: string): MessageKey | undefined {
   return isKnownCondition(condition)
     ? (`overview.health.condition.${condition}` as MessageKey)
