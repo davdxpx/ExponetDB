@@ -1,6 +1,7 @@
 import {
   isScopeGrantableTo,
   isWriteScope,
+  OAUTH_LIMITS,
   SCOPE_IDS,
   scopeDefinition,
   scopeEffect,
@@ -8,12 +9,15 @@ import {
 import { describe, expect, it } from 'vitest'
 import {
   AUTHORITY_DEFAULTS,
+  AUTHORITY_MAX_TARGETS,
   type AuthorityValues,
   authoritySchema,
   isProductionWrite,
   MACHINE_SCOPES,
+  productionWithAllTargets,
   toApiKeyRequest,
   toGrantRequest,
+  toTargetRestriction,
 } from '../../src/features/access/authority.ts'
 import { isPublicJwk, parseJwks } from '../../src/features/access/jwks.ts'
 import {
@@ -24,6 +28,8 @@ import {
   clientDecisions,
   type OAuthClient,
   redirectHosts,
+  restrictionsLine,
+  targetsText,
 } from '../../src/features/access/model.ts'
 import { safeReturnTo } from '../../src/lib/navigation/links.ts'
 import type { Me } from '../../src/lib/session/guard.tsx'
@@ -39,6 +45,7 @@ const MESSAGES = {
   tiers: 'tiers',
   tierOf: (scope: string, tier: string) => `tierOf ${scope} ${tier}`,
   production: 'production',
+  targets: 'targets',
   days: 'days',
   label: 'label',
 }
@@ -148,6 +155,93 @@ describe('the authority a person gives a service account', () => {
     })
     // A machine grant never carries a label.
     expect(toGrantRequest(values({ label: 'x' }))).not.toHaveProperty('label')
+  })
+})
+
+const tid = (n: number): string => `tgt_01JZ${String(n).padStart(22, '0')}`
+
+describe('the target restriction of a key or a machine grant', () => {
+  it('has the maximum the contracts have', () => {
+    expect(AUTHORITY_MAX_TARGETS).toBe(OAUTH_LIMITS.maxTargetRestrictions)
+  })
+
+  it('is every target the roles reach unless the person chose named targets', () => {
+    expect(toTargetRestriction(values())).toEqual({ kind: 'all' })
+    // The IDs of a list the person left are ignored in "all" mode.
+    expect(toTargetRestriction(values({ targetIds: [tid(1)] }))).toEqual({ kind: 'all' })
+    expect(
+      toGrantRequest(values({ targetMode: 'list', targetIds: [tid(1)] })).restrictions,
+    ).toEqual({
+      tiers: ['nonprod'],
+      targets: { kind: 'list', targetIds: [tid(1)] },
+    })
+    expect(
+      toApiKeyRequest(values({ targetMode: 'list', targetIds: [tid(2), tid(1)] })).restrictions
+        .targets,
+    ).toEqual({ kind: 'list', targetIds: [tid(2), tid(1)] })
+  })
+
+  it('names each target once and never widens a list into "all"', () => {
+    expect(
+      toTargetRestriction(values({ targetMode: 'list', targetIds: [tid(1), tid(1), 'x'] })),
+    ).toEqual({
+      kind: 'list',
+      targetIds: [tid(1)],
+    })
+    // An empty list is sent as an empty list (the server refuses it), not as every target.
+    expect(toTargetRestriction(values({ targetMode: 'list', targetIds: [] }))).toEqual({
+      kind: 'list',
+      targetIds: [],
+    })
+  })
+
+  it('refuses a list that is empty, longer than 64, repeated or not made of target IDs', () => {
+    expect(issues({ targetMode: 'list', targetIds: [] })).toEqual(['targets'])
+    expect(issues({ targetMode: 'list', targetIds: ['tgt_bad'] })).toEqual(['targets'])
+    expect(issues({ targetMode: 'list', targetIds: [tid(1), tid(1)] })).toEqual(['targets'])
+    const many = Array.from({ length: 65 }, (_, i) => tid(i + 1))
+    expect(issues({ targetMode: 'list', targetIds: many })).toEqual(['targets'])
+    expect(issues({ targetMode: 'list', targetIds: many.slice(0, 64) })).toEqual([])
+    expect(issues({ targetMode: 'list', targetIds: [tid(1)] })).toEqual([])
+    // "All" does not look at the list.
+    expect(issues({ targetMode: 'all', targetIds: ['tgt_bad'] })).toEqual([])
+  })
+
+  it('is a warning only when production is allowed for all targets', () => {
+    expect(productionWithAllTargets(['prod'], 'all')).toBe(true)
+    expect(productionWithAllTargets(['nonprod', 'prod'], 'all')).toBe(true)
+    expect(productionWithAllTargets(['nonprod'], 'all')).toBe(false)
+    expect(productionWithAllTargets(['prod'], 'list')).toBe(false)
+    // A warning never makes the choice invalid.
+    expect(issues({ tiers: ['nonprod', 'prod'] })).toEqual([])
+  })
+
+  it('reads as one sentence, with the first three IDs and a count of the rest', () => {
+    const r = (targets: ApiKey['restrictions']['targets']): ApiKey['restrictions'] => ({
+      tiers: ['nonprod'],
+      targets,
+    })
+    expect(targetsText(r({ kind: 'all' }))).toBe('Targets: all the roles reach.')
+    expect(targetsText(r({ kind: 'list', targetIds: [tid(1)] }))).toBe(
+      `Targets: limited to 1 target (${tid(1)}).`,
+    )
+    expect(targetsText(r({ kind: 'list', targetIds: [tid(1), tid(2)] }))).toBe(
+      `Targets: limited to 2 targets (${tid(1)}, ${tid(2)}).`,
+    )
+    expect(targetsText(r({ kind: 'list', targetIds: [1, 2, 3, 4].map(tid) }))).toBe(
+      `Targets: limited to 4 targets (${tid(1)}, ${tid(2)}, ${tid(3)}, and 1 more).`,
+    )
+    expect(restrictionsLine(r({ kind: 'all' }))).toBe(
+      'Tiers: Non-production. Targets: all the roles reach.',
+    )
+  })
+
+  it('leaves the line of an API key as the browser suite selects on it', () => {
+    const key = apiKey({
+      expiresAt: '2027-01-11T12:00:00Z',
+      restrictions: { tiers: ['prod'], targets: { kind: 'list', targetIds: [tid(1)] } },
+    })
+    expect(apiKeyLine(key)).toBe('targets.read, active, until 2027-01-11 12:00 UTC.')
   })
 })
 

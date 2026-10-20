@@ -179,3 +179,33 @@ export function grantLine(grant: MachineGrant): string {
       return t('access.service.grant.line.expired', params)
   }
 }
+
+/** Where a key or grant may act, as the contract carries it. */
+export type Restrictions = ApiKey['restrictions']
+
+/** The most target IDs a one-line summary names; the rest are counted. */
+const TARGETS_SHOWN = 3
+
+/**
+ * The target restriction in one sentence: every target the roles reach, or
+ * the number of targets with the first IDs (an ID is the stable name; the
+ * overview resolves paths when the registry can be read).
+ */
+export function targetsText(restrictions: Restrictions): string {
+  const targets = restrictions.targets
+  if (targets.kind === 'all') return t('access.authority.summary.targets.all')
+  const ids = targets.targetIds
+  const shown = ids.slice(0, TARGETS_SHOWN).join(', ')
+  const list =
+    ids.length > TARGETS_SHOWN
+      ? t('access.restriction.more', { ids: shown, count: ids.length - TARGETS_SHOWN })
+      : shown
+  return ids.length === 1
+    ? t('access.restriction.list.one', { ids: list })
+    : t('access.restriction.list.many', { count: ids.length, ids: list })
+}
+
+/** "Tiers: Non-production. Targets: all the roles reach." for a key (a grant's line has its tiers already). */
+export function restrictionsLine(restrictions: Restrictions): string {
+  return `${t('access.restriction.tiers', { tiers: tiersLabel(restrictions.tiers) })} ${targetsText(restrictions)}`
+}

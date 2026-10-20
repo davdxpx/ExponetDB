@@ -9,7 +9,8 @@ import {
 import { type ReactNode, useState } from 'react'
 import { t } from '../../lib/i18n/i18n.ts'
 import { useAccessAction } from './actions.ts'
-import { accessKeys } from './keys.ts'
+import { type ClientUse, type ClientUseRead, lastUseClassText } from './client-use.ts'
+import { ACCESS_PAGE_LIMIT, accessKeys } from './keys.ts'
 import {
   approvedAutomatically,
   authMethodLabel,
@@ -29,7 +30,9 @@ import { actionFailed, type StatusLine } from './status.tsx'
  * name carries "name not verified" unless the client is first party. Each
  * decision goes through a confirmation that states its consequence, then
  * through re-authentication when the server asks for a fresh proof; the
- * outcome is said in the page's status line.
+ * outcome is said in the page's status line. The last use and the active
+ * grants come from the grants the page read (`use`), never from the client,
+ * and are labeled so; a read that failed says that and nothing about use.
  */
 /**
  * A client_id or a redirect URI is shown whole, up to the contract's limit:
@@ -41,10 +44,12 @@ export function ClientCard({
   client,
   line,
   canManage,
+  use,
 }: {
   readonly client: OAuthClient
   readonly line: StatusLine
   readonly canManage: boolean
+  readonly use: ClientUseRead
 }): ReactNode {
   const decisions = clientDecisions(client)
   const hosts = redirectHosts(client.redirectUris)
@@ -145,9 +150,7 @@ export function ClientCard({
     {
       id: 'last-used',
       label: t('access.client.lastUsed'),
-      value: (
-        <span className="text-foreground-lighter">{t('access.client.lastUsed.unreported')}</span>
-      ),
+      value: <UseSummary client={client} use={use} />,
     },
   ]
 
@@ -176,6 +179,59 @@ export function ClientCard({
         <ClientActions client={client} decisions={decisions} line={line} hosts={hosts} />
       ) : null}
     </li>
+  )
+}
+
+/**
+ * The last use and the active grants of a client from the grants that were
+ * read: said as what that read could see. A client with no grant in the read
+ * has no use in it; a recorded use is a minute and a class, and no recorded
+ * use is never turned into "never used".
+ */
+function UseSummary({
+  client,
+  use,
+}: {
+  readonly client: OAuthClient
+  readonly use: ClientUseRead
+}): ReactNode {
+  if (use.state === 'loading') {
+    return <span className="text-foreground-lighter">{t('access.client.lastUsed.loading')}</span>
+  }
+  if (use.state === 'failed') {
+    return (
+      <span className="text-foreground-lighter" data-use="failed">
+        {t('access.client.lastUsed.failed', { reason: use.reason })}
+      </span>
+    )
+  }
+  const found: ClientUse | undefined = use.byClient.get(client.id)
+  const lastUsedAt = found?.lastUsedAt ?? null
+  const activeGrants = found?.activeGrants ?? 0
+  const how = found === undefined ? undefined : lastUseClassText(found)
+  return (
+    <span className="flex flex-col gap-0.5" data-use="ready">
+      <span>
+        {lastUsedAt === null ? (
+          <span className="text-foreground-lighter">{t('access.client.lastUsed.none')}</span>
+        ) : (
+          <span className="inline-flex flex-wrap items-baseline gap-x-2">
+            <TimestampInfo timestamp={lastUsedAt} />
+            {how === undefined ? null : <span className="text-foreground-light">{how}</span>}
+          </span>
+        )}
+      </span>
+      <span>
+        {use.partial
+          ? t('access.client.use.activeGrants.atLeast', { count: activeGrants })
+          : t('access.client.use.activeGrants', { count: activeGrants })}
+      </span>
+      <span className="text-xs text-foreground-lighter">
+        {t('access.client.use.source')}
+        {use.partial ? ` ${t('access.client.use.partial', { count: ACCESS_PAGE_LIMIT })}` : ''}
+        {use.stale ? ` ${t('access.client.use.stale')}` : ''}
+      </span>
+    </span>
   )
 }
 

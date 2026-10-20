@@ -11,6 +11,7 @@ import {
   PageSectionMeta,
   PageSectionSummary,
   PageSectionTitle,
+  useNavigate,
 } from '@exponetdb/ui-patterns'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
@@ -20,6 +21,7 @@ import { toReadable } from '../../lib/query/readable.ts'
 import { useMe } from '../../lib/session/guard.tsx'
 import { holds } from '../access/fields.tsx'
 import { ListView } from '../access/list-view.tsx'
+import { NoMatch } from '../access/no-match.tsx'
 import { ChainPanel } from './chain-panel.tsx'
 import { EventDetails, EventTable } from './event-list.tsx'
 import { ExportSection } from './export-section.tsx'
@@ -36,6 +38,7 @@ import { type AuditSearch, auditHref, hasFilters } from './search.ts'
  */
 export function AuditPage({ search }: { readonly search: AuditSearch }): ReactNode {
   const { client } = useApi()
+  const navigate = useNavigate()
   const me = useMe()
   const canExport = holds(me, 'policy.manage')
   const chain = useQuery(auditChainQuery(client))
@@ -81,16 +84,19 @@ export function AuditPage({ search }: { readonly search: AuditSearch }): ReactNo
             error={events.error}
             what={t('audit.events.what')}
             permission="audit.read"
-            isEmpty={(value) => value.items.length === 0}
-            emptyTitle={
-              hasFilters(search) ? t('audit.events.empty.filtered') : t('audit.events.empty.title')
-            }
+            // A filtered search that finds nothing is "No match" (below), not an empty log.
+            isEmpty={(value) => !hasFilters(search) && value.items.length === 0}
+            emptyTitle={t('audit.events.empty.title')}
             emptyDescription={t('audit.events.empty.body')}
             onRetry={() => void events.refetch()}
             busy={events.isFetching && !events.isFetchingNextPage}
           >
             {(value) =>
-              value.items.length === 0 ? null : (
+              value.items.length === 0 ? (
+                hasFilters(search) && value.nextCursor === null ? (
+                  <NoMatch onReset={() => navigate('/audit')} />
+                ) : null
+              ) : (
                 <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
                   <div className="flex min-w-0 flex-col gap-3">
                     <EventTable events={value.items} selected={selected} onSelect={setSelected} />

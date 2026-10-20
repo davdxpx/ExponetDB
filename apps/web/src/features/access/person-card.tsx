@@ -10,6 +10,7 @@ import { type ReactNode, useId, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { usePlanAction } from '../../lib/api/plan-action.ts'
 import { t } from '../../lib/i18n/i18n.ts'
+import { ProfileAvatar } from '../account/avatar.tsx'
 import { useAccessAction } from './actions.ts'
 import { BindingForm } from './binding-form.tsx'
 import { type RevealedInvitation, revealedOf } from './invitation-link.tsx'
@@ -30,7 +31,8 @@ import { actionFailed, type StatusLine } from './status.tsx'
 /**
  * One person (`li[data-identity]`): name and address as untrusted text, state,
  * factors, the active role bindings with their scope, and what an
- * administrator can do. Binding, unbinding, enabling and erasing are plans
+ * administrator can do, with their picture when they have set one and a
+ * "You" mark on the signed-in person's own card. Binding, unbinding, enabling and erasing are plans
  * (the review page opens); disabling and a new invitation link are inline
  * changes with a confirmation and re-authentication, as the API defines them.
  */
@@ -40,6 +42,8 @@ export interface PersonCardProps {
   readonly bindings: readonly RoleBinding[] | undefined
   readonly line: StatusLine
   readonly canManage: boolean
+  /** The card is the signed-in person's own. */
+  readonly isYou: boolean
   readonly onRevealed: (revealed: RevealedInvitation) => void
 }
 
@@ -48,6 +52,7 @@ export function PersonCard({
   bindings,
   line,
   canManage,
+  isYou,
   onRevealed,
 }: PersonCardProps): ReactNode {
   const facts: KeyValueItem[] = [
@@ -92,10 +97,14 @@ export function PersonCard({
       data-identity={identity.id}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h2 className="min-w-0 text-base font-medium text-foreground">
-          <UntrustedName name={identityName(identity)} label={t('people.name')} />
-        </h2>
+        <div className="flex min-w-0 items-center gap-3">
+          <ProfileAvatar avatar={identity.avatar} name={identityName(identity)} />
+          <h2 className="min-w-0 text-base font-medium text-foreground">
+            <UntrustedName name={identityName(identity)} label={t('people.name')} />
+          </h2>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
+          {isYou ? <Badge variant="default">{t('people.you')}</Badge> : null}
           {identity.recoveryRequired ? (
             <Badge variant="warning">{t('people.recoveryRequired')}</Badge>
           ) : null}
@@ -112,7 +121,7 @@ export function PersonCard({
       <section className="flex flex-col gap-2">
         <h3 className="text-sm font-medium text-foreground">{t('people.bindings.title')}</h3>
         <Bindings bindings={bindings} line={line} canManage={canManage && live} />
-        {canManage && identity.state === 'active' ? (
+        {canManage && (identity.state === 'active' || identity.state === 'invited') ? (
           <BindingForm identityId={identity.id} line={line} />
         ) : null}
       </section>

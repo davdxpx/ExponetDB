@@ -67,14 +67,18 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/access/list-view.tsx': {
     tests: ['access/oauth-clients.test.tsx', 'access/service-accounts.test.tsx', ADMIN],
   },
+  'src/features/access/api-keys-overview.tsx': { tests: ['access/api-keys-overview.test.tsx'] },
+  'src/features/access/choice-select.tsx': { tests: ['access/choice-select.test.tsx'] },
   'src/features/access/oauth-clients-page.tsx': {
-    tests: ['access/oauth-clients.test.tsx', ADMIN],
+    tests: ['access/oauth-clients.test.tsx', 'access/oauth-client-filters.test.tsx', ADMIN],
   },
   'src/features/access/service-accounts-page.tsx': {
-    tests: ['access/service-accounts.test.tsx', ADMIN],
+    tests: ['access/service-accounts.test.tsx', 'access/service-lifecycle.test.tsx', ADMIN],
   },
   'src/features/access/connected-apps-page.tsx': { tests: ['admin/access-pages.test.tsx'] },
-  'src/features/access/people-page.tsx': { tests: ['admin/access-pages.test.tsx'] },
+  'src/features/access/people-page.tsx': {
+    tests: ['admin/access-pages.test.tsx', 'admin/people-filters.test.tsx'],
+  },
   'src/features/access/roles-page.tsx': { tests: ['admin/access-pages.test.tsx'] },
   'src/features/account/factors-section.tsx': { tests: ACCOUNT },
   'src/features/account/grants-section.tsx': { tests: ACCOUNT },
