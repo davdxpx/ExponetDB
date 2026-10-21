@@ -37,6 +37,6 @@
     "remark-gfm": "4.0.1",
     "rollup": "4.63.5",
     "tailwindcss": "4.3.3",
-    "vite": "8.3.2"
+    "vite": "8.3.3"
   }
 }

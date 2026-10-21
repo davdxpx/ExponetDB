@@ -167,6 +167,11 @@ component with a demo page and states.
 - **Truthful states first**: every data component has explicit props for
   `failed`, `stale` and `partial`; there is no way to render a failed read as
   empty (type-level: the data prop is a `Readable<T>` union, not `T[]`).
+  **[DECIDED]** (2026-10-20) A value keeps its place when its banner comes or
+  goes: `ReadableView` renders `ready`, `stale` and `partial` in one shape, so a
+  read that turns old never mounts the content again and nothing typed,
+  focused or pressed in it is lost (before, a minute-old object read rebuilt
+  the row browser and swallowed a "Load more rows" press).
 - **Untrusted content** (object names, comments, statement text, row values,
   client names) is rendered as text, never as HTML or Markdown, and long values
   are truncated with an explicit control to expand. **[OBSERVED]** (Wave 8,

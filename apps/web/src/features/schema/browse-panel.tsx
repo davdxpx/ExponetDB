@@ -182,12 +182,12 @@ function requestOf(object: SchemaObject, state: PanelState, cursor?: BrowseCurso
 // ----- the session -----
 
 /**
- * What the row browser has read, kept above the object's read state. A read of
- * the object that turns old is shown under a banner, which is another place in
- * the tree: whatever sat below it is built again. The rows already read, the
- * press that started them and the read in flight must survive that, so they
- * live in the component that owns the object's read (`ObjectDetail`) and the
- * browser below only uses them.
+ * What the row browser has read, kept above the object's read state. The rows
+ * already read, the press that started them and the read in flight must outlive
+ * the panel (another tab of the object and back, a sort that changes the link),
+ * so they live in the component that owns the object's read (`ObjectDetail`)
+ * and the browser below only uses them. A read of the object that turns old no
+ * longer mounts the panel again: `ReadableView` keeps one shape under a banner.
  */
 export interface BrowseSession {
   readonly phase: Phase
