@@ -428,8 +428,10 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
         if (m === 'hover') localStorage.removeItem('exdb.sidebar.mode')
         else localStorage.setItem('exdb.sidebar.mode', m)
       }, mode)
-      await page.goto(`${origin}/account`)
-      await page.waitForSelector('#me-email')
+      // A fleet page without a section menu: the page starts right after the rail (the account
+      // has a column of its own instead of the rail).
+      await page.goto(`${origin}/audit`)
+      await page.waitForSelector('main h1')
       await page.mouse.move(1000, 500)
       const loaded = await rects()
       expect(loaded.main?.left, mode).toBe(railWidth)
@@ -463,7 +465,7 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
   it('the Web App fits a phone at 390×844: no horizontal page scroll, the header never overlaps itself', async () => {
     await page.setViewportSize({ width: 390, height: 844 })
     // Two targets answer from the browser's route table (the suite has no registered target): a
-    // staging one and a production one, enough for the target layout, its section tabs and header.
+    // staging one and a production one, enough for the target layout, its rail and header.
     const targetBody = (path: string, tier: 'nonprod' | 'production') => ({
       id: `tgt_${path.endsWith('production') ? '2' : '1'}`.padEnd(30, '0'),
       path,
@@ -722,7 +724,7 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
       for (const path of pages) {
         await page.goto(`${origin}${path}`)
         await page.waitForSelector('header button[aria-label="Account"]')
-        if (path.startsWith('/t/')) await page.waitForSelector('[data-slot="page-nav"]')
+        if (path.startsWith('/t/')) await page.waitForSelector('[data-slot="target-context-bar"]')
         if (path.endsWith('/migrations')) await page.waitForSelector('[data-pending]')
         if (path.endsWith('/activity')) await page.waitForSelector('[data-audit]')
         const result = await page.evaluate<{
@@ -781,7 +783,7 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
         expect(result.outside, `${path} header outside the viewport`).toEqual([])
       }
       // The off-canvas menu has a visible button, opens over the page and lists the sections.
-      await page.goto(`${origin}/account`)
+      await page.goto(`${origin}/`)
       const open = page.locator('header [data-sidebar="trigger"]')
       await expect.poll(() => open.isVisible()).toBe(true)
       await open.click()
@@ -793,15 +795,25 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
       expect(await page.locator('[data-slot="target-context-bar"]').innerText()).toContain(
         'Production',
       )
-      // The current section tab is inside the visible part of its own scrolling row.
+      // On a target's page the sheet lists the target's sections, the current one marked and
+      // inside the screen.
       await page.goto(`${origin}/t/shop/platform/staging/migrations`)
-      await page.waitForSelector('[data-slot="page-nav"] a[aria-current="page"]')
-      const tab = await page.evaluate<{ readonly left: number; readonly right: number }>(`(() => {
-        const r = document.querySelector('[data-slot="page-nav"] a[aria-current="page"]').getBoundingClientRect()
-        return { left: r.left, right: r.right }
-      })()`)
-      expect(tab.left).toBeGreaterThanOrEqual(0)
-      expect(tab.right).toBeLessThanOrEqual(390)
+      await page.locator('header [data-sidebar="trigger"]').click()
+      await page.waitForSelector('[data-mobile="true"] a[aria-current="page"]')
+      // The sheet slides in; once in place the current section is inside the screen.
+      const current = () =>
+        page.evaluate<{ readonly left: number; readonly right: number }>(`(() => {
+          const r = document.querySelector('[data-mobile="true"] a[aria-current="page"]').getBoundingClientRect()
+          return { left: r.left, right: r.right }
+        })()`)
+      await expect
+        .poll(async () => {
+          const tab = await current()
+          return tab.left >= 0 && tab.right <= 390
+        })
+        .toBe(true)
+      await page.keyboard.press('Escape')
+      await page.waitForSelector('[data-mobile="true"]', { state: 'detached' })
     } finally {
       console.info(`phone layout at 390x844: ${JSON.stringify(measured)}`)
       await page.unroute('**/api/v1/**')

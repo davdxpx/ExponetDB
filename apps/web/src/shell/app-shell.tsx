@@ -134,12 +134,16 @@ function ShellFrame({ children }: { readonly children: ReactNode }): ReactNode {
   }, [pathname])
   // The account has its own column on wide screens; on a phone its pages are in the sheet.
   const showRail = level !== 'account' || isMobile
+  // The page scrolls in its own container, so the container is in the tab order: a page with
+  // nothing focusable on it (an installation's facts) is still scrolled from the keyboard
+  // (axe: scrollable-region-focusable). Its focus ring is drawn inside it.
   const page = (
     <main
       ref={pageScroller}
       id="content"
-      tabIndex={-1}
-      className="relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-background outline-none"
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll container must take focus
+      tabIndex={0}
+      className="relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-background outline-hidden focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring focus-visible:ring-inset"
     >
       <ShellBreadcrumbs />
       {children}

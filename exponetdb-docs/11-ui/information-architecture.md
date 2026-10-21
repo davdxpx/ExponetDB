@@ -37,7 +37,13 @@ natively (Studio's shell is not on the ADR-0030 allowlist):
   column (`Back to the fleet`, then the account settings and the activity),
   as Studio's account pages have.
 - **A fixed frame.** The header (48 px) and the rail stay in place; only the
-  page's own container scrolls, never the window.
+  page's own container scrolls, never the window. That container is in the
+  tab order (a page with nothing focusable on it is still scrolled from the
+  keyboard) and draws its focus ring inside itself.
+- **List toolbars are one compact row**, as on Studio's list pages: a small
+  search field, then each filter as a pill with its name and its control side
+  by side (the name labels the control), and the table/grid switch as two
+  icon buttons at the end.
 - **The rail is collapsed to its icons on a wide screen and expands while the
   pointer rests on it** (the person can pin it open or closed from the rail's
   footer). A rail item's tooltip appears only after the pointer has rested on

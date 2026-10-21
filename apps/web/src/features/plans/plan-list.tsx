@@ -2,8 +2,6 @@ import type { OperationRead, PlanRead } from '@exponetdb/sdk/operations'
 import {
   Button,
   cn,
-  Input,
-  inputVariants,
   Table,
   TableBody,
   TableCaption,
@@ -35,6 +33,7 @@ import { type ReactNode, useId, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { type MessageKey, t } from '../../lib/i18n/i18n.ts'
 import { toReadable } from '../../lib/query/readable.ts'
+import { TOOLBAR_CONTROL, ToolbarField } from '../../lib/ui/toolbar.tsx'
 import { operationPath } from '../changes/model.ts'
 import { awaitingPlansQuery, planListQuery } from './keys.ts'
 import {
@@ -45,8 +44,6 @@ import {
   type PlanListSearch,
 } from './list-model.ts'
 import { planPath } from './plan-model.ts'
-
-const SELECT = cn(inputVariants({ size: 'small' }), 'w-auto')
 
 const STATE_TEXT: Readonly<Record<string, MessageKey>> = {
   active: 'plans.state.active',
@@ -166,31 +163,30 @@ function Toolbar({
   const change = (next: Partial<PlanListSearch>) => onSearch({ ...search, ...next })
   const awaiting = search.awaiting === 'approval'
   return (
-    <search className="flex flex-wrap items-end gap-3">
+    <search className="flex flex-wrap items-start gap-2">
       <div className="flex flex-col gap-1">
-        <label htmlFor={`${ids}-state`} className="text-xs text-foreground-light">
-          {t('plans.filter.state')}
-        </label>
-        <select
-          id={`${ids}-state`}
-          className={SELECT}
-          value={search.state ?? ''}
-          disabled={awaiting}
-          aria-describedby={awaiting ? `${ids}-state-hint` : undefined}
-          onChange={(event) =>
-            change({ state: PLAN_STATES.find((state) => state === event.target.value) })
-          }
-        >
-          <option value="">{t('plans.filter.state.all')}</option>
-          {PLAN_STATES.map((state) => {
-            const key = STATE_TEXT[state]
-            return (
-              <option key={state} value={state}>
-                {key === undefined ? state : t(key)}
-              </option>
-            )
-          })}
-        </select>
+        <ToolbarField id={`${ids}-state`} label={t('plans.filter.state')}>
+          <select
+            id={`${ids}-state`}
+            className={TOOLBAR_CONTROL}
+            value={search.state ?? ''}
+            disabled={awaiting}
+            aria-describedby={awaiting ? `${ids}-state-hint` : undefined}
+            onChange={(event) =>
+              change({ state: PLAN_STATES.find((state) => state === event.target.value) })
+            }
+          >
+            <option value="">{t('plans.filter.state.all')}</option>
+            {PLAN_STATES.map((state) => {
+              const key = STATE_TEXT[state]
+              return (
+                <option key={state} value={state}>
+                  {key === undefined ? state : t(key)}
+                </option>
+              )
+            })}
+          </select>
+        </ToolbarField>
         {awaiting ? (
           <span id={`${ids}-state-hint`} className="text-xs text-foreground-light">
             {t('plans.filter.state.awaiting')}
@@ -205,23 +201,22 @@ function Toolbar({
           change({ kind: kind === '' ? undefined : kind })
         }}
       >
-        <label htmlFor={`${ids}-kind`} className="text-xs text-foreground-light">
-          {t('plans.filter.kind')}
-        </label>
-        <div className="flex items-center gap-2">
-          <Input
-            id={`${ids}-kind`}
-            className="w-56 font-mono"
-            value={kind}
-            maxLength={PLAN_KIND_MAX_LENGTH}
-            placeholder="migration.apply"
-            autoComplete="off"
-            spellCheck={false}
-            aria-invalid={kindInvalid}
-            aria-describedby={kindInvalid ? `${ids}-kind-error` : undefined}
-            onChange={(event) => setKind(event.target.value)}
-          />
-          <Button type="submit" size="small" variant="outline" disabled={kindInvalid}>
+        <div className="flex items-center gap-1">
+          <ToolbarField id={`${ids}-kind`} label={t('plans.filter.kind')}>
+            <input
+              id={`${ids}-kind`}
+              className={cn(TOOLBAR_CONTROL, 'w-40 font-mono')}
+              value={kind}
+              maxLength={PLAN_KIND_MAX_LENGTH}
+              placeholder="migration.apply"
+              autoComplete="off"
+              spellCheck={false}
+              aria-invalid={kindInvalid}
+              aria-describedby={kindInvalid ? `${ids}-kind-error` : undefined}
+              onChange={(event) => setKind(event.target.value)}
+            />
+          </ToolbarField>
+          <Button type="submit" size="tiny" variant="outline" disabled={kindInvalid}>
             {t('plans.filter.kind.apply')}
           </Button>
         </div>
@@ -232,20 +227,19 @@ function Toolbar({
         ) : null}
       </form>
       <div className="flex flex-col gap-1">
-        <label htmlFor={`${ids}-actor`} className="text-xs text-foreground-light">
-          {t('plans.filter.actor')}
-        </label>
-        <select
-          id={`${ids}-actor`}
-          className={SELECT}
-          value={search.actor ?? 'any'}
-          onChange={(event) =>
-            change({ actor: event.target.value === 'self' ? 'self' : undefined })
-          }
-        >
-          <option value="any">{t('plans.filter.actor.any')}</option>
-          <option value="self">{t('plans.filter.actor.self')}</option>
-        </select>
+        <ToolbarField id={`${ids}-actor`} label={t('plans.filter.actor')}>
+          <select
+            id={`${ids}-actor`}
+            className={TOOLBAR_CONTROL}
+            value={search.actor ?? 'any'}
+            onChange={(event) =>
+              change({ actor: event.target.value === 'self' ? 'self' : undefined })
+            }
+          >
+            <option value="any">{t('plans.filter.actor.any')}</option>
+            <option value="self">{t('plans.filter.actor.self')}</option>
+          </select>
+        </ToolbarField>
       </div>
       {search.target === undefined ? null : (
         <p className="m-0 flex flex-wrap items-center gap-2 text-sm" data-filter-target>
