@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
 import { objectHref, type SchemaSearch } from '../../src/features/schema/search.ts'
 import { parseSqlLink } from '../../src/features/sql/sql-model.ts'
@@ -112,6 +112,16 @@ vi.mock('@exponetdb/ui-data/grid/data-grid', async () => {
     },
   }
 })
+
+// The first mount of the row browser in a file is slow: the lazy chunks load and the whole tree
+// renders for the first time. On CI's two cores, shared by every package's tests, that ran past
+// the 10 s wait of the file's first test. One throwaway mount here takes that cost outside of
+// any test; every test still mounts its own app.
+beforeAll(async () => {
+  mountBrowse(rowsPath(), readyWorld())
+  await screen.findByRole('button', { name: 'Read rows' }, { timeout: 100_000 })
+  cleanup()
+}, 120_000)
 
 afterEach(() => {
   cleanup()

@@ -8,6 +8,11 @@ import { axeViolations } from '../support/axe.ts'
 import { installLayoutStubs } from './support.ts'
 
 beforeAll(installLayoutStubs)
+// The viewer is a lazy chunk (CodeMirror's merge view); the first test would otherwise pay its
+// cold import inside a 1 s wait, which a loaded CI runner exceeds. Load it once first.
+beforeAll(async () => {
+  await import('../../src/editor/text-diff.tsx')
+}, 120_000)
 afterEach(cleanup)
 
 const sides: TextDiffSides = { before: 'select 1;', after: 'select 2;' }
