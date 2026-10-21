@@ -21,7 +21,7 @@
 | `packages/ui` | primitives on Radix + `cva`: Button, Input, Textarea, Select, Combobox, Checkbox, Switch, RadioGroup, Label, Dialog, AlertDialog, Sheet, Popover, Tooltip, DropdownMenu, Tabs, Table, Badge, Card, Toast, Skeleton, ScrollArea, Separator | data fetching, routing, app state |
 | `packages/ui-patterns` | composites: page layout family, dialogs (confirm, typed confirm, plan confirm), state components (loading, failed read, empty, stale, partial, not supported, not permitted), form layout and field arrays, filter bar, multi-select, command menu, charts, timestamp, info tooltip, admonition, status badges, key-value lists | the SQL editor, virtualized grids, framework imports (Next.js, router) |
 | `packages/ui-data` | data grid (TanStack Table + Virtual), SQL editor and diff (CodeMirror 6 in a shadow root, lazy-loaded; [OD-40](../00-product/open-decisions.md#od-40-the-sql-editor-component-under-the-web-apps-csp)), plan viewer, schema diff viewer, EXPLAIN plan viewer, schema tree, migration timeline | domain logic |
-| `packages/icons` | `lucide-react` re-export plus a small factory for database glyphs | brand logos |
+| `packages/icons` | `lucide-react` re-export plus a small factory for database glyphs; the brand glyphs of hosting providers copied from Simple Icons and `BrandGlyph` ([ADR-0033](../01-architecture/adr/0033-provider-glyphs-from-simple-icons.md)) | any other brand logo (ExponetDB's own mark comes from the brand inputs, OD-11) |
 | `apps/design-system` | guidance pages, live demos, accessibility notes; source of truth for humans and agents | product features |
 
 Framework seams defined once in `ui-patterns`: a link component contract, an
@@ -32,7 +32,10 @@ injected `navigate`, a color-scheme hook reading `data-theme`, and
 `packages/ui-patterns` start as copies of allowlisted Supabase files (see
 [§1.1](#11-provenance-of-copied-files)); `packages/icons` is **native** (a
 `lucide-react` re-export plus a few glyphs written here; the fork's icon
-packages are never copied); `packages/ui-data` is written natively (the data
+packages are never copied), except the provider glyphs, which are copied
+from Simple Icons (CC0-1.0) under
+[ADR-0033](../01-architecture/adr/0033-provider-glyphs-from-simple-icons.md)
+(**[DECIDED]** 2026-10-21, the owner's decision S11); `packages/ui-data` is written natively (the data
 grid, SQL editor and viewers are not copied from Studio); `apps/design-system`
 restates the guidance in ExponetDB's own words.
 

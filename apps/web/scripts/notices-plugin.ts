@@ -9,12 +9,14 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 /** The repository notices appended to the generated file (ADR-0030): what the register points to. */
 export const REPOSITORY_NOTICES = [
   {
-    title: 'Files derived from Supabase and shadcn/ui (THIRD_PARTY_NOTICES.md)',
+    title:
+      'Files derived from Supabase and shadcn/ui, glyphs from Simple Icons (THIRD_PARTY_NOTICES.md)',
     file: 'THIRD_PARTY_NOTICES.md',
   },
   { title: 'Apache License 2.0 (Supabase)', file: 'LICENSES/Apache-2.0.txt' },
   { title: 'MIT License (Supabase packages)', file: 'LICENSES/MIT-supabase.txt' },
   { title: 'MIT License (shadcn/ui)', file: 'LICENSES/MIT-shadcn.txt' },
+  { title: 'CC0 1.0 Universal (Simple Icons)', file: 'LICENSES/CC0-1.0-simple-icons.txt' },
   { title: 'SIL Open Font License 1.1 (Inter)', file: 'LICENSES/OFL-1.1-inter.txt' },
   {
     title: 'SIL Open Font License 1.1 (Source Code Pro)',

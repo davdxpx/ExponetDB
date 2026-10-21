@@ -2,7 +2,8 @@
 
 ExponetDB is proprietary (see [`LICENSE`](./LICENSE)). Some files of its Web App
 user interface are derived from third-party source under the rules of
-[ADR-0030](./exponetdb-docs/01-architecture/adr/0030-supabase-ui-source-adoption.md).
+[ADR-0030](./exponetdb-docs/01-architecture/adr/0030-supabase-ui-source-adoption.md)
+and, for the provider glyphs, [ADR-0033](./exponetdb-docs/01-architecture/adr/0033-provider-glyphs-from-simple-icons.md).
 Each such file starts with a provenance header that names its source and states
 that it was modified for ExponetDB, and each is listed with its source path,
 license basis and review in
@@ -32,6 +33,21 @@ license scan checks them.
   shadcn" ([`LICENSES/MIT-shadcn.txt`](./LICENSES/MIT-shadcn.txt)).
 - Supabase's primitives derive from shadcn/ui; ExponetDB's copies of them carry
   that derivation forward.
+
+## Simple Icons
+
+- Source: the npm package `simple-icons` at version `16.35.0`
+  (<https://github.com/simple-icons/simple-icons>), CC0 1.0 Universal
+  ([`LICENSES/CC0-1.0-simple-icons.txt`](./LICENSES/CC0-1.0-simple-icons.txt)).
+  CC0 asks for no attribution; it is named here as a record.
+- Copied: the title, color and SVG path data of the brand glyphs of thirteen
+  hosting providers, in `packages/icons/src/provider-glyphs.ts`
+  ([ADR-0033](./exponetdb-docs/01-architecture/adr/0033-provider-glyphs-from-simple-icons.md);
+  the register's "Other sources").
+- Trademarks: the glyphs are trademarks of their owners. CC0 does not touch
+  trademark rights. ExponetDB uses each glyph only to name the provider a
+  server runs on; no endorsement by or affiliation with any provider is
+  implied.
 
 ## Fonts
 
