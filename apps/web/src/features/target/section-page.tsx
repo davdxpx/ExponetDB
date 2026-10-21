@@ -3,6 +3,7 @@ import {
   NotAvailableYetState,
   PageContainer,
   PageHeader,
+  PageHeaderAside,
   PageHeaderDescription,
   PageHeaderMeta,
   PageHeaderSummary,
@@ -13,6 +14,7 @@ import {
 import { lazy, type ReactNode, Suspense } from 'react'
 import { t } from '../../lib/i18n/i18n.ts'
 import { TARGET_NAV, type TargetSection } from '../../shell/navigation.ts'
+import { RefreshBar } from '../target-overview/overview-refresh.tsx'
 import { ContentWrapper } from './content-wrapper.tsx'
 import type { SchemaKind } from './params.ts'
 import { useTargetHealth } from './queries.ts'
@@ -75,6 +77,12 @@ export function TargetSectionPage({
               <PageHeaderDescription>{t('target.schema.kind', { kind })}</PageHeaderDescription>
             )}
           </PageHeaderSummary>
+          {/* The overview's page action, at the top right as Studio places a page's actions. */}
+          {section === 'overview' && value !== undefined ? (
+            <PageHeaderAside>
+              <RefreshBar />
+            </PageHeaderAside>
+          ) : null}
         </PageHeaderMeta>
       </PageHeader>
       <PageContainer size="large" className="py-6">
