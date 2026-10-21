@@ -269,7 +269,9 @@ neither, and a person whose bindings do not cover the environment does not
 see it (`NOT_FOUND`). Control Store guards check the environment's product,
 the operation's kind, that an ended binding and a revoked declaration never
 change again, that a declaration's attributes are exactly `{bypassrls}` and
-that a role is never a predefined or ExponetDB role. `GET
+that a role is never a predefined or ExponetDB role; an environment keeps
+its tier while it binds execution roles or holds an active exception
+(`tier_in_use`, and a trigger on the environments table). `GET
 /projects/{projectId}/execution-roles` (`migrations.read` on the project)
 shows the default map, each environment's bindings and effective map, and
 the declarations; the CLI's `project execution-roles` and `project

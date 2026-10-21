@@ -96,7 +96,9 @@ every registry change (C-6):
   plan's expected state. The plan content grows; the plan-hash construction
   is unchanged.
 - A new warn rule, `migration.execution-role-exception`, is visible in every
-  plan that uses an exception (role, reason, declaring person, review date).
+  plan that uses an exception (role, exception id and revision, declaring
+  person, review date; the reason, a person's untrusted text, stays in the
+  registry view and out of plans agents read).
   On production the plan's action class is at least `high`, and an agent's
   apply still needs a human approval (`migration.agent-production`, OD-13
   unchanged). Agents may apply nonprod migrations under a declared
@@ -104,8 +106,17 @@ every registry change (C-6):
 - `checkBindings` and the executor's re-check on the migrator session under
   the target lock refuse a revoked, changed or expired exception, and a role
   whose `BYPASSRLS` the plan did not excuse, with `PLAN_STALE`
-  (`execution_role_exception`). The executor never widens what the plan
-  bound: only the bound exceptions excuse anything at apply.
+  (`execution_role_exception`); a plan of several migrations checks again
+  before each further one, so a revocation stops what has not started. The
+  executor never widens what the plan bound: only the bound exceptions
+  excuse anything at apply.
+- A role that **reaches** (through any membership) a role with
+  `SUPERUSER`, `CREATEROLE`, `CREATEDB`, `REPLICATION` or `BYPASSRLS`, or a
+  predefined or ExponetDB role, is never usable, declared or not: a
+  migration could otherwise hand an object to that role (`ALTER … OWNER
+  TO`) and use its powers without any declaration. (Found by the
+  independent review of Part A; the Wave 6 check counted superusers and
+  protected roles only.)
 - The legacy replay (`migration.import.replay`) checks the execution role
   exactly like an apply, at plan time and under the lock, with the
   exceptions of the **scratch** target's environment.
@@ -156,6 +167,11 @@ every registry change (C-6):
   checksum. A production plan consumes staging evidence of the same checksum
   although staging ran as another role. A golden plan-hash vector over a
   plan with per-environment roles is appended (`plan-006`).
+- An environment binds only aliases of the project map: a binding of an
+  alias the map no longer has binds nothing. An environment keeps its tier
+  while it binds execution roles or holds an active exception (the planner
+  refuses `tier_in_use`, and a Control Store trigger refuses the change):
+  both were set under that tier's authority.
 - **Consequence, open (OD-53).** fp1 includes object owners, so two
   environments whose objects are owned by different roles never share a
   fingerprint: `migration.fingerprint-lineage` then fails for every

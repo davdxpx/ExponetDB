@@ -90,3 +90,26 @@ GRANT SELECT ON registry.execution_role_exceptions TO exdb_serve, exdb_worker;
 GRANT INSERT ON registry.execution_role_exceptions TO exdb_worker;
 GRANT UPDATE (state, revision, revoked_by, revoked_at, revoked_by_operation_id, revoke_reason)
   ON registry.execution_role_exceptions TO exdb_worker;
+
+-- An environment keeps its tier while it binds execution roles or holds an
+-- active exception: both were set under that tier's authority (a nonprod
+-- declaration has no approval), so a tier change first ends them. Checked
+-- here, on the frozen environments table, by an additive trigger.
+CREATE FUNCTION registry.environment_execution_roles_keep_tier() RETURNS trigger
+  LANGUAGE plpgsql SET search_path = pg_catalog AS $fn$
+BEGIN
+  IF NEW.tier IS DISTINCT FROM OLD.tier
+     AND (EXISTS (SELECT FROM registry.execution_role_exceptions x
+                   WHERE x.environment_id = OLD.environment_id AND x.state = 'active')
+          OR EXISTS (SELECT FROM registry.execution_role_bindings b
+                      WHERE b.environment_id = OLD.environment_id AND b.ended_at IS NULL)) THEN
+    RAISE EXCEPTION USING ERRCODE = 'EXG14',
+      MESSAGE = 'an environment with execution role bindings or an active exception keeps its tier';
+  END IF;
+  RETURN NEW;
+END
+$fn$;
+REVOKE ALL ON FUNCTION registry.environment_execution_roles_keep_tier() FROM PUBLIC;
+CREATE TRIGGER environments_execution_roles_keep_tier
+  BEFORE UPDATE OF tier ON registry.environments
+  FOR EACH ROW EXECUTE FUNCTION registry.environment_execution_roles_keep_tier();

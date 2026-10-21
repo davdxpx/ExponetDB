@@ -12,7 +12,9 @@ description: |
   worker writes records only as operations of the kinds
   registry.execution_role_exception.declare and .revoke; a guard checks
   the operation, the environment's product, the role name and every
-  transition. Additive: no frozen bundle changes.
+  transition. An additive trigger on registry.environments keeps the tier
+  of an environment that binds execution roles or holds an active
+  exception. Additive: no frozen bundle changes.
 dependsOn:
   - 01M5G6EQ7MFWM3TVK3YN5WRK8W
 execution:

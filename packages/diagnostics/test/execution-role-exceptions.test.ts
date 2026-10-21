@@ -45,8 +45,15 @@ describe('execution-role exception drift (ADR-0034 §4)', () => {
     expect(exceptionDrift(declaration(), role())).toBeNull()
   })
 
-  it('is critical when the role gains any attribute no exception excuses', () => {
-    for (const attribute of ['superuser', 'createRole', 'createDb', 'replication'] as const) {
+  it('is critical when the role gains anything no exception excuses, a privileged reach included', () => {
+    for (const attribute of [
+      'superuser',
+      'createRole',
+      'createDb',
+      'replication',
+      'canLogin',
+      'reachesProtected',
+    ] as const) {
       expect(exceptionDrift(declaration(), role({ [attribute]: true }))).toMatchObject({
         reason: 'privilege_exceeded',
         severity: 'critical',

@@ -800,8 +800,8 @@ export async function planMigrationApply(
         role,
         exceptionId: e?.exceptionId ?? null,
         revision: e?.revision ?? null,
-        // Untrusted text of the declaring person, shown as data.
-        reason: e?.reason ?? null,
+        // The reason (a person's untrusted text) stays in the registry view, out of a plan
+        // agents read.
         declaredBy: e?.declaredBy ?? null,
         reviewBy: e?.reviewBy ?? null,
       }

@@ -49,8 +49,13 @@ export async function executionRolesFor(
 ): Promise<ResolvedExecutionRoles> {
   const defaults = await projectDefaultRoles(q, scope.projectId)
   const bindings = await environmentRoleBindings(q, scope.projectId, scope.environmentId)
+  // An environment refines the map, never extends it: a binding of an alias the map no
+  // longer has (removed by a project change) binds nothing.
+  const refined = Object.entries(bindings).filter(([alias]) => Object.hasOwn(defaults, alias))
   const roles = Object.fromEntries(
-    Object.entries({ ...defaults, ...bindings }).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)),
+    Object.entries({ ...defaults, ...Object.fromEntries(refined) }).sort(([x], [y]) =>
+      x < y ? -1 : x > y ? 1 : 0,
+    ),
   )
   return {
     roles,

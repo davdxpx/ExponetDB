@@ -18,3 +18,7 @@ SELECT has_table_privilege('exdb_worker', 'registry.execution_role_exceptions', 
    AND NOT has_table_privilege('exdb_serve', 'registry.execution_role_exceptions', 'INSERT')
    AND NOT has_table_privilege('exdb_serve', 'registry.execution_role_exceptions', 'UPDATE')
    AND has_table_privilege('exdb_serve', 'registry.execution_role_exceptions', 'SELECT') AS ok;
+
+-- check: an environment with bindings or an active exception keeps its tier
+SELECT EXISTS (SELECT FROM pg_trigger WHERE tgname = 'environments_execution_roles_keep_tier'
+                 AND tgrelid = 'registry.environments'::regclass AND NOT tgisinternal) AS ok;

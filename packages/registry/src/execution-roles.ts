@@ -69,10 +69,11 @@ export async function environmentRoleBindings(
   const { rows } = await q.query(
     'registry.execution_roles.bindings',
     `SELECT alias, role FROM registry.execution_role_bindings
-      WHERE project_id = $1 AND environment_id = $2 AND ended_at IS NULL ORDER BY alias`,
+      WHERE project_id = $1 AND environment_id = $2 AND ended_at IS NULL`,
     [projectId, environmentId],
   )
-  return Object.fromEntries(rows.map((r) => [r.text('alias'), r.text('role')]))
+  // Sorted here, never by the Control Store's collation: plans compare these maps as JSON.
+  return sortedMap(Object.fromEntries(rows.map((r) => [r.text('alias'), r.text('role')])))
 }
 
 /** One declared exception as the registry holds it. */
@@ -220,7 +221,11 @@ export async function projectExecutionRoles(
       slug: e.text('slug'),
       tier: e.text('tier') === 'prod' ? ('prod' as const) : ('nonprod' as const),
       bindings,
-      effective: sortedMap({ ...defaults, ...bindings }),
+      // A binding of an alias the project map no longer has binds nothing.
+      effective: sortedMap({
+        ...defaults,
+        ...Object.fromEntries(Object.entries(bindings).filter(([a]) => Object.hasOwn(defaults, a))),
+      }),
     })
   }
   const { rows } = await q.query(
@@ -456,6 +461,10 @@ export class ExecutionRoleBindingSetKind extends RegistryKind {
     const projectId = c.id('prj', 'projectId')
     const environmentId = c.id('env', 'environmentId')
     const roles = c.object('roles').json() as JsonObject
+    // Every value is checked before anything is written (a refusal never leaves a half set).
+    if (Object.values(roles).some((role) => typeof role !== 'string')) {
+      throw new RegistryError('INTERNAL')
+    }
     return this.effect(async (tx) => {
       const current = await environmentRoleBindings(tx, projectId, environmentId)
       // Nothing is deleted: a binding that is dropped or changes ends; a new or changed one is inserted.
@@ -469,7 +478,6 @@ export class ExecutionRoleBindingSetKind extends RegistryKind {
         )
       }
       for (const [alias, role] of Object.entries(roles)) {
-        if (typeof role !== 'string') return false
         if (current[alias] === role) continue
         await tx.query(
           'registry.kind.execution_role_binding.insert',

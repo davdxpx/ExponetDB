@@ -11,9 +11,10 @@ import type { Severity } from './findings.ts'
  * longer matches. The finding never changes the declaration or the role; a
  * person revokes or re-declares.
  *
- * - `privilege_exceeded` (critical): the role gained an attribute no
- *   exception excuses (`SUPERUSER`, `CREATEROLE`, `CREATEDB`,
- *   `REPLICATION`); every plan is refused anyway.
+ * - `privilege_exceeded` (critical): the role gained what no exception
+ *   excuses (`SUPERUSER`, `CREATEROLE`, `CREATEDB`, `REPLICATION`, `LOGIN`,
+ *   or a membership reaching a privileged, predefined or ExponetDB role);
+ *   every plan is refused anyway.
  * - `review_passed` (warning): the review date passed; the declaration
  *   excuses nothing until a person re-declares or revokes it.
  * - `role_missing`, `bypassrls_lost` (warning): the declaration is stale
@@ -51,7 +52,15 @@ export function exceptionDrift(
     severity,
   })
   const exists = facts?.exists === true
-  if (exists && (facts.superuser || facts.createRole || facts.createDb || facts.replication)) {
+  if (
+    exists &&
+    (facts.superuser ||
+      facts.createRole ||
+      facts.createDb ||
+      facts.replication ||
+      facts.canLogin ||
+      facts.reachesProtected)
+  ) {
     return at('privilege_exceeded', 'critical')
   }
   if (e.expired) return at('review_passed', 'warning')
@@ -62,7 +71,7 @@ export function exceptionDrift(
 
 const SUMMARIES: Readonly<Record<ExceptionDriftReason, string>> = {
   privilege_exceeded:
-    'An execution role declared for BYPASSRLS carries another privileged attribute; its migrations are refused.',
+    'An execution role declared for BYPASSRLS carries another privileged attribute or reaches a privileged role; its migrations are refused.',
   review_passed:
     'A declared BYPASSRLS exception passed its review date and excuses nothing until it is declared again or revoked.',
   role_missing: 'A declared BYPASSRLS exception names a role that does not exist on this database.',

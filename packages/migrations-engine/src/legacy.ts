@@ -1387,13 +1387,16 @@ export class ImportReplayKind implements OperationKind {
       const resolved = await executionRolesFor(this.#deps.store, scratch)
       const [roleFacts] = await executionRoleFacts(session.reader(), [c.executionRole])
       const roleProblem =
-        roleFacts === undefined
-          ? 'missing'
-          : !boundExceptionsHold(c.executionRoleExceptions, resolved.exceptions)
-            ? 'exception_changed'
-            : rolesStillUsable([roleFacts], c.executionRoleExceptions)
-              ? null
-              : (executionRoleProblem(roleFacts) ?? 'changed')
+        c.executionRoleAlias === undefined ||
+        resolved.roles[c.executionRoleAlias] !== c.executionRole
+          ? 'alias_changed'
+          : roleFacts === undefined
+            ? 'missing'
+            : !boundExceptionsHold(c.executionRoleExceptions, resolved.exceptions)
+              ? 'exception_changed'
+              : rolesStillUsable([roleFacts], c.executionRoleExceptions)
+                ? null
+                : (executionRoleProblem(roleFacts) ?? 'changed')
       if (roleProblem !== null) {
         await this.#finish(
           fence,

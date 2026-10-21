@@ -17,7 +17,13 @@ export interface ExecutionRoleFacts {
   readonly createDb: boolean
   readonly replication: boolean
   readonly bypassRls: boolean
-  /** The role reaches (is a member of) a superuser, a predefined `pg_` role or an ExponetDB role. */
+  /**
+   * The role reaches (is a member of) a predefined `pg_` role, an ExponetDB
+   * role, or a role with `SUPERUSER`, `CREATEROLE`, `CREATEDB`, `REPLICATION`
+   * or `BYPASSRLS` (Wave 9: a reached privileged role, say through
+   * `ALTER FUNCTION … OWNER TO`, would give a migration what no declaration
+   * excuses).
+   */
   readonly reachesProtected: boolean
   /** Direct membership of the migrator: `SET` option, `INHERIT` option (PostgreSQL 16+). */
   readonly membership: { readonly set: boolean; readonly inherit: boolean } | null
@@ -55,7 +61,8 @@ const ROLE_FACTS = sql`SELECT r.rolname::text AS role, r.rolcanlogin AS can_logi
        r.rolbypassrls AS bypass_rls,
        EXISTS (SELECT 1 FROM pg_catalog.pg_roles x
                 WHERE x.oid <> r.oid AND pg_catalog.pg_has_role(r.oid, x.oid, 'MEMBER')
-                  AND (x.rolsuper OR x.rolname LIKE 'pg\\_%' OR x.rolname LIKE 'exponetdb\\_%')) AS reaches_protected,
+                  AND (x.rolsuper OR x.rolcreaterole OR x.rolcreatedb OR x.rolreplication OR x.rolbypassrls
+                       OR x.rolname LIKE 'pg\\_%' OR x.rolname LIKE 'exponetdb\\_%')) AS reaches_protected,
        (SELECT m.set_option FROM pg_catalog.pg_auth_members m
          WHERE m.roleid = r.oid AND m.member = (SELECT u.oid FROM pg_catalog.pg_roles u WHERE u.rolname = coalesce($2, current_user))
          ORDER BY m.set_option DESC LIMIT 1) AS member_set,
@@ -134,7 +141,8 @@ export function executionRoleProblem(
     return 'privileged_attribute'
   }
   if (facts.bypassRls && !excused.has('bypassrls')) return 'privileged_attribute'
-  // SET ROLE into it would reach the ledger owner or a predefined role's powers.
+  // SET ROLE into it would reach the ledger owner, a predefined role's powers or a
+  // privileged role's attributes; no declaration excuses a reached role.
   if (facts.reachesProtected) return 'reaches_protected_role'
   if (facts.membership === null) return 'not_a_member'
   if (!facts.membership.set) return 'membership_without_set'

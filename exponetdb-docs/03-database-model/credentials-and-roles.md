@@ -122,8 +122,11 @@ project, ADR-0034 §5):
 OD-51) A role is usable as an execution role only when it exists, is
 `NOLOGIN`, has none of `SUPERUSER`, `CREATEROLE`, `CREATEDB`, `REPLICATION`,
 `BYPASSRLS`, is not a predefined (`pg_…`) or ExponetDB role, **reaches none
-of them** through its memberships (so consumer SQL never runs as the ledger
-owner or with a predefined role's powers), and the migrator is its direct
+of them**, nor a role with `SUPERUSER`, `CREATEROLE`, `CREATEDB`,
+`REPLICATION` or `BYPASSRLS`, through its memberships (so consumer SQL never
+runs as the ledger owner, with a predefined role's powers, or hands an object
+to a privileged role; the privileged-role part since Wave 9, found by the
+independent review of Part A), and the migrator is its direct
 member with `SET TRUE` and `INHERIT FALSE`. **The one exception:**
 `BYPASSRLS` is accepted for a role a person declared for that project and
 environment (§3.2); nothing else is ever excused. The planner reads these

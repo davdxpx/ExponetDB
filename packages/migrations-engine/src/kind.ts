@@ -452,6 +452,25 @@ export class MigrationApplyKind implements OperationKind {
         firstError = { code: 'GRANT_REVOKED', detail: { migrationId: item.migrationId } }
         break
       }
+      if (position > 0) {
+        // A binding, a role or a declared exception changed (revoked, expired) while the plan
+        // runs: what ran stays applied; nothing further starts (ADR-0034 §3).
+        const roleChange = await executionRolesChanged(
+          session,
+          content,
+          await executionRolesFor(this.#deps.store, target),
+        )
+        if (roleChange !== null) {
+          await fenced(fence, 'migrations.kind.progress', (tx) =>
+            writeProgress(tx, ctx.operationId, {
+              ...initial(position, item),
+              errorCode: 'PLAN_STALE',
+            }),
+          )
+          firstError = { code: 'PLAN_STALE', detail: { changedBindings: [roleChange] } }
+          break
+        }
+      }
       const revision = await readRevision(
         this.#deps.store,
         content.projectId,

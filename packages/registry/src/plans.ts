@@ -254,6 +254,17 @@ export async function planEnvironmentUpdate(
       // Live targets carry the tier in their identity markers (EXG03).
       throw conflict('tier_in_use')
     }
+    // Execution roles and exceptions were set under this tier's authority (ADR-0034; the
+    // Control Store refuses the change too).
+    const { rows } = await tx.query(
+      'registry.environment.execution_roles_in_use',
+      `SELECT EXISTS (SELECT FROM registry.execution_role_exceptions
+                       WHERE environment_id = $1 AND state = 'active')
+           OR EXISTS (SELECT FROM registry.execution_role_bindings
+                       WHERE environment_id = $1 AND ended_at IS NULL) AS in_use`,
+      [environmentId],
+    )
+    if (rows[0]?.bool('in_use') === true) throw conflict('tier_in_use')
     changes['tier'] = input.tier
   }
   if (input.evidenceFrom !== undefined && input.evidenceFrom !== env.evidenceFromSlug) {
