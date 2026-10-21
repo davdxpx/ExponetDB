@@ -101,6 +101,11 @@ const SidebarProvider = React.forwardRef<
      * `isSidebarShortcutAllowed`).
      */
     shortcut?: SidebarShortcut | null
+    /**
+     * How long the pointer rests on a collapsed item before its tooltip opens. Zero opens it at
+     * once, which also flashes it while a resting pointer expands the rail; an app passes a delay.
+     */
+    tooltipDelayDuration?: number
   }
 >(
   (
@@ -109,6 +114,7 @@ const SidebarProvider = React.forwardRef<
       open: openProp,
       onOpenChange,
       shortcut = null,
+      tooltipDelayDuration = 0,
       className,
       style,
       children,
@@ -201,7 +207,7 @@ const SidebarProvider = React.forwardRef<
 
     return (
       <SidebarContext.Provider value={contextValue}>
-        <TooltipProvider delayDuration={0}>
+        <TooltipProvider delayDuration={tooltipDelayDuration}>
           <div
             style={
               {

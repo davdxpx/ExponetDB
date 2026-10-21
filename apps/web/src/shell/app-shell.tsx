@@ -99,6 +99,17 @@ export { isCurrent } from './navigation.ts'
  */
 const BLOCKS = [1, 2, 3, 4] as const
 
+/** A collapsed rail item names itself only once the pointer has rested on it this long. */
+const RAIL_TOOLTIP_DELAY_MS = 1000
+
+/** On a phone the rail is a sheet; choosing a page in it closes it (any change of the address). */
+function CloseSheetOnNavigation({ pathname }: { readonly pathname: string }): null {
+  const { setOpenMobile } = useSidebar()
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the path is the trigger, not an input
+  useEffect(() => setOpenMobile(false), [pathname, setOpenMobile])
+  return null
+}
+
 /** `page` on the page itself, `true` on a section the page belongs to, else nothing. */
 function currentness(
   path: string,
@@ -147,7 +158,15 @@ function ShellFrame({ children }: { readonly children: ReactNode }): ReactNode {
     if (page) page.scrollTop = 0
   }, [pathname])
   return (
-    <SidebarProvider open={mode === 'open'} onOpenChange={toggleSidebarMode}>
+    // The frame is exactly the screen's height: the rail and the header stay where they are and only
+    // the page below the header scrolls (its own scroll container, reset on a new page).
+    <SidebarProvider
+      open={mode === 'open'}
+      onOpenChange={toggleSidebarMode}
+      tooltipDelayDuration={RAIL_TOOLTIP_DELAY_MS}
+      className="h-svh overflow-hidden"
+    >
+      <CloseSheetOnNavigation pathname={pathname} />
       <a
         href="#content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-100 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus-ring"
@@ -191,7 +210,7 @@ function ShellFrame({ children }: { readonly children: ReactNode }): ReactNode {
         </SidebarFooter>
       </Sidebar>
       {/* SidebarInset is the page's `main` landmark, the target of the skip link. */}
-      <SidebarInset id="content" tabIndex={-1} className="min-w-0 outline-none">
+      <SidebarInset id="content" tabIndex={-1} className="min-h-0 min-w-0 outline-none">
         <header className="flex h-12 min-w-0 shrink-0 items-center gap-2 border-b border-default px-3">
           <SidebarTrigger />
           {/* On target pages: Product / Project / Environment, with the tier chip (IA §3). */}
@@ -213,7 +232,7 @@ function ShellFrame({ children }: { readonly children: ReactNode }): ReactNode {
             {children}
           </SectionMenuFrame>
         ) : (
-          <div ref={pageScroller} className="min-w-0 flex-1">
+          <div ref={pageScroller} className="min-h-0 min-w-0 flex-1 overflow-y-auto">
             <ShellBreadcrumbs />
             {children}
           </div>

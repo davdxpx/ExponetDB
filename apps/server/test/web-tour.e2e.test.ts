@@ -157,4 +157,56 @@ describe('a tour of the Web App', () => {
     await visit(planPath)
     await shot('desktop-plan-full', true)
   }, 600_000)
+
+  it('keeps the header and the rail in place while a long page scrolls', async () => {
+    await page.setViewportSize(DESKTOP)
+    await visit(production)
+    const header = page.locator('header').first()
+    const rail = page.locator('[data-sidebar="sidebar"]').first()
+    const before = { header: await header.boundingBox(), rail: await rail.boundingBox() }
+    // Scroll what a person can scroll: the window, and every element a wheel scrolls (overflow
+    // auto or scroll), to the end; count the ones that moved.
+    const moved = await page.evaluate<number>(`(() => {
+      window.scrollTo(0, document.body.scrollHeight)
+      let moved = 0
+      for (const el of document.querySelectorAll('*')) {
+        const overflow = getComputedStyle(el).overflowY
+        if ((overflow === 'auto' || overflow === 'scroll') && el.scrollHeight > el.clientHeight + 4) {
+          el.scrollTop = el.scrollHeight
+          if (el.scrollTop > 0) moved += 1
+        }
+      }
+      return moved
+    })()`)
+    await page.waitForTimeout(100)
+    // The page itself moved, in its own container, not the window.
+    expect(moved).toBeGreaterThan(0)
+    expect(await page.evaluate('window.scrollY')).toBe(0)
+    expect(await header.boundingBox()).toEqual(before.header)
+    expect(await rail.boundingBox()).toEqual(before.rail)
+    await shot('desktop-target-overview-scrolled')
+  })
+
+  it('shows a rail tooltip only after the pointer rests on the item', async () => {
+    await page.setViewportSize(DESKTOP)
+    await visit('/')
+    const item = page.locator('[data-sidebar="menu-button"]').nth(1)
+    await item.hover()
+    await page.waitForTimeout(300)
+    expect(await page.locator('[role="tooltip"]').count()).toBe(0)
+    await page.waitForTimeout(1500)
+    await shot('desktop-rail-hover')
+  })
+
+  it('closes the phone sheet when a page in it is chosen', async () => {
+    await page.setViewportSize(PHONE)
+    await visit('/')
+    await page.locator('[data-sidebar="trigger"]').first().click()
+    const sheet = page.locator('[data-mobile="true"]').first()
+    await sheet.waitFor()
+    await shot('phone-sheet-open')
+    await sheet.locator('a[href="/changes/plans"]').first().click()
+    await page.waitForURL(`${ORIGIN}/changes/plans`)
+    await expect.poll(async () => sheet.isVisible(), { timeout: 3000 }).toBe(false)
+  })
 })
