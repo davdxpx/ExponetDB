@@ -72,8 +72,11 @@ arbitrary software, or opening a shell.
     (identical `SHA256SUMS` from two builds of one commit), prints its
     version and commit, and has no dependency beyond the Go standard
     library (`go.mod` has no `require`); `govulncheck` runs in CI on Go
-    1.26.9 (raised from 1.26.8 on 2026-10-13, when the first CI run on a
-    real runner found nine standard-library vulnerabilities fixed in 1.26.9). **[OPEN]** Signed packages and an SBOM do not exist yet: there
+    1.26.10 (raised from 1.26.8 to 1.26.9 on 2026-10-13, when the first CI
+    run on a real runner found nine standard-library vulnerabilities fixed in
+    1.26.9, and to 1.26.10 on 2026-10-21 for GO-2026-6809, compromised
+    intermediate certificates distrusted in `crypto/x509`, which enrollment's
+    certificate check reaches). **[OPEN]** Signed packages and an SBOM do not exist yet: there
     is no release PKI (the open supply-chain item of the
     [G2 record](../14-roadmap/gates/2.md) §6, for the owner).
 
