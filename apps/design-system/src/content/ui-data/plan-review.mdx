@@ -1,10 +1,10 @@
 export const meta = {
-  title: "Plan review: frame, summary and steps",
-  description: "The page of a plan: the production frame, the blocks that show what ExponetDB computed, and the summary with its countdown and actions.",
+  title: "Plan review: frame, checklist, summary and steps",
+  description: "The page of a plan: production said once, the checklist of what must hold before it runs, the technical details, the summary with its countdown and the steps.",
   order: 4,
 }
 
-# Plan review: frame, summary and steps
+# Plan review: frame, checklist, summary and steps
 
 A plan is the statement of a change that has not happened yet. Its review page is where a person decides whether it
 should. The page is built from blocks, each of which shows one kind of fact the server computed, in a fixed order, so
@@ -14,14 +14,22 @@ Guidance: [Plan and apply flow](/guidance/plan-and-apply) and [Production cues](
 
 | Block | Shows | Page |
 |---|---|---|
-| `PlanFrame` | The reserved production frame and cue around the whole review. | this page |
+| `PlanFrame` | The reserved production frame and one sentence around the whole review. | this page |
+| `PlanChecklist` | "Before it can run": one row per check with its state. | this page |
+| `PlanDetailsList` | The technical details: ids, the full plan hash, class, creator, client, times, rules. | this page |
 | `PlanSummaryBlock` | Target, tier, kind, class, state, creator, client, times, plan hash and the plan's actions. | this page |
 | `PlanStepsBlock` | What will run, in order. | this page |
 | `PlanAnalysisBlock`, `PlanEvidenceBlock`, `PolicyDecisionBlock` | The analysis, the evidence and the decision. | [Plan review: analysis, evidence and policy](/ui-data/plan-analysis) |
 | `ApprovalsBlock`, `ApplyVerifyIndicators`, `RawPlanTextBlock` | Approvals, the outcome and the text. | [Plan review: approvals, outcome and text](/ui-data/plan-decision) |
 
-The order of the page is fixed: **what ExponetDB computed** first (`ComputedFactsSection`), then the raw text of the
-plan as data. A person reads the server's facts before the text the plan carries, because text can be written to mislead.
+The order of the page is fixed and reads top-down (**[DECIDED]** by the owner on 2026-10-21): the page header says what
+happens ("Apply 2 migrations to shop/platform/production", "Enroll a node on server tour host"), the plan's state, its
+expiry and who created it through which interface, with the actions on its right; then **Before it can run**
+(`PlanChecklist`); then **What changes**: the migrations, their analysis and the files the plan runs as data, or for
+another kind the stored change in a closed disclosure; then the **Technical details**, closed (`PlanDetailsList`). A
+person reads the server's facts before the text the plan carries, because text can be written to mislead.
+
+The blocks below compose the same facts in blocks; the app's plan page uses the checklist and the details list.
 
 <Demo id="ui-data/plan-frame/production-page" />
 
@@ -42,15 +50,54 @@ plan as data. A person reads the server's facts before the text the plan carries
 ## Plan frame
 
 `PlanFrame` takes `production`, which the page computes as `plan.subject.tier !== 'nonprod'`. That fails closed like the
-confirmation dialogs: a tier that is missing or unknown gets the production cue. With it, the review gets the reserved
-`production` ring and a line at its head that says "This plan changes a production target. Check the target path and the plan
-hash before you decide." Every block inside repeats the cue beside its heading, so a person who scrolled to the raw statements
-still sees that the plan changes production.
+confirmation dialogs: a tier that is missing or unknown is production. With it, the review gets the reserved `production`
+ring and one sentence at its head, in the page's words (`notice`): "This plan changes production.", or for a plan without a
+tier (a server or a node plan) "This plan has no target tier; it is treated as production."
+
+Production is said **once** (**[DECIDED]** by the owner on 2026-10-21): the tier chip beside the page title, the frame and
+the sentence. No block repeats a chip beside its heading; a chip beside every heading made a production page a wall of
+equally loud blocks. The typed and plan confirmations keep their own production frame: they are the moment of the decision.
 
 <Demo id="ui-data/plan-frame/nonproduction" />
 
-`PlanBlock` is the frame of one block: a `section` named by its heading, with the cue. Use it for a block of your own.
-`headingLevel` fits the block to the outline of the page; the default is 2.
+`PlanBlock` is the frame of one block: a `section` named by its heading, in the default border. Use it for a block of your
+own. `headingLevel` fits the block to the outline of the page; the default is 2.
+
+## Before it can run
+
+`PlanChecklist` is one card of rows: what stands between the plan and its effect. Each row has an id (`data-check`), a
+state, a title, one line and, when there is more to say, content below the line. The page builds the rows; the card
+decides nothing.
+
+| State | Icon | Means |
+|---|---|---|
+| `passed` | check | The condition holds: allowed, no approval needed, approvals given, evidence present, not expired, verified. |
+| `waiting` | clock | It holds once something happens: an approval, the apply, the verification. |
+| `blocked` | cross | It does not hold: denied, expired, withdrawn, evidence missing, a failed outcome. |
+| `unknown` | question mark | The server did not say. |
+| `failed` | warning | The read behind the row failed. A failed read is never shown as passed or as empty. |
+| `neutral` | dot | It happened without a verdict: applied, before its verification. Applied is never a passed row. |
+
+The plan page's rows are the policy decision (with the rules that did not pass, only when there are any), the approvals
+(with the agent note, the decisions so far, whether the person may decide and the self-approval acknowledgement), the
+staging evidence of a production migration, the expiry, and once an operation applies the plan its apply and verification
+outcomes as two rows (`applyVerifyChecks`) with a link to the operation.
+
+<Demo id="ui-data/plan-checklist/waiting" />
+
+<Demo id="ui-data/plan-checklist/failed-read" />
+
+## Technical details
+
+`PlanDetailsList` lists the record of the plan in a closed disclosure at the bottom of the page: the plan id and the full
+plan hash, each with a copy button, the kind, the class with its meaning, the ids of the subject, the tier in words, the
+statement classes, who created it and through which interface, the client with its own name marked "name not verified",
+the exact times, the operation, the requirements, the rules that did not pass, the bound schema fingerprint and the newest
+backup. A fact that does not apply to the plan's kind is **left out** (leave its prop out): statement classes, the schema
+state and the backup belong to migrations, the client to a plan made through one. "Not known" stays only where a fact
+applies and could not be established (`null`).
+
+<Demo id="ui-data/plan-details/node-plan" />
 
 ## Summary
 
@@ -99,7 +146,8 @@ order, then the verification; on an operation they are its steps with their stat
 
 ## Accessibility
 
-- Each block is a `section` named by its heading. The production cue is text.
+- Each block is a `section` named by its heading. The production sentence is text.
+- A checklist row says its state in words to assistive technology and in its line to everyone; the icon is decoration.
 - A list of steps is an ordered list. Facts are description lists.
 - The countdown is not a live region; only the expiry is announced.
 

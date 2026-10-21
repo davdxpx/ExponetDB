@@ -29,17 +29,29 @@ Its hash covers all of that and is shown to people in full, with a copy button.
 
 ## 2. Review
 
-The plan review page (`/changes/plans/<id>`) shows two blocks in a fixed order.
+The plan review page (`/changes/plans/<id>`) reads top-down, in a fixed order
+(**[DECIDED]** by the owner on 2026-10-21):
 
-- **What ExponetDB computed**, first: the target and its tier, the kind and class
-  of the plan, who created it and through which client (a client name is marked
-  "name not verified" unless it is first party), the policy decision with the rule
-  ids, the staging evidence, the bound schema fingerprint, the expiry, the full plan
-  hash, and, per migration, every statement with its line, lock and compatibility,
-  the drops, the rewrite estimates, the rollback and the checksum.
-- **What the plan stores**, second: the stored files verbatim, numbered, as text
-  only, with invisible and direction characters shown by code point (see
-  [Untrusted content](/guidance/untrusted-content)).
+- **The header** says what happens, in words: "Apply 2 migrations to
+  shop/platform/production", "Enroll a node on server tour host". Under it, the
+  plan's state, the expiry countdown and who created it through which interface;
+  beside the title, the production chip; on the right, the actions (Apply, Approve
+  and Reject for a person who may decide, Withdraw), which wrap below the title on
+  a phone.
+- **Before it can run**: one checklist of what ExponetDB computed and what must
+  hold, each row with its state: the policy decision (the rules that did not pass,
+  only when there are any), the approvals, the staging evidence of a production
+  migration, the expiry, and after the apply the apply and verification outcomes
+  as two rows.
+- **What changes**: per migration every statement with its line, lock and
+  compatibility, the drops, the rewrite estimates and the rollback, then the stored
+  files verbatim, numbered, as text only, with invisible and direction characters
+  shown by code point (see [Untrusted content](/guidance/untrusted-content)). For
+  another kind, the stored change as data in a closed disclosure.
+- **Technical details**, closed: the plan id and the full plan hash with copy
+  buttons, the class, the creator and the client (a client name is marked "name not
+  verified"), the exact times, the bound schema fingerprint. A fact that does not
+  apply to the plan's kind is left out instead of reading "not known".
 
 A plan that an agent created carries a note saying so, and that an agent cannot
 approve it. The page reads the computed facts from the server; it does not work them

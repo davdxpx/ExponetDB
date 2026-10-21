@@ -463,6 +463,74 @@ characters marked). A card for a plan an agent made carries a note that an
 agent proposed it and cannot approve. No new design system or navigation
 (Wave 8).
 
+**[DECIDED]** (owner, 2026-10-21) The plan review page `/changes/plans/<id>`
+reads top-down so a person understands it at a glance; **[OBSERVED]** built
+in `apps/web/src/features/plans/` (`plan-page.tsx`, `plan-heading.tsx`,
+`plan-checks.tsx`, `plan-title.ts`):
+
+1. **Header.** The title says what happens, from the plan's kind and its
+   subject, in catalog sentences: "Apply 2 migrations to
+   shop/platform/production", "Enroll a node on server tour host", "Suspend
+   writes to shop/platform/staging". The subject is the target path, or the
+   registry name of the server or cluster (a node plan names its node's
+   server), as untrusted text (C-26); while a name is not read, or its read
+   failed, the title names the subject by its ID. Under the title: the plan
+   state as a badge (for a used plan, the state of its operation, such as
+   "Awaiting approval"), the expiry countdown, and who created it through
+   which interface ("Created by you via Web App"; another identity is "a
+   person" or "a service account", its ID only in the details). The one
+   production chip sits beside the title. On the right, the actions: Apply
+   (primary) while the plan is active, Approve and Reject for a person the
+   server lets decide, Withdraw on the person's own active plan made in the
+   Web App; on a phone they wrap below the title. The actions are the existing
+   ones with their plan confirmation, typed target path, re-authentication and
+   hash binding. An active plan whose actions are withheld for a reason of the
+   view (an out-of-date read, a hash or expiry that is not known) says why
+   where the actions would be.
+2. **Production, once.** The reserved frame around the review and one short
+   sentence at its head; no block repeats a chip
+   ([`design-system.md` §4](./design-system.md#4-rules)).
+3. **Before it can run** (one checklist card): the policy decision (allowed,
+   allowed once approved or once its listed requirements are met, denied; the
+   rules that did not pass only when there are any), the approvals ("1 of 2
+   approvals given" or "No approval needed", the agent note, the decisions so
+   far, whether the person may decide, the self-approval acknowledgement), the
+   staging evidence of a production migration, the expiry, and once an
+   operation applies the plan its apply and verification outcomes as two rows
+   with a link to the operation page (applied is a row without a verdict, never
+   a passed one). A read that failed is a row that says so with "Try again",
+   never a passed or an empty row. An operation that needs attention adds the
+   next action, "Verify again" when the server says it is retryable and the
+   reconciliation steps.
+4. **What changes.** For migrations: the migrations with "View SQL", their
+   analysis (every statement with its line, lock and compatibility, drops,
+   rewrites, rollback, checksum) and the files the plan runs, numbered, as text
+   (collapsed after 1,000 lines). For other kinds: the stored change as data in
+   a closed "Stored change" disclosure, with the sentence that no text in it
+   can approve anything.
+5. **Technical details**, closed: plan ID and full plan hash with copy
+   buttons, kind, class with its meaning, the subject's IDs, the tier in words,
+   statement classes, creator ID and interface, the client with its own name
+   marked *name not verified*, exact times, the operation ID, requirements,
+   rules that did not pass, the bound schema fingerprint and the newest backup.
+   A fact that does not apply to the plan's kind is left out (statement classes,
+   schema state and backup belong to migrations, the client to a plan made
+   through one); "not known" stays only where a fact applies and could not be
+   read.
+
+The computed facts a person decides on (target and tier in the title, the
+decision, the approvals, the evidence, the analysis) still come before the raw
+text of the plan, as ADR-0029 §3 and §4 require; the identifying record (the
+full plan hash and the client's own name) moved to the closed details after it,
+and the plan confirmation shows the hash it sends at the moment of the decision
+([ADR-0029](../01-architecture/adr/0029-approval-link-from-mcp.md), amendment of
+2026-10-21). The operation page `/changes/operations/<id>` has the same shape:
+the title from the operation's kind and subject, its state and who started it,
+the chip beside the title, the actions on the right ("Verify again", cancel,
+"Review the plan"), the frame with one sentence, the apply and verification
+indicators, attention, error, steps and migrations, and the technical details
+closed at the bottom.
+
 **[DECIDED]** (Wave 6, [ADR-0026](../01-architecture/adr/0026-cli-step-up-browser-handoff.md))
 The **step-up page** (`/step-up#id=<stu_…>`) confirms a command a person
 started in the CLI: it shows the client's registered name, the action, the

@@ -170,10 +170,11 @@ describe('editors', () => {
 })
 
 describe('plan review', () => {
-  it('frames a production plan and repeats the cue on every block, in the order of the page', () => {
+  it('frames a production plan once, no block repeats the cue, in the order of the page', () => {
     const { container } = renderDemo('ui-data/plan-frame/production-page')
     const frame = container.querySelector('[data-plan-frame]')
     expect(frame).toHaveAttribute('data-tier', 'production')
+    expect(container.querySelectorAll('[data-production-notice]')).toHaveLength(1)
     const titles = Array.from(frame?.querySelectorAll('[data-plan-block]') ?? []).map((block) =>
       block.getAttribute('data-plan-block'),
     )
@@ -191,18 +192,53 @@ describe('plan review', () => {
     const computed = container.querySelector('[data-review-part="computed"]')
     expect(computed).not.toBeNull()
     expect(computed?.nextElementSibling).toHaveTextContent('What the plan runs')
-    for (const block of frame?.querySelectorAll('[data-plan-block]') ?? []) {
-      expect(
-        block.querySelector('[data-production-cue]'),
-        block.getAttribute('data-plan-block') ?? '',
-      ).not.toBeNull()
-    }
+    // The owner's decision of 2026-10-21: production is said once, not beside every heading.
+    expect(container.querySelector('[data-production-cue]')).toBeNull()
   })
 
-  it('adds no frame and no cue to a non-production plan', () => {
+  it('adds no frame and no production sentence to a non-production plan', () => {
     const { container } = renderDemo('ui-data/plan-frame/nonproduction')
     expect(container.querySelector('[data-plan-frame]')).toHaveAttribute('data-tier', 'nonprod')
-    expect(container.querySelector('[data-production-cue]')).toBeNull()
+    expect(container.querySelector('[data-production-notice]')).toBeNull()
+  })
+
+  it('lists the checks before a plan runs with their states, applied and verified apart', () => {
+    const { container } = renderDemo('ui-data/plan-checklist/waiting')
+    const states = Array.from(container.querySelectorAll('[data-check]')).map((row) => [
+      row.getAttribute('data-check'),
+      row.getAttribute('data-check-state'),
+    ])
+    expect(states).toEqual([
+      ['policy', 'waiting'],
+      ['approvals', 'waiting'],
+      ['evidence', 'passed'],
+      ['expiry', 'passed'],
+      ['apply', 'waiting'],
+      ['verification', 'waiting'],
+    ])
+    expect(container).toHaveTextContent('An agent proposed this plan; it cannot approve it.')
+    expect(container).toHaveTextContent('prod.destructive.requires-approval')
+  })
+
+  it('says a failed read failed, with a retry, and a decision that is not known as not known', () => {
+    const { container } = renderDemo('ui-data/plan-checklist/failed-read')
+    expect(container.querySelector('[data-check="operation"]')).toHaveAttribute(
+      'data-check-state',
+      'failed',
+    )
+    expect(container.querySelector('[data-check="policy"]')).toHaveAttribute(
+      'data-check-state',
+      'unknown',
+    )
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+  })
+
+  it('lists only the details that apply to a node plan, none as "not known"', () => {
+    const { container } = renderDemo('ui-data/plan-details/node-plan')
+    expect(container.querySelectorAll('[data-not-known]')).toHaveLength(0)
+    expect(container.querySelector('[data-fact="classifications"]')).toBeNull()
+    expect(container.querySelector('[data-fact="client-name"]')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Copy plan hash' })).toBeInTheDocument()
   })
 
   it('counts down to the expiry of an active plan and offers the actions', () => {

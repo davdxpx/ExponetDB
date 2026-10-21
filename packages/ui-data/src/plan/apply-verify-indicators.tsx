@@ -18,6 +18,7 @@ import {
 import { type ReactNode, useRef, useState } from 'react'
 
 import { knownText } from './format.ts'
+import type { PlanCheck, PlanCheckState } from './plan-checklist.tsx'
 import { PlanBlock } from './plan-frame.tsx'
 import { Marked, NotKnown, TimeText } from './shared.tsx'
 
@@ -238,6 +239,71 @@ function Indicator({
   )
 }
 
+const CHECK_STATES: Readonly<Record<Tone, PlanCheckState>> = {
+  waiting: 'waiting',
+  progress: 'waiting',
+  // An applied change has no verdict until it is verified (C-13): never a passed row.
+  neutral: 'neutral',
+  done: 'passed',
+  warning: 'blocked',
+  failed: 'blocked',
+  unknown: 'unknown',
+}
+
+function outcomeLine(outcome: { readonly key: string; readonly text: OutcomeText }): ReactNode {
+  return (
+    <span>
+      <strong className="font-medium text-foreground">
+        {outcome.text.tone === 'unknown' && outcome.key !== 'unknown' ? (
+          <Marked text={outcome.text.label} mono />
+        ) : (
+          outcome.text.label
+        )}
+      </strong>
+      {`. ${outcome.text.meaning}`}
+    </span>
+  )
+}
+
+/**
+ * The apply outcome and the verification outcome as two separate rows of a
+ * `PlanChecklist` (C-13: applied is not verified, so an applied change is a
+ * row without a verdict, never a passed one). Each row carries
+ * `data-indicator` and `data-outcome` like the indicators.
+ */
+export function applyVerifyChecks({
+  applyOutcome,
+  verificationOutcome,
+  operationState,
+}: {
+  readonly applyOutcome: string | null
+  readonly verificationOutcome: string | null
+  readonly operationState?: string | null
+}): readonly [PlanCheck, PlanCheck] {
+  const apply = outcomeOf(applyOutcome, APPLY, operationState === 'running')
+  const verification = outcomeOf(verificationOutcome, VERIFICATION, operationState === 'verifying')
+  return [
+    {
+      id: 'apply',
+      state: CHECK_STATES[apply.text.tone],
+      title: 'Apply',
+      line: outcomeLine(apply),
+      data: { 'data-indicator': 'apply', 'data-outcome': apply.key, 'data-tone': apply.text.tone },
+    },
+    {
+      id: 'verification',
+      state: CHECK_STATES[verification.text.tone],
+      title: 'Verification',
+      line: outcomeLine(verification),
+      data: {
+        'data-indicator': 'verification',
+        'data-outcome': verification.key,
+        'data-tone': verification.text.tone,
+      },
+    },
+  ]
+}
+
 /** What the server says about an operation that needs attention. */
 export interface NeedsAttentionView {
   /** The next action as the server named it (catalog text); `null` when it named none. */
@@ -312,6 +378,60 @@ function VerifyAgain({ onVerifyAgain }: { readonly onVerifyAgain: () => unknown 
 }
 
 /**
+ * The note of an operation that needs attention: the next action the server
+ * named (untrusted text), and "Verify again" only when the server says a
+ * retry is accepted. The page passes its own "Verify again" as `action` (a
+ * confirmation dialog) or `onVerifyAgain` for the note's own button.
+ */
+export function NeedsAttentionNote({
+  attention,
+  onVerifyAgain,
+  action,
+}: {
+  readonly attention: NeedsAttentionView
+  readonly onVerifyAgain?: (() => unknown) | undefined
+  /** The page's own "Verify again" control, shown when the server says it is retryable. */
+  readonly action?: ReactNode
+}): ReactNode {
+  const nextAction = knownText(attention.nextAction)
+  return (
+    <div
+      role="note"
+      data-needs-attention=""
+      className="flex flex-col gap-2 rounded-md border border-warning-500 bg-warning-200 px-3 py-2 text-sm"
+    >
+      <p className="inline-flex items-center gap-1.5 font-medium">
+        <AlertTriangle aria-hidden="true" className="size-4 text-warning-600" />
+        Needs attention
+      </p>
+      <div className="flex flex-col gap-0.5">
+        <span className="text-xs text-foreground-lighter">Next action</span>
+        {nextAction === undefined ? (
+          <span>
+            <NotKnown />. Inspect the operation before you do anything else.
+          </span>
+        ) : (
+          <UntrustedText text={nextAction} label="next action" />
+        )}
+      </div>
+      {attention.retryable === true ? (
+        action !== undefined ? (
+          action
+        ) : onVerifyAgain !== undefined ? (
+          <VerifyAgain onVerifyAgain={onVerifyAgain} />
+        ) : null
+      ) : attention.retryable === false ? (
+        <p className="text-foreground-light">Verification cannot be retried for this operation.</p>
+      ) : attention.retryable === null ? (
+        <p className="text-foreground-light">
+          Whether verification can be retried is <NotKnown />.
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+/**
  * The apply outcome and the verification outcome of an operation as two
  * separate indicators, each with its own icon, words and time (C-13: applied
  * is not verified; there is no combined "success"). An operation that needs
@@ -333,7 +453,6 @@ export function ApplyVerifyIndicators({
   const apply = outcomeOf(applyOutcome, APPLY, operationState === 'running')
   const verification = outcomeOf(verificationOutcome, VERIFICATION, operationState === 'verifying')
   const attention = needsAttention ?? null
-  const nextAction = attention === null ? undefined : knownText(attention.nextAction)
 
   return (
     <PlanBlock
@@ -347,37 +466,7 @@ export function ApplyVerifyIndicators({
         <Indicator name="verification" outcome={verification} at={verifiedAt} now={current} />
       </ul>
       {attention === null ? null : (
-        <div
-          role="note"
-          data-needs-attention=""
-          className="flex flex-col gap-2 rounded-md border border-warning-500 bg-warning-200 px-3 py-2 text-sm"
-        >
-          <p className="inline-flex items-center gap-1.5 font-medium">
-            <AlertTriangle aria-hidden="true" className="size-4 text-warning-600" />
-            Needs attention
-          </p>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-xs text-foreground-lighter">Next action</span>
-            {nextAction === undefined ? (
-              <span>
-                <NotKnown />. Inspect the operation before you do anything else.
-              </span>
-            ) : (
-              <UntrustedText text={nextAction} label="next action" />
-            )}
-          </div>
-          {attention.retryable === true && onVerifyAgain !== undefined ? (
-            <VerifyAgain onVerifyAgain={onVerifyAgain} />
-          ) : attention.retryable === false ? (
-            <p className="text-foreground-light">
-              Verification cannot be retried for this operation.
-            </p>
-          ) : attention.retryable === null ? (
-            <p className="text-foreground-light">
-              Whether verification can be retried is <NotKnown />.
-            </p>
-          ) : null}
-        </div>
+        <NeedsAttentionNote attention={attention} onVerifyAgain={onVerifyAgain} />
       )}
     </PlanBlock>
   )

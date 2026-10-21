@@ -153,7 +153,7 @@ component with a demo page and states.
 | Forms | ui-patterns | one layout component for label, description, error, help; field arrays; dirty-state guard on navigation with an in-app dialog (never `window.confirm`) |
 | Dialogs and confirmation flows | ui-patterns | graduated: plain confirm (reversible), warning confirm with checklist, typed confirmation (target path or object name), plan confirm (shows plan hash, tier, class); confirm button disabled until the typed text matches; dismissal blocked while pending. **[OBSERVED]** (Wave 8, `packages/ui-patterns/src/confirmations/`): built on `AlertDialog`; the typed text matches exactly (case-sensitive, NFC on both sides, no trimming, an empty expected text never matches) and the expected text is shown with invisible and direction characters made visible; plan classes are the contract's `low`, `standard`, `high`, `critical`: `high` needs the typed target path, `critical` the path and the typed effect (order §8), an unknown class the path; a production tier (anything not exactly `nonprod`) frames the dialog with the reserved token and says "Production"; typed text and ticks reset when the expected text, plan hash or tier changes; one press runs the action once; `onConfirm` receives exactly the facts shown |
 | Destructive-action UX | ui-patterns | destructive variant only for actions that destroy; least-destructive alternative offered in the same dialog (cancel before terminate) |
-| Plan/apply UX | ui-data | plan review page blocks: summary, steps, analysis, evidence, policy decision, approvals, expiry; apply and verify as separate indicators |
+| Plan/apply UX | ui-data | plan review page blocks: summary, steps, analysis, evidence, policy decision, approvals, expiry; apply and verify as separate indicators. **[OBSERVED]** (2026-10-21, the owner's design of the plan page) `PlanChecklist` ("Before it can run": one row per check with a state of its own shape and words: passed, waiting, blocked, not known, could not be read, no verdict yet; `applyVerifyChecks` gives the apply and verification rows, never a passed row for an applied change) and `PlanDetailsList` (the technical details: a fact that does not apply to the plan's kind is left out, "not known" only where it applies) |
 | Diff views | ui-data | text diff (CodeMirror merge view), structured diff for settings and grants (before/after table), schema diff by object with classification badges |
 | Query and result views | ui-data | virtualized grid, column type rendering, truncation with on-demand full value, copy and export with caps, untrusted-content rendering (no HTML, escaped) |
 | Performance visualizations | ui-patterns (charts) | time series with explicit gaps (cause shown), stacked breakdowns, top-N tables with sparklines |
@@ -187,6 +187,18 @@ component with a demo page and states.
   these patterns or the same rule.
 - **Production cues** appear on every surface that can lead to a production
   change: chip in the header, frame on plan pages, path in typed confirmations.
+  **[DECIDED]** (owner, 2026-10-21) Production is marked **once, clearly**, not
+  on every block: on the plan review page and the operation page the one chip
+  sits beside the title (`PageHeaderTitle productionCue`), the reserved
+  `production` frame surrounds the review (`PlanFrame`), and one short sentence
+  heads it ("This plan changes production.", or for a plan or operation without
+  a tier, such as a server or node plan, "This plan has no target tier; it is
+  treated as production."). No block inside the frame repeats a chip beside its
+  heading (`PlanBlock` carries none, in the default border): a chip on every
+  block made a production page a wall of equally loud blocks. The typed
+  confirmations and the plan confirmation keep their own production frame and
+  words unchanged; they are the safety-critical moment. The test for production
+  still fails closed: a tier that is not exactly `nonprod` is production.
 - **Accessibility**: WCAG 2.2 AA; navigation uses navigation semantics (not
   `role="menu"`); sortable headers set `aria-sort`; focus is visible; dialogs
   trap focus and restore it; color is never the only signal (icons and text

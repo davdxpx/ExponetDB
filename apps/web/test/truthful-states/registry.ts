@@ -165,6 +165,7 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/migrations/plans-section.tsx': { tests: MIGRATIONS },
   'src/features/migrations/timeline-section.tsx': { tests: MIGRATIONS },
   'src/features/plans/plan-list.tsx': { tests: ['plans/plan-list.test.tsx'] },
+  'src/features/plans/plan-checks.tsx': { tests: ['plans/plan-page.test.tsx'] },
   'src/features/plans/plan-page.tsx': { tests: ['plans/plan-page.test.tsx'] },
   'src/features/plans/stored-files.tsx': {
     tests: ['plans/plan-actions.test.tsx'],

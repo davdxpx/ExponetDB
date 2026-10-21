@@ -1,6 +1,6 @@
 import { cn } from '@exponetdb/ui'
 import { UntrustedName } from '@exponetdb/ui-patterns'
-import { Fragment, type ReactNode, useId } from 'react'
+import { type ReactNode, useId } from 'react'
 import { t } from '../../lib/i18n/i18n.ts'
 import type { Me } from '../../lib/session/guard.tsx'
 
@@ -8,8 +8,9 @@ import type { Me } from '../../lib/session/guard.tsx'
  * The small building blocks of the interstitial OAuth pages (consent,
  * device code): a card of label and value rows, the "Signed in as" row, a
  * section heading, a native check box or radio button row (native inputs,
- * so the browser suites and assistive technology see plain form controls)
- * and a catalog sentence with nodes in its placeholders.
+ * so the browser suites and assistive technology see plain form controls).
+ * A catalog sentence with nodes in its placeholders is `withNodes`
+ * (`lib/i18n/with-nodes.tsx`).
  */
 export interface DetailRow {
   readonly id: string
@@ -122,22 +123,4 @@ export function ChoiceRow({
       </span>
     </label>
   )
-}
-
-/**
- * A catalog sentence whose `{name}` placeholders are filled with nodes (an
- * untrusted host, a code): the text around them stays the catalog's, the
- * nodes are rendered as they are. Placeholders without a node stay visible.
- */
-export function withNodes(text: string, nodes: Readonly<Record<string, ReactNode>>): ReactNode {
-  const out: ReactNode[] = []
-  let offset = 0
-  for (const part of text.split(/(\{[A-Za-z]+\})/)) {
-    if (part === '') continue
-    const name = /^\{([A-Za-z]+)\}$/.exec(part)?.[1]
-    const node = name === undefined ? undefined : nodes[name]
-    out.push(<Fragment key={offset}>{node === undefined ? part : node}</Fragment>)
-    offset += part.length
-  }
-  return out
 }
