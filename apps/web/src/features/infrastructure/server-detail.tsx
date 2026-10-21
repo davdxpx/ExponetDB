@@ -10,6 +10,7 @@ import { EnrollmentTokens, EnrollNodeButton } from './enrollment.tsx'
 import { clustersQuery, isServerId, nodesQuery, serverQuery } from './keys.ts'
 import { clusterPath, nodePath } from './model.ts'
 import { InfraPage, InfraSection, NodeStateBadge, ObjectLink } from './parts.tsx'
+import { ProviderName } from './provider.tsx'
 import { ServerFacts } from './servers-page.tsx'
 
 /**
@@ -62,7 +63,7 @@ function ServerDetail({ serverId }: { readonly serverId: string }): ReactNode {
                 {
                   id: 'provider',
                   label: t('infra.servers.column.provider'),
-                  value: t(`infra.servers.provider.${s.provider}`),
+                  value: <ProviderName provider={s.provider} />,
                 },
                 {
                   id: 'location',

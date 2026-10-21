@@ -153,6 +153,25 @@ describe('a tour of the Web App', () => {
       for (const [name, path] of stops) {
         await visit(path)
         await shot(`${size}-${name}`)
+        if (name === 'servers') {
+          // The provider list open, every provider with its logo (owner decision S11).
+          const provider = page.locator('#server-register-form [role="combobox"]')
+          await provider.scrollIntoViewIfNeeded()
+          await provider.click()
+          await page.locator('[role="listbox"]').waitFor()
+          expect(await page.locator('[role="option"] [data-provider-logo] svg').count()).toBe(22)
+          // The opening animation has ended (an evaluation, not waitForFunction: the CSP has no eval).
+          await expect
+            .poll(() =>
+              page.evaluate<boolean>(
+                'document.getAnimations().every((a) => a.playState !== "running")',
+              ),
+            )
+            .toBe(true)
+          await shot(`${size}-servers-providers`)
+          await page.keyboard.press('Escape')
+          await page.locator('[role="listbox"]').waitFor({ state: 'detached' })
+        }
       }
     }
     await page.setViewportSize(DESKTOP)

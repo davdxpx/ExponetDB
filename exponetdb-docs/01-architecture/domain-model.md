@@ -183,6 +183,10 @@ OpenAPI component `ServerProvider`); the Control Store's CHECK repeats it
 [`../02-control-plane/control-database.md` §5](../02-control-plane/control-database.md#5-the-control-stores-own-migrations)),
 the registry and the CLI (`server create --provider`) read it from the
 contract, and the Web App's list is checked against the contract's type.
+The Web App shows each provider with its logo left of its name: a brand
+glyph copied from Simple Icons, or a neutral glyph for a provider without
+one (AWS, Microsoft Azure, Oracle, IBM and STACKIT have none in the pinned
+version; [ADR-0033](./adr/0033-provider-glyphs-from-simple-icons.md)).
 
 **Node** (`nod_`). An enrolled agent identity on exactly one server. Fields:
 `server_id`, `state` (`pending_enrollment`, `active`, `degraded`, `offline`,
