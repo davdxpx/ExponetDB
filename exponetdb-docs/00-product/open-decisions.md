@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); OD-50 added on 2026-10-21 with the CLI's scope presets; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -69,6 +69,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-47 | Changing a person's sign-in address | open | (a) as today: erase and invite again; an address change needs a verified delivery channel (OD-21) | an address change on the account page | yes |
 | OD-48 | A SQL formatter in the Web App, given its license closure | open | (c) no formatter until one without a Python-2.0 dependency exists or the owner allows it; (a) would allow `Python-2.0` for the formatter's `argparse` (used only by its command line) | "Format SQL" in the SQL editor | yes |
 | OD-49 | The server provider enum and `/api/v1` GA | open | (a) mark `ServerProvider` open (`x-extensible-enum`) before GA, so a provider added later is additive | the GA decision of `/api/v1` | yes |
+| OD-50 | What the CLI may learn about the scopes an account could hold | open | (b) a CLI read action returning the scopes the person could be granted, computed like the consent page | "could get" in `whoami` and `doctor` | yes |
 
 ---
 
@@ -1372,6 +1373,25 @@ nothing is implemented. Line references are to commit `1966cf4`.
   replace it later by an additive open member.
 - **Recommendation.** (a), decided together with GA.
 - **Blocks.** The GA decision of `/api/v1` (G7).
+- **Owner decision needed.** Yes.
+
+## OD-50. What the CLI may learn about the scopes an account could hold
+
+- **Added.** 2026-10-21 (CLI scope presets,
+  [`../15-cli/README.md` §3](../15-cli/README.md#sign-in-scopes-and-presets)).
+- **Question.** `exponetdb whoami` and `doctor` show the granted scopes and
+  what each preset lacks, but not what the account could be granted: the
+  effective permissions are in `GET /me`, whose action `me.get` is a Web App
+  action (scope `api`, client kind `web`). Should the CLI read them?
+- **Options.** (a) as today: the consent page shows it, the CLI shows the
+  requested scopes that were not granted; (b) a new read action for the
+  `cli` client kind under `targets.read` (or no scope) that returns the
+  scopes the person could be granted now, as the consent page computes them;
+  (c) open `me.get` to the CLI (it returns bindings and the session too,
+  more than the question needs).
+- **Recommendation.** (b): additive, one read, the same computation as the
+  consent page, so the CLI never guesses from role names.
+- **Blocks.** "Could get" in `whoami` and `doctor`.
 - **Owner decision needed.** Yes.
 
 ## Decisions of the Wave 8 order (2026-10-13)

@@ -25,6 +25,7 @@ import {
 import { discover } from '../oauth.ts'
 import { header } from '../output/format.ts'
 import { type Block, result } from '../output/model.ts'
+import { scopeHint, scopeList, scopeReport } from '../presets.ts'
 import { BUILD } from '../version.ts'
 
 /**
@@ -157,7 +158,36 @@ async function doctorChecks(ctx: RunContext, includeParser: boolean): Promise<Ch
         `authenticated; installation ${remote.installationId ?? 'unknown'}, server ${remote.installation.version}, REST v1`,
       )
       const stored = await ctx.tokens.read(server)
-      if (stored !== undefined) add('scopes', 'ok', stored.scope)
+      if (stored !== undefined) {
+        const auth = remote.profile?.auth
+        const report = scopeReport(
+          scopeList(stored.scope),
+          auth?.method === 'oauth' ? auth.requestedScopes : undefined,
+        )
+        const covered = report.presets.filter((p) => p.covered).map((p) => p.preset)
+        add(
+          'scopes',
+          'ok',
+          `${stored.scope}; presets covered: ${covered.length === 0 ? 'none' : covered.join(', ')}`,
+        )
+        if (report.notGranted !== null && report.notGranted.length > 0) {
+          add(
+            'scopes not granted',
+            'warn',
+            `${report.notGranted.join(' ')} (asked for at the last sign-in; the account does not hold them or they were not ticked)`,
+          )
+        }
+        const next = report.presets.find((p) => !p.covered && !p.preset.endsWith(':prod'))
+        if (next !== undefined) {
+          // A sign-in replaces the grant: the suggestion keeps what is held.
+          const login = scopeHint(report.granted, next.missing, ` --server ${server}`)
+          add(
+            'more scopes',
+            'skip',
+            `${next.preset} adds ${next.missing.join(' ')}: ${login.at(-1)} (the consent page shows what the account holds)`,
+          )
+        }
+      }
     } catch (error) {
       const code =
         error instanceof CliError

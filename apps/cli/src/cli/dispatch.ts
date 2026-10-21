@@ -2,13 +2,14 @@ import type { ApiError } from '@exponetdb/sdk'
 import { CliError } from '../errors.ts'
 import type { CommandResult, OutputContext, SafeError } from '../output/model.ts'
 import { renderHuman, renderJson, renderNdjson, type Terminal } from '../output/render.ts'
-import { TokenStore } from '../store.ts'
+import { isCliScope, scopeHint, scopeList } from '../presets.ts'
+import { prop, TokenStore } from '../store.ts'
 import { BUILD } from '../version.ts'
 import { type GlobalOptions, type Parsed, parse, UsageError } from './args.ts'
 import { EXIT, exitFor } from './exit.ts'
 import { commandHelp, groupHelp, rootHelp } from './help.ts'
 import { ProfileStore } from './profiles.ts'
-import { connect, type Remote, RemoteFailure } from './remote.ts'
+import { connect, type Remote, RemoteFailure, resolveServer } from './remote.ts'
 import { contextFor, type Io, type RunContext } from './run.ts'
 import { type CommandSpec, commandName } from './spec.ts'
 
@@ -38,7 +39,7 @@ export function terminalFor(io: Io, global: GlobalOptions): Terminal {
 }
 
 /** Next steps a person can copy for well-known refusals. */
-function nextFor(code: string, spec: CommandSpec | undefined, server?: string): string[] {
+function nextFor(code: string, server?: string): string[] {
   const on = server === undefined ? '' : ` --server ${server}`
   switch (code) {
     case 'UNAUTHENTICATED':
@@ -47,10 +48,6 @@ function nextFor(code: string, spec: CommandSpec | undefined, server?: string): 
     case 'signed_out':
     case 'expired':
       return [`exponetdb login${on}`]
-    case 'INSUFFICIENT_SCOPE':
-      return spec?.scopes === undefined
-        ? [`exponetdb auth scopes${on}`]
-        : [`exponetdb login${on} --scope "${spec.scopes.join(' ')}"`]
     case 'installation_changed':
       return ['exponetdb profile show', 'exponetdb doctor']
     case 'TRANSPORT_FAILED':
@@ -61,12 +58,7 @@ function nextFor(code: string, spec: CommandSpec | undefined, server?: string): 
   }
 }
 
-export function apiFailure(
-  command: string,
-  spec: CommandSpec | undefined,
-  e: ApiError,
-  server?: string,
-): CommandResult {
+export function apiFailure(command: string, e: ApiError, server?: string): CommandResult {
   const error: SafeError = {
     code: e.code,
     message:
@@ -87,18 +79,49 @@ export function apiFailure(
     ...(e.requestId === null ? {} : { requestId: e.requestId }),
     ...(e.planId === undefined ? {} : { planId: e.planId }),
     ...(e.operationId === undefined ? {} : { operationId: e.operationId }),
-    next: nextFor(e.code, spec, server),
+    next: nextFor(e.code, server),
     blocks: [],
   }
 }
 
-function cliFailure(command: string, spec: CommandSpec | undefined, e: CliError): CommandResult {
+/**
+ * The next steps of an `INSUFFICIENT_SCOPE` refusal (15-cli §3): the sign-in
+ * that keeps the scopes granted now and adds the one the server named. A
+ * key's scopes change on the server, so a key profile is not told to sign in.
+ */
+async function scopeNext(
+  ctx: RunContext,
+  spec: CommandSpec,
+  details: unknown,
+  remote: Remote | undefined,
+): Promise<string[]> {
+  // A refusal while connecting comes before `remote`: resolve it as the command did.
+  const resolved = remote ?? (await resolveServer(ctx).catch(() => undefined))
+  if ((resolved?.profile?.auth.method ?? 'oauth') !== 'oauth') {
+    return ['exponetdb profile show', 'exponetdb auth scopes']
+  }
+  const server = resolved?.server
+  const stored =
+    server === undefined ? undefined : await ctx.tokens.read(server).catch(() => undefined)
+  const named = prop(details, 'requiredScope')
+  // A named scope the CLI can never hold (a Web App scope) gives no sign-in hint.
+  const required =
+    typeof named === 'string' ? (isCliScope(named) ? [named] : []) : (spec.scopes ?? [])
+  const hint = scopeHint(
+    stored === undefined ? [] : scopeList(stored.scope),
+    required,
+    server === undefined ? '' : ` --server ${server}`,
+  )
+  return hint.length === 0 ? ['exponetdb auth scopes', 'exponetdb auth presets'] : hint
+}
+
+function cliFailure(command: string, e: CliError): CommandResult {
   return {
     command,
     status: 'error',
     exitCode: exitFor(e.code),
     error: { code: e.code, message: e.message },
-    next: nextFor(e.code, spec),
+    next: nextFor(e.code),
     blocks: [],
   }
 }
@@ -281,9 +304,9 @@ export async function dispatch(
     } else if (error instanceof UsageError) {
       return usageFailure(io, error, name, format === 'table' ? undefined : format, undefined)
     } else if (error instanceof RemoteFailure) {
-      r = apiFailure(name, command, error.error, remote?.server)
+      r = apiFailure(name, error.error, remote?.server)
     } else if (error instanceof CliError) {
-      r = cliFailure(name, command, error)
+      r = cliFailure(name, error)
     } else {
       r = {
         command: name,
@@ -297,6 +320,10 @@ export async function dispatch(
       }
       if (global.verbose && error instanceof Error) io.stderr(`(${error.name})\n`)
     }
+  }
+  if (r.error?.code === 'INSUFFICIENT_SCOPE') {
+    const hint = await scopeNext(ctx, command, r.error.details, remote)
+    r = { ...r, next: [...new Set([...hint, ...(r.next ?? [])])] }
   }
   emit(io, r, format, terminal, ctx.outputContext())
   return r.exitCode

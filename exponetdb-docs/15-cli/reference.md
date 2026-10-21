@@ -20,6 +20,7 @@ exit codes are in [`README.md`](./README.md).
 | [`logout`](#logout) | remote | session | Revoke the grant on the server, then delete the local tokens. |
 | [`whoami`](#whoami) | remote | read | Show the server, its version and the sign-in in use (one authenticated request). |
 | [`auth status`](#auth-status) | local | local | List the servers this CLI holds a sign-in for (local; no network, no token shown). |
+| [`auth presets`](#auth-presets) | local | local | List the named scope presets of exponetdb login --preset (local). |
 | [`auth scopes`](#auth-scopes) | local | local | List the OAuth scopes the CLI can ask for, and which need the browser. |
 | [`auth reauth`](#auth-reauth) | remote | session | Confirm a step-up in the browser now, for a plan to apply or an enrollment token to reveal. |
 | [`profile list`](#profile-list) | local | local | List profiles (local). |
@@ -242,7 +243,7 @@ Runs: locally; effect: local; output: `AgentHelp`.
 
 Sign in through the browser (or the device flow) and store the tokens privately.
 
-Opens the authorization page of the server (loopback redirect, PKCE S256). With --device the CLI shows a code to enter on another device; the device flow never carries a production or administrative scope. Production and administrative scopes need explicit consent in the browser.
+Opens the authorization page of the server (loopback redirect, PKCE S256). Without --scope or --preset it asks for the scopes granted at the last sign-in (remembered per profile), else targets.read. With --device the CLI shows a code to enter on another device; the device flow never carries a production or administrative scope. Production and administrative scopes need explicit consent in the browser.
 
 ```text
 exponetdb login [flags]
@@ -254,14 +255,17 @@ Aliases: `auth login`.
 
 | Argument or flag | Meaning |
 |---|---|
-| `--scope <scopes>` | Scopes to ask for, space or comma separated (default targets.read). |
+| `--scope <scopes>` | Scopes to ask for, space or comma separated (default: the last grant of the profile, else targets.read). |
+| `--preset <read\|developer:nonprod\|developer:prod\|operator:nonprod\|operator:prod\|admin>` | A named scope list (exponetdb auth presets); combines with --scope. |
 | `--device` | Use the device flow (a code to type elsewhere). |
 | `--no-browser` | Print the sign-in URL without opening a browser. |
 
 ```sh
 exponetdb login --server https://db.example.com
+exponetdb login --preset developer:nonprod
+exponetdb login --preset admin --scope migrations.apply:prod
 exponetdb login --scope "targets.read migrations.plan migrations.apply:nonprod"
-exponetdb login --device
+exponetdb login --device --preset developer:nonprod
 ```
 
 ### logout
@@ -306,6 +310,18 @@ exponetdb auth status
 ```
 
 Runs: locally; effect: local; output: `AuthStatus`.
+
+### auth presets
+
+List the named scope presets of exponetdb login --preset (local).
+
+From this CLI version. A preset is shorthand for a scope list: the consent page still offers only what the account holds; only a preset named …:prod holds a production scope.
+
+```text
+exponetdb auth presets
+```
+
+Runs: locally; effect: local; output: `ScopePresetList`.
 
 ### auth scopes
 
@@ -382,7 +398,7 @@ Runs: locally; effect: local; output: `Profile`.
 | `--key-file <path>` | Private key or API key file (api-key, service-account). |
 | `--client-id <id>` | Service account client id. |
 | `--key-id <kid>` | Service account key id. |
-| `--scopes <a,b>` | Service account scopes. |
+| `--scopes <a,b>` | Service account scopes; for oauth, what the first `exponetdb login` asks for (later the last grant). |
 | `--default-output <table\|json\|ndjson>` | Default output format. |
 | `--default-target <tgt_…>` | Default target. |
 | `--use` | Make it the current profile. |

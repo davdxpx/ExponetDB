@@ -5,6 +5,7 @@ import { type Profile, type ProfileAuth, validProfileName } from '../cli/profile
 import type { CommandSpec } from '../cli/spec.ts'
 import { parseServer } from '../oauth.ts'
 import { result } from '../output/model.ts'
+import { isCliScope } from '../presets.ts'
 
 /**
  * Profiles and configuration ([`15-cli/README.md` §3](../../../../exponetdb-docs/15-cli/README.md#3-profiles-context-and-precedence)).
@@ -12,7 +13,11 @@ import { result } from '../output/model.ts'
  * server; the first remote command records the installation id it sees.
  */
 function authRows(auth: ProfileAuth): [string, string][] {
-  if (auth.method === 'oauth') return [['Auth', 'oauth (exponetdb login)']]
+  if (auth.method === 'oauth')
+    return [
+      ['Auth', 'oauth (exponetdb login)'],
+      ['Scopes', auth.scopes === undefined ? '- (targets.read)' : auth.scopes.join(' ')],
+    ]
   if (auth.method === 'api-key')
     return [
       ['Auth', 'api-key'],
@@ -36,7 +41,7 @@ function view(p: Profile, current: boolean) {
     installationId: p.installationId,
     auth:
       auth.method === 'oauth'
-        ? { method: auth.method }
+        ? auth
         : auth.method === 'api-key'
           ? { method: auth.method, keyFile: auth.keyFile }
           : {
@@ -177,7 +182,13 @@ export const profileCommands: readonly CommandSpec[] = [
         placeholder: 'kid',
         description: 'Service account key id.',
       },
-      { name: 'scopes', type: 'list', placeholder: 'a,b', description: 'Service account scopes.' },
+      {
+        name: 'scopes',
+        type: 'list',
+        placeholder: 'a,b',
+        description:
+          'Service account scopes; for oauth, what the first `exponetdb login` asks for (later the last grant).',
+      },
       {
         name: 'default-output',
         type: 'enum',
@@ -213,7 +224,14 @@ export const profileCommands: readonly CommandSpec[] = [
           : absolute(ctx.io.cwd, String(input.flags['key-file']))
       let auth: ProfileAuth
       if (method === 'oauth') {
-        auth = { method: 'oauth' }
+        const scopes = input.flags['scopes'] as readonly string[] | undefined
+        const unknown = scopes?.filter((s) => !isCliScope(s)) ?? []
+        if (unknown.length > 0)
+          throw new UsageError(
+            `The CLI cannot hold ${unknown.join(', ')}.`,
+            'exponetdb auth scopes, exponetdb auth presets',
+          )
+        auth = scopes === undefined ? { method: 'oauth' } : { method: 'oauth', scopes }
       } else if (method === 'api-key') {
         if (keyFile === undefined) throw new UsageError('--auth api-key needs --key-file.')
         auth = { method: 'api-key', keyFile }

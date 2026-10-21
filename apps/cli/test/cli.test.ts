@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { chmod, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { writeFileSync } from 'node:fs'
+import { chmod, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -28,6 +29,13 @@ interface FakeState {
   revoked: string[]
   devicePolls: string[]
   lastVerifierOk?: boolean
+  /** The scope the server grants (default: targets.read). */
+  grant?: string | undefined
+  /** The `scope` of each authorization and device request. */
+  asked: string[]
+  deviceRequests: number
+  /** The installation read answers INSUFFICIENT_SCOPE (a refusal while connecting). */
+  installationRefused?: boolean
 }
 
 let fake: FakeState
@@ -97,7 +105,7 @@ beforeAll(async () => {
           send(res, 400, { error: 'invalid_grant' })
           return
         }
-        send(res, 200, tokens())
+        send(res, 200, tokens(fake.grant))
         return
       }
       if (grant === 'refresh_token') {
@@ -129,6 +137,8 @@ beforeAll(async () => {
       return
     }
     if (url.pathname === '/oauth/device_authorization') {
+      fake.deviceRequests += 1
+      fake.asked.push((await body(req)).get('scope') ?? '')
       send(res, 200, {
         device_code: token('exdc'),
         user_code: 'BCDF-GHJK',
@@ -144,6 +154,10 @@ beforeAll(async () => {
         send(res, 401, { code: 'UNAUTHENTICATED' })
         return
       }
+      if (fake.installationRefused === true) {
+        send(res, 403, { code: 'INSUFFICIENT_SCOPE', details: { requiredScope: 'targets.read' } })
+        return
+      }
       send(res, 200, {
         version: '0.2.0',
         contracts: {
@@ -154,6 +168,16 @@ beforeAll(async () => {
           projectConfig: 'exponetdb.project/v1',
         },
         features: [],
+      })
+      return
+    }
+    if (url.pathname.startsWith('/api/v1/')) {
+      send(res, 403, {
+        code: 'INSUFFICIENT_SCOPE',
+        title: 'Insufficient scope',
+        message: 'The token lacks the scope this action needs.',
+        retryable: false,
+        details: { requiredScope: 'migrations.plan' },
       })
       return
     }
@@ -169,7 +193,7 @@ afterAll(async () => {
 })
 
 beforeEach(async () => {
-  fake = { refreshCalls: 0, revoked: [], devicePolls: [] }
+  fake = { refreshCalls: 0, revoked: [], devicePolls: [], asked: [], deviceRequests: 0 }
   dir = await mkdtemp(join(tmpdir(), 'exdb-cli-'))
 })
 
@@ -181,6 +205,7 @@ afterEach(async () => {
 function browser(answer: (authorize: URL) => Record<string, string>) {
   return (url: string) => {
     const authorize = new URL(url)
+    fake.asked.push(authorize.searchParams.get('scope') ?? '')
     const challenge = authorize.searchParams.get('code_challenge')
     if (challenge !== null) fake.challenge = challenge
     fake.code = token('exac')
@@ -268,6 +293,10 @@ describe('loopback sign-in', () => {
   it('accepts only https servers, or http on loopback', () => {
     expect(parseServer('https://db.example.test/')).toBe('https://db.example.test')
     for (const bad of [
+      'https://a$(id).evil.example.test',
+      'https://a`id`.evil.example.test',
+      'https://a;id.evil.example.test',
+      "https://a'b.evil.example.test",
       'http://db.example.test',
       'https://db.example.test/api',
       'https://u:p@db.example.test',
@@ -352,5 +381,237 @@ describe('device sign-in', () => {
       sleep: async () => undefined,
     }).catch((e: unknown) => e)
     expect(error instanceof CliError && error.code).toBe('oauth_access_denied')
+  })
+})
+
+describe('scope presets and the remembered request', () => {
+  const config = () => join(dir, 'config')
+  const profileFile = async () =>
+    JSON.parse(await readFile(join(config(), 'profiles.json'), 'utf8')) as {
+      profiles: Record<string, { auth: Record<string, unknown> }>
+    }
+  const addProfile = (extra: string[] = []) =>
+    run(['profile', 'add', 'lab', '--server', origin, '--use', ...extra], io(happy))
+  const ioNoEnv = (lines: string[] = []) =>
+    testIo({ lines, configDir: config(), openBrowser: happy })
+
+  it('asks for a preset, remembers the grant per profile and asks for it again', async () => {
+    expect(await addProfile()).toBe(0)
+    fake.grant = 'targets.read schema.read migrations.plan'
+    const lines: string[] = []
+    expect(await run(['login', '--preset', 'developer:nonprod'], ioNoEnv(lines))).toBe(0)
+    expect(fake.asked.at(-1)?.split(' ')).toEqual([
+      'targets.read',
+      'schema.read',
+      'migrations.read',
+      'diagnostics.read',
+      'backups.read',
+      'nodes.read',
+      'audit.read',
+      'migrations.plan',
+      'migrations.apply:nonprod',
+    ])
+    expect(lines.join('\n')).toMatch(/Not granted: migrations\.read .*migrations\.apply:nonprod/)
+    const auth = (await profileFile()).profiles['lab']?.auth
+    expect(auth?.['scopes']).toEqual(['targets.read', 'schema.read', 'migrations.plan'])
+    expect(auth?.['requestedScopes']).toHaveLength(9)
+
+    fake.grant = undefined
+    expect(await run(['login'], ioNoEnv())).toBe(0)
+    expect(fake.asked.at(-1)).toBe('targets.read schema.read migrations.plan')
+  })
+
+  it('never remembers a production scope, and keeps the installation id', async () => {
+    expect(await addProfile()).toBe(0)
+    expect(await run(['login'], ioNoEnv())).toBe(0)
+    expect(await run(['whoami'], ioNoEnv())).toBe(0)
+    const seen = (await profileFile()).profiles['lab'] as unknown as { installationId: unknown }
+    fake.grant = 'targets.read migrations.apply:prod'
+    const lines: string[] = []
+    expect(await run(['login', '--preset', 'developer:prod'], ioNoEnv(lines))).toBe(0)
+    expect(lines.join('\n')).toMatch(/asks for the same without the production scopes/)
+    const after = (await profileFile()).profiles['lab'] as unknown as {
+      installationId: unknown
+      auth: Record<string, unknown>
+    }
+    expect(after.auth['scopes']).toEqual(['targets.read'])
+    expect(after.installationId).toEqual(seen.installationId)
+    expect(await run(['login'], ioNoEnv())).toBe(0)
+    expect(fake.asked.at(-1)).toBe('targets.read')
+  })
+
+  it('does not rewrite a profile that changed while the browser was open', async () => {
+    expect(await addProfile()).toBe(0)
+    const path = join(config(), 'profiles.json')
+    const changed = {
+      version: 1,
+      current: 'lab',
+      profiles: {
+        lab: {
+          server: origin,
+          installationId: null,
+          auth: { method: 'api-key', keyFile: '/tmp/key' },
+          defaults: {},
+        },
+      },
+    }
+    const lines: string[] = []
+    const browserThenChange = (url: string) => {
+      writeFileSync(path, JSON.stringify(changed), { mode: 0o600 })
+      happy(url)
+    }
+    expect(
+      await run(
+        ['login', '--preset', 'read'],
+        testIo({ lines, configDir: config(), openBrowser: browserThenChange }),
+      ),
+    ).toBe(0)
+    expect(lines.join('\n')).toMatch(/Not remembered: the profile lab changed/)
+    expect((await profileFile()).profiles['lab']?.auth).toEqual({
+      method: 'api-key',
+      keyFile: '/tmp/key',
+    })
+  })
+
+  it('without a profile asks again for the current sign-in, and drops what it does not know', async () => {
+    fake.grant = 'targets.read schema.read'
+    expect(await run(['login', '--preset', 'read'], io(happy))).toBe(0)
+    expect(await run(['login'], io(happy))).toBe(0)
+    expect(fake.asked.at(-1)).toBe('targets.read schema.read')
+
+    expect(await addProfile()).toBe(0)
+    const path = join(config(), 'profiles.json')
+    const file = JSON.parse(await readFile(path, 'utf8'))
+    file.profiles.lab.auth = {
+      method: 'oauth',
+      scopes: ['schema.read', 'plans.approve', 'x\u001b[2J'],
+    }
+    await writeFile(path, JSON.stringify(file), { mode: 0o600 })
+    const lines: string[] = []
+    expect(await run(['login'], ioNoEnv(lines))).toBe(0)
+    expect(fake.asked.at(-1)).toBe('schema.read')
+    expect(lines.join('\n')).toContain(
+      'Not asked for (unknown to this CLI): ["plans.approve","x\\u001b[2J"]',
+    )
+    expect(lines.join('\n')).not.toContain('\u001b')
+  })
+
+  it('combines --preset and --scope, and an oauth profile may name the first request', async () => {
+    expect(await addProfile(['--scopes', 'targets.read,registry.manage'])).toBe(0)
+    expect(await run(['login'], ioNoEnv())).toBe(0)
+    expect(fake.asked.at(-1)).toBe('targets.read registry.manage')
+    expect(
+      await run(['login', '--preset', 'read', '--scope', 'migrations.import'], ioNoEnv()),
+    ).toBe(0)
+    expect(fake.asked.at(-1)?.split(' ')).toEqual([
+      ...'targets.read schema.read migrations.read diagnostics.read backups.read nodes.read audit.read'.split(
+        ' ',
+      ),
+      'migrations.import',
+    ])
+    expect(await addProfile(['--force', '--scopes', 'plans.approve'])).toBe(2)
+  })
+
+  it('refuses an unknown preset as a usage error', async () => {
+    expect(await run(['login', '--preset', 'everything'], io(happy))).toBe(2)
+    expect(fake.asked).toEqual([])
+  })
+
+  it('never sends an admin or production preset, or such a remembered request, through the device flow', async () => {
+    for (const preset of ['admin', 'developer:prod', 'operator:prod']) {
+      const lines: string[] = []
+      expect(await run(['login', '--device', '--preset', preset], io(happy, lines))).toBe(2)
+      expect(lines.join('\n')).toMatch(/device flow never carries/)
+    }
+    expect(await addProfile(['--scopes', 'targets.read,registry.manage'])).toBe(0)
+    const lines: string[] = []
+    expect(await run(['login', '--device'], ioNoEnv(lines))).toBe(2)
+    expect(lines.join('\n')).toMatch(/registry\.manage \(remembered for profile lab\)/)
+    expect(fake.deviceRequests).toBe(0)
+
+    expect(await run(['login', '--device', '--preset', 'developer:nonprod'], ioNoEnv())).toBe(0)
+    expect(fake.deviceRequests).toBe(1)
+    expect(fake.asked.at(-1)).toContain('migrations.apply:nonprod')
+  })
+
+  it('names the sign-in that would allow a command refused for a missing scope', async () => {
+    expect(await run(['login'], io(happy))).toBe(0)
+    const stdout: string[] = []
+    const code = await run(
+      ['target', 'list', '--output', 'json'],
+      testIo({ stdout, env: { EXPONETDB_URL: origin }, configDir: config() }),
+    )
+    expect(code).toBe(3)
+    const doc = JSON.parse(stdout.join('')) as { error: { code: string }; next: string[] }
+    expect(doc.error.code).toBe('INSUFFICIENT_SCOPE')
+    expect(doc.next).toEqual([
+      `exponetdb login --server ${origin} --preset developer:nonprod`,
+      `exponetdb login --server ${origin} --scope "targets.read migrations.plan"`,
+    ])
+  })
+
+  it('keeps the granted scopes in the hint when the refusal comes while connecting', async () => {
+    fake.grant = 'schema.read migrations.plan'
+    expect(await run(['login'], io(happy))).toBe(0)
+    fake.installationRefused = true
+    const stdout: string[] = []
+    const code = await run(
+      ['whoami', '--output', 'json'],
+      testIo({ stdout, env: { EXPONETDB_URL: origin }, configDir: config() }),
+    )
+    expect(code).toBe(3)
+    expect((JSON.parse(stdout.join('')) as { next: string[] }).next).toEqual([
+      `exponetdb login --server ${origin} --preset developer:nonprod`,
+      `exponetdb login --server ${origin} --scope "schema.read migrations.plan targets.read"`,
+    ])
+  })
+
+  it('reports the scopes, what was not granted and the next preset in doctor', async () => {
+    expect(await addProfile(['--scopes', 'targets.read,registry.manage'])).toBe(0)
+    expect(await run(['login'], ioNoEnv())).toBe(0)
+    const stdout: string[] = []
+    await run(
+      ['doctor', '--skip-parser', '--output', 'json'],
+      testIo({ stdout, configDir: config() }),
+    )
+    const checks = (
+      JSON.parse(stdout.join('')) as {
+        data: { items: { check: string; status: string; detail: string }[] }
+      }
+    ).data.items
+    const byName = (name: string) => checks.find((c) => c.check === name)
+    expect(byName('scopes')).toMatchObject({
+      status: 'ok',
+      detail: 'targets.read; presets covered: none',
+    })
+    expect(byName('scopes not granted')).toMatchObject({ status: 'warn' })
+    expect(byName('scopes not granted')?.detail).toMatch(/^registry\.manage /)
+    // The suggestion keeps the scope held now (a sign-in replaces the grant).
+    expect(byName('more scopes')?.detail).toMatch(
+      /^read adds schema\.read .*: exponetdb login --server \S+ --scope "targets\.read schema\.read /,
+    )
+  })
+
+  it('shows the granted scopes against the presets in whoami', async () => {
+    expect(await addProfile(['--scopes', 'targets.read,registry.manage'])).toBe(0)
+    expect(await run(['login'], ioNoEnv())).toBe(0)
+    const stdout: string[] = []
+    expect(await run(['whoami', '--output', 'json'], testIo({ stdout, configDir: config() }))).toBe(
+      0,
+    )
+    const doc = JSON.parse(stdout.join('')) as {
+      data: {
+        scopes: {
+          granted: string[]
+          notGranted: string[]
+          presets: { preset: string; covered: boolean; missing: string[] }[]
+        }
+      }
+    }
+    expect(doc.data.scopes.granted).toEqual(['targets.read'])
+    expect(doc.data.scopes.notGranted).toEqual(['registry.manage'])
+    expect(doc.data.scopes.presets.find((p) => p.preset === 'read')?.missing).toContain(
+      'schema.read',
+    )
   })
 })
