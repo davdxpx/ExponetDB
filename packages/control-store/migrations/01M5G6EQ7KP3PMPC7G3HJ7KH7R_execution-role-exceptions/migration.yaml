@@ -1,0 +1,24 @@
+schema: exponetdb.migration/v1
+id: 01M5G6EQ7KP3PMPC7G3HJ7KH7R
+name: execution-role-exceptions
+description: |
+  Declared execution-role exceptions (ADR-0034 §1, OD-51): one record per
+  (project, environment, PostgreSQL role) that lets the migration engine
+  accept exactly the BYPASSRLS attribute on an execution role of that
+  project in that environment. The excused attributes are fixed to
+  {bypassrls} by a CHECK constraint, so nothing else can ever be stored;
+  a declaration carries a reason, the declaring person, an optional review
+  date and a revision; it is revoked once and never re-activated. The
+  worker writes records only as operations of the kinds
+  registry.execution_role_exception.declare and .revoke; a guard checks
+  the operation, the environment's product, the role name and every
+  transition. Additive: no frozen bundle changes.
+dependsOn:
+  - 01M5G6EQ7MFWM3TVK3YN5WRK8W
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

@@ -62,6 +62,23 @@ async function environmentRef(remote: Remote, productId: string, ref: string): P
   throw new CliError('NOT_FOUND', `No environment ${ref} in this product is visible to you.`)
 }
 
+/** An environment (id or slug) of a project's product. */
+async function projectEnvironmentRef(remote: Remote, projectId: string, ref: string) {
+  if (/^env_[0-9A-HJKMNP-TV-Z]{26}$/.test(ref)) return ref
+  const project = must(await remote.sdk.call('getProject', { params: { projectId } } as never)) as {
+    readonly productId: string
+  }
+  return environmentRef(remote, project.productId, ref)
+}
+
+const ENVIRONMENT_FLAG = {
+  name: 'environment',
+  type: 'string',
+  placeholder: 'env',
+  description: "An environment of the project's product (id or slug).",
+  required: true,
+} as const
+
 export const registryCommands: readonly CommandSpec[] = [
   // ----- products -----
   listCommand({
@@ -424,6 +441,170 @@ export const registryCommands: readonly CommandSpec[] = [
         ? {}
         : { trustedExtensions: i.flags['trusted-extensions'] }),
     }),
+  }),
+
+  // ----- execution roles (ADR-0034) -----
+  showCommand({
+    path: ['project', 'execution-roles'],
+    summary:
+      "Show a project's execution roles: the default map, each environment's bindings and the declared exceptions.",
+    group: 'registry',
+    args: [{ name: 'project', description: 'A project id (prj_…).', required: true }],
+    action: 'project.execution_roles.get',
+    scopes: ['migrations.read'],
+    output: 'ProjectExecutionRoles',
+    title: 'execution roles',
+    operation: 'getProjectExecutionRoles',
+    params: (i) => ({ projectId: arg(i, 'project') }),
+    view: (v) => [
+      {
+        kind: 'table',
+        columns: [
+          { title: 'ENVIRONMENT' },
+          { title: 'TIER' },
+          { title: 'ALIAS' },
+          { title: 'ROLE', flexible: true },
+          { title: 'SOURCE' },
+        ],
+        rows: v.environments.flatMap((e) =>
+          Object.entries(e.effective).map(([alias, role]) => [
+            e.slug,
+            e.tier,
+            alias,
+            role,
+            Object.hasOwn(e.bindings, alias) ? 'binding' : 'project',
+          ]),
+        ),
+        empty: 'No execution roles: the project maps no alias.',
+      },
+      {
+        kind: 'table',
+        columns: [
+          { title: 'EXCEPTION' },
+          { title: 'ENVIRONMENT' },
+          { title: 'ROLE' },
+          { title: 'EXCUSES' },
+          { title: 'STATE' },
+          { title: 'REVIEW BY' },
+        ],
+        rows: v.exceptions.map((e) => [
+          e.id,
+          v.environments.find((x) => x.environmentId === e.environmentId)?.slug ?? e.environmentId,
+          e.role,
+          e.attributes.join(','),
+          e.state === 'active' && e.expired ? 'expired' : e.state,
+          dash(e.reviewBy),
+        ]),
+        empty: 'No declared exceptions.',
+      },
+    ],
+  }),
+  planCommand({
+    path: ['project', 'execution-roles', 'set'],
+    summary:
+      "Plan one environment's execution roles (aliases of the project map bound to other roles); the set replaces the environment's bindings.",
+    group: 'registry',
+    args: [{ name: 'project', description: 'A project id.', required: true }],
+    flags: [
+      ENVIRONMENT_FLAG,
+      {
+        name: 'role',
+        type: 'list',
+        placeholder: 'alias=role',
+        description: 'A binding (alias=PostgreSQL role); repeat for each alias.',
+      },
+      {
+        name: 'clear',
+        type: 'boolean',
+        description: 'Remove every binding: the project map applies again.',
+      },
+    ],
+    action: 'registry.execution_role_binding.set.plan',
+    scopes: MANAGE,
+    operation: 'planExecutionRoleBindings',
+    params: async (i, r) => {
+      const projectId = arg(i, 'project')
+      return {
+        projectId,
+        environmentId: await projectEnvironmentRef(r, projectId, String(i.flags['environment'])),
+      }
+    },
+    body: (i) => {
+      const roles = i.flags['role'] as string[] | undefined
+      if ((roles === undefined) === (i.flags['clear'] !== true)) {
+        throw new UsageError('Give --role alias=role (repeatable) or --clear.')
+      }
+      return { roles: roles === undefined ? {} : Object.fromEntries(pairs(roles, 'role')) }
+    },
+  }),
+  planCommand({
+    path: ['project', 'role-exception', 'declare'],
+    summary:
+      'Plan a declared exception: one role may carry BYPASSRLS as an execution role of the project in one environment (nothing else is ever excused).',
+    group: 'registry',
+    args: [{ name: 'project', description: 'A project id.', required: true }],
+    flags: [
+      ENVIRONMENT_FLAG,
+      {
+        name: 'role',
+        type: 'string',
+        placeholder: 'role',
+        description: 'The PostgreSQL role.',
+        required: true,
+      },
+      {
+        name: 'reason',
+        type: 'string',
+        placeholder: 'text',
+        description: 'Why the role needs BYPASSRLS (20 to 1000 characters).',
+        required: true,
+      },
+      {
+        name: 'review-by',
+        type: 'string',
+        placeholder: 'YYYY-MM-DD',
+        description: 'After this date the exception excuses nothing.',
+      },
+    ],
+    action: 'registry.execution_role_exception.declare.plan',
+    scopes: MANAGE,
+    operation: 'planExecutionRoleException',
+    params: async (i, r) => {
+      const projectId = arg(i, 'project')
+      return {
+        projectId,
+        environmentId: await projectEnvironmentRef(r, projectId, String(i.flags['environment'])),
+      }
+    },
+    body: (i) => ({
+      role: String(i.flags['role']),
+      reason: String(i.flags['reason']),
+      ...optional(i, 'review-by', (v) => v),
+    }),
+  }),
+  planCommand({
+    path: ['project', 'role-exception', 'revoke'],
+    summary:
+      'Plan the revocation of a declared exception; every plan that relied on it becomes stale.',
+    group: 'registry',
+    args: [
+      { name: 'project', description: 'A project id.', required: true },
+      { name: 'exception', description: 'The exception (rxe_…).', required: true },
+    ],
+    flags: [
+      {
+        name: 'reason',
+        type: 'string',
+        placeholder: 'text',
+        description: 'Why it is revoked (up to 1000 characters).',
+        required: true,
+      },
+    ],
+    action: 'registry.execution_role_exception.revoke.plan',
+    scopes: MANAGE,
+    operation: 'planExecutionRoleExceptionRevocation',
+    params: (i) => ({ projectId: arg(i, 'project'), exceptionId: arg(i, 'exception') }),
+    body: (i) => ({ reason: String(i.flags['reason']) }),
   }),
 
   // ----- targets -----

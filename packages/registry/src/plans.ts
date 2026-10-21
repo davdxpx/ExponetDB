@@ -83,13 +83,23 @@ export interface RegistryPlanContext {
   readonly egressAddresses?: readonly string[]
 }
 
-interface Draft {
+export interface Draft {
   readonly kind: string
   readonly actionClass: StoredActionClass
   readonly subject: PlanSubject
   readonly content: JsonObject
   readonly expectedState: JsonObject
   readonly analysis?: JsonObject
+}
+
+/** Stores a registry plan with its policy decision (also for planners in other modules of the registry). */
+export async function storeRegistryPlan(
+  tx: Tx,
+  context: Pick<RegistryPlanContext, 'policy'>,
+  actor: RegistryActor | 'system',
+  draft: Draft,
+): Promise<PlanRecord> {
+  return store(tx, context, actor, draft)
 }
 
 async function store(

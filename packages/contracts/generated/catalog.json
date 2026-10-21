@@ -5505,6 +5505,227 @@
       "wave": "8"
     },
     {
+      "basis": "ADR-0034; credentials-and-roles.md §3",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "project.execution_roles.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.read"
+      },
+      "subject": "project",
+      "tierSemantics": "none",
+      "title": "Get the execution roles of a project: the default map, each environment’s bindings and the declared exceptions",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.execution_role_binding.set.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "project",
+      "tierSemantics": "subject",
+      "title": "Plan the execution roles of one environment of a project (ADR-0034 §5)",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "ADR-0034 §5 (Wave 9 order D-A2): registry.manage at the environment’s tier",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.execution_role_binding.set",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "project",
+      "tierSemantics": "subject",
+      "title": "Set the execution roles of one environment of a project (aliases bound to other roles than the project map)",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.execution_role_exception.declare.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "project",
+      "tierSemantics": "subject",
+      "title": "Plan a declared BYPASSRLS execution-role exception (ADR-0034, OD-51)",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "ADR-0034 §2 (OD-51): human only, registry.manage at the environment’s tier, production with an approval",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.execution_role_exception.declare",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "project",
+      "tierSemantics": "subject",
+      "title": "Declare that one role may carry BYPASSRLS as an execution role of a project in one environment (nothing else is excusable)",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.execution_role_exception.revoke.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "project",
+      "tierSemantics": "subject",
+      "title": "Plan the revocation of an execution-role exception (ADR-0034)",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "ADR-0034 §2: human only, registry.manage at the environment’s tier",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.execution_role_exception.revoke",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "project",
+      "tierSemantics": "subject",
+      "title": "Revoke an execution-role exception: plans that bound it become stale",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
       "basis": "OD-22 (extended 2026-10-13): setting or changing the declared tier is a production decision; registry.md §4",
       "class": {
         "class": "high",
@@ -9555,6 +9776,8 @@
               "observer_credential_missing",
               "system_identifier_taken",
               "credential_missing",
+              "exception_active",
+              "exception_not_active",
               "cluster_unmapped",
               "cluster_not_agent_managed",
               "postgres_ca_missing",

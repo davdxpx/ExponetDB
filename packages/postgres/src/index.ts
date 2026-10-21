@@ -115,8 +115,10 @@ export {
   type VerificationRecord,
 } from './ledger-history.ts'
 export {
+  blocksExecution,
   changedGuards,
   type EngineGuards,
+  type ExcusableAttribute,
   type ExecutionRoleFacts,
   type ExecutionRoleProblem,
   type ExtensionFacts,

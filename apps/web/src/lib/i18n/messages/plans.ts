@@ -76,6 +76,11 @@ export const plansMessages = {
   'plans.title.registry.environment.update': 'Change an environment',
   'plans.title.registry.project.create': 'Create a project',
   'plans.title.registry.project.update': 'Change a project',
+  'plans.title.registry.execution_role_binding.set': "Set an environment's execution roles",
+  'plans.title.registry.execution_role_exception.declare':
+    'Declare a BYPASSRLS exception for an execution role',
+  'plans.title.registry.execution_role_exception.revoke':
+    'Revoke a BYPASSRLS exception of an execution role',
   'plans.title.registry.server.create': 'Create a server record',
   'plans.title.registry.cluster.register': 'Register an external cluster',
   'plans.title.other': 'Run {kind} on {subject}',

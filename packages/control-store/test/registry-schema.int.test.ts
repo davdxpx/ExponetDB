@@ -776,6 +776,9 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M5F4NHFTMQRYJA43P8GKP44M',
         // Wave 9 Part A (A2, A3): evidence strength and drift totals of legacy imports.
         '01M5G6EQ7GKZV615Y680AHT52B',
+        // Wave 9 Part A (A5, A4): execution roles per environment and declared exceptions.
+        '01M5G6EQ7MFWM3TVK3YN5WRK8W',
+        '01M5G6EQ7KP3PMPC7G3HJ7KH7R',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

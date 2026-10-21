@@ -104,7 +104,10 @@ Migrations run as the project's **execution role**, the role that owns the
 application's objects (for example `reosa_owner`). It is a `NOLOGIN` role. The
 migrator switches into it with `SET LOCAL ROLE` inside the migration transaction.
 
-**[DECIDED]** ExponetDB requires each project to declare, per target:
+**[DECIDED]** ExponetDB requires each project to declare, per environment
+(the project's map is the default; an environment binding refines it, §3.1;
+before Wave 9 this paragraph said "per target" while the code resolved per
+project, ADR-0034 §5):
 
 | Declaration | Example (proposed for REOSA on `reos-db-01`) |
 |---|---|
@@ -114,17 +117,75 @@ migrator switches into it with `SET LOCAL ROLE` inside the migration transaction
 | protected and foreign-owned schemas | `auth` (owned by the auth service role), excluded from migrations |
 
 **[DECIDED]** (Wave 6, `executionRoleProblem` in
-`packages/postgres/src/migration-facts.ts`) A role is usable as an
-execution role only when it exists, is `NOLOGIN`, has none of
-`SUPERUSER`, `CREATEROLE`, `CREATEDB`, `REPLICATION`, `BYPASSRLS`, is not a
-predefined (`pg_…`) or ExponetDB role, **reaches none of them** through its
-memberships (so consumer SQL never runs as the ledger owner or with a
-predefined role's powers), and the migrator is its direct member with
-`SET TRUE` and `INHERIT FALSE`. The planner reads these facts with the
-observer for the migrator; the executor reads them again under the lock.
-The alias → role map and the trusted extensions of a project are registry
-data (`registry.projects.execution_roles`, `trusted_extensions`), never a
+`packages/postgres/src/migration-facts.ts`; amended in Wave 9 by
+[ADR-0034](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md),
+OD-51) A role is usable as an execution role only when it exists, is
+`NOLOGIN`, has none of `SUPERUSER`, `CREATEROLE`, `CREATEDB`, `REPLICATION`,
+`BYPASSRLS`, is not a predefined (`pg_…`) or ExponetDB role, **reaches none
+of them** through its memberships (so consumer SQL never runs as the ledger
+owner or with a predefined role's powers), and the migrator is its direct
+member with `SET TRUE` and `INHERIT FALSE`. **The one exception:**
+`BYPASSRLS` is accepted for a role a person declared for that project and
+environment (§3.2); nothing else is ever excused. The planner reads these
+facts with the observer for the migrator; the executor reads them again
+under the lock, and so do the legacy replay and, since Wave 9, the
+rollback (which never checked them before; a Wave 6 defect found in Part A).
+The alias → role map, its environment bindings, the declared exceptions and
+the trusted extensions of a project are registry data
+(`registry.projects.execution_roles`, `registry.execution_role_bindings`,
+`registry.execution_role_exceptions`, `trusted_extensions`), never a
 client's claim.
+
+### 3.1 Execution roles per environment
+
+**[DECIDED]** (Wave 9, ADR-0034 §5, the Wave 9 order D-A2) An environment
+of the project's product may bind an alias of the project's map to another
+role (`registry.execution_role_bindings`), so staging and production of one
+project on one cluster run under their own role sets. Per alias the
+environment's binding wins, else the project map; an environment never
+adds an alias. One resolver (`executionRolesFor` in
+`packages/migrations-engine/src/execution-roles.ts`) serves the planner,
+the apply kind, resume, rollback, re-verification, the reads and the
+legacy replay (which resolves for the **scratch** target's environment); a
+test fails when other engine code reads the map or the bindings. A plan
+binds the resolved names and apply resolves again: a change in between is
+`PLAN_STALE`. `c1` hashes only the alias, so a production plan consumes the
+staging evidence of the same checksum although staging ran as another
+role. Setting an environment's bindings is the registry operation
+`registry.execution_role_binding.set` (`registry.manage` at that
+environment's tier, re-authentication, human only; a tier-restricted grant
+changes no environment's roles, authorization.md §5). Nothing is deleted:
+a change ends the current row of an alias and inserts its successor, so the
+table keeps the history.
+
+**[OPEN: OD-53]** fp1 includes object owners, so two environments whose
+objects are owned by different roles never have equal fingerprints: for a
+project that is not an imported legacy project, every production plan then
+fails `migration.fingerprint-lineage` and needs an approval (fail closed;
+for an imported project it stays the legacy warning).
+
+### 3.2 Declared `BYPASSRLS` exceptions
+
+**[DECIDED]** (Wave 9, ADR-0034 §1 to §4, OD-51) Supabase-origin schemas
+keep `SECURITY DEFINER` functions owned by the schema owner that read
+`FORCE ROW LEVEL SECURITY` tables; their owner needs `BYPASSRLS`. A person
+declares, per project, environment and role, that this role may carry
+`BYPASSRLS` as an execution role (`registry.execution_role_exception.declare`,
+`registry.manage` at the environment's tier, re-authentication, human only;
+on production also an approval, `registry.execution-role-exception-production`).
+A declaration names the role, a reason (20 to 1000 characters) and an
+optional review date; its attributes are fixed to `{bypassrls}` by the
+Control Store, it is revoked once and never re-activated, and after its
+review date it excuses nothing. Every plan that relies on it binds
+`{exceptionId, revision}` and shows it (`migration.execution-role-exception`,
+a warning); a revoked, changed or expired declaration makes such a plan
+`PLAN_STALE`. An agent may apply nonprod migrations under a declaration;
+production stays as before (`migration.agent-production`). The health
+sampler keeps a finding open while the live role no longer matches the
+declaration (`execution_role_exception_drift`,
+[`health.md` §3](../10-observability/health.md)). The target state is a
+dedicated definer role, so the execution role can drop `BYPASSRLS` and the
+declaration can be revoked (ADR-0034 §7).
 
 The declaration is checked continuously (drift kind E). **[OBSERVED]** REOSA's
 current self-hosting plan makes the application login role `reosa_app` the owner

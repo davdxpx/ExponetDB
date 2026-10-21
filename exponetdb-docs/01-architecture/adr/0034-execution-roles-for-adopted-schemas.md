@@ -113,9 +113,14 @@ every registry change (C-6):
 ### 4. Drift and parity
 
 - A finding (`execution_role_exception_drift`) is raised when the live
-  role no longer matches the declaration: it lost `BYPASSRLS` (the exception
-  is stale and should be revoked) or gained any other privileged attribute
-  (every plan is refused anyway).
+  role no longer matches the declaration: it lost `BYPASSRLS` or no longer
+  exists (the exception is stale and should be revoked), or gained any other
+  privileged attribute (critical; every plan is refused anyway). A
+  declaration past its review date raises it too (it excuses nothing until
+  a person declares it again or revokes it). The health sampler raises it
+  (kind `health`, one finding per declaration,
+  [`health.md` §3](../../10-observability/health.md)), because a schema
+  drift acceptance must never cover a role's attributes.
 - Evidence for production compares the evidence environment's execution
   roles with production's: equal attributes and equal exception status, or a
   warning (`migration.execution-role-parity`): a staging run under a role
@@ -125,10 +130,14 @@ every registry change (C-6):
 ### 5. Execution roles per environment (D-A2)
 
 - A new registry record, **`registry.execution_role_bindings`**
-  (`project_id`, `environment_id`, `alias`, `role`), overrides the project's
-  alias map for one environment. Resolution per alias: the environment's
-  binding if one exists, else the project map. The project map stays the
-  default, so every Wave 6 project works unchanged.
+  (`project_id`, `environment_id`, `alias`, `role`, set and ended by an
+  operation), overrides the project's alias map for one environment.
+  Resolution per alias: the environment's current binding if one exists,
+  else the project map. The project map stays the default, so every Wave 6
+  project works unchanged. Nothing is deleted (no runtime role deletes in
+  the registry, a frozen Wave 2 verification): a change ends the current
+  row of an alias and inserts its successor in the same operation, so the
+  table keeps the history.
 - **One resolver**, `executionRolesFor(target)`, replaces every direct
   reader of the project map in the engine (planner, apply kind, resume,
   rollback, re-verification, reads, the legacy replay); a test fails when
@@ -137,13 +146,22 @@ every registry change (C-6):
   (`registry.execution_role_binding.set`), `registry.manage` at the
   environment's tier with a re-authentication, human only; a binding change
   between plan and apply makes the plan `PLAN_STALE` (the plan binds the
-  resolved names, as since Wave 6).
+  resolved names, as since Wave 6). An environment subject passes only an
+  unrestricted grant ([`authorization.md` §5](../../08-auth-and-security/authorization.md)):
+  a tier-restricted CLI grant changes no environment's roles, and a person
+  whose bindings do not cover the environment does not see it (`NOT_FOUND`).
 - Nothing frozen changes: `c1` hashes only the alias
   ([`migration-bundles.md` §3](../../04-migrations/migration-bundles.md#3-checksum-semantics)),
   the plan binds resolved names per target, and evidence binds the
   checksum. A production plan consumes staging evidence of the same checksum
   although staging ran as another role. A golden plan-hash vector over a
-  plan with per-environment roles is appended.
+  plan with per-environment roles is appended (`plan-006`).
+- **Consequence, open (OD-53).** fp1 includes object owners, so two
+  environments whose objects are owned by different roles never share a
+  fingerprint: `migration.fingerprint-lineage` then fails for every
+  production plan of a project that is not an imported legacy project, and
+  each needs an approval (fail closed). An imported project sees only the
+  legacy lineage warning. fp1 does not change.
 
 ### 6. Threat analysis
 

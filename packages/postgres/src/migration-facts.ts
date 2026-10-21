@@ -33,6 +33,17 @@ export type ExecutionRoleProblem =
   | 'membership_inherits'
   | 'membership_without_set'
   | 'reaches_protected_role'
+  /**
+   * Usable only because a person declared an execution-role exception
+   * (ADR-0034): `BYPASSRLS` is the role's sole problem and it is excused.
+   * Callers bind the exception into the plan; it is never a blocking problem.
+   */
+  | 'declared_exception'
+
+/** The only attribute an execution-role exception can excuse (ADR-0034 §1). */
+export type ExcusableAttribute = 'bypassrls'
+
+const NOTHING_EXCUSED: ReadonlySet<ExcusableAttribute> = new Set()
 
 const EXPONETDB_ROLES: ReadonlySet<string> = new Set([
   ...Object.values(ROLE_NAMES),
@@ -103,27 +114,37 @@ export async function executionRoleFacts(
  * direct member with `SET TRUE` and `INHERIT FALSE` (the migrator never
  * gains its privileges implicitly, and consumer SQL never runs as the
  * ledger owner).
+ *
+ * `excused` (ADR-0034) holds what a declared execution-role exception
+ * excuses for this role: at most `bypassrls`. The answer is
+ * `declared_exception` only when `BYPASSRLS` is the role's sole problem and
+ * it is excused; `SUPERUSER`, `CREATEROLE`, `CREATEDB`, `REPLICATION`,
+ * `LOGIN`, a predefined or ExponetDB role, any reach into one and every
+ * membership defect are never excusable and are reported first.
  */
-export function executionRoleProblem(facts: ExecutionRoleFacts): ExecutionRoleProblem | null {
+export function executionRoleProblem(
+  facts: ExecutionRoleFacts,
+  excused: ReadonlySet<ExcusableAttribute> = NOTHING_EXCUSED,
+): ExecutionRoleProblem | null {
   if (EXPONETDB_ROLES.has(facts.role)) return 'exponetdb_role'
   if (facts.role.startsWith('pg_')) return 'predefined_role'
   if (!facts.exists) return 'missing'
   if (facts.canLogin) return 'can_login'
-  if (
-    facts.superuser ||
-    facts.createRole ||
-    facts.createDb ||
-    facts.replication ||
-    facts.bypassRls
-  ) {
+  if (facts.superuser || facts.createRole || facts.createDb || facts.replication) {
     return 'privileged_attribute'
   }
+  if (facts.bypassRls && !excused.has('bypassrls')) return 'privileged_attribute'
   // SET ROLE into it would reach the ledger owner or a predefined role's powers.
   if (facts.reachesProtected) return 'reaches_protected_role'
   if (facts.membership === null) return 'not_a_member'
   if (!facts.membership.set) return 'membership_without_set'
   if (facts.membership.inherit) return 'membership_inherits'
-  return null
+  return facts.bypassRls ? 'declared_exception' : null
+}
+
+/** A problem a plan cannot run with: anything but none and a declared exception. */
+export function blocksExecution(problem: ExecutionRoleProblem | null): boolean {
+  return problem !== null && problem !== 'declared_exception'
 }
 
 export interface ExtensionFacts {

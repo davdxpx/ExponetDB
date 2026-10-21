@@ -48,6 +48,10 @@ exit codes are in [`README.md`](./README.md).
 | [`project show`](#project-show) | remote | read | Show a project and its managed scope. |
 | [`project create`](#project-create) | remote | plan | Plan a new project of a product. |
 | [`project update`](#project-update) | remote | plan | Plan a project change (name, managed scope, execution roles, trusted extensions). |
+| [`project execution-roles`](#project-execution-roles) | remote | read | Show a project's execution roles: the default map, each environment's bindings and the declared exceptions. |
+| [`project execution-roles set`](#project-execution-roles-set) | remote | plan | Plan one environment's execution roles (aliases of the project map bound to other roles); the set replaces the environment's bindings. |
+| [`project role-exception declare`](#project-role-exception-declare) | remote | plan | Plan a declared exception: one role may carry BYPASSRLS as an execution role of the project in one environment (nothing else is ever excused). |
+| [`project role-exception revoke`](#project-role-exception-revoke) | remote | plan | Plan the revocation of a declared exception; every plan that relied on it becomes stale. |
 | [`target list`](#target-list) | remote | read | List targets with tier, state and health. |
 | [`target show`](#target-show) | remote | read | Show a target: placement, ledger, health, findings. |
 | [`target register`](#target-register) | remote | plan | Plan registering a database of a cluster as a target of a project environment. |
@@ -751,6 +755,86 @@ Runs: against the server; effect: plan; action: `registry.project.update.plan`; 
 | `--name <text>` | Display name. |
 | `--execution-role <name=role>` | Execution roles (name=PostgreSQL role). |
 | `--trusted-extensions <a,b>` | Extensions a bundle may require. |
+| `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### project execution-roles
+
+Show a project's execution roles: the default map, each environment's bindings and the declared exceptions.
+
+```text
+exponetdb project execution-roles <project>
+```
+
+Runs: against the server; effect: read; action: `project.execution_roles.get`; scopes: `migrations.read`; output: `ProjectExecutionRoles`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `project` (required) | A project id (prj_…). |
+
+### project execution-roles set
+
+Plan one environment's execution roles (aliases of the project map bound to other roles); the set replaces the environment's bindings.
+
+```text
+exponetdb project execution-roles set <project> [flags]
+```
+
+Runs: against the server; effect: plan; action: `registry.execution_role_binding.set.plan`; scopes: `registry.manage`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `project` (required) | A project id. |
+| `--environment <env>` | An environment of the project's product (id or slug). Required unless --file is given. |
+| `--role <alias=role>` | A binding (alias=PostgreSQL role); repeat for each alias. |
+| `--clear` | Remove every binding: the project map applies again. |
+| `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### project role-exception declare
+
+Plan a declared exception: one role may carry BYPASSRLS as an execution role of the project in one environment (nothing else is ever excused).
+
+```text
+exponetdb project role-exception declare <project> [flags]
+```
+
+Runs: against the server; effect: plan; action: `registry.execution_role_exception.declare.plan`; scopes: `registry.manage`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `project` (required) | A project id. |
+| `--environment <env>` | An environment of the project's product (id or slug). Required unless --file is given. |
+| `--role <role>` | The PostgreSQL role. Required unless --file is given. |
+| `--reason <text>` | Why the role needs BYPASSRLS (20 to 1000 characters). Required unless --file is given. |
+| `--review-by <YYYY-MM-DD>` | After this date the exception excuses nothing. |
+| `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### project role-exception revoke
+
+Plan the revocation of a declared exception; every plan that relied on it becomes stale.
+
+```text
+exponetdb project role-exception revoke <project> <exception> [flags]
+```
+
+Runs: against the server; effect: plan; action: `registry.execution_role_exception.revoke.plan`; scopes: `registry.manage`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `project` (required) | A project id. |
+| `exception` (required) | The exception (rxe_…). |
+| `--reason <text>` | Why it is revoked (up to 1000 characters). Required unless --file is given. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
 | `--wait` | Wait until applied and verified (the default). |

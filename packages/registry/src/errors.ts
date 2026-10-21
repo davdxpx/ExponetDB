@@ -37,6 +37,8 @@ export type ConflictReason =
   | 'observer_credential_missing'
   | 'system_identifier_taken'
   | 'credential_missing'
+  | 'exception_active'
+  | 'exception_not_active'
 
 export function conflict(reason: ConflictReason): RegistryError {
   return new RegistryError('REGISTRY_CONFLICT', { reason })

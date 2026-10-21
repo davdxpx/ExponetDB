@@ -7,6 +7,8 @@ import {
   planEndpointAdd,
   planEndpointRetire,
   planEnvironmentCreate,
+  planExecutionRoleExceptionDeclare,
+  planExecutionRoleExceptionRevoke,
   planProductCreate,
   planProjectCreate,
   planTargetRegister,
@@ -545,6 +547,96 @@ describe('drift finding cap', () => {
     const open = await openFindings(h.worker, capped.targetId, 'drift')
     expect(open.map((f) => f.findingId)).toContain(changed[0]?.findingId)
     expect(open.some((f) => f.code === 'drift_overflow')).toBe(true)
+  })
+})
+
+/**
+ * ADR-0034 §4: the health sampler compares every active execution-role
+ * exception of the target's environment with the role on the target and
+ * keeps one finding per declaration that no longer matches.
+ */
+describe('execution-role exception drift (health sampler)', () => {
+  const definer = `exdb_it_diag_definer_${Date.now().toString(36)}`
+  let exceptionId = ''
+
+  const exceptionFindings = async () =>
+    (await openFindings(h.worker, target.targetId, 'health')).filter(
+      (f) => f.code === 'execution_role_exception_drift',
+    )
+
+  beforeAll(async () => {
+    await runAsSuperuser(pg17, 'postgres', [`CREATE ROLE ${definer} NOLOGIN BYPASSRLS`])
+    const declared = await run(h, a, (tx) =>
+      planExecutionRoleExceptionDeclare(tx, h.context, a, projectId, target.environmentId, {
+        role: definer,
+        reason: 'Definer functions of the adopted schema read FORCE tables.',
+      }),
+    )
+    expect(declared.operation.state).toBe('succeeded')
+    exceptionId = String((await planContent(h, declared.plan.planId))['exceptionId'])
+  })
+
+  afterAll(async () => {
+    await runAsSuperuser(pg17, 'postgres', [`DROP ROLE IF EXISTS ${definer}`])
+  })
+
+  it('opens nothing while the role matches its declaration', async () => {
+    await sampleTarget(healthDeps(), await fresh(target))
+    expect(await exceptionFindings()).toEqual([])
+  })
+
+  it('keeps one finding per declaration: stale, then exceeded, then cleared', async () => {
+    await runAsSuperuser(pg17, 'postgres', [`ALTER ROLE ${definer} NOBYPASSRLS`])
+    await sampleTarget(healthDeps(), await fresh(target))
+    const [stale, ...more] = await exceptionFindings()
+    expect(more).toEqual([])
+    expect(stale).toMatchObject({
+      severity: 'warning',
+      dedupKey: `health:execution_role_exception:${exceptionId}`,
+      details: { exceptionId, role: definer, reason: 'bypassrls_lost', securityRelevant: true },
+    })
+
+    // Another privileged attribute: the same finding, now critical.
+    await runAsSuperuser(pg17, 'postgres', [`ALTER ROLE ${definer} BYPASSRLS CREATEDB`])
+    await sampleTarget(healthDeps(), await fresh(target))
+    const [exceeded, ...again] = await exceptionFindings()
+    expect(again).toEqual([])
+    expect(exceeded).toMatchObject({
+      findingId: stale?.findingId,
+      severity: 'critical',
+      occurrences: 2,
+      details: { reason: 'privilege_exceeded' },
+    })
+
+    await runAsSuperuser(pg17, 'postgres', [`ALTER ROLE ${definer} NOCREATEDB`])
+    await sampleTarget(healthDeps(), await fresh(target))
+    expect(await exceptionFindings()).toEqual([])
+    const resolved = await h.worker.query(
+      'test.diag.exception_finding',
+      `SELECT state, resolution FROM observation.findings WHERE finding_id = $1`,
+      [stale?.findingId ?? ''],
+    )
+    expect(resolved.rows[0]?.text('resolution')).toBe('cleared')
+  })
+
+  it('changes no finding when the roles cannot be read, and clears it once revoked', async () => {
+    await runAsSuperuser(pg17, 'postgres', [`ALTER ROLE ${definer} NOBYPASSRLS`])
+    await sampleTarget(healthDeps(), await fresh(target))
+    const [open] = await exceptionFindings()
+    expect(open?.details['reason']).toBe('bypassrls_lost')
+
+    // A sample whose diagnostic session cannot open reads no role: the finding stays.
+    await sampleTarget(healthDeps({ connector: new FailingConnector(h) }), await fresh(target))
+    expect((await exceptionFindings()).map((f) => f.findingId)).toEqual([open?.findingId])
+
+    const revoked = await run(h, a, (tx) =>
+      planExecutionRoleExceptionRevoke(tx, h.context, a, projectId, exceptionId, {
+        reason: 'The definer functions moved to a dedicated role.',
+      }),
+    )
+    expect(revoked.operation.state).toBe('succeeded')
+    await sampleTarget(healthDeps(), await fresh(target))
+    expect(await exceptionFindings()).toEqual([])
   })
 })
 

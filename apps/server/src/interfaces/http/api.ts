@@ -58,6 +58,10 @@ import {
   EnvironmentChangeRequestSchema,
   EnvironmentCreateRequestSchema,
   EnvironmentIdSchema,
+  ExecutionRoleBindingsRequestSchema,
+  ExecutionRoleExceptionDeclareRequestSchema,
+  ExecutionRoleExceptionIdSchema,
+  ExecutionRoleExceptionRevokeRequestSchema,
   type ExplainRequest,
   FindingIdSchema,
   GrantIdSchema,
@@ -1123,6 +1127,43 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         caller(call),
         ProjectIdSchema.parse(field(call.params, 'projectId')),
         ProjectChangeRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  getProjectExecutionRoles: async (app, call) =>
+    value(
+      await app.registry.projectExecutionRoles(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+      ),
+    ),
+  planExecutionRoleBindings: async (app, call) =>
+    value(
+      await app.registry.planExecutionRoleBindings(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        EnvironmentIdSchema.parse(field(call.params, 'environmentId')),
+        ExecutionRoleBindingsRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planExecutionRoleException: async (app, call) =>
+    value(
+      await app.registry.planExecutionRoleException(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        EnvironmentIdSchema.parse(field(call.params, 'environmentId')),
+        ExecutionRoleExceptionDeclareRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planExecutionRoleExceptionRevocation: async (app, call) =>
+    value(
+      await app.registry.planExecutionRoleExceptionRevocation(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        ExecutionRoleExceptionIdSchema.parse(field(call.params, 'exceptionId')),
+        ExecutionRoleExceptionRevokeRequestSchema.parse(call.body),
         idempotency(call),
       ),
     ),

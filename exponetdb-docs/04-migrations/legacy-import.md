@@ -256,7 +256,14 @@ ledger such as drizzle's compares) are kept beside it. Golden vectors:
   now names another role (`PLAN_STALE`, `execution_roles`); and the worker
   reads the facts again on the migrator session under the scratch target's
   lock: a role that became unusable stops the replay before any file runs
-  (report `incomplete`, `execution_role:<problem>`, `PLAN_STALE`). A file that fails makes the report `incomplete`
+  (report `incomplete`, `execution_role:<problem>`, `PLAN_STALE`).
+  **[DECIDED]** (Wave 9 Part A, A4, A5; ADR-0034 §3, §5) The replay's role
+  is the alias resolved for the **scratch** target's environment, and only
+  that environment's declared exceptions excuse its `BYPASSRLS` (a
+  declaration for the imported target's environment does not); the plan
+  binds the declaration it relies on (`executionRoleExceptions`), shows it
+  (`migration.execution-role-exception`), and a revocation before the
+  replay is `PLAN_STALE`. A file that fails makes the report `incomplete`
   with the file, error and SQLSTATE; the scratch target is then consumed
   (re-create it for the next analysis).
 - **Compare and classify** (worker, imported target read as the observer

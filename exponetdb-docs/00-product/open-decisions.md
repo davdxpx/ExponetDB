@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); OD-50 added on 2026-10-21 with the CLI's scope presets; on 2026-10-21 the owner's Wave 9 order ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)) split OD-7 into OD-7a (staging: yes) and OD-7b (production: no applies before Wave 11), decided the engine part of OD-4 (pgBackRest; the storage stays open until the measured spike B0), and added OD-51 (a declared `BYPASSRLS` execution-role exception) and OD-52 (adopting a running pgBackRest setup), both decided by the order's defaults; OD-8 stays open and blocks Part B of Wave 9 (see ["Decisions of the Wave 9 order"](#decisions-of-the-wave-9-order-2026-10-21)); all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); OD-50 added on 2026-10-21 with the CLI's scope presets; on 2026-10-21 the owner's Wave 9 order ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)) split OD-7 into OD-7a (staging: yes) and OD-7b (production: no applies before Wave 11), decided the engine part of OD-4 (pgBackRest; the storage stays open until the measured spike B0), and added OD-51 (a declared `BYPASSRLS` execution-role exception) and OD-52 (adopting a running pgBackRest setup), both decided by the order's defaults; OD-53 (fingerprint lineage across per-environment owner roles) added on 2026-10-21 by Part A (A5); OD-8 stays open and blocks Part B of Wave 9 (see ["Decisions of the Wave 9 order"](#decisions-of-the-wave-9-order-2026-10-21)); all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -72,6 +72,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-50 | What the CLI may learn about the scopes an account could hold | open | (b) a CLI read action returning the scopes the person could be granted, computed like the consent page | "could get" in `whoami` and `doctor` | yes |
 | OD-51 | An execution role with `BYPASSRLS` for adopted schemas | **resolved 2026-10-21** (Wave 9 order default D-A1; stands unless the owner overrules it) | a declared, audited, revocable exception per (project, environment, PostgreSQL role) that excuses exactly `BYPASSRLS` and nothing else; declared and revoked by people only (never MCP), production with an approval and a re-authentication; a warn rule in every plan that uses it; on production at least `high` and agent applies still need a human approval ([ADR-0034](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md)) | Wave 9 Part A (A4) | decided |
 | OD-52 | Adopting a running, hand-made pgBackRest setup | **resolved 2026-10-21** (Wave 9 order default D-B2; stands unless the owner overruled it) | adopt, then own: first observe the existing stanza, repositories and schedules without changing them, then take ownership of configuration and scheduling through a planned, verified hand-over that stays reversible until confirmed; an ADR in Wave 9 B0 | Wave 9 Part B (B0, B2) | decided |
+| OD-53 | Fingerprint lineage when environments use different owner roles | open | (a) keep it fail closed: a lineage mismatch caused by owner names needs an approval, as today; (b) compare the two stored documents with the execution roles mapped by alias (fp1 unchanged, a new lineage comparison); (c) treat a mismatch only in owners and grantees of execution roles as a warning | production plans of a non-legacy project whose environments are bound to different owner roles (ADR-0034 §5) | yes |
 
 ---
 
@@ -1513,6 +1514,32 @@ History:
   never own; (c) adopt, then own through a planned hand-over.
 - **Recommendation.** (c).
 - **Blocks.** Wave 9 B0 and B2.
+
+## OD-53. Fingerprint lineage when environments use different owner roles
+
+- **Status.** OPEN (found in Wave 9 Part A, A5, 2026-10-21)
+- **Question.** Should a production plan count as following its evidence
+  environment when the only difference between the two schemas is which
+  execution role owns the objects?
+- **Why it matters.** Per-environment execution roles (ADR-0034 §5) let
+  staging and production of one project own their objects with different
+  roles on one cluster. fp1 includes object owners (and grantees), so the
+  two fingerprints are never equal, and `migration.fingerprint-lineage`
+  fails for every production plan of such a project: each needs an
+  approval. An imported legacy project only sees the lineage warning
+  (`migration.fingerprint-lineage-legacy`), so REOSA's import is not
+  blocked by this. fp1 is frozen and does not change in any option.
+  **[OBSERVED]** `packages/migrations-engine/test/execution-roles.int.test.ts`
+  (the production plan of the definer migration).
+- **Options.** (a) keep it fail closed: an approval per production plan,
+  as today; (b) a second lineage comparison over the two stored documents
+  with the execution roles mapped by alias (fp1 unchanged; needs both
+  documents stored and a reviewed mapping rule); (c) treat a mismatch only
+  in owners and grantees that are execution roles as a warning.
+- **Recommendation.** (a) until a project needs it, then (b); (c) hides a
+  real difference behind a role name.
+- **Blocks.** Nothing in Part A; production plans of a non-legacy project
+  with per-environment owner roles need an approval until it is decided.
 
 ## Decisions of the Wave 9 order (2026-10-21)
 

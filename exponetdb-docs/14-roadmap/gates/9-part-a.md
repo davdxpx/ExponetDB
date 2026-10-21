@@ -107,8 +107,8 @@ another repository.
 | A1 | The CLI starts a legacy import from the project file (`baseline:<slug>` and `<slug>`, `--hints`) | none needed (the request contract is unchanged) | `apps/cli/src/commands/migration.ts` (`baselineSlug`, `importHints`, flag `--hints`) | unit tests §4.2; the end-to-end run of the CLI process (analyze → report → resolve → baseline) lands with the real-shape fixture of A2 | open (end-to-end pending) |
 | A2 | Supabase ledger matching on real data (names, statement sequences, evidence strength, multi-file aliases, real-shape fixture) | `ImportAnalysisRequest.aliases` takes a stem or a list of stems; `ImportReport.items[].evidenceStrength` (additive) | `migrations-engine/src/legacy-evidence.ts`, `legacy.ts` (`relateLedger`, `classify`, extension check); bundle `01M5G6EQ7GKZV615Y680AHT52B_legacy-import-evidence`; fixture `testkit/src/fixtures/supabase-history.ts`; the Web App shows the strength (§4.4) | §4.3 | PASS |
 | A3 | The replay checks the execution role; no silent cap in the import path | error `LEGACY_IMPORT_TRUNCATED`; `ImportReport.driftTotal`, `driftTruncated` (additive) | `legacy.ts` (role check at planning and under the scratch lock, binding check, drift totals, evidence and attribute lists capped with a mark); rule `migration.import-execution-role`; Web App: strength and truncation warning | §4.4 | PASS (the A4 exception model joins the same check with A4) |
-| A4 | Declared `BYPASSRLS` execution-role exception (ADR-0034, OD-51) **S** | open | open | open | open |
-| A5 | Execution roles per environment (one resolver) | open | open | open | open |
+| A4 | Declared `BYPASSRLS` execution-role exception (ADR-0034, OD-51) **S** | `rxe_` ids; `ExecutionRoleExceptionDeclareRequest`, `…RevokeRequest`, `ExecutionRoleExceptionView`, `ProjectExecutionRoles`; actions `registry.execution_role_exception.declare(.plan)`, `.revoke(.plan)`, `project.execution_roles.get`; routes `planExecutionRoleException`, `planExecutionRoleExceptionRevocation`, `getProjectExecutionRoles`; `REGISTRY_CONFLICT` reasons `exception_active`, `exception_not_active`; `MigrationPlanContent.expectedState.executionRoleExceptions`, `facts.executionRoleExceptions`, `facts.executionRoleParity` (all additive) | bundle `01M5G6EQ7KP3PMPC7G3HJ7KH7R_execution-role-exceptions`; `registry/src/execution-roles.ts` (plans, kinds); `postgres/src/migration-facts.ts` (`executionRoleProblem(facts, excused)`, `declared_exception`); `migrations-engine/src/execution-roles.ts` (`roleUnder`, `boundExceptionsHold`, `rolesStillUsable`); planner, kind, executor, resume, rollback, legacy replay; rules `migration.execution-role-exception`, `migration.execution-role-parity`, `registry.execution-role-exception-production`; the health sampler's `execution_role_exception_drift` finding; CLI `project role-exception declare/revoke` | §4.5 | PASS, pending the independent security review (§6) |
+| A5 | Execution roles per environment (one resolver) | `ExecutionRoleBindingsRequest`; actions `registry.execution_role_binding.set(.plan)`; route `planExecutionRoleBindings` (additive) | bundle `01M5G6EQ7MFWM3TVK3YN5WRK8W_execution-role-bindings` (append-only); `executionRolesFor` replaces every direct reader (planner, kind, executor, resume, rollback, reverify, reads, legacy); a source test forbids other readers; CLI `project execution-roles`, `project execution-roles set` | §4.5 | PASS, with OD-53 opened (§5) |
 | A6 | Legacy files with cluster-global effects (replay elision, cluster-global expectations, `CONCURRENTLY`, comment-only files) | open | open | open | open |
 | A7 | Scratch targets: preflight, in-place reset, database retire | open | open | open | open |
 | A8 | External-cluster onboarding without hand-made SQL | open | open | open | open |
@@ -222,9 +222,113 @@ another repository.
   (19), server (185), web (159 files, 2372 tests); integration tests of the
   migrations engine (65).
 
+### 4.5 A4, A5: execution roles for adopted schemas (2026-10-21)
+
+- Design: [ADR-0034](../../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md),
+  [`credentials-and-roles.md` §3, §3.1, §3.2](../../03-database-model/credentials-and-roles.md#3-execution-roles-who-owns-application-objects),
+  [`registry.md` §4.2](../../02-control-plane/registry.md#42-execution-roles-per-environment-and-declared-exceptions-wave-9),
+  [`health.md` §3](../../10-observability/health.md), threat **T35**.
+- **Found while building, corrected:** (1) `migration.rollback` never
+  checked its execution role's facts (a Wave 6 defect): a rollback planned
+  after the owner gained `SUPERUSER` or `BYPASSRLS` would have run
+  `down.sql` as that role. The rollback now reads the facts at planning
+  (`requirementsUnmet: execution_role`, deny), binds the role and the
+  exception it relies on, and re-checks both at acceptance and under the
+  lock. (2) The first bindings bundle granted `DELETE` to the worker; the
+  frozen Wave 2 verification "no runtime role deletes" in the registry
+  refused it on the first migration run. The bindings are now append-only
+  (a change ends the current row and inserts its successor), which also
+  keeps their history. (3) `credentials-and-roles.md:104-106` said "per
+  target" while the code resolved per project; both now say per
+  environment with the project map as default.
+- `packages/postgres`: `executionRoleProblem(facts, excused)` stays pure;
+  `declared_exception` only when `BYPASSRLS` is the sole problem and it is
+  excused; superuser, `CREATEROLE`, `CREATEDB`, `REPLICATION`, login,
+  protected reach and membership defects are reported first and never
+  excused.
+- `packages/migrations-engine/test/execution-roles.test.ts` (5 tests, pure
+  plus a source scan): the exception excuses only `BYPASSRLS`; never
+  another attribute; `boundExceptionsHold` and `rolesStillUsable` (the
+  executor never widens what the plan bound); no engine module outside the
+  resolver reads `execution_roles`, the bindings or the exceptions (the
+  scan was checked against the old readers).
+- `packages/migrations-engine/test/execution-roles.int.test.ts` (PostgreSQL
+  17, 9 tests): staging and production of one project on one cluster run
+  under their own owners (a production binding); the production plan
+  consumes the staging evidence of the same checksum, binds the resolved
+  name and shows parity `match`, and the table on production is owned by
+  production's role; a binding changed after planning is `PLAN_STALE` at
+  acceptance, and after acceptance at the worker's start (operation
+  `failed`, `not_started`, `PLAN_STALE`; nothing ran); the ended binding
+  stays as history; an alias outside the map and a protected role are
+  refused; an owner with `BYPASSRLS` is denied until a person declares it
+  for that environment, then the plan binds `{exceptionId, revision}`,
+  shows the warn rule and applies, the objects owned by that role;
+  `CREATEDB` on top is still denied; an agent plans on nonprod under the
+  declaration without `migration.agent-production`; a revocation makes the
+  waiting plan `PLAN_STALE` and the next plan denied, and a second
+  revocation is `exception_not_active`; the rollback is denied while the
+  declaration is revoked, binds a new declaration, and goes stale when it
+  is revoked; on production the declaration needs an approval and a
+  re-authentication, parity is `mismatch` while only staging has a
+  declaration and `match` once production has one, a person's plan waits
+  for an approval only because fp1 lineage differs (owners differ by
+  design, OD-53), and an agent's plan needs `migration.agent-production`.
+- `legacy-supabase.int.test.ts`, one more test: a declaration for the
+  imported target's environment does not excuse the replay; one for the
+  scratch target's environment does (bound, warned), and its revocation
+  makes the replay plan `PLAN_STALE`.
+- `packages/diagnostics/test/execution-role-exceptions.test.ts` (4 tests)
+  and `diagnostics.int.test.ts` (3 more tests): no finding while the role
+  matches; `bypassrls_lost` (warning), then on the same finding
+  `privilege_exceeded` (critical) after `CREATEDB`, then `cleared`; a sample
+  whose diagnostic session cannot open changes no finding; a revocation
+  clears it.
+- `apps/server/test/http-registry-tier.int.test.ts` (2 more tests, REST):
+  the staging-only colleague binds and declares for staging, does not see
+  production (`NOT_FOUND`) nor the project-wide view; a tier-restricted CLI
+  grant changes no environment's roles (`PERMISSION_DENIED`: an environment
+  subject passes only an unrestricted grant); a CLI grant for both tiers
+  plans production's bindings (tier `prod`); an unknown alias is `422`;
+  the view shows defaults, bindings, effective maps and the declaration
+  (`attributes: [bypassrls]`, review date); a second active declaration is
+  `exception_active`; the owner's production declaration waits for an
+  approval and stays out of the registry; revocation gives revision 2 and
+  a second one `exception_not_active`.
+- `packages/contracts/test/registry.test.ts` (one more test): the three
+  kinds are high, stored plans, re-authenticated, human only, tier
+  `subject`; the plans are Web App and CLI only; no MCP tool exposes them.
+- Golden vector `plan-006` (plan hash over a plan with per-environment
+  roles and a bound exception) derived independently (Python JCS and
+  SHA-256), appended and locked; the TypeScript implementation agrees.
+- Also corrected in passing: the Web App's plan titles cover the three new
+  kinds (`apps/web/src/features/plans/plan-title.ts`, a contract-wide
+  test), and the server's served-routes test admits Wave 9 and pins its
+  four routes.
+- Runs on this tree: `bun run check`, `bun run typecheck` (28 of 28),
+  `verify:generated`, `golden:check`, `golden:history origin/main` (452
+  vectors unchanged, 1 new, 21 frozen bundles byte-identical), `boundaries`,
+  `secrets`; unit tests of all 28 packages (turbo, `--env-mode=loose` so
+  Playwright finds the preinstalled Chromium; in strict mode the tokens
+  suite cannot launch it, an environment fact, not a code one), among them
+  contracts 217, cli 78, server 186, diagnostics 143, web 2372; integration
+  tests of control-store (117), registry (25), migrations-engine (75),
+  postgres (483), diagnostics (162) and the server's migration, registry,
+  MCP plan, break-glass, drift-accept and Wave 8 suites (87) plus
+  `http-registry-tier` (8), all passed.
+
 ## 5. Limits and residual risks
 
-Filled as the items land.
+- **OD-53 (open).** fp1 includes owners, so a non-legacy project whose
+  environments own their objects with different roles needs an approval
+  for every production plan (`migration.fingerprint-lineage`); imported
+  legacy projects see only the legacy warning. Fail closed, fp1 unchanged.
+- **T35 (accepted residual risk, OD-51).** While a declaration is active,
+  a reviewed migration running as the declared owner reads rows of tables
+  owned by other roles past their row security. The target state is a
+  dedicated definer role (ADR-0034 §7).
+- The health finding compares on the 15-second sample; between two samples
+  a changed role is caught by the plan and the executor's own checks.
 
 ## 6. Reviews
 

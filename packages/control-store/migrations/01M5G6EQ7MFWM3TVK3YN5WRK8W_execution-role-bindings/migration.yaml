@@ -1,0 +1,24 @@
+schema: exponetdb.migration/v1
+id: 01M5G6EQ7MFWM3TVK3YN5WRK8W
+name: execution-role-bindings
+description: |
+  Execution roles per environment (ADR-0034 §5, the Wave 9 order D-A2):
+  registry.execution_role_bindings maps an execution role alias of a
+  project to a PostgreSQL role for one environment of the project's
+  product; the project's alias map (registry.projects.execution_roles, of
+  the frozen migration-engine bundle) stays the default for every alias an
+  environment does not bind. Nothing is deleted: the worker inserts a
+  current row and ends one only as an operation of the kind
+  registry.execution_role_binding.set, so the table keeps the history; a
+  guard checks the environment's product, the operation's kind, that an
+  ended row never changes and that the role is never a predefined or an
+  ExponetDB role. Additive: no frozen bundle changes.
+dependsOn:
+  - 01M5G6EQ7GKZV615Y680AHT52B
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

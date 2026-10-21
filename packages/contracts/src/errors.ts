@@ -1025,6 +1025,8 @@ export const ERRORS = {
             'observer_credential_missing',
             'system_identifier_taken',
             'credential_missing',
+            'exception_active',
+            'exception_not_active',
             'cluster_unmapped',
             'cluster_not_agent_managed',
             'postgres_ca_missing',

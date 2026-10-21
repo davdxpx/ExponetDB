@@ -318,6 +318,90 @@
       }
     },
     {
+      "id": "plan-006",
+      "description": "a plan with per-environment execution roles and a declared exception binds the resolved names and the exception (ADR-0034); the construction is unchanged",
+      "plan": {
+        "id": "pln_01JB2ZB3M5P7R9T1V3X5Z7B9D2",
+        "kind": "migration.apply",
+        "kindVersion": 1,
+        "createdAt": "2026-10-21T12:00:00Z",
+        "expiresAt": "2026-10-21T12:15:00Z",
+        "actor": {
+          "identityId": "idn_01JB2Z0000000000000000000A",
+          "kind": "human",
+          "via": "web"
+        },
+        "client": {
+          "sessionId": "ses_01JB2Z0000000000000000000B"
+        },
+        "subject": {
+          "targetId": "tgt_01JB2Z0000000000000000000C",
+          "targetPath": "demo/app/production",
+          "generation": 3,
+          "tier": "prod"
+        },
+        "content": {
+          "migrations": [
+            {
+              "id": "01JB2Z6G8M4Q7R9T1V3W5X7Y9Z",
+              "checksum": "sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "executionRole": "acme_prod_owner"
+            }
+          ],
+          "execution": {
+            "mode": "transactional"
+          },
+          "expectedState": {
+            "executionRoles": {
+              "owner": "acme_prod_owner"
+            },
+            "executionRoleExceptions": {
+              "acme_prod_owner": {
+                "exceptionId": "rxe_01JB2Z0000000000000000000D",
+                "revision": 1
+              }
+            }
+          },
+          "facts": {
+            "evidence": "present",
+            "executionRoleExceptions": 1,
+            "executionRoleParity": "match"
+          }
+        },
+        "contentChecksum": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "policy": {
+          "decision": "require",
+          "policyVersion": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "requirements": [
+            {
+              "kind": "approval",
+              "count": 1,
+              "permission": "plans.approve"
+            }
+          ],
+          "rules": [
+            {
+              "id": "migration.execution-role-exception",
+              "result": "fail"
+            },
+            {
+              "id": "migration.staging-evidence",
+              "result": "pass"
+            }
+          ]
+        },
+        "expectedState": {
+          "schemaFingerprint": "fp1:17:1111111111111111111111111111111111111111111111111111111111111111",
+          "ledgerStateHash": "sha256:ls1:2222222222222222222222222222222222222222222222222222222222222222",
+          "pgVersionNum": 170006
+        }
+      },
+      "expected": {
+        "canonical": "{\"actor\":{\"identityId\":\"idn_01JB2Z0000000000000000000A\",\"kind\":\"human\",\"via\":\"web\"},\"client\":{\"sessionId\":\"ses_01JB2Z0000000000000000000B\"},\"content\":{\"execution\":{\"mode\":\"transactional\"},\"expectedState\":{\"executionRoleExceptions\":{\"acme_prod_owner\":{\"exceptionId\":\"rxe_01JB2Z0000000000000000000D\",\"revision\":1}},\"executionRoles\":{\"owner\":\"acme_prod_owner\"}},\"facts\":{\"evidence\":\"present\",\"executionRoleExceptions\":1,\"executionRoleParity\":\"match\"},\"migrations\":[{\"checksum\":\"sha256:c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"executionRole\":\"acme_prod_owner\",\"id\":\"01JB2Z6G8M4Q7R9T1V3W5X7Y9Z\"}]},\"contentChecksum\":\"sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"createdAt\":\"2026-10-21T12:00:00Z\",\"expectedState\":{\"ledgerStateHash\":\"sha256:ls1:2222222222222222222222222222222222222222222222222222222222222222\",\"pgVersionNum\":170006,\"schemaFingerprint\":\"fp1:17:1111111111111111111111111111111111111111111111111111111111111111\"},\"expiresAt\":\"2026-10-21T12:15:00Z\",\"id\":\"pln_01JB2ZB3M5P7R9T1V3X5Z7B9D2\",\"kind\":\"migration.apply\",\"kindVersion\":1,\"policy\":{\"decision\":\"require\",\"policyVersion\":\"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"requirements\":[{\"count\":1,\"kind\":\"approval\",\"permission\":\"plans.approve\"}],\"rules\":[{\"id\":\"migration.execution-role-exception\",\"result\":\"fail\"},{\"id\":\"migration.staging-evidence\",\"result\":\"pass\"}]},\"subject\":{\"generation\":3,\"targetId\":\"tgt_01JB2Z0000000000000000000C\",\"targetPath\":\"demo/app/production\",\"tier\":\"prod\"}}",
+        "planHash": "sha256:afc25a72cfd790d844df84573176f322b0f9ebab54575beecf288ec6e41b3e22"
+      }
+    },
+    {
       "id": "plan-010",
       "description": "state is never part of the hash input",
       "plan": {

@@ -3,6 +3,7 @@ import {
   ApplyChecksumSchema,
   BreakGlassGrantIdSchema,
   CursorSchema,
+  ExecutionRoleExceptionIdSchema,
   IdentityIdSchema,
   ImportReportIdSchema,
   LedgerStateHashSchema,
@@ -409,6 +410,16 @@ export const MigrationPlanContentSchema = z
       ledgerStateHash: LedgerStateHashSchema,
       extensions: z.record(z.string().max(63), z.string().max(64)),
       executionRoles: z.record(z.string().max(63), z.string().max(64)),
+      executionRoleExceptions: z
+        .record(
+          z.string().max(63),
+          z.object({ exceptionId: ExecutionRoleExceptionIdSchema, revision: z.int().min(1) }),
+        )
+        .optional()
+        .meta({
+          description:
+            'Per execution role the declared BYPASSRLS exception the plan relies on (ADR-0034); a revoked, changed or expired one makes the plan stale (Wave 9).',
+        }),
     }),
     evidence: z
       .object({
@@ -440,6 +451,17 @@ export const MigrationPlanContentSchema = z
         lineage: z.enum(['match', 'mismatch', 'unknown', 'not_required']),
         dependenciesVerified: z.boolean(),
         legacyProject: z.boolean(),
+        executionRoleExceptions: z.int().min(0).optional().meta({
+          description:
+            'How many execution roles of the plan run under a declared BYPASSRLS exception (rule migration.execution-role-exception; Wave 9).',
+        }),
+        executionRoleParity: z
+          .enum(['match', 'mismatch', 'unknown', 'not_required'])
+          .optional()
+          .meta({
+            description:
+              "Production: whether the evidence target's execution roles have the same attributes and exception status (rule migration.execution-role-parity; Wave 9).",
+          }),
       })
       .meta({ description: 'What the policy rules decide on (policy-engine.md §4, Migrations).' }),
     resume: MigrationResumeBindingSchema.optional().meta({

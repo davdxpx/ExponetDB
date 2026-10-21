@@ -249,6 +249,32 @@ Tests: `apps/server/test/http-registry-tier.int.test.ts`,
 `packages/auth/test/registry-tier.test.ts`,
 `packages/control-store/test/registry-schema.int.test.ts`.
 
+### 4.2 Execution roles per environment and declared exceptions (Wave 9)
+
+**[DECIDED]** (Wave 9 Part A, [ADR-0034](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md),
+[`../03-database-model/credentials-and-roles.md` §3.1, §3.2](../03-database-model/credentials-and-roles.md#31-execution-roles-per-environment))
+Two registry records refine a project's execution roles:
+
+| Record | What it holds | Changed by |
+|---|---|---|
+| `registry.execution_role_bindings` | per (project, environment of the project's product, alias of the project map) the PostgreSQL role, with the operation that set it and, once replaced or removed, the operation that ended it (nothing is deleted) | `registry.execution_role_binding.set`: the environment's whole set, replaced |
+| `registry.execution_role_exceptions` (`rxe_…`) | a person's declaration that one role may carry `BYPASSRLS` as an execution role of the project in one environment: role, reason, optional review date, `active` or `revoked`, a revision, who declared and revoked it | `registry.execution_role_exception.declare`, `.revoke` |
+
+All three operations are `registry.manage` at the **environment's** tier
+(the subject is the environment), high, re-authenticated and human only;
+declaring or revoking on a production environment also needs an approval
+(`registry.execution-role-exception-production`). An environment subject
+passes only an unrestricted grant: a tier-restricted CLI grant changes
+neither, and a person whose bindings do not cover the environment does not
+see it (`NOT_FOUND`). Control Store guards check the environment's product,
+the operation's kind, that an ended binding and a revoked declaration never
+change again, that a declaration's attributes are exactly `{bypassrls}` and
+that a role is never a predefined or ExponetDB role. `GET
+/projects/{projectId}/execution-roles` (`migrations.read` on the project)
+shows the default map, each environment's bindings and effective map, and
+the declarations; the CLI's `project execution-roles` and `project
+role-exception` commands use it.
+
 ## 5. Registry and REOSA's infrastructure register
 
 **[OBSERVED]** REOSA already keeps an infrastructure register in its admin

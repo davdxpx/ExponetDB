@@ -50,6 +50,13 @@ import {
 import type { PlanContent, PlanItem } from './content.ts'
 import { type MigrationKindDeps, projectRegistry } from './deps.ts'
 import { MigrationError } from './errors.ts'
+import {
+  boundExceptionsHold,
+  type ExceptionBinding,
+  executionRolesFor,
+  rolesStillUsable,
+  roleUnder,
+} from './execution-roles.ts'
 import { runTransactional } from './executor.ts'
 import {
   type ContentKeys,
@@ -165,6 +172,8 @@ interface ReplayContent {
    * `migration.import-execution-role` decides on it.
    */
   readonly executionRoleCheck?: { readonly role: string; readonly problem: string | null }
+  /** The declared exception of the scratch environment the replay relies on (ADR-0034), if any. */
+  readonly executionRoleExceptions?: Readonly<Record<string, ExceptionBinding>>
   readonly searchPath: readonly string[]
   readonly files: readonly { readonly stem: string; readonly checksum: string }[]
   readonly hints: Hints
@@ -403,9 +412,10 @@ export async function planImportAnalysis(
       'The scratch target must be another active nonprod target of the same project.',
     )
   }
-  const project = await projectRegistry(tx, target.projectId)
+  // The replay runs on the scratch target: its environment's roles and exceptions (ADR-0034).
+  const scratchRoles = await executionRolesFor(tx, scratch)
   const executionRoleAlias = request.role ?? 'owner'
-  const executionRole = project.executionRoles[executionRoleAlias]
+  const executionRole = scratchRoles.roles[executionRoleAlias]
   if (executionRole === undefined) {
     throw invalid('/role', 'execution_role_unmapped', 'The execution role alias is not mapped.')
   }
@@ -462,14 +472,17 @@ export async function planImportAnalysis(
     `import-plan/${scratch.targetId}`,
   )
   let executionRoleCheck: { role: string; problem: string | null }
+  let replayException: ExceptionBinding | null = null
   try {
     const [facts] = await scratchOpened.session.readOnly((rtx) =>
       executionRoleFacts(rtx, [executionRole], 'exponetdb_migrator'),
     )
-    executionRoleCheck = {
-      role: executionRole,
-      problem: facts === undefined ? 'missing' : executionRoleProblem(facts),
-    }
+    const checked =
+      facts === undefined
+        ? { problem: 'missing', binding: null }
+        : roleUnder(facts, scratchRoles.exceptions)
+    executionRoleCheck = { role: executionRole, problem: checked.problem }
+    replayException = checked.binding
   } finally {
     await scratchOpened.session.close()
   }
@@ -537,6 +550,9 @@ export async function planImportAnalysis(
     executionRoleAlias,
     executionRole,
     executionRoleCheck,
+    ...(replayException === null
+      ? {}
+      : { executionRoleExceptions: { [executionRole]: replayException } }),
     searchPath: hints.searchPath,
     files: files.map((f) => ({ stem: f.stem, checksum: f.checksum })),
     hints,
@@ -1130,13 +1146,19 @@ export class ImportReplayKind implements OperationKind {
     if (report?.state !== 'pending') {
       changed.push({ binding: 'report', actual: report?.state ?? 'missing' })
     }
-    // The alias still names the role the plan checked (a plan without the check is stale).
-    const project = await projectRegistry(this.#deps.store, c.projectId)
-    if (
-      c.executionRoleCheck === undefined ||
-      project.executionRoles[c.executionRoleAlias ?? 'owner'] !== c.executionRole
-    ) {
-      changed.push({ binding: 'execution_roles', actual: 'changed' })
+    // The alias still names the role the plan checked in the scratch environment, and the
+    // exception it relied on still holds (a plan without the check is stale).
+    if (scratch !== undefined) {
+      const resolved = await executionRolesFor(this.#deps.store, scratch)
+      if (
+        c.executionRoleCheck === undefined ||
+        resolved.roles[c.executionRoleAlias ?? 'owner'] !== c.executionRole
+      ) {
+        changed.push({ binding: 'execution_roles', actual: 'changed' })
+      }
+      if (!boundExceptionsHold(c.executionRoleExceptions, resolved.exceptions)) {
+        changed.push({ binding: 'execution_role_exception', actual: 'changed' })
+      }
     }
     return changed
   }
@@ -1242,9 +1264,18 @@ export class ImportReplayKind implements OperationKind {
         }
         throw error
       }
-      // The execution role again, on the migrator session under the lock: still usable.
+      // The execution role again, on the migrator session under the lock: still usable, and
+      // BYPASSRLS excused only where the plan bound an exception that still holds.
+      const resolved = await executionRolesFor(this.#deps.store, scratch)
       const [roleFacts] = await executionRoleFacts(session.reader(), [c.executionRole])
-      const roleProblem = roleFacts === undefined ? 'missing' : executionRoleProblem(roleFacts)
+      const roleProblem =
+        roleFacts === undefined
+          ? 'missing'
+          : !boundExceptionsHold(c.executionRoleExceptions, resolved.exceptions)
+            ? 'exception_changed'
+            : rolesStillUsable([roleFacts], c.executionRoleExceptions)
+              ? null
+              : (executionRoleProblem(roleFacts) ?? 'changed')
       if (roleProblem !== null) {
         await this.#finish(
           fence,

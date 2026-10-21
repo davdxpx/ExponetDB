@@ -13,6 +13,8 @@ import { ROLE_NAMES, readLedgerRows } from '@exponetdb/postgres'
 import {
   findTarget,
   planEnvironmentCreate,
+  planExecutionRoleExceptionDeclare,
+  planExecutionRoleExceptionRevoke,
   planProductCreate,
   planProjectCreate,
   planProjectUpdate,
@@ -259,6 +261,52 @@ describe('legacy import of a real-shape Supabase history', () => {
       expect(rows.map((r) => [r.text('state'), r.textOrNull('incomplete_reason')])).toEqual([
         ['incomplete', 'execution_role:privileged_attribute'],
       ])
+    } finally {
+      await runAsSuperuser(pg17, 'postgres', [`ALTER ROLE ${OWNER} NOBYPASSRLS`])
+    }
+  })
+
+  it("replays as a BYPASSRLS owner only under the scratch environment's declared exception, and stops once it is revoked", async () => {
+    const declare = async (environmentId: string) => {
+      const r = await run(h, a, (tx) =>
+        planExecutionRoleExceptionDeclare(tx, h.context, a, projectId, environmentId, {
+          role: OWNER,
+          reason: 'Definer functions of the imported schema read FORCE tables.',
+        }),
+      )
+      expect(r.operation.state).toBe('succeeded')
+      return String((await planContent(h, r.plan.planId))['exceptionId'])
+    }
+    const revoke = async (exceptionId: string) => {
+      const r = await run(h, a, (tx) =>
+        planExecutionRoleExceptionRevoke(tx, h.context, a, projectId, exceptionId, {
+          reason: 'The replay test is done with this declaration.',
+        }),
+      )
+      expect(r.operation.state).toBe('succeeded')
+    }
+    const ruleOf = (p: PlanRecord, id: string) =>
+      (p.body['policy'] as { rules: { id: string; result: string }[] }).rules.find(
+        (r) => r.id === id,
+      )?.result
+    await runAsSuperuser(pg17, 'postgres', [`ALTER ROLE ${OWNER} BYPASSRLS`])
+    try {
+      // A declaration for the imported target's environment says nothing about the replay.
+      const onImported = await declare(imported.environmentId)
+      expect((await analysis()).decision).toBe('deny')
+
+      const onScratch = await declare(scratch.environmentId)
+      const p = await analysis()
+      expect(p.decision).not.toBe('deny')
+      expect(ruleOf(p, 'migration.import-execution-role')).not.toBe('fail')
+      expect(ruleOf(p, 'migration.execution-role-exception')).toBe('fail')
+      expect(p.body['content'] as Record<string, unknown>).toMatchObject({
+        executionRoleCheck: { role: OWNER, problem: 'declared_exception' },
+        executionRoleExceptions: { [OWNER]: { exceptionId: onScratch, revision: 1 } },
+      })
+      await revoke(onScratch)
+      await expect(apply(p)).rejects.toMatchObject({ code: 'PLAN_STALE' })
+      await revoke(onImported)
     } finally {
       await runAsSuperuser(pg17, 'postgres', [`ALTER ROLE ${OWNER} NOBYPASSRLS`])
     }

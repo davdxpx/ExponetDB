@@ -5,6 +5,7 @@ import {
   DatabaseIdSchema,
   EndpointIdSchema,
   EnvironmentIdSchema,
+  ExecutionRoleExceptionIdSchema,
   IdentityIdSchema,
   ProjectIdSchema,
   ServerIdSchema,
@@ -449,6 +450,109 @@ export const ClusterBootstrapSqlSchema = z
   })
   .meta({ id: 'ClusterBootstrapSql' })
 
+// ----- execution roles for adopted schemas (ADR-0034, Wave 9 Part A) -----
+
+/** A reason a person writes: 20 to 1000 characters, line breaks and tabs allowed, no other control character. */
+const DeclarationReasonSchema = z
+  .string()
+  .min(20)
+  .max(1000)
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are refused on purpose
+  .regex(/^[^\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]+$/u)
+  .meta({
+    untrusted: true,
+    description: 'Why, in the words of the person declaring (20 to 1000 characters).',
+  })
+
+/**
+ * The execution roles of one environment of a project (ADR-0034 §5, D-A2):
+ * aliases of the project's map bound to other roles for this environment
+ * only; an alias the request leaves out takes the project's role. An empty
+ * map removes every binding of the environment. Planned like every
+ * registry change; `registry.manage` at the environment's tier.
+ */
+export const ExecutionRoleBindingsRequestSchema = z
+  .strictObject({
+    roles: z
+      .record(ExecutionRoleAliasSchema, PostgresRoleNameSchema)
+      .refine((roles) => Object.keys(roles).length <= 32, { message: 'At most 32 aliases.' })
+      .meta({
+        description:
+          'Alias → PostgreSQL role for this environment; every alias must exist in the project map; never a pg_ or exponetdb_ role.',
+      }),
+  })
+  .meta({ id: 'ExecutionRoleBindingsRequest' })
+
+/**
+ * Declares that one PostgreSQL role may serve as an execution role of the
+ * project in this environment although it has `BYPASSRLS` (ADR-0034 §1,
+ * OD-51). Nothing but `BYPASSRLS` is ever excused. Human only; production
+ * needs an approval and a re-authentication.
+ */
+export const ExecutionRoleExceptionDeclareRequestSchema = z
+  .strictObject({
+    role: PostgresRoleNameSchema.meta({
+      description: 'The PostgreSQL role (never pg_ or exponetdb_).',
+    }),
+    reason: DeclarationReasonSchema,
+    reviewBy: z.iso.date().optional().meta({
+      description:
+        'A date by which a person reviews the exception; after it the exception excuses nothing (fail closed).',
+    }),
+  })
+  .meta({ id: 'ExecutionRoleExceptionDeclareRequest' })
+
+export const ExecutionRoleExceptionRevokeRequestSchema = z
+  .strictObject({
+    reason: z
+      .string()
+      .min(1)
+      .max(1000)
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are refused on purpose
+      .regex(/^[^\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]+$/u)
+      .meta({ untrusted: true, description: 'Why the exception ends.' }),
+  })
+  .meta({ id: 'ExecutionRoleExceptionRevokeRequest' })
+
+export const ExecutionRoleExceptionViewSchema = z
+  .object({
+    id: ExecutionRoleExceptionIdSchema,
+    projectId: ProjectIdSchema,
+    environmentId: EnvironmentIdSchema,
+    role: z.string().max(63).meta({ untrusted: true }),
+    attributes: z.array(z.literal('bypassrls')).length(1),
+    reason: untrustedText(1000, 'The declaring person’s reason.'),
+    reviewBy: z.iso.date().nullable(),
+    state: z.enum(['active', 'revoked']),
+    /** Active, but its review date passed: it excuses nothing until a person declares it again. */
+    expired: z.boolean(),
+    revision: z.int().min(1),
+    declaredBy: IdentityIdSchema,
+    declaredAt: TimestampSchema,
+    revokedBy: IdentityIdSchema.nullable(),
+    revokedAt: TimestampSchema.nullable(),
+    revokeReason: untrustedText(1000, 'Why it was revoked.').nullable(),
+  })
+  .meta({ id: 'ExecutionRoleException' })
+
+/** The execution roles of a project: the default map, each environment's bindings and effective map, the exceptions. */
+export const ProjectExecutionRolesSchema = z
+  .object({
+    projectId: ProjectIdSchema,
+    defaults: z.record(z.string().max(63), z.string().max(63)),
+    environments: z.array(
+      z.object({
+        environmentId: EnvironmentIdSchema,
+        slug: SlugSchema,
+        tier: TierSchema,
+        bindings: z.record(z.string().max(63), z.string().max(63)),
+        effective: z.record(z.string().max(63), z.string().max(63)),
+      }),
+    ),
+    exceptions: z.array(ExecutionRoleExceptionViewSchema).max(500),
+  })
+  .meta({ id: 'ProjectExecutionRoles' })
+
 export type ProductCreateRequest = z.infer<typeof ProductCreateRequestSchema>
 export type EnvironmentCreateRequest = z.infer<typeof EnvironmentCreateRequestSchema>
 export type EnvironmentChangeRequest = z.infer<typeof EnvironmentChangeRequestSchema>
@@ -467,3 +571,12 @@ export type EndpointView = z.infer<typeof EndpointViewSchema>
 export type DatabaseView = z.infer<typeof DatabaseViewSchema>
 export type CredentialView = z.infer<typeof CredentialViewSchema>
 export type ClusterBootstrapSql = z.infer<typeof ClusterBootstrapSqlSchema>
+export type ExecutionRoleBindingsRequest = z.infer<typeof ExecutionRoleBindingsRequestSchema>
+export type ExecutionRoleExceptionDeclareRequest = z.infer<
+  typeof ExecutionRoleExceptionDeclareRequestSchema
+>
+export type ExecutionRoleExceptionRevokeRequest = z.infer<
+  typeof ExecutionRoleExceptionRevokeRequestSchema
+>
+export type ExecutionRoleExceptionView = z.infer<typeof ExecutionRoleExceptionViewSchema>
+export type ProjectExecutionRoles = z.infer<typeof ProjectExecutionRolesSchema>

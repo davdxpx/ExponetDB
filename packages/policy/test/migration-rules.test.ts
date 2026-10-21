@@ -286,3 +286,41 @@ describe('migration.import-execution-role', () => {
     expect((await rule({ executionRoleCheck: { role: 7, problem: null } }))?.result).toBe('unknown')
   })
 })
+
+describe('execution-role exceptions and parity (ADR-0034)', () => {
+  it('warns in every plan that uses a declared exception, never blocking', async () => {
+    for (const tier of ['nonprod', 'prod'] as const) {
+      const d = await decide(tier, { executionRoleExceptions: 1, executionRoleParity: 'match' })
+      expect(d.decision, tier).toBe('allow')
+      expect(d.rules.find((r) => r.id === 'migration.execution-role-exception')).toMatchObject({
+        result: 'fail',
+        severity: 'warn',
+      })
+    }
+    const none = await decide('nonprod', { executionRoleExceptions: 0 })
+    expect(none.rules.find((r) => r.id === 'migration.execution-role-exception')?.result).toBe(
+      'not_applicable',
+    )
+  })
+
+  it('warns on production when the evidence ran under other execution roles or that is not known', async () => {
+    for (const parity of ['mismatch', 'unknown'] as const) {
+      const d = await decide('prod', { executionRoleParity: parity })
+      expect(d.decision, parity).toBe('allow')
+      expect(d.rules.find((r) => r.id === 'migration.execution-role-parity')).toMatchObject({
+        result: 'fail',
+        severity: 'warn',
+        facts: { parity },
+      })
+    }
+    expect(
+      (await decide('prod', { executionRoleParity: 'match' })).rules.find(
+        (r) => r.id === 'migration.execution-role-parity',
+      )?.result,
+    ).toBe('pass')
+    expect(
+      (await decide('nonprod', {})).rules.find((r) => r.id === 'migration.execution-role-parity')
+        ?.result,
+    ).toBe('not_applicable')
+  })
+})

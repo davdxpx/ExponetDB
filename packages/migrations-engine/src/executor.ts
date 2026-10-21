@@ -5,7 +5,6 @@ import {
   checkExpectations,
   type EngineGuards,
   executionRoleFacts,
-  executionRoleProblem,
   ident,
   insertLedgerRow,
   insertMigrationEvent,
@@ -23,6 +22,11 @@ import {
 } from '@exponetdb/postgres'
 import { analyzeMigrationSql, loadParser, survivingExpectations } from '@exponetdb/postgres/parser'
 import type { PlanContent, PlanItem } from './content.ts'
+import {
+  boundExceptionsHold,
+  type ResolvedExecutionRoles,
+  rolesStillUsable,
+} from './execution-roles.ts'
 import type { StoredRevision } from './store.ts'
 import type { ManagedScope } from './target.ts'
 
@@ -611,17 +615,23 @@ export async function runNontransactional(
 
 /**
  * The execution roles the plan bound, read again on the migrator session
- * under the lock: still mapped the same way and still usable.
+ * under the lock (ADR-0034 §3): still resolved the same way for the
+ * target's environment, every exception the plan relied on still the same
+ * (id, revision, active, not past review), and every role still usable,
+ * with `BYPASSRLS` excused only where the plan bound an exception. The
+ * changed binding, or null.
  */
 export async function executionRolesChanged(
   session: TargetSession,
   content: PlanContent,
-  current: Readonly<Record<string, string>>,
-): Promise<boolean> {
+  current: ResolvedExecutionRoles,
+): Promise<'execution_roles' | 'execution_role_exception' | null> {
   for (const [alias, role] of Object.entries(content.expectedState.executionRoles)) {
-    if (current[alias] !== role) return true
+    if (current.roles[alias] !== role) return 'execution_roles'
   }
+  const bound = content.expectedState.executionRoleExceptions
+  if (!boundExceptionsHold(bound, current.exceptions)) return 'execution_role_exception'
   const roles = [...new Set(content.migrations.map((m) => m.executionRole))]
   const facts = await executionRoleFacts(session.reader(), roles)
-  return facts.some((f) => executionRoleProblem(f) !== null)
+  return rolesStillUsable(facts, bound) ? null : 'execution_roles'
 }

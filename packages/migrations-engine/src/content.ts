@@ -79,6 +79,10 @@ export interface PlanContent {
     readonly ledgerStateHash: string
     readonly extensions: Readonly<Record<string, string>>
     readonly executionRoles: Readonly<Record<string, string>>
+    /** Per role, the declared exception the plan relies on (ADR-0034); absent when none. */
+    readonly executionRoleExceptions?: Readonly<
+      Record<string, { readonly exceptionId: string; readonly revision: number }>
+    >
   }
   readonly evidence: {
     readonly targetId: string

@@ -87,4 +87,45 @@ export const driftAcceptProd: Rule = {
   },
 }
 
-export const REGISTRY_RULES: readonly Rule[] = [targetRegisterProdApproval, driftAcceptProd]
+/**
+ * `registry.execution-role-exception-production` (Wave 9, ADR-0034 §2, OD-51):
+ * declaring or revoking a `BYPASSRLS` execution-role exception for a
+ * production environment needs a human approval and a fresh
+ * re-authentication. The subject tier is the environment's, resolved by the
+ * planner; an unknown tier requires the same.
+ */
+export const executionRoleExceptionProduction: Rule = {
+  id: 'registry.execution-role-exception-production',
+  version: 1,
+  description:
+    'Declaring or revoking a BYPASSRLS execution-role exception for a production environment needs a human approval and a fresh re-authentication.',
+  appliesTo: [
+    'registry.execution_role_exception.declare',
+    'registry.execution_role_exception.revoke',
+  ],
+  severity: 'require',
+  overridableByBreakGlass: false,
+  facts: [],
+  defaults: { approvals: 1, reauthWithinSeconds: 300 },
+  requirements: targetRegisterProdApproval.requirements,
+  evaluate({ request }) {
+    const tier = request.subject.tier
+    if (tier === 'nonprod') {
+      return { result: 'not_applicable', message: 'The environment is not production.' }
+    }
+    if (tier === 'prod') {
+      return {
+        result: 'fail',
+        message: 'A production execution-role exception changes only after a human approval.',
+        facts: { tier },
+      }
+    }
+    return { result: 'unknown', message: 'The tier of the environment is not known.' }
+  },
+}
+
+export const REGISTRY_RULES: readonly Rule[] = [
+  targetRegisterProdApproval,
+  driftAcceptProd,
+  executionRoleExceptionProduction,
+]

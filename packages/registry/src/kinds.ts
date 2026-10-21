@@ -8,6 +8,11 @@ import type {
 import { readMarker } from '@exponetdb/postgres'
 import { Body } from './content.ts'
 import { RegistryError } from './errors.ts'
+import {
+  ExecutionRoleBindingSetKind,
+  ExecutionRoleExceptionDeclareKind,
+  ExecutionRoleExceptionRevokeKind,
+} from './execution-roles.ts'
 import { inspectDatabase } from './inspect.ts'
 import { RegistryKind, type RegistryKindDeps, refusalOf } from './kind-base.ts'
 import { observeClusterIdentity } from './plans.ts'
@@ -1002,5 +1007,8 @@ export function registryKinds(deps: RegistryKindDeps): readonly OperationKind[] 
     new TargetStateKind(deps, 'target.suspend'),
     new TargetStateKind(deps, 'target.resume'),
     new TargetStateKind(deps, 'target.decommission'),
+    new ExecutionRoleBindingSetKind(deps),
+    new ExecutionRoleExceptionDeclareKind(deps),
+    new ExecutionRoleExceptionRevokeKind(deps),
   ]
 }
