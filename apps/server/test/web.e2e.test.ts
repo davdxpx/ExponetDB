@@ -789,12 +789,13 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
       await open.click()
       await page.waitForSelector('[data-mobile="true"] a[href="/targets"]')
       await page.keyboard.press('Escape')
-      // On a production target the tier chip stays in the header at phone width.
+      // On a production target the tier chip stays in the header at phone width. The bar is in
+      // the header before the target's reads answer, and the chip comes with them.
       await page.goto(`${origin}/t/shop/platform/production`)
       await page.waitForSelector('[data-slot="target-context-bar"]')
-      expect(await page.locator('[data-slot="target-context-bar"]').innerText()).toContain(
-        'Production',
-      )
+      await expect
+        .poll(() => page.locator('[data-slot="target-context-bar"]').innerText())
+        .toContain('Production')
       // On a target's page the sheet lists the target's sections, the current one marked and
       // inside the screen.
       await page.goto(`${origin}/t/shop/platform/staging/migrations`)
