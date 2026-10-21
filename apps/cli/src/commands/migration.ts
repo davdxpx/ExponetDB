@@ -7,7 +7,7 @@ import { type LintFinding, lintBundles, type Tier } from '@exponetdb/migrations/
 import type { ImportReport, MigrationStatus, PlanView } from '@exponetdb/sdk'
 import { applyPlan, planResult } from '../cli/apply.ts'
 import { EXIT } from '../cli/exit.ts'
-import { checkedBody } from '../cli/planning.ts'
+import { bodyFromFile, checkedBody } from '../cli/planning.ts'
 import { arg, flag, showCommand, TARGET_FLAG } from '../cli/reads.ts'
 import { must } from '../cli/remote.ts'
 import type { CommandInput, CommandSpec, FlagSpec, RunContext } from '../cli/types.ts'
@@ -519,6 +519,51 @@ const PLAN_FLAGS: readonly FlagSpec[] = [
   },
 ]
 
+/** The import hints a `--hints` file may carry (the request contract checks their shapes). */
+const HINT_FIELDS = ['aliases', 'notApplicable', 'role', 'searchPath', 'ledgers'] as const
+
+/**
+ * `--baseline` and the project file's `legacy.baseline` name the baseline as
+ * `baseline:<slug>` (the dependency ref of the migration format) or as the
+ * bare slug; the REST request takes the slug. Anything else is left for the
+ * contract check to refuse.
+ */
+export function baselineSlug(value: string): string {
+  return value.startsWith('baseline:') ? value.slice('baseline:'.length) : value
+}
+
+/**
+ * The hints of a legacy import from a JSON or YAML file (data only, at most
+ * 256 KiB): an object with only the fields of {@link HINT_FIELDS}. A field
+ * given both in the file and as a flag is refused, never silently merged.
+ */
+export async function importHints(
+  ctx: RunContext,
+  path: string,
+  flags: Readonly<Record<string, unknown>>,
+): Promise<Record<string, unknown>> {
+  const value = await bodyFromFile(ctx, path)
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    throw new UsageError(`The hints file ${path} must hold one object.`)
+  const hints = value as Record<string, unknown>
+  const unknown = Object.keys(hints).filter((k) => !(HINT_FIELDS as readonly string[]).includes(k))
+  if (unknown.length > 0)
+    throw new UsageError(
+      `The hints file ${path} has fields the import does not know: ${unknown.slice(0, 5).join(', ')} (allowed: ${HINT_FIELDS.join(', ')}).`,
+    )
+  const twice = (
+    [
+      ['ledgers', 'ledger'],
+      ['notApplicable', 'not-applicable'],
+    ] as const
+  ).filter(([field, name]) => field in hints && flags[name] !== undefined)
+  if (twice.length > 0)
+    throw new UsageError(
+      `Give ${twice.map(([field, name]) => `${field} (--${name})`).join(' and ')} either in the hints file or as a flag, not both.`,
+    )
+  return hints
+}
+
 function reportBlocks(r: ImportReport): Block[] {
   return [
     {
@@ -833,8 +878,15 @@ const remoteCommands: readonly CommandSpec[] = [
       {
         name: 'baseline',
         type: 'string',
-        placeholder: 'baseline:…',
-        description: 'The baseline ref (default the project’s).',
+        placeholder: 'slug',
+        description: 'The baseline, as baseline:<slug> or <slug> (default the project’s).',
+      },
+      {
+        name: 'hints',
+        type: 'string',
+        placeholder: 'path',
+        description:
+          'Import hints as a JSON or YAML file: aliases, notApplicable, role, searchPath, ledgers (checked against the contract).',
       },
       {
         name: 'ledger',
@@ -866,9 +918,12 @@ const remoteCommands: readonly CommandSpec[] = [
       const names = (await readdir(dir)).filter((n) => n.endsWith('.sql')).sort()
       const files = []
       for (const name of names) files.push({ name, text: await readFile(join(dir, name), 'utf8') })
+      const hintsPath = flag(input, 'hints')
+      const hints = hintsPath === undefined ? {} : await importHints(ctx, hintsPath, input.flags)
       const body = checkedBody('planImportAnalysis', {
+        ...hints,
         scratchTarget: flag(input, 'scratch'),
-        baseline: flag(input, 'baseline') ?? legacy.baseline,
+        baseline: baselineSlug(flag(input, 'baseline') ?? legacy.baseline),
         files,
         ...(input.flags['ledger'] === undefined ? {} : { ledgers: input.flags['ledger'] }),
         ...(input.flags['not-applicable'] === undefined

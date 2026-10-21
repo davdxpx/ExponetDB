@@ -270,6 +270,16 @@ ledger such as drizzle's compares) are kept beside it. Golden vectors:
   be unchanged before `COMMIT`. Verification records a run for the baseline:
   the fingerprint still equals the reviewed one and every accepted file's
   surviving expectations hold. The report becomes `baselined`.
+- **CLI** (corrected in Wave 9 Part A, A1): `exponetdb migration import
+  analyze` submits every `*.sql` file of the project's `legacy.directory`
+  in file name order. `--baseline` and the project file's
+  `legacy.baseline` take `baseline:<slug>` or the bare `<slug>` (the
+  request carries the slug; Wave 6 refused the project's own
+  `baseline:<slug>` locally). `--hints <file>` (JSON or YAML, at most
+  256 KiB, data only) carries `aliases`, `notApplicable`, `role`,
+  `searchPath` and `ledgers`; an unknown field, a wrong shape or a field
+  given both in the file and as a flag (`--ledger`, `--not-applicable`) is a
+  usage error before anything is sent.
 - **Not in Wave 6:** `migration.rebaseline`, `ledger.reconcile`, the
   materialization of targets without history (§4) and the CLI lint
   `legacy_file_after_baseline`; a legacy file that needs a statement the

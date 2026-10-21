@@ -1739,7 +1739,8 @@ Runs: against the server; effect: plan; action: `migration.import.analyze`; scop
 |---|---|
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
 | `--scratch <target>` | An empty disposable target to replay on. (required) |
-| `--baseline <baseline:…>` | The baseline ref (default the project’s). |
+| `--baseline <slug>` | The baseline, as baseline:<slug> or <slug> (default the project’s). |
+| `--hints <path>` | Import hints as a JSON or YAML file: aliases, notApplicable, role, searchPath, ledgers (checked against the contract). |
 | `--ledger <supabase,drizzle,applied_migrations>` | Legacy ledgers to read. |
 | `--not-applicable <files>` | Legacy files that never apply to this target. |
 | `--apply` | Apply the analysis plan at once and wait. |

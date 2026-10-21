@@ -104,7 +104,7 @@ another repository.
 | # | Item | Contract | Implementation | Evidence | Status |
 |---|---|---|---|---|---|
 | A0 | Phase 0: inventory, order, decisions, record | — | — | §1, §2 | PASS |
-| A1 | The CLI starts a legacy import from the project file (`baseline:<slug>` and `<slug>`, `--hints`) | none needed | open | open | open |
+| A1 | The CLI starts a legacy import from the project file (`baseline:<slug>` and `<slug>`, `--hints`) | none needed (the request contract is unchanged) | `apps/cli/src/commands/migration.ts` (`baselineSlug`, `importHints`, flag `--hints`) | unit tests §4.2; the end-to-end run of the CLI process (analyze → report → resolve → baseline) lands with the real-shape fixture of A2 | open (end-to-end pending) |
 | A2 | Supabase ledger matching on real data (names, statement sequences, evidence strength, multi-file aliases, real-shape fixture) | open | open | open | open |
 | A3 | The replay checks the execution role; no silent cap in the import path | open | open | open | open |
 | A4 | Declared `BYPASSRLS` execution-role exception (ADR-0034, OD-51) **S** | open | open | open | open |
@@ -125,6 +125,24 @@ another repository.
   OD-51, OD-52, "Decisions of the Wave 9 order").
 - `CLAUDE.md` "Current phase", [`../../12-operations/bootstrap.md`](../../12-operations/bootstrap.md)
   and the [G2 record](./2.md) state OD-7a precisely.
+
+### 4.2 A1: the CLI legacy import (2026-10-21)
+
+- Defect reproduced on the base code: with `legacy.baseline: baseline:demo-2026`
+  in the project file, `exponetdb migration import analyze` stops locally
+  with `usage: The request does not match the contract: baseline: …`
+  (exit 2); with the fix the same command passes every local check and
+  reaches the transport (exit 5 against an unreachable server).
+- `apps/cli/test/local.test.ts` "migration import analyze from the project
+  file" (3 tests): the project's `baseline:<slug>` and `--baseline` in both
+  forms pass, an invalid slug is refused; a `--hints` file in YAML and JSON
+  with `aliases`, `notApplicable`, `role`, `searchPath`, `ledgers` passes
+  the contract check; an unknown field (`scratchTarget`), a wrong shape
+  (`searchPath` as a string), a field given in the file and as a flag, a
+  file that holds no object and a missing file are usage errors.
+- `bun run --cwd apps/cli typecheck` clean; `vitest run` in `apps/cli`:
+  5 files, 78 tests passed; `biome check apps/cli` clean;
+  `bun run --cwd apps/cli reference` regenerated `15-cli/reference.md`.
 
 ## 5. Limits and residual risks
 
