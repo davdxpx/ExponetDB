@@ -47,7 +47,7 @@ the CLI in; the consent page lists each scope, and administrative and
 production scopes are opt-in (tick them, tick production, confirm):
 
 ```sh
-exponetdb login --scope "targets.read registry.manage nodes.read migrations.read migrations.plan migrations.apply:nonprod migrations.apply:prod schema.read diagnostics.read audit.read"
+exponetdb login --preset admin --scope migrations.apply:prod
 exponetdb whoami
 exponetdb doctor
 exponetdb product list
@@ -232,7 +232,7 @@ policy wants it, the approval) in the browser, exactly as above.
 | `drift check <target>` lists an object | the database changed outside a migration | write a migration for it, or undo it; plans bound to the old fingerprint are stale |
 | exit 4, `awaiting_approval` | a person must approve | `exponetdb approval open <operation>` |
 | exit 6 | the wait ended, or the outcome needs reconciliation | `exponetdb operation watch <operation>`; the server keeps working |
-| exit 3 | sign-in, scope or re-authentication | `exponetdb whoami`, then `login --scope …` |
+| exit 3 | sign-in, scope or re-authentication | run the `login` the output's `next` names (`exponetdb whoami` shows what the sign-in holds) |
 
 ## 10. Tidy up
 

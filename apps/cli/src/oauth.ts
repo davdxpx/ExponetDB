@@ -53,6 +53,13 @@ export function parseServer(value: string): string {
     throw new CliError('server_invalid', 'The server must be a URL such as https://db.example.com.')
   }
   const loopback = ['127.0.0.1', '[::1]', 'localhost'].includes(url.hostname)
+  // URL keeps `$`, `;`, `(` or a backtick in a host; hints print the origin into shell commands.
+  if (!/^(?:[a-z0-9.-]+|\[[0-9a-f:.]+\])$/.test(url.hostname)) {
+    throw new CliError(
+      'server_invalid',
+      'The server name may hold letters, digits, dots and dashes only.',
+    )
+  }
   if (
     (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) ||
     url.username !== '' ||

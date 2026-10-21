@@ -110,6 +110,72 @@ A planned mutation always shows server, profile, target or cluster, tier
 and plan id. `plan apply` applies the stored plan; current defaults never
 change its target.
 
+### Sign-in scopes and presets
+
+**[DECIDED]** (2026-10-21, after the owner found that a plain
+`exponetdb login` asked for `targets.read` only and nothing said how to get
+more; `apps/cli/src/presets.ts`.) A scope stays an upper bound: the consent
+page offers only the scopes the person holds, production and administrative
+scopes stay explicit opt-ins in the browser, and every request is still
+checked against the person's permissions, the target's tier and policy.
+
+- **Presets.** `exponetdb login --preset <name>` asks for a named list of
+  scopes defined once in the CLI's registry (`exponetdb auth presets` lists
+  them from the CLI version in use). A preset is shorthand only; it never
+  widens what the server grants.
+
+  | Preset | Scopes |
+  |---|---|
+  | `read` | `targets.read schema.read migrations.read diagnostics.read backups.read nodes.read audit.read` |
+  | `developer:nonprod` | `read` + `migrations.plan migrations.apply:nonprod` |
+  | `developer:prod` | `developer:nonprod` + `migrations.apply:prod` |
+  | `operator:nonprod` | `developer:nonprod` + `data.read:nonprod connections.operate:nonprod backups.run restore.plan nodes.plan nodes.operate:nonprod` |
+  | `operator:prod` | `operator:nonprod` + `migrations.apply:prod data.read:prod connections.operate:prod nodes.operate:prod` |
+  | `admin` | `developer:nonprod` + `registry.manage access.read access.manage policy.manage migrations.import schema.manage` |
+
+  Only a preset named `…:prod` holds a production scope. No preset holds
+  `restore.execute`, `operations.recover`, `breakglass.activate`,
+  `diagnostics.read_sensitive` or `data.read_sensitive`; they are named with
+  `--scope`. `--preset` and `--scope` combine (the union), e.g.
+  `--preset admin --scope migrations.apply:prod`.
+- **The remembered request.** Without `--scope` or `--preset`, `login` asks
+  again for the scopes granted at the last sign-in: those of the profile in
+  use (an `oauth` profile records them in `profiles.json`, non-secret, as
+  `auth.scopes` with the request as `auth.requestedScopes`), else those of
+  the sign-in the token store still holds for the server, else
+  `targets.read`. `profile add --auth oauth --scopes …` sets the first
+  request. A remembered scope this CLI version does not know is dropped with
+  a hint. **Production scopes are never remembered** (C-24: production is its
+  own opt-in each time); a production sign-in names them again with a
+  `…:prod` preset or `--scope`. `--scope` and `--preset` replace the
+  remembered request, and a sign-in replaces the grant; the next sign-in
+  remembers what was granted then. A profile that was removed, given another
+  authentication method or moved to another server while the browser was
+  open is left as it is (the sign-in still counts).
+- **The device flow** still carries no explicit-consent scope
+  ([`../05-mcp/oauth.md` §5](../05-mcp/oauth.md#5-tokens)): `--device` with
+  `admin`, a `…:prod` preset or a remembered request holding such a scope is
+  refused before anything is sent, naming the scopes; `--device --preset
+  developer:nonprod` (or `read`, `operator:nonprod`) works.
+- **A missing scope.** When the server refuses with `INSUFFICIENT_SCOPE`,
+  `next` holds the exact sign-in that would allow the command: the scopes
+  granted now plus the one the server named (`details.requiredScope`, else
+  the command's declared scopes), as the smallest preset that covers them
+  (when one does) and as an explicit `--scope` list, so signing in again
+  never drops what the person already had. A scope the CLI can never hold
+  (a Web App scope) gives no sign-in, only `exponetdb auth scopes`; a key
+  profile is pointed at `profile show`, since a key's scopes change on the
+  server. Suggested commands carry only contract scope names and the server
+  origin, whose host the CLI accepts only as letters, digits, dots and dashes
+  (or an IP address), so a copied `next` line holds no shell syntax.
+- **`whoami` and `doctor`** show the granted scopes, the presets they cover,
+  what each preset still lacks (`doctor` names the sign-in that adds the
+  next non-production preset and keeps the scopes held now), and (with an
+  `oauth` profile) the requested scopes that were not granted: the account does not hold them or the person
+  did not tick them on the consent page. **[OPEN: OD-50]** The CLI cannot
+  read what the account could be granted (`GET /me` is a Web App action);
+  until OD-50 is decided the consent page is where the person sees it.
+
 ## 4. Output contract `exponetdb.cli-output/v1`
 
 **JSON** (`--output json`) prints exactly one document:
