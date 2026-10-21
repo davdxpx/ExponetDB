@@ -105,7 +105,7 @@ another repository.
 |---|---|---|---|---|---|
 | A0 | Phase 0: inventory, order, decisions, record | — | — | §1, §2 | PASS |
 | A1 | The CLI starts a legacy import from the project file (`baseline:<slug>` and `<slug>`, `--hints`) | none needed (the request contract is unchanged) | `apps/cli/src/commands/migration.ts` (`baselineSlug`, `importHints`, flag `--hints`) | unit tests §4.2; the end-to-end run of the CLI process (analyze → report → resolve → baseline) lands with the real-shape fixture of A2 | open (end-to-end pending) |
-| A2 | Supabase ledger matching on real data (names, statement sequences, evidence strength, multi-file aliases, real-shape fixture) | open | open | open | open |
+| A2 | Supabase ledger matching on real data (names, statement sequences, evidence strength, multi-file aliases, real-shape fixture) | `ImportAnalysisRequest.aliases` takes a stem or a list of stems; `ImportReport.items[].evidenceStrength` (additive) | `migrations-engine/src/legacy-evidence.ts`, `legacy.ts` (`relateLedger`, `classify`, extension check); bundle `01M5G6EQ7GKZV615Y680AHT52B_legacy-import-evidence`; fixture `testkit/src/fixtures/supabase-history.ts` | §4.3 | PASS (the Web App shows the strength with A3) |
 | A3 | The replay checks the execution role; no silent cap in the import path | open | open | open | open |
 | A4 | Declared `BYPASSRLS` execution-role exception (ADR-0034, OD-51) **S** | open | open | open | open |
 | A5 | Execution roles per environment (one resolver) | open | open | open | open |
@@ -143,6 +143,48 @@ another repository.
 - `bun run --cwd apps/cli typecheck` clean; `vitest run` in `apps/cli`:
   5 files, 78 tests passed; `biome check apps/cli` clean;
   `bun run --cwd apps/cli reference` regenerated `15-cli/reference.md`.
+
+### 4.3 A2: Supabase ledger matching on real data (2026-10-21)
+
+- Design: [`legacy-import.md` §2.3](../../04-migrations/legacy-import.md#23-evidence-strength).
+  Supabase `name` matches the stem (`<version>_<name>` only a fallback
+  hint); the 14-digit version is the applied time; the statement sequences
+  of both sides are compared after the lexical normalization of `c1`
+  (unchanged), in three tiers (`strong` one by one, `medium` normalized,
+  `low` comments in bodies ignored); `curated` aliases also for one entry
+  → several files (compared with the files joined in file order); a name
+  alone (`weak`) never records a file. Date pinning is de-scoped with the
+  document change (PostgreSQL cannot fix `now()` per session); extensions are
+  compared (name, schema, version) before any file replays.
+- `packages/migrations-engine/test/legacy-evidence.test.ts` (9 tests, pure):
+  one element with the whole file against the parsed file (medium), comments
+  stripped inside a body too (low), the Wave 6 comparison (strong), a
+  different text, an empty entry and unreadable text (no evidence),
+  whitespace next to `;` and a missing last `;`, `;` and `--` inside
+  literals and quoted names, a comment-only file, a multi-file entry in
+  and out of file order, the strength rule, the Supabase version time.
+- `packages/migrations-engine/test/legacy-supabase.int.test.ts` (PostgreSQL
+  17, 3 tests) on the real-shape fixture: an alias naming an unknown file or
+  one file twice is refused; a scratch target without the imported target's
+  `pg_trgm` makes the report `incomplete` (`extensions_differ:pg_trgm`)
+  before anything runs; then: `0100` and `0101` recorded by the normalized
+  sequence (`medium`), `0102` by the weaker tier (`low`), `0103` and `0104`
+  by the one merged entry (`medium`), the file edited after apply only
+  `weak` and not recorded, `0106` (entry without statements) and `0107`
+  (runner only) `unrecorded_present` and `weak`; no ledger entry is left
+  without a file; the runner's table is global drift; the baseline verifies
+  and takes `appliedAt` `2026-01-01T09:00:00.000Z` from the Supabase
+  version, and claims none for a name-only file (`appliedAtUnknown`).
+- The Wave 6 test `legacy.int.test.ts` now expects the corrected rule: a
+  file matched by name only is `unrecorded_present` / `unrecorded_missing`
+  (it was `recorded_*`), with the strengths `strong`, `curated`, `weak`
+  shown; its other expectations are unchanged.
+- Runs on this commit: `bun run check`, `bun run typecheck` (28 of 28),
+  `bun run verify:generated`, `bun run golden:check`, `bun run golden:history
+  origin/main` (452 vectors and 21 frozen bundles unchanged); unit tests of
+  contracts (216), control-store (27), migrations-engine (19), postgres
+  (1242), testkit (12), server (185), tooling (164), sdk (89); integration
+  tests of control-store (117) and migrations-engine (62), all passed.
 
 ## 5. Limits and residual risks
 

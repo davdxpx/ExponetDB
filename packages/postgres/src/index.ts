@@ -123,6 +123,7 @@ export {
   executionRoleFacts,
   executionRoleProblem,
   extensionFacts,
+  extensionPlacements,
   installedExtensions,
   type RelationSize,
   readEngineGuards,

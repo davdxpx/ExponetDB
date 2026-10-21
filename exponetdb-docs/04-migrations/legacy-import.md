@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Status | Baseline (Wave 0), accepted 2026-10-05 |
-| Applies to | Wave 6 (engine), Wave 10 (REOSA import) |
+| Status | Baseline (Wave 0), accepted 2026-10-05; corrected and extended in Wave 9 Part A (2026-10-21, [record](../14-roadmap/gates/9-part-a.md)): §2.2 CLI, §2.3 evidence strength, extensions and date pinning in §2 and §6 |
+| Applies to | Wave 6 (engine), Wave 9 Part A (real Supabase-origin histories), Wave 10 (REOSA import) |
 | Read before | [`ledger.md`](./ledger.md), [`dependency-graph.md` §6](./dependency-graph.md#6-baselines-and-imported-history), [`../03-database-model/schema-fingerprints.md`](../03-database-model/schema-fingerprints.md), [`../13-integrations/reosa-current-state.md`](../13-integrations/reosa-current-state.md) |
 
 Existing databases arrive with history ExponetDB did not write. That history is
@@ -81,6 +81,17 @@ created in migrations), extensions and their schemas, conditional-role choices
 target itself), and the replay date for date-dependent DDL (pinned to the
 target's actual partitions).
 
+**[DECIDED]** (Wave 9 Part A, A2) **Extensions** are declared by preparing the
+scratch target, and checked, never guessed: before the first file runs, the
+replay compares the installed extensions of both targets (name, schema,
+version); any difference makes the report `incomplete` with
+`extensions_differ:<name>` and replays nothing. **Date pinning is not
+implemented** **[NON-GOAL]** for now: PostgreSQL offers no way to fix `now()` or
+`current_date` for one session, so date-dependent DDL replays at the replay
+time; the partitions that differ appear as global drift items
+(`only_in_target`, `only_in_replay`), which a person resolves like any other
+drift (accept as `unmanaged_but_present`, or schedule the change).
+
 During replay the engine records, after each file `k`:
 
 - the derived structural expectations of file `k`
@@ -100,14 +111,16 @@ The replay ends with fingerprint `F_replay`.
   ACL entry, function body digest).
 - **Per file**: evaluate each file's surviving expectations against the target.
 - **Per ledger entry**: match entries to files with the strongest available
-  evidence, in this order:
+  evidence, in this order (strength names as recorded per item, §2.3):
 
 | Evidence | Strength | How |
 |---|---|---|
-| Drizzle `hash` equals SHA-256 of a file's bytes | strong (content) | hash comparison; independent of names |
-| Supabase `statements[]` equal a file's statements | strong (content) | parse both, compare normalized statement texts |
-| Alias table entry (`0252_task_sync_runs` → `0260_task_sync_runs`) | medium (curated) | project hints |
-| Exact name match | weak | hint only |
+| Drizzle `hash` equals SHA-256 of a file's bytes | `strong` (content) | hash comparison; independent of names |
+| Supabase `statements[]` equal a file's statements one by one | `strong` (content) | whitespace collapsed per statement (the Wave 6 comparison) |
+| Supabase `statements[]` equal a file as a normalized statement sequence | `medium` (content) | both sides joined and normalized lexically like `c1`: comments, drizzle breakpoints and whitespace do not matter (§2.3) |
+| … equal only when comments inside dollar-quoted bodies are ignored too | `low` (content) | the same code ran; the stored body text differs (§2.3) |
+| Alias table entry (`0252_task_sync_runs` → `0260_task_sync_runs`, or one entry → several files) | `curated` | project hints; for several files, the entry's statements are compared with the files' statements joined in file order and the stronger result counts |
+| Exact name match (Supabase `name`, or `<version>_<name>` of older ledgers; a runner's file name) | `weak` | a hint only: **never makes a file `recorded`** |
 | Numeric prefix match | none | never used alone (60 prefixes are ambiguous) |
 
 ### Step 4: Classify
@@ -247,9 +260,10 @@ ledger such as drizzle's compares) are kept beside it. Golden vectors:
   read as empty. Evidence per file, strongest first: a hash ledger equal to
   the bytes digest (`legacy_tool_hash`), applied statements equal to the
   file's statements (`legacy_applied_statements`), a curated alias, an equal
-  name (`name_hint`, weak). A numeric prefix is never evidence. States as in
+  name (`name_hint`, weak; since Wave 9 it never records a file, §2.3). A
+  numeric prefix is never evidence. States as in
   step 4; a file without derivable expectations is `ambiguous` unless content
-  evidence recorded it; ledger entries without a file and every global drift
+  or curated evidence recorded it; ledger entries without a file and every global drift
   entry (`only_in_target`, `only_in_replay`, `differs`, at most 500) are
   review items.
 - **Review** `POST …/import-reports/{id}/items/{itemId}/decision` records a
@@ -287,6 +301,46 @@ ledger such as drizzle's compares) are kept beside it. Golden vectors:
   replayed and makes the report `incomplete` (declare such prerequisites on
   the cluster first).
 
+### 2.3 Evidence strength
+
+**[DECIDED]** (Wave 9 Part A, A2; Wave 6 defect corrected) Measured on a real
+Supabase ledger on 2026-10-21: every entry's `version` is a 14-digit
+timestamp, its `name` is the file stem, and `statements` holds **one
+element: the whole file with its comments stripped**. Wave 6 built the
+entry's name as `<version>_<name>` and compared statements one by one, so no
+real entry ever matched, and it let a name match make a file `recorded`.
+The engine (`packages/migrations-engine/src/legacy-evidence.ts`) now:
+
+- matches the Supabase `name` with the file stem and keeps `<version>_<name>`
+  only as a fallback name hint; the version, read as a UTC time
+  `YYYYMMDDHHMMSS` **[ASSUMPTION]** (the Supabase tooling writes UTC), is the
+  entry's applied time; drizzle's `created_at` (milliseconds) and a
+  runner's `applied_at` are applied times too;
+- compares the **joined executable statement sequence** of both sides: each
+  ledger element, and each file as a whole, passes the lexical
+  normalization of `c1` (`scanExecutableText`, unchanged), then the
+  whitespace next to a top-level `;` is removed and trailing semicolons are
+  dropped; the parts are joined with `;`. Comments outside and inside
+  statements, drizzle `--> statement-breakpoint` comments, line breaks and
+  indentation do not matter; a `;` or a comment marker inside a literal, a
+  quoted name or a dollar-quoted body is data;
+- records per item the **strength** of the strongest evidence
+  (`evidenceStrength` in the report): `strong`, `medium`, `low`, `curated`,
+  `weak`, or none. Content (`strong`, `medium`, `low`) and `curated` make a
+  file `recorded`; `weak` never does: a file with only a name match is
+  `unrecorded_present` when its effects hold (imported with
+  `checksum_provenance = legacy_file_at_import`, basis "effect observed")
+  and `unrecorded_missing` or `ambiguous` otherwise;
+- takes the applied time of a baseline row from the earliest ledger that
+  records the file (never from a name-only match; the row then says
+  `appliedAtUnknown`).
+
+The provenance stored in the target ledger keeps its frozen values: a hash is
+`legacy_tool_hash`, any statement tier is `legacy_applied_statements`, a
+curated alias or an observed effect is `legacy_file_at_import`. Evidence lists
+are never cut silently: an item with more than 16 entries ends with
+`evidence_truncated:<n>`.
+
 ## 3. Multiple targets of one project
 
 Each target (staging, production) is imported separately, producing its own
@@ -323,14 +377,14 @@ the new target directly. See
 |---|---|
 | Two legacy files with the same number | Identity is the full file stem, which is unique; numbers are not used. |
 | File renamed after apply (applied name differs) | Alias table maps the applied name to the stem; content evidence (drizzle hash, statements) confirms independently. |
-| One ledger entry for several files | Curated rule in hints (`0032_0036_… → [0032_…, …, 0036_…]`) plus statement comparison. |
+| One ledger entry for several files | Curated rule in hints (`"0032_0036_…": ["0032_…", …, "0036_…"]`, Wave 9) plus statement comparison against the files joined in file order (§2.3). |
 | File edited (comments only) after apply | Executable checksum unchanged; no issue. |
 | File edited (executable text) after apply | The imported checksum is of today's text; the replay uses today's text; if the target's objects match, it imports as present. Divergence is still caught by object comparison. |
 | Conditional DDL took a different branch on the target | Surviving expectations differ; review item with the evaluated branch shown. |
-| Date-dependent partitions | Replay pins the date to match the target's partitions; partition sets are compared as a family. |
+| Date-dependent partitions | **Not pinned** (Wave 9 Part A, §2 step 2): the replay runs at its own time; differing partitions are drift items a person resolves. |
 | Objects created by hand, never in a file | Global drift item → `unmanaged_but_present` or removal. |
 | Provider-managed schemas (`auth`, `storage`, `realtime`, `extensions`, `supabase_migrations`, …) | Excluded from managed scope by the project's configuration; never imported. |
-| Extension in `extensions` schema on the source, `public` on the replay | Replay declares extension schemas to match the target; otherwise every vector column differs. |
+| Extension in `extensions` schema on the source, `public` on the replay | The scratch target is prepared with the target's extensions in the same schemas and versions; the replay refuses otherwise (`extensions_differ:<name>`, §2 step 2). |
 | Legacy ledger table missing on a target | Fine; evidence comes from objects. |
 | Target unreachable mid-analysis | Report marked incomplete; cannot be applied. |
 | Import run twice | Analysis is repeatable; the baseline operation refuses if a baseline row already exists (a second baseline is a separate, deliberate `migration.rebaseline`). |

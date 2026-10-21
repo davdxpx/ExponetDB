@@ -157,6 +157,20 @@ export async function extensionFacts(
   }))
 }
 
+const EXTENSION_PLACEMENTS = sql`SELECT e.extname::text AS name, n.nspname::text AS schema, e.extversion AS version
+  FROM pg_catalog.pg_extension e JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace
+ ORDER BY 1`
+
+/** Where each installed extension lives and its version (a legacy replay compares them, legacy-import.md §2). */
+export async function extensionPlacements(
+  reader: CatalogReader,
+): Promise<Map<string, { readonly schema: string; readonly version: string }>> {
+  const rows = await reader.query(EXTENSION_PLACEMENTS)
+  return new Map(
+    rows.map((r) => [r.text('name'), { schema: r.text('schema'), version: r.text('version') }]),
+  )
+}
+
 /** Every installed extension and its version (bound into a migration plan). */
 export async function installedExtensions(reader: CatalogReader): Promise<Record<string, string>> {
   const row = (await reader.query(INSTALLED_EXTENSIONS))[0]

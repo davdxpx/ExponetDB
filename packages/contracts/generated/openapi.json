@@ -6015,10 +6015,23 @@
         "properties": {
           "aliases": {
             "additionalProperties": {
-              "maxLength": 200,
-              "type": "string"
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "maxItems": 64,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              ]
             },
-            "description": "Curated: an applied ledger name → the file stem it stands for.",
+            "description": "Curated: an applied ledger name → the file stem it stands for, or the stems of the several files one ledger entry stands for (Wave 9).",
             "propertyNames": {
               "maxLength": 200,
               "type": "string"
@@ -6223,13 +6236,31 @@
                   ]
                 },
                 "evidence": {
-                  "description": "The evidence the classification used (ledger hash, statements, alias, expectations held).",
+                  "description": "The evidence the classification used (ledger hash, statements, alias, expectations held); a longer list ends with evidence_truncated:<n>.",
                   "items": {
                     "maxLength": 200,
                     "type": "string"
                   },
                   "maxItems": 16,
                   "type": "array"
+                },
+                "evidenceStrength": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "strong",
+                        "medium",
+                        "low",
+                        "curated",
+                        "weak"
+                      ],
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "The strongest ledger evidence behind the item (legacy-import.md §2.3): strong (a tool hash of the bytes, or the applied statements one by one), medium (the normalized statement sequence), low (equal only with comments inside bodies ignored), curated (an alias), weak (a name only, which never records a file); null when no ledger entry relates to it (Wave 9)."
                 },
                 "itemId": {
                   "pattern": "^[0-9]{1,6}$",

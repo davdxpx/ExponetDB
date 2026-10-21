@@ -890,7 +890,7 @@ export type IdentityState = "invited" | "active" | "disabled" | "erased"
 
 export type ImportAnalysisRequest = {
   readonly aliases?: {
-    readonly [key: string]: string
+    readonly [key: string]: string | readonly string[]
   }
   readonly baseline: string
   readonly files: readonly LegacyFile[]
@@ -920,6 +920,7 @@ export type ImportReport = {
       readonly state: "recorded_present" | "unrecorded_present" | "recorded_missing" | "unrecorded_missing" | "superseded" | "not_applicable" | "ambiguous"
     }) | null
     readonly evidence?: readonly string[]
+    readonly evidenceStrength?: "strong" | "medium" | "low" | "curated" | "weak" | null
     readonly itemId: string
     readonly legacyId: string
     readonly name: string

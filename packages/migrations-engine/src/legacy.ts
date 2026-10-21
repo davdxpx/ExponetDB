@@ -16,6 +16,7 @@ import {
   type CatalogReader,
   checkExpectations,
   diffDocuments,
+  extensionPlacements,
   insertLedgerRow,
   insertMigrationEvent,
   insertVerification,
@@ -42,11 +43,22 @@ import {
   operationActor,
   type RegistryActor,
   RegistryError,
+  type TargetRecord,
 } from '@exponetdb/registry'
 import type { PlanContent, PlanItem } from './content.ts'
 import { type MigrationKindDeps, projectRegistry } from './deps.ts'
 import { MigrationError } from './errors.ts'
 import { runTransactional } from './executor.ts'
+import {
+  type ContentKeys,
+  type ContentMatch,
+  contentKeys,
+  type EvidenceStrength,
+  matchKeys,
+  recordsTheFile,
+  STRENGTH_RANK,
+  supabaseVersionTime,
+} from './legacy-evidence.ts'
 import type { MigrationPlanContext } from './planner.ts'
 import { type Fence, fenced, LeaseLost, writeMirror } from './records.ts'
 import type { StoredRevision } from './store.ts'
@@ -119,7 +131,8 @@ interface ImportFile {
 
 interface Hints {
   readonly ledgers: readonly ('supabase' | 'drizzle' | 'applied_migrations')[]
-  readonly aliases: Readonly<Record<string, string>>
+  /** Curated: an applied ledger name → the stem, or the stems, it stands for. */
+  readonly aliases: Readonly<Record<string, string | readonly string[]>>
   readonly notApplicable: readonly string[]
   /** The replay's (and the expectation checks') search path. */
   readonly searchPath: readonly string[]
@@ -210,9 +223,12 @@ function hintsFrom(value: unknown): Hints {
   const h = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>
   const strings = (v: unknown) =>
     Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
-  const aliases: Record<string, string> = {}
+  const aliases: Record<string, string | string[]> = {}
   if (typeof h['aliases'] === 'object' && h['aliases'] !== null) {
-    for (const [k, v] of Object.entries(h['aliases'])) if (typeof v === 'string') aliases[k] = v
+    for (const [k, v] of Object.entries(h['aliases'])) {
+      if (typeof v === 'string') aliases[k] = v
+      else if (Array.isArray(v)) aliases[k] = v.filter((x): x is string => typeof x === 'string')
+    }
   }
   const path = strings(h['searchPath'])
   return {
@@ -237,6 +253,7 @@ interface ItemRecord {
   readonly provenance: Provenance | null
   readonly appliedAt: string | null
   readonly evidence: readonly string[]
+  readonly strength: EvidenceStrength | null
   readonly decision: {
     readonly state: Exclude<ImportItemState, 'ambiguous'>
     readonly note: string
@@ -250,7 +267,7 @@ async function readItems(q: Queryable, reportId: string): Promise<ItemRecord[]> 
     'migrations.import.items',
     `SELECT item_id, kind, legacy_id, name, state, content_digest, checksum_provenance,
             to_char(applied_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS applied_at,
-            evidence, decision_state, decision_note, decided_by,
+            evidence, evidence_strength, decision_state, decision_note, decided_by,
             to_char(decided_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS decided_at
        FROM migrations.import_items WHERE report_id = $1 ORDER BY item_id`,
     [reportId],
@@ -268,6 +285,7 @@ async function readItems(q: Queryable, reportId: string): Promise<ItemRecord[]> 
       provenance: r.textOrNull('checksum_provenance') as Provenance | null,
       appliedAt: r.textOrNull('applied_at'),
       evidence: Array.isArray(evidence) ? evidence.map(String) : [],
+      strength: r.textOrNull('evidence_strength') as EvidenceStrength | null,
       decision:
         decision === null
           ? null
@@ -314,6 +332,7 @@ export async function importReportView(q: Queryable, targetId: string, reportId:
       state: i.state,
       contentDigest: i.contentDigest,
       evidence: [...i.evidence],
+      evidenceStrength: i.strength,
       decision:
         i.decision === null
           ? null
@@ -334,7 +353,7 @@ export interface ImportAnalysisInput {
   readonly baseline: string
   readonly files: readonly { readonly name: string; readonly text: string }[]
   readonly ledgers?: readonly ('supabase' | 'drizzle' | 'applied_migrations')[] | undefined
-  readonly aliases?: Readonly<Record<string, string>> | undefined
+  readonly aliases?: Readonly<Record<string, string | readonly string[]>> | undefined
   readonly notApplicable?: readonly string[] | undefined
   readonly role?: string | undefined
   readonly searchPath?: readonly string[] | undefined
@@ -399,13 +418,23 @@ export async function planImportAnalysis(
       throw invalid(`/notApplicable/${i}`, 'unknown_stem', 'Not a submitted file stem.')
     }
   }
-  for (const [name, s] of Object.entries(request.aliases ?? {})) {
-    if (!stems.has(s)) {
+  for (const [name, value] of Object.entries(request.aliases ?? {})) {
+    const named = typeof value === 'string' ? [value] : [...value]
+    if (named.length === 0 || new Set(named).size !== named.length) {
       throw invalid(
         `/aliases/${name}`,
-        'unknown_stem',
-        'An alias names a file that was not submitted.',
+        'alias_files',
+        'An alias names one file, or several different files.',
       )
+    }
+    for (const s of named) {
+      if (!stems.has(s)) {
+        throw invalid(
+          `/aliases/${name}`,
+          'unknown_stem',
+          'An alias names a file that was not submitted.',
+        )
+      }
     }
   }
   // The imported target has no baseline yet (a second one is a deliberate rebaseline).
@@ -420,7 +449,12 @@ export async function planImportAnalysis(
   const reportId = newId('imr', ctx.policy.clock.nowMs())
   const hints: Hints = {
     ledgers: [...new Set(request.ledgers ?? [])].sort(),
-    aliases: { ...(request.aliases ?? {}) },
+    aliases: Object.fromEntries(
+      Object.entries(request.aliases ?? {}).map(([k, v]) => [
+        k,
+        typeof v === 'string' ? v : [...v],
+      ]),
+    ),
     notApplicable: [...(request.notApplicable ?? [])].sort(),
     searchPath: [...(request.searchPath ?? ['public'])],
   }
@@ -531,11 +565,15 @@ function emptyDocument(doc: CanonicalDocument): boolean {
 
 interface LegacyLedgerEntry {
   readonly source: 'supabase' | 'drizzle' | 'applied_migrations'
+  /** The name the ledger recorded (Supabase: `name`, the file stem as applied). */
   readonly name: string
+  /** Supabase only: `<version>_<name>`, a fallback name hint of older ledgers. */
+  readonly altName: string | null
   /** sha256:<hex> of the file bytes (drizzle), or null. */
   readonly bytesDigest: string | null
-  /** The applied statements, whitespace-collapsed (supabase), or null. */
+  /** The applied statements as the ledger holds them (supabase), or null. */
   readonly statements: readonly string[] | null
+  /** When the ledger says it was applied (Supabase's version, drizzle's created_at, a runner's applied_at). */
   readonly appliedAt: string | null
 }
 
@@ -545,13 +583,16 @@ const SUPABASE = sql`SELECT version::text AS version, coalesce(name::text, '') A
   FROM supabase_migrations.schema_migrations ORDER BY version`
 const DRIZZLE = sql`SELECT hash::text AS hash, created_at::text AS created_at
   FROM drizzle.__drizzle_migrations ORDER BY id`
+
+/** drizzle's `created_at` (milliseconds since the epoch) as a time, if it is one. */
+function drizzleTime(value: string | null): string | null {
+  if (value === null || !/^[0-9]{10,15}$/.test(value)) return null
+  const t = Number(value)
+  return t > 946_684_800_000 && t < 32_503_680_000_000 ? new Date(t).toISOString() : null
+}
 const APPLIED_MIGRATIONS = sql`SELECT filename::text AS filename,
        to_char(applied_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS applied_at
   FROM public.applied_migrations ORDER BY applied_at`
-
-function collapse(text: string): string {
-  return text.replace(/\s+/g, ' ').trim().replace(/;$/, '')
-}
 
 /** The legacy ledgers the request named, as evidence; an unreadable one is reported, never assumed empty. */
 async function readLegacyLedgers(
@@ -573,12 +614,18 @@ async function readLegacyLedgers(
       if (ledger === 'supabase') {
         for (const r of await reader.query(SUPABASE)) {
           const statements = r.json('statements')
+          const version = r.text('version')
+          const name = r.text('name')
+          const joined = [version, name].filter((x) => x !== '').join('_')
           entries.push({
             source: ledger,
-            name: [r.text('version'), r.text('name')].filter((x) => x !== '').join('_'),
+            name: name === '' ? joined : name,
+            altName: name === '' ? null : joined,
             bytesDigest: null,
-            statements: Array.isArray(statements) ? statements.map((s) => collapse(String(s))) : [],
-            appliedAt: null,
+            statements: Array.isArray(statements)
+              ? statements.filter((x) => typeof x === 'string')
+              : [],
+            appliedAt: supabaseVersionTime(version),
           })
         }
       } else if (ledger === 'drizzle') {
@@ -586,9 +633,10 @@ async function readLegacyLedgers(
           entries.push({
             source: ledger,
             name: r.text('hash'),
+            altName: null,
             bytesDigest: `sha256:${r.text('hash').toLowerCase()}`,
             statements: null,
-            appliedAt: null,
+            appliedAt: drizzleTime(r.textOrNull('created_at')),
           })
         }
       } else {
@@ -596,6 +644,7 @@ async function readLegacyLedgers(
           entries.push({
             source: ledger,
             name: r.text('filename').replace(/\.sql$/, ''),
+            altName: null,
             bytesDigest: null,
             statements: null,
             appliedAt: r.textOrNull('applied_at'),
@@ -684,6 +733,144 @@ interface Classified {
   readonly provenance: Provenance | null
   readonly appliedAt: string | null
   readonly evidence: readonly string[]
+  readonly strength: EvidenceStrength | null
+}
+
+/** At most this many evidence entries per item; a longer list says so in its last entry. */
+const MAX_EVIDENCE = 16
+
+/** The evidence list of an item: never cut silently (Wave 9 order A3). */
+export function cappedEvidence(evidence: readonly string[]): string[] {
+  const unique = [...new Set(evidence)]
+  return unique.length <= MAX_EVIDENCE
+    ? unique
+    : [...unique.slice(0, MAX_EVIDENCE - 1), `evidence_truncated:${unique.length}`]
+}
+
+/** What a ledger entry says about one file, with its strength (legacy-import.md §2.3). */
+interface Related {
+  readonly strength: EvidenceStrength
+  readonly provenance: Provenance | null
+  readonly appliedAt: string | null
+  readonly evidence: string
+}
+
+function provenanceOf(match: ContentMatch): Provenance | null {
+  switch (match.how) {
+    case 'hash':
+      return 'legacy_tool_hash'
+    case 'alias':
+      return 'legacy_file_at_import'
+    case 'name_hint':
+      return null
+    default:
+      return 'legacy_applied_statements'
+  }
+}
+
+/**
+ * The evidence of every ledger entry for every file, strongest per pair
+ * (legacy-import.md §2.3): a tool's hash of the bytes; the applied
+ * statements against the file's statements (exact, normalized, or with
+ * comments inside bodies ignored); a curated alias, also for one entry that
+ * stands for several files (then the entry's statements are compared with
+ * the files' statements joined in file order); the name. A numeric prefix
+ * is never evidence. Keys are computed once per side.
+ */
+function relateLedger(
+  chain: readonly FileAnalysis[],
+  ledger: readonly LegacyLedgerEntry[],
+  hints: Hints,
+): { related: Map<string, Related[]>; used: Set<LegacyLedgerEntry> } {
+  const related = new Map<string, Related[]>()
+  const used = new Set<LegacyLedgerEntry>()
+  const keys = new Map<string, ContentKeys>()
+  const statementsOf = new Map<string, string[]>()
+  const textOf = new Map<string, string>()
+  const byExact = new Map<string, string[]>()
+  const byNormalized = new Map<string, string[]>()
+  const byBodies = new Map<string, string[]>()
+  const byDigest = new Map<string, string[]>()
+  const push = (m: Map<string, string[]>, k: string | null, stem: string) => {
+    if (k !== null) m.set(k, [...(m.get(k) ?? []), stem])
+  }
+  for (const a of chain) {
+    const stem = a.file.stem
+    const text = normalizeSqlSource(a.file.bytes)
+    const value = text.ok ? text.value : ''
+    const statements = a.statements.map((st) => value.slice(st.start, st.end))
+    const k = contentKeys(statements, [value])
+    keys.set(stem, k)
+    statementsOf.set(stem, statements)
+    textOf.set(stem, value)
+    push(byExact, k.exact, stem)
+    push(byNormalized, k.normalized, stem)
+    push(byBodies, k.bodies, stem)
+    push(byDigest, a.file.bytesDigest, stem)
+  }
+  const position = new Map(chain.map((a, i) => [a.file.stem, i]))
+  const groups = new Map<string, string[]>()
+  for (const [name, value] of Object.entries(hints.aliases)) {
+    const stems = (typeof value === 'string' ? [value] : [...value]).filter((s) => keys.has(s))
+    groups.set(
+      name,
+      stems.sort((x, y) => (position.get(x) ?? 0) - (position.get(y) ?? 0)),
+    )
+  }
+  const add = (stem: string, e: LegacyLedgerEntry, match: ContentMatch) => {
+    used.add(e)
+    related.set(stem, [
+      ...(related.get(stem) ?? []),
+      {
+        strength: match.strength,
+        provenance: provenanceOf(match),
+        appliedAt: e.appliedAt,
+        evidence: `${e.source}:${match.how}`,
+      },
+    ])
+  }
+  for (const e of ledger) {
+    if (e.bytesDigest !== null) {
+      for (const stem of byDigest.get(e.bytesDigest) ?? []) {
+        add(stem, e, { strength: 'strong', how: 'hash' })
+      }
+    }
+    const applied = e.statements !== null && e.statements.length > 0 ? e.statements : null
+    const entryKeys = applied === null ? null : contentKeys(applied, applied)
+    if (entryKeys !== null) {
+      const seen = new Set<string>()
+      const tiers: [Map<string, string[]>, string | null, ContentMatch][] = [
+        [byExact, entryKeys.exact, { strength: 'strong', how: 'statements' }],
+        [byNormalized, entryKeys.normalized, { strength: 'medium', how: 'statements_normalized' }],
+        [byBodies, entryKeys.bodies, { strength: 'low', how: 'statements_bodies' }],
+      ]
+      for (const [index, key, match] of tiers) {
+        for (const stem of key === null ? [] : (index.get(key) ?? [])) {
+          if (seen.has(stem)) continue
+          seen.add(stem)
+          add(stem, e, match)
+        }
+      }
+    }
+    const group = groups.get(e.name) ?? (e.altName === null ? undefined : groups.get(e.altName))
+    if (group !== undefined && group.length > 0) {
+      const joined =
+        entryKeys === null
+          ? null
+          : matchKeys(
+              entryKeys,
+              contentKeys(
+                group.flatMap((s) => statementsOf.get(s) ?? []),
+                group.map((s) => textOf.get(s) ?? ''),
+              ),
+            )
+      for (const stem of group) add(stem, e, joined ?? { strength: 'curated', how: 'alias' })
+    }
+    for (const name of new Set([e.name, e.altName])) {
+      if (name !== null && keys.has(name)) add(name, e, { strength: 'weak', how: 'name_hint' })
+    }
+  }
+  return { related, used }
 }
 
 /** Classifies each file (legacy-import.md §2 step 4); evidence by content first, names last. */
@@ -696,11 +883,7 @@ async function classify(
   searchPath: readonly string[],
 ): Promise<Classified[]> {
   const out: Classified[] = []
-  const used = new Set<LegacyLedgerEntry>()
-  const aliasOf = new Map<string, string[]>()
-  for (const [applied, stem] of Object.entries(hints.aliases)) {
-    aliasOf.set(stem, [...(aliasOf.get(stem) ?? []), applied])
-  }
+  const { related, used } = relateLedger(chain, ledger, hints)
   for (const a of chain) {
     const stem = a.file.stem
     const evidence: string[] = unreadable.map((l) => `ledger_unreadable:${l}`)
@@ -714,59 +897,30 @@ async function classify(
         provenance: null,
         appliedAt: null,
         evidence: ['hint:not_applicable'],
+        strength: null,
       })
       continue
     }
-    // Ledger evidence, strongest first; a numeric prefix is never used.
-    let provenance: Provenance | null = null
-    let appliedAt: string | null = null
-    const statementTexts = (() => {
-      const text = normalizeSqlSource(a.file.bytes)
-      return text.ok ? a.statements.map((s) => collapse(text.value.slice(s.start, s.end))) : []
-    })()
-    for (const e of ledger) {
-      let match: Provenance | null = null
-      let what = ''
-      if (e.bytesDigest !== null && e.bytesDigest === a.file.bytesDigest) {
-        match = 'legacy_tool_hash'
-        what = `${e.source}:hash`
-      } else if (
-        e.statements !== null &&
-        e.statements.length > 0 &&
-        e.statements.length === statementTexts.length &&
-        e.statements.every((s, i) => s === statementTexts[i])
-      ) {
-        match = 'legacy_applied_statements'
-        what = `${e.source}:statements`
-      } else if ((aliasOf.get(stem) ?? []).includes(e.name)) {
-        match = 'legacy_file_at_import'
-        what = `${e.source}:alias`
-      } else if (e.name === stem) {
-        match = 'unknown'
-        what = `${e.source}:name_hint`
-      }
-      if (match === null) continue
-      used.add(e)
-      evidence.push(what)
-      appliedAt ??= e.appliedAt
-      const rank = (p: Provenance | null) =>
-        p === 'legacy_tool_hash'
-          ? 3
-          : p === 'legacy_applied_statements'
-            ? 2
-            : p === 'legacy_file_at_import'
-              ? 1
-              : p === 'unknown'
-                ? 0
-                : -1
-      if (rank(match) > rank(provenance)) provenance = match
-    }
-    const recorded = provenance !== null
+    // Ledger evidence, strongest first; a name alone never records a file.
+    const rel = [...(related.get(stem) ?? [])].sort(
+      (x, y) => STRENGTH_RANK[y.strength] - STRENGTH_RANK[x.strength],
+    )
+    evidence.push(...rel.map((r) => r.evidence))
+    const best = rel[0]
+    const strength = best?.strength ?? null
+    const recorded = recordsTheFile(strength)
+    const provenance: Provenance | null = recorded ? (best?.provenance ?? null) : null
+    // The earliest time a ledger that records the file names.
+    const appliedAt =
+      rel
+        .filter((r) => recordsTheFile(r.strength) && r.appliedAt !== null)
+        .map((r) => r.appliedAt as string)
+        .sort()[0] ?? null
     // Effects: the file's surviving expectations on the imported target.
     let state: ImportItemState
     if (a.expectations.length === 0) {
       evidence.push(a.underived ? 'effects_not_derivable' : 'no_structural_expectations')
-      state = recorded && provenance !== 'unknown' ? 'recorded_present' : 'ambiguous'
+      state = recorded ? 'recorded_present' : 'ambiguous'
     } else if (a.surviving.length === 0) {
       evidence.push('expectations_superseded')
       state = 'superseded'
@@ -803,25 +957,27 @@ async function classify(
       contentDigest: a.file.sourceDigest,
       provenance:
         state === 'recorded_present' || state === 'unrecorded_present' || state === 'superseded'
-          ? provenance === 'unknown' || provenance === null
-            ? 'legacy_file_at_import'
-            : provenance
+          ? (provenance ?? 'legacy_file_at_import')
           : null,
-      appliedAt,
-      evidence: evidence.slice(0, 16),
+      appliedAt: recorded ? appliedAt : null,
+      evidence: cappedEvidence(evidence),
+      strength,
     })
   }
   for (const e of ledger) {
     if (used.has(e)) continue
+    // A Supabase name may repeat across versions; `<version>_<name>` is unique.
+    const id = e.altName ?? e.name
     out.push({
       kind: 'ledger_entry',
-      legacyId: `ledger:${e.source}:${e.name}`.slice(0, 200),
-      name: e.name.slice(0, 200) || e.source,
+      legacyId: `ledger:${e.source}:${id}`.slice(0, 200),
+      name: id.slice(0, 200) || e.source,
       state: 'ambiguous',
       contentDigest: null,
       provenance: null,
       appliedAt: e.appliedAt,
       evidence: ['ledger_entry_without_file'],
+      strength: null,
     })
   }
   return out
@@ -844,6 +1000,7 @@ function driftItems(replay: CanonicalDocument, target: CanonicalDocument): Class
       provenance: null,
       appliedAt: null,
       evidence: ['only_in_target'],
+      strength: null,
     })
   }
   for (const e of diff.removed) {
@@ -856,6 +1013,7 @@ function driftItems(replay: CanonicalDocument, target: CanonicalDocument): Class
       provenance: null,
       appliedAt: null,
       evidence: ['only_in_replay'],
+      strength: null,
     })
   }
   for (const c of diff.changed) {
@@ -868,6 +1026,7 @@ function driftItems(replay: CanonicalDocument, target: CanonicalDocument): Class
       provenance: null,
       appliedAt: null,
       evidence: ['differs', ...c.attributes.slice(0, 8).map((a) => `attribute:${a}`)],
+      strength: null,
     })
   }
   return out.slice(0, MAX_DRIFT_ITEMS)
@@ -954,8 +1113,8 @@ export class ImportReplayKind implements OperationKind {
           'migrations.import.item',
           `INSERT INTO migrations.import_items
              (report_id, item_id, kind, legacy_id, name, state, content_digest, checksum_provenance,
-              applied_at, evidence)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10)`,
+              applied_at, evidence, evidence_strength)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10, $11)`,
           [
             reportId,
             i + 1,
@@ -967,6 +1126,7 @@ export class ImportReplayKind implements OperationKind {
             item.provenance,
             item.appliedAt,
             JSON.stringify(item.evidence),
+            item.strength,
           ],
         )
       }
@@ -1028,6 +1188,19 @@ export class ImportReplayKind implements OperationKind {
           fence,
           c.reportId,
           { state: 'incomplete', reason: 'scratch_not_empty' },
+          ctx.operationId,
+        )
+        return { outcome: 'not_applied', errorCode: 'PRECONDITION_FAILED' }
+      }
+      // Extensions are declared on the scratch target, never guessed: each must be
+      // installed there in the same schema and version as on the imported target, or every
+      // object that uses one would differ (legacy-import.md §2, §6).
+      const differs = await extensionsDiffer(this.#deps, target, session)
+      if (differs !== null) {
+        await this.#finish(
+          fence,
+          c.reportId,
+          { state: 'incomplete', reason: `extensions_differ:${differs}` },
           ctx.operationId,
         )
         return { outcome: 'not_applied', errorCode: 'PRECONDITION_FAILED' }
@@ -1122,6 +1295,7 @@ export class ImportReplayKind implements OperationKind {
                   provenance: null,
                   appliedAt: null,
                   evidence: ['hint:not_applicable'],
+                  strength: null,
                 },
             )
             items.push(...classified.filter((i) => i.kind !== 'file'))
@@ -1175,6 +1349,30 @@ export class ImportReplayKind implements OperationKind {
     // An interrupted replay left the scratch target part-way: a person re-creates it.
     return report === undefined || report.state === 'pending' ? 'unknown' : 'applied'
   }
+}
+
+/** The first extension that the scratch target holds differently from the imported one, or null. */
+async function extensionsDiffer(
+  deps: MigrationKindDeps,
+  target: TargetRecord,
+  scratch: TargetSession,
+): Promise<string | null> {
+  const observed = await deps.connector.forTarget(target, 'observer', 'import/extensions')
+  let theirs: Awaited<ReturnType<typeof extensionPlacements>>
+  try {
+    theirs = await observed.session.readOnly((rtx) => extensionPlacements(rtx))
+  } finally {
+    await observed.session.close()
+  }
+  const ours = await scratch.readOnly((rtx) => extensionPlacements(rtx))
+  for (const name of [...new Set([...theirs.keys(), ...ours.keys()])].sort()) {
+    const a = theirs.get(name)
+    const b = ours.get(name)
+    if (a === undefined || b === undefined || a.schema !== b.schema || a.version !== b.version) {
+      return name.slice(0, 63)
+    }
+  }
+  return null
 }
 
 function scopeOf(scope: ManagedScope) {

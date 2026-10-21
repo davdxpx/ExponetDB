@@ -1,0 +1,23 @@
+schema: exponetdb.migration/v1
+id: 01M5G6EQ7GKZV615Y680AHT52B
+name: legacy-import-evidence
+description: |
+  The legacy import on real, imported histories (Wave 9 order, Part A, A2
+  and A3; legacy-import.md §2.3). migrations.import_items gains the
+  strength of the evidence behind each item (strong, medium, low, curated,
+  weak; NULL when no ledger entry relates to it). migrations.import_reports
+  gains the true number of global drift entries and whether the report
+  holds fewer of them than exist (drift_truncated): a truncated report is
+  never baselined. The worker writes the new columns once, when it finishes
+  an analysis; nobody changes them afterwards. Additive: no frozen bundle
+  changes; the guard of the frozen legacy-import bundle keeps watching its
+  own columns, a second guard here watches the new ones.
+dependsOn:
+  - 01M5F4NHFTMQRYJA43P8GKP44M
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

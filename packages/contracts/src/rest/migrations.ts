@@ -637,10 +637,16 @@ export const ImportAnalysisRequestSchema = z
       .optional()
       .meta({ description: 'The legacy ledgers to read on the imported target (evidence only).' }),
     aliases: z
-      .record(z.string().max(200), z.string().max(200))
+      .record(
+        z.string().max(200),
+        z.union([z.string().max(200), z.array(z.string().max(200)).min(1).max(64)]),
+      )
       .refine((a) => Object.keys(a).length <= 1000, { message: 'At most 1000 aliases.' })
       .optional()
-      .meta({ description: 'Curated: an applied ledger name → the file stem it stands for.' }),
+      .meta({
+        description:
+          'Curated: an applied ledger name → the file stem it stands for, or the stems of the several files one ledger entry stands for (Wave 9).',
+      }),
     notApplicable: z
       .array(z.string().max(200))
       .max(1000)
@@ -688,8 +694,16 @@ export const ImportReportSchema = z
         contentDigest: Sha256DigestSchema.nullable(),
         evidence: z.array(z.string().max(200)).max(16).optional().meta({
           description:
-            'The evidence the classification used (ledger hash, statements, alias, expectations held).',
+            'The evidence the classification used (ledger hash, statements, alias, expectations held); a longer list ends with evidence_truncated:<n>.',
         }),
+        evidenceStrength: z
+          .enum(['strong', 'medium', 'low', 'curated', 'weak'])
+          .nullable()
+          .optional()
+          .meta({
+            description:
+              'The strongest ledger evidence behind the item (legacy-import.md §2.3): strong (a tool hash of the bytes, or the applied statements one by one), medium (the normalized statement sequence), low (equal only with comments inside bodies ignored), curated (an alias), weak (a name only, which never records a file); null when no ledger entry relates to it (Wave 9).',
+          }),
         decision: z
           .object({
             state: ImportItemStateSchema,

@@ -240,7 +240,11 @@ describe('legacy import', () => {
     expect(r.state).toBe('open')
     const states = Object.fromEntries(r.items.map((i) => [i.legacyId, [i.state, i.evidence]]))
     expect(states['legacy:0005_status_incidents']?.[0]).toBe('not_applicable')
-    expect(states['legacy:0003_notes']?.[0]).toBe('recorded_missing')
+    // Only its name matches a ledger entry (weak): a name never records a file (Wave 9 A2).
+    expect(states['legacy:0003_notes']).toEqual([
+      'unrecorded_missing',
+      expect.arrayContaining(['supabase:name_hint']),
+    ])
     expect(states['legacy:0001_conditional_policy']?.[0]).toBe('ambiguous')
     expect(states['legacy:0006_listing_tmp']?.[0]).toBe('superseded')
     // Content evidence: the hash ledger, a curated alias; a name alone is only a hint.
@@ -253,9 +257,17 @@ describe('legacy import', () => {
       expect.arrayContaining(['supabase:alias']),
     ])
     expect(states['legacy:0002_listings']).toEqual([
-      'recorded_present',
+      'unrecorded_present',
       expect.arrayContaining(['supabase:name_hint']),
     ])
+    const strength = Object.fromEntries(r.items.map((i) => [i.legacyId, i.evidenceStrength]))
+    expect(strength).toMatchObject({
+      'legacy:0008_events': 'strong',
+      'legacy:0009_event_index': 'strong',
+      'legacy:0004_listing_status': 'curated',
+      'legacy:0002_listings': 'weak',
+      'legacy:0000_init': null,
+    })
     expect(states['legacy:0000_init']?.[0]).toBe('unrecorded_present')
     expect(states['legacy:0009_event_index']).toEqual([
       'recorded_present',

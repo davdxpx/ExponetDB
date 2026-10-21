@@ -28,6 +28,11 @@ export {
   reosaShapedStatements,
   SHAPED_SCHEMA,
 } from './fixtures/reosa-shaped.ts'
+export {
+  SUPABASE_ALIASES,
+  SUPABASE_FILES,
+  supabaseTargetStatements,
+} from './fixtures/supabase-history.ts'
 export { FaultProxy, type ProxyMode } from './proxy.ts'
 export { loginPassword, provisionRoles, type RoleProvisioning, withRolesHeld } from './roles.ts'
 export {

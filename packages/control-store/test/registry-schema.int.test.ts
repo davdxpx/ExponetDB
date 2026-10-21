@@ -774,6 +774,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M4V7PRFXK2N9QB4ZH6WD3TME',
         // Owner decision of 2026-10-21: a longer list of server providers.
         '01M5F4NHFTMQRYJA43P8GKP44M',
+        // Wave 9 Part A (A2, A3): evidence strength and drift totals of legacy imports.
+        '01M5G6EQ7GKZV615Y680AHT52B',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')
