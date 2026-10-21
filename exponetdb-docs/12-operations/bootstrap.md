@@ -16,11 +16,15 @@ OAuth client is set up, and how credentials are rotated.
 The first databases ExponetDB manages (REOSA's) already exist and have a history
 of migrations applied by REOSA's own tooling. Until ExponetDB takes over:
 
-- REOSA keeps applying migrations with its current flow; ExponetDB does not
-  touch REOSA databases before Wave 10 (read-only first, then legacy import,
+- REOSA keeps applying migrations with its current flow until the owner
+  moves a database under ExponetDB (read-only first, then legacy import,
   [`../04-migrations/legacy-import.md`](../04-migrations/legacy-import.md),
   [`../13-integrations/reosa-integration.md`](../13-integrations/reosa-integration.md)).
-  Waves 4 to 9 work against test databases.
+  Waves 4 to 9 are developed and tested against disposable databases only.
+  **[DECIDED]** (owner, 2026-10-21, OD-7a) REOSA staging, which already runs
+  self-managed on `reos-db-01`, is the first real target: the owner
+  registers and imports it with what Part A of Wave 9 delivers; REOSA
+  production stays untouched until Wave 11 (OD-7b).
 - The database host `reos-db-01` is prepared with REOSA's handbook (PostgreSQL
   from PGDG, private network, TLS). ExponetDB's agent is installed **after**
   that, on a working host; it does not provision hosts.
@@ -114,6 +118,14 @@ in local bootstrap mode while off-host audit and backup evidence remains
 open. The measured proxy setting remains required. This limited operational
 exception does not accept G2 off-host evidence or authorize real managed
 targets; revisit it before real managed targets are registered.
+
+**[DECIDED]** (owner, 2026-10-21, the Wave 9 order, OD-7a) Exactly one real
+nonprod target set is authorized: REOSA staging and its scratch database on
+`reos-db-01` (an external cluster without a node agent). The owner
+registers it, imports its history and lets sessions apply staging
+migrations through ExponetDB after Part A of Wave 9. This does not close
+the G2 off-host evidence and authorizes no production target (OD-7b: no
+applies to REOSA production before Wave 11).
 
 ## 4. Agent root CA ceremony
 

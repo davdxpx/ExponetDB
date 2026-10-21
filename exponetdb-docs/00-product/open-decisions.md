@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); OD-50 added on 2026-10-21 with the CLI's scope presets; all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); OD-50 added on 2026-10-21 with the CLI's scope presets; on 2026-10-21 the owner's Wave 9 order ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)) split OD-7 into OD-7a (staging: yes) and OD-7b (production: no applies before Wave 11), decided the engine part of OD-4 (pgBackRest; the storage stays open until the measured spike B0), and added OD-51 (a declared `BYPASSRLS` execution-role exception) and OD-52 (adopting a running pgBackRest setup), both decided by the order's defaults; OD-8 stays open and blocks Part B of Wave 9 (see ["Decisions of the Wave 9 order"](#decisions-of-the-wave-9-order-2026-10-21)); all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -23,11 +23,11 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-1 | Web App language | **resolved 2026-10-13** | option (c): English UI strings behind typed message keys from day one; German later by adding a catalog | (was Wave 8) | decided |
 | OD-2 | Node agent implementation language | **resolved 2026-10-05** | Go | (was Wave 5 and the Go golden vectors of Wave 1) | decided |
 | OD-3 | Toolchain and runtime | **resolved 2026-10-05** | Bun workspaces + Turborepo + Vitest + Biome + TypeScript; Node.js 24 LTS for production server processes | (was Waves 1, 2) | decided |
-| OD-4 | Backup engine | open | pgBackRest (version chosen and pinned at deployment) on Hetzner Object Storage with object lock, plus `pg_dump` + restic off-provider | Wave 9 | yes |
+| OD-4 | Backup engine | **engine decided 2026-10-21** (Wave 9 order default D-B1); **storage open** until the measured spike B0 | pgBackRest for L1 (version chosen and pinned per [`backup-engines.md`](../09-backups-and-restore/backup-engines.md)); storage (Hetzner Object Storage with S3 Object Lock, Cloudflare R2 with bucket lock rules, or both) decided by the owner with the spike's measurements; `pg_dump` + restic off-provider (D-B4) | Wave 9 Part B (storage) | yes (storage) |
 | OD-5 | MCP client registration policy | **resolved 2026-10-06, revised 2026-10-13** | revised 2026-10-13 by the owner: new CIMD and DCR clients are approved automatically by default (`EXPONETDB_OAUTH_CLIENT_REGISTRATION=open`), a person still consents, an administrator can still disable a client; `review` keeps the 2026-10-06 rule. Option (a) of 2026-10-06: pre-registered first-party clients; third-party CIMD clients only after an admin approves the exact `client_id` URL, bound to a fingerprint of its security metadata; DCR as deprecated compatibility that creates a pending public client (`none`) until approved; service-account clients pre-registered with `private_key_jwt`; no client secrets; no third-party client trusted at bootstrap | (was Wave 3B) | decided |
 | OD-6 | Verified provenance for production migrations | **resolved 2026-10-12** | not in V1; add repository integration or signed artifacts after Wave 10 | Wave 6 (production policy), later | yes |
-| OD-7 | Manage REOSA's current hosted databases before the move | open | yes: read-only first, then import and staging migrations | Wave 10 | yes |
-| OD-8 | Audit retention and personal data | **open (legal)**; Wave 2 design settled 2026-10-05 | permanent audit with pseudonymous labels; erasure pseudonymizes identities; default `permanent`, never below 400 days | Wave 9 (final setting); no longer Wave 2 | yes (legal) |
+| OD-7 | Manage REOSA's current databases before the move | **resolved 2026-10-21** (split by the owner's Wave 9 order) | OD-7a (staging, already self-managed on `reos-db-01`): **yes**, registered, imported and migrated through ExponetDB after Part A of Wave 9; OD-7b (production, still on the hosted provider until Wave 11): **no applies before Wave 11**, at most read-only observation | (was Wave 10) | decided |
+| OD-8 | Audit retention and personal data | **open (legal)**; Wave 2 design settled 2026-10-05; still open at the start of Wave 9 (2026-10-21) | permanent audit with pseudonymous labels; erasure pseudonymizes identities; default `permanent`, never below 400 days (the Wave 9 order recommends option (a), D-B3) | Wave 9 Part B (a stop-and-ask point; Part A does not depend on it) | yes (legal) |
 | OD-9 | Approval model for a one-person organization | **resolved 2026-10-05** | option (a): agent proposes, a human approves in the Web App; human-initiated plans may be self-approved with fresh re-authentication; `critical` self-approvals add an explicit acknowledgement, a 10-minute cooling period and a fresh re-authentication at apply | (was Waves 3A, 6) | decided |
 | OD-10 | Future identity architecture | open | ExponetDB stays authorization server for its resources; federates login to the Exponet identity service later | later wave | yes |
 | OD-11 | Exponet brand input for the Web App | **resolved 2026-10-13** (placeholder) | option (b) until the owner supplies a brand: neutral placeholder tokens (an indigo-blue hue near 255, clearly not Supabase green), the wordmark is the text "ExponetDB" in the UI font, Inter and Source Code Pro (OFL, self-hosted); replaceable through the token inputs only | (was Wave 8); a real brand replaces the placeholder later | yes (brand values, when they exist) |
@@ -70,6 +70,8 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-48 | A SQL formatter in the Web App, given its license closure | open | (c) no formatter until one without a Python-2.0 dependency exists or the owner allows it; (a) would allow `Python-2.0` for the formatter's `argparse` (used only by its command line) | "Format SQL" in the SQL editor | yes |
 | OD-49 | The server provider enum and `/api/v1` GA | open | (a) mark `ServerProvider` open (`x-extensible-enum`) before GA, so a provider added later is additive | the GA decision of `/api/v1` | yes |
 | OD-50 | What the CLI may learn about the scopes an account could hold | open | (b) a CLI read action returning the scopes the person could be granted, computed like the consent page | "could get" in `whoami` and `doctor` | yes |
+| OD-51 | An execution role with `BYPASSRLS` for adopted schemas | **resolved 2026-10-21** (Wave 9 order default D-A1; stands unless the owner overrules it) | a declared, audited, revocable exception per (project, environment, PostgreSQL role) that excuses exactly `BYPASSRLS` and nothing else; declared and revoked by people only (never MCP), production with an approval and a re-authentication; a warn rule in every plan that uses it; on production at least `high` and agent applies still need a human approval ([ADR-0034](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md)) | Wave 9 Part A (A4) | decided |
+| OD-52 | Adopting a running, hand-made pgBackRest setup | **resolved 2026-10-21** (Wave 9 order default D-B2; stands unless the owner overruled it) | adopt, then own: first observe the existing stanza, repositories and schedules without changing them, then take ownership of configuration and scheduling through a planned, verified hand-over that stays reversible until confirmed; an ADR in Wave 9 B0 | Wave 9 Part B (B0, B2) | decided |
 
 ---
 
@@ -150,6 +152,28 @@ History:
 - **Owner decision needed.** Yes (given on 2026-10-05).
 
 ## OD-4. Backup engine
+
+- **Status.** ENGINE DECIDED, STORAGE OPEN
+- **Decision date.** 2026-10-21 (engine)
+- **Decision.** The L1 engine (physical backups and WAL archive) is
+  **pgBackRest** (the Wave 9 order's default D-B1, which stands unless the
+  owner overrules it). Reasons: the owner already runs pgBackRest 2.59.3 on
+  `reos-db-01` with client-side encryption, scheduled full, differential and
+  monthly backups to S3-compatible storage and passed PITR drills (also on a
+  freshly built host); this document recommended pgBackRest as well. The
+  version is pinned per [`backup-engines.md` §3](../09-backups-and-restore/backup-engines.md),
+  after the 2026-10-04 advisory is checked against the project's release
+  notes in Wave 9 B0. The **storage** choice is not decided: it stays open
+  until the measured storage spike of Wave 9 B0 (disposable buckets only)
+  and is then put to the owner with the measurements (Cloudflare R2 with
+  bucket lock rules, Hetzner Object Storage with S3 Object Lock, or both in
+  different layers). The logical layer (`pg_dump` + restic to a second
+  provider) is part of Wave 9 (D-B4). An existing hand-made setup is adopted,
+  not replaced ([OD-52](#od-52-adopting-a-running-hand-made-pgbackrest-setup)).
+- **Source.** the owner's Wave 9 order, §3.2 D-B1, D-B4
+  ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)).
+
+History:
 
 - **Question.** Which engine takes physical backups and archives WAL, and where
   do repositories live?
@@ -276,6 +300,30 @@ History:
 
 ## OD-7. Manage REOSA's current hosted databases before the move
 
+- **Status.** RESOLVED (split into OD-7a and OD-7b)
+- **Decision date.** 2026-10-21
+- **Decision.** The question is overtaken by events: REOSA staging no
+  longer runs on the hosted provider. It is split:
+  - **OD-7a (staging): yes.** REOSA staging already runs on `reos-db-01`
+    (self-managed, an external cluster without a node agent). After Part A
+    of Wave 9 the owner registers it, imports its history and lets sessions
+    apply staging migrations through ExponetDB. This is the owner's explicit
+    authorization for exactly one real nonprod target set: REOSA staging and
+    its scratch database on `reos-db-01`. It does not close the G2 off-host
+    evidence and authorizes no production target.
+  - **OD-7b (production): no applies before Wave 11.** REOSA production
+    still runs on the hosted provider and moves only in Wave 11; until then
+    ExponetDB at most observes it read-only.
+  The REOSA-side deliverables of Wave 10 (bundle roots in REOSA's
+  repository, REOSA Admin `/database`, the runtime schema contract) stay in
+  Wave 10; the product capabilities Wave 10 needs (import of a real
+  Supabase-origin history, per-environment execution roles, external-cluster
+  onboarding) are brought forward into Part A of Wave 9.
+- **Source.** the owner's Wave 9 order, §3.1 items 2 and 4
+  ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)).
+
+History:
+
 - **Question.** Does ExponetDB register and manage REOSA's Supabase-hosted
   databases (as external clusters) before REOSA moves to `reos-db-01`, or only
   after?
@@ -329,6 +377,11 @@ History:
     removed.
   Text elsewhere that depends on the legal choice stays marked
   `[OPEN: OD-8]`.
+- **Status (2026-10-21, at the start of Wave 9).** Still **open**. The owner's
+  Wave 9 order recommends option (a) (D-B3) and makes the decision a
+  stop-and-ask point: Part B of Wave 9 (backups, restores, retention of the
+  new records) does not start before the owner decides it. Part A (the
+  migration engine for imported schemas) does not depend on it.
 
 ## OD-9. Approval model for a one-person organization
 
@@ -1393,6 +1446,92 @@ nothing is implemented. Line references are to commit `1966cf4`.
   consent page, so the CLI never guesses from role names.
 - **Blocks.** "Could get" in `whoami` and `doctor`.
 - **Owner decision needed.** Yes.
+
+## OD-51. An execution role with `BYPASSRLS` for adopted schemas
+
+- **Status.** RESOLVED
+- **Decision date.** 2026-10-21
+- **Decision.** The Wave 9 order's default D-A1, which stands unless the
+  owner overrules it: a declared, audited, revocable **execution-role
+  exception** per (project, environment, PostgreSQL role) that excuses
+  exactly the `BYPASSRLS` attribute of an execution role and nothing else.
+  `SUPERUSER`, `CREATEROLE`, `CREATEDB`, `REPLICATION`, `LOGIN` and any reach
+  into `pg_*` or `exponetdb_*` roles are never excusable. People declare and
+  revoke it (`registry.manage` at the environment's tier, never through MCP);
+  production needs an approval and a re-authentication. Every plan that uses
+  it shows the warn rule `migration.execution-role-exception`; on production
+  the plan is at least `high` and an agent's apply still needs a human
+  approval (OD-13 unchanged). A plan binds the exception and its revision; a
+  revoked or changed exception makes the plan `PLAN_STALE`. Design, threat
+  analysis and the recommended target state for adopters (a dedicated
+  definer role, so the owner can drop `BYPASSRLS` later):
+  [ADR-0034](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md).
+- **Source.** the owner's Wave 9 order, §3.2 D-A1 and §7 A4
+  ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)).
+
+History:
+
+- **Question.** May an execution role carry `BYPASSRLS`?
+- **Why it matters.** Wave 6 refuses it (`privileged_attribute`). Supabase's
+  `postgres` role has `BYPASSRLS`, and Supabase-origin schemas use
+  `SECURITY DEFINER` functions owned by it on `FORCE ROW LEVEL SECURITY`
+  tables; removing the attribute silently turns their reads into empty
+  results and their writes into policy errors (measured on the first real
+  adopter on 2026-10-21: 159 `FORCE` tables, 48 definer functions, 41 of
+  them on `FORCE` tables). A product that can only manage greenfield
+  schemas cannot adopt real ones.
+- **Options.** (a) keep refusing it; adopters rewrite their role model
+  first; (b) a declared, audited, revocable exception for `BYPASSRLS` only;
+  (c) accept any attribute the project declares.
+- **Recommendation.** (b).
+- **Blocks.** Part A of Wave 9 (A4) and every Supabase-origin adopter.
+
+## OD-52. Adopting a running, hand-made pgBackRest setup
+
+- **Status.** RESOLVED
+- **Decision date.** 2026-10-21
+- **Decision.** The Wave 9 order's default D-B2, which stands unless the
+  owner overrules it: **adopt, then own.** ExponetDB first observes an
+  existing pgBackRest stanza (catalog, archive status, verify, drills)
+  without changing its configuration or schedules, then takes ownership of
+  configuration and scheduling through a planned, verified hand-over that
+  stays reversible until confirmed. The rule "repository configuration
+  written by the agent, never edited by hand"
+  ([`backup-engines.md`](../09-backups-and-restore/backup-engines.md)) applies
+  from the hand-over on. Foreign values are shown, never overwritten (OD-20).
+  The ADR is written in Wave 9 B0.
+- **Source.** the owner's Wave 9 order, §3.2 D-B2
+  ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)).
+
+History:
+
+- **Question.** How does ExponetDB take over a backup chain it did not
+  create?
+- **Why it matters.** The documents only knew an ExponetDB-owned setup,
+  which would force a destructive re-setup of a working, drilled chain.
+- **Options.** (a) re-create the setup under ExponetDB; (b) observe only,
+  never own; (c) adopt, then own through a planned hand-over.
+- **Recommendation.** (c).
+- **Blocks.** Wave 9 B0 and B2.
+
+## Decisions of the Wave 9 order (2026-10-21)
+
+The owner's Wave 9 order ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md))
+lists four **[OWNER]** instructions and seven **[DEFAULT]** proposals that
+stand unless the owner overrules them. **[DECIDED]** 2026-10-21, source: the
+Wave 9 order ([Part A record §2](../14-roadmap/gates/9-part-a.md#2-decisions-of-the-wave-9-order)).
+OD-4 (D-B1), OD-7 (owner item 4), OD-51 (D-A1) and OD-52 (D-B2) are above.
+
+| # | Topic | Decision | Kind |
+|---|---|---|---|
+| O1 | Order of work | Part A (the migration engine for real, imported schemas) first, as its own pull request and record, then Part B (Wave 9 proper); Part A may be merged before Part B is finished | OWNER |
+| O2 | Scope pull-forward | Part A brings forward the product capabilities of Wave 10 (import of a real Supabase-origin history, per-environment execution roles, external-cluster onboarding), not its REOSA-side deliverables | OWNER |
+| O3 | Quality over speed | the professional design even when it costs more code: contracts first, additive bundles, ADRs where a DECIDED rule changes, real-PostgreSQL tests, independent review rounds, truthful records | OWNER |
+| O4 | OD-7 | split into OD-7a (yes) and OD-7b (no applies before Wave 11), see OD-7 | OWNER |
+| D-A2 | Execution roles per environment | the alias → role map is resolved per (project, environment), the project map as default; one resolver, no direct reader of the project map ([ADR-0034](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md)) | DEFAULT |
+| D-B3 | OD-8 | option (a) recommended; **not decided**: a stop-and-ask point before Part B | DEFAULT (recommendation only) |
+| D-B4 | L2 and L3 in Wave 9 | `pg_dump` (L2) and restic to a second provider (L3), engine-independent, are part of Wave 9; restic needs an allowlist addition | DEFAULT |
+| D-B5 | The G5 waiver | node capabilities are developed and proven only on disposable hosts; closing the waiver needs `node-pg` and `node-host-scenarios` on a disposable Ubuntu 24.04 VM; without one the items stay `NOT PROVEN` and the session asks the owner | DEFAULT |
 
 ## Decisions of the Wave 8 order (2026-10-13)
 
