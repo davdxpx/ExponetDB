@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import type { Readable } from '@exponetdb/ui-patterns'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { TextDiffSides } from '../../src/editor/diff-types.ts'
 import { ReadableTextDiff } from '../../src/editor/readable-text-diff.tsx'
@@ -8,11 +8,6 @@ import { axeViolations } from '../support/axe.ts'
 import { installLayoutStubs } from './support.ts'
 
 beforeAll(installLayoutStubs)
-// The viewer is a lazy chunk (CodeMirror's merge view); the first test would otherwise pay its
-// cold import inside a 1 s wait, which a loaded CI runner exceeds. Load it once first.
-beforeAll(async () => {
-  await import('../../src/editor/text-diff.tsx')
-}, 120_000)
 afterEach(cleanup)
 
 const sides: TextDiffSides = { before: 'select 1;', after: 'select 2;' }
@@ -64,8 +59,14 @@ describe('ReadableTextDiff: a read with a value', () => {
     expect(
       await screen.findByRole('group', { name: 'up.sql: draft against applied' }),
     ).toBeInTheDocument()
-    const host = container.querySelector('[data-exdb-editor="diff"]')
-    expect(host?.shadowRoot?.querySelectorAll('.cm-editor')).toHaveLength(2)
+    // The group stands while the lazy viewer is still loading; the two editors come with it.
+    await waitFor(
+      () => {
+        const host = container.querySelector('[data-exdb-editor="diff"]')
+        expect(host?.shadowRoot?.querySelectorAll('.cm-editor')).toHaveLength(2)
+      },
+      { timeout: 10_000 },
+    )
     expect(await screen.findByText(/1 changed block/)).toBeInTheDocument()
   })
 
