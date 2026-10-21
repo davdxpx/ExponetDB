@@ -1,4 +1,4 @@
-import { Check, ChevronDown } from '@exponetdb/icons'
+import { Check, ChevronsUpDown } from '@exponetdb/icons'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -24,6 +24,7 @@ import { useMatch, useRouterState } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { t } from '../../lib/i18n/i18n.ts'
 import { useMe } from '../../lib/session/guard.tsx'
+import { PathSeparator } from '../../shell/path-separator.tsx'
 import { DatabaseSwitcher } from './database-switcher.tsx'
 import {
   type Environment,
@@ -92,13 +93,18 @@ function ContextBar({ target }: { readonly target: TargetRoute }): ReactNode {
         data-slot="target-context-bar"
         className="min-w-0 shrink"
       >
-        <BreadcrumbList className="flex-nowrap">
+        <BreadcrumbList className="flex-nowrap gap-1 sm:gap-1">
           {/* On a phone the product and project move into the environment menu (it names them);
               the command menu has "Switch database…" there. */}
+          <BreadcrumbSeparator className="max-md:hidden [&>svg]:size-4">
+            <PathSeparator />
+          </BreadcrumbSeparator>
           <BreadcrumbItem className="max-md:hidden">
             <DatabaseSwitcher target={target} identityId={identityId} pathname={pathname} />
           </BreadcrumbItem>
-          <BreadcrumbSeparator className="max-md:hidden">/</BreadcrumbSeparator>
+          <BreadcrumbSeparator className="[&>svg]:size-4">
+            <PathSeparator />
+          </BreadcrumbSeparator>
           <BreadcrumbItem className="min-w-0">
             <EnvironmentSwitcher
               target={target}
@@ -140,10 +146,10 @@ function EnvironmentSwitcher(props: {
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
-          variant="outline"
+          variant="text"
           size="tiny"
-          className="max-w-full"
-          iconRight={<ChevronDown className="size-3" />}
+          className="max-w-full text-foreground"
+          iconRight={<ChevronsUpDown className="size-3.5" />}
         >
           <span className="flex min-w-0 items-center gap-1.5">
             <span className="sr-only">{t('target.bar.environment')}</span>{' '}

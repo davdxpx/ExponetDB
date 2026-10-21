@@ -69,6 +69,11 @@ const core = {
   'shell.account.settings': 'Account settings',
   'shell.signOut': 'Sign out',
   'shell.account.version': 'Version {version}',
+  'shell.account.back': 'Back to the fleet',
+  'shell.account.logs': 'Logs',
+  'shell.home': 'Back to the fleet overview',
+  'shell.connect': 'Connect',
+  'shell.menu': 'Open the menu',
   'crash.title': 'This page failed to render',
   'crash.body':
     'The page stopped while drawing. A page that fails to draw does not change plans, operations or data: the server keeps its state.',

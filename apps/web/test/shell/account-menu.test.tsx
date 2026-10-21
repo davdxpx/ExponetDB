@@ -210,10 +210,15 @@ describe('the account menu of the header', () => {
 })
 
 describe('the tabs of the account area', () => {
-  it('lists the tabs with the current one marked', async () => {
+  it('lists the pages in the account column with the current one marked, after the way back', async () => {
     mountApp('/account/preferences', signedIn())
     const nav = await screen.findByRole('navigation', { name: en['accountArea.nav'] })
-    expect(within(nav).getAllByRole('link')).toHaveLength(5)
+    expect(within(nav).getAllByRole('link')).toHaveLength(6)
+    expect(within(nav).getAllByRole('link')[0]).toHaveAccessibleName(en['shell.account.back'])
+    expect(within(nav).getByRole('link', { name: en['shell.account.back'] })).toHaveAttribute(
+      'href',
+      '/',
+    )
     expect(within(nav).getByRole('link', { name: en['accountMenu.preferences'] })).toHaveAttribute(
       'aria-current',
       'page',

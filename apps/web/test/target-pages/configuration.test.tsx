@@ -299,7 +299,7 @@ describe('the configuration page', () => {
     expect(within(none).queryByText(/Could not read/)).toBeNull()
   })
 
-  it('wears the production frame on a production target', async () => {
+  it('says Production by the title of a production target', async () => {
     const w = new OpsWorld()
     project(w)
     w.sample(PROD_TARGET)
@@ -307,7 +307,9 @@ describe('the configuration page', () => {
     w.on('GET', POLICY, policy())
     mountOps(`/t/${PROD_TARGET}/configuration`, w)
     await section('Target')
-    expect(document.querySelector('[data-production-frame]')).not.toBeNull()
+    await waitFor(() =>
+      expect(document.querySelector('[data-slot="page-header-production-cue"]')).not.toBeNull(),
+    )
     expect(screen.getAllByText('Production').length).toBeGreaterThan(0)
   })
 

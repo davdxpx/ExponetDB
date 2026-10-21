@@ -25,6 +25,35 @@ through node agents. Three things must be visible everywhere:
 
 ## 2. Levels and routes
 
+**[DECIDED]** (owner, 2026-10-21) The frame is built like Supabase Studio's,
+natively (Studio's shell is not on the ADR-0030 allowlist):
+
+- **Three levels, three rails.** The fleet (every page about many targets,
+  Studio's organization level), one target (every page below
+  `/t/<product>/<project>/<environment>`, Studio's project level) and the
+  person's account. The rail lists the sections of the level the page is on:
+  the fleet's sections (§2.1) in their four blocks, or the target's sections
+  (§2.2) in their four groups. The account has no rail on a wide screen but a
+  column (`Back to the fleet`, then the account settings and the activity),
+  as Studio's account pages have.
+- **A fixed frame.** The header (48 px) and the rail stay in place; only the
+  page's own container scrolls, never the window.
+- **The rail is collapsed to its icons on a wide screen and expands while the
+  pointer rests on it** (the person can pin it open or closed from the rail's
+  footer). A rail item's tooltip appears only after the pointer has rested on
+  it for one second. On a phone the rail is a sheet opened from the header's
+  menu button, and choosing a page closes it.
+- **The header draws the path** of where the page is, each step divided by a
+  slanted stroke: the mark (back to the fleet), the installation, then on a
+  target's pages its product, project and environment (each a switcher, the
+  environment with its tier and health), then at the end the target's
+  Connect, the search and the account menu. The addresses do not change; the
+  path is only drawn.
+- **A fleet section with several pages** (for example Changes: plans,
+  operations, approvals) shows its pages in a 256 px column beside the rail on
+  a wide screen, headed by the section's name; on a phone they are listed
+  under the section in the sheet.
+
 ### 2.1 Global level
 
 | Section | Route | Purpose |
@@ -166,8 +195,12 @@ immutable, so URLs are stable; ids are used for API calls).
 | **Advisors** | `/advisors` | findings with remediation and draft fixes |
 | **Activity** | `/activity` | audit and operations filtered to this target |
 
-The section order follows the owner brief's list (overview, schema, migrations,
-queries, connections, locks, backups, restore, configuration). Restore lives
+**[DECIDED]** (owner, 2026-10-21) The target's rail groups its sections as
+Studio groups a project's: the work on the data (Overview, Schema, SQL), the
+changes (Migrations, Compare, Drift), the running database (Connections,
+Locks, Performance, Activity, Findings, Advisors) and the target's settings
+(Backups, Configuration). The tabs above the target's pages are gone; the rail
+is the target's navigation. Restore lives
 inside Backups because a restore always starts from a backup and its
 destination is never the current target in place
 ([`../09-backups-and-restore/restore.md`](../09-backups-and-restore/restore.md)).
@@ -292,8 +325,10 @@ the environment menu lists the other targets of the project with a tier chip
 taken from the contract's `tier` (never the slug), and its loading, failed,
 stale, partial and empty states are distinct. `E` then `P`, `S` or `D` switch
 to the environment named `production`, `staging` or `development` (`P` falls
-back to the single `prod`-tier sibling). A production target carries the
-reserved production frame around its pages. `ContentWrapper` renders the first
+back to the single `prod`-tier sibling). A production target shows the
+tier chip in the header's path and in each page title; since 2026-10-21 no
+frame surrounds its pages (the reserved frame marks plans, design-system.md
+§4). `ContentWrapper` renders the first
 state that holds: the target read loading or failed; a suspended or
 decommissioned target for pages that show live target data (pages of stored
 data stay readable under a notice); Wave 9 and OD-21 pages "not available

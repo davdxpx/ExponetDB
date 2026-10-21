@@ -1,12 +1,24 @@
 import {
+  Activity,
+  Cable,
   Database,
   DatabaseBackup,
+  FileDiff,
+  Gauge,
   GitCompareArrows,
+  House,
+  Layers,
   LayoutDashboard,
+  Lightbulb,
+  Lock,
   type LucideIcon,
   ScrollText,
   Server,
   Settings,
+  Settings2,
+  Siren,
+  SquareTerminal,
+  Table2,
   Users,
 } from '@exponetdb/icons'
 import type { CommandShortcutId } from '@exponetdb/ui-patterns'
@@ -340,42 +352,112 @@ export interface TargetNavItem {
   readonly suffix: string
   readonly requires: readonly Requirement[]
   readonly wave?: '9'
+  /** The glyph of the section in the target's rail. */
+  readonly icon: LucideIcon
+  /**
+   * The rail's group, as Studio groups a project's rail: the target and its data (1), its
+   * changes (2), what runs on it (3), how it is kept (4); a separator divides the groups.
+   */
+  readonly group: 1 | 2 | 3 | 4
 }
 
-/** The target sections in the order of the owner brief (information-architecture.md §2.2). */
+/** The target sections, grouped as the target's rail shows them (information-architecture.md §2.2). */
 export const TARGET_NAV: readonly TargetNavItem[] = [
-  { id: 'overview', label: 'Overview', suffix: '', requires: [] },
+  { id: 'overview', label: 'Overview', suffix: '', requires: [], icon: House, group: 1 },
   {
     id: 'schema',
     label: 'Schema',
     suffix: '/schema',
     requires: ['target.reachable'],
+    icon: Table2,
+    group: 1,
   },
-  { id: 'migrations', label: 'Migrations', suffix: '/migrations', requires: [] },
-  { id: 'sql', label: 'SQL', suffix: '/sql', requires: ['target.reachable'] },
+  {
+    id: 'sql',
+    label: 'SQL',
+    suffix: '/sql',
+    requires: ['target.reachable'],
+    icon: SquareTerminal,
+    group: 1,
+  },
+  {
+    id: 'migrations',
+    label: 'Migrations',
+    suffix: '/migrations',
+    requires: [],
+    icon: Layers,
+    group: 2,
+  },
+  // The environments of the project side by side (`/t/<product>/<project>/<environment>/compare`).
+  {
+    id: 'compare',
+    label: 'Compare environments',
+    suffix: '/compare',
+    requires: [],
+    icon: GitCompareArrows,
+    group: 2,
+  },
+  { id: 'drift', label: 'Drift', suffix: '/drift', requires: [], icon: FileDiff, group: 2 },
+  {
+    id: 'connections',
+    label: 'Connections',
+    suffix: '/connections',
+    requires: ['target.reachable'],
+    icon: Cable,
+    group: 3,
+  },
+  {
+    id: 'locks',
+    label: 'Locks',
+    suffix: '/locks',
+    requires: ['target.reachable'],
+    icon: Lock,
+    group: 3,
+  },
   {
     id: 'performance',
     label: 'Performance',
     suffix: '/performance',
     requires: ['wave9'],
     wave: '9',
+    icon: Gauge,
+    group: 3,
   },
   {
-    id: 'connections',
-    label: 'Connections',
-    suffix: '/connections',
-    requires: ['target.reachable'],
+    id: 'activity',
+    label: 'Activity',
+    suffix: '/activity',
+    requires: [],
+    icon: Activity,
+    group: 3,
   },
-  { id: 'locks', label: 'Locks', suffix: '/locks', requires: ['target.reachable'] },
-  { id: 'backups', label: 'Backups', suffix: '/backups', requires: ['wave9'], wave: '9' },
-  { id: 'configuration', label: 'Configuration', suffix: '/configuration', requires: [] },
-  { id: 'findings', label: 'Findings', suffix: '/findings', requires: [] },
-  { id: 'drift', label: 'Drift', suffix: '/drift', requires: [] },
-  // The environments of the project side by side. The page is built by another change; its
-  // route is `/t/<product>/<project>/<environment>/compare`.
-  { id: 'compare', label: 'Compare environments', suffix: '/compare', requires: [] },
-  { id: 'advisors', label: 'Advisors', suffix: '/advisors', requires: ['wave9'], wave: '9' },
-  { id: 'activity', label: 'Activity', suffix: '/activity', requires: [] },
+  { id: 'findings', label: 'Findings', suffix: '/findings', requires: [], icon: Siren, group: 3 },
+  {
+    id: 'advisors',
+    label: 'Advisors',
+    suffix: '/advisors',
+    requires: ['wave9'],
+    wave: '9',
+    icon: Lightbulb,
+    group: 3,
+  },
+  {
+    id: 'backups',
+    label: 'Backups',
+    suffix: '/backups',
+    requires: ['wave9'],
+    wave: '9',
+    icon: DatabaseBackup,
+    group: 4,
+  },
+  {
+    id: 'configuration',
+    label: 'Configuration',
+    suffix: '/configuration',
+    requires: [],
+    icon: Settings2,
+    group: 4,
+  },
 ]
 
 export interface TargetPath {

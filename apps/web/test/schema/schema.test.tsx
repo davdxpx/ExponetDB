@@ -229,11 +229,15 @@ describe('the schema page: fingerprint, drift and the way to a change', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows the production frame on a production target', async () => {
+  it('says Production on a production target', async () => {
     mountApp('/t/shop/platform/production/schema', readyWorld())
     await status()
-    const outlet = document.querySelector('[data-production-frame]')
-    expect(outlet).not.toBeNull()
+    await waitFor(() =>
+      expect(document.querySelector('[data-slot="target-layout"]')).toHaveAttribute(
+        'data-tier',
+        'production',
+      ),
+    )
     expect(screen.getAllByText('Production').length).toBeGreaterThan(0)
   })
 })

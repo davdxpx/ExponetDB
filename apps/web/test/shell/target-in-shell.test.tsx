@@ -9,12 +9,13 @@ afterEach(cleanup)
 
 /**
  * The target layout inside the real shell (the target tests use a stand-in
- * shell): the context bar sits in the header once, the target sections once,
- * the Databases rail item is current, and E then a letter switches the
- * environment through the shell's shortcut provider.
+ * shell): the context bar sits in the header once, the rail lists the
+ * target's sections in place of the fleet's, with the current one marked, and
+ * E then a letter switches the environment through the shell's shortcut
+ * provider.
  */
 describe('a target page inside the shell', () => {
-  it('shows the context bar in the header and the target sections once', async () => {
+  it('shows the context bar in the header and the target sections in the rail, once each', async () => {
     const world = new World()
     project(world)
     mountApp('/t/shop/platform/staging/locks', world)
@@ -23,10 +24,16 @@ describe('a target page inside the shell', () => {
     expect(await within(header).findByRole('navigation', { name: 'Target' })).toBeInTheDocument()
     expect(screen.getAllByRole('navigation', { name: 'Target' })).toHaveLength(1)
     expect(screen.getAllByRole('navigation', { name: 'Target sections' })).toHaveLength(1)
-    const rail = screen.getByRole('navigation', { name: 'Main navigation' })
-    expect(within(rail).getByRole('link', { name: 'Databases' })).toHaveAttribute(
+    // At a target's level the rail is the target's: the fleet's sections are not listed.
+    expect(screen.queryByRole('navigation', { name: 'Main navigation' })).toBeNull()
+    const rail = screen.getByRole('navigation', { name: 'Target sections' })
+    expect(within(rail).getByRole('link', { name: 'Locks' })).toHaveAttribute(
       'aria-current',
-      'true',
+      'page',
+    )
+    expect(within(rail).getByRole('link', { name: 'Overview' })).toHaveAttribute(
+      'href',
+      '/t/shop/platform/staging',
     )
     expect(await axeViolations()).toEqual([])
   })

@@ -11,6 +11,7 @@ import { useNavigate } from '@exponetdb/ui-patterns'
 import { type ReactNode, useState } from 'react'
 import { t } from '../../lib/i18n/i18n.ts'
 import { switchTarget } from '../../shell/navigation.ts'
+import { PathSeparator } from '../../shell/path-separator.tsx'
 import { DatabaseChoices } from './database-choices.tsx'
 import type { TargetRoute } from './params.ts'
 import { useDatabases } from './queries.ts'
@@ -38,15 +39,15 @@ export function DatabaseSwitcher(props: {
       <PopoverTrigger asChild>
         <Button
           type="button"
-          variant="outline"
+          variant="text"
           size="tiny"
-          className="max-w-full"
+          className="max-w-full text-foreground"
           aria-label={`${t('target.switch.trigger')}: ${target.product} / ${target.project}`}
-          iconRight={<ChevronsUpDown className="size-3" />}
+          iconRight={<ChevronsUpDown className="size-3.5" />}
         >
-          <span className="flex min-w-0 items-center gap-1.5">
+          <span className="flex min-w-0 items-center gap-1">
             <span className="truncate">{target.product}</span>
-            <span className="text-foreground-lighter">/</span>
+            <PathSeparator />
             <span className="truncate">{target.project}</span>
           </span>
         </Button>

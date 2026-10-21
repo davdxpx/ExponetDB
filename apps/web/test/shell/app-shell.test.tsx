@@ -205,7 +205,8 @@ describe('the rail and the page beside it', () => {
     const rail = document.querySelector('[data-collapsible][data-state]')
     const main = screen.getByRole('main')
     if (rail === null) throw new Error('no rail')
-    // The rail's own box (the first child) is what the flex row lays out beside the page.
+    // The rail's own box (the first child) is what the flex row lays out beside the page; the
+    // page follows it (beside the section menu where the section has one).
     const gap = rail.firstElementChild
     return { rail, gap, main }
   }
@@ -220,7 +221,7 @@ describe('the rail and the page beside it', () => {
     expect(rail).toHaveAttribute('data-collapsible', 'icon')
     // The rail's box is out of the flow (absolute) and the page follows the 3rem slot.
     expect(gap).toHaveClass('absolute')
-    expect(rail.nextElementSibling).toBe(main)
+    expect(rail.nextElementSibling?.contains(main)).toBe(true)
 
     const link = within(rail as HTMLElement).getAllByRole('link')[2] as HTMLElement
     await user.hover(link)
@@ -240,7 +241,7 @@ describe('the rail and the page beside it', () => {
     // In the flow (relative) at the sidebar width: the page beside it is offset by the same width.
     expect(gap).toHaveClass('relative', 'w-(--sidebar-width)')
     expect(gap).not.toHaveClass('absolute')
-    expect(rail.nextElementSibling).toBe(main)
+    expect(rail.nextElementSibling?.contains(main)).toBe(true)
   })
 
   it('collapsed: the rail takes the icon width in the layout and never opens by itself', async () => {
@@ -249,7 +250,7 @@ describe('the rail and the page beside it', () => {
     expect(rail).toHaveAttribute('data-state', 'collapsed')
     expect(rail).toHaveAttribute('data-collapsible', 'icon')
     expect(gap).toHaveClass('relative', 'group-data-[collapsible=icon]:w-(--sidebar-width-icon)')
-    expect(rail.nextElementSibling).toBe(main)
+    expect(rail.nextElementSibling?.contains(main)).toBe(true)
     const link = within(rail as HTMLElement).getAllByRole('link')[2] as HTMLElement
     await user.hover(link)
     expect(rail).toHaveAttribute('data-state', 'collapsed')

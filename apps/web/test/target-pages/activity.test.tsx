@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, screen, within } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
 import {
@@ -165,14 +165,16 @@ describe('the activity page', () => {
     expect(audit.textContent).not.toContain(BIDI)
   })
 
-  it('wears the production frame on a production target', async () => {
+  it('says Production by the title of a production target', async () => {
     const w = new OpsWorld()
     project(w)
     w.sample(PROD_TARGET)
     withDefaults(w, PROD_TARGET)
     mountOps(`/t/${PROD_TARGET}/activity`, w)
     await screen.findByRole('table', { name: 'Operations on this target, newest first' })
-    expect(document.querySelector('[data-production-frame]')).not.toBeNull()
+    await waitFor(() =>
+      expect(document.querySelector('[data-slot="page-header-production-cue"]')).not.toBeNull(),
+    )
   })
 
   it('has no accessibility violations', async () => {
