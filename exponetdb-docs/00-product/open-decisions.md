@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -68,6 +68,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-46 | Host metrics history and a PostgreSQL log tail | open | (a) neither in V1: host values stay latest-only; a log tail waits for a redaction and retention decision | Studio-like report charts and a log page | yes |
 | OD-47 | Changing a person's sign-in address | open | (a) as today: erase and invite again; an address change needs a verified delivery channel (OD-21) | an address change on the account page | yes |
 | OD-48 | A SQL formatter in the Web App, given its license closure | open | (c) no formatter until one without a Python-2.0 dependency exists or the owner allows it; (a) would allow `Python-2.0` for the formatter's `argparse` (used only by its command line) | "Format SQL" in the SQL editor | yes |
+| OD-49 | The server provider enum and `/api/v1` GA | open | (a) mark `ServerProvider` open (`x-extensible-enum`) before GA, so a provider added later is additive | the GA decision of `/api/v1` | yes |
 
 ---
 
@@ -1355,6 +1356,24 @@ nothing is implemented. Line references are to commit `1966cf4`.
 - **Blocks.** "Format SQL" in the SQL editor.
 - **Owner decision needed.** Yes.
 
+## OD-49. The server provider enum and `/api/v1` GA
+
+- **Added.** 2026-10-21 (the owner's long provider list, S11 below).
+- **Question.** `provider` of a server is the closed enum `ServerProvider`.
+  Before GA a new value is a change with notice
+  ([`../06-rest-api/ga-readiness.md` §7](../06-rest-api/ga-readiness.md#7-update-2026-10-21-the-server-provider-list));
+  after GA a new value of a closed enum needs `/api/v2`
+  ([`../01-architecture/versioning.md` §2](../01-architecture/versioning.md#2-rules-for-additive-changes)).
+  The list is expected to grow. Should it become an open enum before GA?
+- **Options.** (a) mark it open (`x-extensible-enum`): known values are
+  listed, clients accept others, the SDK type becomes `string` and the Web
+  App and the CLI show an unknown value by its id; (b) keep it closed and
+  add providers only with a new major version; (c) keep it closed and
+  replace it later by an additive open member.
+- **Recommendation.** (a), decided together with GA.
+- **Blocks.** The GA decision of `/api/v1` (G7).
+- **Owner decision needed.** Yes.
+
 ## Decisions of the Wave 8 order (2026-10-13)
 
 The owner's Wave 8 order ([`../14-roadmap/orders/wave-8-order.md`](../14-roadmap/orders/wave-8-order.md))
@@ -1396,3 +1415,11 @@ the session. **[DECIDED]** 2026-10-13, source: the owner
 | S8 | Scope strings of a tiered `registry.manage` | asked by the part 2 session: the tier of `registry.manage` is enforced through role-binding coverage and grant tiers, but the frozen `oauth-delegation` bundle's `verify.sql` pins the stored OAuth scope catalog exactly, so the literal scopes `registry.manage:prod` and `registry.manage:nonprod` cannot be added without a new verification version. Decided: **keep as is**: one untiered `registry.manage` scope (human sessions only), the tier carried by bindings and grant tiers; recorded as a limit of G8 |
 | S9 | Accent color | after seeing screenshots of the Web App the owner chose a **turquoise accent** (the family of `#13A28E`) instead of the placeholder indigo, and no purple: the reserved `production` token moves off purple to a distinct non-error hue. The owner chose the color only because they like it; it is no reference to another product: no name, string, logo or font of any other product is used. This replaces the hue of the OD-11 placeholder and overrides, for this color only, the Wave 8 order's list of colors not to use; fonts, wordmark and the rest of OD-11 stay |
 | S10 | Account system | the owner asked for a fully built account area like Supabase's: an account menu in the header with an avatar (initials or an uploaded profile picture), name and email, a direct theme switch, and links to the account pages (profile with display name and profile picture, preferences, security: passkeys, authenticator, recovery codes and sessions, connected applications, the person's own activity), replacing the plain "Account" text button. This includes the server side the profile picture needs (stored same-origin, never a remote image), additive and contracts first |
+
+## Owner decisions after the Wave 8 session
+
+**[DECIDED]** with the date of each row, source: the owner.
+
+| # | Date | Topic | Decision |
+|---|---|---|---|
+| S11 | 2026-10-21 | Server providers with logos | "Real icons give an application a lot of quality; they are no dependency once copied into the project." The `provider` of a server becomes a long list of well-known providers, each shown with its logo to the left of its name. The selection of the providers and the source of the logos are the implementing session's choice: the list in [`../01-architecture/domain-model.md` §3.2](../01-architecture/domain-model.md#32-physical-layer) (additive; the four Wave 4 values keep their meaning; [OD-49](#od-49-the-server-provider-enum-and-apiv1-ga) for GA) |

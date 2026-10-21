@@ -44,6 +44,45 @@ export const AccessRoleSchema = z.enum(ACCESS_ROLES).meta({
 })
 export type AccessRole = z.infer<typeof AccessRoleSchema>
 
+/**
+ * Where a server runs (domain-model.md §3.2). The list grows additively and a value never changes
+ * its meaning: the Control Store's CHECK on `registry.servers.provider` repeats it, and the Web
+ * App, the CLI and the registry read it from here. The first four values are the Wave 4 list;
+ * the others were added with the owner's decision of 2026-10-21 (a long provider list with
+ * logos). `hetzner_robot` is a Hetzner dedicated server (managed in Hetzner Robot),
+ * `akamai_linode` Akamai Cloud (formerly Linode), `on_premises` hardware of one's own.
+ */
+export const SERVER_PROVIDERS = [
+  'hetzner_cloud',
+  'hetzner_robot',
+  'other',
+  'unknown',
+  'aws',
+  'google_cloud',
+  'azure',
+  'oracle_cloud',
+  'ibm_cloud',
+  'alibaba_cloud',
+  'digitalocean',
+  'akamai_linode',
+  'vultr',
+  'upcloud',
+  'scaleway',
+  'exoscale',
+  'stackit',
+  'ovhcloud',
+  'ionos',
+  'netcup',
+  'contabo',
+  'on_premises',
+] as const
+export const ServerProviderSchema = z.enum(SERVER_PROVIDERS).meta({
+  id: 'ServerProvider',
+  description:
+    'Where a server runs: a hosting provider, on_premises (own hardware), other, or unknown. Values are only ever added.',
+})
+export type ServerProvider = z.infer<typeof ServerProviderSchema>
+
 export const ENDPOINT_KINDS = ['private', 'public', 'local_socket', 'pooler'] as const
 export const EndpointKindSchema = z.enum(ENDPOINT_KINDS).meta({ id: 'EndpointKind' })
 
@@ -174,7 +213,7 @@ export const ProjectChangeRequestSchema = z
 export const ServerCreateRequestSchema = z
   .strictObject({
     displayName: DisplayNameSchema,
-    provider: z.enum(['hetzner_cloud', 'hetzner_robot', 'other', 'unknown']),
+    provider: ServerProviderSchema,
     providerRef: z
       .string()
       .min(1)

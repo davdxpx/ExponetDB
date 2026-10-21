@@ -1,4 +1,4 @@
-import type { Server } from '@exponetdb/sdk/operations'
+import type { Server, ServerProvider } from '@exponetdb/sdk/operations'
 import {
   Button,
   Input,
@@ -140,9 +140,36 @@ function ServerTable({ servers }: { readonly servers: readonly Server[] }): Reac
   )
 }
 
-const PROVIDERS = ['hetzner_cloud', 'hetzner_robot', 'other', 'unknown'] as const
-type Provider = (typeof PROVIDERS)[number]
-const isProvider = (value: string): value is Provider =>
+/** Every provider of the contract (`ServerProvider`), in the order the form lists them. */
+const PROVIDERS = [
+  'hetzner_cloud',
+  'hetzner_robot',
+  'aws',
+  'google_cloud',
+  'azure',
+  'oracle_cloud',
+  'ibm_cloud',
+  'alibaba_cloud',
+  'digitalocean',
+  'akamai_linode',
+  'vultr',
+  'upcloud',
+  'scaleway',
+  'exoscale',
+  'stackit',
+  'ovhcloud',
+  'ionos',
+  'netcup',
+  'contabo',
+  'on_premises',
+  'other',
+  'unknown',
+] as const satisfies readonly ServerProvider[]
+// A provider the contract has and the list misses fails the type check here.
+type Unlisted = Exclude<ServerProvider, (typeof PROVIDERS)[number]>
+const everyProviderListed: [Unlisted] extends [never] ? true : Unlisted = true
+void everyProviderListed
+const isProvider = (value: string): value is ServerProvider =>
   (PROVIDERS as readonly string[]).includes(value)
 
 /** Text a label of the registry accepts: 1 to `max` characters, no control characters. */

@@ -691,6 +691,21 @@ verifies none is left); it never reads a name or a picture. Tests:
 `packages/control-store/test/registry-schema.int.test.ts` (the upgrade
 through every bundle).
 
+**[DECIDED]** (owner decision of 2026-10-21, a long provider list with
+logos; bundle `01M5F4NHFTMQRYJA43P8GKP44M_server-providers`, depending on
+`identity-profiles`, additive, transactional, not frozen) The CHECK
+`servers_provider_check` of `registry.servers.provider` (an unnamed column
+CHECK of the frozen `registry` bundle, so PostgreSQL's name) is replaced by
+one that accepts the four Wave 4 values and eighteen more, exactly the
+contract's `SERVER_PROVIDERS`
+([`../01-architecture/domain-model.md` §3.2](../01-architecture/domain-model.md#32-physical-layer)).
+Every stored value keeps its meaning; no table, column, row or right
+changes (the worker still inserts servers, `serve` does not). Tests:
+`packages/control-store/test/registry-schema.int.test.ts` ("accepts exactly
+the server providers of the contract": every contract value is accepted, a
+near miss such as `hetzner`, `linode` or `Hetzner_Cloud` is `23514`, and
+`serve` cannot insert; and the upgrade through every bundle).
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

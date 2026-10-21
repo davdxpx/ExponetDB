@@ -1,0 +1,21 @@
+schema: exponetdb.migration/v1
+id: 01M5F4NHFTMQRYJA43P8GKP44M
+name: server-providers
+description: |
+  A longer list of server providers (owner decision of 2026-10-21: a long
+  provider list with logos; domain-model.md §3.2). The CHECK of
+  registry.servers.provider accepts the four values of the frozen registry
+  bundle and eighteen more: aws, google_cloud, azure, oracle_cloud,
+  ibm_cloud, alibaba_cloud, digitalocean, akamai_linode, vultr, upcloud,
+  scaleway, exoscale, stackit, ovhcloud, ionos, netcup, contabo and
+  on_premises. Additive: every stored value keeps its meaning; no table,
+  column, row or right changes.
+dependsOn:
+  - 01M4V7PRFXK2N9QB4ZH6WD3TME
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

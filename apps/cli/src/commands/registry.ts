@@ -1,3 +1,4 @@
+import { SERVER_PROVIDERS } from '@exponetdb/contracts'
 import type { Environment } from '@exponetdb/sdk'
 import { EXIT } from '../cli/exit.ts'
 import { pairs, planCommand } from '../cli/planning.ts'
@@ -641,8 +642,8 @@ export const registryCommands: readonly CommandSpec[] = [
       {
         name: 'provider',
         type: 'enum',
-        values: ['hetzner_cloud', 'hetzner_robot', 'other', 'unknown'],
-        description: 'Hosting provider.',
+        values: SERVER_PROVIDERS,
+        description: 'Where the server runs (a hosting provider, on_premises, other or unknown).',
         default: 'other',
       },
       {

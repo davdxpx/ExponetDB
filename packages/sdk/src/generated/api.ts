@@ -2262,15 +2262,17 @@ export type Server = {
     readonly os: string
     readonly reportedAt: string
   }) | null
-  readonly provider: "hetzner_cloud" | "hetzner_robot" | "other" | "unknown"
+  readonly provider: ServerProvider
 }
 
 export type ServerCreateRequest = {
   readonly displayName: string
   readonly location?: string
-  readonly provider: "hetzner_cloud" | "hetzner_robot" | "other" | "unknown"
+  readonly provider: ServerProvider
   readonly providerRef?: string
 }
+
+export type ServerProvider = "hetzner_cloud" | "hetzner_robot" | "other" | "unknown" | "aws" | "google_cloud" | "azure" | "oracle_cloud" | "ibm_cloud" | "alibaba_cloud" | "digitalocean" | "akamai_linode" | "vultr" | "upcloud" | "scaleway" | "exoscale" | "stackit" | "ovhcloud" | "ionos" | "netcup" | "contabo" | "on_premises"
 
 export type ServiceAccount = {
   readonly apiKeys: readonly ApiKey[]

@@ -899,7 +899,7 @@ Runs: against the server; effect: plan; action: `registry.server.create.plan`; s
 | Argument or flag | Meaning |
 |---|---|
 | `name` | Display name. Required unless --file is given. |
-| `--provider <hetzner_cloud\|hetzner_robot\|other\|unknown>` | Hosting provider. (default other) |
+| `--provider <hetzner_cloud\|hetzner_robot\|other\|unknown\|aws\|google_cloud\|azure\|oracle_cloud\|ibm_cloud\|alibaba_cloud\|digitalocean\|akamai_linode\|vultr\|upcloud\|scaleway\|exoscale\|stackit\|ovhcloud\|ionos\|netcup\|contabo\|on_premises>` | Where the server runs (a hosting provider, on_premises, other or unknown). (default other) |
 | `--location <text>` | Location (e.g. fsn1). |
 | `--provider-ref <id>` | The provider’s reference. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
