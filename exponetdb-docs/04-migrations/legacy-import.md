@@ -318,7 +318,7 @@ ledger such as drizzle's compares) are kept beside it. Golden vectors:
   `legacy_file_after_baseline`; a legacy file that needs a statement the
   admission refuses (for example `CREATE ROLE`) or `CONCURRENTLY` cannot be
   replayed and makes the report `incomplete` (declare such prerequisites on
-  the cluster first).
+  the cluster first). Corrected in Wave 9 Part A (A6), §2.4.
 
 ### 2.3 Evidence strength
 
@@ -359,6 +359,73 @@ The provenance stored in the target ledger keeps its frozen values: a hash is
 curated alias or an observed effect is `legacy_file_at_import`. Evidence lists
 are never cut silently: an item with more than 16 entries ends with
 `evidence_truncated:<n>`.
+
+### 2.4 Files with cluster-global effects
+
+**[DECIDED]** (Wave 9 Part A, A6) Supabase-origin histories create and
+change roles in their files, often inside `DO` blocks that swallow
+`duplicate_object`. The replay runs as the execution role, which never has
+`CREATEROLE`: **[OBSERVED]** on PostgreSQL 16, 17 and 18 (measured
+2026-10-21, and asserted by `legacy-cluster-global.int.test.ts`) `CREATE
+ROLE`, `GRANT <role> TO <role>` and `ALTER ROLE … SET` fail with `42501`
+for a new and for an existing role alike, and a `WHEN duplicate_object`
+handler does not catch it; only a guard such as `IF NOT EXISTS (… pg_roles
+…)` passes, and only when the role already exists. Role effects are
+cluster-wide, so a replay on a scratch target could not prove them anyway.
+For the **legacy replay only, never for a real migration** (bundles keep
+refusing role statements):
+
+- **Elision.** A top-level role statement (`CREATE ROLE`, `CREATE USER`,
+  `CREATE GROUP`, `ALTER ROLE`, `ALTER ROLE … SET`, `ALTER ROLE … RENAME`,
+  `DROP ROLE`, `GRANT <role> TO <role>`, `REVOKE <role> FROM <role>`,
+  `COMMENT ON ROLE`), and a `DO` block whose PL/pgSQL body holds nothing but
+  such statements, in nested blocks, with exception handlers whose actions
+  are `NULL` or a `RAISE` below `EXCEPTION` (with at most `SQLERRM` or
+  `SQLSTATE` as parameters), and no declared variable, is **not run** on
+  the scratch target. A `DO` block that holds role statements and also does
+  anything else (an `IF`, a query, a `PERFORM`, a dynamic `EXECUTE`, a
+  declared variable, any other statement) is **mixed**: it runs unchanged,
+  and its file is `ambiguous` (`do_block_mixed:<statement>`), a human
+  decision. A `DO` block without role statements is ordinary procedural SQL,
+  as before. A `DO` body is read with the PL/pgSQL parser of
+  `libpg_query` 18, the only binding that has one; its SQL statements are
+  then parsed with the scratch target's own major, and a body either parser
+  cannot read is mixed. `REASSIGN OWNED` and every other refused statement
+  still make the report `incomplete`.
+- **Cluster-global expectations.** Each elided statement becomes
+  expectations, listed per file in the replay plan's analysis
+  (`replay.elided`): a role exists or not and the attributes the statement
+  states (`LOGIN`, `SUPERUSER`, `CREATEDB`, `CREATEROLE`, `REPLICATION`,
+  `BYPASSRLS`, `INHERIT`, `CONNECTION LIMIT`; never a password), a
+  membership exists or not with the options it states (`ADMIN`, `INHERIT`,
+  `SET`), a role setting (`pg_db_role_setting`, per database or for all) has
+  the value or is reset, a role's comment. Inside a block with an exception
+  handler only what holds whether the statement created something or found
+  it is kept: that the role or the membership exists. Over the whole chain the last
+  statement about the same thing wins (the others are superseded). The
+  observer checks the surviving ones against the **imported** target's
+  catalog: evidence `cluster_global_held:<n>/<m>`. A file whose cluster-global
+  expectations do not all hold, or cannot be read, is `ambiguous` (never
+  present nor missing: roles are cluster-wide and another database's history
+  may have changed them), a person decides. A statement whose subject depends on who runs it
+  (`CURRENT_USER`, `SESSION_USER`, `CURRENT_ROLE`, `PUBLIC`) or whose value
+  comes from the session (`SET … FROM CURRENT`, `RESET ALL`) yields no
+  expectation and makes the file `ambiguous` (`cluster_global_unknown`).
+  A setting value is compared as PostgreSQL stores it after the statement's
+  own rendering (list settings such as `search_path` quoted like
+  `quote_ident`); a value PostgreSQL would render differently does not hold,
+  which is fail-closed: a person decides.
+- **`CONCURRENTLY`.** A statement only allowed outside a transaction
+  (`CREATE INDEX CONCURRENTLY`, `DROP INDEX CONCURRENTLY`, `REINDEX …
+  CONCURRENTLY`) is replayed **non-transactionally**: the file runs in
+  segments, the statements before it in one transaction, the statement
+  alone in autocommit as the execution role with the same guards, the rest
+  in another transaction; no ledger or event is written on the scratch
+  target. A failure stops the replay like any other (`replay_failed`, the
+  statement's index in the file).
+- **Comment-only files.** A file without statements is not replayed and
+  not refused: evidence `no_statements`, `recorded_present` when a ledger
+  records it, else `unrecorded_present` (it has no effect to miss).
 
 ## 3. Multiple targets of one project
 
@@ -405,5 +472,8 @@ the new target directly. See
 | Provider-managed schemas (`auth`, `storage`, `realtime`, `extensions`, `supabase_migrations`, …) | Excluded from managed scope by the project's configuration; never imported. |
 | Extension in `extensions` schema on the source, `public` on the replay | The scratch target is prepared with the target's extensions in the same schemas and versions; the replay refuses otherwise (`extensions_differ:<name>`, §2 step 2). |
 | Legacy ledger table missing on a target | Fine; evidence comes from objects. |
+| A file creates or grants roles (top level or in a `DO` block that swallows `duplicate_object`) | Elided from the replay, checked as cluster-global expectations on the imported target (`cluster_global_held:<n>/<m>`, §2.4); a mixed `DO` block runs and makes the file `ambiguous`. |
+| `CREATE INDEX CONCURRENTLY` in a file | Replayed alone in autocommit between transactional segments (§2.4). |
+| A file with comments only | Not replayed; `no_statements` (§2.4). |
 | Target unreachable mid-analysis | Report marked incomplete; cannot be applied. |
 | Import run twice | Analysis is repeatable; the baseline operation refuses if a baseline row already exists (a second baseline is a separate, deliberate `migration.rebaseline`). |

@@ -14,6 +14,7 @@ import {
 import {
   type CanonicalDocument,
   type CatalogReader,
+  checkClusterGlobalExpectations,
   checkExpectations,
   diffDocuments,
   executionRoleFacts,
@@ -33,8 +34,9 @@ import {
   takeTargetLock,
 } from '@exponetdb/postgres'
 import {
-  analyzeMigrationSql,
+  type ClusterGlobalExpectation,
   type Expectation,
+  loadClusterGlobalParsers,
   loadParser,
   type StatementFacts,
   survivingExpectations,
@@ -57,7 +59,7 @@ import {
   rolesStillUsable,
   roleUnder,
 } from './execution-roles.ts'
-import { runTransactional } from './executor.ts'
+import { runReplayAutocommit, runTransactional } from './executor.ts'
 import {
   type ContentKeys,
   type ContentMatch,
@@ -68,6 +70,7 @@ import {
   STRENGTH_RANK,
   supabaseVersionTime,
 } from './legacy-evidence.ts'
+import { type FileReplay, fileReplay, survivingGlobals } from './legacy-replay.ts'
 import type { MigrationPlanContext } from './planner.ts'
 import { type Fence, fenced, LeaseLost, writeMirror } from './records.ts'
 import type { StoredRevision } from './store.ts'
@@ -473,6 +476,7 @@ export async function planImportAnalysis(
   )
   let executionRoleCheck: { role: string; problem: string | null }
   let replayException: ExceptionBinding | null = null
+  const scratchMajor = scratchOpened.session.facts.major
   try {
     const [facts] = await scratchOpened.session.readOnly((rtx) =>
       executionRoleFacts(rtx, [executionRole], 'exponetdb_migrator'),
@@ -592,6 +596,7 @@ export async function planImportAnalysis(
         files: files.length,
         scratchTargetId: scratch.targetId,
         executionRole: { role: executionRole, problem: executionRoleCheck.problem },
+        replay: await replaySummary(scratchMajor, files, new Set(hints.notApplicable)),
       },
       policy,
     },
@@ -606,6 +611,52 @@ export async function planImportAnalysis(
 }
 
 // ----- analysis: the replay and the comparison -----
+
+/** At most this many entries per list of the replay summary; the counts are always complete. */
+const MAX_SUMMARY_ENTRIES = 500
+
+/**
+ * What the replay will elide, run in autocommit, leave to a person and
+ * skip, per file (legacy-import.md §2.4), shown in the replay plan.
+ */
+async function replaySummary(
+  major: 16 | 17 | 18,
+  files: readonly Pick<ImportFile, 'stem' | 'bytes'>[],
+  skipped: ReadonlySet<string>,
+): Promise<JsonObject> {
+  await loadClusterGlobalParsers(major)
+  const elided: JsonObject[] = []
+  const mixed: JsonObject[] = []
+  const autocommit: JsonObject[] = []
+  const noStatements: string[] = []
+  const counts = { elided: 0, mixedDoBlocks: 0, autocommit: 0, noStatements: 0, expectations: 0 }
+  for (const f of files) {
+    if (skipped.has(f.stem)) continue
+    const text = normalizeSqlSource(f.bytes)
+    const r = text.ok ? fileReplay(major, text.value) : undefined
+    if (r === undefined) continue
+    for (const e of r.elided) {
+      counts.elided++
+      if (elided.length < MAX_SUMMARY_ENTRIES) {
+        elided.push({ file: f.stem, statement: e.statement, form: e.form, type: e.type })
+      }
+    }
+    for (const g of r.globals) counts.expectations += g.expectations.length
+    for (const statement of r.mixedDoBlocks) {
+      counts.mixedDoBlocks++
+      if (mixed.length < MAX_SUMMARY_ENTRIES) mixed.push({ file: f.stem, statement })
+    }
+    for (const statement of r.autocommit) {
+      counts.autocommit++
+      if (autocommit.length < MAX_SUMMARY_ENTRIES) autocommit.push({ file: f.stem, statement })
+    }
+    if (r.noStatements) {
+      counts.noStatements++
+      if (noStatements.length < MAX_SUMMARY_ENTRIES) noStatements.push(f.stem)
+    }
+  }
+  return { counts, elided, mixedDoBlocks: mixed, autocommit, noStatements }
+}
 
 function replayContentOf(plan: Pick<PlanRecord, 'body'>): ReplayContent {
   const c = plan.body['content'] as unknown as ReplayContent | undefined
@@ -744,43 +795,72 @@ interface FileAnalysis {
   readonly expectations: readonly Expectation[]
   readonly surviving: readonly { readonly statement: number; readonly expectation: Expectation }[]
   readonly underived: boolean
+  /** Cluster-global expectations of the elided statements (legacy-import.md §2.4). */
+  readonly globals: readonly ClusterGlobalExpectation[]
+  readonly survivingGlobals: readonly ClusterGlobalExpectation[]
+  /** An elided statement stated something no expectation can hold. */
+  readonly globalsUnknown: boolean
+  readonly mixedDoBlocks: readonly number[]
+  readonly noStatements: boolean
 }
 
 /** Each file's statements and, over the whole chain, the expectations that survive later files. */
 function analyzeChain(
-  major: 16 | 17 | 18,
   files: readonly ImportFile[],
-  trusted: readonly string[],
+  replays: ReadonlyMap<string, FileReplay>,
 ): FileAnalysis[] | { readonly failedAt: string } {
-  const perFile: StatementFacts[][] = []
+  const perFile: FileReplay[] = []
   for (const f of files) {
-    const text = normalizeSqlSource(f.bytes)
-    const analysis = text.ok
-      ? analyzeMigrationSql(major, text.value, { trustedExtensions: trusted })
-      : null
-    if (analysis === null || !analysis.ok) return { failedAt: f.stem }
-    perFile.push([...analysis.statements])
+    const r = replays.get(f.stem)
+    if (r === undefined) return { failedAt: f.stem }
+    perFile.push(r)
   }
   // One chain: statement k of file i gets a global index, survivors map back to their file.
   const flat: StatementFacts[] = []
   const owner: number[] = []
-  for (const [i, statements] of perFile.entries()) {
-    for (const s of statements) {
+  for (const [i, r] of perFile.entries()) {
+    for (const s of r.statements) {
       flat.push({ ...s, index: flat.length })
       owner.push(i)
     }
   }
   const survivors = survivingExpectations(flat)
+  const globals = survivingGlobals(perFile)
   return files.map((file, i) => {
-    const statements = perFile[i] ?? []
+    const r = perFile[i] as FileReplay
+    const elided = new Set(r.elided.map((e) => e.statement))
     return {
       file,
-      statements,
-      expectations: statements.flatMap((s) => [...s.expectations]),
+      statements: r.statements,
+      expectations: r.statements.flatMap((s) => [...s.expectations]),
       surviving: survivors.filter((x) => owner[x.statement] === i),
-      underived: statements.some((s) => s.procedural || s.coverage !== 'derived'),
+      // An elided statement's effects are the cluster-global expectations, not underived SQL.
+      underived: r.statements.some(
+        (s) => !elided.has(s.index) && (s.procedural || s.coverage !== 'derived'),
+      ),
+      globals: r.globals.flatMap((g) => [...g.expectations]),
+      survivingGlobals: globals.surviving[i] ?? [],
+      globalsUnknown: r.globals.some((g) => g.unknown),
+      mixedDoBlocks: r.mixedDoBlocks,
+      noStatements: r.noStatements,
     }
   })
+}
+
+/** Each file's replay (legacy-import.md §2.4); a file its major cannot read has none. */
+async function replaysOf(
+  major: 16 | 17 | 18,
+  files: readonly ImportFile[],
+  trusted: readonly string[],
+): Promise<Map<string, FileReplay>> {
+  await loadClusterGlobalParsers(major)
+  const out = new Map<string, FileReplay>()
+  for (const f of files) {
+    const text = normalizeSqlSource(f.bytes)
+    const r = text.ok ? fileReplay(major, text.value, trusted) : undefined
+    if (r !== undefined) out.set(f.stem, r)
+  }
+  return out
 }
 
 interface Classified {
@@ -975,30 +1055,57 @@ async function classify(
         .filter((r) => recordsTheFile(r.strength) && r.appliedAt !== null)
         .map((r) => r.appliedAt as string)
         .sort()[0] ?? null
-    // Effects: the file's surviving expectations on the imported target.
+    // Effects: the file's surviving expectations on the imported target, structural and
+    // cluster-global (legacy-import.md §2.4).
     let state: ImportItemState
-    if (a.expectations.length === 0) {
+    if (a.noStatements) {
+      evidence.push('no_statements')
+      state = recorded ? 'recorded_present' : 'unrecorded_present'
+    } else if (a.expectations.length === 0 && a.globals.length === 0) {
       evidence.push(a.underived ? 'effects_not_derivable' : 'no_structural_expectations')
       state = recorded ? 'recorded_present' : 'ambiguous'
-    } else if (a.surviving.length === 0) {
+    } else if (a.surviving.length === 0 && a.survivingGlobals.length === 0) {
       evidence.push('expectations_superseded')
       state = 'superseded'
     } else {
       let held = 0
-      const results = await guarded(reader, async () => {
-        await pinSearchPath(reader, searchPath)
-        return checkExpectations(reader, a.surviving)
-      })
-      if (results === undefined) {
-        evidence.push('expectations_unreadable')
-        held = -1
-      } else {
-        held = results.filter((r) => r.ok).length
-        evidence.push(`expectations_held:${held}/${results.length}`)
+      let total = 0
+      let unreadable = false
+      if (a.surviving.length > 0) {
+        const results = await guarded(reader, async () => {
+          await pinSearchPath(reader, searchPath)
+          return checkExpectations(reader, a.surviving)
+        })
+        if (results === undefined) {
+          evidence.push('expectations_unreadable')
+          unreadable = true
+        } else {
+          const ok = results.filter((r) => r.ok).length
+          evidence.push(`expectations_held:${ok}/${results.length}`)
+          held += ok
+          total += results.length
+        }
       }
-      if (held === -1 || (held > 0 && held < a.surviving.length)) {
+      let globalsHold = true
+      if (a.survivingGlobals.length > 0) {
+        const results = await guarded(reader, () =>
+          checkClusterGlobalExpectations(reader, a.survivingGlobals),
+        )
+        if (results === undefined) {
+          evidence.push('cluster_global_unreadable')
+          unreadable = true
+          globalsHold = false
+        } else {
+          const ok = results.filter((r) => r.ok).length
+          evidence.push(`cluster_global_held:${ok}/${results.length}`)
+          globalsHold = ok === results.length
+          held += ok
+          total += results.length
+        }
+      }
+      if (unreadable || (held > 0 && held < total)) {
         state = 'ambiguous'
-      } else if (held === a.surviving.length) {
+      } else if (held === total) {
         state = recorded ? 'recorded_present' : 'unrecorded_present'
       } else {
         state = recorded ? 'recorded_missing' : 'unrecorded_missing'
@@ -1007,6 +1114,17 @@ async function classify(
         evidence.push('partly_derived')
         if (state === 'unrecorded_present') state = 'ambiguous'
       }
+      // Role effects are cluster-wide (another database may have changed them): a file whose
+      // cluster-global effects do not all hold is never present nor missing; a person decides.
+      if (!globalsHold) state = 'ambiguous'
+    }
+    if (a.globalsUnknown) {
+      evidence.push('cluster_global_unknown')
+      if (state !== 'superseded') state = 'ambiguous'
+    }
+    for (const statement of a.mixedDoBlocks) {
+      evidence.push(`do_block_mixed:${statement}`)
+      state = 'ambiguous'
     }
     out.push({
       kind: 'file',
@@ -1292,6 +1410,7 @@ export class ImportReplayKind implements OperationKind {
       const major = session.facts.major
       await loadParser(major)
       const scope = project.scope
+      const replays = await replaysOf(major, files, project.trustedExtensions)
       // The scratch target is empty: nothing a replay could collide with or be mistaken for.
       const before = await session.readOnly(async (rtx) => ({
         snapshot: await snapshotWithin(rtx, scopeOf(scope)),
@@ -1323,53 +1442,70 @@ export class ImportReplayKind implements OperationKind {
       const skipped = new Set(c.hints.notApplicable)
       const applicable = files.filter((f) => !skipped.has(f.stem))
       for (const f of applicable) {
-        if (!(await leaseHeld(this.#deps.store, ctx.operationId, ctx.leaseOwner))) {
-          throw new LeaseLost()
-        }
-        const step = await runTransactional({
-          session,
-          content: {
-            target: {
-              targetId: scratch.targetId,
-              generation: c.scratch.generation,
-              clusterSystemIdentifier: c.scratch.clusterSystemIdentifier,
-            },
-          } as unknown as PlanContent,
-          item: {
-            migrationId: f.stem,
-            executionRole: c.executionRole,
-            searchPath: c.searchPath,
-            lockTimeoutMs: 5000,
-            statementTimeoutMs: 900_000,
-          } as unknown as PlanItem,
-          revision: {
-            files: { 'up.sql': f.bytes, 'verify.sql': null, 'down.sql': null },
-          } as unknown as StoredRevision,
-          operationId: ctx.operationId,
-          planId: ctx.plan.planId,
-          actorRef: ctx.plan.actor.identityId,
-          clientRef: ctx.plan.actor.clientId,
-          installationId: this.#deps.installationId,
-          engineVersion: this.#deps.engineVersion,
-          scope,
-          trustedExtensions: project.trustedExtensions,
-          fingerprintBefore: null,
-          stillHolds: () => leaseHeld(this.#deps.store, ctx.operationId, ctx.leaseOwner),
-          replay: true,
-        })
-        if (step.result !== 'applied') {
-          const detail =
-            step.result === 'failed'
-              ? `replay_failed:${f.stem}:${step.errorCode}${step.statementIndex === null ? '' : `:${step.statementIndex}`}${step.sqlstate === null ? '' : `:${step.sqlstate}`}`
-              : `replay_unknown:${f.stem}`
-          await this.#finish(
-            fence,
-            c.reportId,
-            { state: 'incomplete', reason: detail },
-            ctx.operationId,
-          )
-          // The scratch target took the files before this one: the replay itself happened.
-          return 'applied'
+        const plan = replays.get(f.stem)
+        // A file its major cannot read runs as submitted: the admission refuses it as before.
+        const segments =
+          plan === undefined
+            ? [{ kind: 'transactional' as const, statements: [] as number[], bytes: f.bytes }]
+            : plan.segments.map((g) => ({ ...g, bytes: new TextEncoder().encode(g.text) }))
+        for (const segment of segments) {
+          if (!(await leaseHeld(this.#deps.store, ctx.operationId, ctx.leaseOwner))) {
+            throw new LeaseLost()
+          }
+          const input = {
+            session,
+            content: {
+              target: {
+                targetId: scratch.targetId,
+                generation: c.scratch.generation,
+                clusterSystemIdentifier: c.scratch.clusterSystemIdentifier,
+              },
+            } as unknown as PlanContent,
+            item: {
+              migrationId: f.stem,
+              executionRole: c.executionRole,
+              searchPath: c.searchPath,
+              lockTimeoutMs: 5000,
+              statementTimeoutMs: 900_000,
+            } as unknown as PlanItem,
+            revision: {
+              files: { 'up.sql': segment.bytes, 'verify.sql': null, 'down.sql': null },
+            } as unknown as StoredRevision,
+            operationId: ctx.operationId,
+            planId: ctx.plan.planId,
+            actorRef: ctx.plan.actor.identityId,
+            clientRef: ctx.plan.actor.clientId,
+            installationId: this.#deps.installationId,
+            engineVersion: this.#deps.engineVersion,
+            scope,
+            trustedExtensions: project.trustedExtensions,
+            fingerprintBefore: null,
+            stillHolds: () => leaseHeld(this.#deps.store, ctx.operationId, ctx.leaseOwner),
+            replay: true as const,
+          }
+          const step =
+            segment.kind === 'autocommit'
+              ? await runReplayAutocommit(input)
+              : await runTransactional(input)
+          if (step.result !== 'applied') {
+            // The statement's index in the file, not in the segment.
+            const index =
+              step.result === 'failed' && step.statementIndex !== null
+                ? (segment.statements[step.statementIndex] ?? step.statementIndex)
+                : null
+            const detail =
+              step.result === 'failed'
+                ? `replay_failed:${f.stem}:${step.errorCode}${index === null ? '' : `:${index}`}${step.sqlstate === null ? '' : `:${step.sqlstate}`}`
+                : `replay_unknown:${f.stem}`
+            await this.#finish(
+              fence,
+              c.reportId,
+              { state: 'incomplete', reason: detail },
+              ctx.operationId,
+            )
+            // The scratch target took the files before this one: the replay itself happened.
+            return 'applied'
+          }
         }
       }
       const replay = await session.readOnly((rtx) => snapshotWithin(rtx, scopeOf(scope)))
@@ -1383,7 +1519,7 @@ export class ImportReplayKind implements OperationKind {
         const result = await observed.session.readOnly(
           async (rtx) => {
             const snapshot = await snapshotWithin(rtx, scopeOf(scope))
-            const chain = analyzeChain(major, applicable, project.trustedExtensions)
+            const chain = analyzeChain(applicable, replays)
             if ('failedAt' in chain) return { failedAt: chain.failedAt } as const
             const ledgers = await readLegacyLedgers(rtx, c.hints.ledgers)
             const classified = await classify(
@@ -1971,20 +2107,25 @@ export class MigrationBaselineKind implements OperationKind {
       let run: { fingerprint: string; held: number; checked: number }
       try {
         await loadParser(opened.session.facts.major)
+        const applicable = files.filter((f) => !c.notApplicable.includes(f.stem))
+        const replays = await replaysOf(
+          opened.session.facts.major,
+          applicable,
+          project.trustedExtensions,
+        )
         run = await opened.session.readOnly(async (rtx) => {
           const snapshot = await snapshotWithin(rtx, scopeOf(project.scope))
-          const chain = analyzeChain(
-            rtx.facts.major,
-            files.filter((f) => !c.notApplicable.includes(f.stem)),
-            project.trustedExtensions,
-          )
+          const chain = analyzeChain(applicable, replays)
           let held = 0
           let checked = 0
           if (!('failedAt' in chain)) {
             await pinSearchPath(rtx, c.searchPath)
             for (const a of chain) {
-              if (!accepted.has(a.file.stem) || a.surviving.length === 0) continue
-              const results = await checkExpectations(rtx, a.surviving)
+              if (!accepted.has(a.file.stem)) continue
+              const results = [
+                ...(a.surviving.length === 0 ? [] : await checkExpectations(rtx, a.surviving)),
+                ...(await checkClusterGlobalExpectations(rtx, a.survivingGlobals)),
+              ]
               checked += results.length
               held += results.filter((r) => r.ok).length
             }

@@ -1,4 +1,8 @@
 export {
+  type ClusterGlobalHistory,
+  clusterGlobalHistory,
+} from './fixtures/cluster-global-history.ts'
+export {
   HOSTILE_SCHEMA,
   HOSTILE_TABLE_NAMES,
   hostileRoleStatements,

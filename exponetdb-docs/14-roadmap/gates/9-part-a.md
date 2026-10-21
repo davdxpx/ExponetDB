@@ -109,7 +109,7 @@ another repository.
 | A3 | The replay checks the execution role; no silent cap in the import path | error `LEGACY_IMPORT_TRUNCATED`; `ImportReport.driftTotal`, `driftTruncated` (additive) | `legacy.ts` (role check at planning and under the scratch lock, binding check, drift totals, evidence and attribute lists capped with a mark); rule `migration.import-execution-role`; Web App: strength and truncation warning | §4.4 | PASS (the A4 exception model joins the same check with A4) |
 | A4 | Declared `BYPASSRLS` execution-role exception (ADR-0034, OD-51) **S** | `rxe_` ids; `ExecutionRoleExceptionDeclareRequest`, `…RevokeRequest`, `ExecutionRoleExceptionView`, `ProjectExecutionRoles`; actions `registry.execution_role_exception.declare(.plan)`, `.revoke(.plan)`, `project.execution_roles.get`; routes `planExecutionRoleException`, `planExecutionRoleExceptionRevocation`, `getProjectExecutionRoles`; `REGISTRY_CONFLICT` reasons `exception_active`, `exception_not_active`; `MigrationPlanContent.expectedState.executionRoleExceptions`, `facts.executionRoleExceptions`, `facts.executionRoleParity` (all additive) | bundle `01M5G6EQ7KP3PMPC7G3HJ7KH7R_execution-role-exceptions`; `registry/src/execution-roles.ts` (plans, kinds); `postgres/src/migration-facts.ts` (`executionRoleProblem(facts, excused)`, `declared_exception`); `migrations-engine/src/execution-roles.ts` (`roleUnder`, `boundExceptionsHold`, `rolesStillUsable`); planner, kind, executor, resume, rollback, legacy replay; rules `migration.execution-role-exception`, `migration.execution-role-parity`, `registry.execution-role-exception-production`; the health sampler's `execution_role_exception_drift` finding; CLI `project role-exception declare/revoke` | §4.5 | PASS, pending the independent security review (§6) |
 | A5 | Execution roles per environment (one resolver) | `ExecutionRoleBindingsRequest`; actions `registry.execution_role_binding.set(.plan)`; route `planExecutionRoleBindings` (additive) | bundle `01M5G6EQ7MFWM3TVK3YN5WRK8W_execution-role-bindings` (append-only); `executionRolesFor` replaces every direct reader (planner, kind, executor, resume, rollback, reverify, reads, legacy); a source test forbids other readers; CLI `project execution-roles`, `project execution-roles set` | §4.5 | PASS, with OD-53 opened (§5) |
-| A6 | Legacy files with cluster-global effects (replay elision, cluster-global expectations, `CONCURRENTLY`, comment-only files) | open | open | open | open |
+| A6 | Legacy files with cluster-global effects (replay elision, cluster-global expectations, `CONCURRENTLY`, comment-only files) | none needed (report evidence strings and the replay plan's analysis are additive data) | `postgres/src/parser/cluster-global.ts` (role statement effects, `DO` blocks through the PL/pgSQL parser of 18), `postgres/src/cluster-globals.ts` (the catalog check), `migrations-engine/src/legacy-replay.ts` (segments, chain supersession), `executor.ts` (`runReplayAutocommit`), `legacy.ts` (plan summary, segmented replay, classification, baseline verification); fixture `testkit/src/fixtures/cluster-global-history.ts` | §4.6 | PASS |
 | A7 | Scratch targets: preflight, in-place reset, database retire | open | open | open | open |
 | A8 | External-cluster onboarding without hand-made SQL | open | open | open | open |
 | A9 | Documents brought up to the real state | — | — | open | open |
@@ -317,6 +317,49 @@ another repository.
   MCP plan, break-glass, drift-accept and Wave 8 suites (87) plus
   `http-registry-tier` (8), all passed.
 
+### 4.6 A6: legacy files with cluster-global effects (2026-10-21)
+
+- Design: [`legacy-import.md` §2.4](../../04-migrations/legacy-import.md#24-files-with-cluster-global-effects).
+- **Measured** on PostgreSQL 16, 17 and 18 (2026-10-21, then asserted by
+  `legacy-cluster-global.int.test.ts`): as a `NOLOGIN` owner without
+  `CREATEROLE`, `CREATE ROLE` in a `DO` block with `WHEN duplicate_object`
+  fails with `42501` for a new and for an existing role, as do `GRANT
+  <role> TO <role>` in such a block and `ALTER ROLE … SET`; a block guarded
+  by `IF NOT EXISTS (… pg_roles …)` passes when the role exists.
+- `libpg-query` 18.1.5 is the only binding with a PL/pgSQL parser
+  (`parsePlPgSQLSync`); it reads `DO` bodies for the shape check only, the
+  body's SQL statements are parsed with the target's major, and a body
+  either cannot read is not elided.
+- `packages/postgres/test/cluster-global.test.ts` (11 tests): `CREATE ROLE`
+  with attributes and memberships and never the password, `ALTER ROLE`,
+  `ALTER GROUP ADD/DROP USER`, settings rendered as PostgreSQL stores them
+  (list quoting, `IN DATABASE`, `RESET`, `ALL`), `FROM CURRENT`, `RESET ALL`
+  and `CURRENT_USER` as unknown, `DROP ROLE`, `GRANT`/`REVOKE` of roles with
+  options, `RENAME`, `COMMENT ON ROLE`; role-only `DO` blocks (presence
+  only under a handler, nested blocks, `RAISE NOTICE … SQLERRM`) and mixed
+  ones (`IF`, other SQL, `PERFORM`, a declared variable, `RAISE EXCEPTION`,
+  a function in a `RAISE`); `DO` without role statements and `LANGUAGE sql`
+  untouched; the same on 16, 17 and 18.
+- `packages/migrations-engine/test/legacy-replay.test.ts` (8 tests): a file
+  without elision runs as submitted; elided statements and the remaining
+  segment; a mixed block replayed; `CONCURRENTLY` alone between
+  transactional segments; a comment-only file; an unparsable file;
+  supersession over the chain (the last statement wins, a removal
+  supersedes what names the role, a role created again survives).
+- `legacy-cluster-global.int.test.ts` (PostgreSQL 16, 17, 18 for the
+  measurement; 17 for the import, 5 tests): the replay plan lists 7 elided
+  statements, the mixed block, the autocommit statement and the
+  comment-only file; the replay completes; role-only files are
+  `unrecorded_present` by `cluster_global_held:6/6` and `2/2`, a file with a
+  table and role statements by both kinds of evidence, the mixed block's
+  file `ambiguous` (`do_block_mixed:0`), the index file `unrecorded_present`
+  with the index valid on the scratch target, the comment-only file
+  `unrecorded_present` (`no_statements`), and a file whose connection limit
+  was changed by hand on the target `ambiguous` (`cluster_global_held:0/1`);
+  nothing cluster-wide ran (the hand-set limit is unchanged).
+- The baseline verification checks the accepted files' surviving
+  cluster-global expectations too.
+
 ## 5. Limits and residual risks
 
 - **OD-53 (open).** fp1 includes owners, so a non-legacy project whose
@@ -327,6 +370,11 @@ another repository.
   a reviewed migration running as the declared owner reads rows of tables
   owned by other roles past their row security. The target state is a
   dedicated definer role (ADR-0034 §7).
+- A6: a setting value PostgreSQL renders differently from the statement
+  (a reserved word in a `search_path`, an interval it normalizes) does not
+  hold and makes the file `ambiguous` (fail closed). A `DO` block that
+  creates roles through a dynamic `EXECUTE` is not recognized; it replays
+  as submitted and fails like before (`replay_failed`, 42501).
 - The health finding compares on the 15-second sample; between two samples
   a changed role is caught by the plan and the executor's own checks.
 

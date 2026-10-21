@@ -22,6 +22,22 @@ export {
   isWholeRowCallable,
   READ_NODES,
 } from './allowlist.ts'
+export {
+  type ClusterGlobalExpectation,
+  type ClusterGlobalForm,
+  type ClusterGlobalStatement,
+  clusterGlobalStatements,
+  expectationKey,
+  isRoleStatement,
+  loadClusterGlobalParsers,
+  type MembershipOption,
+  quoteIdentLike,
+  type RoleAttribute,
+  type RoleStatementEffects,
+  renderSettingValue,
+  roleStatementEffects,
+  rolesOf,
+} from './cluster-global.ts'
 export { isLiteral, type LexMode, lex, type Token, type TokenKind } from './lexer.ts'
 export { isSupportedMajor, SUPPORTED_MAJORS, type SupportedMajor } from './majors.ts'
 export {
@@ -59,6 +75,7 @@ export {
   type ParseFailure,
   type ParseResult,
   parse,
+  parsePlpgsql,
   parseWith,
   walk,
 } from './parse.ts'

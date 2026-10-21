@@ -21,6 +21,7 @@ export {
   MAX_DETAIL_CHARS,
   redactDetail,
 } from './checks.ts'
+export { type ClusterGlobalResult, checkClusterGlobalExpectations } from './cluster-globals.ts'
 export {
   mapDriverError,
   type ServerFields,
