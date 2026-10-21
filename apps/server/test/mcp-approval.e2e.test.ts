@@ -252,16 +252,20 @@ describe('approval from MCP in a real browser', () => {
     await page.goto(url)
     const card = page.locator(`li.card.focused[data-operation="${operationId}"]`)
     await card.locator('.review').waitFor()
+    // The title says what happens, with the target path; production is said once.
+    expect(await page.locator('h1').textContent()).toContain(`to ${w.ids.slug}/platform/production`)
+    expect(await page.locator('[data-tier="production"]:not([data-plan-frame])').count()).toBe(1)
     const computed = (await card.locator('.review .computed').textContent()) ?? ''
-    expect(computed).toContain(`${w.ids.slug}/platform/production`)
     expect(computed).toContain(
       'Applied and verified with the same checksum on the evidence environment',
     )
-    // The client's own name: text, isolated, marked as not verified.
+    // The client's own name, in the technical details: text, isolated, marked as not verified.
     const clientName = card.locator('.client-name [data-untrusted="name"]')
     expect(await clientName.locator('[dir="ltr"]').first().textContent()).toBe('Agent E2E')
     expect(await clientName.textContent()).toContain('name not verified')
-    expect(await card.locator('.computed code.full-hash').textContent()).toBe(plan['planHash'])
+    expect(await card.locator('[data-plan-details] code.full-hash').textContent()).toBe(
+      plan['planHash'],
+    )
     expect(
       await card.locator('section.source[data-file="up.sql"] table.source-text').textContent(),
     ).toContain('ALTER TABLE public.accounts ADD COLUMN reviewed text;')
@@ -273,7 +277,11 @@ describe('approval from MCP in a real browser', () => {
       'An agent proposed this plan; it cannot approve it.',
     )
     expect(await card.getByRole('checkbox', { name: /This is my own plan/ }).count()).toBe(0)
-    await card.getByRole('button', { name: 'Approve', exact: true }).click()
+    // The decision is in the page header, beside the title.
+    await page
+      .locator('[data-slot="page-header-actions"]')
+      .getByRole('button', { name: 'Approve', exact: true })
+      .click()
     // The confirmation names the target, the tier, the class and the full plan hash; a high or
     // critical plan needs the target path typed before the approval is sent.
     const confirm = page.getByRole('alertdialog')

@@ -247,14 +247,19 @@ describe('the migrations page: timeline, plans and drift', () => {
     ).toHaveAttribute('href', `/t/${TARGET}/drift`)
   })
 
-  it('shows the production frame and chip on a production target', async () => {
+  it('shows the production chip on a production target', async () => {
     const w = new OpsWorld()
     project(w)
     w.sample('shop/platform/production')
     withDefaults(w, 'shop/platform/production')
     mountOps('/t/shop/platform/production/migrations', w)
     expect(await screen.findByRole('heading', { level: 1, name: /Migrations/ })).toBeInTheDocument()
-    await waitFor(() => expect(document.querySelector('[data-production-frame]')).not.toBeNull())
+    await waitFor(() =>
+      expect(document.querySelector('[data-slot="target-layout"]')).toHaveAttribute(
+        'data-tier',
+        'production',
+      ),
+    )
     expect(screen.getAllByText('Production').length).toBeGreaterThan(0)
   })
 

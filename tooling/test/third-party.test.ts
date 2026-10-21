@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import {
   BRAND_PATTERNS,
+  checkOtherSources,
   checkRegister,
   findMalformedHeader,
+  findMalformedOtherHeader,
   isExempt,
+  OTHER_COLUMNS,
+  OTHER_SECTION,
+  OTHER_SOURCES,
+  type OtherRow,
   PINNED_SOURCE_COMMIT,
   parseHeader,
+  parseOtherHeader,
+  parseOtherRegister,
   parseRegister,
+  REGISTER_PATH,
   type RegisterRow,
   type SourceFile,
   scopeProblems,
@@ -343,5 +352,134 @@ describe('ADR-0030 scope of copied files', () => {
     ]) {
       expect(scopeProblems('packages/ui/src/x.tsx', source, 1), source).toHaveLength(1)
     }
+  })
+})
+
+describe('other sources (ADR-0033)', () => {
+  const GLYPHS = 'packages/icons/src/provider-glyphs.ts'
+  const otherHeader = (pkg = 'simple-icons', version = '16.35.0', license = 'CC0-1.0') =>
+    `// Copied from ${pkg}@${version} (npm). ${license}. The marks belong to their owners and identify a provider only. Modified for ExponetDB.`
+  const glyphs = (header = otherHeader()): SourceFile =>
+    file(GLYPHS, header, '// icons/hetzner.svg\n// data/simple-icons.json\nexport const x = 1\n')
+  const otherRow = (overrides: Partial<OtherRow> = {}): OtherRow => ({
+    line: 80,
+    path: GLYPHS,
+    packageName: 'simple-icons',
+    version: '16.35.0',
+    upstreamFiles: ['icons/hetzner.svg', 'data/simple-icons.json'],
+    licenseBasis: 'CC0-1.0',
+    notices: 'header; LICENSES/CC0-1.0-simple-icons.txt',
+    changes: 'mono flag added',
+    review: 'reviewed: no per-icon license entry',
+    ...overrides,
+  })
+
+  it('reads the header and flags a near miss', () => {
+    expect(parseOtherHeader(`${otherHeader()}\n`)).toEqual({
+      packageName: 'simple-icons',
+      version: '16.35.0',
+      license: 'CC0-1.0',
+      line: 1,
+    })
+    const near = '// Copied from simple-icons@16 (npm). CC0-1.0.\n'
+    expect(parseOtherHeader(near)).toBeUndefined()
+    expect(findMalformedOtherHeader(near)).toBe(1)
+    expect(findMalformedOtherHeader(`${otherHeader()}\n`)).toBeUndefined()
+    expect(findMalformedOtherHeader('export const x = 1\n')).toBeUndefined()
+  })
+
+  it('parses the "Other sources" table and splits the upstream files', () => {
+    const md = [
+      '## Register',
+      '| ExponetDB path | Source path | Commit | License basis | Notices applied | Changes | Review |',
+      '|---|---|---|---|---|---|---|',
+      '',
+      `## ${OTHER_SECTION}`,
+      '',
+      `| ${OTHER_COLUMNS.join(' | ')} |`,
+      `|${OTHER_COLUMNS.map(() => '---').join('|')}|`,
+      `| \`${GLYPHS}\` | \`simple-icons\` | \`16.35.0\` | \`icons/hetzner.svg\`, \`data/simple-icons.json\` | CC0-1.0 | header | none | reviewed |`,
+      '',
+      '## Notes',
+      '| ignored | row |',
+    ].join('\n')
+    expect(parseRegister(md)).toEqual({ rows: [], problems: [] })
+    const parsed = parseOtherRegister(md)
+    expect(parsed.problems).toEqual([])
+    expect(parsed.rows).toEqual([
+      {
+        line: 9,
+        path: GLYPHS,
+        packageName: 'simple-icons',
+        version: '16.35.0',
+        upstreamFiles: ['icons/hetzner.svg', 'data/simple-icons.json'],
+        licenseBasis: 'CC0-1.0',
+        notices: 'header',
+        changes: 'none',
+        review: 'reviewed',
+      },
+    ])
+    expect(parseOtherRegister('## Register\n')).toEqual({ rows: [], problems: [] })
+    const wrong = [`## ${OTHER_SECTION}`, '| Path | Package |', '|---|---|'].join('\n')
+    expect(parseOtherRegister(wrong).problems.join('\n')).toContain('the table header must be')
+  })
+
+  it('accepts a registered copy of the pinned version inside its scope', () => {
+    expect(checkOtherSources([glyphs()], [otherRow()])).toEqual([])
+    // The Supabase register does not claim the file.
+    expect(checkRegister([glyphs()], [])).toEqual([])
+  })
+
+  it('reports a header without a row and a malformed header', () => {
+    expect(checkOtherSources([glyphs()], [])).toEqual([
+      `${GLYPHS}:1: has a provenance header but no row under "Other sources" in ${REGISTER_PATH}`,
+    ])
+    const bad = file(GLYPHS, '// Copied from simple-icons@latest. CC0.')
+    expect(checkOtherSources([bad], []).join('\n')).toContain('malformed provenance header')
+  })
+
+  it('refuses another package, another version, another license and another place', () => {
+    const text = (overrides: Partial<OtherRow>, f = glyphs()) =>
+      checkOtherSources([f], [otherRow(overrides)]).join('\n')
+    expect(text({ packageName: 'some-icons' }, glyphs(otherHeader('some-icons')))).toContain(
+      'which is not an allowed source',
+    )
+    expect(text({ version: '16.36.0' })).toContain('only the pinned 16.35.0 may be copied')
+    expect(text({ version: '16.36.0' })).toContain(
+      'header names simple-icons@16.35.0, the register row (line 80) names simple-icons@16.36.0',
+    )
+    expect(text({}, glyphs(otherHeader('simple-icons', '16.35.0', 'MIT')))).toContain(
+      'header names the license MIT, simple-icons is copied under CC0-1.0',
+    )
+    expect(text({ licenseBasis: 'MIT' })).toContain('must name the license CC0-1.0')
+    const elsewhere: SourceFile = { ...glyphs(), path: 'packages/ui/src/glyphs.ts' }
+    expect(text({ path: 'packages/ui/src/glyphs.ts' }, elsewhere)).toContain(
+      'lies outside the scope of simple-icons',
+    )
+  })
+
+  it('reports an empty cell, a missing review, a missing file and an unnamed upstream file', () => {
+    const problems = (rows: OtherRow[], files = [glyphs()]) =>
+      checkOtherSources(files, rows).join('\n')
+    expect(problems([otherRow({ changes: '—' })])).toContain('the "Changes" cell')
+    expect(problems([otherRow({ review: 'pending' })])).toContain('has no recorded review')
+    expect(problems([otherRow()], [])).toContain('is registered but does not exist')
+    const bare: SourceFile = { path: GLYPHS, text: 'export const x = 1\n' }
+    expect(problems([otherRow()], [bare])).toContain('lacks the provenance header')
+    expect(problems([otherRow({ upstreamFiles: ['icons/aws.svg'] })])).toContain(
+      'the upstream file icons/aws.svg (register line 80) is not named in the file',
+    )
+    expect(problems([otherRow(), otherRow({ line: 81 })])).toContain(
+      'is registered twice (first at line 80)',
+    )
+  })
+
+  it('pins Simple Icons to one version, CC0-1.0, in packages/icons only', () => {
+    expect(OTHER_SOURCES['simple-icons']).toEqual({
+      version: '16.35.0',
+      license: 'CC0-1.0',
+      scope: ['packages/icons/src/'],
+      decision: 'ADR-0033',
+    })
   })
 })

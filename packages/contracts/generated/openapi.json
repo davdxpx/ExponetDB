@@ -15825,13 +15825,7 @@
             ]
           },
           "provider": {
-            "enum": [
-              "hetzner_cloud",
-              "hetzner_robot",
-              "other",
-              "unknown"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/ServerProvider"
           }
         },
         "required": [
@@ -15862,13 +15856,7 @@
             "type": "string"
           },
           "provider": {
-            "enum": [
-              "hetzner_cloud",
-              "hetzner_robot",
-              "other",
-              "unknown"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/ServerProvider"
           },
           "providerRef": {
             "maxLength": 128,
@@ -15882,6 +15870,34 @@
           "provider"
         ],
         "type": "object"
+      },
+      "ServerProvider": {
+        "description": "Where a server runs: a hosting provider, on_premises (own hardware), other, or unknown. Values are only ever added.",
+        "enum": [
+          "hetzner_cloud",
+          "hetzner_robot",
+          "other",
+          "unknown",
+          "aws",
+          "google_cloud",
+          "azure",
+          "oracle_cloud",
+          "ibm_cloud",
+          "alibaba_cloud",
+          "digitalocean",
+          "akamai_linode",
+          "vultr",
+          "upcloud",
+          "scaleway",
+          "exoscale",
+          "stackit",
+          "ovhcloud",
+          "ionos",
+          "netcup",
+          "contabo",
+          "on_premises"
+        ],
+        "type": "string"
       },
       "ServiceAccount": {
         "properties": {

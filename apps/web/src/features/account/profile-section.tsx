@@ -1,4 +1,4 @@
-import { Button, Input, Label } from '@exponetdb/ui'
+import { Button, Input } from '@exponetdb/ui'
 import { ConfirmDialog } from '@exponetdb/ui-patterns'
 import { type FormEvent, type ReactNode, useId, useRef, useState } from 'react'
 import { RawBody } from '../../lib/api/client.ts'
@@ -20,7 +20,7 @@ import {
   reasonSentence,
   refusalOf,
 } from './profile-model.ts'
-import { SectionHeading } from './section.tsx'
+import { AccountCard, AccountSection, CardRow } from './section.tsx'
 import type { AccountWriter } from './writer.ts'
 
 /**
@@ -67,7 +67,6 @@ function NameSection({
   readonly feedback: Feedback
 }): ReactNode {
   const { client } = useApi()
-  const headingId = useId()
   const inputId = useId()
   const hintId = useId()
   const [name, setName] = useState(me.displayName ?? '')
@@ -101,36 +100,39 @@ function NameSection({
   }
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3">
-      <SectionHeading id={headingId}>{t('profile.name.heading')}</SectionHeading>
-      <form id="profile-name-form" className="flex max-w-md flex-col gap-3" onSubmit={submit}>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor={inputId}>{t('profile.name.label')}</Label>
-          <Input
-            id={inputId}
-            name="displayName"
-            autoComplete="nickname"
-            value={name}
-            aria-describedby={hintId}
-            onChange={(event) => setName(event.target.value)}
-          />
-          <p id={hintId} className="text-xs text-foreground-lighter">
-            {t('profile.name.hint')}
-          </p>
-        </div>
-        <div>
-          <Button
-            type="submit"
-            variant="primary"
-            size="small"
-            loading={busy}
-            disabled={writer.busy !== undefined && !busy}
+    <AccountSection title={t('profile.name.heading')}>
+      <form id="profile-name-form" onSubmit={submit}>
+        <AccountCard
+          footer={
+            <Button
+              type="submit"
+              variant="primary"
+              size="small"
+              loading={busy}
+              disabled={writer.busy !== undefined && !busy}
+            >
+              {t('profile.name.save')}
+            </Button>
+          }
+        >
+          <CardRow
+            label={t('profile.name.label')}
+            htmlFor={inputId}
+            description={t('profile.name.hint')}
+            descriptionId={hintId}
           >
-            {t('profile.name.save')}
-          </Button>
-        </div>
+            <Input
+              id={inputId}
+              name="displayName"
+              autoComplete="nickname"
+              value={name}
+              aria-describedby={hintId}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </CardRow>
+        </AccountCard>
       </form>
-    </section>
+    </AccountSection>
   )
 }
 
@@ -153,7 +155,6 @@ function PictureSection({
   readonly feedback: Feedback
 }): ReactNode {
   const { client } = useApi()
-  const headingId = useId()
   const inputId = useId()
   const hintId = useId()
   const fileInput = useRef<HTMLInputElement>(null)
@@ -214,66 +215,73 @@ function PictureSection({
     })
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3">
-      <SectionHeading id={headingId}>{t('profile.picture.heading')}</SectionHeading>
-      <div className="flex flex-wrap items-center gap-4">
-        <ProfileAvatar avatar={me.avatar} name={name} size="lg" />
-        <p id="avatar-state" className="max-w-md text-sm text-foreground-light">
-          {hasPicture ? t('profile.picture.current') : t('profile.picture.none')}
-        </p>
-      </div>
-      <div className="flex max-w-md flex-col gap-1.5">
-        <Label htmlFor={inputId}>{t('profile.picture.label')}</Label>
-        <input
-          ref={fileInput}
-          id={inputId}
-          type="file"
-          accept={AVATAR_TYPES.join(',')}
-          aria-describedby={hintId}
-          className="block w-full text-sm text-foreground-light file:mr-3 file:rounded-md file:border file:border-default file:bg-surface-100 file:px-3 file:py-1.5 file:text-sm file:text-foreground"
-          onChange={(event) => choose(event.target.files?.[0])}
-        />
-        <p id={hintId} className="text-xs text-foreground-lighter">
-          {t('profile.picture.hint')}
-        </p>
-      </div>
-      {chosen?.preview === undefined ? null : (
-        <div className="flex items-center gap-3">
-          <ProfileAvatar name={name} src={chosen.preview} size="lg" />
-          <span className="text-sm text-foreground-light">{t('profile.picture.preview')}</span>
-        </div>
-      )}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="primary"
-          size="small"
-          loading={uploading}
-          disabled={chosen === undefined || (writer.busy !== undefined && !uploading)}
-          onClick={upload}
+    <AccountSection title={t('profile.picture.heading')}>
+      <AccountCard
+        footer={
+          <>
+            {hasPicture ? (
+              <ConfirmDialog
+                trigger={
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="small"
+                    disabled={writer.busy !== undefined}
+                  >
+                    {t('profile.picture.remove')}
+                  </Button>
+                }
+                title={t('profile.picture.remove.title')}
+                description={t('profile.picture.remove.description')}
+                actionLabel={t('profile.picture.remove.action')}
+                destructive
+                onConfirm={remove}
+              />
+            ) : null}
+            <Button
+              type="button"
+              variant="primary"
+              size="small"
+              loading={uploading}
+              disabled={chosen === undefined || (writer.busy !== undefined && !uploading)}
+              onClick={upload}
+            >
+              {t('profile.picture.upload')}
+            </Button>
+          </>
+        }
+      >
+        <CardRow label={t('profile.picture.shown')}>
+          <div className="flex flex-wrap items-center gap-4">
+            <ProfileAvatar avatar={me.avatar} name={name} size="lg" />
+            <p id="avatar-state" className="max-w-md text-sm text-foreground-light">
+              {hasPicture ? t('profile.picture.current') : t('profile.picture.none')}
+            </p>
+          </div>
+        </CardRow>
+        <CardRow
+          label={t('profile.picture.label')}
+          htmlFor={inputId}
+          description={t('profile.picture.hint')}
+          descriptionId={hintId}
         >
-          {t('profile.picture.upload')}
-        </Button>
-        {hasPicture ? (
-          <ConfirmDialog
-            trigger={
-              <Button
-                type="button"
-                variant="default"
-                size="small"
-                disabled={writer.busy !== undefined}
-              >
-                {t('profile.picture.remove')}
-              </Button>
-            }
-            title={t('profile.picture.remove.title')}
-            description={t('profile.picture.remove.description')}
-            actionLabel={t('profile.picture.remove.action')}
-            destructive
-            onConfirm={remove}
+          <input
+            ref={fileInput}
+            id={inputId}
+            type="file"
+            accept={AVATAR_TYPES.join(',')}
+            aria-describedby={hintId}
+            className="block w-full text-sm text-foreground-light file:mr-3 file:rounded-md file:border file:border-default file:bg-surface-100 file:px-3 file:py-1.5 file:text-sm file:text-foreground"
+            onChange={(event) => choose(event.target.files?.[0])}
           />
-        ) : null}
-      </div>
-    </section>
+          {chosen?.preview === undefined ? null : (
+            <div className="flex items-center gap-3">
+              <ProfileAvatar name={name} src={chosen.preview} size="lg" />
+              <span className="text-sm text-foreground-light">{t('profile.picture.preview')}</span>
+            </div>
+          )}
+        </CardRow>
+      </AccountCard>
+    </AccountSection>
   )
 }

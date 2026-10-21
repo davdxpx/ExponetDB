@@ -2,14 +2,21 @@
  * The icons of the Web App: Lucide (ISC) through `lucide-react`, re-exported
  * by name so every icon in use is listed here (the UI packages import icons
  * from this package only, `graph.json`); database glyphs of our own follow in
- * Phase 4. No brand or third-party logos.
+ * Phase 4. The only brand marks are the hosting providers' glyphs copied from
+ * Simple Icons (CC0-1.0, ADR-0033), used to name the provider a server runs on.
  */
+
 export type { LucideIcon, LucideProps } from 'lucide-react'
 export {
+  Activity,
   AlertTriangle,
   ArrowDown,
+  ArrowLeft,
   ArrowRightLeft,
   ArrowUp,
+  Boxes,
+  Building2,
+  Cable,
   Calendar,
   Check,
   ChevronDown,
@@ -20,29 +27,46 @@ export {
   Circle,
   CircleHelp,
   Clock,
+  Cloud,
   Copy,
   Database,
   DatabaseBackup,
   Dot,
   Eye,
+  FileDiff,
   FolderClosed,
   FolderOpen,
+  Gauge,
   GitCompareArrows,
   GripVertical,
+  House,
+  Layers,
   LayoutDashboard,
+  LayoutGrid,
+  Lightbulb,
+  List,
   Loader2,
   Lock,
+  Menu,
   PanelLeft,
   PencilLine,
+  Plug,
   Plus,
   RefreshCw,
   ScrollText,
   Search,
   Server,
   Settings,
+  Settings2,
   ShieldAlert,
+  Siren,
+  SquareTerminal,
+  Table2,
   Trash2,
   Unlink,
   Users,
+  Waypoints,
   X,
 } from 'lucide-react'
+export { BrandGlyph, type BrandGlyphProps } from './brand-glyph.tsx'
+export { BRAND_GLYPHS, type BrandGlyphData, type BrandId } from './provider-glyphs.ts'

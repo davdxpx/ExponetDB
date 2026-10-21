@@ -1,3 +1,4 @@
+import { SERVER_PROVIDERS } from '@exponetdb/contracts'
 import { newId } from '@exponetdb/kernel'
 import type pg from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -462,6 +463,31 @@ describe('registry guards', () => {
     ).toBe('EXG07')
   })
 
+  it('accepts exactly the server providers of the contract', async () => {
+    const o = await op()
+    const insert = (provider: string) =>
+      refused(
+        'exdb_worker',
+        `INSERT INTO registry.servers (server_id, display_name, provider, created_by_operation_id)
+         VALUES ($1, 'db host', $2, $3)`,
+        [newId('srv', now()), provider, o],
+      )
+    for (const provider of SERVER_PROVIDERS) {
+      expect(await insert(provider), provider).toBeUndefined()
+    }
+    for (const provider of ['', 'hetzner', 'Hetzner_Cloud', 'linode', 'aws ', 'equinix_metal']) {
+      expect(await insert(provider), provider).toBe('23514')
+    }
+    expect(
+      await refused(
+        'exdb_serve',
+        `INSERT INTO registry.servers (server_id, display_name, provider, created_by_operation_id)
+         VALUES ($1, 'db host', 'aws', $2)`,
+        [newId('srv', now()), o],
+      ),
+    ).toBe('42501')
+  })
+
   it('lets an address name one cluster only, registry-wide', async () => {
     const a = await world()
     const b = await world()
@@ -746,6 +772,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M4V3RV9F5XM2TB8KC6QZJ0NS',
         // Owner decision S10 (2026-10-13): the profile of a person (display name, picture).
         '01M4V7PRFXK2N9QB4ZH6WD3TME',
+        // Owner decision of 2026-10-21: a longer list of server providers.
+        '01M5F4NHFTMQRYJA43P8GKP44M',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

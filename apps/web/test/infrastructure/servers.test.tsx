@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom/vitest'
+import { SERVER_PROVIDERS } from '@exponetdb/contracts'
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -130,6 +131,116 @@ describe('the servers page', () => {
     ])
   })
 
+  it('lists every provider in its group, each with its logo, and plans the chosen one', async () => {
+    const user = userEvent.setup()
+    const world = new World()
+    const { router, container } = mountApp('/infrastructure/servers', world)
+    const form = await waitFor(() => {
+      const found = document.getElementById('server-register-form')
+      if (found === null) throw new Error('no form')
+      return found
+    })
+    const trigger = within(form).getByRole('combobox', { name: 'Provider' })
+    expect(trigger).toHaveTextContent('Not known')
+    expect(await axeViolations(container)).toEqual([])
+    await user.click(trigger)
+    const listbox = await screen.findByRole('listbox')
+    for (const group of ['Cloud platforms', 'Dedicated and hosting', 'Own hardware and other']) {
+      expect(within(listbox).getByText(group)).toBeInTheDocument()
+    }
+    const options = within(listbox).getAllByRole('option')
+    expect(options.map((o) => o.textContent)).toEqual([
+      'Akamai Cloud (Linode)',
+      'Alibaba Cloud',
+      'Amazon Web Services (AWS)',
+      'DigitalOcean',
+      'Exoscale',
+      'Google Cloud',
+      'Hetzner Cloud',
+      'IBM Cloud',
+      'Microsoft Azure',
+      'Oracle Cloud Infrastructure',
+      'Scaleway',
+      'STACKIT',
+      'UpCloud',
+      'Vultr',
+      'Contabo',
+      'Hetzner Dedicated (Robot)',
+      'IONOS',
+      'Netcup',
+      'OVHcloud',
+      'On premises (own hardware)',
+      'Other',
+      'Not known',
+    ])
+    // As many as the contract has, each once.
+    expect(options).toHaveLength(SERVER_PROVIDERS.length)
+    expect(new Set(options.map((o) => o.textContent)).size).toBe(SERVER_PROVIDERS.length)
+    for (const option of options) {
+      const logo = option.querySelector('[data-provider-logo]')
+      expect(logo, option.textContent ?? '').not.toBeNull()
+      expect(logo?.getAttribute('aria-hidden')).toBe('true')
+      expect(logo?.querySelector('svg')).not.toBeNull()
+    }
+    const logoOf = (name: string) =>
+      within(listbox)
+        .getByRole('option', { name })
+        .querySelector('[data-provider-logo]')
+        ?.getAttribute('data-provider-logo')
+    expect(logoOf('Hetzner Cloud')).toBe('hetzner')
+    expect(logoOf('Hetzner Dedicated (Robot)')).toBe('hetzner')
+    expect(logoOf('OVHcloud')).toBe('ovh')
+    // No glyph in the pinned Simple Icons version: a neutral glyph, never a logo from elsewhere.
+    for (const name of ['Amazon Web Services (AWS)', 'Microsoft Azure', 'STACKIT', 'Other']) {
+      expect(logoOf(name), name).toBe('neutral')
+    }
+    // A long list: choose by typing, as a keyboard user does (jsdom races Radix's guard against
+    // the opening click's pointer-up on the first click into the list).
+    await user.keyboard('Scaleway')
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(trigger).toHaveTextContent('Scaleway'))
+    expect(screen.queryByRole('listbox')).toBeNull()
+    expect(trigger.querySelector('[data-provider-logo="scaleway"]')).not.toBeNull()
+    fireEvent.change(within(form).getByLabelText('Display name'), {
+      target: { value: 'shop-db-03' },
+    })
+    await user.click(within(form).getByRole('button', { name: 'Plan server registration' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/changes/plans/${PLAN}`))
+    expect(world.changes).toEqual([
+      {
+        method: 'POST',
+        path: '/api/v1/servers',
+        body: { displayName: 'shop-db-03', provider: 'scaleway' },
+      },
+    ])
+  })
+
+  it('shows the provider logo left of its name, and a neutral glyph where there is no logo', async () => {
+    const world = new World()
+    world.servers = [
+      server(),
+      server({ id: 'srv_01M4S9000000000000000000S2', displayName: 'b', provider: 'aws' }),
+    ]
+    const { container } = mountApp('/infrastructure/servers', world)
+    const table = await screen.findByRole('table', { name: 'Servers' })
+    const rows = within(table).getAllByRole('row').slice(1)
+    const cellOf = (row: HTMLElement) =>
+      row.querySelector('[data-provider-logo]')?.closest('td') ?? undefined
+    const first = rows[0]
+    const second = rows[1]
+    if (first === undefined || second === undefined) throw new Error('two rows expected')
+    expect(cellOf(first)?.textContent).toBe('Hetzner Cloud')
+    expect(first.querySelector('[data-provider-logo]')?.getAttribute('data-provider-logo')).toBe(
+      'hetzner',
+    )
+    expect(first.querySelector('[data-brand="hetzner"]')?.getAttribute('fill')).toBe('#D50C2D')
+    expect(cellOf(second)?.textContent).toBe('Amazon Web Services (AWS)')
+    expect(second.querySelector('[data-provider-logo]')?.getAttribute('data-provider-logo')).toBe(
+      'neutral',
+    )
+    expect(await axeViolations(container)).toEqual([])
+  })
+
   it('sends nothing for a name with control characters', async () => {
     const user = userEvent.setup()
     const world = new World()
@@ -159,6 +270,9 @@ describe('the server page', () => {
       `/infrastructure/nodes/${NODE}`,
     )
     expect(await screen.findByText('shop-main')).toBeInTheDocument()
+    const provider = container.querySelector('[data-provider-logo="hetzner"]')
+    expect(provider?.getAttribute('aria-hidden')).toBe('true')
+    expect(provider?.parentElement?.textContent).toBe('Hetzner Cloud')
     expect(await axeViolations(container)).toEqual([])
     await user.click(screen.getByRole('button', { name: 'Plan enrollment' }))
     await waitFor(() => expect(router.state.location.pathname).toBe(`/changes/plans/${PLAN}`))

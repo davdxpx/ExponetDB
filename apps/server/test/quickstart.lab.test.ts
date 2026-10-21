@@ -92,13 +92,16 @@ async function confirmWithPasskey(): Promise<void> {
 
 /**
  * Approves the plan of an operation card on its review page: the
- * self-approval acknowledgement when the plan is the person's own (OD-9),
- * the Approve button, then the confirmation that names the plan (a high or
- * critical plan needs its target path typed), then a fresh proof if asked.
+ * self-approval acknowledgement (in the card's approvals row) when the plan
+ * is the person's own (OD-9), the Approve button (in the page header), then
+ * the confirmation that names the plan (a high or critical plan needs its
+ * target path typed), then a fresh proof if asked.
  */
 async function approveInBrowser(card: Locator): Promise<void> {
   // The decision renders once the queue is read; only then is the acknowledgement known.
-  const approve = card.getByRole('button', { name: 'Approve', exact: true })
+  const approve = page
+    .locator('[data-slot="page-header-actions"]')
+    .getByRole('button', { name: 'Approve', exact: true })
   await approve.waitFor()
   const acknowledge = card.getByRole('checkbox', { name: /This is my own plan/ })
   if ((await acknowledge.count()) > 0) {

@@ -299,20 +299,28 @@ describe('the plan review in Chromium', () => {
     await page.waitForURL(`${ORIGIN}/changes/plans/${PLAN}`)
     await page.waitForSelector('li.card.focused[data-operation] .review .computed')
     const review = page.locator('.review')
-    // Facts ExponetDB computed: the target, production, the drop, the decision and its rule.
-    const computed = review.locator('.computed')
-    expect(await computed.textContent()).toContain('shop/platform/production')
-    // Production is framed and named as a tier, never as an error.
+    // The title says what happens: the target path as text.
+    expect(await page.locator('h1').textContent()).toBe(
+      'Apply 1 migration to shop/platform/production',
+    )
+    // Production is said once, as a tier, never as an error: the chip beside the title, the
+    // frame and one sentence; no block repeats it.
     expect(await page.locator('[data-plan-frame][data-tier="production"]').count()).toBe(1)
-    expect(await computed.locator('[data-tier]').first().textContent()).toBe('Production')
-    expect(await computed.locator('li.destructive').allTextContents()).toEqual([
+    const chips = page.locator('[data-tier="production"]:not([data-plan-frame])')
+    expect(await chips.count()).toBe(1)
+    expect(await chips.first().textContent()).toBe('Production')
+    expect(await page.locator('[data-production-notice]').count()).toBe(1)
+    // Facts ExponetDB computed, before any raw text: the decision and its rule, the drop.
+    const computed = review.locator('.computed')
+    const changes = review.locator('[data-plan-section="changes"]')
+    expect(await changes.locator('li.destructive').allTextContents()).toEqual([
       'table public.accounts',
     ])
-    expect(await computed.textContent()).toMatch(
+    expect(await changes.textContent()).toMatch(
       /declared\s*Additive\s*,\s*observed\s*Destructive\s*\(they disagree\)/,
     )
     // Every statement is listed with its line before any raw text: filler cannot hide the DROP.
-    const statements = computed.locator('tr[data-statement]')
+    const statements = changes.locator('tr[data-statement]')
     expect(await statements.count()).toBe(2)
     expect(
       (await statements.nth(0).locator('td').allTextContents()).slice(0, 5).map((c) => c.trim()),
@@ -321,20 +329,24 @@ describe('the plan review in Chromium', () => {
       (await statements.nth(1).locator('td').allTextContents()).slice(0, 5).map((c) => c.trim()),
     ).toEqual(['#2', '404', 'DROP TABLE', 'ACCESS EXCLUSIVE (severity High)', 'Destructive'])
     expect(await statements.nth(1).getAttribute('class')).toContain('destructive')
-    const policy = computed.locator('[data-plan-block="policy"]')
+    const policy = computed.locator('[data-check="policy"]')
     expect(await policy.textContent()).toContain('migration.agent-production')
     expect(await policy.textContent()).toContain('failed')
     expect(await policy.textContent()).toContain('the rule requires')
-    expect(await computed.locator('code.full-hash').textContent()).toBe(HASH)
+    // The technical details are closed until opened; the full hash and the client are in them.
+    const details = review.locator('details[data-plan-details]')
+    expect(await details.getAttribute('open')).toBeNull()
+    expect(await details.locator('code.full-hash').textContent()).toBe(HASH)
     // The client's own name: text, isolated, marked as not verified.
-    const clientName = computed.locator('.client-name [data-untrusted="name"]')
+    const clientName = details.locator('.client-name [data-untrusted="name"]')
     expect(await clientName.locator('[dir="ltr"]').first().textContent()).toBe(
       'ExponetDB Official ✅ <b>trusted</b>',
     )
     expect(await clientName.textContent()).toContain('name not verified')
 
-    // Nothing from the plan became markup: no script, image, link or bold element inside the review.
-    for (const tag of ['script', 'img', 'a', 'b', 'iframe']) {
+    // Nothing from the plan became markup: no script, image, link or bold element inside the
+    // review; the one link is the page's own to the operation.
+    for (const tag of ['script', 'img', 'a:not([data-operation-link])', 'b', 'iframe']) {
       expect(await review.locator(tag).count(), tag).toBe(0)
     }
     expect(await page.evaluate(() => (globalThis as { __pwned?: number }).__pwned)).toBeUndefined()

@@ -177,7 +177,7 @@ describe('the findings page', () => {
     expect(await axeViolations(document.body)).toEqual([])
   })
 
-  it('wears the production frame on a production target', async () => {
+  it('says Production by the title of a production target', async () => {
     const w = new OpsWorld()
     project(w)
     w.sample('shop/platform/production')
@@ -185,6 +185,8 @@ describe('the findings page', () => {
     w.on('GET', FINDINGS, { items: [], nextCursor: null })
     mountOps('/t/shop/platform/production/findings', w)
     await screen.findByText(/no open finding/)
-    expect(document.querySelector('[data-production-frame]')).not.toBeNull()
+    await waitFor(() =>
+      expect(document.querySelector('[data-slot="page-header-production-cue"]')).not.toBeNull(),
+    )
   })
 })

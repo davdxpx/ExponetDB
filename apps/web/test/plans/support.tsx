@@ -70,6 +70,10 @@ export class World {
   readonly planPages = new Map<string, { items: PlanRead[]; nextCursor: string | null }>()
   /** What `GET /operations` answers (the plan list's "Awaiting approval" view). */
   listedOperations: OperationRead[] = []
+  /** Registry records the page reads for a title (`GET /servers/{id}`, `/clusters/{id}`, `/nodes/{id}`). */
+  readonly servers = new Map<string, unknown>()
+  readonly clusters = new Map<string, unknown>()
+  readonly nodes = new Map<string, unknown>()
   /** Stored bundles by `<projectId>/<migrationId>`. */
   readonly bundles = new Map<string, unknown>()
   /** Stored files by `<projectId>/<migrationId>/<revision>/<file>`. */
@@ -221,6 +225,13 @@ export function answer(world: World, sent: Sent): Response {
   if (m !== null && method === 'GET') {
     const operation = world.operations.get(decodeURIComponent(m[1] ?? ''))
     return operation === undefined ? NOT_FOUND('OPERATION_NOT_FOUND') : json(200, operation)
+  }
+  m = /^\/api\/v1\/(servers|clusters|nodes)\/([^/]+)$/.exec(p)
+  if (m !== null && method === 'GET') {
+    const table =
+      m[1] === 'servers' ? world.servers : m[1] === 'clusters' ? world.clusters : world.nodes
+    const record = table.get(decodeURIComponent(m[2] ?? ''))
+    return record === undefined ? NOT_FOUND() : json(200, record)
   }
   m = /^\/api\/v1\/operations\/([^/]+)\/retry-verification$/.exec(p)
   if (m !== null && method === 'POST') {
@@ -442,6 +453,50 @@ export function hostilePlan(over: Partial<PlanRead> = {}): PlanRead {
     },
     ...over,
   } as unknown as PlanRead
+}
+
+export const SERVER = 'srv_01M4S9000000000000000000AK'
+export const TOKEN = 'ent_01M4S9000000000000000000AM'
+
+/**
+ * A node enrollment plan as the server makes it: no target and no tier (the
+ * page treats it as production), the server in its change, no client, no
+ * approval, and a plan read without policy rules.
+ */
+export function nodeEnrollPlan(over: Partial<PlanRead> = {}): PlanRead {
+  return {
+    id: PLAN,
+    kind: 'node.enroll',
+    kindVersion: 1,
+    class: 'high',
+    state: 'active',
+    planHash: HASH,
+    createdAt: '2026-10-13T08:00:00.000Z',
+    expiresAt: '2099-10-13T09:00:00.000Z',
+    actor: { identityId: IDENTITY, kind: 'human', via: 'web' },
+    clientId: null,
+    subject: { targetId: null, targetPath: null, clusterId: null, nodeId: null, tier: null },
+    contentChecksum: `sha256:${'cd'.repeat(32)}`,
+    decision: 'allow',
+    requirements: [],
+    overriddenRules: [],
+    approvals: { required: 0, given: 0 },
+    operationId: null,
+    change: { content: { serverId: SERVER, tokenId: TOKEN }, analysis: {} },
+    ...over,
+  } as unknown as PlanRead
+}
+
+/** The registry record of the plan's server (`GET /servers/{id}`); its name is untrusted. */
+export function serverRecord(displayName = 'tour host'): unknown {
+  return {
+    id: SERVER,
+    displayName,
+    derivedTier: null,
+    location: null,
+    observedFacts: null,
+    provider: 'hetzner_cloud',
+  }
 }
 
 export const UP_SQL = [

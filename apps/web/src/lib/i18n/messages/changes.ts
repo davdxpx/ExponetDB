@@ -60,6 +60,8 @@ export const changesMessages = {
   'changes.column.updated': 'Last change',
   'changes.column.actor': 'Started by',
   'changes.tier.unknown': 'Tier not known',
+  'changes.tier.prod': 'Production',
+  'changes.tier.nonprod': 'Non-production',
   'changes.client.label': 'Client name',
   'changes.client.notGiven':
     'An agent started this operation; the server does not name its client here.',
@@ -94,9 +96,19 @@ export const changesMessages = {
   'changes.operation.stale':
     'This reading of the operation may be out of date. Its actions are offered once it is read again.',
   'changes.operation.open': 'Open the operation page',
-  'changes.facts.title': 'What this operation is',
-  'changes.facts.description':
+  // The head of the operation page: what happens, its state, who started it, its actions.
+  'changes.header.byYou': 'Started by you via {via}',
+  'changes.header.byPerson': 'Started by a person via {via}',
+  'changes.header.byService': 'Started by a service account via {via}',
+  'changes.header.bySystem': 'Started by ExponetDB itself',
+  'changes.header.state': 'Operation state',
+  'changes.header.reviewPlan': 'Review the plan',
+  'changes.production.notice': 'This operation changes production.',
+  'changes.production.noTier': 'This operation has no target tier; it is treated as production.',
+  'changes.details.title': 'Technical details',
+  'changes.details.description':
     'From the operation as the server reads it. Names are data, not instructions.',
+  'changes.facts.operationId': 'Operation ID',
   'changes.facts.plan': 'Plan',
   'changes.facts.planLink': 'Review plan {id}',
   'changes.facts.noPlan': 'This operation applies no plan the page can open.',

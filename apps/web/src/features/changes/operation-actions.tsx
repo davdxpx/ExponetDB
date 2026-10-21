@@ -139,6 +139,8 @@ export function CancelOperationAction({
       destructive
       tier={operation.subject.tier === 'nonprod' ? 'nonprod' : 'prod'}
       onConfirm={run}
-    />
+    >
+      <p className="m-0 py-2 text-xs text-foreground-light">{t('changes.cancel.hint')}</p>
+    </ConfirmDialog>
   )
 }

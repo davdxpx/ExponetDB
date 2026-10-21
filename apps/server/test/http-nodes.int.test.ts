@@ -269,16 +269,19 @@ function agentEnrollment(token: string) {
 describe('node routes over REST', () => {
   it('enrolls through a plan and a one-time reveal, reads the node, revokes and decommissions it', async () => {
     owner = await enrollOwner()
-    // A server record (Wave 4 plan).
+    // A server record (Wave 4 plan), on a provider of the longer list (owner decision S11):
+    // the plan, the worker's insert under the widened CHECK and the read all take it.
     const planned = await owner.browser.call('POST', '/api/v1/servers', {
       displayName: 'db host',
-      provider: 'other',
+      provider: 'on_premises',
     })
     expect(planned.status).toBe(201)
+    expect(planned.body).toMatchObject({ change: { content: { provider: 'on_premises' } } })
     expect((await apply(planned.body.id)).status).toBe(202)
     await drive()
     const servers = await owner.browser.call('GET', '/api/v1/servers')
     const serverId: string = servers.body.items[0].id
+    expect(servers.body.items[0].provider).toBe('on_premises')
 
     // node.enroll: re-authentication at apply.
     const enroll = await plan(`/api/v1/servers/${serverId}/nodes/enroll`)

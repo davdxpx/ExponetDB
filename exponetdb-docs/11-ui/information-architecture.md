@@ -25,6 +25,41 @@ through node agents. Three things must be visible everywhere:
 
 ## 2. Levels and routes
 
+**[DECIDED]** (owner, 2026-10-21) The frame is built like Supabase Studio's,
+natively (Studio's shell is not on the ADR-0030 allowlist):
+
+- **Three levels, three rails.** The fleet (every page about many targets,
+  Studio's organization level), one target (every page below
+  `/t/<product>/<project>/<environment>`, Studio's project level) and the
+  person's account. The rail lists the sections of the level the page is on:
+  the fleet's sections (§2.1) in their four blocks, or the target's sections
+  (§2.2) in their four groups. The account has no rail on a wide screen but a
+  column (`Back to the fleet`, then the account settings and the activity),
+  as Studio's account pages have.
+- **A fixed frame.** The header (48 px) and the rail stay in place; only the
+  page's own container scrolls, never the window. That container is in the
+  tab order (a page with nothing focusable on it is still scrolled from the
+  keyboard) and draws its focus ring inside itself.
+- **List toolbars are one compact row**, as on Studio's list pages: a small
+  search field, then each filter as a pill with its name and its control side
+  by side (the name labels the control), and the table/grid switch as two
+  icon buttons at the end.
+- **The rail is collapsed to its icons on a wide screen and expands while the
+  pointer rests on it** (the person can pin it open or closed from the rail's
+  footer). A rail item's tooltip appears only after the pointer has rested on
+  it for one second. On a phone the rail is a sheet opened from the header's
+  menu button, and choosing a page closes it.
+- **The header draws the path** of where the page is, each step divided by a
+  slanted stroke: the mark (back to the fleet), the installation, then on a
+  target's pages its product, project and environment (each a switcher, the
+  environment with its tier and health), then at the end the target's
+  Connect, the search and the account menu. The addresses do not change; the
+  path is only drawn.
+- **A fleet section with several pages** (for example Changes: plans,
+  operations, approvals) shows its pages in a 256 px column beside the rail on
+  a wide screen, headed by the section's name; on a phone they are listed
+  under the section in the sheet.
+
 ### 2.1 Global level
 
 | Section | Route | Purpose |
@@ -108,7 +143,7 @@ distinct states (§6); a failed read is never an empty list.
 | `/changes/operations`, `/changes/operations/$operationId` | `features/changes/` | Operations list; operation page with applied and verified as separate indicators, "Verify again" when `retryable`, cancel where the operation allows it |
 | `/changes/promotion` | `features/changes/promotion-page.tsx` | Migration stream of one project against its environments in evidence order, from the Control Store mirrors (`source: cached`); a missing mirror cell is `unknown`, never "not applied" |
 | `/approvals` | `features/approvals/` | Approvals queue (earlier URL, §2.1 parity) |
-| `/infrastructure`, `/servers`, `/servers/$serverId` | `features/infrastructure/` | Servers of the registry with the agent's last report; register a server by plan |
+| `/infrastructure`, `/servers`, `/servers/$serverId` | `features/infrastructure/` | Servers of the registry with the agent's last report; register a server by plan; the provider is chosen from a grouped list (cloud platforms, dedicated and hosting, own hardware and other) and shown everywhere with its logo left of its name (`provider.tsx`; **[DECIDED]** 2026-10-21, owner decision S11; [ADR-0033](../01-architecture/adr/0033-provider-glyphs-from-simple-icons.md)) |
 | `/infrastructure/clusters`, `/clusters/$clusterId` | `features/infrastructure/` | PostgreSQL clusters with management mode, declared tier, placements, desired roles; role-verifier hand-off (the browser computes a SCRAM-SHA-256 verifier, never sends a password) |
 | `/infrastructure/nodes`, `/nodes/$nodeId` | `features/infrastructure/` | Node agents, capabilities, jobs (never the job envelope), enrollment with a reveal-once token |
 | `/infrastructure/certificates` | `features/infrastructure/certificates-page.tsx` | Certificate authorities of the agent PKI and the PostgreSQL CA with expiry |
@@ -144,6 +179,13 @@ activity (`/account/activity`: `GET /audit-events?actor=self`, which needs
 every path of the area and no tab navigation. The five paths are exact
 `returnTo` targets.
 
+**[DECIDED]** (owner, 2026-10-21) The account pages are laid out as Studio's:
+the pages are listed in the account's column (§2), not as tabs on the page;
+each section is a title above a card, each setting a row of the card with its
+name (and a line about it) on the left and its value or control on the right,
+stacked on a phone; the actions that save a card are in its footer on the
+right. Lists (passkeys, sessions, applications, activity) are cards of rows.
+
 **[PLANNED]** `/approvals#operation=op_…` redirects to the plan review page
 `/changes/plans/<id>` (§5).
 
@@ -166,8 +208,12 @@ immutable, so URLs are stable; ids are used for API calls).
 | **Advisors** | `/advisors` | findings with remediation and draft fixes |
 | **Activity** | `/activity` | audit and operations filtered to this target |
 
-The section order follows the owner brief's list (overview, schema, migrations,
-queries, connections, locks, backups, restore, configuration). Restore lives
+**[DECIDED]** (owner, 2026-10-21) The target's rail groups its sections as
+Studio groups a project's: the work on the data (Overview, Schema, SQL), the
+changes (Migrations, Compare, Drift), the running database (Connections,
+Locks, Performance, Activity, Findings, Advisors) and the target's settings
+(Backups, Configuration). The tabs above the target's pages are gone; the rail
+is the target's navigation. Restore lives
 inside Backups because a restore always starts from a backup and its
 destination is never the current target in place
 ([`../09-backups-and-restore/restore.md`](../09-backups-and-restore/restore.md)).
@@ -292,8 +338,10 @@ the environment menu lists the other targets of the project with a tier chip
 taken from the contract's `tier` (never the slug), and its loading, failed,
 stale, partial and empty states are distinct. `E` then `P`, `S` or `D` switch
 to the environment named `production`, `staging` or `development` (`P` falls
-back to the single `prod`-tier sibling). A production target carries the
-reserved production frame around its pages. `ContentWrapper` renders the first
+back to the single `prod`-tier sibling). A production target shows the
+tier chip in the header's path and in each page title; since 2026-10-21 no
+frame surrounds its pages (the reserved frame marks plans, design-system.md
+§4). `ContentWrapper` renders the first
 state that holds: the target read loading or failed; a suspended or
 decommissioned target for pages that show live target data (pages of stored
 data stay readable under a notice); Wave 9 and OD-21 pages "not available
@@ -414,6 +462,74 @@ with invisible and direction characters shown by code point and non-ASCII
 characters marked). A card for a plan an agent made carries a note that an
 agent proposed it and cannot approve. No new design system or navigation
 (Wave 8).
+
+**[DECIDED]** (owner, 2026-10-21) The plan review page `/changes/plans/<id>`
+reads top-down so a person understands it at a glance; **[OBSERVED]** built
+in `apps/web/src/features/plans/` (`plan-page.tsx`, `plan-heading.tsx`,
+`plan-checks.tsx`, `plan-title.ts`):
+
+1. **Header.** The title says what happens, from the plan's kind and its
+   subject, in catalog sentences: "Apply 2 migrations to
+   shop/platform/production", "Enroll a node on server tour host", "Suspend
+   writes to shop/platform/staging". The subject is the target path, or the
+   registry name of the server or cluster (a node plan names its node's
+   server), as untrusted text (C-26); while a name is not read, or its read
+   failed, the title names the subject by its ID. Under the title: the plan
+   state as a badge (for a used plan, the state of its operation, such as
+   "Awaiting approval"), the expiry countdown, and who created it through
+   which interface ("Created by you via Web App"; another identity is "a
+   person" or "a service account", its ID only in the details). The one
+   production chip sits beside the title. On the right, the actions: Apply
+   (primary) while the plan is active, Approve and Reject for a person the
+   server lets decide, Withdraw on the person's own active plan made in the
+   Web App; on a phone they wrap below the title. The actions are the existing
+   ones with their plan confirmation, typed target path, re-authentication and
+   hash binding. An active plan whose actions are withheld for a reason of the
+   view (an out-of-date read, a hash or expiry that is not known) says why
+   where the actions would be.
+2. **Production, once.** The reserved frame around the review and one short
+   sentence at its head; no block repeats a chip
+   ([`design-system.md` §4](./design-system.md#4-rules)).
+3. **Before it can run** (one checklist card): the policy decision (allowed,
+   allowed once approved or once its listed requirements are met, denied; the
+   rules that did not pass only when there are any), the approvals ("1 of 2
+   approvals given" or "No approval needed", the agent note, the decisions so
+   far, whether the person may decide, the self-approval acknowledgement), the
+   staging evidence of a production migration, the expiry, and once an
+   operation applies the plan its apply and verification outcomes as two rows
+   with a link to the operation page (applied is a row without a verdict, never
+   a passed one). A read that failed is a row that says so with "Try again",
+   never a passed or an empty row. An operation that needs attention adds the
+   next action, "Verify again" when the server says it is retryable and the
+   reconciliation steps.
+4. **What changes.** For migrations: the migrations with "View SQL", their
+   analysis (every statement with its line, lock and compatibility, drops,
+   rewrites, rollback, checksum) and the files the plan runs, numbered, as text
+   (collapsed after 1,000 lines). For other kinds: the stored change as data in
+   a closed "Stored change" disclosure, with the sentence that no text in it
+   can approve anything.
+5. **Technical details**, closed: plan ID and full plan hash with copy
+   buttons, kind, class with its meaning, the subject's IDs, the tier in words,
+   statement classes, creator ID and interface, the client with its own name
+   marked *name not verified*, exact times, the operation ID, requirements,
+   rules that did not pass, the bound schema fingerprint and the newest backup.
+   A fact that does not apply to the plan's kind is left out (statement classes,
+   schema state and backup belong to migrations, the client to a plan made
+   through one); "not known" stays only where a fact applies and could not be
+   read.
+
+The computed facts a person decides on (target and tier in the title, the
+decision, the approvals, the evidence, the analysis) still come before the raw
+text of the plan, as ADR-0029 §3 and §4 require; the identifying record (the
+full plan hash and the client's own name) moved to the closed details after it,
+and the plan confirmation shows the hash it sends at the moment of the decision
+([ADR-0029](../01-architecture/adr/0029-approval-link-from-mcp.md), amendment of
+2026-10-21). The operation page `/changes/operations/<id>` has the same shape:
+the title from the operation's kind and subject, its state and who started it,
+the chip beside the title, the actions on the right ("Verify again", cancel,
+"Review the plan"), the frame with one sentence, the apply and verification
+indicators, attention, error, steps and migrations, and the technical details
+closed at the bottom.
 
 **[DECIDED]** (Wave 6, [ADR-0026](../01-architecture/adr/0026-cli-step-up-browser-handoff.md))
 The **step-up page** (`/step-up#id=<stu_…>`) confirms a command a person

@@ -4,7 +4,7 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "Icons of the Web App: a lucide-react re-export plus a few database glyphs written natively. No brand logos (design-system.md \u00a71).",
+  "description": "Icons of the Web App: a lucide-react re-export, a few database glyphs written natively, and the brand glyphs of hosting providers copied from Simple Icons (CC0-1.0, ADR-0033).",
   "sideEffects": [
     "**/*.css"
   ],

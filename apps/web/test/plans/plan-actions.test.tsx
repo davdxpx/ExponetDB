@@ -35,10 +35,16 @@ function ownActive(over: Partial<PlanRead> = {}): PlanRead {
   } as Partial<PlanRead>)
 }
 
-async function summary(): Promise<HTMLElement> {
+/** The page header once the plan is shown: the plan's actions are on its right. */
+async function header(): Promise<HTMLElement> {
   return waitFor(() => {
-    const element = document.querySelector('[data-plan-block="summary"]')
-    if (!(element instanceof HTMLElement)) throw new Error('no summary yet')
+    const element = document.querySelector('[data-slot="page-header"]')
+    if (
+      !(element instanceof HTMLElement) ||
+      element.querySelector('[data-header-facts]') === null
+    ) {
+      throw new Error('no plan header yet')
+    }
     return element
   })
 }
@@ -57,7 +63,7 @@ describe('withdraw a plan', () => {
     const world = new World()
     world.plans.set(PLAN, ownActive())
     mountApp(`/changes/plans/${PLAN}`, world)
-    const block = await summary()
+    const block = await header()
     await user.click(await within(block).findByRole('button', { name: 'Withdraw plan' }))
     const dialog = await screen.findByRole('alertdialog', { name: 'Withdraw this plan?' })
     // The plan is on production: the dialog carries the production frame and names the target.
@@ -87,7 +93,7 @@ describe('withdraw a plan', () => {
     const world = new World()
     world.plans.set(PLAN, ownActive())
     mountApp(`/changes/plans/${PLAN}`, world)
-    const block = await summary()
+    const block = await header()
     await user.click(await within(block).findByRole('button', { name: 'Withdraw plan' }))
     const dialog = await screen.findByRole('alertdialog', { name: 'Withdraw this plan?' })
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
@@ -102,7 +108,7 @@ describe('withdraw a plan', () => {
     world.plans.set(PLAN, ownActive())
     world.reauthNeeded = true
     mountApp(`/changes/plans/${PLAN}`, world)
-    const block = await summary()
+    const block = await header()
     await user.click(await within(block).findByRole('button', { name: 'Withdraw plan' }))
     const dialog = await screen.findByRole('alertdialog', { name: 'Withdraw this plan?' })
     await user.click(within(dialog).getByRole('button', { name: 'Withdraw plan' }))
@@ -128,7 +134,7 @@ describe('withdraw a plan', () => {
       message: 'The plan belongs to another client.',
     })
     mountApp(`/changes/plans/${PLAN}`, world)
-    const block = await summary()
+    const block = await header()
     await user.click(await within(block).findByRole('button', { name: 'Withdraw plan' }))
     const dialog = await screen.findByRole('alertdialog', { name: 'Withdraw this plan?' })
     await user.click(within(dialog).getByRole('button', { name: 'Withdraw plan' }))
@@ -145,14 +151,14 @@ describe('withdraw a plan', () => {
       ownActive({ actor: { identityId: OTHER_IDENTITY, kind: 'human', via: 'web' } }),
     )
     mountApp(`/changes/plans/${PLAN}`, world)
-    const block = await summary()
+    const block = await header()
     expect(await within(block).findByRole('button', { name: 'Apply' })).toBeInTheDocument()
     expect(within(block).queryByRole('button', { name: 'Withdraw plan' })).toBeNull()
     cleanup()
     const consumed = new World()
     consumed.plans.set(PLAN, ownActive({ state: 'consumed' }))
     mountApp(`/changes/plans/${PLAN}`, consumed)
-    const used = await summary()
+    const used = await header()
     expect(within(used).queryByRole('button', { name: 'Withdraw plan' })).toBeNull()
   })
 })
@@ -177,7 +183,7 @@ describe('the files of a plan, for every reader of it', () => {
     expect(up.textContent).not.toContain(BIDI)
     expect(up.textContent).toContain('<script>window.__pwned = 1</script>')
     const review = document.querySelector('.review') as HTMLElement
-    for (const tag of ['script', 'img', 'a', 'b', 'iframe']) {
+    for (const tag of ['script', 'img', 'a:not([data-operation-link])', 'b', 'iframe']) {
       expect(review.querySelectorAll(tag), tag).toHaveLength(0)
     }
     expect(block.textContent).not.toContain('This page shows')
@@ -288,8 +294,9 @@ describe('the files of a plan, for every reader of it', () => {
       if (!(element instanceof HTMLElement)) throw new Error('no bundles block yet')
       return element
     })
-    // The bundle list is outside the review: it holds buttons only.
-    expect(bundles.closest('.review')).toBeNull()
+    // The migrations are the first part of "What changes": buttons only, never a link.
+    expect(bundles.closest('[data-plan-section="changes"]')).not.toBeNull()
+    expect(bundles.querySelector('a')).toBeNull()
     await user.click(
       within(bundles).getByRole('button', { name: `View SQL of migration ${MIGRATION}` }),
     )

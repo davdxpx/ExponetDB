@@ -251,11 +251,13 @@ describe('compare environments: the comparison', () => {
     expect(within(shown).getByText('invoices')).toBeInTheDocument()
   })
 
-  it('carries the production cue on a production target', async () => {
+  it('says Production by the title of a production target', async () => {
     const w = world(PROD_TARGET)
     mountOps(page('?to=staging', PROD_TARGET), w)
     expect(await screen.findByRole('heading', { level: 1, name: /Compare environments/ }))
-    await waitFor(() => expect(document.querySelector('[data-production-frame]')).not.toBeNull())
+    await waitFor(() =>
+      expect(document.querySelector('[data-slot="page-header-production-cue"]')).not.toBeNull(),
+    )
     expect(screen.getAllByText('Production').length).toBeGreaterThan(0)
   })
 

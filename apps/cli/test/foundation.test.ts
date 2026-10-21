@@ -1,6 +1,7 @@
 import { mkdtemp, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { SERVER_PROVIDERS } from '@exponetdb/contracts'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parse, parseDuration, UsageError } from '../src/cli/args.ts'
 import { EXIT, exitFor } from '../src/cli/exit.ts'
@@ -178,6 +179,23 @@ describe('the argument parser', () => {
     expect(refuse(['thing', 'do', 'x', '--json', '-o', 'table'])[0]).toBe(
       '--json and --output disagree.',
     )
+  })
+
+  it('takes every server provider of the contract and refuses another with a suggestion', () => {
+    const create = COMMANDS.find((c) => commandName(c) === 'server create')
+    expect(create?.flags?.find((f) => f.name === 'provider')?.values).toEqual(SERVER_PROVIDERS)
+    for (const provider of SERVER_PROVIDERS) {
+      const p = parse(COMMANDS, ['server', 'create', 'db-01', '--provider', provider])
+      expect(p.input.flags['provider'], provider).toBe(provider)
+    }
+    try {
+      parse(COMMANDS, ['server', 'create', 'db-01', '--provider', 'hetzner_clod'])
+      throw new Error('accepted')
+    } catch (e) {
+      if (!(e instanceof UsageError)) throw e
+      expect(e.message).toContain('--provider is one of hetzner_cloud, hetzner_robot,')
+      expect(e.suggestion).toBe('--provider hetzner_cloud')
+    }
   })
 
   it('reads durations', () => {

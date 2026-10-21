@@ -2,6 +2,7 @@ import type { ApprovalReview, MigrationBundle } from '@exponetdb/sdk/operations'
 import { RawPlanTextBlock } from '@exponetdb/ui-data'
 import {
   FailedReadState,
+  type HeadingLevel,
   LoadingState,
   PartialBanner,
   type Readable,
@@ -226,12 +227,16 @@ export function useStoredFiles(
 export function StoredFilesBlock({
   readable,
   collapsedLines,
+  headingLevel = 2,
   onRetry,
 }: {
   readonly readable: Readable<PlanFiles>
   readonly collapsedLines: number
+  /** The level of the raw-text block's heading in the page outline. Default 2. */
+  readonly headingLevel?: HeadingLevel
   readonly onRetry: () => void
 }): ReactNode {
+  const inner: HeadingLevel = headingLevel < 6 ? ((headingLevel + 1) as HeadingLevel) : 6
   const value = readableValue(readable)
   return (
     <div className="flex min-w-0 flex-col gap-2" data-stored-files={readable.state}>
@@ -243,7 +248,7 @@ export function StoredFilesBlock({
           what={t('plans.files.what').toLowerCase()}
           error={readable.error}
           onRetry={onRetry}
-          headingLevel={3}
+          headingLevel={inner}
         />
       ) : null}
       {readable.state === 'partial' ? (
@@ -255,7 +260,7 @@ export function StoredFilesBlock({
         />
       ) : null}
       <RawPlanTextBlock
-        headingLevel={2}
+        headingLevel={headingLevel}
         files={value?.files ?? null}
         omitted={value?.omitted ?? null}
         runs={value?.runs ?? null}

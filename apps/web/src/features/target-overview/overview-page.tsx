@@ -18,11 +18,10 @@ import { HealthBlock } from './health-block.tsx'
 import { HistoryBlock } from './history-block.tsx'
 import { HostValue } from './host-row.tsx'
 import { MigrationsBlock } from './migrations-block.tsx'
-import { RefreshBar } from './overview-refresh.tsx'
 
 /**
- * The body of the target overview (information-architecture.md §2.2): health
- * in incident order, what the target is, the health history, the migration
+ * The body of the target overview (information-architecture.md §2.2; its
+ * Refresh is in the page header): health in incident order, what the target is, the health history, the migration
  * head against the other environments, recent operations and open findings.
  * Each block reads on its own and fails on its own; the target read the
  * layout started gates the page, so this body only renders once there is a
@@ -33,7 +32,6 @@ export function TargetOverviewBody(props: { readonly target: Target }): ReactNod
   const health = useTargetHealth(scope.target.path)
   return (
     <div className="flex flex-col gap-10" data-page="target-overview">
-      <RefreshBar />
       <HealthBlock health={health} />
       <FactsBlock target={props.target} health={health} />
       <HistoryBlock path={scope.target.path} />

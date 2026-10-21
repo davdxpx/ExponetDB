@@ -51,6 +51,7 @@ import {
   ProjectDefaultsSchema,
 } from '../manifest/index.ts'
 import { LintCodeSchema, MigrationProgressSchema } from './migrations.ts'
+import { ServerProviderSchema } from './registry.ts'
 
 /*
  * REST v1 read resources (resources.md). Shapes of a group are refined in the
@@ -1598,7 +1599,7 @@ export const ServerSchema = z
   .object({
     id: ServerIdSchema,
     displayName: name(128, 'Mutable label; nothing binds to it.'),
-    provider: z.enum(['hetzner_cloud', 'hetzner_robot', 'other', 'unknown']),
+    provider: ServerProviderSchema,
     location: name(64, 'Location label.').nullable(),
     derivedTier: TierSchema.nullable(),
     observedFacts: z

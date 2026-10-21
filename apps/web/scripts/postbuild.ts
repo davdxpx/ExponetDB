@@ -41,6 +41,7 @@ export const REQUIRED_TITLES = [
   'Files derived from Supabase and shadcn/ui',
   'Apache License 2.0 (Supabase)',
   'MIT License (shadcn/ui)',
+  'CC0 1.0 Universal (Simple Icons)',
 ]
 export const URL_ALLOWLIST = [
   'http://www.w3.org/1999/xlink',

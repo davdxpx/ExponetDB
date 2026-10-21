@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { axeViolations } from '../../../../packages/ui/test/support/axe.ts'
 import {
   BIDI,
@@ -45,6 +45,17 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
 })
+
+// The first mount of the workspace in a file is slow: the lazy chunks load and the whole tree
+// renders for the first time. On CI's two cores, shared by every package's tests, that ran past
+// the 10 s wait of the file's first test. One throwaway mount here takes that cost outside of
+// any test; every test still mounts its own app.
+beforeAll(async () => {
+  mountSql(SQL, world())
+  await screen.findByRole('textbox', { name: /SQL (query|draft)/ }, { timeout: 100_000 })
+  cleanup()
+  window.localStorage.clear()
+}, 120_000)
 
 function world(): SqlWorld {
   const w = new SqlWorld()

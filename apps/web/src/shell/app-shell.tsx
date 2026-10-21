@@ -15,41 +15,29 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarHeader,
-  SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarProvider,
-  SidebarSeparator,
-  SidebarTrigger,
   useIsMobile,
   usePanelRef,
   useSidebar,
 } from '@exponetdb/ui'
 import {
   CommandMenu,
-  CommandMenuTriggerInput,
   CommandProvider,
-  ShortcutKeys,
   ShortcutProvider,
   UntrustedName,
-  useActiveShortcuts,
   useLinkComponent,
   useNavigate,
 } from '@exponetdb/ui-patterns'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouterState } from '@tanstack/react-router'
-import { Fragment, type ReactNode, type RefObject, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { ProfileAvatar } from '../features/account/avatar.tsx'
 import { displayNameOf, type ProfileMe } from '../features/account/profile-model.ts'
 import { installationQuery } from '../features/settings/keys.ts'
-import { TargetContextBar } from '../features/target/context-bar.tsx'
+import { targetOfPathname } from '../features/target/params.ts'
 import { forgetRecentTargets, pruneRecentTargets } from '../features/target/recent-storage.ts'
 import { useApi } from '../lib/api/context.tsx'
 import { t } from '../lib/i18n/i18n.ts'
@@ -73,40 +61,37 @@ import {
 } from '../lib/preferences/theme.ts'
 import { useMe } from '../lib/session/guard.tsx'
 import { forgetSqlTabs } from '../lib/storage/sql-tabs.ts'
+import { AppHeader } from './app-header.tsx'
 import { ShellBreadcrumbs } from './breadcrumbs.tsx'
 import { ShellCommands } from './commands.tsx'
-import {
-  isCurrent,
-  NAV_SECTIONS,
-  type NavItem,
-  type NavSection,
-  sectionMenu,
-  sectionOf,
-} from './navigation.ts'
+import { shellLevel } from './levels.ts'
+import { isCurrent, type NavItem, type NavSection, sectionMenu, sectionOf } from './navigation.ts'
+import { AccountNav, AccountRail, FleetRail, TargetRail } from './rail.tsx'
 
 export { isCurrent } from './navigation.ts'
 
 /**
- * The frame of every signed-in page (order §7, information-architecture.md
- * §2): the icon rail of the global sections (from the IA data, one list feeds
- * the rail, the command menu and the shortcut sheet; a tooltip names each
- * icon while the rail is collapsed), the section menu of the current section
- * beside the page, a header with the command-menu field and the theme and
- * account menus, and the page in a `main` landmark that a skip link reaches
- * first. The rail expands on hover, stays open or stays collapsed, as the
- * person chose; small screens get it as a sheet with the section pages
- * listed under each section.
+ * The frame of every signed-in page, built as Supabase Studio builds its
+ * dashboard (information-architecture.md §2): a column exactly the screen's
+ * height with the header across the top and, below it, the rail, the menu of
+ * the current section where it has one, and the page in a `main` landmark
+ * that alone scrolls (a skip link reaches it first). The rail lists the
+ * sections of the level the page is on: the fleet, one target, or (only as the
+ * phone's sheet) the account, which has its own column instead. The rail is
+ * collapsed to its icons and expands over the page while the pointer rests on
+ * it, stays open or stays collapsed, as the person chose; on a phone it is a
+ * sheet that closes when a page in it is chosen.
  */
-const BLOCKS = [1, 2, 3, 4] as const
 
-/** `page` on the page itself, `true` on a section the page belongs to, else nothing. */
-function currentness(
-  path: string,
-  pathname: string,
-  inSection: boolean,
-): 'page' | 'true' | undefined {
-  if (pathname === path) return 'page'
-  return inSection ? 'true' : undefined
+/** A collapsed rail item names itself only once the pointer has rested on it this long. */
+const RAIL_TOOLTIP_DELAY_MS = 1000
+
+/** On a phone the rail is a sheet; choosing a page in it closes it (any change of the address). */
+function CloseSheetOnNavigation({ pathname }: { readonly pathname: string }): null {
+  const { setOpenMobile } = useSidebar()
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the path is the trigger, not an input
+  useEffect(() => setOpenMobile(false), [pathname, setOpenMobile])
+  return null
 }
 
 export function AppShell({ children }: { readonly children: ReactNode }): ReactNode {
@@ -129,12 +114,13 @@ export function AppShell({ children }: { readonly children: ReactNode }): ReactN
 function ShellFrame({ children }: { readonly children: ReactNode }): ReactNode {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const mode = useSidebarMode()
-  const Link = useLinkComponent()
   const isMobile = useIsMobile()
-  const section = sectionOf(pathname)
+  const level = shellLevel(pathname)
+  const target = level === 'target' ? targetOfPathname(pathname) : undefined
+  const section = level === 'fleet' ? sectionOf(pathname) : undefined
   const menu = section === undefined ? [] : sectionMenu(section.id)
   const identityId = useMe().identity.id
-  const pageScroller = useRef<HTMLDivElement>(null)
+  const pageScroller = useRef<HTMLElement>(null)
   // A recent-databases list belongs to the person who opened the databases: another person's
   // list, left by a session that ended without a sign-out, goes when this person's page opens.
   useEffect(() => pruneRecentTargets(identityId), [identityId])
@@ -146,101 +132,103 @@ function ShellFrame({ children }: { readonly children: ReactNode }): ReactNode {
     const page = document.scrollingElement as Element | null | undefined
     if (page) page.scrollTop = 0
   }, [pathname])
+  // The account has its own column on wide screens; on a phone its pages are in the sheet.
+  const showRail = level !== 'account' || isMobile
+  // The page scrolls in its own container, so the container is in the tab order: a page with
+  // nothing focusable on it (an installation's facts) is still scrolled from the keyboard
+  // (axe: scrollable-region-focusable). Its focus ring is drawn inside it.
+  const page = (
+    <main
+      ref={pageScroller}
+      id="content"
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a scroll container must take focus
+      tabIndex={0}
+      className="relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-background outline-hidden focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-ring focus-visible:ring-inset"
+    >
+      <ShellBreadcrumbs />
+      {children}
+    </main>
+  )
   return (
-    <SidebarProvider open={mode === 'open'} onOpenChange={toggleSidebarMode}>
+    // The frame is exactly the screen's height: the header and the rail stay where they are and
+    // only the page scrolls (its own scroll container, reset on a new page).
+    <SidebarProvider
+      open={mode === 'open'}
+      onOpenChange={toggleSidebarMode}
+      tooltipDelayDuration={RAIL_TOOLTIP_DELAY_MS}
+      className="h-svh flex-col overflow-hidden"
+    >
+      <CloseSheetOnNavigation pathname={pathname} />
       <a
         href="#content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-100 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus-ring"
       >
         {t('shell.skip')}
       </a>
-      <Sidebar collapsible="icon" expandOnHover={mode === 'hover'} label={t('shell.navigation')}>
-        <SidebarHeader>
-          <Link
-            href="/"
-            className="truncate rounded-md px-2 py-1 text-base font-semibold text-foreground focus-ring"
+      <AppHeader level={level} pathname={pathname} accountMenu={<AccountMenu />} />
+      <div className="flex min-h-0 w-full flex-1">
+        {showRail ? (
+          <Sidebar
+            collapsible="icon"
+            expandOnHover={mode === 'hover'}
+            label={t('shell.navigation')}
+            className="z-50"
           >
-            {t('app.name')}
-          </Link>
-        </SidebarHeader>
-        <SidebarContent>
-          <nav aria-label={t('shell.navigation')}>
-            {BLOCKS.map((block) => (
-              <Fragment key={block}>
-                {block === 1 ? null : <SidebarSeparator />}
-                <SidebarGroup>
-                  <SidebarGroupContent>
-                    <SidebarMenu>
-                      {NAV_SECTIONS.filter((item) => item.block === block).map((item) => (
-                        <RailItem
-                          key={item.id}
-                          section={item}
-                          pathname={pathname}
-                          current={section?.id === item.id}
-                        />
-                      ))}
-                    </SidebarMenu>
-                  </SidebarGroupContent>
-                </SidebarGroup>
-              </Fragment>
-            ))}
-          </nav>
-        </SidebarContent>
-        <SidebarFooter>
-          <SidebarModeMenu />
-        </SidebarFooter>
-      </Sidebar>
-      {/* SidebarInset is the page's `main` landmark, the target of the skip link. */}
-      <SidebarInset id="content" tabIndex={-1} className="min-w-0 outline-none">
-        <header className="flex h-12 min-w-0 shrink-0 items-center gap-2 border-b border-default px-3">
-          <SidebarTrigger />
-          {/* On target pages: Product / Project / Environment, with the tier chip (IA §3). */}
-          <TargetContextBar />
-          <CommandMenuTriggerInput placeholder={t('shell.search')} className="max-w-sm" />
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            <AccountMenu />
-          </div>
-        </header>
-        {/* Below md the section menu lives in the off-canvas rail; a panel group would still reserve its
+            <SidebarContent className="pt-1">
+              {level === 'account' ? (
+                <AccountRail pathname={pathname} />
+              ) : target !== undefined ? (
+                <TargetRail
+                  target={target}
+                  pathname={pathname}
+                  fallback={<FleetRail pathname={pathname} current={sectionOf(pathname)} />}
+                />
+              ) : (
+                <FleetRail pathname={pathname} current={section} />
+              )}
+            </SidebarContent>
+            <SidebarFooter>
+              <SidebarModeMenu />
+            </SidebarFooter>
+          </Sidebar>
+        ) : (
+          <AccountNav
+            pathname={pathname}
+            className="hidden h-full w-64 shrink-0 overflow-y-auto border-r border-default bg-dash-sidebar md:flex"
+          />
+        )}
+        {/* Below md the section menu lives in the sheet; a panel group would still reserve its
             256 px (the panel's own inline `display: flex` beats a `hidden` class). */}
         {section !== undefined && menu.length > 0 && !isMobile ? (
-          <SectionMenuFrame
-            section={section}
-            items={menu}
-            pathname={pathname}
-            scroller={pageScroller}
-          >
-            {children}
+          <SectionMenuFrame section={section} items={menu} pathname={pathname}>
+            {page}
           </SectionMenuFrame>
         ) : (
-          <div ref={pageScroller} className="min-w-0 flex-1">
-            <ShellBreadcrumbs />
-            {children}
-          </div>
+          page
         )}
-      </SidebarInset>
+      </div>
     </SidebarProvider>
   )
 }
 
 /**
- * The section menu beside the page, in a resizable panel. Its width is read when the panel
- * appears and then left alone (the library takes `defaultSize` as the starting size); the width a
- * person drags it to is kept per browser, and layouts the library sets itself (on mount, on a
- * change of the window) are not a choice and are not kept.
+ * The section menu beside the page, as Studio's product menu: a column with
+ * the section's name in a header as tall as the frame's and its pages below,
+ * scrolling on its own, in a resizable panel. Its width is read when the panel
+ * appears and then left alone (the library takes `defaultSize` as the starting
+ * size); the width a person drags it to is kept per browser, and layouts the
+ * library sets itself (on mount, on a change of the window) are not a choice
+ * and are not kept.
  */
 function SectionMenuFrame({
   section,
   items,
   pathname,
-  scroller,
   children,
 }: {
   readonly section: NavSection
   readonly items: readonly NavItem[]
   readonly pathname: string
-  /** The element whose scroll position resets when the address changes. */
-  readonly scroller: RefObject<HTMLDivElement | null>
   readonly children: ReactNode
 }): ReactNode {
   const panel = usePanelRef()
@@ -248,7 +236,7 @@ function SectionMenuFrame({
   return (
     <ResizablePanelGroup
       orientation="horizontal"
-      className="min-h-0 flex-1"
+      className="min-h-0 min-w-0 flex-1"
       onLayoutChanged={(_layout, meta) => {
         const pixels = panel.current?.getSize().inPixels
         if (meta.isUserInteraction && pixels !== undefined) rememberSectionMenuWidth(pixels)
@@ -266,71 +254,10 @@ function SectionMenuFrame({
         <SectionMenu section={section} items={items} pathname={pathname} />
       </ResizablePanel>
       <ResizableHandle className="hidden md:flex" aria-label={t('shell.sectionMenu.resize')} />
-      <ResizablePanel id="page" className="min-w-0">
-        <div ref={scroller} className="h-full min-w-0 overflow-auto">
-          <ShellBreadcrumbs />
-          {children}
-        </div>
+      <ResizablePanel id="page" className="flex min-w-0">
+        {children}
       </ResizablePanel>
     </ResizablePanelGroup>
-  )
-}
-
-function RailItem({
-  section,
-  pathname,
-  current,
-}: {
-  readonly section: NavSection
-  readonly pathname: string
-  readonly current: boolean
-}): ReactNode {
-  const Link = useLinkComponent()
-  const { isMobile } = useSidebar()
-  const letters = useLetterShortcuts()
-  const active = useActiveShortcuts()
-  // On a small screen the rail is a sheet: the section pages are listed under their section.
-  const pages = isMobile ? sectionMenu(section.id) : []
-  // The keys go in the tooltip only while they work: the letter shortcuts are on and the
-  // shortcut has a handler on this page (the registry knows the keys and the platform).
-  const hint = letters && active.includes(section.shortcut)
-  return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        asChild
-        isActive={current}
-        tooltip={
-          hint
-            ? {
-                children: (
-                  <span className="flex items-center gap-3">
-                    <span>{section.label}</span>
-                    <ShortcutKeys shortcut={section.shortcut} />
-                  </span>
-                ),
-              }
-            : section.label
-        }
-      >
-        <Link href={section.path} aria-current={currentness(section.path, pathname, current)}>
-          <section.icon aria-hidden="true" />
-          <span>{section.label}</span>
-        </Link>
-      </SidebarMenuButton>
-      {pages.length > 0 ? (
-        <SidebarMenuSub>
-          {pages.map((page) => (
-            <SidebarMenuSubItem key={page.id}>
-              <SidebarMenuSubButton asChild isActive={isCurrent(page.path, pathname)}>
-                <Link href={page.path} aria-current={pathname === page.path ? 'page' : undefined}>
-                  <span>{page.label}</span>
-                </Link>
-              </SidebarMenuSubButton>
-            </SidebarMenuSubItem>
-          ))}
-        </SidebarMenuSub>
-      ) : null}
-    </SidebarMenuItem>
   )
 }
 
@@ -352,10 +279,12 @@ function SectionMenu({
   return (
     <nav
       aria-label={t('shell.sectionMenu', { section: section.label })}
-      className="flex h-full flex-col gap-2 overflow-y-auto border-r border-default bg-dash-sidebar px-3 py-4"
+      className="flex h-full flex-col border-r border-default bg-dash-sidebar"
     >
-      <p className="px-2 text-sm font-medium text-foreground">{section.label}</p>
-      <ul className="flex flex-col gap-0.5">
+      <div className="flex h-12 shrink-0 items-center border-b border-default px-6">
+        <p className="truncate text-sm font-medium text-foreground">{section.label}</p>
+      </div>
+      <ul className="flex grow flex-col gap-px overflow-y-auto px-3 py-4">
         {items.map((item) => {
           const active = current?.id === item.id
           return (
@@ -364,10 +293,10 @@ function SectionMenu({
                 href={item.path}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex rounded-md px-2 py-1.5 text-sm focus-ring',
+                  'flex rounded-md px-3 py-[3px] text-sm transition-colors focus-ring',
                   active
-                    ? 'bg-selection font-medium text-foreground'
-                    : 'text-foreground-light hover:bg-surface-200 hover:text-foreground',
+                    ? 'bg-sidebar-accent font-semibold text-foreground'
+                    : 'text-foreground-light hover:bg-sidebar-accent/50 hover:text-foreground',
                 )}
               >
                 {item.label}

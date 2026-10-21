@@ -11,12 +11,13 @@ import {
 } from 'react'
 
 /**
- * The page frame of a plan (design-system.md §4: production cues on every
- * surface that can lead to a production change; information-architecture.md
- * §5). `PlanFrame` draws the reserved `production` frame around the whole
- * review and a "Production" cue at its head; every block inside repeats the
- * cue beside its heading, so a person who scrolled to the raw statements
- * still sees that the plan changes production.
+ * The page frame of a plan (design-system.md §4: production is marked once,
+ * clearly; information-architecture.md §5). `PlanFrame` draws the reserved
+ * `production` frame around the whole review and one short sentence at its
+ * head. The page header carries the one production chip; the blocks inside
+ * the frame repeat nothing (**[DECIDED]** by the owner on 2026-10-21: a chip
+ * beside every block heading made a production page a wall of equally loud
+ * blocks). The typed confirmations keep their own production frame.
  */
 
 interface PlanFrameState {
@@ -34,34 +35,31 @@ export interface PlanFrameProps extends HTMLAttributes<HTMLDivElement> {
   /**
    * The plan changes production. The page passes `plan.subject.tier !== 'nonprod'`
    * (`PlanView.subject.tier`), which fails closed like the confirmation dialogs:
-   * a tier that is missing or not known gets the production cue.
+   * a tier that is missing or not known gets the production frame.
    */
   readonly production: boolean
+  /**
+   * The one sentence at the head of a production frame, in the page's words
+   * ("This plan changes production.", or why a plan without a tier is treated
+   * as production). Default: "This plan changes production."
+   */
+  readonly notice?: ReactNode
   readonly children?: ReactNode
-}
-
-/** The chip every production cue of the plan page uses: the reserved color and the word. */
-export function ProductionCue({ className }: { readonly className?: string }): ReactNode {
-  return (
-    <span
-      data-production-cue=""
-      className={cn(
-        'inline-flex items-center gap-1 rounded-md border border-production bg-production px-2 py-0.5 text-xs leading-4 font-medium whitespace-nowrap text-production-foreground',
-        className,
-      )}
-    >
-      <Server aria-hidden="true" className="size-3" />
-      Production
-    </span>
-  )
 }
 
 /**
  * The frame of a plan's review page. With `production` it adds the reserved
- * `production` frame and a "Production" cue at its head, and the blocks
- * inside show the cue beside their headings; without it, it adds neither.
+ * `production` frame and one sentence at its head (no chip: the page
+ * header's tier chip is the one chip of the page); without it, it adds
+ * neither. Blocks inside can ask `usePlanFrameProduction()`.
  */
-export function PlanFrame({ production, children, className, ...rest }: PlanFrameProps): ReactNode {
+export function PlanFrame({
+  production,
+  notice,
+  children,
+  className,
+  ...rest
+}: PlanFrameProps): ReactNode {
   const value = useMemo(() => ({ production }), [production])
   return (
     <PlanFrameContext.Provider value={value}>
@@ -76,12 +74,12 @@ export function PlanFrame({ production, children, className, ...rest }: PlanFram
         {...rest}
       >
         {production ? (
-          <p className="flex flex-wrap items-center gap-2 rounded-md border border-production bg-production-muted px-3 py-2 text-sm text-foreground">
-            <ProductionCue />
-            <span>
-              This plan changes a production target. Check the target path and the plan hash before
-              you decide.
-            </span>
+          <p
+            data-production-notice=""
+            className="m-0 flex items-start gap-2 rounded-md border border-production bg-production-muted px-3 py-2 text-sm text-foreground"
+          >
+            <Server aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-production" />
+            <span className="min-w-0">{notice ?? 'This plan changes production.'}</span>
           </p>
         ) : null}
         {children}
@@ -101,8 +99,9 @@ export interface PlanBlockProps extends Omit<HTMLAttributes<HTMLElement>, 'title
 }
 
 /**
- * One block of the plan review: a `section` named by its heading, with the
- * production cue beside the heading inside a production `PlanFrame`.
+ * One block of the plan review: a `section` named by its heading, in the
+ * default border. It carries no production cue of its own: the frame and the
+ * page header say it once.
  */
 export function PlanBlock({
   title,
@@ -113,24 +112,19 @@ export function PlanBlock({
   ...rest
 }: PlanBlockProps): ReactNode {
   const headingId = useId()
-  const production = usePlanFrameProduction()
   const Heading = `h${headingLevel}` as const
   return (
     <section
       aria-labelledby={headingId}
       className={cn(
         'flex min-w-0 flex-col gap-3 rounded-lg border border-default bg-surface-100 p-4',
-        production && 'border-production',
         className,
       )}
       {...rest}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <Heading id={headingId} className="text-base font-medium text-foreground">
-          {title}
-        </Heading>
-        {production ? <ProductionCue /> : null}
-      </div>
+      <Heading id={headingId} className="text-base font-medium text-foreground">
+        {title}
+      </Heading>
       {description === undefined ? null : (
         <div className="text-sm text-foreground-light">{description}</div>
       )}

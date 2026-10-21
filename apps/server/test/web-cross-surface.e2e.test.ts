@@ -138,7 +138,8 @@ async function registerInWebApp(environment: 'staging' | 'production'): Promise<
   }
   await page.waitForURL(/\/changes\/plans\/pln_/)
   await page.locator('.review .computed').waitFor()
-  expect(await page.locator('.review .computed').textContent()).toContain(path)
+  // The title says what happens: the target path as text.
+  expect(await page.locator('h1').textContent()).toContain(path)
 
   await page.getByRole('button', { name: 'Apply', exact: true }).click()
   await confirmPlanDialog('Apply plan', path)
@@ -299,18 +300,24 @@ describe('one change across the Web App, MCP and the audit trail', () => {
     await page.waitForURL(`${ORIGIN}/changes/plans/${plan['id']}`)
     const card = page.locator(`li.card.focused[data-operation="${operationId}"]`)
     await card.locator('.review .computed').waitFor()
-    expect(await card.locator('.computed').textContent()).toContain(productionPath)
-    // The client's own name: text, isolated, marked as not verified.
+    expect(await page.locator('h1').textContent()).toContain(productionPath)
+    // The client's own name, in the technical details: text, isolated, marked as not verified.
     const clientName = card.locator('.client-name [data-untrusted="name"]')
     expect(await clientName.locator('[dir="ltr"]').first().textContent()).toBe(CLIENT_NAME)
     expect(await clientName.textContent()).toContain('name not verified')
     expect(await card.locator('.review b').count()).toBe(0)
-    expect(await card.locator('.computed code.full-hash').textContent()).toBe(plan['planHash'])
+    expect(await card.locator('[data-plan-details] code.full-hash').textContent()).toBe(
+      plan['planHash'],
+    )
     // Nothing applied yet: the apply indicator is waiting, verification is pending.
     expect(await page.locator('li[data-indicator="apply"]').getAttribute('data-outcome')).not.toBe(
       'applied',
     )
-    await card.getByRole('button', { name: 'Approve', exact: true }).click()
+    // The decision is in the page header, beside the title.
+    await page
+      .locator('[data-slot="page-header-actions"]')
+      .getByRole('button', { name: 'Approve', exact: true })
+      .click()
     await confirmPlanDialog('Approve plan', productionPath)
     await withPasskeyIfAsked(page.locator('p.status', { hasText: /^Approved/ }))
 

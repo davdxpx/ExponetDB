@@ -1,4 +1,4 @@
-import { ChevronDown, Plus, Search } from '@exponetdb/icons'
+import { ChevronDown, LayoutGrid, List, Plus, Search } from '@exponetdb/icons'
 import type { TargetSummary } from '@exponetdb/sdk/operations'
 import {
   Button,
@@ -10,7 +10,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   Input,
-  inputVariants,
   Table,
   TableBody,
   TableCaption,
@@ -39,6 +38,7 @@ import { useApi } from '../../lib/api/context.tsx'
 import { type MessageKey, t } from '../../lib/i18n/i18n.ts'
 import { readTargetsPreferences, writeTargetsPreferences } from '../../lib/preferences/targets.ts'
 import { toReadable } from '../../lib/query/readable.ts'
+import { TOOLBAR_CONTROL, ToolbarField } from '../../lib/ui/toolbar.tsx'
 import { HEALTH_STATES, HealthCell } from '../fleet/health.tsx'
 import { copyText } from './copy.tsx'
 import {
@@ -72,8 +72,6 @@ import {
 import { phrase } from './phrase.ts'
 
 export const REGISTER_PATH = '/targets/register'
-
-const SELECT = (extra?: string): string => cn(inputVariants({ size: 'small' }), 'w-auto', extra)
 
 /**
  * All targets (`/targets`, labelled "Databases"): search, filters and sort
@@ -297,35 +295,34 @@ function Toolbar(props: {
   const { search, change } = props
   const ids = useId()
   return (
-    <search className="flex flex-wrap items-end gap-3">
-      <div className="flex min-w-60 flex-1 flex-col gap-1">
-        <label htmlFor={`${ids}-q`} className="text-xs text-foreground-light">
+    <search className="flex flex-wrap items-start gap-2">
+      <div className="relative w-full sm:w-64">
+        <label htmlFor={`${ids}-q`} className="sr-only">
           {t('targets.search.label')}
         </label>
-        <div className="relative">
-          <Search
-            aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2 text-foreground-light"
-          />
-          <Input
-            id={`${ids}-q`}
-            type="search"
-            className="pl-8"
-            value={search.q ?? ''}
-            maxLength={SEARCH_MAX_LENGTH}
-            placeholder={t('targets.search.placeholder')}
-            autoComplete="off"
-            onChange={(event: ChangeEvent<HTMLInputElement>) =>
-              change({ q: event.target.value === '' ? undefined : event.target.value })
-            }
-          />
-        </div>
+        <Search
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-foreground-lighter"
+        />
+        <Input
+          id={`${ids}-q`}
+          type="search"
+          size="tiny"
+          className="pl-7"
+          value={search.q ?? ''}
+          maxLength={SEARCH_MAX_LENGTH}
+          placeholder={t('targets.search.placeholder')}
+          autoComplete="off"
+          onChange={(event: ChangeEvent<HTMLInputElement>) =>
+            change({ q: event.target.value === '' ? undefined : event.target.value })
+          }
+        />
       </div>
       <RegistryFilters search={search} change={change} />
-      <Field id={`${ids}-tier`} label={t('targets.filter.tier')}>
+      <ToolbarField id={`${ids}-tier`} label={t('targets.filter.tier')}>
         <select
           id={`${ids}-tier`}
-          className={SELECT()}
+          className={TOOLBAR_CONTROL}
           value={search.tier ?? ''}
           onChange={(event) =>
             change({
@@ -337,11 +334,11 @@ function Toolbar(props: {
           <option value="prod">{t('targets.filter.tier.prod')}</option>
           <option value="nonprod">{t('targets.filter.tier.nonprod')}</option>
         </select>
-      </Field>
-      <Field id={`${ids}-state`} label={t('targets.filter.state')}>
+      </ToolbarField>
+      <ToolbarField id={`${ids}-state`} label={t('targets.filter.state')}>
         <select
           id={`${ids}-state`}
-          className={SELECT()}
+          className={TOOLBAR_CONTROL}
           value={search.state ?? ''}
           onChange={(event) =>
             change({ state: STATE_FILTERS.find((state) => state === event.target.value) })
@@ -354,11 +351,11 @@ function Toolbar(props: {
             </option>
           ))}
         </select>
-      </Field>
-      <Field id={`${ids}-health`} label={t('targets.filter.health')}>
+      </ToolbarField>
+      <ToolbarField id={`${ids}-health`} label={t('targets.filter.health')}>
         <select
           id={`${ids}-health`}
-          className={SELECT()}
+          className={TOOLBAR_CONTROL}
           value={search.health ?? ''}
           onChange={(event) => {
             const value = [...HEALTH_STATES, 'none' as const].find((h) => h === event.target.value)
@@ -372,11 +369,11 @@ function Toolbar(props: {
             </option>
           ))}
         </select>
-      </Field>
-      <Field id={`${ids}-sort`} label={t('targets.sort.label')}>
+      </ToolbarField>
+      <ToolbarField id={`${ids}-sort`} label={t('targets.sort.label')}>
         <select
           id={`${ids}-sort`}
-          className={SELECT()}
+          className={TOOLBAR_CONTROL}
           value={props.sort}
           onChange={(event) => {
             const sort = SORTS.find((candidate) => candidate === event.target.value)
@@ -389,21 +386,30 @@ function Toolbar(props: {
             </option>
           ))}
         </select>
-      </Field>
-      <fieldset className="m-0 flex min-w-0 gap-1 border-0 p-0">
+      </ToolbarField>
+      <fieldset className="m-0 ml-auto flex min-w-0 border-0 p-0">
         <legend className="sr-only">{t('targets.view.label')}</legend>
-        {(['table', 'grid'] as const).map((view) => (
-          <Button
-            key={view}
-            type="button"
-            size="small"
-            variant={props.view === view ? 'default' : 'outline'}
-            aria-pressed={props.view === view}
-            onClick={() => change({ view })}
-          >
-            {t(view === 'table' ? 'targets.view.table' : 'targets.view.grid')}
-          </Button>
-        ))}
+        {(['table', 'grid'] as const).map((view) => {
+          const Icon = view === 'table' ? List : LayoutGrid
+          const label = t(view === 'table' ? 'targets.view.table' : 'targets.view.grid')
+          return (
+            <Button
+              key={view}
+              type="button"
+              size="tiny"
+              variant={props.view === view ? 'default' : 'outline'}
+              aria-pressed={props.view === view}
+              aria-label={label}
+              onClick={() => change({ view })}
+              className={cn(
+                'px-1.5',
+                view === 'table' ? 'rounded-r-none' : '-ml-px rounded-l-none',
+                props.view === view ? 'bg-background-selection' : 'text-foreground-lighter',
+              )}
+              icon={<Icon aria-hidden="true" strokeWidth={1.5} />}
+            />
+          )
+        })}
       </fieldset>
     </search>
   )
@@ -557,51 +563,35 @@ function RegistryFilter(props: {
   }
   return (
     <div className="flex flex-col gap-1" data-filter={props.what}>
-      <label htmlFor={props.id} className="text-xs text-foreground-light">
-        {props.label}
-      </label>
-      <select
-        id={props.id}
-        className={SELECT()}
-        value={props.value ?? ''}
-        disabled={props.disabled === true || readable.state === 'loading'}
-        aria-describedby={note === null ? undefined : noteId}
-        onChange={(event) =>
-          props.onChange(event.target.value === '' ? undefined : event.target.value)
-        }
-      >
-        <option value="">{props.allLabel}</option>
-        {props.value !== undefined && !listed ? (
-          <option value={props.value}>
-            {unread ? props.value : t('targets.filter.notListed', { slug: props.value })}
-          </option>
-        ) : null}
-        {props.options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
+      <ToolbarField id={props.id} label={props.label}>
+        <select
+          id={props.id}
+          className={TOOLBAR_CONTROL}
+          value={props.value ?? ''}
+          disabled={props.disabled === true || readable.state === 'loading'}
+          aria-describedby={note === null ? undefined : noteId}
+          onChange={(event) =>
+            props.onChange(event.target.value === '' ? undefined : event.target.value)
+          }
+        >
+          <option value="">{props.allLabel}</option>
+          {props.value !== undefined && !listed ? (
+            <option value={props.value}>
+              {unread ? props.value : t('targets.filter.notListed', { slug: props.value })}
+            </option>
+          ) : null}
+          {props.options.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </ToolbarField>
       {note === null ? null : (
         <p id={noteId} className="m-0 max-w-60 text-xs text-foreground-light">
           {note}
         </p>
       )}
-    </div>
-  )
-}
-
-function Field(props: {
-  readonly id: string
-  readonly label: string
-  readonly children: ReactNode
-}): ReactNode {
-  return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={props.id} className="text-xs text-foreground-light">
-        {props.label}
-      </label>
-      {props.children}
     </div>
   )
 }

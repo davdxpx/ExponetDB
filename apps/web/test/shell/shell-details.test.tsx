@@ -103,10 +103,10 @@ describe('the tooltips of the icon rail', () => {
 })
 
 describe('the page starts at its top', () => {
-  /** The element that scrolls the page beside the section menu. */
+  /** The element that scrolls the page: the `main` landmark itself, below the fixed header. */
   function scroller(): HTMLElement {
-    const found = screen.getByRole('main').querySelector<HTMLElement>('.overflow-auto')
-    if (found === null) throw new Error('no scrolling page')
+    const found = screen.getByRole('main')
+    expect(found).toHaveClass('overflow-y-auto')
     return found
   }
 

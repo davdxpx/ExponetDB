@@ -37,7 +37,7 @@ way. Every statement is **[OBSERVED]** on the branch unless marked.
 | 8 | A changelog that carries notice of changes | `architecture.md` §9 promises "notice in the changelog"; the repository has no changelog | **not met** |
 | 9 | CI has run the matrix on the commit to be declared | no GitHub Actions runner has ever started for this repository | **not met** |
 | 10 | Deployed and observed off-host | G2 off-host deployment evidence is still outstanding (`gates/2.md`) | **not met** |
-| 11 | Open decisions that change the API | OD-22 implemented in Wave 8 part 2 (`declaredTier`, `POST /clusters/{id}/declared-tier`; tiered OAuth scope strings for `registry.manage` wait for the owner), OD-21 (notification channel; break-glass activation refused), OD-27 | open |
+| 11 | Open decisions that change the API | OD-22 implemented in Wave 8 part 2 (`declaredTier`, `POST /clusters/{id}/declared-tier`; tiered OAuth scope strings for `registry.manage` wait for the owner), OD-21 (notification channel; break-glass activation refused), OD-27, OD-49 (an open `ServerProvider`, §7) | open |
 
 ## 3. Changes Wave 7 made to existing answers
 
@@ -114,3 +114,22 @@ MCP announcements, their digests and `toolVersion` did not move):
 - Counted on this branch: 159 documented operations, 154 served; the five that
   are not served are the ones listed in §1, so criterion 7 is unchanged
   (**not met**). The totals in §1 to §5 are those of the dates they carry.
+
+## 7. Update 2026-10-21: the server provider list
+
+**[OBSERVED]** The owner asked on 2026-10-21 for a long list of server
+providers ([`../01-architecture/domain-model.md` §3.2](../01-architecture/domain-model.md#32-physical-layer)).
+`provider` of `Server` and of `ServerCreateRequest` is now the named
+component `ServerProvider` (the SDK type of the same name) with eighteen
+values more than before; the four earlier values keep their meaning. The
+enum is closed, so a client that treats it as exhaustive sees values it did
+not know: under the pre-GA rule ([`architecture.md` §9](./architecture.md#9-versioning))
+that is a change with notice, and this section is the notice. No route,
+action or MCP tool changes (no tool announces a server; the digests and
+`toolVersion` did not move).
+
+**[OPEN: OD-49]** For the GA decision of §4: after GA, a further provider
+would need `/api/v2` unless `ServerProvider` is marked open
+(`x-extensible-enum`, [`../01-architecture/versioning.md` §2](../01-architecture/versioning.md#2-rules-for-additive-changes))
+before GA. Marking it open makes its SDK type `string`
+([OD-49](../00-product/open-decisions.md#od-49-the-server-provider-enum-and-apiv1-ga)).

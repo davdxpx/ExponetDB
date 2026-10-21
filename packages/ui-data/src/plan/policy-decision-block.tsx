@@ -249,6 +249,64 @@ function RuleItem({ rule }: { readonly rule: PolicyRuleView }): ReactNode {
   )
 }
 
+/** The rules a break-glass grant overrode, as a warning note; nothing for none. */
+export function OverriddenRulesNote({
+  rules,
+}: {
+  readonly rules: readonly string[] | null | undefined
+}): ReactNode {
+  if (rules === undefined || rules === null || rules.length === 0) return null
+  return (
+    <Note tone="warning">
+      <Words>
+        <strong className="font-medium">Overridden by break-glass:</strong>
+        <RuleList rules={rules} />
+      </Words>
+    </Note>
+  )
+}
+
+/** The requirements of a decision as a list; `aria-labelledby` names it. */
+export function PolicyRequirementList({
+  requirements,
+  ...rest
+}: {
+  readonly requirements: readonly PolicyRequirementView[]
+  readonly 'aria-labelledby'?: string
+  readonly 'aria-label'?: string
+}): ReactNode {
+  return (
+    <ul {...rest} className="flex flex-col gap-1 text-sm">
+      {keyedBy(requirements, (r) => r.kind).map(({ item: requirement, key }) => (
+        <li key={key} data-requirement={requirement.kind}>
+          <RequirementText requirement={requirement} />
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/**
+ * The rules that failed, warned or could not be evaluated, each with its id,
+ * result and severity, its message and remediation as untrusted text.
+ */
+export function PolicyRuleList({
+  rules,
+  ...rest
+}: {
+  readonly rules: readonly PolicyRuleView[]
+  readonly 'aria-labelledby'?: string
+  readonly 'aria-label'?: string
+}): ReactNode {
+  return (
+    <ul {...rest} className="flex flex-col gap-2 text-sm">
+      {keyedBy(rules, (rule) => rule.id).map(({ item: rule, key }) => (
+        <RuleItem key={key} rule={rule} />
+      ))}
+    </ul>
+  )
+}
+
 /**
  * The policy decision the server recorded in the plan: allow, allow with
  * requirements, or deny; the requirements (approvals, re-authentication,
@@ -268,16 +326,7 @@ export function PolicyDecisionBlock({
   return (
     <PlanBlock title="Policy decision" headingLevel={headingLevel} data-plan-block="policy">
       <DecisionValue decision={decision} />
-      {overriddenRules === undefined ||
-      overriddenRules === null ||
-      overriddenRules.length === 0 ? null : (
-        <Note tone="warning">
-          <Words>
-            <strong className="font-medium">Overridden by break-glass:</strong>
-            <RuleList rules={overriddenRules} />
-          </Words>
-        </Note>
-      )}
+      <OverriddenRulesNote rules={overriddenRules} />
       <div className="flex flex-col gap-1">
         <p id={requirementsId} className="text-xs text-foreground-lighter">
           Requirements
@@ -289,13 +338,7 @@ export function PolicyDecisionBlock({
         ) : requirements.length === 0 ? (
           <p className="text-sm">None</p>
         ) : (
-          <ul aria-labelledby={requirementsId} className="flex flex-col gap-1 text-sm">
-            {keyedBy(requirements, (r) => r.kind).map(({ item: requirement, key }) => (
-              <li key={key} data-requirement={requirement.kind}>
-                <RequirementText requirement={requirement} />
-              </li>
-            ))}
-          </ul>
+          <PolicyRequirementList requirements={requirements} aria-labelledby={requirementsId} />
         )}
       </div>
       <div className="flex flex-col gap-1">
@@ -309,11 +352,7 @@ export function PolicyDecisionBlock({
         ) : rules.length === 0 ? (
           <p className="text-sm">None</p>
         ) : (
-          <ul aria-labelledby={rulesId} className="flex flex-col gap-2 text-sm">
-            {keyedBy(rules, (rule) => rule.id).map(({ item: rule, key }) => (
-              <RuleItem key={key} rule={rule} />
-            ))}
-          </ul>
+          <PolicyRuleList rules={rules} aria-labelledby={rulesId} />
         )}
       </div>
     </PlanBlock>

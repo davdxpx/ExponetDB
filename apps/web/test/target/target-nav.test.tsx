@@ -24,15 +24,17 @@ function worldWith(openFindingCount: number): World {
 }
 
 const nav = (): Promise<HTMLElement> => screen.findByRole('navigation', { name: 'Target sections' })
+const badge = (): Element | null => document.querySelector('[data-slot="findings-badge"]')
 
-describe('the Findings tab and its count of open findings', () => {
+describe('the Findings item of the rail and its count of open findings', () => {
   it('shows the number of open findings after the label, with the words for assistive technology', async () => {
     mountApp(`/t/${PATH}/locks`, worldWith(3))
     const tab = await within(await nav()).findByRole('link', { name: 'Findings 3 open findings' })
     expect(tab).toHaveAttribute('href', `/t/${PATH}/findings`)
-    await waitFor(() => expect(tab.querySelector('[data-slot="page-nav-badge"]')).not.toBeNull())
-    expect(tab.querySelector('[aria-hidden="true"]')).toHaveTextContent('3')
-    // Only the Findings tab carries a count.
+    await waitFor(() => expect(badge()).not.toBeNull())
+    expect(badge()).toHaveTextContent('3')
+    expect(badge()).toHaveAttribute('aria-hidden', 'true')
+    // Only the Findings item carries a count.
     expect(document.querySelectorAll('[data-slot="findings-badge"]')).toHaveLength(1)
     expect(within(await nav()).getByRole('link', { name: 'Locks' })).toHaveAccessibleName('Locks')
   })
@@ -41,14 +43,14 @@ describe('the Findings tab and its count of open findings', () => {
     mountApp(`/t/${PATH}`, worldWith(1204))
     const tab = await within(await nav()).findByRole('link', { name: /^Findings/ })
     await waitFor(() => expect(tab).toHaveAccessibleName('Findings 1204 open findings'))
-    expect(tab.querySelector('[aria-hidden="true"]')).toHaveTextContent('99+')
+    expect(badge()).toHaveTextContent('99+')
   })
 
   it('shows no badge for zero open findings, which the Findings page says after its own read', async () => {
     mountApp(`/t/${PATH}`, worldWith(0))
     const tab = await within(await nav()).findByRole('link', { name: 'Findings' })
     await screen.findByRole('heading', { level: 1, name: 'Overview' })
-    expect(tab.querySelector('[data-slot="page-nav-badge"]')).toBeNull()
+    expect(badge()).toBeNull()
     expect(tab).toHaveAccessibleName('Findings')
   })
 
@@ -58,7 +60,7 @@ describe('the Findings tab and its count of open findings', () => {
     mountApp(`/t/${PATH}`, world)
     const tab = await within(await nav()).findByRole('link', { name: 'Findings' })
     await screen.findAllByText(/INTERNAL_ERROR/)
-    expect(tab.querySelector('[data-slot="page-nav-badge"]')).toBeNull()
+    expect(badge()).toBeNull()
     expect(tab).toHaveAccessibleName('Findings')
     expect(document.body.textContent).not.toMatch(/Findings\s*0/)
   })
@@ -70,7 +72,7 @@ describe('the Findings tab and its count of open findings', () => {
     await waitFor(() => expect(tab).toHaveAccessibleName('Findings 4 open findings'))
     world.failures.set(TARGET_READ, { status: 500, code: 'INTERNAL_ERROR' })
     await queryClient.refetchQueries({ queryKey: ['targets', 'detail', PATH] })
-    await waitFor(() => expect(tab.querySelector('[data-slot="page-nav-badge"]')).toBeNull())
+    await waitFor(() => expect(badge()).toBeNull())
     expect(tab).toHaveAccessibleName('Findings')
   })
 
@@ -85,7 +87,7 @@ describe('the Findings tab and its count of open findings', () => {
     )
     mountApp(`/t/${PATH}`, world)
     const tab = await within(await nav()).findByRole('link', { name: 'Findings' })
-    expect(tab.querySelector('[data-slot="page-nav-badge"]')).toBeNull()
+    expect(badge()).toBeNull()
     release()
     await waitFor(() => expect(tab).toHaveAccessibleName('Findings 5 open findings'))
   })
@@ -97,7 +99,7 @@ describe('the Findings tab and its count of open findings', () => {
   })
 })
 
-describe('the count the tab may claim', () => {
+describe('the count the rail may claim', () => {
   const target = (count: number): Target => new World().add(PATH, { openFindingCount: count })
 
   it('is the count only for a read that succeeded, and nothing for a partial one that holds none', () => {
@@ -128,12 +130,12 @@ describe('the count the tab may claim', () => {
     ).toBeUndefined()
   })
 
-  it('puts the badge on the Findings item only, and none when there is no count', () => {
+  it('puts the count on the Findings item only, and none when there is no count', () => {
     const withCount = targetNavItems(TARGET, `/t/${PATH}`, 3)
-    expect(withCount.map((item) => item.badge !== undefined)).toEqual(
+    expect(withCount.map((item) => item.count !== undefined)).toEqual(
       TARGET_NAV.map((item) => item.id === 'findings'),
     )
-    expect(targetNavItems(TARGET, `/t/${PATH}`).every((item) => item.badge === undefined)).toBe(
+    expect(targetNavItems(TARGET, `/t/${PATH}`).every((item) => item.count === undefined)).toBe(
       true,
     )
   })

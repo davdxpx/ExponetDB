@@ -1,19 +1,26 @@
 import { Button } from '@exponetdb/ui'
 import {
+  AgentProposedNote,
   type AnalysisOverallView,
   ApplyVerifyIndicators,
   type ApprovalBinding,
   ApprovalsBlock,
+  applyVerifyChecks,
   ComputedFactsSection,
+  EvidenceStatus,
+  evidenceCheckState,
   type MigrationAnalysisView,
   PlanAnalysisBlock,
   type PlanBinding,
+  PlanChecklist,
+  PlanDetailsList,
   PlanEvidenceBlock,
   PlanFrame,
   type PlanStep,
   PlanStepsBlock,
   PlanSummaryBlock,
   PolicyDecisionBlock,
+  PolicyRuleList,
   type RawPlanFile,
   RawPlanTextBlock,
 } from '@exponetdb/ui-data'
@@ -295,16 +302,135 @@ function ProductionPlanPage(): ReactNode {
   )
 }
 
+/** "Before it can run" of a production migration plan an agent proposed, waiting for its approval. */
+function ReadinessChecklist(): ReactNode {
+  const [apply, verification] = applyVerifyChecks({
+    applyOutcome: 'not_started',
+    verificationOutcome: 'pending',
+    operationState: 'awaiting_approval',
+  })
+  return (
+    <PlanChecklist
+      title="Before it can run"
+      headingLevel={3}
+      checks={[
+        {
+          id: 'policy',
+          state: 'waiting',
+          title: 'Policy',
+          line: 'Allowed once approved.',
+          children: (
+            <PolicyRuleList
+              aria-label="Rules that did not pass"
+              rules={[
+                {
+                  id: 'prod.destructive.requires-approval',
+                  severity: 'require',
+                  result: 'fail',
+                  message: 'A plan that drops an object on production needs an approval.',
+                  overridableByBreakGlass: false,
+                },
+              ]}
+            />
+          ),
+        },
+        {
+          id: 'approvals',
+          state: 'waiting',
+          title: 'Approvals',
+          line: '0 of 1 approval given.',
+          children: (
+            <>
+              <AgentProposedNote />
+              <p className="m-0">You can approve this plan.</p>
+            </>
+          ),
+        },
+        {
+          id: 'evidence',
+          state: evidenceCheckState('present'),
+          title: 'Evidence',
+          line: <EvidenceStatus status="present" />,
+        },
+        {
+          id: 'expiry',
+          state: 'passed',
+          title: 'Expiry',
+          line: 'Accepted for apply before it expired. A plan is used once.',
+        },
+        apply,
+        verification,
+      ]}
+    />
+  )
+}
+
 export const demos: readonly DemoDefinition[] = [
   {
     id: 'ui-data/plan-frame/production-page',
     title:
-      'A production plan: the frame, every block with its production cue, the server facts first and the raw text last',
+      'A production plan in blocks: the frame and one sentence, no block repeats the cue, the server facts first and the raw text last',
     render: () => <ProductionPlanPage />,
   },
   {
+    id: 'ui-data/plan-checklist/waiting',
+    title:
+      '"Before it can run": each check with its state as an icon and words, applied and verified as separate rows',
+    render: () => <ReadinessChecklist />,
+  },
+  {
+    id: 'ui-data/plan-checklist/failed-read',
+    title:
+      'A check whose read failed says so, with a retry; a decision that is not known is not known',
+    render: () => (
+      <PlanChecklist
+        title="Before it can run"
+        headingLevel={3}
+        checks={[
+          {
+            id: 'policy',
+            state: 'unknown',
+            title: 'Policy',
+            line: 'The policy decision is not known.',
+          },
+          { id: 'approvals', state: 'passed', title: 'Approvals', line: 'No approval needed.' },
+          {
+            id: 'operation',
+            state: 'failed',
+            title: 'Apply',
+            line: 'Could not read the operation that applies this plan: The operation store is unavailable. (INTERNAL)',
+            action: (
+              <Button type="button" variant="default" size="tiny">
+                Try again
+              </Button>
+            ),
+          },
+        ]}
+      />
+    ),
+  },
+  {
+    id: 'ui-data/plan-details/node-plan',
+    title:
+      'Technical details of a node plan: only the facts that apply, the full plan hash with a copy button, the tier in words',
+    render: () => (
+      <PlanDetailsList
+        planId={PLAN_ID}
+        planHash={HASH}
+        kind="node.enroll"
+        planClass="high"
+        subject={{ serverId: 'srv_01JABCDEFGHJKMNPQRSTVWXYZ0' }}
+        tier={null}
+        creator={{ kind: 'human', identityId: 'idn_01JABCDEFGHJKMNPQRSTVWXYZ1', via: 'web' }}
+        createdAt={minutesAgo(5)}
+        expiresAt={minutesAhead(10)}
+        now={NOW}
+      />
+    ),
+  },
+  {
     id: 'ui-data/plan-frame/nonproduction',
-    title: 'A non-production plan: no frame and no production cue on any block',
+    title: 'A non-production plan: no frame and no production sentence',
     render: () => (
       <PlanFrame production={false}>
         <Summary production={false} withActions={false} />

@@ -12,10 +12,13 @@ import {
   hostileItem,
   hostilePlan,
   mountChanges,
+  nodeEnrollPlan,
   OP,
   OP2,
   operationFor,
   PLAN,
+  SERVER,
+  serverRecord,
   ZWSP,
 } from './support.tsx'
 
@@ -48,7 +51,8 @@ async function openOperation(world: ChangesWorld, id = OP) {
     if (!(element instanceof HTMLElement)) throw new Error('no operation yet')
     return element
   })
-  return { ...mounted, frame }
+  const header = document.querySelector('[data-slot="page-header"]') as HTMLElement
+  return { ...mounted, frame, header }
 }
 
 const outcomeOf = (frame: HTMLElement) =>
@@ -100,12 +104,35 @@ describe('the operation page', () => {
     })
     const { frame } = await openOperation(world)
     expect(frame).toHaveAttribute('data-tier', 'production')
-    expect(within(frame).getByText(/This plan changes a production target/)).toBeInTheDocument()
+    // Production is said once: the chip beside the title, the frame and one sentence.
+    expect(within(frame).getByText('This operation changes production.')).toBeInTheDocument()
     expect(
       screen
         .getByRole('heading', { level: 1 })
         .parentElement?.querySelector('[data-tier="production"]'),
     ).not.toBeNull()
+    expect(
+      document.querySelectorAll('[data-tier="production"]:not([data-plan-frame])'),
+    ).toHaveLength(1)
+    expect(document.querySelectorAll('[data-production-notice]')).toHaveLength(1)
+    // The title says what happens; the header names the state and who started it.
+    // The count comes from the plan the operation applies, once it is read.
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+        'Apply 1 migration to shop/platform/production',
+      ),
+    )
+    const header = document.querySelector('[data-slot="page-header"]') as HTMLElement
+    expect(header).toHaveTextContent('Started by you via MCP (an AI agent)')
+    expect(within(header).getByRole('link', { name: 'Review the plan' })).toHaveAttribute(
+      'href',
+      `/changes/plans/${PLAN}`,
+    )
+    // The facts are technical details, closed until opened.
+    const details = frame.querySelector(
+      'details[data-operation-block="facts"]',
+    ) as HTMLDetailsElement
+    expect(details.open).toBe(false)
     const planLink = within(frame).getByRole('link', { name: `Review plan ${PLAN}` })
     expect(planLink).toHaveAttribute('href', `/changes/plans/${PLAN}`)
     expect(await within(frame).findByText(HASH)).toBeInTheDocument()
@@ -124,6 +151,64 @@ describe('the operation page', () => {
     expect(frame.querySelector('[data-state="verifying"]')?.textContent).toBe('Verifying')
   })
 
+  it('titles a node operation by the server its plan names, and says why it is production', async () => {
+    const world = new ChangesWorld()
+    world.plans.set(PLAN, nodeEnrollPlan({ state: 'consumed', operationId: OP }))
+    world.servers.set(SERVER, serverRecord('tour host'))
+    world.operations.set(
+      OP,
+      operationFor(OP, {
+        kind: 'node.enroll',
+        state: 'queued',
+        actor: { identityId: 'idn_01M4S9000000000000000000AZ', kind: 'human', via: 'web' },
+        subject: { targetId: null, targetPath: null, clusterId: null, nodeId: null, tier: null },
+      }),
+    )
+    const { frame, header } = await openOperation(world)
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Enroll a node on server tour host' }),
+    ).toBeInTheDocument()
+    expect(header).toHaveTextContent('Started by a person via Web App')
+    expect(header.textContent).not.toContain('idn_01M4S9000000000000000000AZ')
+    expect(
+      within(frame).getByText('This operation has no target tier; it is treated as production.'),
+    ).toBeInTheDocument()
+    expect(
+      document.querySelectorAll('[data-tier="production"]:not([data-plan-frame])'),
+    ).toHaveLength(1)
+    // Cancel is an action of the header while the operation has not started.
+    expect(within(header).getByRole('button', { name: 'Cancel operation' })).toBeInTheDocument()
+  })
+
+  it('titles an operation read without a path by its plan’s path for the same target only', async () => {
+    const world = worldWith({
+      state: 'succeeded',
+      applyOutcome: 'applied',
+      verificationOutcome: 'passed',
+      subject: { ...operationFor(OP).subject, targetPath: null },
+    })
+    await openOperation(world)
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+        'Apply 1 migration to shop/platform/production',
+      ),
+    )
+    cleanup()
+    const other = worldWith({
+      subject: {
+        ...operationFor(OP).subject,
+        targetId: 'tgt_01M4S9000000000000000000AE',
+        targetPath: null,
+      },
+    })
+    await openOperation(other)
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+        'Apply 1 migration to tgt_01M4S9000000000000000000AE',
+      ),
+    )
+  })
+
   it('shows a non-production operation without the production frame', async () => {
     const world = worldWith({
       state: 'succeeded',
@@ -137,7 +222,8 @@ describe('the operation page', () => {
     })
     const { frame } = await openOperation(world)
     expect(frame).toHaveAttribute('data-tier', 'nonprod')
-    expect(within(frame).queryByText(/This plan changes a production target/)).toBeNull()
+    expect(within(frame).queryByText('This operation changes production.')).toBeNull()
+    expect(document.querySelector('[data-tier="production"]')).toBeNull()
     expect(within(frame).getByRole('link', { name: /shop/ })).toHaveAttribute(
       'href',
       '/t/shop/platform/staging',
@@ -186,9 +272,11 @@ describe('the operation page', () => {
       retryable: true,
       errorCode: 'VERIFICATION_ERROR',
     })
-    const { frame } = await openOperation(world)
+    const { frame, header } = await openOperation(world)
     await within(frame).findByText(HASH)
-    await user.click(within(frame).getByRole('button', { name: 'Verify again' }))
+    // Verify again is an action of the page header, not of the frame.
+    expect(within(frame).queryByRole('button', { name: 'Verify again' })).toBeNull()
+    await user.click(within(header).getByRole('button', { name: 'Verify again' }))
     const dialog = await screen.findByRole('alertdialog', { name: 'Verify this change again?' })
     // The plan confirmation: target, class and the full plan hash of the plan.
     expect(within(dialog).getByText(HASH)).toBeInTheDocument()
@@ -222,8 +310,8 @@ describe('the operation page', () => {
         tier: 'nonprod',
       },
     })
-    const { frame } = await openOperation(world)
-    await user.click(within(frame).getByRole('button', { name: 'Verify again' }))
+    const { header } = await openOperation(world)
+    await user.click(within(header).getByRole('button', { name: 'Verify again' }))
     const dialog = await screen.findByRole('alertdialog', { name: 'Verify this change again?' })
     await user.dblClick(within(dialog).getByRole('button', { name: 'Verify change again' }))
     await waitFor(() => expect(world.posts(`/operations/${OP}/retry-verification`)).toHaveLength(1))
@@ -258,9 +346,12 @@ describe('the operation page', () => {
   it('cancels an operation that has not started, through a confirmation', async () => {
     const user = userEvent.setup()
     const world = worldWith({ state: 'queued' })
-    const { frame } = await openOperation(world)
-    await user.click(within(frame).getByRole('button', { name: 'Cancel operation' }))
+    const { header } = await openOperation(world)
+    await user.click(within(header).getByRole('button', { name: 'Cancel operation' }))
     const dialog = await screen.findByRole('alertdialog', { name: 'Cancel this operation?' })
+    expect(dialog).toHaveTextContent(
+      'Only the person or client that applied the plan can cancel it.',
+    )
     expect(world.posts('/cancel')).toHaveLength(0)
     await user.click(within(dialog).getByRole('button', { name: 'Cancel operation' }))
     await waitFor(() => expect(world.posts(`/operations/${OP}/cancel`)).toHaveLength(1))
@@ -275,8 +366,8 @@ describe('the operation page', () => {
       code: 'PLAN_BINDING_ACTOR',
       message: 'Only the identity and client that created the plan may use it.',
     })
-    const { frame } = await openOperation(world)
-    await user.click(within(frame).getByRole('button', { name: 'Cancel operation' }))
+    const { header } = await openOperation(world)
+    await user.click(within(header).getByRole('button', { name: 'Cancel operation' }))
     const dialog = await screen.findByRole('alertdialog', { name: 'Cancel this operation?' })
     await user.click(within(dialog).getByRole('button', { name: 'Cancel operation' }))
     expect(
@@ -286,8 +377,8 @@ describe('the operation page', () => {
   })
 
   it('offers no cancel once the operation runs', async () => {
-    const { frame } = await openOperation(worldWith({ state: 'running' }))
-    expect(within(frame).queryByRole('button', { name: 'Cancel operation' })).toBeNull()
+    await openOperation(worldWith({ state: 'running' }))
+    expect(screen.queryByRole('button', { name: 'Cancel operation' })).toBeNull()
   })
 
   it('names an unknown error code as unknown, never as text it is not', async () => {
@@ -304,8 +395,8 @@ describe('the operation page', () => {
       verificationOutcome: 'error',
       retryable: true,
     })
-    const { frame, queryClient } = await openOperation(world)
-    expect(within(frame).getByRole('button', { name: 'Verify again' })).toBeInTheDocument()
+    const { header, queryClient } = await openOperation(world)
+    expect(within(header).getByRole('button', { name: 'Verify again' })).toBeInTheDocument()
     world.failures.set(`GET /api/v1/operations/${OP}`, {
       status: 503,
       code: 'UNAVAILABLE',
@@ -403,7 +494,11 @@ describe('the operation page', () => {
       }),
     )
     act(() => focusManager.setFocused(true))
-    await screen.findByText('Succeeded')
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-slot="page-header"] [data-state="succeeded"]'),
+      ).not.toBeNull(),
+    )
     await new Promise((resolve) => setTimeout(resolve, 60))
     const terminal = reads()
     await new Promise((resolve) => setTimeout(resolve, 300))

@@ -1,4 +1,4 @@
-import type { AccessRole } from '@exponetdb/contracts'
+import { type AccessRole, SERVER_PROVIDERS, type ServerProvider } from '@exponetdb/contracts'
 import type { Row } from '@exponetdb/control-store'
 import { InvariantError } from '@exponetdb/kernel'
 
@@ -124,8 +124,8 @@ export function projectFrom(row: Row): ProjectRecord {
   }
 }
 
-export const PROVIDERS = ['hetzner_cloud', 'hetzner_robot', 'other', 'unknown'] as const
-export type Provider = (typeof PROVIDERS)[number]
+/** The providers of the contract; the Control Store's CHECK on `registry.servers.provider` allows the same. */
+export type Provider = ServerProvider
 
 export interface ServerRecord {
   readonly serverId: string
@@ -139,7 +139,7 @@ export function serverFrom(row: Row): ServerRecord {
   return {
     serverId: row.text('server_id'),
     displayName: row.text('display_name'),
-    provider: oneOf(PROVIDERS, row.text('provider')),
+    provider: oneOf(SERVER_PROVIDERS, row.text('provider')),
     location: row.textOrNull('location'),
     derivedTier: tierOf(row.textOrNull('derived_tier')),
   }

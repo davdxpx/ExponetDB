@@ -1,4 +1,3 @@
-import { cn } from '@exponetdb/ui'
 import { isProductionTier, readableValue } from '@exponetdb/ui-patterns'
 import { Outlet } from '@tanstack/react-router'
 import { type ReactNode, useEffect, useMemo } from 'react'
@@ -10,7 +9,6 @@ import { useTarget } from './queries.ts'
 import { rememberTarget } from './recent-storage.ts'
 import { TargetScopeProvider } from './scope.tsx'
 import { TargetSectionCommands } from './section-commands.tsx'
-import { TargetNav } from './target-nav.tsx'
 
 /**
  * The layout of every page below `/t/<product>/<project>/<environment>`
@@ -22,17 +20,17 @@ import { TargetNav } from './target-nav.tsx'
  * - the target is read once (`useTarget`); a `NOT_FOUND` answer renders the
  *   same "page not found", whether the target does not exist or is not
  *   visible to the person;
- * - the target sections as a navigation (the Findings tab carries the count of
- *   open findings when the target read succeeded), the commands "Switch
- *   environment" and the commands that open a section of this target, and
- *   the page in an outlet keyed by the target's id, so switching environment
- *   remounts everything the page keeps for its target (tabs, filters,
- *   drafts);
+ * - the commands "Switch environment" and the commands that open a section
+ *   of this target (the sections themselves are the shell's rail at the
+ *   target's level, as Studio lists a project's products), and the page in an
+ *   outlet keyed by the target's id, so switching environment remounts
+ *   everything the page keeps for its target (tabs, filters, drafts);
  * - a target that was read is remembered as one of the person's recent
  *   databases (five at most, in this browser, under the person's id);
- * - on a production target the root carries `data-tier="production"` and the
- *   outlet a production frame (the reserved `production` token); the chip with
- *   the word "Production" is in the header and in each page title.
+ * - on a production target the root carries `data-tier="production"`; the
+ *   chip with the word "Production" is in the header's path and in each page
+ *   title (a frame around the whole page is for plans only, design-system.md
+ *   §4).
  *
  * Pages read the target from `useTargetScope()` and gate their content with
  * `ContentWrapper`; the layout itself renders the loading and failed states
@@ -77,13 +75,7 @@ function ValidTargetLayout({ target }: { readonly target: TargetRoute }): ReactN
       >
         <EnvironmentCommands target={target} />
         <TargetSectionCommands target={target} />
-        <TargetNav target={target} />
-        <div
-          key={outletKey}
-          data-slot="target-outlet"
-          data-production-frame={production ? '' : undefined}
-          className={cn('min-w-0 flex-1', production && 'border-2 border-production')}
-        >
+        <div key={outletKey} data-slot="target-outlet" className="min-w-0 flex-1">
           <Outlet />
         </div>
       </div>

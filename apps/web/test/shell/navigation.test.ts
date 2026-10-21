@@ -71,8 +71,8 @@ describe('the navigation model', () => {
     expect(GLOBAL_NAV.filter((i) => i.wave === '9').map((i) => i.id)).toEqual(['backups'])
     expect(TARGET_NAV.filter((i) => i.wave === '9').map((i) => i.id)).toEqual([
       'performance',
-      'backups',
       'advisors',
+      'backups',
     ])
     expect(GLOBAL_NAV.find((i) => i.id === 'notifications')?.requires).toEqual(['od21'])
   })

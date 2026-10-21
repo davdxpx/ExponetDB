@@ -3,6 +3,7 @@ import { Badge, Button, Input, Label } from '@exponetdb/ui'
 import { Admonition, TierChip, UntrustedName } from '@exponetdb/ui-patterns'
 import { type FormEvent, type ReactNode, useId, useState } from 'react'
 import { describeError, t } from '../../lib/i18n/i18n.ts'
+import { withNodes } from '../../lib/i18n/with-nodes.tsx'
 import {
   allowBlocker,
   type ConsentChoice,
@@ -17,7 +18,7 @@ import {
   toDecision,
   withTier,
 } from './consent-model.ts'
-import { ChoiceRow, SectionHeading, withNodes } from './consent-parts.tsx'
+import { ChoiceRow, SectionHeading } from './consent-parts.tsx'
 import { inlineName } from './inline-name.ts'
 
 /**
