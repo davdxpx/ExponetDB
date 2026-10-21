@@ -8,7 +8,7 @@ import { t } from '../../lib/i18n/i18n.ts'
 import { TotpSetupPanel } from '../enrollment/totp-setup.tsx'
 import type { Feedback } from '../sign-in/feedback.tsx'
 import { type Factor, hasTotp, recoveryCodesLeft } from './account-model.ts'
-import { SectionHeading } from './section.tsx'
+import { AccountCard, AccountSection, CardRow } from './section.tsx'
 import type { AccountWriter } from './writer.ts'
 
 /**
@@ -31,7 +31,6 @@ export function FactorsSection({
   readonly onCodes: (codes: readonly string[]) => void
 }): ReactNode {
   const { client } = useApi()
-  const headingId = useId()
   const ids = { password: useId(), confirm: useId() }
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -82,92 +81,97 @@ export function FactorsSection({
     })
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-4">
-      <SectionHeading id={headingId}>{t('account.factors')}</SectionHeading>
-      <form
-        id="change-password"
-        className="flex flex-col gap-3 sm:max-w-md"
-        onSubmit={changePassword}
-      >
-        <div className="flex flex-col gap-2">
-          <Label htmlFor={ids.password}>{t('enrollment.password.new')}</Label>
-          <Input
-            id={ids.password}
-            name="password"
-            type="password"
-            autoComplete="new-password"
-            minLength={14}
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor={ids.confirm}>{t('enrollment.password.repeat')}</Label>
-          <Input
-            id={ids.confirm}
-            name="confirm"
-            type="password"
-            autoComplete="new-password"
-            minLength={14}
-            required
-            value={confirm}
-            onChange={(event) => setConfirm(event.target.value)}
-          />
-        </div>
-        <div>
-          <Button
-            type="submit"
-            variant="default"
-            size="small"
-            loading={writer.busy === 'password'}
-            disabled={locked && writer.busy !== 'password'}
+    <AccountSection title={t('account.factors')}>
+      <AccountCard>
+        <CardRow label={t('account.factors.password')}>
+          <form
+            id="change-password"
+            className="flex flex-col gap-3 sm:max-w-md"
+            onSubmit={changePassword}
           >
-            {t('account.password.change')}
-          </Button>
-        </div>
-      </form>
-      <div className="flex flex-col gap-3">
-        <div>
-          <Button
-            id="replace-totp"
-            type="button"
-            variant="default"
-            size="small"
-            loading={writer.busy === 'totp'}
-            disabled={locked && writer.busy !== 'totp'}
-            onClick={startTotp}
-          >
-            {replacing ? t('account.totp.replace') : t('account.totp.setup')}
-          </Button>
-        </div>
-        {totp === undefined ? null : (
-          <TotpSetupPanel
-            setup={totp}
-            busy={writer.busy === 'totp-confirm'}
-            disabled={locked}
-            onConfirm={confirmTotp}
-          />
-        )}
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          id="regenerate-codes"
-          type="button"
-          variant="default"
-          size="small"
-          loading={writer.busy === 'codes'}
-          disabled={locked && writer.busy !== 'codes'}
-          onClick={regenerate}
-        >
-          {t('account.codes.regenerate')}
-        </Button>
-        {left === undefined ? null : (
-          <span className="text-xs text-foreground-lighter">
-            {t('account.codes.remaining', { count: left })}
-          </span>
-        )}
-      </div>
-    </section>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={ids.password}>{t('enrollment.password.new')}</Label>
+              <Input
+                id={ids.password}
+                name="password"
+                type="password"
+                autoComplete="new-password"
+                minLength={14}
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={ids.confirm}>{t('enrollment.password.repeat')}</Label>
+              <Input
+                id={ids.confirm}
+                name="confirm"
+                type="password"
+                autoComplete="new-password"
+                minLength={14}
+                required
+                value={confirm}
+                onChange={(event) => setConfirm(event.target.value)}
+              />
+            </div>
+            <div>
+              <Button
+                type="submit"
+                variant="default"
+                size="small"
+                loading={writer.busy === 'password'}
+                disabled={locked && writer.busy !== 'password'}
+              >
+                {t('account.password.change')}
+              </Button>
+            </div>
+          </form>
+        </CardRow>
+        <CardRow label={t('account.factors.totp')}>
+          <div>
+            <Button
+              id="replace-totp"
+              type="button"
+              variant="default"
+              size="small"
+              loading={writer.busy === 'totp'}
+              disabled={locked && writer.busy !== 'totp'}
+              onClick={startTotp}
+            >
+              {replacing ? t('account.totp.replace') : t('account.totp.setup')}
+            </Button>
+          </div>
+          {totp === undefined ? null : (
+            <TotpSetupPanel
+              setup={totp}
+              busy={writer.busy === 'totp-confirm'}
+              disabled={locked}
+              onConfirm={confirmTotp}
+            />
+          )}
+        </CardRow>
+        <CardRow label={t('account.factors.codes')}>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              id="regenerate-codes"
+              type="button"
+              variant="default"
+              size="small"
+              loading={writer.busy === 'codes'}
+              disabled={locked && writer.busy !== 'codes'}
+              onClick={regenerate}
+            >
+              {t('account.codes.regenerate')}
+            </Button>
+            {left === undefined ? null : (
+              <span className="text-xs text-foreground-lighter">
+                {t('account.codes.remaining', { count: left })}
+              </span>
+            )}
+          </div>
+        </CardRow>
+      </AccountCard>
+    </AccountSection>
   )
 }

@@ -1,5 +1,5 @@
 import type { CreationOptions } from '@exponetdb/contracts'
-import { Button, Input, Label } from '@exponetdb/ui'
+import { Button, Input } from '@exponetdb/ui'
 import { type Readable, ReadableView, UntrustedName } from '@exponetdb/ui-patterns'
 import { type ReactNode, useId, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
@@ -7,7 +7,7 @@ import { createPasskey } from '../../lib/auth/webauthn.ts'
 import { t } from '../../lib/i18n/i18n.ts'
 import { TimeText } from '../sign-in/time-text.tsx'
 import { type Factor, type Passkey, passkeysOf, removePasskeyPath } from './account-model.ts'
-import { SectionHeading } from './section.tsx'
+import { AccountCard, AccountSection, CardRow } from './section.tsx'
 import type { AccountWriter } from './writer.ts'
 
 /**
@@ -27,7 +27,6 @@ export function PasskeysSection({
   readonly onRetry: () => void
 }): ReactNode {
   const { client } = useApi()
-  const headingId = useId()
   const labelId = useId()
   const [label, setLabel] = useState(() => t('account.passkey.newDefault'))
   const locked = writer.busy !== undefined
@@ -56,8 +55,7 @@ export function PasskeysSection({
   }
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3">
-      <SectionHeading id={headingId}>{t('account.passkeys')}</SectionHeading>
+    <AccountSection title={t('account.passkeys')}>
       <ReadableView
         readable={factors}
         what={t('account.passkeys.what')}
@@ -71,7 +69,7 @@ export function PasskeysSection({
         ready={(value) => (
           <ul
             id="passkey-list"
-            className="flex flex-col divide-y divide-border rounded-lg border border-default"
+            className="flex flex-col divide-y divide-border overflow-hidden rounded-lg border border-default bg-surface-100 shadow-xs"
           >
             {passkeysOf(value.items).map((passkey) => (
               <PasskeyRow
@@ -85,31 +83,33 @@ export function PasskeysSection({
           </ul>
         )}
       />
-      <div className="flex flex-col gap-2 sm:max-w-md">
-        <Label htmlFor={labelId}>{t('account.passkey.newLabel')}</Label>
-        <Input
-          id={labelId}
-          name="label"
-          maxLength={64}
-          autoComplete="off"
-          value={label}
-          onChange={(event) => setLabel(event.target.value)}
-        />
-      </div>
-      <div>
-        <Button
-          id="add-passkey"
-          type="button"
-          variant="primary"
-          size="small"
-          loading={writer.busy === 'add-passkey'}
-          disabled={locked && writer.busy !== 'add-passkey'}
-          onClick={add}
-        >
-          {t('account.passkey.add')}
-        </Button>
-      </div>
-    </section>
+      <AccountCard
+        footer={
+          <Button
+            id="add-passkey"
+            type="button"
+            variant="primary"
+            size="small"
+            loading={writer.busy === 'add-passkey'}
+            disabled={locked && writer.busy !== 'add-passkey'}
+            onClick={add}
+          >
+            {t('account.passkey.add')}
+          </Button>
+        }
+      >
+        <CardRow label={t('account.passkey.newLabel')} htmlFor={labelId}>
+          <Input
+            id={labelId}
+            name="label"
+            maxLength={64}
+            autoComplete="off"
+            value={label}
+            onChange={(event) => setLabel(event.target.value)}
+          />
+        </CardRow>
+      </AccountCard>
+    </AccountSection>
   )
 }
 

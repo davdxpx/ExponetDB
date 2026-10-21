@@ -1,11 +1,11 @@
 import { Badge, Button } from '@exponetdb/ui'
 import { type Readable, ReadableView, UntrustedName } from '@exponetdb/ui-patterns'
-import { type ReactNode, useId } from 'react'
+import type { ReactNode } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { t } from '../../lib/i18n/i18n.ts'
 import { TimeText } from '../sign-in/time-text.tsx'
 import type { WebSession } from './account-model.ts'
-import { SectionHeading } from './section.tsx'
+import { AccountSection } from './section.tsx'
 import type { AccountWriter } from './writer.ts'
 
 /**
@@ -27,7 +27,6 @@ export function SessionsSection({
   readonly onRetry: () => void
 }): ReactNode {
   const { client } = useApi()
-  const headingId = useId()
   const locked = writer.busy !== undefined
 
   const signOut = (session: WebSession): void =>
@@ -45,8 +44,7 @@ export function SessionsSection({
     })
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3">
-      <SectionHeading id={headingId}>{t('account.sessions')}</SectionHeading>
+    <AccountSection title={t('account.sessions')}>
       <ReadableView
         readable={sessions}
         what={t('account.sessions.what')}
@@ -56,7 +54,7 @@ export function SessionsSection({
         ready={(value) => (
           <ul
             id="session-list"
-            className="flex flex-col divide-y divide-border rounded-lg border border-default"
+            className="flex flex-col divide-y divide-border overflow-hidden rounded-lg border border-default bg-surface-100 shadow-xs"
           >
             {value.items.map((session) => (
               <li
@@ -109,6 +107,6 @@ export function SessionsSection({
           </Button>
         </div>
       )}
-    </section>
+    </AccountSection>
   )
 }

@@ -173,6 +173,13 @@ activity (`/account/activity`: `GET /audit-events?actor=self`, which needs
 every path of the area and no tab navigation. The five paths are exact
 `returnTo` targets.
 
+**[DECIDED]** (owner, 2026-10-21) The account pages are laid out as Studio's:
+the pages are listed in the account's column (§2), not as tabs on the page;
+each section is a title above a card, each setting a row of the card with its
+name (and a line about it) on the left and its value or control on the right,
+stacked on a phone; the actions that save a card are in its footer on the
+right. Lists (passkeys, sessions, applications, activity) are cards of rows.
+
 **[PLANNED]** `/approvals#operation=op_…` redirects to the plan review page
 `/changes/plans/<id>` (§5).
 

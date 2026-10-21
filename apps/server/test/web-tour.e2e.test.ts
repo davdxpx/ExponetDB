@@ -142,6 +142,8 @@ describe('a tour of the Web App', () => {
       ['servers', '/infrastructure/servers'],
       ['people', '/access/people'],
       ['account', '/account'],
+      ['account-preferences', '/account/preferences'],
+      ['account-security', '/account/security'],
     ]
     for (const [size, viewport] of [
       ['desktop', DESKTOP],

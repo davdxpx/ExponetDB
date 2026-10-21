@@ -107,6 +107,9 @@ export const accountMessages = {
   'account.passkey.add': 'Add a passkey',
   'account.passkey.addedStatus': 'Passkey added.',
   'account.factors': 'Password, authenticator app and recovery codes',
+  'account.factors.password': 'Password',
+  'account.factors.totp': 'Authenticator app',
+  'account.factors.codes': 'Recovery codes',
   'account.password.change': 'Change password',
   'account.password.changed': 'Password changed.',
   'account.totp.replace': 'Replace authenticator app',
@@ -179,6 +182,7 @@ export const accountMessages = {
   'profile.picture.removed': 'Profile picture removed.',
   'profile.picture.none': 'You have no profile picture. Your initials are shown.',
   'profile.picture.current': 'Your profile picture',
+  'profile.picture.shown': 'Shown now',
   'profile.picture.reason.unsupported_format':
     'This file is not a PNG, JPEG or WebP image. SVG and GIF files are not accepted.',
   'profile.picture.reason.type_mismatch':
@@ -194,6 +198,7 @@ export const accountMessages = {
   'profile.picture.reason.unknown': 'The server did not accept this picture. Choose another file.',
 
   'preferences.note': 'These choices are kept in this browser only.',
+  'preferences.appearance': 'Appearance',
   'preferences.theme': 'Theme',
   'preferences.sidebar': 'Sidebar',
   'preferences.shortcuts': 'Keyboard shortcuts',
