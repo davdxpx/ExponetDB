@@ -540,6 +540,45 @@ export const migrationBaselineProduction: Rule = {
   },
 }
 
+/** The execution role facts a legacy replay plan binds (`content.executionRoleCheck`). */
+function replayRoleCheck(
+  content: JsonValue | undefined,
+): { readonly role: string; readonly problem: string | null } | undefined {
+  const check = isJsonObject(content) ? content['executionRoleCheck'] : undefined
+  if (!isJsonObject(check) || typeof check['role'] !== 'string') return undefined
+  const problem = check['problem']
+  if (problem !== null && typeof problem !== 'string') return undefined
+  return { role: check['role'], problem }
+}
+
+export const migrationImportExecutionRole: Rule = {
+  id: 'migration.import-execution-role',
+  version: 1,
+  description:
+    'A legacy replay runs as an execution role the migrator may SET ROLE into, checked like an apply (Wave 9 order A3); no override.',
+  appliesTo: ['migration.import.replay'],
+  severity: 'deny',
+  overridableByBreakGlass: false,
+  facts: [],
+  defaults: {},
+  requirements: () => [],
+  evaluate({ request }) {
+    const check = replayRoleCheck(request.content)
+    if (check === undefined) {
+      return { result: 'unknown', message: 'The plan carries no execution role check.' }
+    }
+    return check.problem === null || check.problem === 'declared_exception'
+      ? { result: 'pass', message: 'The execution role is usable on the scratch target.' }
+      : {
+          result: 'fail',
+          message: `The execution role is not usable on the scratch target: ${check.problem}.`,
+          facts: { role: check.role, problem: check.problem },
+          remediation:
+            'Map the alias to a NOLOGIN owner without privileged attributes and grant it to exponetdb_migrator WITH INHERIT FALSE, SET TRUE.',
+        }
+  },
+}
+
 export const MIGRATION_RULES: readonly Rule[] = [
   migrationLintErrors,
   migrationPgVersion,
@@ -558,4 +597,5 @@ export const MIGRATION_RULES: readonly Rule[] = [
   migrationVerifyConsumerCode,
   migrationRollbackProduction,
   migrationBaselineProduction,
+  migrationImportExecutionRole,
 ]

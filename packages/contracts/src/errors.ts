@@ -613,6 +613,20 @@ export const ERRORS = {
         .max(1000),
     }),
   },
+  LEGACY_IMPORT_TRUNCATED: {
+    group: 'migrations',
+    status: 409,
+    retryable: false,
+    title: 'Legacy import report incomplete',
+    message:
+      'The import report holds fewer global drift items than exist, so it cannot become a baseline.',
+    remediation:
+      'Narrow the managed schema scope or correct the import inputs so that the drift fits the report, then analyze again.',
+    details: z.strictObject({
+      driftTotal: z.int().min(0),
+      held: z.int().min(0),
+    }),
+  },
   // ----- Evidence and policy -----
   STAGING_EVIDENCE_MISSING: {
     group: 'evidence_and_policy',

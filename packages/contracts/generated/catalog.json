@@ -8779,6 +8779,39 @@
       "type": "https://db.exponet.cloud/errors/legacy-import-ambiguous"
     },
     {
+      "code": "LEGACY_IMPORT_TRUNCATED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/LEGACY_IMPORT_TRUNCATED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "driftTotal": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "held": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "driftTotal",
+          "held"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "The import report holds fewer global drift items than exist, so it cannot become a baseline.",
+      "remediation": "Narrow the managed schema scope or correct the import inputs so that the drift fits the report, then analyze again.",
+      "retryable": false,
+      "status": 409,
+      "title": "Legacy import report incomplete",
+      "type": "https://db.exponet.cloud/errors/legacy-import-truncated"
+    },
+    {
       "code": "STAGING_EVIDENCE_MISSING",
       "details": null,
       "group": "evidence_and_policy",

@@ -714,6 +714,14 @@ export const ImportReportSchema = z
       }),
     ),
     unresolved: z.int().min(0),
+    driftTotal: z.int().min(0).nullable().optional().meta({
+      description:
+        'How many global drift entries the analysis found (null until it ran); the report holds at most 500 of them (Wave 9).',
+    }),
+    driftTruncated: z.boolean().optional().meta({
+      description:
+        'The report holds fewer drift items than driftTotal: it is never baselined (LEGACY_IMPORT_TRUNCATED); narrow the scope or fix the inputs and analyze again (Wave 9).',
+    }),
   })
   .meta({ id: 'ImportReport' })
 

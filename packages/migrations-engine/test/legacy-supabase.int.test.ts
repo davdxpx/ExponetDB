@@ -123,7 +123,7 @@ async function registerTarget(envSlug: string, extra: readonly string[]): Promis
     ...extra,
   ])
   if (envSlug === 'scratch') scratchDb = name
-  else importedDb = name
+  else if (envSlug === 'staging') importedDb = name
   const databaseId = await registerDatabase(h, a, clusterId, name)
   const r = await run(h, a, (tx) =>
     planTargetRegister(tx, h.context, a, {
@@ -224,6 +224,44 @@ describe('legacy import of a real-shape Supabase history', () => {
     await expect(analysis({ x: ['0103_notes', '0103_notes'] })).rejects.toMatchObject({
       code: 'VALIDATION_FAILED',
     })
+  })
+
+  it('denies a replay plan whose execution role is not usable on the scratch target', async () => {
+    await runAsSuperuser(pg17, 'postgres', [`ALTER ROLE ${OWNER} BYPASSRLS`])
+    try {
+      const p = await analysis()
+      expect(p.decision).toBe('deny')
+      const rule = (
+        p.body['policy'] as { rules: { id: string; result: string; facts: unknown }[] }
+      ).rules.find((r) => r.id === 'migration.import-execution-role')
+      expect(rule).toMatchObject({
+        result: 'fail',
+        facts: { role: OWNER, problem: 'privileged_attribute' },
+      })
+    } finally {
+      await runAsSuperuser(pg17, 'postgres', [`ALTER ROLE ${OWNER} NOBYPASSRLS`])
+    }
+  })
+
+  it('checks the execution role again under the scratch target lock: a role changed after planning stops the replay', async () => {
+    const p = await analysis()
+    expect(p.decision).toBe('allow')
+    await runAsSuperuser(pg17, 'postgres', [`ALTER ROLE ${OWNER} BYPASSRLS`])
+    try {
+      const op = await apply(p)
+      expect(op).toMatchObject({ state: 'failed', applyOutcome: 'not_applied' })
+      expect((await operationError(h, op.operationId)).code).toBe('PLAN_STALE')
+      const { rows } = await h.worker.query(
+        'test.supabase.role',
+        'SELECT state, incomplete_reason FROM migrations.import_reports WHERE report_id = $1',
+        [reportOf(p)],
+      )
+      expect(rows.map((r) => [r.text('state'), r.textOrNull('incomplete_reason')])).toEqual([
+        ['incomplete', 'execution_role:privileged_attribute'],
+      ])
+    } finally {
+      await runAsSuperuser(pg17, 'postgres', [`ALTER ROLE ${OWNER} NOBYPASSRLS`])
+    }
   })
 
   it('refuses to replay when the scratch target lacks an extension of the imported target', async () => {
@@ -350,5 +388,51 @@ describe('legacy import of a real-shape Supabase history', () => {
       appliedAt: '2026-01-04T09:00:00.000Z',
     })
     expect(sources.get('legacy:0107_settings')).toMatchObject({ appliedAtUnknown: true })
+  })
+
+  it('never cuts drift silently: a report with more drift than it holds is flagged and never baselined', async () => {
+    const big = await registerTarget('big', [
+      `SET ROLE ${OWNER}`,
+      `DO $$ BEGIN FOR i IN 1..505 LOOP EXECUTE format('CREATE TABLE public.acme_hand_%s (id int)', i); END LOOP; END $$`,
+      'RESET ROLE',
+    ])
+    const fresh = await registerTarget('scratch-big', [])
+    const p = await h.serve.transaction('test.supabase.big', (tx) =>
+      planImportAnalysis(tx, ctx, a, big.targetId, {
+        scratchTarget: fresh.targetId,
+        baseline: BASELINE,
+        files: [{ name: '0001_unrelated.sql', text: 'CREATE TABLE public.acme_one (id int);\n' }],
+      }),
+    )
+    const op = await apply(p)
+    expect(op).toMatchObject({ state: 'succeeded', applyOutcome: 'applied' })
+    const r = await h.worker.transaction('test.supabase.big.report', (tx) =>
+      importReportView(tx, big.targetId, reportOf(p)),
+    )
+    expect(r.driftTruncated).toBe(true)
+    // 505 tables only in the target and one only in the replay, each with its column:
+    // every catalog entry is one drift entry.
+    expect(r.driftTotal).toBe(1012)
+    expect(r.items.filter((i) => i.legacyId.startsWith('drift:'))).toHaveLength(500)
+    for (const i of r.items.filter((x) => x.decision === null && x.state === 'ambiguous')) {
+      await h.serve.transaction('test.supabase.big.decide', (tx) =>
+        decideImportItem(tx, {
+          targetId: big.targetId,
+          reportId: r.id,
+          itemId: Number(i.itemId),
+          state: 'unrecorded_present',
+          note: 'accepted in the test',
+          identityId: a.identityId,
+        }),
+      )
+    }
+    await expect(
+      h.serve.transaction('test.supabase.big.baseline', (tx) =>
+        planBaseline(tx, ctx, a, big.targetId, r.id),
+      ),
+    ).rejects.toMatchObject({
+      code: 'LEGACY_IMPORT_TRUNCATED',
+      details: { driftTotal: 1012, held: 500 },
+    })
   })
 })

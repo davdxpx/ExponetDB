@@ -61,6 +61,14 @@ const REPORT_STATE_LABELS: Readonly<Record<ImportReport['state'], MessageKey>> =
   superseded: 'migrations.import.report.superseded',
 }
 
+const STRENGTH_LABELS: Readonly<Record<NonNullable<Item['evidenceStrength']>, MessageKey>> = {
+  strong: 'migrations.import.strength.strong',
+  medium: 'migrations.import.strength.medium',
+  low: 'migrations.import.strength.low',
+  curated: 'migrations.import.strength.curated',
+  weak: 'migrations.import.strength.weak',
+}
+
 function stateLabel(state: string): string | undefined {
   return Object.hasOwn(STATE_LABELS, state) ? t(STATE_LABELS[state as Item['state']]) : undefined
 }
@@ -200,6 +208,14 @@ function ReportBody({
           />
         </Admonition>
       )}
+      {report.driftTruncated === true ? (
+        <Admonition type="warning" title={t('migrations.import.truncated.title')}>
+          {t('migrations.import.truncated.body', {
+            held: report.items.filter((i) => i.legacyId.startsWith('drift:')).length,
+            total: report.driftTotal ?? 0,
+          })}
+        </Admonition>
+      ) : null}
       {report.items.length === 0 ? (
         <p className="m-0 text-sm text-foreground-light">{t('migrations.import.noItems')}</p>
       ) : (
@@ -248,6 +264,14 @@ function ItemsTable({
               <StateText state={item.state} />
             </TableCell>
             <TableCell className="text-xs">
+              {item.evidenceStrength === undefined ||
+              item.evidenceStrength === null ||
+              !Object.hasOwn(STRENGTH_LABELS, item.evidenceStrength) ? null : (
+                <div className="mb-1 text-foreground">
+                  {t('migrations.import.strength')}{' '}
+                  <strong>{t(STRENGTH_LABELS[item.evidenceStrength])}</strong>
+                </div>
+              )}
               {item.evidence === undefined || item.evidence.length === 0 ? (
                 <span className="text-foreground-light">{t('migrations.import.noEvidence')}</span>
               ) : (

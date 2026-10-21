@@ -311,6 +311,46 @@ describe('the legacy import review', () => {
     expect(import_.textContent).not.toContain(BIDI)
   })
 
+  it('shows the strength of the ledger evidence and says when the report does not hold all of its drift', async () => {
+    const w = world()
+    const items = report().items
+    w.on(
+      'GET',
+      REPORT,
+      report({
+        driftTotal: 812,
+        driftTruncated: true,
+        items: [
+          { ...items[0], evidenceStrength: 'medium' },
+          { ...items[1], evidenceStrength: 'weak' },
+          {
+            itemId: '3',
+            legacyId: 'drift:table:public.acme_hand',
+            name: 'table:public.acme_hand',
+            state: 'ambiguous',
+            contentDigest: null,
+            evidence: ['only_in_target'],
+            evidenceStrength: null,
+            decision: null,
+          },
+        ],
+      }),
+    )
+    mountOps(REPORT_PAGE, w)
+    const import_ = await section('Legacy import')
+    const table = await within(import_).findByRole('table', {
+      name: 'Files of the legacy import and their classification',
+    })
+    expect(
+      within(table).getByText('Medium (the same statements, comments ignored)'),
+    ).toBeInTheDocument()
+    expect(within(table).getByText('Weak (the name only; not recorded)')).toBeInTheDocument()
+    expect(
+      within(import_).getByText('This report does not hold all of its drift'),
+    ).toBeInTheDocument()
+    expect(import_.textContent).toContain('It holds 1 of 812 drift entries')
+  })
+
   it('records a decision with a note and shows the updated report', async () => {
     const w = world()
     let current = report()

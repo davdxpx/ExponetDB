@@ -248,7 +248,15 @@ ledger such as drizzle's compares) are kept beside it. Golden vectors:
   with `scratch_not_empty`), each file except the `notApplicable` ones runs
   in its own transaction as the project's execution role, through the same
   statement admission and engine guards as a bundle, without an L0 gate and
-  without a ledger row. A file that fails makes the report `incomplete`
+  without a ledger row. **[DECIDED]** (Wave 9 Part A, A3; a Wave 6 defect
+  corrected) The execution role is checked exactly like an apply's: the
+  planner reads its facts on the scratch target for the migrator and binds
+  them (`executionRoleCheck`; rule `migration.import-execution-role` denies
+  an unusable role, no override); acceptance refuses the plan when the alias
+  now names another role (`PLAN_STALE`, `execution_roles`); and the worker
+  reads the facts again on the migrator session under the scratch target's
+  lock: a role that became unusable stops the replay before any file runs
+  (report `incomplete`, `execution_role:<problem>`, `PLAN_STALE`). A file that fails makes the report `incomplete`
   with the file, error and SQLSTATE; the scratch target is then consumed
   (re-create it for the next analysis).
 - **Compare and classify** (worker, imported target read as the observer
@@ -263,9 +271,13 @@ ledger such as drizzle's compares) are kept beside it. Golden vectors:
   name (`name_hint`, weak; since Wave 9 it never records a file, §2.3). A
   numeric prefix is never evidence. States as in
   step 4; a file without derivable expectations is `ambiguous` unless content
-  or curated evidence recorded it; ledger entries without a file and every global drift
-  entry (`only_in_target`, `only_in_replay`, `differs`, at most 500) are
-  review items.
+  or curated evidence recorded it; ledger entries without a file and every
+  global drift entry (`only_in_target`, `only_in_replay`, `differs`) are
+  review items. A report holds at most 500 drift items; **[DECIDED]** (Wave 9
+  Part A, A3) it records the true number (`driftTotal`) and whether it holds
+  fewer (`driftTruncated`), and a truncated report is never baselined
+  (`LEGACY_IMPORT_TRUNCATED`): narrow the managed scope or correct the inputs
+  and analyze again. Nothing in the import path is cut silently.
 - **Review** `POST …/import-reports/{id}/items/{itemId}/decision` records a
   state and a note per item (an open report only; the classification never
   changes). The report reads `resolved` when no item that needs a decision

@@ -16,6 +16,8 @@ import {
   type CatalogReader,
   checkExpectations,
   diffDocuments,
+  executionRoleFacts,
+  executionRoleProblem,
   extensionPlacements,
   insertLedgerRow,
   insertMigrationEvent,
@@ -154,7 +156,15 @@ interface ReplayContent {
     readonly clusterSystemIdentifier: string
   }
   readonly baselineId: string
+  /** The alias the replay runs as, and the role the registry mapped it to at planning. */
+  readonly executionRoleAlias?: string
   readonly executionRole: string
+  /**
+   * What the planner read about the role on the scratch target, for the
+   * migrator (Wave 9 order A3): the same check as an apply; the rule
+   * `migration.import-execution-role` decides on it.
+   */
+  readonly executionRoleCheck?: { readonly role: string; readonly problem: string | null }
   readonly searchPath: readonly string[]
   readonly files: readonly { readonly stem: string; readonly checksum: string }[]
   readonly hints: Hints
@@ -191,13 +201,15 @@ interface ReportRecord {
   readonly incompleteReason: string | null
   readonly createdAt: string
   readonly hints: Hints
+  readonly driftTotal: number | null
+  readonly driftTruncated: boolean
 }
 
 async function readReport(q: Queryable, reportId: string): Promise<ReportRecord | undefined> {
   const { rows } = await q.query(
     'migrations.import.report',
     `SELECT report_id, target_id, project_id, scratch_target_id, baseline_id, state, fingerprint,
-            replay_fingerprint, incomplete_reason, hints,
+            replay_fingerprint, incomplete_reason, hints, drift_total, drift_truncated,
             to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS created_at
        FROM migrations.import_reports WHERE report_id = $1`,
     [reportId],
@@ -216,6 +228,8 @@ async function readReport(q: Queryable, reportId: string): Promise<ReportRecord 
     incompleteReason: r.textOrNull('incomplete_reason'),
     createdAt: r.text('created_at'),
     hints: hintsFrom(r.json('hints')),
+    driftTotal: r.intOrNull('drift_total'),
+    driftTruncated: r.bool('drift_truncated'),
   }
 }
 
@@ -339,6 +353,8 @@ export async function importReportView(q: Queryable, targetId: string, reportId:
           : { state: i.decision.state, note: i.decision.note, decidedAt: i.decision.decidedAt },
     })),
     unresolved,
+    driftTotal: report.driftTotal,
+    driftTruncated: report.driftTruncated,
   }
 }
 
@@ -388,7 +404,8 @@ export async function planImportAnalysis(
     )
   }
   const project = await projectRegistry(tx, target.projectId)
-  const executionRole = project.executionRoles[request.role ?? 'owner']
+  const executionRoleAlias = request.role ?? 'owner'
+  const executionRole = project.executionRoles[executionRoleAlias]
   if (executionRole === undefined) {
     throw invalid('/role', 'execution_role_unmapped', 'The execution role alias is not mapped.')
   }
@@ -436,6 +453,25 @@ export async function planImportAnalysis(
         )
       }
     }
+  }
+  // The replay runs as the execution role on the scratch target: checked there, for the
+  // migrator, exactly like an apply (the rule migration.import-execution-role decides).
+  const scratchOpened = await ctx.connector.forTarget(
+    scratch,
+    'observer',
+    `import-plan/${scratch.targetId}`,
+  )
+  let executionRoleCheck: { role: string; problem: string | null }
+  try {
+    const [facts] = await scratchOpened.session.readOnly((rtx) =>
+      executionRoleFacts(rtx, [executionRole], 'exponetdb_migrator'),
+    )
+    executionRoleCheck = {
+      role: executionRole,
+      problem: facts === undefined ? 'missing' : executionRoleProblem(facts),
+    }
+  } finally {
+    await scratchOpened.session.close()
   }
   // The imported target has no baseline yet (a second one is a deliberate rebaseline).
   const opened = await ctx.connector.forTarget(target, 'observer', `import-plan/${target.targetId}`)
@@ -498,7 +534,9 @@ export async function planImportAnalysis(
       clusterSystemIdentifier: scratch.placement.systemIdentifier ?? '',
     },
     baselineId: `baseline:${request.baseline}`,
+    executionRoleAlias,
     executionRole,
+    executionRoleCheck,
     searchPath: hints.searchPath,
     files: files.map((f) => ({ stem: f.stem, checksum: f.checksum })),
     hints,
@@ -533,7 +571,12 @@ export async function planImportAnalysis(
         environmentId: target.environmentId,
       },
       content: content as unknown as JsonObject,
-      analysis: { reportId, files: files.length, scratchTargetId: scratch.targetId },
+      analysis: {
+        reportId,
+        files: files.length,
+        scratchTargetId: scratch.targetId,
+        executionRole: { role: executionRole, problem: executionRoleCheck.problem },
+      },
       policy,
     },
     { clock: ctx.policy.clock },
@@ -985,8 +1028,15 @@ async function classify(
 
 const MAX_DRIFT_ITEMS = 500
 
-/** Global drift between the replay and the target: objects no legacy file explains. */
-function driftItems(replay: CanonicalDocument, target: CanonicalDocument): Classified[] {
+/**
+ * Global drift between the replay and the target: objects no legacy file
+ * explains. At most {@link MAX_DRIFT_ITEMS} become items; the true number is
+ * returned with them, and a report that holds fewer is never baselined.
+ */
+function driftItems(
+  replay: CanonicalDocument,
+  target: CanonicalDocument,
+): { readonly items: Classified[]; readonly total: number } {
   const diff = diffDocuments(replay, target)
   const key = (e: { class: string; key: readonly string[] }) => `${e.class}:${e.key.join('.')}`
   const out: Classified[] = []
@@ -1025,11 +1075,11 @@ function driftItems(replay: CanonicalDocument, target: CanonicalDocument): Class
       contentDigest: null,
       provenance: null,
       appliedAt: null,
-      evidence: ['differs', ...c.attributes.slice(0, 8).map((a) => `attribute:${a}`)],
+      evidence: cappedEvidence(['differs', ...c.attributes.map((a) => `attribute:${a}`)]),
       strength: null,
     })
   }
-  return out.slice(0, MAX_DRIFT_ITEMS)
+  return { items: out.slice(0, MAX_DRIFT_ITEMS), total: out.length }
 }
 
 /** The worker's replay and comparison (`migration.import.replay`). */
@@ -1080,6 +1130,14 @@ export class ImportReplayKind implements OperationKind {
     if (report?.state !== 'pending') {
       changed.push({ binding: 'report', actual: report?.state ?? 'missing' })
     }
+    // The alias still names the role the plan checked (a plan without the check is stale).
+    const project = await projectRegistry(this.#deps.store, c.projectId)
+    if (
+      c.executionRoleCheck === undefined ||
+      project.executionRoles[c.executionRoleAlias ?? 'owner'] !== c.executionRole
+    ) {
+      changed.push({ binding: 'execution_roles', actual: 'changed' })
+    }
     return changed
   }
 
@@ -1093,6 +1151,8 @@ export class ImportReplayKind implements OperationKind {
           readonly fingerprint: string
           readonly replayFingerprint: string
           readonly items: readonly Classified[]
+          readonly driftTotal: number
+          readonly driftHeld: number
         },
     operationId: string,
   ): Promise<void> {
@@ -1134,9 +1194,16 @@ export class ImportReplayKind implements OperationKind {
         'migrations.import.open',
         `UPDATE migrations.import_reports
             SET state = 'open', fingerprint = $2, replay_fingerprint = $3, operation_id = $4,
-                analyzed_at = clock_timestamp()
+                analyzed_at = clock_timestamp(), drift_total = $5, drift_truncated = $6
           WHERE report_id = $1 AND state = 'pending'`,
-        [reportId, result.fingerprint, result.replayFingerprint, operationId],
+        [
+          reportId,
+          result.fingerprint,
+          result.replayFingerprint,
+          operationId,
+          result.driftTotal,
+          result.driftHeld < result.driftTotal,
+        ],
       )
     })
   }
@@ -1174,6 +1241,22 @@ export class ImportReplayKind implements OperationKind {
           return { outcome: 'not_applied', errorCode: 'MIGRATION_LOCK_TIMEOUT' }
         }
         throw error
+      }
+      // The execution role again, on the migrator session under the lock: still usable.
+      const [roleFacts] = await executionRoleFacts(session.reader(), [c.executionRole])
+      const roleProblem = roleFacts === undefined ? 'missing' : executionRoleProblem(roleFacts)
+      if (roleProblem !== null) {
+        await this.#finish(
+          fence,
+          c.reportId,
+          { state: 'incomplete', reason: `execution_role:${roleProblem}` },
+          ctx.operationId,
+        )
+        return {
+          outcome: 'not_applied',
+          errorCode: 'PLAN_STALE',
+          detail: { changedBindings: ['execution_roles'] },
+        }
       }
       const major = session.facts.major
       await loadParser(major)
@@ -1312,6 +1395,7 @@ export class ImportReplayKind implements OperationKind {
           )
           return 'applied'
         }
+        const drift = driftItems(replay.document, result.snapshot.document)
         await this.#finish(
           fence,
           c.reportId,
@@ -1319,7 +1403,9 @@ export class ImportReplayKind implements OperationKind {
             state: 'open',
             fingerprint: result.snapshot.fingerprint,
             replayFingerprint: replay.fingerprint,
-            items: [...result.items, ...driftItems(replay.document, result.snapshot.document)],
+            items: [...result.items, ...drift.items],
+            driftTotal: drift.total,
+            driftHeld: drift.items.length,
           },
           ctx.operationId,
         )
@@ -1476,10 +1562,17 @@ export async function planBaseline(
   }
   if (report.state !== 'open' || report.fingerprint === null) throw new MigrationError('CONFLICT')
   const items = await readItems(tx, reportId)
+  if (report.driftTruncated) {
+    // Drift the report does not hold was never shown to anyone: no baseline over it.
+    throw new MigrationError('LEGACY_IMPORT_TRUNCATED', {
+      driftTotal: report.driftTotal ?? 0,
+      held: items.filter((i) => i.kind === 'drift').length,
+    })
+  }
   const unresolved = unresolvedOf(items)
   if (unresolved.length > 0) {
     throw new MigrationError('LEGACY_IMPORT_AMBIGUOUS', {
-      items: unresolved.slice(0, 50).map((i) => ({ itemId: String(i.itemId) })),
+      items: unresolved.slice(0, 1000).map((i) => ({ itemId: String(i.itemId) })),
     })
   }
   const files = await readFiles(tx, reportId)

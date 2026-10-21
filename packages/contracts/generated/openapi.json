@@ -6151,6 +6151,23 @@
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
             "type": "string"
           },
+          "driftTotal": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How many global drift entries the analysis found (null until it ran); the report holds at most 500 of them (Wave 9)."
+          },
+          "driftTruncated": {
+            "description": "The report holds fewer drift items than driftTotal: it is never baselined (LEGACY_IMPORT_TRUNCATED); narrow the scope or fix the inputs and analyze again (Wave 9).",
+            "type": "boolean"
+          },
           "fingerprint": {
             "anyOf": [
               {
@@ -13017,6 +13034,7 @@
               "LEDGER_DIVERGENCE",
               "LEDGER_NOT_INITIALIZED",
               "LEGACY_IMPORT_AMBIGUOUS",
+              "LEGACY_IMPORT_TRUNCATED",
               "STAGING_EVIDENCE_MISSING",
               "STAGING_VERIFICATION_FAILED",
               "STAGING_EVIDENCE_UNREACHABLE",

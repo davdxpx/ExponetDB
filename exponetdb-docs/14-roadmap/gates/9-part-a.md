@@ -105,8 +105,8 @@ another repository.
 |---|---|---|---|---|---|
 | A0 | Phase 0: inventory, order, decisions, record | — | — | §1, §2 | PASS |
 | A1 | The CLI starts a legacy import from the project file (`baseline:<slug>` and `<slug>`, `--hints`) | none needed (the request contract is unchanged) | `apps/cli/src/commands/migration.ts` (`baselineSlug`, `importHints`, flag `--hints`) | unit tests §4.2; the end-to-end run of the CLI process (analyze → report → resolve → baseline) lands with the real-shape fixture of A2 | open (end-to-end pending) |
-| A2 | Supabase ledger matching on real data (names, statement sequences, evidence strength, multi-file aliases, real-shape fixture) | `ImportAnalysisRequest.aliases` takes a stem or a list of stems; `ImportReport.items[].evidenceStrength` (additive) | `migrations-engine/src/legacy-evidence.ts`, `legacy.ts` (`relateLedger`, `classify`, extension check); bundle `01M5G6EQ7GKZV615Y680AHT52B_legacy-import-evidence`; fixture `testkit/src/fixtures/supabase-history.ts` | §4.3 | PASS (the Web App shows the strength with A3) |
-| A3 | The replay checks the execution role; no silent cap in the import path | open | open | open | open |
+| A2 | Supabase ledger matching on real data (names, statement sequences, evidence strength, multi-file aliases, real-shape fixture) | `ImportAnalysisRequest.aliases` takes a stem or a list of stems; `ImportReport.items[].evidenceStrength` (additive) | `migrations-engine/src/legacy-evidence.ts`, `legacy.ts` (`relateLedger`, `classify`, extension check); bundle `01M5G6EQ7GKZV615Y680AHT52B_legacy-import-evidence`; fixture `testkit/src/fixtures/supabase-history.ts`; the Web App shows the strength (§4.4) | §4.3 | PASS |
+| A3 | The replay checks the execution role; no silent cap in the import path | error `LEGACY_IMPORT_TRUNCATED`; `ImportReport.driftTotal`, `driftTruncated` (additive) | `legacy.ts` (role check at planning and under the scratch lock, binding check, drift totals, evidence and attribute lists capped with a mark); rule `migration.import-execution-role`; Web App: strength and truncation warning | §4.4 | PASS (the A4 exception model joins the same check with A4) |
 | A4 | Declared `BYPASSRLS` execution-role exception (ADR-0034, OD-51) **S** | open | open | open | open |
 | A5 | Execution roles per environment (one resolver) | open | open | open | open |
 | A6 | Legacy files with cluster-global effects (replay elision, cluster-global expectations, `CONCURRENTLY`, comment-only files) | open | open | open | open |
@@ -185,6 +185,42 @@ another repository.
   contracts (216), control-store (27), migrations-engine (19), postgres
   (1242), testkit (12), server (185), tooling (164), sdk (89); integration
   tests of control-store (117) and migrations-engine (62), all passed.
+
+### 4.4 A3: the replay's execution role, no silent cap (2026-10-21)
+
+- The replay plan binds `executionRoleCheck` (the role's facts read on the
+  scratch target for `exponetdb_migrator`, `executionRoleProblem` as for an
+  apply) and the alias; rule `migration.import-execution-role` (deny, not
+  overridable) decides; acceptance refuses a plan whose alias now names
+  another role; the worker reads the facts again on the migrator session
+  under the scratch lock before the emptiness check and any file.
+- The report records `drift_total` and `drift_truncated` (written once, by
+  the worker, guarded); `planBaseline` refuses a truncated report with
+  `LEGACY_IMPORT_TRUNCATED` (`driftTotal`, `held`); evidence lists and the
+  attribute list of a `differs` item end with `evidence_truncated:<n>`
+  instead of being cut; the error detail of unresolved items lists up to the
+  contract's 1000.
+- `packages/policy/test/migration-rules.test.ts` "migration.import-execution-role"
+  (2 tests): usable and `declared_exception` pass; every other problem and a
+  plan without the check deny, never overridable.
+- `legacy-supabase.int.test.ts` (PostgreSQL 17), three more tests: the owner
+  with `BYPASSRLS` makes the replay plan `deny` (rule facts `role`,
+  `privileged_attribute`); `BYPASSRLS` granted after planning stops the
+  replay under the lock (operation `failed`, `not_applied`, `PLAN_STALE`;
+  report `incomplete`, `execution_role:privileged_attribute`; nothing ran);
+  505 hand-made tables give `driftTotal` 1012 (each table and its column is
+  one catalog entry), 500 drift items, `driftTruncated`, and the baseline is
+  refused with `LEGACY_IMPORT_TRUNCATED` (`driftTotal` 1012, `held` 500)
+  after every held item was decided.
+- Web App (`apps/web/src/features/migrations/legacy-import.tsx`): the
+  strength per item and a warning "This report does not hold all of its
+  drift" with the counts; `test/target-pages/migrations.test.tsx` (one more
+  test, 22 in the file); the copy rules of `test/i18n` hold.
+- Runs on this commit: `bun run check`, `bun run typecheck` (28 of 28),
+  `verify:generated`, `golden:check`, `golden:history origin/main`
+  (unchanged); unit tests of contracts (216), policy (83), migrations-engine
+  (19), server (185), web (159 files, 2372 tests); integration tests of the
+  migrations engine (65).
 
 ## 5. Limits and residual risks
 

@@ -1,4 +1,4 @@
-import { fixedClock } from '@exponetdb/kernel'
+import { fixedClock, type JsonObject } from '@exponetdb/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   MIGRATION_RULES,
@@ -241,5 +241,48 @@ describe('migration rules', () => {
         )
       ).decision,
     ).toBe('deny')
+  })
+})
+
+describe('migration.import-execution-role', () => {
+  const replay = (content: JsonObject) =>
+    engine.evaluate({
+      request: {
+        kind: 'migration.import.replay',
+        principal: { kind: 'human', identityId: 'idn_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z', client: 'web' },
+        subject: { tier: 'nonprod' },
+        content,
+      },
+      settings: [],
+    })
+  const rule = async (content: JsonObject) =>
+    (await replay(content)).rules.find((r) => r.id === 'migration.import-execution-role')
+
+  it('allows a replay whose execution role is usable, and one excused by a declared exception', async () => {
+    const usable = await replay({ executionRoleCheck: { role: 'acme_owner', problem: null } })
+    expect(usable.decision).toBe('allow')
+    expect(
+      (await rule({ executionRoleCheck: { role: 'acme_owner', problem: 'declared_exception' } }))
+        ?.result,
+    ).toBe('pass')
+  })
+
+  it('denies any other problem, and a plan without the check, never overridable', async () => {
+    for (const problem of [
+      'privileged_attribute',
+      'can_login',
+      'reaches_protected_role',
+      'missing',
+    ]) {
+      const d = await replay({ executionRoleCheck: { role: 'acme_owner', problem } })
+      expect(d.decision, problem).toBe('deny')
+      expect(d.rules.find((r) => r.id === 'migration.import-execution-role')).toMatchObject({
+        result: 'fail',
+        overridableByBreakGlass: false,
+        facts: { role: 'acme_owner', problem },
+      })
+    }
+    expect((await replay({})).decision).toBe('deny')
+    expect((await rule({ executionRoleCheck: { role: 7, problem: null } }))?.result).toBe('unknown')
   })
 })

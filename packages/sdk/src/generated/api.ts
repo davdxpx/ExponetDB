@@ -909,6 +909,8 @@ export type ImportDecisionRequest = {
 export type ImportReport = {
   readonly baselineId: string
   readonly createdAt: string
+  readonly driftTotal?: number | null
+  readonly driftTruncated?: boolean
   readonly fingerprint: string | null
   readonly id: string
   readonly incompleteReason?: string | null
