@@ -427,6 +427,52 @@ refusing role statements):
   not refused: evidence `no_statements`, `recorded_present` when a ledger
   records it, else `unrecorded_present` (it has no effect to miss).
 
+### 2.5 Scratch targets
+
+**[DECIDED]** (Wave 9 Part A, A7) A scratch target is an active nonprod
+target of the same project with its own environment, emptied for each
+analysis; nothing marks it "consumed", the replay's emptiness check does.
+
+- **Preflight** (read only): `GET /targets/{id}/migrations/scratch-check?scratchTarget=…`
+  (`migrations.import` on both targets; CLI `migration import scratch-check
+  --target … --scratch …`; not an MCP tool) reports, with what differs:
+  `scratch_usable` (the registry rules above), `identity` (the scratch
+  database carries its identity marker and the oid the registry recorded),
+  `empty` (no object in the managed scope, no ledger row), `extensions`
+  (the imported target's extensions with the same schema and version),
+  `outside_scope` (every object outside the managed scope that the imported
+  schema depends on, a foreign key to an identity service's table, a policy
+  calling its function, read from `pg_depend` on the imported target, must
+  exist on the scratch target as a schema-only copy; at most 1 000 are
+  read, more is `unknown`), and `execution_role` (the role resolved for the
+  scratch environment, for the migrator, with that environment's declared
+  exceptions). `ready` is all of them passing. The preflight changes
+  nothing; the replay checks again under its own lock.
+- **In-place reset.** A used scratch target is reset without re-creating
+  its database (which would change the oid the registry recorded and fail
+  `database_mismatch`): `exponetdb migration import scratch-reset-sql
+  --scratch …` prints a script built from registry values (installation,
+  target id, generation, the project's managed scope) that a person runs as
+  a superuser connected to that database. It stops unless the database
+  carries the scratch target's marker and has no ledger row; then, in one
+  transaction, it drops and re-creates each schema of the managed scope with
+  its owner and grants (read from the catalog before the drop) and
+  re-creates the extensions that lived there in their versions. The
+  database, its oid, the `exponetdb` schema with the marker and every
+  schema outside the scope stay; default privileges set inside a dropped
+  schema go with it. Run the preflight afterwards.
+- **A wrong registration** is corrected by decommissioning the target and
+  retiring the database record (`registry.database.retire`,
+  [`../02-control-plane/registry.md` §4.3](../02-control-plane/registry.md#43-correcting-a-wrong-registration-wave-9)).
+- **Freeze out-of-band DDL** on the imported target from the analysis to
+  the baseline. The report records the imported target's fingerprint the
+  analysis compared with; planning the baseline refuses when the live
+  fingerprint differs (`SCHEMA_FINGERPRINT_MISMATCH`), and so does its
+  execution under the lock (`PLAN_STALE`, `schemaFingerprint`): a change in
+  between means a new analysis.
+  `exponetdb target show <target>` and the report (`fingerprint`) show both
+  values.
+
 ## 3. Multiple targets of one project
 
 Each target (staging, production) is imported separately, producing its own

@@ -110,7 +110,7 @@ another repository.
 | A4 | Declared `BYPASSRLS` execution-role exception (ADR-0034, OD-51) **S** | `rxe_` ids; `ExecutionRoleExceptionDeclareRequest`, `…RevokeRequest`, `ExecutionRoleExceptionView`, `ProjectExecutionRoles`; actions `registry.execution_role_exception.declare(.plan)`, `.revoke(.plan)`, `project.execution_roles.get`; routes `planExecutionRoleException`, `planExecutionRoleExceptionRevocation`, `getProjectExecutionRoles`; `REGISTRY_CONFLICT` reasons `exception_active`, `exception_not_active`; `MigrationPlanContent.expectedState.executionRoleExceptions`, `facts.executionRoleExceptions`, `facts.executionRoleParity` (all additive) | bundle `01M5G6EQ7KP3PMPC7G3HJ7KH7R_execution-role-exceptions`; `registry/src/execution-roles.ts` (plans, kinds); `postgres/src/migration-facts.ts` (`executionRoleProblem(facts, excused)`, `declared_exception`); `migrations-engine/src/execution-roles.ts` (`roleUnder`, `boundExceptionsHold`, `rolesStillUsable`); planner, kind, executor, resume, rollback, legacy replay; rules `migration.execution-role-exception`, `migration.execution-role-parity`, `registry.execution-role-exception-production`; the health sampler's `execution_role_exception_drift` finding; CLI `project role-exception declare/revoke` | §4.5, §6.1 | PASS (independent security review §6.1, its findings fixed) |
 | A5 | Execution roles per environment (one resolver) | `ExecutionRoleBindingsRequest`; actions `registry.execution_role_binding.set(.plan)`; route `planExecutionRoleBindings` (additive) | bundle `01M5G6EQ7MFWM3TVK3YN5WRK8W_execution-role-bindings` (append-only); `executionRolesFor` replaces every direct reader (planner, kind, executor, resume, rollback, reverify, reads, legacy); a source test forbids other readers; CLI `project execution-roles`, `project execution-roles set` | §4.5 | PASS, with OD-53 opened (§5) |
 | A6 | Legacy files with cluster-global effects (replay elision, cluster-global expectations, `CONCURRENTLY`, comment-only files) | none needed (report evidence strings and the replay plan's analysis are additive data) | `postgres/src/parser/cluster-global.ts` (role statement effects, `DO` blocks through the PL/pgSQL parser of 18), `postgres/src/cluster-globals.ts` (the catalog check), `migrations-engine/src/legacy-replay.ts` (segments, chain supersession), `executor.ts` (`runReplayAutocommit`), `legacy.ts` (plan summary, segmented replay, classification, baseline verification); fixture `testkit/src/fixtures/cluster-global-history.ts` | §4.6 | PASS |
-| A7 | Scratch targets: preflight, in-place reset, database retire | open | open | open | open |
+| A7 | Scratch targets: preflight, in-place reset, database retire | `ScratchCheck`, action `migration.import.scratch_check` and route `checkScratchTarget`; actions `registry.database.retire(.plan)`, route `planDatabaseRetirement`, `DatabaseRetireRequest`, conflicts `database_retired`, `database_in_use` (additive) | `migrations-engine/src/scratch-check.ts`, `postgres/src/scratch.ts` (objects outside the scope, presence by catalog lookup); `migrations/src/format/scratch-reset.ts` (the reset script); registry planner and `DatabaseRetireKind`; CLI `migration import scratch-check`, `migration import scratch-reset-sql`, `cluster database retire` | §4.7 | PASS (MCP not offered; see §5) |
 | A8 | External-cluster onboarding without hand-made SQL | open | open | open | open |
 | A9 | Documents brought up to the real state | — | — | open | open |
 | A10 | Part A done: two independent review rounds, the pull request, the owner test package | — | — | open | open |
@@ -360,6 +360,42 @@ another repository.
 - The baseline verification checks the accepted files' surviving
   cluster-global expectations too.
 
+### 4.7 A7: scratch targets that can be prepared and reused (2026-10-21)
+
+- Design: [`legacy-import.md` §2.5](../../04-migrations/legacy-import.md#25-scratch-targets),
+  [`registry.md` §4.3](../../02-control-plane/registry.md#43-correcting-a-wrong-registration-wave-9).
+- **Reset without a new endpoint.** The reset script is built in the CLI
+  from REST reads (target, project, installation): the server gains no
+  write path, and the script runs only where a person runs it, as a
+  superuser, guarded by the identity marker. Re-creating the database was
+  not an option: a new oid fails `database_mismatch` at the next analysis.
+- **Found while building:** `to_regclass` and its kin raise `42501` for a
+  schema the observer may not use; the presence check reads the catalogs
+  instead. A foreign key depends on the referenced table's unique index
+  too; the preflight lists it, a schema-only copy with the same key has it.
+- `packages/migrations-engine/test/scratch-check.int.test.ts` (PostgreSQL
+  17, 5 tests): a fresh scratch target lacks the imported target's
+  extension (`pg_trgm: target public@…, scratch missing`) and the three
+  objects outside the scope (the identity table, its key, the function a
+  policy calls); prepared, every check passes and an analysis replays; used,
+  `empty` fails with the replayed objects; a role with `CREATEDB` fails
+  `execution_role`; the reset script refuses the imported target's
+  database, then on the scratch database keeps its oid and marker, restores
+  the extension and the owner's `CREATE`, and the preflight is ready and the
+  next analysis replays; a target that cannot be a scratch target is named
+  (`same_target`, `not_found`) and nothing further is checked.
+- `packages/registry/test/database-retire.int.test.ts` (2 tests): a current
+  placement is refused (`database_in_use`); after the target's
+  decommissioning the record is retired (verified, audited), a second
+  retirement is `database_retired`, the database itself is untouched, and
+  the re-created database (a new oid) registers again under the same name.
+- `packages/migrations/test/scratch-reset.test.ts` (4 tests): the guard
+  values, the scope's schemas, quoting of every name and the path, and
+  refusal of non-canonical ids.
+- Docs: freeze out-of-band DDL on the imported target between analysis and
+  baseline (`SCHEMA_FINGERPRINT_MISMATCH` at planning, `PLAN_STALE` under the
+  lock), `legacy-import.md` §2.5.
+
 ## 5. Limits and residual risks
 
 - **OD-53 (open).** fp1 includes owners, so a non-legacy project whose
@@ -375,6 +411,12 @@ another repository.
   hold and makes the file `ambiguous` (fail closed). A `DO` block that
   creates roles through a dynamic `EXECUTE` is not recognized; it replays
   as submitted and fails like before (`replay_failed`, 42501).
+- A7: the preflight is not an MCP tool (the order allows it only read only
+  and scoped; a new tool needs its own catalog version, left for when an
+  agent needs it). It reads at most 1 000 objects outside the scope
+  (`unknown` beyond) and does not compare the copies' definitions, only
+  that they exist. The reset drops default privileges set inside a managed
+  schema.
 - The health finding compares on the 15-second sample; between two samples
   a changed role is caught by the plan and the executor's own checks.
 

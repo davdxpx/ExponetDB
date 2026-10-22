@@ -1399,6 +1399,14 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         idempotency(call),
       ),
     ),
+  checkScratchTarget: async (app, call) =>
+    value(
+      await app.migrations.scratchCheck(
+        caller(call),
+        target(call),
+        String(field(call.query, 'scratchTarget')),
+      ),
+    ),
   getImportReport: async (app, call) =>
     value(
       await app.migrations.importReport(

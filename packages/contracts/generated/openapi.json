@@ -564,6 +564,7 @@
               "migration.stream.get",
               "migration.bundle.get",
               "migration.import.report.get",
+              "migration.import.scratch_check",
               "session.list",
               "lock.list",
               "query_stats.list",
@@ -11229,6 +11230,7 @@
               "migration.stream.get",
               "migration.bundle.get",
               "migration.import.report.get",
+              "migration.import.scratch_check",
               "session.list",
               "lock.list",
               "query_stats.list",
@@ -11669,6 +11671,7 @@
               "migration.stream.get",
               "migration.bundle.get",
               "migration.import.report.get",
+              "migration.import.scratch_check",
               "session.list",
               "lock.list",
               "query_stats.list",
@@ -12165,6 +12168,7 @@
               "migration.stream.get",
               "migration.bundle.get",
               "migration.import.report.get",
+              "migration.import.scratch_check",
               "session.list",
               "lock.list",
               "query_stats.list",
@@ -12576,6 +12580,7 @@
               "migration.stream.get",
               "migration.bundle.get",
               "migration.import.report.get",
+              "migration.import.scratch_check",
               "session.list",
               "lock.list",
               "query_stats.list",
@@ -16129,6 +16134,105 @@
             "type": "object"
           }
         ]
+      },
+      "ScratchCheck": {
+        "properties": {
+          "checkedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "checks": {
+            "items": {
+              "properties": {
+                "check": {
+                  "enum": [
+                    "scratch_usable",
+                    "identity",
+                    "empty",
+                    "extensions",
+                    "outside_scope",
+                    "execution_role"
+                  ],
+                  "type": "string"
+                },
+                "detail": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[a-z][a-z0-9_:.-]{0,199}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "A machine code: why it failed or could not be checked."
+                },
+                "items": {
+                  "description": "What differs, as catalog names (untrusted text).",
+                  "items": {
+                    "maxLength": 300,
+                    "type": "string",
+                    "x-untrusted": true
+                  },
+                  "maxItems": 100,
+                  "type": "array"
+                },
+                "status": {
+                  "enum": [
+                    "pass",
+                    "fail",
+                    "unknown"
+                  ],
+                  "type": "string"
+                },
+                "truncated": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "check",
+                "status",
+                "detail",
+                "items",
+                "truncated"
+              ],
+              "type": "object"
+            },
+            "maxItems": 6,
+            "type": "array"
+          },
+          "ready": {
+            "description": "Every check passed: an analysis can replay here.",
+            "type": "boolean"
+          },
+          "scratchTargetId": {
+            "anyOf": [
+              {
+                "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "scratchTargetId",
+          "ready",
+          "checkedAt",
+          "checks"
+        ],
+        "type": "object"
       },
       "Server": {
         "properties": {
@@ -34064,6 +34168,124 @@
           "VERIFY_CONSTRUCT_UNSUPPORTED"
         ],
         "x-exponetdb-wave": "6"
+      }
+    },
+    "/targets/{target}/migrations/scratch-check": {
+      "get": {
+        "operationId": "checkScratchTarget",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "in": "query",
+            "name": "scratchTarget",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScratchCheck"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.import"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Check, read only, whether a scratch target can take a legacy import replay of this target: usable, its identity, empty, the same extensions, the objects outside the managed scope the schema depends on, the execution role (Wave 9).",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "migration.import.scratch_check",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
       }
     },
     "/targets/{target}/migrations/{migrationId}": {

@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { newUlid } from '@exponetdb/kernel'
-import { type ValidatedBundle, validateBundle } from '@exponetdb/migrations/format'
+import { scratchResetSql, type ValidatedBundle, validateBundle } from '@exponetdb/migrations/format'
 import { buildGraph } from '@exponetdb/migrations/graph'
 import { type LintFinding, lintBundles, type Tier } from '@exponetdb/migrations/lint'
 import type { ImportReport, MigrationStatus, PlanView } from '@exponetdb/sdk'
@@ -942,6 +942,111 @@ const remoteCommands: readonly CommandSpec[] = [
       return applyPlan(ctx, remote, 'migration import analyze', plan, input.flags)
     },
   },
+  {
+    path: ['migration', 'import', 'scratch-reset-sql'],
+    summary:
+      'Print the SQL that resets a used scratch target in place (run it as a superuser on that database): it keeps the database and its identity marker and recreates the managed schemas with their grants and extensions.',
+    group: 'migration',
+    flags: [
+      {
+        name: 'scratch',
+        type: 'string',
+        placeholder: 'target',
+        description: 'The scratch target (path or tgt_ id); nonprod only.',
+        required: true,
+      },
+    ],
+    locality: 'remote',
+    effect: 'read',
+    action: 'target.get',
+    scopes: ['targets.read'],
+    output: 'ScratchResetSql',
+    async run(ctx, input) {
+      const remote = await ctx.remote()
+      const scratch = must(
+        await remote.sdk.call('getTarget', { params: { target: String(input.flags['scratch']) } }),
+      )
+      if (scratch.tier !== 'nonprod') {
+        throw new UsageError('A scratch target is nonprod; this one is not.')
+      }
+      const project = must(
+        await remote.sdk.call('getProject', { params: { projectId: scratch.projectId } }),
+      )
+      const installation = must(await remote.sdk.call('getInstallation', {} as never))
+      if (installation.installationId === undefined) {
+        throw new CliError('INTERNAL', 'The server does not name its installation.')
+      }
+      const scope = project.managedScope as {
+        readonly includeSchemas?: readonly string[]
+        readonly excludeSchemas?: readonly string[]
+      }
+      const text = scratchResetSql({
+        installationId: installation.installationId,
+        targetId: scratch.id,
+        targetPath: scratch.path,
+        generation: scratch.generation,
+        ...(scope.includeSchemas === undefined ? {} : { includeSchemas: scope.includeSchemas }),
+        ...(scope.excludeSchemas === undefined ? {} : { excludeSchemas: scope.excludeSchemas }),
+      })
+      return result({
+        command: 'migration import scratch-reset-sql',
+        data: { targetId: scratch.id, sql: text },
+        blocks: [{ kind: 'text', lines: text.trimEnd().split('\n') }],
+        next: [
+          `exponetdb migration import scratch-check --target <imported target> --scratch ${scratch.id}`,
+        ],
+      })
+    },
+  },
+  showCommand({
+    path: ['migration', 'import', 'scratch-check'],
+    summary:
+      'Check, read only, whether a scratch target can take this target’s legacy replay: usable, its identity, empty, the same extensions, the objects outside the managed scope, the execution role.',
+    group: 'migration',
+    flags: [
+      TARGET_REQUIRED,
+      {
+        name: 'scratch',
+        type: 'string',
+        placeholder: 'target',
+        description: 'The scratch target (path or tgt_ id).',
+        required: true,
+      },
+    ],
+    action: 'migration.import.scratch_check',
+    scopes: ['migrations.import'],
+    output: 'ScratchCheck',
+    title: 'scratch check',
+    operation: 'checkScratchTarget',
+    params: (i) => ({ target: String(i.flags['target']) }),
+    query: (i) => ({ scratchTarget: String(i.flags['scratch']) }),
+    view: (r) => [
+      {
+        kind: 'status',
+        word: r.ready ? 'ready' : 'not ready',
+        tone: r.ready ? 'ok' : 'warn',
+        text: r.ready
+          ? 'An analysis can replay on this scratch target.'
+          : 'Prepare the scratch target first; the analysis would not complete.',
+      },
+      {
+        kind: 'table',
+        columns: [{ title: 'CHECK' }, { title: 'STATUS' }, { title: 'DETAIL', flexible: true }],
+        rows: r.checks.map((c) => [
+          c.check,
+          c.status,
+          [c.detail ?? '', ...c.items.slice(0, 5)].filter((x) => x !== '').join('; ') +
+            (c.items.length > 5 || c.truncated ? ' …' : ''),
+        ]),
+      },
+    ],
+    next: (r) =>
+      r.ready
+        ? [
+            `exponetdb migration import analyze --target ${r.targetId} --scratch ${r.scratchTargetId ?? ''}`,
+          ]
+        : [],
+  }),
   showCommand({
     path: ['migration', 'import', 'report'],
     summary: 'An import report: every legacy file’s classification and the decisions so far.',

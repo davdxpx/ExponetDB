@@ -825,6 +825,37 @@
       "wave": "6"
     },
     {
+      "basis": "Wave 9 order A7; legacy-import.md §2.5",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "migration.import.scratch_check",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.import"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.import"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Check a scratch target before a legacy import (read only: usability, identity, emptiness, extensions, objects outside the scope, the execution role)",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
       "basis": "resources.md, tool-catalog.md",
       "class": {
         "class": "read",

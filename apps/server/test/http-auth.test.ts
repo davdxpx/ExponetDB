@@ -124,6 +124,7 @@ describe('served routes (Wave 2 and 4 to 9)', () => {
       .map(({ route }) => route.operationId)
       .sort()
     expect(served).toEqual([
+      'checkScratchTarget',
       'getProjectExecutionRoles',
       'planDatabaseRetirement',
       'planExecutionRoleBindings',

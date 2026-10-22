@@ -52,6 +52,7 @@ export {
 } from './resume.ts'
 export { MigrationVerifyKind, planMigrationVerify } from './reverify.ts'
 export { MigrationRollbackKind, planMigrationRollback } from './rollback.ts'
+export { type ScratchCheckDeps, scratchCheck } from './scratch-check.ts'
 export {
   fileDigest,
   type IngestedItem,

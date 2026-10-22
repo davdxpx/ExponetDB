@@ -155,6 +155,13 @@ export {
 } from './reviewed.ts'
 export { RowShapeError, TargetRow } from './rows.ts'
 export {
+  MAX_OUTSIDE_SCOPE,
+  type ManagedScopeFilter,
+  missingObjects,
+  type OutsideScopeObject,
+  referencedOutsideScope,
+} from './scratch.ts'
+export {
   ACCESS_ROLES,
   type AccessRole,
   type CatalogReader,

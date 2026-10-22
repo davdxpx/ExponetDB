@@ -1,0 +1,345 @@
+import { newId, systemClock } from '@exponetdb/kernel'
+import { scratchResetSql } from '@exponetdb/migrations/format'
+import {
+  acceptPlan,
+  KindRegistry,
+  type OperationRecord,
+  type PlanRecord,
+  processNextOperation,
+  readOperation,
+  WORKER_ACTOR,
+} from '@exponetdb/operations'
+import { MIGRATION_RULES, REGISTRY_RULES, RuleRegistry } from '@exponetdb/policy'
+import { ROLE_NAMES } from '@exponetdb/postgres'
+import {
+  findTarget,
+  planEnvironmentCreate,
+  planProductCreate,
+  planProjectCreate,
+  planProjectUpdate,
+  planTargetRegister,
+  type RegistryActor,
+  registryAcceptDependencies,
+  registryKinds,
+  type TargetRecord,
+} from '@exponetdb/registry'
+import { runAsSuperuser, serverFor, type TestServer, withSuperuser } from '@exponetdb/testkit'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import {
+  actor,
+  type Harness,
+  harness,
+  operationError,
+  planContent,
+  readyCluster,
+  registerDatabase,
+  run,
+  submit,
+  targetDatabase,
+  verifyCredentials,
+} from '../../registry/test/harness.ts'
+import {
+  type MigrationPlanContext,
+  migrationKinds,
+  planImportAnalysis,
+  scratchCheck,
+} from '../src/index.ts'
+
+/**
+ * The scratch preflight (Wave 9 order A7, legacy-import.md §2.5) on real
+ * PostgreSQL 17: a prepared scratch target passes every check; a scratch
+ * target without the schema-only copy of an identity service's table and
+ * function the imported schema depends on, without its extension, with an
+ * execution role that cannot run, or already used by a replay, fails the
+ * matching check with what is missing; a target that cannot be a scratch
+ * target is named.
+ */
+let h: Harness
+let a: RegistryActor
+let kinds: KindRegistry
+let ctx: MigrationPlanContext
+const pg17: TestServer = serverFor(17)
+const suffix = Date.now().toString(36)
+const slug = `sc${suffix}`
+let clusterId = ''
+let productId = ''
+let projectId = ''
+const OWNER = 'exdb_it_scratch_check_owner'
+
+/** The imported target: a public schema that depends on an identity service's schema (outside the scope). */
+const IMPORTED = [
+  'CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public',
+  'CREATE SCHEMA acme_identity',
+  'CREATE TABLE acme_identity.users (id uuid PRIMARY KEY)',
+  "CREATE FUNCTION acme_identity.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULL::uuid'",
+  `SET ROLE ${OWNER}`,
+  'CREATE TABLE public.acme_profiles (id uuid PRIMARY KEY, handle text NOT NULL)',
+  'RESET ROLE',
+  'ALTER TABLE public.acme_profiles ADD CONSTRAINT acme_profiles_user FOREIGN KEY (id) REFERENCES acme_identity.users (id)',
+  'ALTER TABLE public.acme_profiles ENABLE ROW LEVEL SECURITY',
+  'CREATE POLICY acme_own ON public.acme_profiles USING (id = acme_identity.uid())',
+]
+let imported: TargetRecord
+let scratch: TargetRecord
+let scratchDb = ''
+let importedDb = ''
+
+async function apply(p: PlanRecord): Promise<OperationRecord> {
+  const result = await h.serve.transaction('test.sc.accept', (tx) =>
+    acceptPlan(
+      tx,
+      {
+        planId: p.planId,
+        actor: {
+          kind: 'human',
+          identityId: a.identityId,
+          label: a.label,
+          client: 'web',
+          clientId: null,
+        },
+      },
+      registryAcceptDependencies(tx, { policy: ctx.policy, kinds, systemActor: WORKER_ACTOR }, a),
+    ),
+  )
+  if (result.status !== 'accepted') throw result.error
+  const workerId = newId('prc', Date.now())
+  for (let i = 0; i < 50; i++) {
+    const r = await processNextOperation(h.worker, { workerId, kinds, clock: systemClock })
+    if (r.status === 'idle') break
+  }
+  const op = await readOperation(h.worker, result.operation.operationId)
+  if (op === undefined) throw new Error('operation vanished')
+  return op
+}
+
+async function registerTarget(envSlug: string, extra: readonly string[]): Promise<TargetRecord> {
+  const env = await run(h, a, (tx) =>
+    planEnvironmentCreate(tx, h.context, a, productId, {
+      slug: envSlug,
+      displayName: envSlug,
+      tier: 'nonprod',
+    }),
+  )
+  const environmentId = String((await planContent(h, env.plan.planId))['environmentId'])
+  const name = await targetDatabase(pg17, `sc_${envSlug}`, [
+    `GRANT CREATE, USAGE ON SCHEMA public TO ${OWNER}`,
+    ...extra,
+  ])
+  if (envSlug === 'scratch') scratchDb = name
+  else importedDb = name
+  const databaseId = await registerDatabase(h, a, clusterId, name)
+  const r = await run(h, a, (tx) =>
+    planTargetRegister(tx, h.context, a, {
+      projectId: projectId as never,
+      environmentId: environmentId as never,
+      databaseId: databaseId as never,
+    }),
+  )
+  if (r.operation.state !== 'succeeded') {
+    throw new Error(JSON.stringify(await operationError(h, r.operation.operationId)))
+  }
+  const t = await findTarget(h.worker, String((await planContent(h, r.plan.planId))['targetId']))
+  if (t === undefined) throw new Error('target not registered')
+  return t
+}
+
+beforeAll(async () => {
+  h = await harness('exdb_it_scratch_check')
+  a = actor()
+  await runAsSuperuser(pg17, 'postgres', [
+    `DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${OWNER}') THEN CREATE ROLE ${OWNER} NOLOGIN; END IF; END $$`,
+  ])
+  clusterId = await readyCluster(h, a, pg17)
+  await submit(h, a, clusterId, 'verifier')
+  await verifyCredentials(h)
+  await runAsSuperuser(pg17, 'postgres', [
+    `GRANT ${OWNER} TO ${ROLE_NAMES.migrator} WITH INHERIT FALSE, SET TRUE`,
+  ])
+  ctx = {
+    policy: {
+      registry: new RuleRegistry([...REGISTRY_RULES, ...MIGRATION_RULES]),
+      codeVersion: '0.1.0+test',
+      clock: systemClock,
+    },
+    installationId: h.db.installationId,
+    connector: h.serveConnector,
+  }
+  kinds = new KindRegistry([
+    ...registryKinds({
+      store: h.worker,
+      clock: systemClock,
+      connector: h.workerConnector,
+      installationId: h.db.installationId,
+      controlStoreSystemIdentifier: async () => h.controlStoreSystemIdentifier,
+      snapshots: h.snapshots,
+    }),
+    ...migrationKinds({
+      store: h.worker,
+      clock: systemClock,
+      connector: h.workerConnector,
+      installationId: h.db.installationId,
+      engineVersion: '0.1.0+test',
+    }),
+  ])
+  const product = await run(h, a, (tx) =>
+    planProductCreate(tx, h.context, a, { slug, displayName: 'Scratch check' }),
+  )
+  productId = String((await planContent(h, product.plan.planId))['productId'])
+  const project = await run(h, a, (tx) =>
+    planProjectCreate(tx, h.context, a, {
+      product: slug,
+      slug: 'platform',
+      displayName: 'Platform',
+      managedScope: { includeSchemas: ['public'], excludeSchemas: [] },
+    }),
+  )
+  projectId = String((await planContent(h, project.plan.planId))['projectId'])
+  await run(h, a, (tx) =>
+    planProjectUpdate(tx, h.context, a, projectId, { executionRoles: { owner: OWNER } }),
+  )
+  imported = await registerTarget('staging', IMPORTED)
+  scratch = await registerTarget('scratch', [])
+}, 240_000)
+
+afterAll(async () => {
+  await h?.close()
+})
+
+const check = (scratchRef: string) =>
+  scratchCheck(
+    h.worker,
+    { connector: h.workerConnector, installationId: h.db.installationId },
+    imported,
+    scratchRef,
+  )
+const statusOf = (r: Awaited<ReturnType<typeof check>>) =>
+  Object.fromEntries(r.checks.map((c) => [c.check, [c.status, c.detail]]))
+
+describe('the scratch preflight', () => {
+  it('names what the scratch target lacks: the extension, the objects outside the scope', async () => {
+    const r = await check(scratch.targetId)
+    expect(r.ready).toBe(false)
+    expect(statusOf(r)).toEqual({
+      scratch_usable: ['pass', null],
+      identity: ['pass', null],
+      empty: ['pass', null],
+      extensions: ['fail', 'extensions_differ:1'],
+      outside_scope: ['fail', 'missing:3'],
+      execution_role: ['pass', null],
+    })
+    const items = Object.fromEntries(r.checks.map((c) => [c.check, c.items]))
+    expect(items['extensions']?.[0]).toMatch(/^pg_trgm: target public@[0-9.]+, scratch missing$/)
+    // The foreign key needs the table and its unique index; the policy needs the function.
+    expect(items['outside_scope']).toEqual([
+      'function acme_identity.uid()',
+      'relation acme_identity.users',
+      'relation acme_identity.users_pkey',
+    ])
+  })
+
+  it('passes once the scratch target is prepared like the imported one', async () => {
+    await runAsSuperuser(pg17, scratchDb, [
+      'CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public',
+      // A schema-only copy of what the imported schema depends on outside its scope.
+      'CREATE SCHEMA acme_identity',
+      'CREATE TABLE acme_identity.users (id uuid PRIMARY KEY)',
+      "CREATE FUNCTION acme_identity.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULL::uuid'",
+    ])
+    const r = await check(scratch.targetId)
+    expect(statusOf(r)).toMatchObject({ extensions: ['pass', null], outside_scope: ['pass', null] })
+    expect(r.ready).toBe(true)
+    // And an analysis replays there (the preflight changed nothing).
+    const p = await h.serve.transaction('test.sc.analyze', (tx) =>
+      planImportAnalysis(tx, ctx, a, imported.targetId, {
+        scratchTarget: scratch.targetId,
+        baseline: 'acme-scratch-2026',
+        files: [
+          {
+            name: '0001_profiles.sql',
+            text: 'CREATE TABLE public.acme_profiles (id uuid PRIMARY KEY, handle text NOT NULL);\n',
+          },
+        ],
+        ledgers: [],
+      }),
+    )
+    expect(p.decision).toBe('allow')
+    expect((await apply(p)).state).toBe('succeeded')
+  })
+
+  it('reports a used scratch target and an unusable execution role', async () => {
+    const used = await check(scratch.targetId)
+    // The table the replay created, with its columns and key: each a catalog entry.
+    expect(statusOf(used)['empty']).toEqual(['fail', 'objects:5'])
+    expect(used.checks.find((c) => c.check === 'empty')?.items).toEqual(
+      expect.arrayContaining([expect.stringMatching(/^table public\.acme_profiles/)]),
+    )
+    await runAsSuperuser(pg17, 'postgres', [`ALTER ROLE ${OWNER} CREATEDB`])
+    try {
+      const r = await check(scratch.targetId)
+      expect(statusOf(r)['execution_role']).toEqual(['fail', 'privileged_attribute'])
+    } finally {
+      await runAsSuperuser(pg17, 'postgres', [`ALTER ROLE ${OWNER} NOCREATEDB`])
+    }
+  })
+
+  it('resets the used scratch target in place: same database, same marker, ready again', async () => {
+    const before = await withSuperuser(pg17, scratchDb, (c) =>
+      c.query(
+        `SELECT (SELECT oid::text FROM pg_catalog.pg_database WHERE datname = current_database()) AS oid,
+                (SELECT target_id FROM exponetdb.target_identity) AS marker`,
+      ),
+    )
+    const script = scratchResetSql({
+      installationId: h.db.installationId,
+      targetId: scratch.targetId,
+      targetPath: scratch.path,
+      generation: scratch.generation,
+      includeSchemas: ['public'],
+    })
+    // The guard refuses any other database: here the imported target.
+    await expect(runAsSuperuser(pg17, importedDb, [script])).rejects.toMatchObject({
+      message: expect.stringContaining('is not the scratch target'),
+    })
+    await runAsSuperuser(pg17, scratchDb, [script])
+    const after = await withSuperuser(pg17, scratchDb, (c) =>
+      c.query(
+        `SELECT (SELECT oid::text FROM pg_catalog.pg_database WHERE datname = current_database()) AS oid,
+                (SELECT target_id FROM exponetdb.target_identity) AS marker,
+                (SELECT count(*)::int FROM pg_catalog.pg_extension WHERE extname = 'pg_trgm') AS trgm,
+                pg_catalog.has_schema_privilege($1, 'public', 'CREATE') AS owner_creates`,
+        [OWNER],
+      ),
+    )
+    expect(after.rows[0]).toEqual({ ...before.rows[0], trgm: 1, owner_creates: true })
+    const r = await check(scratch.targetId)
+    expect(r.ready, JSON.stringify(r.checks)).toBe(true)
+    // The same target takes the next analysis.
+    const p = await h.serve.transaction('test.sc.analyze_again', (tx) =>
+      planImportAnalysis(tx, ctx, a, imported.targetId, {
+        scratchTarget: scratch.targetId,
+        baseline: 'acme-scratch-2026',
+        files: [
+          {
+            name: '0001_profiles.sql',
+            text: 'CREATE TABLE public.acme_profiles (id uuid PRIMARY KEY, handle text NOT NULL);\n',
+          },
+        ],
+        ledgers: [],
+      }),
+    )
+    expect((await apply(p)).state).toBe('succeeded')
+  })
+
+  it('names a target that cannot be a scratch target, and checks nothing further', async () => {
+    const same = await check(imported.targetId)
+    expect(same.checks[0]).toMatchObject({
+      check: 'scratch_usable',
+      status: 'fail',
+      detail: 'same_target',
+    })
+    expect(same.checks.slice(1).every((c) => c.status === 'unknown')).toBe(true)
+    const none = await check('tgt_01M5GZZZZZZZZZZZZZZZZZZZZZ')
+    expect(none).toMatchObject({ scratchTargetId: null, ready: false })
+    expect(none.checks[0]).toMatchObject({ detail: 'not_found' })
+  })
+})

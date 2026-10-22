@@ -631,6 +631,17 @@ export const ACTIONS = {
     clientKinds: HUMAN,
     humanOnly: true,
   }),
+  'migration.import.scratch_check': read(
+    'Check a scratch target before a legacy import (read only: usability, identity, emptiness, extensions, objects outside the scope, the execution role)',
+    'target',
+    'migrations.import',
+    {
+      wave: '9',
+      clientKinds: HUMAN,
+      humanOnly: true,
+      basis: 'Wave 9 order A7; legacy-import.md §2.5',
+    },
+  ),
   'session.list': read('List sessions', 'target', 'diagnostics.read'),
   'lock.list': read('List locks', 'target', 'diagnostics.read'),
   'query_stats.list': read('List statement statistics', 'target', 'diagnostics.read', {

@@ -689,6 +689,41 @@ export const ImportAnalysisRequestSchema = z
   })
   .meta({ id: 'ImportAnalysisRequest' })
 
+/** `GET /targets/{target}/migrations/scratch-check` (Wave 9, legacy-import.md §2.5). */
+export const ScratchCheckSchema = z
+  .object({
+    targetId: TargetIdSchema,
+    scratchTargetId: TargetIdSchema.nullable(),
+    ready: z.boolean().meta({ description: 'Every check passed: an analysis can replay here.' }),
+    checkedAt: TimestampSchema,
+    checks: z
+      .array(
+        z.object({
+          check: z.enum([
+            'scratch_usable',
+            'identity',
+            'empty',
+            'extensions',
+            'outside_scope',
+            'execution_role',
+          ]),
+          status: z.enum(['pass', 'fail', 'unknown']),
+          detail: z
+            .string()
+            .regex(/^[a-z][a-z0-9_:.-]{0,199}$/)
+            .nullable()
+            .meta({ description: 'A machine code: why it failed or could not be checked.' }),
+          items: z
+            .array(z.string().max(300).meta({ untrusted: true }))
+            .max(100)
+            .meta({ description: 'What differs, as catalog names (untrusted text).' }),
+          truncated: z.boolean(),
+        }),
+      )
+      .max(6),
+  })
+  .meta({ id: 'ScratchCheck' })
+
 export const ImportReportSchema = z
   .object({
     id: ImportReportIdSchema,
@@ -822,6 +857,7 @@ export type MigrationDetail = z.infer<typeof MigrationDetailSchema>
 export type VerificationRun = z.infer<typeof VerificationRunSchema>
 export type MigrationProgress = z.infer<typeof MigrationProgressSchema>
 export type ImportReport = z.infer<typeof ImportReportSchema>
+export type ScratchCheck = z.infer<typeof ScratchCheckSchema>
 export type StepUpView = z.infer<typeof StepUpSchema>
 export type EvidenceItem = z.infer<typeof EvidenceItemSchema>
 
