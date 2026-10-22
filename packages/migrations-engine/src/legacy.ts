@@ -30,6 +30,7 @@ import {
   readLedgerRows,
   snapshotWithin,
   sql,
+  TargetError,
   type TargetSession,
   takeTargetLock,
 } from '@exponetdb/postgres'
@@ -927,12 +928,14 @@ function provenanceOf(match: ContentMatch): Provenance | null {
  * is never evidence. Keys are computed once per side.
  *
  * Content proves that one file ran, never which of several files with the
- * same content: an entry's hash or statement evidence goes to one file only.
- * When several files share the content an entry holds, an entry that names
- * one of them takes it, and the rest pair up in file and ledger order only
- * when at least as many entries hold that content; otherwise none of the
- * remaining files is recorded by it, and each is `contested` (the number of
- * files sharing the content): a person decides.
+ * same content, and each ledger records a file once. An entry whose name is
+ * a file's stem stands for that file only: its content records it when it
+ * matches, and never another file (a copy, or the text the named file had
+ * when it ran: `content_names_other_file`). The unnamed entries of one ledger
+ * whose content equals the same files pair up with them in file and ledger
+ * order when there are at least as many entries as files (an entry beyond
+ * them stays without a file); otherwise none is recorded by that content and
+ * each file is `contested` (the number of files sharing it): a person decides.
  */
 function relateLedger(
   chain: readonly FileAnalysis[],
@@ -943,21 +946,13 @@ function relateLedger(
   used: Set<LegacyLedgerEntry>
   contested: Map<string, number>
   contradicted: Set<string>
+  namesOther: Set<string>
 } {
   const related = new Map<string, Related[]>()
   const used = new Set<LegacyLedgerEntry>()
   const contested = new Map<string, number>()
   const contradicted = new Set<string>()
-  // Matches of one entry with several files of the same content, resolved after every entry.
-  const shared = new Map<
-    string,
-    { stems: string[]; claims: { entry: LegacyLedgerEntry; match: ContentMatch }[] }
-  >()
-  const claim = (key: string, stems: string[], entry: LegacyLedgerEntry, match: ContentMatch) => {
-    const group = shared.get(key) ?? { stems, claims: [] }
-    group.claims.push({ entry, match })
-    shared.set(key, group)
-  }
+  const namesOther = new Set<string>()
   const keys = new Map<string, ContentKeys>()
   const statementsOf = new Map<string, string[]>()
   const textOf = new Map<string, string>()
@@ -1003,22 +998,26 @@ function relateLedger(
       },
     ])
   }
+  // Each ledger records a file once: what one entry took, no other entry of the same ledger
+  // takes. Unnamed entries wait until every named one is placed, then pair per content.
+  const taken = new Map<string, Set<string>>()
+  const takenBy = (source: string) => {
+    const set = taken.get(source) ?? new Set<string>()
+    taken.set(source, set)
+    return set
+  }
+  const unnamed = new Map<
+    string,
+    { stems: string[]; entries: { entry: LegacyLedgerEntry; matches: Map<string, ContentMatch> }[] }
+  >()
   for (const e of ledger) {
-    const seen = new Set<string>()
-    const offer = (key: string, stems: readonly string[], match: ContentMatch) => {
-      const fresh = stems.filter((stem) => !seen.has(stem))
-      for (const stem of fresh) seen.add(stem)
-      if (fresh.length === 1 && stems.length === 1) {
-        add(fresh[0] as string, e, match)
-      } else if (fresh.length > 0) {
-        used.add(e)
-        claim(key, [...stems], e, match)
-      }
+    // Every file the entry's content equals, at the strongest tier for that file.
+    const matches = new Map<string, ContentMatch>()
+    const offer = (stems: readonly string[], match: ContentMatch) => {
+      for (const stem of stems) if (!matches.has(stem)) matches.set(stem, match)
     }
     if (e.bytesDigest !== null) {
-      const stems = byDigest.get(e.bytesDigest) ?? []
-      if (stems.length > 0)
-        offer(`hash:${e.bytesDigest}`, stems, { strength: 'strong', how: 'hash' })
+      offer(byDigest.get(e.bytesDigest) ?? [], { strength: 'strong', how: 'hash' })
     }
     const applied = e.statements !== null && e.statements.length > 0 ? e.statements : null
     const entryKeys = applied === null ? null : contentKeys(applied, applied)
@@ -1028,9 +1027,31 @@ function relateLedger(
         [byNormalized, entryKeys.normalized, { strength: 'medium', how: 'statements_normalized' }],
         [byBodies, entryKeys.bodies, { strength: 'low', how: 'statements_bodies' }],
       ]
-      for (const [index, key, match] of tiers) {
-        const stems = key === null ? [] : (index.get(key) ?? [])
-        if (stems.length > 0) offer(`${match.how}:${key}`, stems, match)
+      for (const [index, key, match] of tiers)
+        offer(key === null ? [] : (index.get(key) ?? []), match)
+    }
+    if (matches.size > 0) {
+      const named = [e.name, e.altName].find((n): n is string => n !== null && keys.has(n))
+      const mine = takenBy(e.source)
+      if (named !== undefined) {
+        // An entry that names a file stands for that file only: its content records it when
+        // it matches, and never another file of the same content (a copy, an older text).
+        const match = matches.get(named)
+        if (match !== undefined && !mine.has(named)) {
+          add(named, e, match)
+          mine.add(named)
+        } else {
+          used.add(e)
+          for (const stem of matches.keys()) if (stem !== named) namesOther.add(stem)
+        }
+      } else {
+        const stems = [...matches.keys()].sort(
+          (x, y) => (position.get(x) ?? 0) - (position.get(y) ?? 0),
+        )
+        const key = `${e.source}\u0000${stems.join('\u0000')}`
+        const group = unnamed.get(key) ?? { stems, entries: [] }
+        group.entries.push({ entry: e, matches })
+        unnamed.set(key, group)
       }
     }
     const group = groups.get(e.name) ?? (e.altName === null ? undefined : groups.get(e.altName))
@@ -1060,30 +1081,27 @@ function relateLedger(
       if (name !== null && keys.has(name)) add(name, e, { strength: 'weak', how: 'name_hint' })
     }
   }
-  for (const { stems, claims } of shared.values()) {
-    const open = [...stems].sort((x, y) => (position.get(x) ?? 0) - (position.get(y) ?? 0))
-    const waiting: typeof claims = []
-    // An entry that names one of the files takes that one.
-    for (const c of claims) {
-      const named = open.findIndex((stem) => stem === c.entry.name || stem === c.entry.altName)
-      if (named >= 0) {
-        add(open[named] as string, c.entry, c.match)
-        open.splice(named, 1)
-      } else {
-        waiting.push(c)
-      }
-    }
-    if (waiting.length >= open.length) {
-      // As many entries as files: each ran, in file order and ledger order.
+  for (const { stems, entries } of unnamed.values()) {
+    const source = entries[0]?.entry.source ?? 'supabase'
+    const mine = takenBy(source)
+    const open = stems.filter((stem) => !mine.has(stem))
+    if (entries.length >= open.length) {
+      // As many entries as files: each ran, in file order and ledger order. An entry beyond
+      // the files (one whose file was deleted, or a second run) stays without a file.
       open.forEach((stem, i) => {
-        const c = waiting[i]
-        if (c !== undefined) add(stem, c.entry, c.match)
+        const c = entries[i]
+        const match = c?.matches.get(stem)
+        if (c !== undefined && match !== undefined) {
+          add(stem, c.entry, match)
+          mine.add(stem)
+        }
       })
-    } else if (waiting.length > 0) {
+    } else {
+      for (const c of entries) used.add(c.entry)
       for (const stem of open) contested.set(stem, Math.max(contested.get(stem) ?? 0, stems.length))
     }
   }
-  return { related, used, contested, contradicted }
+  return { related, used, contested, contradicted, namesOther }
 }
 
 /** Classifies each file (legacy-import.md §2 step 4); evidence by content first, names last. */
@@ -1096,7 +1114,7 @@ async function classify(
   searchPath: readonly string[],
 ): Promise<Classified[]> {
   const out: Classified[] = []
-  const { related, used, contested, contradicted } = relateLedger(chain, ledger, hints)
+  const { related, used, contested, contradicted, namesOther } = relateLedger(chain, ledger, hints)
   for (const a of chain) {
     const stem = a.file.stem
     const evidence: string[] = unreadable.map((l) => `ledger_unreadable:${l}`)
@@ -1211,6 +1229,12 @@ async function classify(
     }
     // An alias the entry's own statements contradict records nothing.
     if (contradicted.has(stem) && !recorded) state = 'ambiguous'
+    // An entry that names another file holds this file's content: a copy, or the text the
+    // named file had when it ran. Neither ran by this evidence; a person decides.
+    if (namesOther.has(stem) && !recorded) {
+      evidence.push('content_names_other_file')
+      state = 'ambiguous'
+    }
     out.push({
       kind: 'file',
       legacyId: `legacy:${stem}`,
@@ -1516,7 +1540,20 @@ export class ImportReplayKind implements OperationKind {
       // The same major, and extensions declared on the scratch target, never guessed: each
       // must be installed there in the same schema and version as on the imported target, or
       // every object that uses one would differ (legacy-import.md §2, §6).
-      const differs = await scratchDiffers(this.#deps, target, session)
+      let differs: string | null
+      try {
+        differs = await scratchDiffers(this.#deps, target, session)
+      } catch (error) {
+        if (!unavailable(error)) throw error
+        // Nothing ran: the report says why instead of staying pending (legacy-import.md §6).
+        await this.#finish(
+          fence,
+          c.reportId,
+          { state: 'incomplete', reason: 'target_unavailable' },
+          ctx.operationId,
+        )
+        return { outcome: 'not_applied', errorCode: 'TARGET_UNAVAILABLE' }
+      }
       if (differs !== null) {
         await this.#finish(
           fence,
@@ -1597,75 +1634,86 @@ export class ImportReplayKind implements OperationKind {
         }
       }
       const replay = await session.readOnly((rtx) => snapshotWithin(rtx, scopeOf(scope)))
-      // The imported target is only read.
-      const observed = await this.#deps.connector.forTarget(
-        target,
-        'observer',
-        `import/${ctx.operationId}`,
-      )
       try {
-        const result = await observed.session.readOnly(
-          async (rtx) => {
-            const snapshot = await snapshotWithin(rtx, scopeOf(scope))
-            const chain = analyzeChain(applicable, replays)
-            if ('failedAt' in chain) return { failedAt: chain.failedAt } as const
-            const ledgers = await readLegacyLedgers(rtx, c.hints.ledgers)
-            const classified = await classify(
-              rtx,
-              chain,
-              ledgers.entries,
-              ledgers.unreadable,
-              c.hints,
-              c.searchPath,
-            )
-            // In file order: the skipped files as not applicable, then the ledger entries.
-            const byStem = new Map(
-              classified.filter((i) => i.kind === 'file').map((i) => [i.name, i]),
-            )
-            const items: Classified[] = files.map(
-              (f) =>
-                byStem.get(f.stem) ?? {
-                  kind: 'file',
-                  legacyId: `legacy:${f.stem}`,
-                  name: f.stem,
-                  state: 'not_applicable',
-                  contentDigest: f.sourceDigest,
-                  provenance: null,
-                  appliedAt: null,
-                  evidence: ['hint:not_applicable'],
-                  strength: null,
-                },
-            )
-            items.push(...classified.filter((i) => i.kind !== 'file'))
-            return { snapshot, items } as const
-          },
-          { statementTimeoutMs: 120_000 },
+        // The imported target is only read.
+        const observed = await this.#deps.connector.forTarget(
+          target,
+          'observer',
+          `import/${ctx.operationId}`,
         )
-        if ('failedAt' in result) {
+        try {
+          const result = await observed.session.readOnly(
+            async (rtx) => {
+              const snapshot = await snapshotWithin(rtx, scopeOf(scope))
+              const chain = analyzeChain(applicable, replays)
+              if ('failedAt' in chain) return { failedAt: chain.failedAt } as const
+              const ledgers = await readLegacyLedgers(rtx, c.hints.ledgers)
+              const classified = await classify(
+                rtx,
+                chain,
+                ledgers.entries,
+                ledgers.unreadable,
+                c.hints,
+                c.searchPath,
+              )
+              // In file order: the skipped files as not applicable, then the ledger entries.
+              const byStem = new Map(
+                classified.filter((i) => i.kind === 'file').map((i) => [i.name, i]),
+              )
+              const items: Classified[] = files.map(
+                (f) =>
+                  byStem.get(f.stem) ?? {
+                    kind: 'file',
+                    legacyId: `legacy:${f.stem}`,
+                    name: f.stem,
+                    state: 'not_applicable',
+                    contentDigest: f.sourceDigest,
+                    provenance: null,
+                    appliedAt: null,
+                    evidence: ['hint:not_applicable'],
+                    strength: null,
+                  },
+              )
+              items.push(...classified.filter((i) => i.kind !== 'file'))
+              return { snapshot, items } as const
+            },
+            { statementTimeoutMs: 120_000 },
+          )
+          if ('failedAt' in result) {
+            await this.#finish(
+              fence,
+              c.reportId,
+              { state: 'incomplete', reason: `parse_failed:${result.failedAt}` },
+              ctx.operationId,
+            )
+            return 'applied'
+          }
+          const drift = driftItems(replay.document, result.snapshot.document)
           await this.#finish(
             fence,
             c.reportId,
-            { state: 'incomplete', reason: `parse_failed:${result.failedAt}` },
+            {
+              state: 'open',
+              fingerprint: result.snapshot.fingerprint,
+              replayFingerprint: replay.fingerprint,
+              items: [...result.items, ...drift.items],
+              driftTotal: drift.total,
+              driftHeld: drift.items.length,
+            },
             ctx.operationId,
           )
-          return 'applied'
+        } finally {
+          await observed.session.close()
         }
-        const drift = driftItems(replay.document, result.snapshot.document)
+      } catch (error) {
+        if (!unavailable(error)) throw error
+        // The scratch target took the files; the imported one could not be read to compare.
         await this.#finish(
           fence,
           c.reportId,
-          {
-            state: 'open',
-            fingerprint: result.snapshot.fingerprint,
-            replayFingerprint: replay.fingerprint,
-            items: [...result.items, ...drift.items],
-            driftTotal: drift.total,
-            driftHeld: drift.items.length,
-          },
+          { state: 'incomplete', reason: 'target_unavailable' },
           ctx.operationId,
         )
-      } finally {
-        await observed.session.close()
       }
       return 'applied'
     } catch (error) {
@@ -1692,7 +1740,6 @@ export class ImportReplayKind implements OperationKind {
   }
 }
 
-/** The first extension that the scratch target holds differently from the imported one, or null. */
 /**
  * Why the scratch target cannot stand for the imported one, or null: another
  * PostgreSQL major (`major_differs:<target>/<scratch>`), or an extension in
@@ -1724,6 +1771,10 @@ async function scratchDiffers(
   }
   return null
 }
+
+/** A target that could not be reached or read (never a refusal of a statement). */
+const unavailable = (error: unknown) =>
+  error instanceof TargetError && error.code === 'TARGET_UNAVAILABLE'
 
 function scopeOf(scope: ManagedScope) {
   return {

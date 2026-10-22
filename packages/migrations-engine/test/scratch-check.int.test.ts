@@ -307,10 +307,14 @@ describe('the scratch preflight', () => {
     ])
     await expect(runAsSuperuser(pg17, scratchDb, [script])).rejects.toMatchObject({
       message: expect.stringMatching(
-        /outside the managed scope.*view acme_identity\.profile_handles/,
+        /outside the managed scope depend on it and would be dropped \(1\): rule _RETURN on view acme_identity\.profile_handles$/,
       ),
     })
     await runAsSuperuser(pg17, scratchDb, ['DROP VIEW acme_identity.profile_handles'])
+    // A publication's member is no dependent worth refusing: the drop ends the membership only.
+    await runAsSuperuser(pg17, scratchDb, [
+      'CREATE PUBLICATION exdb_it_reset_pub FOR TABLE public.acme_profiles',
+    ])
     // A schema name holding the script's own dollar-quote tag stays inside its literal.
     const hostile = 'x$reset$;COMMIT;CREATE TABLE public.exdb_breakout(i int);--'
     const tagged = scratchResetSql({
@@ -340,6 +344,14 @@ describe('the scratch preflight', () => {
     )
     expect(hijacked.rows[0]).toEqual({ calls: 0 })
     await runAsSuperuser(pg17, scratchDb, ['DROP TABLE acme_identity.exdb_hijacked'])
+    const publication = await withSuperuser(pg17, scratchDb, (c) =>
+      c.query(
+        `SELECT (SELECT count(*)::int FROM pg_catalog.pg_publication WHERE pubname = 'exdb_it_reset_pub') AS kept,
+                (SELECT count(*)::int FROM pg_catalog.pg_publication_tables WHERE pubname = 'exdb_it_reset_pub') AS members`,
+      ),
+    )
+    expect(publication.rows[0]).toEqual({ kept: 1, members: 0 })
+    await runAsSuperuser(pg17, scratchDb, ['DROP PUBLICATION exdb_it_reset_pub'])
     const after = await withSuperuser(pg17, scratchDb, (c) =>
       c.query(
         `SELECT (SELECT oid::text FROM pg_catalog.pg_database WHERE datname = current_database()) AS oid,

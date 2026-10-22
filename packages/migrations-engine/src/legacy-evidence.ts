@@ -75,9 +75,9 @@ const CODE_LANGUAGES = new Set(['plpgsql', 'sql'])
  * Whether the dollar-quoted body that ends at `end` is the code of a `DO`
  * block or of a function or procedure in `plpgsql` or `sql`: only such a
  * body is compared without its comments and whitespace (the `low` tier).
- * A dollar-quoted literal (data) or a body in another language (whose
- * whitespace may matter) never is. `prefix` holds the statement's tokens
- * so far; the `LANGUAGE` clause may also follow the body.
+ * A dollar-quoted literal (data, a parameter's default) or a body in another
+ * language (whose whitespace may matter) never is. `prefix` holds the
+ * statement's tokens so far; the `LANGUAGE` clause may also follow the body.
  */
 function isCodeBody(prefix: readonly string[], text: string, end: number): boolean {
   const start = prefix.lastIndexOf(';') + 1
@@ -86,9 +86,14 @@ function isCodeBody(prefix: readonly string[], text: string, end: number): boole
     .filter((t) => t !== ' ')
     .map((t) => t.toLowerCase())
   const head = words.slice(0, 4)
-  const isDo = head[0] === 'do'
+  // The body is the string right after `DO` (or `DO LANGUAGE <name>`) or after a routine's
+  // `AS`: a dollar-quoted default or other literal before it is data.
+  const isDo =
+    head[0] === 'do' && (words.length === 1 || (words.length === 3 && words[1] === 'language'))
   const isRoutine =
-    head[0] === 'create' && (head.includes('function') || head.includes('procedure'))
+    head[0] === 'create' &&
+    (head.includes('function') || head.includes('procedure')) &&
+    words[words.length - 1] === 'as'
   if (!isDo && !isRoutine) return false
   const unquote = (t: string) => t.replace(/^(["'])(.*)\1$/, '$2').toLowerCase()
   let language: string | null = null

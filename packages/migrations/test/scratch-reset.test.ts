@@ -65,6 +65,11 @@ describe('scratchResetSql', () => {
     const sql = scratchResetSql({ ...BASE, excludeSchemas: ['auth'] })
     expect(sql).toContain("NOT (n.nspname = ANY (ARRAY['auth']::text[]))")
     expect(sql).toContain("n.nspname NOT IN ('information_schema', 'exponetdb')")
+    // The REST project view gives such a scope as null (review round 2: it threw).
+    expect(scratchResetSql({ ...BASE, includeSchemas: null, excludeSchemas: ['auth'] })).toBe(sql)
+    expect(scratchResetSql({ ...BASE, includeSchemas: null, excludeSchemas: null })).toContain(
+      'NOT (n.nspname = ANY (ARRAY[]::text[]))',
+    )
   })
 
   it('refuses ids and generations that are not canonical', () => {

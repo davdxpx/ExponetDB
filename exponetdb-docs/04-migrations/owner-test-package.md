@@ -202,7 +202,10 @@ the lab superuser in `acme_scratch` (`exponetdb dev sql staging --lab parta
 preflight is ready again. Counter-check: before the reset, a view outside
 the scope on a replayed table (`CREATE SCHEMA probe; CREATE VIEW probe.v AS
 SELECT * FROM public.acme_notes;` in `acme_scratch`) makes the reset refuse
-and name `view probe.v`; `DROP SCHEMA probe CASCADE;`, then reset.
+and name `rule _RETURN on view probe.v`; `DROP SCHEMA probe CASCADE;`, then
+reset. On REOSA staging the history also adds a trigger on `auth.users`
+that calls a `public` function: drop what the replay created outside the
+scope before resetting (legacy-import.md §2.5).
 
 ## 7. A first bundle from an MCP agent on staging
 

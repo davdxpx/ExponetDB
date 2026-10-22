@@ -426,3 +426,40 @@ describe('doctor, agent help and the reference', () => {
     for (const c of COMMANDS) expect(out.stdout).toContain(`### ${c.path.join(' ')}`)
   })
 })
+
+describe('migration import scratch-reset-sql', () => {
+  // The command reads three REST views; this stub answers them as the server does.
+  const views = (managedScope: unknown): Record<string, unknown> => ({
+    getTarget: {
+      id: 'tgt_01M5GNJDEAT617M685B9PNA4Q4',
+      path: 'acme/platform/scratch',
+      tier: 'nonprod',
+      generation: 1,
+      projectId: 'prj_01M5GNJDEAT617M685B9PNA4Q4',
+    },
+    getProject: { id: 'prj_01M5GNJDEAT617M685B9PNA4Q4', managedScope },
+    getInstallation: { installationId: 'ins_01M5GNJDEAT617M685B9PNA4Q4' },
+  })
+  const reset = async (managedScope: unknown) => {
+    const command = COMMANDS.find((c) => c.path.join(' ') === 'migration import scratch-reset-sql')
+    if (command === undefined) throw new Error('no scratch-reset-sql command')
+    const answers = views(managedScope)
+    const ctx = {
+      remote: async () => ({
+        sdk: { call: async (operation: string) => ({ ok: true, value: answers[operation] }) },
+      }),
+    }
+    const out = await command.run(
+      ctx as never,
+      { flags: { scratch: 'acme/platform/scratch' } } as never,
+    )
+    return (out as { data: { sql: string } }).data.sql
+  }
+
+  it('resets a project scope that lists no schemas (null in the project view) and one that does', async () => {
+    const all = await reset({ includeSchemas: null, excludeSchemas: ['auth', 'storage'] })
+    expect(all).toContain("NOT (n.nspname = ANY (ARRAY['auth', 'storage']::text[]))")
+    const listed = await reset({ includeSchemas: ['public'], excludeSchemas: [] })
+    expect(listed).toContain("managed text[] := ARRAY['public']::text[];")
+  })
+})

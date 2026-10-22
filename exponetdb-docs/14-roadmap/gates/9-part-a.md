@@ -590,6 +590,16 @@ written as **[OBSERVED]** with that source, everything still to come as
 - A8: a database whose name holds a double quote gets no legacy ledger
   grant from the script (psql cannot `\connect` to it); the script says so,
   and a person grants the read by hand.
+- Review round 2 (C2-S2), for the owner: an execution role that is a
+  member of a role with `BYPASSRLS` (Supabase's `service_role`) or of a
+  `pg_*` role is never usable, declared or not (ADR-0034 excuses the role's
+  own attribute only). Check REOSA staging's `<env>_owner` memberships
+  before running the owner test package's §8 there.
+- Review round 2 (C2-P3-3): the preflight does not compare what lies
+  outside the managed scope beyond what the imported schema depends on, and
+  `pg_depend` holds no references from function bodies other than `BEGIN
+  ATOMIC`; objects a replay creates outside the scope stay on the scratch
+  target after the reset (legacy-import.md §2.5).
 - Review round 1, P3-5: the baseline verification fails when the imported
   target's major cannot parse the chain (`structural.unparsed`); no test
   drives it, since it needs the imported target's major to change between
@@ -671,5 +681,33 @@ run end to end through psql), secrets and the frozen pieces sound.
 | S-P3-2 | P3 | The bootstrap excuses `BYPASSRLS` for the grant when any environment declared it | stays: documented (§4.8, §5); the plan and the executor check the declaration per environment | — |
 | S-P3-3 | P3 | The replay's autocommit step leaves session settings set | stays: the Wave 6 autocommit runner does the same, each step sets its own, and the session belongs to one operation and is closed after it | — |
 
-Round 2 (fresh reviewers over the whole diff after these fixes) follows
-before the pull request is marked ready.
+### 6.3 Review round 2 over the whole Part A diff (2026-10-22)
+
+Two fresh independent reviewers (no part in building it or in round 1), one
+for correctness and truthful states, one for security and authority,
+reviewed `git diff origin/main...b38b970` (16 commits), re-verified the
+round-1 fixes, ran the golden checks and the suites on disposable
+containers, and edited nothing. Both confirmed the frozen pieces unchanged.
+Fixes in `65b4837` (security) and the commit after it (correctness), each
+with a test that fails on the code before it unless the row says otherwise.
+
+**Security.** One P1, two P3:
+
+| # | Severity | Finding | Fix | Test |
+|---|---|---|---|---|
+| S2-P1-1 | P1 | The scratch reset script, run by a superuser, resolved its operators through the session's `search_path`: an exact-type operator a replay left in a managed schema (`public.=(oid, regclass)`) won over the built-in one and ran as the superuser (the reviewer: `ALTER ROLE … SUPERUSER` ran; here, 61 280 calls in one reset) | the transaction sets `search_path = pg_catalog, pg_temp` before the `DO` block (threat T37, legacy-import.md §2.5) | `scratch-check.int.test.ts` plants the operator: 0 calls (61 280 without the fix); `scratch-reset.test.ts` |
+| S2-P3-1 | P3 | The bootstrap script compares names unqualified while an administrator runs it (no hijack found: every comparison collides with a `pg_catalog` operator) | the same path in its first session and after each `\connect`, reset at the end (credentials-and-roles.md §8, T36) | `adapter.test.ts`; `bootstrap.int.test.ts` on 16, 17, 18 |
+| S2-P3-2 | P3 (suspected by the reviewer) | A retirement and a registration of the same database could both commit (READ COMMITTED; the foreign key's lock does not conflict with the retirement's update), leaving a placement on a retired database | the registration locks the database row `FOR SHARE` first; whichever comes second waits and its guard refuses (registry.md §4.3) | `database-retire.int.test.ts` "never leaves a placement …" (the registration finished during the retirement without the lock) |
+
+**Correctness.** Two P2, four P3, two suspected:
+
+| # | Severity | Finding | Fix | Test |
+|---|---|---|---|---|
+| C2-P2-1 | P2 (the C-P1-1 class) | An entry's name only counted inside one tier's group: a copy of a named file's text recorded as applied when the named file was reformatted, edited after it ran, or named by two entries | an entry that names a stem stands for that file only; its content never records another file (`content_names_other_file`); each ledger records a file once; only unnamed entries pair (legacy-import.md §2.3, §6) | `legacy-ledger-match.int.test.ts` (`0012`–`0017`) |
+| C2-P2-2 | P2 | `migration import scratch-reset-sql` threw for a project scope without an include list (`null` in the project view), the walkthrough's default | `null` means all schemas but the excluded ones | `scratch-reset.test.ts`; `local.test.ts` "resets a project scope that lists no schemas" |
+| C2-P3-1 | P3 | Entries of one content matching at different tiers never paired | entries are grouped by the files their content equals, at any tier | same test (`seed_b`, `medium`) |
+| C2-P3-2 | P3 | An entry beyond the files of its content disappeared from the report | it stays a ledger item without a file | same test (`seed_c`) |
+| C2-P3-3 | P3 | The reset refused publication members; its list was cut without a mark; the preflight's `ready`, objects a replay leaves outside the scope (the Supabase `auth.users` trigger) and references inside function bodies were not described | publication members no longer refused; the count and a cut mark in the message; legacy-import.md §2.5 and the owner test package say what `ready` does not cover | `scratch-check.int.test.ts` (a publication kept, the count); a probe on 16 and 18 |
+| C2-P3-4 | P3 | The `low` tier normalized a dollar-quoted default before a routine's body | only the string after `AS` (or `DO`) is a code body | `legacy-evidence.test.ts` |
+| C2-S1 | suspected | An imported target unreachable during the replay left the report `pending`, not `incomplete` as §6 says | `incomplete`, `target_unavailable` (before the replay: not applied; after it: the scratch target took the files) | `legacy-ledger-match.int.test.ts` "an imported target that cannot be read" (a connector that refuses it) |
+| C2-S2 | suspected, owner question | ADR-0034 excuses only the role's own `BYPASSRLS`: an owner that is a member of a role with `BYPASSRLS` (Supabase's `service_role`) or of a `pg_*` role reaches a protected role and is never usable, declared or not | not changed: the reach rule is a DECIDED security rule (order §1, stop-and-ask); the owner checks the `<env>_owner` memberships on REOSA staging before §8 of the owner test package (§5) | — |

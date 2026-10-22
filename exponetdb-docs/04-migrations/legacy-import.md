@@ -381,13 +381,18 @@ The engine (`packages/migrations-engine/src/legacy-evidence.ts`) now:
   and of `plpgsql` or `sql` functions and procedures, and nowhere else (a
   dollar-quoted literal is data, and a body in another language, such as
   Python, keeps its whitespace);
-- gives one entry's content to **one file only**: content proves that a
-  file ran, not which of several files with the same content. When several
-  files hold an entry's content, an entry that names one of them takes it;
-  the others pair up with entries of that content in file and ledger order
-  only when there are at least as many entries as files; otherwise none of
-  them is recorded by that content, and each is `ambiguous` with
-  `content_matches_files:<n>`;
+- gives one entry's content to **one file only**, and each ledger records
+  a file once: content proves that a file ran, not which of several files
+  with the same content. **[DECIDED]** (Wave 9 Part A, review rounds 1
+  and 2) An entry whose name is a file's stem stands for that file only:
+  its content records it when it matches, and never another file of the
+  same content (a copy, or the text the named file had when it ran: that
+  file is `ambiguous` with `content_names_other_file`). The unnamed entries
+  of one ledger whose content equals the same files (at any tier) pair up
+  with them in file and ledger order when there are at least as many
+  entries as files, and an entry beyond them stays a ledger item without a
+  file; with fewer entries than files none is recorded by that content,
+  and each is `ambiguous` with `content_matches_files:<n>`;
 - treats a **contradicted alias** as no evidence: when an alias says one
   entry stands for several files and the entry holds statements that are
   not the files' joined content, each file gets `<ledger>:alias_contradicted`
@@ -521,8 +526,11 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   `pg_depend`, normal and automatic dependencies). Then, in one
   transaction, it drops and re-creates each schema of the managed scope with
   its owner and grants (read from the catalog before the drop) and
-  re-creates the extensions that lived there in their versions. The script
-  is one `DO` block whose dollar-quote tag occurs nowhere in its body (a
+  re-creates the extensions that lived there in their versions. A
+  publication's membership of a table or schema is no reason to refuse
+  (the drop ends the membership, the publication stays); a refusal names
+  how many objects depend and marks a list cut at 2 000 characters. The
+  script is one `DO` block whose dollar-quote tag occurs nowhere in its body (a
   schema name may hold `$`), so no registry value leaves its literal, and
   **[DECIDED]** (review round 2) it first sets `search_path = pg_catalog,
   pg_temp` for its transaction: an operator or function a replay left in a
@@ -531,6 +539,19 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   database, its oid, the `exponetdb` schema with the marker and every
   schema outside the scope stay; default privileges set inside a dropped
   schema go with it. Run the preflight afterwards.
+- **What the preflight and the reset do not see** **[DECIDED]** (review
+  round 2). `ready` means the six checks above passed, nothing more. A
+  history that also creates objects **outside** the managed scope (a
+  trigger on the identity service's `auth.users` calling a `public`
+  function, the Supabase `on_auth_user_created` pattern; tables in another
+  schema) leaves them on the scratch target: the reset refuses while such a
+  dependent exists (it names it) and keeps every other object outside the
+  scope, so the next replay would fail on them (`42P07`). Drop what the
+  replay created outside the scope before the reset, or widen the scope.
+  References inside function bodies (`LANGUAGE sql AS $$ … auth.uid() … $$`)
+  are not in `pg_depend` (only `BEGIN ATOMIC` bodies are), so
+  `outside_scope` does not list what such a body needs; the replay names it
+  when it fails.
 - **A wrong registration** is corrected by decommissioning the target and
   retiring the database record (`registry.database.retire`,
   [`../02-control-plane/registry.md` §4.3](../02-control-plane/registry.md#43-correcting-a-wrong-registration-wave-9)).
@@ -580,7 +601,7 @@ the new target directly. See
 | Two legacy files with the same number | Identity is the full file stem, which is unique; numbers are not used. |
 | File renamed after apply (applied name differs) | Alias table maps the applied name to the stem; content evidence (drizzle hash, statements) confirms independently. |
 | One ledger entry for several files | Curated rule in hints (`"0032_0036_…": ["0032_…", …, "0036_…"]`, Wave 9) plus statement comparison against the files joined in file order (§2.3). |
-| Two files with the same content (a fix run twice, a copied file) | One entry's content records one file only: the entry that names a file takes it, as many entries as files pair up, fewer leave each file `ambiguous` (`content_matches_files:<n>`, §2.3). |
+| Two files with the same content (a fix run twice, a copied file) | One entry's content records one file only: an entry that names a file stands for it alone (a copy of its content is `ambiguous`, `content_names_other_file`), as many unnamed entries as files pair up, fewer leave each file `ambiguous` (`content_matches_files:<n>`, §2.3). |
 | File edited (comments only) after apply | Executable checksum unchanged; no issue. |
 | File edited (executable text) after apply | The imported checksum is of today's text; the replay uses today's text; if the target's objects match, it imports as present. Divergence is still caught by object comparison. |
 | Conditional DDL took a different branch on the target | Surviving expectations differ; review item with the evaluated branch shown. |
@@ -594,5 +615,5 @@ the new target directly. See
 | A file creates or grants roles (top level or in a `DO` block that swallows `duplicate_object`) | Elided from the replay, checked as cluster-global expectations on the imported target (`cluster_global_held:<n>/<m>`, §2.4); a mixed `DO` block runs and makes the file `ambiguous`. |
 | `CREATE INDEX CONCURRENTLY` in a file | Replayed alone in autocommit between transactional segments (§2.4). |
 | A file with comments only | Not replayed; `no_statements` (§2.4). |
-| Target unreachable mid-analysis | Report marked incomplete; cannot be applied. |
+| Target unreachable mid-analysis | Report marked `incomplete` (`target_unavailable`, review round 2: it stayed `pending` before); cannot be applied. |
 | Import run twice | Analysis is repeatable; the baseline operation refuses if a baseline row already exists (a second baseline is a separate, deliberate `migration.rebaseline`). |

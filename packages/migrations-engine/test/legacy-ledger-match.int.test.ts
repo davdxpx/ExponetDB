@@ -9,8 +9,9 @@ import {
   WORKER_ACTOR,
 } from '@exponetdb/operations'
 import { MIGRATION_RULES, REGISTRY_RULES, RuleRegistry } from '@exponetdb/policy'
-import { ROLE_NAMES } from '@exponetdb/postgres'
+import { ROLE_NAMES, TargetError } from '@exponetdb/postgres'
 import {
+  type Connector,
   findTarget,
   planEnvironmentCreate,
   planExecutionRoleBindings,
@@ -82,6 +83,8 @@ let scratch: TargetRecord
 const FIX = "UPDATE public.lm_t SET plan = 'free' WHERE plan IS NULL;\n"
 const SEED = 'UPDATE public.lm_t SET plan = lower(plan);\n'
 const FLAG = 'UPDATE public.lm_t SET plan = upper(plan);\n'
+const APPLIED_EV = "UPDATE public.lm_t SET plan = 'pro' WHERE id = 2;\n"
+const DUP = "UPDATE public.lm_t SET plan = 'y';\n"
 const FILES = [
   { name: '0001_t.sql', text: 'CREATE TABLE public.lm_t (id int PRIMARY KEY, plan text);\n' },
   { name: '0002_fix.sql', text: FIX },
@@ -101,10 +104,19 @@ const FILES = [
   // Two files, one entry of their content, named after neither.
   { name: '0010_flag.sql', text: FLAG },
   { name: '0011_flag_again.sql', text: FLAG },
+  // Review round 2. Edited after it ran; a copy keeps the text that ran.
+  { name: '0012_ev.sql', text: "UPDATE public.lm_t SET plan = 'pro' WHERE id = 1;\n" },
+  { name: '0013_ev_copy.sql', text: APPLIED_EV },
+  // Reformatted after it ran (medium); a copy keeps the bytes that ran (strong).
+  { name: '0014_fmt.sql', text: "UPDATE   public.lm_t   SET plan = 'x';\n" },
+  { name: '0015_fmt_copy.sql', text: "UPDATE public.lm_t SET plan = 'x';\n" },
+  // Two entries name the first file (two versions); the copy ran by neither.
+  { name: '0016_dup.sql', text: DUP },
+  { name: '0017_dup_copy.sql', text: DUP },
 ]
 const text = (name: string) => FILES.find((f) => f.name === name)?.text.trim() ?? ''
 
-async function apply(p: PlanRecord): Promise<OperationRecord> {
+async function apply(p: PlanRecord, using: KindRegistry = kinds): Promise<OperationRecord> {
   const result = await h.serve.transaction('test.lm.accept', (tx) =>
     acceptPlan(
       tx,
@@ -118,13 +130,17 @@ async function apply(p: PlanRecord): Promise<OperationRecord> {
           clientId: null,
         },
       },
-      registryAcceptDependencies(tx, { policy: ctx.policy, kinds, systemActor: WORKER_ACTOR }, a),
+      registryAcceptDependencies(
+        tx,
+        { policy: ctx.policy, kinds: using, systemActor: WORKER_ACTOR },
+        a,
+      ),
     ),
   )
   if (result.status !== 'accepted') throw result.error
   const workerId = newId('prc', Date.now())
   for (let i = 0; i < 50; i++) {
-    const r = await processNextOperation(h.worker, { workerId, kinds, clock: systemClock })
+    const r = await processNextOperation(h.worker, { workerId, kinds: using, clock: systemClock })
     if (r.status === 'idle') break
   }
   const op = await readOperation(h.worker, result.operation.operationId)
@@ -248,9 +264,14 @@ beforeAll(async () => {
        ${entry('20260104090000', '0004_x', [`CREATE TABLE public.lm_x (id int)`, `GRANT ${OTHER_OWNER} TO CURRENT_USER`])},
        ${entry('20260105090000', '0005_drop_x', [text('0005_drop_x.sql')])},
        ${entry('20260106090000', 'seed_a', [SEED.trim()])},
-       ${entry('20260107090000', 'seed_b', [SEED.trim()])},
+       ${entry('20260107090000', 'seed_b', ['UPDATE public.lm_t  SET plan =  lower(plan)'])},
+       ${entry('20260109090000', 'seed_c', [SEED.trim()])},
        ${entry('20260108090000', 'notes', [text('0008_notes.sql')])},
-       ${entry('20260110090000', 'flags', [FLAG.trim()])}`,
+       ${entry('20260110090000', 'flags', [FLAG.trim()])},
+       ${entry('20260112090000', '0012_ev', [APPLIED_EV.trim()])},
+       ${entry('20260114090000', '0014_fmt', ["UPDATE public.lm_t SET plan = 'x'"])},
+       ${entry('20260116090000', '0016_dup', [DUP.trim()])},
+       ${entry('20260116100000', '0016_dup', [DUP.trim()])}`,
     `GRANT USAGE ON SCHEMA supabase_migrations TO ${ROLE_NAMES.observer}`,
     `GRANT SELECT ON supabase_migrations.schema_migrations TO ${ROLE_NAMES.observer}`,
   ])
@@ -287,9 +308,19 @@ describe('ledger entries and files of the same content', () => {
     expect(item('0002_fix')).toMatchObject({ state: 'recorded_present', strength: 'strong' })
     expect(item('0003_fix_again')).toMatchObject({ state: 'ambiguous', strength: null })
     expect(item('0003_fix_again').evidence).toEqual(['effects_not_derivable'])
-    // As many entries as files: each file has its own.
+    // As many entries as files: each file has its own, also when one entry matches only
+    // with whitespace normalized; an entry beyond the files stays a ledger item.
     expect(item('0006_seed')).toMatchObject({ state: 'recorded_present', strength: 'strong' })
-    expect(item('0007_seed_again')).toMatchObject({ state: 'recorded_present', strength: 'strong' })
+    expect(item('0007_seed_again')).toMatchObject({ state: 'recorded_present', strength: 'medium' })
+    expect(r.items.map((i) => i.legacyId)).toContain('ledger:supabase:20260109090000_seed_c')
+    // An entry that names a file never records another one of the same content.
+    expect(item('0013_ev_copy').state).toBe('ambiguous')
+    expect(item('0013_ev_copy').evidence).toContain('content_names_other_file')
+    expect(item('0014_fmt')).toMatchObject({ state: 'recorded_present', strength: 'medium' })
+    expect(item('0015_fmt_copy')).toMatchObject({ state: 'ambiguous', strength: null })
+    expect(item('0016_dup')).toMatchObject({ state: 'recorded_present', strength: 'strong' })
+    expect(item('0017_dup_copy').state).toBe('ambiguous')
+    expect(item('0017_dup_copy').evidence).toContain('content_names_other_file')
     // Fewer entries than files: none is recorded by it, a person decides.
     for (const stem of ['0010_flag', '0011_flag_again']) {
       expect(item(stem).state).toBe('ambiguous')
@@ -356,4 +387,52 @@ describe('a scratch target that cannot stand for the imported one', () => {
     )
     expect(report).toMatchObject({ state: 'incomplete', incompleteReason: 'major_differs:17/16' })
   }, 180_000)
+})
+
+describe('an imported target that cannot be read', () => {
+  it('ends the analysis incomplete with target_unavailable instead of leaving it pending', async () => {
+    const fresh = await registerTarget('scratch-blind', [])
+    // The worker reaches every target but the imported one (a lost network, a stopped server).
+    const blind = new Proxy(h.workerConnector, {
+      get(t, property, receiver) {
+        if (property === 'forTarget') {
+          return (target: TargetRecord, ...rest: unknown[]) => {
+            if (target.targetId === imported.targetId) {
+              return Promise.reject(new TargetError('TARGET_UNAVAILABLE', 'connection_lost'))
+            }
+            return (t.forTarget as (...a: unknown[]) => unknown).call(t, target, ...rest)
+          }
+        }
+        const value = Reflect.get(t, property, receiver)
+        return typeof value === 'function' ? value.bind(t) : value
+      },
+    }) as Connector
+    const blindKinds = new KindRegistry([
+      ...migrationKinds({
+        store: h.worker,
+        clock: systemClock,
+        connector: blind,
+        installationId: h.db.installationId,
+        engineVersion: '0.1.0+test',
+      }),
+    ])
+    const p = await h.serve.transaction('test.lm.analyze_blind', (tx) =>
+      planImportAnalysis(tx, ctx, a, imported.targetId, {
+        scratchTarget: fresh.targetId,
+        baseline: 'ledger-match-blind',
+        files: [FILES[0] as (typeof FILES)[number]],
+        ledgers: [],
+      }),
+    )
+    const op = await apply(p, blindKinds)
+    expect(op).toMatchObject({ applyOutcome: 'not_applied' })
+    const report = await h.worker.transaction('test.lm.report_blind', (tx) =>
+      importReportView(
+        tx,
+        imported.targetId,
+        String((p.body['content'] as { reportId: string }).reportId),
+      ),
+    )
+    expect(report).toMatchObject({ state: 'incomplete', incompleteReason: 'target_unavailable' })
+  })
 })

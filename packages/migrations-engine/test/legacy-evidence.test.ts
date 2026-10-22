@@ -147,6 +147,12 @@ describe('statement sequences', () => {
         [`${python};`],
       ),
     ).toBe(null)
+    // A dollar-quoted default before a routine's body is data (review round 2).
+    const withDefault = (d: string) =>
+      `CREATE FUNCTION f(a text DEFAULT $d$x -- ${d}$d$) RETURNS void LANGUAGE plpgsql AS $$ BEGIN PERFORM 1; END $$`
+    expect(
+      statementsMatch([withDefault('one')], [[withDefault('two')]], [`${withDefault('two')};`]),
+    ).toBe(null)
     // A DO block without LANGUAGE, and a plpgsql routine with LANGUAGE after the body, are code.
     for (const [stored, file] of [
       ['DO $$ BEGIN PERFORM 1; END $$', 'DO $$\nBEGIN\n  -- once\n  PERFORM 1;\nEND\n$$'],

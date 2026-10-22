@@ -976,17 +976,18 @@ const remoteCommands: readonly CommandSpec[] = [
       if (installation.installationId === undefined) {
         throw new CliError('INTERNAL', 'The server does not name its installation.')
       }
+      // A scope without a list of schemas is null in the project view: all but the excluded.
       const scope = project.managedScope as {
-        readonly includeSchemas?: readonly string[]
-        readonly excludeSchemas?: readonly string[]
+        readonly includeSchemas?: readonly string[] | null
+        readonly excludeSchemas?: readonly string[] | null
       }
       const text = scratchResetSql({
         installationId: installation.installationId,
         targetId: scratch.id,
         targetPath: scratch.path,
         generation: scratch.generation,
-        ...(scope.includeSchemas === undefined ? {} : { includeSchemas: scope.includeSchemas }),
-        ...(scope.excludeSchemas === undefined ? {} : { excludeSchemas: scope.excludeSchemas }),
+        includeSchemas: scope.includeSchemas ?? null,
+        excludeSchemas: scope.excludeSchemas ?? null,
       })
       return result({
         command: 'migration import scratch-reset-sql',

@@ -20,9 +20,12 @@ export interface ScratchResetInput {
   readonly generation: number
   /** For the comment only; the marker identifies the database. */
   readonly databaseName?: string
-  /** The project's managed scope: the listed schemas, else all but the excluded ones. */
-  readonly includeSchemas?: readonly string[]
-  readonly excludeSchemas?: readonly string[]
+  /**
+   * The project's managed scope: the listed schemas, else (absent or null, as
+   * the REST project view gives a scope without a list) all but the excluded ones.
+   */
+  readonly includeSchemas?: readonly string[] | null
+  readonly excludeSchemas?: readonly string[] | null
 }
 
 const literal = (value: string) => `'${value.replaceAll("'", "''")}'`
@@ -38,7 +41,7 @@ export function scratchResetSql(input: ScratchResetInput): string {
     throw new Error('a generation is a positive integer')
   }
   const managed =
-    input.includeSchemas === undefined
+    input.includeSchemas === undefined || input.includeSchemas === null
       ? `ARRAY(SELECT n.nspname::text FROM pg_catalog.pg_namespace n
              WHERE n.nspname NOT LIKE 'pg\\_%' AND n.nspname NOT IN ('information_schema', 'exponetdb')
                AND NOT (n.nspname = ANY (${array(input.excludeSchemas ?? [])})))`
@@ -48,6 +51,7 @@ export function scratchResetSql(input: ScratchResetInput): string {
   const body = `DECLARE
   managed text[] := ${managed};
   outside text;
+  outside_count bigint;
   s record;
   g record;
   e record;
@@ -84,14 +88,19 @@ BEGIN
                END),
              (pg_catalog.pg_identify_object(d.classid, d.objid, d.objsubid)).schema) AS dependent
       FROM pg_catalog.pg_depend d
-     WHERE d.deptype IN ('n', 'a') AND d.classid <> 'pg_catalog.pg_default_acl'::regclass)
-  SELECT pg_catalog.string_agg(DISTINCT pg_catalog.pg_describe_object(dep.classid, dep.objid, dep.objsubid), ', ')
-    INTO outside
+     -- A publication's member row goes with its table; the publication itself stays.
+     WHERE d.deptype IN ('n', 'a')
+       AND d.classid NOT IN ('pg_catalog.pg_default_acl'::regclass, 'pg_catalog.pg_publication_rel'::regclass,
+                             'pg_catalog.pg_publication_namespace'::regclass))
+  SELECT pg_catalog.count(DISTINCT (dep.classid, dep.objid, dep.objsubid)),
+         pg_catalog.string_agg(DISTINCT pg_catalog.pg_describe_object(dep.classid, dep.objid, dep.objsubid), ', ')
+    INTO outside_count, outside
     FROM dep
    WHERE dep.referenced = ANY (managed)
      AND (dep.dependent IS NULL OR NOT dep.dependent = ANY (managed));
   IF outside IS NOT NULL THEN
-    RAISE EXCEPTION 'objects outside the managed scope depend on it and would be dropped: %', pg_catalog.left(outside, 2000);
+    RAISE EXCEPTION 'objects outside the managed scope depend on it and would be dropped (%): %', outside_count,
+      pg_catalog.left(outside, 2000) || CASE WHEN pg_catalog.length(outside) > 2000 THEN ' (list cut)' ELSE '' END;
   END IF;
   CREATE TEMPORARY TABLE exdb_reset_extensions ON COMMIT DROP AS
     SELECT x.extname::text AS name, n.nspname::text AS schema, x.extversion AS version
