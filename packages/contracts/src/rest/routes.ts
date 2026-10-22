@@ -2261,6 +2261,18 @@ export const MIGRATION_ROUTES = [
     errors: ['NOT_FOUND'],
   },
   {
+    operationId: 'checkScratchTarget',
+    method: 'get',
+    path: '/targets/{target}/migrations/scratch-check',
+    summary:
+      'Check, read only, whether a scratch target can take a legacy import replay of this target: usable, its identity, empty, the same extensions, the objects outside the managed scope the schema depends on, the execution role (Wave 9).',
+    action: 'migration.import.scratch_check',
+    pathParams: z.strictObject({ target: TargetRefSchema }),
+    query: z.strictObject({ scratchTarget: TargetRefSchema }),
+    response: { status: 200, schema: ScratchCheckSchema },
+    errors: ['VALIDATION_FAILED', ...TARGET_ERRORS],
+  },
+  {
     operationId: 'getTargetMigration',
     method: 'get',
     path: '/targets/{target}/migrations/{migrationId}',
@@ -2387,18 +2399,6 @@ export const MIGRATION_ROUTES = [
     response: { status: 201, schema: PlanViewSchema },
     errors: [...LIVE_TARGET_ERRORS, 'CSRF_FAILED', 'IDEMPOTENCY_KEY_REUSED', 'PRECONDITION_FAILED'],
     maxBodyBytes: MIGRATION_BODY_LIMIT_BYTES,
-  },
-  {
-    operationId: 'checkScratchTarget',
-    method: 'get',
-    path: '/targets/{target}/migrations/scratch-check',
-    summary:
-      'Check, read only, whether a scratch target can take a legacy import replay of this target: usable, its identity, empty, the same extensions, the objects outside the managed scope the schema depends on, the execution role (Wave 9).',
-    action: 'migration.import.scratch_check',
-    pathParams: z.strictObject({ target: TargetRefSchema }),
-    query: z.strictObject({ scratchTarget: TargetRefSchema }),
-    response: { status: 200, schema: ScratchCheckSchema },
-    errors: ['VALIDATION_FAILED', ...TARGET_ERRORS],
   },
   {
     operationId: 'getImportReport',
