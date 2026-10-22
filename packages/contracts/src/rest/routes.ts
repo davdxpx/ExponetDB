@@ -103,6 +103,7 @@ import {
   MigrationResumeRequestSchema,
   MigrationRollbackRequestSchema,
   MigrationVerifyRequestSchema,
+  ScratchCheckRequestSchema,
   ScratchCheckSchema,
   StepUpConfirmRequestSchema,
   StepUpRequestSchema,
@@ -2278,6 +2279,19 @@ export const MIGRATION_ROUTES = [
     }),
     response: { status: 200, schema: ScratchCheckSchema },
     errors: ['VALIDATION_FAILED', ...TARGET_ERRORS],
+  },
+  {
+    operationId: 'checkScratchTargetForFiles',
+    method: 'post',
+    path: '/targets/{target}/migrations/scratch-check',
+    summary:
+      'The scratch preflight with the legacy files (read only): the same checks, and what the files reference in schemas outside the managed scope that the scratch target lacks (legacy_references).',
+    action: 'migration.import.scratch_check',
+    pathParams: z.strictObject({ target: TargetRefSchema }),
+    body: ScratchCheckRequestSchema,
+    response: { status: 200, schema: ScratchCheckSchema },
+    errors: ['VALIDATION_FAILED', 'CSRF_FAILED', ...TARGET_ERRORS],
+    maxBodyBytes: MIGRATION_BODY_LIMIT_BYTES,
   },
   {
     operationId: 'getTargetMigration',

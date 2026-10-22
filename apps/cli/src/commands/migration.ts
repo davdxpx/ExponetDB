@@ -1,10 +1,15 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { newUlid } from '@exponetdb/kernel'
-import { scratchResetSql, type ValidatedBundle, validateBundle } from '@exponetdb/migrations/format'
+import {
+  scratchCopyCommands,
+  scratchResetSql,
+  type ValidatedBundle,
+  validateBundle,
+} from '@exponetdb/migrations/format'
 import { buildGraph } from '@exponetdb/migrations/graph'
 import { type LintFinding, lintBundles, type Tier } from '@exponetdb/migrations/lint'
-import type { ImportReport, MigrationStatus, PlanView } from '@exponetdb/sdk'
+import type { ImportReport, MigrationStatus, PlanView, ScratchCheck } from '@exponetdb/sdk'
 import { applyPlan, planResult } from '../cli/apply.ts'
 import { EXIT } from '../cli/exit.ts'
 import { bodyFromFile, checkedBody } from '../cli/planning.ts'
@@ -38,6 +43,23 @@ const READ = ['migrations.read']
 const PLAN = ['migrations.plan']
 
 const TARGET_REQUIRED: FlagSpec = { ...TARGET_FLAG, required: true }
+
+const SCRATCH_CHECK_FLAGS: FlagSpec[] = [
+  TARGET_REQUIRED,
+  {
+    name: 'scratch',
+    type: 'string',
+    placeholder: 'target',
+    description: 'The scratch target (path or tgt_ id).',
+    required: true,
+  },
+  {
+    name: 'role',
+    type: 'string',
+    placeholder: 'alias',
+    description: 'The execution role alias the replay runs as (the hints role; default owner).',
+  },
+]
 
 const workdir = (ctx: RunContext) => ctx.global.workdir ?? ctx.io.cwd
 
@@ -913,11 +935,7 @@ const remoteCommands: readonly CommandSpec[] = [
       const legacy = project.config.legacy
       if (legacy === undefined)
         throw new UsageError('The project has no legacy directory (layout legacy+bundles).')
-      const { readdir, readFile } = await import('node:fs/promises')
-      const dir = join(project.root, legacy.directory)
-      const names = (await readdir(dir)).filter((n) => n.endsWith('.sql')).sort()
-      const files = []
-      for (const name of names) files.push({ name, text: await readFile(join(dir, name), 'utf8') })
+      const files = await legacyFiles(project)
       const hintsPath = flag(input, 'hints')
       const hints = hintsPath === undefined ? {} : await importHints(ctx, hintsPath, input.flags)
       const body = checkedBody('planImportAnalysis', {
@@ -999,64 +1017,80 @@ const remoteCommands: readonly CommandSpec[] = [
       })
     },
   },
-  showCommand({
+  {
     path: ['migration', 'import', 'scratch-check'],
     summary:
-      'Check, read only, whether a scratch target can take this target’s legacy replay: usable, its identity, empty, the same extensions, the objects outside the managed scope, the execution role.',
+      'Check, read only, whether a scratch target can take this target’s legacy replay: usable, its identity, empty, the same extensions, the objects outside the managed scope, the execution role; in a project with a legacy directory also what its files reference outside the scope.',
     group: 'migration',
-    flags: [
-      TARGET_REQUIRED,
-      {
-        name: 'scratch',
-        type: 'string',
-        placeholder: 'target',
-        description: 'The scratch target (path or tgt_ id).',
-        required: true,
-      },
-      {
-        name: 'role',
-        type: 'string',
-        placeholder: 'alias',
-        description: 'The execution role alias the replay runs as (the hints role; default owner).',
-      },
-    ],
+    flags: SCRATCH_CHECK_FLAGS,
+    locality: 'remote',
+    effect: 'read',
     action: 'migration.import.scratch_check',
     scopes: ['migrations.import'],
     output: 'ScratchCheck',
-    title: 'scratch check',
-    operation: 'checkScratchTarget',
-    params: (i) => ({ target: String(i.flags['target']) }),
-    query: (i) => ({
-      scratchTarget: String(i.flags['scratch']),
-      ...(typeof i.flags['role'] === 'string' ? { role: i.flags['role'] } : {}),
-    }),
-    view: (r) => [
-      {
-        kind: 'status',
-        word: r.ready ? 'ready' : 'not ready',
-        tone: r.ready ? 'ok' : 'warn',
-        text: r.ready
-          ? 'An analysis can replay on this scratch target.'
-          : 'Prepare the scratch target first; the analysis would not complete.',
-      },
-      {
-        kind: 'table',
-        columns: [{ title: 'CHECK' }, { title: 'STATUS' }, { title: 'DETAIL', flexible: true }],
-        rows: r.checks.map((c) => [
-          c.check,
-          c.status,
-          [c.detail ?? '', ...c.items.slice(0, 5)].filter((x) => x !== '').join('; ') +
-            (c.items.length > 5 || c.truncated ? ' …' : ''),
-        ]),
-      },
-    ],
-    next: (r) =>
-      r.ready
-        ? [
-            `exponetdb migration import analyze --target ${r.targetId} --scratch ${r.scratchTargetId ?? ''}`,
-          ]
-        : [],
-  }),
+    async run(ctx, input) {
+      const { remote, check: r } = await runScratchCheck(ctx, input)
+      return result({
+        command: 'migration import scratch-check',
+        data: r,
+        blocks: [header('scratch check', remote.context), ...scratchCheckView(r)],
+        next: r.ready
+          ? [
+              `exponetdb migration import analyze --target ${r.targetId} --scratch ${r.scratchTargetId ?? ''}`,
+            ]
+          : (r.copySchemas ?? []).length > 0
+            ? [
+                `exponetdb migration import scratch-copy-commands --target ${r.targetId} --scratch ${r.scratchTargetId ?? ''}`,
+              ]
+            : [],
+      })
+    },
+  },
+  {
+    path: ['migration', 'import', 'scratch-copy-commands'],
+    summary:
+      'Print the shell commands that copy, schema-only and without triggers, the schemas outside the managed scope the scratch target lacks objects of from the imported target (pg_dump and pg_restore; set IMPORTED_URL and SCRATCH_URL).',
+    group: 'migration',
+    flags: SCRATCH_CHECK_FLAGS,
+    locality: 'remote',
+    effect: 'read',
+    action: 'migration.import.scratch_check',
+    scopes: ['migrations.import'],
+    output: 'ScratchCopyCommands',
+    async run(ctx, input) {
+      const { remote, check: r } = await runScratchCheck(ctx, input)
+      const schemas = r.copySchemas ?? []
+      const target = must(
+        await remote.sdk.call('getTarget', { params: { target: String(input.flags['target']) } }),
+      )
+      const text =
+        schemas.length === 0
+          ? null
+          : scratchCopyCommands({
+              schemas,
+              targetPath: target.path,
+              scratchPath: String(input.flags['scratch']),
+            })
+      return result({
+        command: 'migration import scratch-copy-commands',
+        data: { targetId: r.targetId, scratchTargetId: r.scratchTargetId, schemas, commands: text },
+        blocks:
+          text === null
+            ? [
+                {
+                  kind: 'status',
+                  word: 'nothing to copy',
+                  tone: 'ok',
+                  text: 'The scratch target holds every object outside the managed scope the checks name.',
+                },
+              ]
+            : [{ kind: 'text', lines: text.trimEnd().split('\n') }],
+        next: [
+          `exponetdb migration import scratch-check --target ${r.targetId} --scratch ${r.scratchTargetId ?? ''}`,
+        ],
+      })
+    },
+  },
   showCommand({
     path: ['migration', 'import', 'report'],
     summary: 'An import report: every legacy file’s classification and the decisions so far.',
@@ -1168,3 +1202,83 @@ const remoteCommands: readonly CommandSpec[] = [
 
 export const migrationCommands: readonly CommandSpec[] = [...localCommands, ...remoteCommands]
 export type { CommandResult }
+
+/** A project's legacy files in name order, with their exact text. */
+async function legacyFiles(
+  project: LocalProject,
+): Promise<{ readonly name: string; readonly text: string }[]> {
+  const legacy = project.config.legacy
+  if (legacy === undefined) return []
+  const { readdir, readFile } = await import('node:fs/promises')
+  const dir = join(project.root, legacy.directory)
+  const names = (await readdir(dir)).filter((n) => n.endsWith('.sql')).sort()
+  const files = []
+  for (const name of names) files.push({ name, text: await readFile(join(dir, name), 'utf8') })
+  return files
+}
+
+/**
+ * The scratch preflight; in a project with a legacy directory it sends the
+ * files, so the check also covers what they reference outside the scope.
+ */
+async function runScratchCheck(
+  ctx: RunContext,
+  input: CommandInput,
+): Promise<{
+  readonly remote: Awaited<ReturnType<RunContext['remote']>>
+  readonly check: ScratchCheck
+}> {
+  let files: { readonly name: string; readonly text: string }[] = []
+  try {
+    files = await legacyFiles(await currentProject(workdir(ctx)))
+  } catch (error) {
+    // Outside a project the check runs without the files.
+    if (!(error instanceof UsageError)) throw error
+  }
+  const remote = await ctx.remote()
+  const params = { target: String(input.flags['target']) }
+  const scratchTarget = String(input.flags['scratch'])
+  const role = typeof input.flags['role'] === 'string' ? { role: input.flags['role'] } : {}
+  const check =
+    files.length === 0
+      ? must(
+          await remote.sdk.call('checkScratchTarget', {
+            params,
+            query: { scratchTarget, ...role },
+          } as never),
+        )
+      : must(
+          await remote.sdk.call('checkScratchTargetForFiles', {
+            params,
+            body: checkedBody('checkScratchTargetForFiles', {
+              scratchTarget,
+              ...role,
+              files,
+            }) as never,
+          }),
+        )
+  return { remote, check: check as ScratchCheck }
+}
+
+function scratchCheckView(r: ScratchCheck): Block[] {
+  return [
+    {
+      kind: 'status',
+      word: r.ready ? 'ready' : 'not ready',
+      tone: r.ready ? 'ok' : 'warn',
+      text: r.ready
+        ? 'An analysis can replay on this scratch target.'
+        : 'Prepare the scratch target first; the analysis would not complete.',
+    },
+    {
+      kind: 'table',
+      columns: [{ title: 'CHECK' }, { title: 'STATUS' }, { title: 'DETAIL', flexible: true }],
+      rows: r.checks.map((c) => [
+        c.check,
+        c.status,
+        [c.detail ?? '', ...c.items.slice(0, 5)].filter((x) => x !== '').join('; ') +
+          (c.items.length > 5 || c.truncated ? ' …' : ''),
+      ]),
+    },
+  ]
+}

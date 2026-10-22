@@ -19,7 +19,7 @@ export interface OutsideScopeObject {
   readonly kind: 'relation' | 'function' | 'type'
   readonly schema: string
   readonly name: string
-  /** A function's argument types (`oidvectortypes`), else null. */
+  /** A function's argument types (`oidvectortypes`); null: any (a call names no types). */
   readonly args: string | null
 }
 
@@ -83,7 +83,7 @@ const PRESENT = sql`SELECT r.kind, r.schema, r.name, r.args,
                                        WHERE n.nspname = r.schema AND c.relname = r.name)
          WHEN 'function' THEN EXISTS (SELECT FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
                                        WHERE n.nspname = r.schema AND p.proname = r.name
-                                         AND pg_catalog.oidvectortypes(p.proargtypes) = coalesce(r.args, ''))
+                                         AND (r.args IS NULL OR pg_catalog.oidvectortypes(p.proargtypes) = r.args))
          WHEN 'type' THEN EXISTS (SELECT FROM pg_catalog.pg_type t JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
                                    WHERE n.nspname = r.schema AND t.typname = r.name)
        END AS present

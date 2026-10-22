@@ -39,6 +39,13 @@ export {
   roleStatementEffects,
   rolesOf,
 } from './cluster-global.ts'
+export {
+  type LegacyReference,
+  type LegacyReferences,
+  legacyReferences,
+  outsideScope,
+  type ScopeTest,
+} from './legacy-references.ts'
 export { isLiteral, type LexMode, lex, type Token, type TokenKind } from './lexer.ts'
 export { isSupportedMajor, SUPPORTED_MAJORS, type SupportedMajor } from './majors.ts'
 export {

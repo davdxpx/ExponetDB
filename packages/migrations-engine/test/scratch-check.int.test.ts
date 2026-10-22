@@ -257,6 +257,51 @@ describe('the scratch preflight', () => {
     const r = await check(scratch.targetId)
     expect(statusOf(r)).toMatchObject({ extensions: ['pass', null], outside_scope: ['pass', null] })
     expect(r.ready).toBe(true)
+    expect(r.copySchemas).toBeUndefined()
+    // With the legacy files: what an old file names outside the scope that the imported
+    // target's schema no longer depends on, as on the first real import (follow-up 2, F3).
+    const history = [
+      {
+        name: '0013_members_own_read.sql',
+        text: `CREATE TABLE public.acme_members (user_id uuid);
+CREATE POLICY acme_members_own ON public.acme_members USING (user_id = (SELECT acme_identity.uid()));
+CREATE POLICY acme_members_session ON public.acme_members USING (acme_identity.session_ok(user_id));
+CREATE TABLE public.acme_audit (id uuid REFERENCES acme_identity.users (id));
+`,
+      },
+      { name: '0014_drop.sql', text: 'DROP TABLE public.acme_members;\n' },
+    ]
+    const withFiles = await scratchCheck(
+      h.worker,
+      { connector: h.workerConnector, installationId: h.db.installationId },
+      imported,
+      scratch.targetId,
+      'owner',
+      history,
+    )
+    expect(withFiles.ready).toBe(false)
+    expect(statusOf(withFiles)['legacy_references']).toEqual(['fail', 'missing:1'])
+    expect(withFiles.checks.find((c) => c.check === 'legacy_references')?.items).toEqual([
+      'function acme_identity.session_ok() (0013_members_own_read)',
+    ])
+    expect(withFiles.copySchemas).toEqual(['acme_identity'])
+    await runAsSuperuser(pg17, scratchDb, [
+      "CREATE FUNCTION acme_identity.session_ok(uuid) RETURNS boolean LANGUAGE sql STABLE AS 'SELECT true'",
+    ])
+    try {
+      const prepared = await scratchCheck(
+        h.worker,
+        { connector: h.workerConnector, installationId: h.db.installationId },
+        imported,
+        scratch.targetId,
+        'owner',
+        history,
+      )
+      expect(statusOf(prepared)['legacy_references']).toEqual(['pass', null])
+      expect(prepared.ready).toBe(true)
+    } finally {
+      await runAsSuperuser(pg17, scratchDb, ['DROP FUNCTION acme_identity.session_ok(uuid)'])
+    }
     // And an analysis replays there (the preflight changed nothing).
     const p = await h.serve.transaction('test.sc.analyze', (tx) =>
       planImportAnalysis(tx, ctx, a, imported.targetId, {

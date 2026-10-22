@@ -11,6 +11,7 @@ import {
   snapshotWithin,
   type TargetSession,
 } from '@exponetdb/postgres'
+import { legacyReferences, loadClusterGlobalParsers } from '@exponetdb/postgres/parser'
 import { brand, type Connector, findTarget, type TargetRecord } from '@exponetdb/registry'
 import { projectRegistry } from './deps.ts'
 import { executionRolesFor, roleUnder } from './execution-roles.ts'
@@ -58,25 +59,42 @@ export interface ScratchCheckDeps {
   readonly installationId: string
 }
 
+/**
+ * With `files` (the legacy history), the preflight also checks what they
+ * reference in schemas outside the managed scope against the scratch
+ * target (`legacy_references`, follow-up 2 F3): the imported target's
+ * current schema may no longer depend on something an old file needs.
+ */
 export async function scratchCheck(
   q: Queryable,
   deps: ScratchCheckDeps,
   target: TargetRecord,
   scratchRef: string,
   alias = 'owner',
+  files?: readonly { readonly name: string; readonly text: string }[],
 ): Promise<ScratchCheck> {
   const checkedAt = new Date().toISOString()
   const scratch = await findTarget(q, scratchRef)
-  const LATER = ['identity', 'empty', 'extensions', 'outside_scope', 'execution_role'] as const
+  const LATER: readonly Check['check'][] = [
+    'identity',
+    'empty',
+    'extensions',
+    'outside_scope',
+    'execution_role',
+    ...(files === undefined ? [] : (['legacy_references'] as const)),
+  ]
   /** The checks after `from` cannot run: unknown, with why. */
-  const unknownAfter = (from: (typeof LATER)[number] | null, detail: string): Check[] =>
+  const unknownAfter = (from: Check['check'] | null, detail: string): Check[] =>
     LATER.slice(from === null ? 0 : LATER.indexOf(from) + 1).map((c) => check(c, 'unknown', detail))
+  /** Schemas outside the scope the scratch target lacks objects of: to copy schema-only. */
+  const copy = new Set<string>()
   const result = (checks: Check[]): ScratchCheck => ({
     targetId: brand('tgt', target.targetId),
     scratchTargetId: scratch === undefined ? null : brand('tgt', scratch.targetId),
     ready: checks.every((c) => c.status === 'pass'),
     checkedAt,
     checks,
+    ...(copy.size === 0 ? {} : { copySchemas: [...copy].sort().slice(0, MAX_ITEMS) }),
   })
   // The registry's rules for a scratch target (the analysis refuses the same).
   const unusable =
@@ -215,6 +233,7 @@ export async function scratchCheck(
             ),
       )
       const missing = await scratchSession.readOnly((rtx) => missingObjects(rtx, outside.objects))
+      for (const m of missing) copy.add(m.schema)
       checks.push(
         outside.truncated
           ? check('outside_scope', 'unknown', 'too_many_objects', missing.map(label))
@@ -247,8 +266,58 @@ export async function scratchCheck(
             : check('execution_role', 'fail', problem, [role]),
       )
     }
+    if (files !== undefined) {
+      const refs = await legacyReferencesCheck(scratchSession, scope, files)
+      checks.push(refs.check)
+      for (const schema of refs.schemas) copy.add(schema)
+    }
     return result(checks)
   } finally {
     await scratchSession.close()
   }
+}
+
+/** What the legacy files name outside the managed scope that the scratch target lacks. */
+async function legacyReferencesCheck(
+  scratch: TargetSession,
+  scope: {
+    readonly includeSchemas?: readonly string[]
+    readonly excludeSchemas: readonly string[]
+  },
+  files: readonly { readonly name: string; readonly text: string }[],
+): Promise<{ readonly check: Check; readonly schemas: readonly string[] }> {
+  // The replay parses on the scratch target's major (the extensions check makes it the imported one's).
+  const major = scratch.facts.major
+  await loadClusterGlobalParsers(major)
+  const found = legacyReferences(major, files, scope)
+  const missing = await scratch.readOnly((rtx) =>
+    missingObjects(
+      rtx,
+      found.references.map((r) => ({ kind: r.kind, schema: r.schema, name: r.name, args: null })),
+    ),
+  )
+  const firstFile = new Map(
+    found.references.map((r) => [`${r.kind} ${r.schema}.${r.name}`, r.file]),
+  )
+  const items = missing.map((m) => {
+    const name = `${m.kind} ${m.schema}.${m.name}${m.kind === 'function' ? '()' : ''}`
+    return `${name} (${firstFile.get(`${m.kind} ${m.schema}.${m.name}`) ?? ''})`
+  })
+  const schemas = [...new Set(missing.map((m) => m.schema))]
+  if (missing.length > 0) {
+    return {
+      check: check('legacy_references', 'fail', `missing:${missing.length}`, items),
+      schemas,
+    }
+  }
+  // A file no grammar reads is refused by the replay; what it names is not known here.
+  if (found.unparsed.length > 0) {
+    return {
+      check: check('legacy_references', 'unknown', `unparsed:${found.unparsed.length}`, [
+        ...found.unparsed,
+      ]),
+      schemas,
+    }
+  }
+  return { check: check('legacy_references', 'pass', null), schemas }
 }

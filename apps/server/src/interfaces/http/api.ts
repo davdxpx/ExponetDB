@@ -118,6 +118,7 @@ import {
   SchemaDiffRequestSchema,
   SchemaObjectKindSchema,
   type Scope,
+  ScratchCheckRequestSchema,
   ServerCreateRequestSchema,
   ServerIdSchema,
   ServiceAccountCreateRequestSchema,
@@ -1418,6 +1419,18 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         optionalText(call.query, 'role'),
       ),
     ),
+  checkScratchTargetForFiles: async (app, call) => {
+    const body = ScratchCheckRequestSchema.parse(call.body)
+    return value(
+      await app.migrations.scratchCheck(
+        caller(call),
+        target(call),
+        body.scratchTarget,
+        body.role,
+        body.files,
+      ),
+    )
+  },
   getImportReport: async (app, call) =>
     value(
       await app.migrations.importReport(

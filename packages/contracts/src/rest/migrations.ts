@@ -689,6 +689,26 @@ export const ImportAnalysisRequestSchema = z
   })
   .meta({ id: 'ImportAnalysisRequest' })
 
+/**
+ * `POST /targets/{target}/migrations/scratch-check` (follow-up 2, F3): the
+ * same read-only preflight, with the legacy files, so it also checks what
+ * they reference outside the managed scope (`legacy_references`).
+ */
+export const ScratchCheckRequestSchema = z
+  .strictObject({
+    scratchTarget: TargetRefSchema,
+    role: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{0,62}$/)
+      .optional()
+      .meta({
+        description:
+          'The execution role alias the replay runs as (the analysis hint role; default owner).',
+      }),
+    files: z.array(LegacyFileSchema).min(1).max(1000),
+  })
+  .meta({ id: 'ScratchCheckRequest' })
+
 /** `GET /targets/{target}/migrations/scratch-check` (Wave 9, legacy-import.md §2.5). */
 export const ScratchCheckSchema = z
   .object({
@@ -706,6 +726,8 @@ export const ScratchCheckSchema = z
             'extensions',
             'outside_scope',
             'execution_role',
+            // Only when the check was given the legacy files (follow-up 2, F3).
+            'legacy_references',
           ]),
           status: z.enum(['pass', 'fail', 'unknown']),
           detail: z
@@ -720,7 +742,15 @@ export const ScratchCheckSchema = z
           truncated: z.boolean(),
         }),
       )
-      .max(6),
+      .max(7),
+    copySchemas: z
+      .array(z.string().max(63).meta({ untrusted: true }))
+      .max(100)
+      .optional()
+      .meta({
+        description:
+          'The schemas outside the managed scope the scratch target lacks objects of (outside_scope, legacy_references): copy them schema-only from the imported target (migration import scratch-copy-commands).',
+      }),
   })
   .meta({ id: 'ScratchCheck' })
 
@@ -858,6 +888,7 @@ export type VerificationRun = z.infer<typeof VerificationRunSchema>
 export type MigrationProgress = z.infer<typeof MigrationProgressSchema>
 export type ImportReport = z.infer<typeof ImportReportSchema>
 export type ScratchCheck = z.infer<typeof ScratchCheckSchema>
+export type ScratchCheckRequest = z.infer<typeof ScratchCheckRequestSchema>
 export type StepUpView = z.infer<typeof StepUpSchema>
 export type EvidenceItem = z.infer<typeof EvidenceItemSchema>
 

@@ -537,6 +537,42 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   drift. The alias is `owner` unless `role` (CLI `--role`) names the one the
   hints use. The preflight changes
   nothing; the replay checks again under its own lock.
+- **What the history references** **[DECIDED]** (follow-up 2, F3,
+  2026-10-22). `outside_scope` reads what the imported target's **current**
+  schema depends on; an old file can need more. **[OBSERVED]** The first
+  real import passed the preflight and its replay stopped at a policy
+  calling `auth.uid()` (`3F000`): the scratch target had no `auth` schema,
+  and no current object depended on it any more. With the legacy files
+  (`POST /targets/{id}/migrations/scratch-check`, body `{ scratchTarget,
+  role?, files }`; the CLI sends the project's legacy directory when there
+  is one), the preflight adds `legacy_references`: every schema-qualified
+  relation, function and type in a schema outside the managed scope that a
+  file names, read from the parse trees with the scratch target's major (a
+  `LANGUAGE sql` function body, which PostgreSQL checks at `CREATE
+  FUNCTION`, and every statement and expression of a PL/pgSQL `DO` block
+  count; a PL/pgSQL function body runs only when called and does not; a
+  `DROP` needs nothing; an unqualified name resolves through the replay's
+  search path and is not counted; an object the history creates itself is
+  not a reference), must exist on the scratch target (a function in any
+  overload: a call site names no argument types). It fails with
+  `missing:<n>` and names each object with the first file that names it,
+  and is `unknown` (`unparsed:<n>`) when a file cannot be parsed. Both
+  checks give `copySchemas`, the schemas outside the scope the scratch
+  target lacks objects of.
+- **Schema-only copies.** `exponetdb migration import
+  scratch-copy-commands --target … --scratch …` runs the preflight and
+  prints the shell commands (read only, nothing is run; **[OBSERVED]**
+  verified on PostgreSQL 17 on 2026-10-22): `pg_dump --schema-only` of
+  exactly the `copySchemas` (each written as a literal pattern) from
+  `$IMPORTED_URL`, a TOC filter that leaves out every trigger and trigger
+  comment (a trigger on `auth.users` calling a function in the managed
+  scope, the `on_auth_user_created` pattern, would need that function
+  before the replay creates it; the history creates the trigger again if
+  it does), and `pg_restore --single-transaction --exit-on-error` into
+  `$SCRATCH_URL`. No data, no credential: the person sets both connection
+  strings. Owners and grants are kept, so the roles must exist where the
+  copy goes (the same cluster does). The copies are outside the managed
+  scope, so an in-place reset keeps them.
 - **In-place reset.** A used scratch target is reset without re-creating
   its database (which would change the oid the registry recorded and fail
   `database_mismatch`): `exponetdb migration import scratch-reset-sql

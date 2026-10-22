@@ -16201,7 +16201,8 @@
                     "empty",
                     "extensions",
                     "outside_scope",
-                    "execution_role"
+                    "execution_role",
+                    "legacy_references"
                   ],
                   "type": "string"
                 },
@@ -16248,7 +16249,17 @@
               ],
               "type": "object"
             },
-            "maxItems": 6,
+            "maxItems": 7,
+            "type": "array"
+          },
+          "copySchemas": {
+            "description": "The schemas outside the managed scope the scratch target lacks objects of (outside_scope, legacy_references): copy them schema-only from the imported target (migration import scratch-copy-commands).",
+            "items": {
+              "maxLength": 63,
+              "type": "string",
+              "x-untrusted": true
+            },
+            "maxItems": 100,
             "type": "array"
           },
           "ready": {
@@ -16279,6 +16290,44 @@
           "ready",
           "checkedAt",
           "checks"
+        ],
+        "type": "object"
+      },
+      "ScratchCheckRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/LegacyFile"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "type": "array"
+          },
+          "role": {
+            "description": "The execution role alias the replay runs as (the analysis hint role; default owner).",
+            "pattern": "^[a-z][a-z0-9_]{0,62}$",
+            "type": "string"
+          },
+          "scratchTarget": {
+            "anyOf": [
+              {
+                "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "description": "Target path <product>/<project>/<environment>.",
+                "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                "type": "string"
+              }
+            ],
+            "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+          }
+        },
+        "required": [
+          "scratchTarget",
+          "files"
         ],
         "type": "object"
       },
@@ -34391,6 +34440,113 @@
         "x-exponetdb-action-class": "read",
         "x-exponetdb-errors": [
           "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
+      },
+      "post": {
+        "operationId": "checkScratchTargetForFiles",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScratchCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScratchCheck"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.import"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "The scratch preflight with the legacy files (read only): the same checks, and what the files reference in schemas outside the managed scope that the scratch target lacks (legacy_references).",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "migration.import.scratch_check",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
           "GRANT_REVOKED",
           "INSUFFICIENT_SCOPE",
           "INTERNAL",

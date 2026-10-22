@@ -116,7 +116,7 @@ describe('served routes (Wave 2 and 4 to 9)', () => {
     ])
   })
 
-  it('serves the Wave 9 routes built so far (Part A, ADR-0034), each with a handler', () => {
+  it('serves the Wave 9 routes built so far (Part A, ADR-0034, follow-up 2), each with a handler', () => {
     const served = servedRoutes()
       .filter(
         ({ route }) => isActionId(route.action) && actionDefinition(route.action).wave === '9',
@@ -125,6 +125,7 @@ describe('served routes (Wave 2 and 4 to 9)', () => {
       .sort()
     expect(served).toEqual([
       'checkScratchTarget',
+      'checkScratchTargetForFiles',
       'getProjectExecutionRoles',
       'planDatabaseRetirement',
       'planExecutionRoleBindings',

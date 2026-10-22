@@ -272,6 +272,7 @@ export class MigrationUseCases {
     ref: string,
     scratchRef: string,
     alias?: string,
+    files?: readonly { readonly name: string; readonly text: string }[],
   ): Promise<ScratchCheck> {
     const { observation } = this.#services()
     const target = await this.#target('migration.import.scratch_check', caller, ref)
@@ -288,6 +289,7 @@ export class MigrationUseCases {
       target,
       scratch?.targetId ?? scratchRef,
       alias,
+      files,
     )
   }
 

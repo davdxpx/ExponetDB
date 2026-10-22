@@ -151,9 +151,12 @@ exponetdb target list                                            # acme/platform
 exponetdb migration import scratch-check --target acme/platform/staging --scratch acme/platform/scratch
 ```
 
-Expected: `ready`, six checks `pass`: `scratch_usable`, `identity`, `empty`,
-`extensions`, `outside_scope`, `execution_role` (the last one passes as a
-declared exception). Counter-check: `exponetdb dev sql staging --lab parta
+Expected: `ready`, seven checks `pass`: `scratch_usable`, `identity`, `empty`,
+`extensions`, `outside_scope`, `execution_role` (it passes as a declared
+exception) and `legacy_references` (run in the project directory, the
+command sends the legacy files; this history names nothing outside
+`public`, and `migration import scratch-copy-commands` answers `nothing to
+copy`). Counter-check: `exponetdb dev sql staging --lab parta
 --db acme_scratch` with `CREATE TABLE public.x (id int);` makes `empty` fail
 with `objects:1`; drop the table again.
 
