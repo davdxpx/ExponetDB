@@ -361,7 +361,9 @@ END $$`)
       ["EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'acme_b' OR rolname = 'acme_c')", undefined],
       ["EXISTS (SELECT 1 FROM pg_roles WHERE rolname = lower('ACME_B'))", undefined],
       ["EXISTS (SELECT 1 FROM pg_roles WHERE rolname LIKE 'acme_%')", undefined],
-      ["EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'acme_b' LIMIT 1)", undefined],
+      ["EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'acme_b' LIMIT 0)", undefined],
+      ["EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'acme_b' LIMIT (SELECT 1))", undefined],
+      ["EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'acme_b') OR FOUND", undefined],
       ["EXISTS (SELECT 1 FROM public.pg_roles WHERE rolname = 'acme_b')", undefined],
       ["EXISTS (SELECT 1 FROM pg_roles, pg_database WHERE rolname = 'acme_b')", undefined],
       ["EXISTS (SELECT 1 FROM pg_class WHERE relname = 'acme_b')", undefined],
@@ -382,8 +384,15 @@ END $$`)
     ] as const) {
       expect(guard(cond, body), `${cond} ${body ?? ''}`).toBe('mixed_do_block')
     }
-    // An ELSE or ELSIF branch runs when the guard is false.
+    // An ELSE branch that does more than raise a notice, or an ELSIF branch, runs when the
+    // guard is false; so does a notice with an expression the replay would evaluate.
     expect(guard(roles, 'GRANT acme_a TO acme_b; ELSE GRANT acme_a TO acme_c;')).toBe(
+      'mixed_do_block',
+    )
+    expect(guard(roles, "GRANT acme_a TO acme_b; RAISE NOTICE '%', public.acme_audit();")).toBe(
+      'mixed_do_block',
+    )
+    expect(guard(roles, "GRANT acme_a TO acme_b; ELSE RAISE EXCEPTION 'missing';")).toBe(
       'mixed_do_block',
     )
     expect(
@@ -393,5 +402,96 @@ END $$`)
     expect(
       one(`DO $$ BEGIN IF ${roles} THEN RETURN; END IF; GRANT acme_a TO acme_b; END $$`).form,
     ).toBe('mixed_do_block')
+  })
+
+  it('accepts the common safe shapes: a notice, an ELSE that only notices, AND, LIMIT (review)', () => {
+    const notice = one(`DO $$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'acme_anon') THEN
+    CREATE ROLE acme_anon NOLOGIN;
+    RAISE NOTICE 'created';
+  ELSE
+    RAISE NOTICE 'role acme_anon exists';
+  END IF;
+END $$`)
+    expect(notice.form).toBe('role_do_block')
+    expect(notice.effects.expectations).toEqual([{ kind: 'role', role: 'acme_anon', exists: true }])
+    const both = one(`DO $$ BEGIN
+  IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'acme_x' LIMIT 1)
+     AND EXISTS (SELECT FROM pg_roles WHERE rolname = 'acme_y') THEN
+    GRANT acme_x TO acme_y;
+  END IF;
+END $$`)
+    expect(both.form).toBe('role_do_block')
+    expect(both.effects.expectations).toEqual([
+      {
+        kind: 'membership',
+        role: 'acme_x',
+        member: 'acme_y',
+        exists: true,
+        when: [
+          { kind: 'role', role: 'acme_x', exists: true },
+          { kind: 'role', role: 'acme_y', exists: true },
+        ],
+      },
+    ])
+  })
+
+  it('lets a later statement of the block supersede an earlier one about the same thing (review P2-2)', () => {
+    const x = { kind: 'role', role: 'acme_x', exists: true } as const
+    // Recreate: the role exists afterwards, while the guard holds.
+    const recreate = one(`DO $$ BEGIN
+  IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'acme_x') THEN
+    DROP ROLE acme_x;
+    CREATE ROLE acme_x LOGIN;
+  END IF;
+END $$`)
+    expect(recreate.effects.expectations).toEqual([
+      { kind: 'role', role: 'acme_x', exists: true, when: [x] },
+      { kind: 'role_attribute', role: 'acme_x', attribute: 'login', value: true, when: [x] },
+    ])
+    // Regrant: the membership exists afterwards, with ADMIN, while the guard holds.
+    const ab = { kind: 'membership', role: 'acme_a', member: 'acme_b', exists: true } as const
+    const regrant = one(`DO $$ BEGIN
+  IF EXISTS (SELECT FROM pg_auth_members WHERE roleid = 'acme_a'::regrole AND member = 'acme_b'::regrole) THEN
+    REVOKE acme_a FROM acme_b;
+    GRANT acme_a TO acme_b WITH ADMIN OPTION;
+  END IF;
+END $$`)
+    expect(regrant.effects.expectations).toEqual([
+      { ...ab, when: [ab] },
+      {
+        kind: 'membership_option',
+        role: 'acme_a',
+        member: 'acme_b',
+        option: 'admin',
+        value: true,
+        when: [ab],
+      },
+    ])
+    // A later statement behind a guard of its own does not supersede an earlier one.
+    const narrower = one(`DO $$ BEGIN
+  GRANT acme_a TO acme_b;
+  IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'acme_x') THEN REVOKE acme_a FROM acme_b; END IF;
+END $$`)
+    expect(narrower.effects.expectations).toEqual([
+      { kind: 'membership', role: 'acme_a', member: 'acme_b', exists: true },
+      { kind: 'membership', role: 'acme_a', member: 'acme_b', exists: false, when: [x] },
+    ])
+  })
+
+  it('keeps unconditional behind NOT EXISTS only the guard subject made present (review P3-1)', () => {
+    const s = one(`DO $$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'acme_x') THEN
+    CREATE ROLE acme_x NOLOGIN;
+    GRANT acme_x TO acme_auth;
+    DROP ROLE acme_y;
+  END IF;
+END $$`)
+    expect(s.effects.expectations).toEqual([
+      { kind: 'role', role: 'acme_x', exists: true },
+      // Checked, but never superseding: they ran only if acme_x was missing then.
+      { kind: 'membership', role: 'acme_x', member: 'acme_auth', exists: true, when: [] },
+      { kind: 'role', role: 'acme_y', exists: false, when: [] },
+    ])
   })
 })

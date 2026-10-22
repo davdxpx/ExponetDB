@@ -476,11 +476,26 @@ interface Collected {
   readonly presenceOnly: boolean
   /** The `IF EXISTS` guards around it. */
   readonly when: readonly ClusterGlobalCondition[]
+  /** The `IF NOT EXISTS` guards around it: it ran only while these were missing. */
+  readonly absent: readonly ClusterGlobalCondition[]
 }
 
 interface Scope {
   readonly presenceOnly: boolean
   readonly when: readonly ClusterGlobalCondition[]
+  readonly absent: readonly ClusterGlobalCondition[]
+}
+
+/** A RAISE below EXCEPTION with at most SQLERRM or SQLSTATE as parameters: it changes nothing. */
+function harmlessRaise(n: { readonly type: string; readonly body: JsonNode } | undefined): boolean {
+  if (n?.type !== 'PLpgSQL_stmt_raise') return false
+  const level = n.body['elog_level']
+  if (typeof level !== 'number' || level > MAX_RAISE_LEVEL) return false
+  if (n.body['options'] !== undefined || n.body['condname'] !== undefined) return false
+  return objects(n.body['params']).every((p) => {
+    const q = str(((p as JsonNode)['PLpgSQL_expr'] as JsonNode | undefined)?.['query'])
+    return q !== null && /^\s*(sqlerrm|sqlstate)\s*$/i.test(q)
+  })
 }
 
 /** Whether the block holds role statements, guards and exception handlers only (collected into `out`). */
@@ -492,22 +507,14 @@ function roleOnlyBlock(
   top: boolean,
 ): boolean {
   const exceptions = (block['exceptions'] as JsonNode | undefined)?.['PLpgSQL_exception_block']
-  const inner = { presenceOnly: scope.presenceOnly || exceptions !== undefined, when: scope.when }
+  const inner = { ...scope, presenceOnly: scope.presenceOnly || exceptions !== undefined }
   if (!roleOnlyBody(major, block['body'], inner, out, top)) return false
   if (exceptions !== undefined) {
     for (const exc of objects((exceptions as JsonNode)['exc_list'])) {
       const e = nodeType(exc)
       if (e?.type !== 'PLpgSQL_exception') return false
       for (const action of objects(e.body['action'])) {
-        const a = nodeType(action)
-        if (a?.type !== 'PLpgSQL_stmt_raise') return false
-        const level = a.body['elog_level']
-        if (typeof level !== 'number' || level > MAX_RAISE_LEVEL) return false
-        if (a.body['options'] !== undefined || a.body['condname'] !== undefined) return false
-        for (const p of objects(a.body['params'])) {
-          const q = str(((p as JsonNode)['PLpgSQL_expr'] as JsonNode | undefined)?.['query'])
-          if (q === null || !/^\s*(sqlerrm|sqlstate)\s*$/i.test(q)) return false
-        }
+        if (!harmlessRaise(nodeType(action))) return false
       }
     }
   }
@@ -526,9 +533,13 @@ function roleOnlyBody(
     const n = nodeType(item)
     if (n?.type === 'PLpgSQL_stmt_block') {
       if (!roleOnlyBlock(major, n.body, scope, out, false)) return false
+    } else if (harmlessRaise(n)) {
+      // A notice changes nothing.
     } else if (n?.type === 'PLpgSQL_stmt_if') {
-      // A guard and its THEN branch only: an ELSE or ELSIF branch runs when the guard is false.
-      if (n.body['elsif_list'] !== undefined || n.body['else_body'] !== undefined) return false
+      // A guard and its THEN branch: an ELSIF branch, or an ELSE branch that does more than
+      // raise a notice, runs when the guard is false.
+      if (n.body['elsif_list'] !== undefined) return false
+      if (!objects(n.body['else_body']).every((e) => harmlessRaise(nodeType(e)))) return false
       const cond = str(
         ((n.body['cond'] as JsonNode | undefined)?.['PLpgSQL_expr'] as JsonNode | undefined)?.[
           'query'
@@ -538,9 +549,11 @@ function roleOnlyBody(
       if (guard === undefined) return false
       // NOT EXISTS: the branch ran only if the role or membership was missing, so only what
       // holds either way is kept. EXISTS: what the branch states holds only while the guard does.
-      const next = guard.negated
-        ? { presenceOnly: true, when: scope.when }
-        : { presenceOnly: scope.presenceOnly, when: [...scope.when, guard.condition] }
+      const next = {
+        presenceOnly: scope.presenceOnly || guard.absent.length > 0,
+        when: [...scope.when, ...guard.holds],
+        absent: [...scope.absent, ...guard.absent],
+      }
       if (!roleOnlyBody(major, n.body['then_body'], next, out, false)) return false
     } else if (n?.type === 'PLpgSQL_stmt_execsql') {
       const expr = (n.body['sqlstmt'] as JsonNode | undefined)?.['PLpgSQL_expr'] as
@@ -550,7 +563,7 @@ function roleOnlyBody(
       if (query === null || n.body['into'] !== undefined || n.body['target'] !== undefined) {
         return false
       }
-      out.push({ query, presenceOnly: scope.presenceOnly, when: scope.when })
+      out.push({ query, ...scope })
     } else if (n?.type === 'PLpgSQL_stmt_return') {
       // The parser adds a bare RETURN at the end of the outermost block; one anywhere else
       // would skip what follows it.
@@ -631,7 +644,12 @@ function regroleName(input: string): string | undefined {
 function roleGuard(
   major: SupportedMajor,
   query: string,
-): { readonly negated: boolean; readonly condition: ClusterGlobalCondition } | undefined {
+):
+  | {
+      readonly holds: readonly ClusterGlobalCondition[]
+      readonly absent: readonly ClusterGlobalCondition[]
+    }
+  | undefined {
   const parsed = parseWith(major, `SELECT ${query}`, MAX_MIGRATION_PARSE_BYTES)
   if (!parsed.ok || parsed.statements.length !== 1) return undefined
   const [st] = parsed.statements
@@ -639,7 +657,27 @@ function roleGuard(
   const targets = list(st.node['targetList'])
   const target = targets.length === 1 ? nodeType(targets[0]) : undefined
   if (target?.type !== 'ResTarget' || !onlyKeys(target.body, ['val', 'location'])) return undefined
-  let value = nodeType(target.body['val'])
+  const top = nodeType(target.body['val'])
+  // Several conditions joined by AND; each one an [NOT] EXISTS.
+  const parts =
+    top?.type === 'BoolExpr' && top.body['boolop'] === 'AND_EXPR'
+      ? list(top.body['args'])
+      : [target.body['val']]
+  const holds: ClusterGlobalCondition[] = []
+  const absent: ClusterGlobalCondition[] = []
+  for (const part of parts) {
+    const c = existsCondition(part)
+    if (c === undefined) return undefined
+    ;(c.negated ? absent : holds).push(c.condition)
+  }
+  return { holds, absent }
+}
+
+/** One `[NOT] EXISTS (SELECT … FROM pg_roles | pg_auth_members WHERE …)`, or `undefined`. */
+function existsCondition(
+  node: unknown,
+): { readonly negated: boolean; readonly condition: ClusterGlobalCondition } | undefined {
+  let value = nodeType(node)
   let negated = false
   if (value?.type === 'BoolExpr') {
     const args = list(value.body['args'])
@@ -657,9 +695,16 @@ function roleGuard(
   const sub = nodeType(value.body['subselect'])
   if (
     sub?.type !== 'SelectStmt' ||
-    !plainSelect(sub.body, ['targetList', 'fromClause', 'whereClause'])
+    !plainSelect(sub.body, ['targetList', 'fromClause', 'whereClause', 'limitCount'])
   )
     return undefined
+  // EXISTS reads one row at most: a LIMIT of a positive constant changes nothing.
+  if (sub.body['limitCount'] !== undefined) {
+    const limit = nodeType(sub.body['limitCount'])
+    const n = limit?.type === 'A_Const' ? (limit.body['ival'] as JsonNode | undefined)?.['ival'] : 0
+    if (sub.body['limitOption'] !== 'LIMIT_OPTION_COUNT' || typeof n !== 'number' || n < 1)
+      return undefined
+  }
   const from = list(sub.body['fromClause'])
   const range = from.length === 1 ? nodeType(from[0]) : undefined
   if (
@@ -758,7 +803,9 @@ function roleGuard(
 function plainSelect(node: JsonNode, allowed: readonly string[]): boolean {
   return (
     onlyKeys(node, [...allowed, 'limitOption', 'op']) &&
-    (node['limitOption'] === undefined || node['limitOption'] === 'LIMIT_OPTION_DEFAULT') &&
+    (node['limitOption'] === undefined ||
+      node['limitOption'] === 'LIMIT_OPTION_DEFAULT' ||
+      (allowed.includes('limitCount') && node['limitOption'] === 'LIMIT_OPTION_COUNT')) &&
     (node['op'] === undefined || node['op'] === 'SETOP_NONE')
   )
 }
@@ -826,7 +873,13 @@ export function clusterGlobalStatements(
     const roleOnly =
       datums &&
       action?.type === 'PLpgSQL_stmt_block' &&
-      roleOnlyBlock(major, action.body, { presenceOnly: false, when: [] }, statements, true) &&
+      roleOnlyBlock(
+        major,
+        action.body,
+        { presenceOnly: false, when: [], absent: [] },
+        statements,
+        true,
+      ) &&
       statements.every((s) => singleRoleStatement(major, s.query) !== undefined)
     if (!roleOnly) {
       out.push({
@@ -837,7 +890,7 @@ export function clusterGlobalStatements(
       })
       continue
     }
-    const expectations: ClusterGlobalExpectation[] = []
+    const raw: { readonly e: ClusterGlobalExpectation; readonly from: Collected }[] = []
     let unknown = false
     for (const s of statements) {
       const role = singleRoleStatement(major, s.query)
@@ -849,17 +902,58 @@ export function clusterGlobalStatements(
         unknown = true
         continue
       }
-      for (const e of effects.expectations) {
-        // A statement that undoes what its guard asked (IF EXISTS … THEN DROP ROLE, REVOKE)
-        // leaves the same state whether the guard held or not: that guard does not apply.
-        const when = s.when.filter(
-          (c) => !(expectationKey(c) === expectationKey(e) && 'exists' in e && !e.exists),
-        )
-        expectations.push(when.length === 0 ? e : { ...e, when })
-      }
+      for (const e of effects.expectations) raw.push({ e, from: s })
       unknown ||= effects.unknown
     }
-    out.push({ index, type: st.type, form: 'role_do_block', effects: { expectations, unknown } })
+    out.push({
+      index,
+      type: st.type,
+      form: 'role_do_block',
+      effects: { expectations: blockExpectations(raw), unknown },
+    })
   }
   return out
+}
+
+/**
+ * What a role-only block states, in its order. The block runs top to
+ * bottom, so a later statement about the same thing (or a later removal of
+ * a role) supersedes an earlier one whenever it ran at least as often: its
+ * guards are among the earlier one's. Then each surviving expectation gets
+ * its guards: a statement that undoes what its own `EXISTS` guard asked
+ * (`IF EXISTS … THEN DROP ROLE`, `REVOKE`) leaves the same state either way,
+ * so that guard does not apply; under a `NOT EXISTS` guard only the guard's
+ * own subject made present holds either way, anything else is checked but
+ * never supersedes (`when`, possibly empty).
+ */
+function blockExpectations(
+  raw: readonly { readonly e: ClusterGlobalExpectation; readonly from: Collected }[],
+): ClusterGlobalExpectation[] {
+  const keys = (cs: readonly ClusterGlobalCondition[]) => new Set(cs.map(expectationKey))
+  const within = (inner: Collected, outer: Collected) => {
+    const outerWhen = keys(outer.when)
+    const outerAbsent = keys(outer.absent)
+    return (
+      inner.when.every((c) => outerWhen.has(expectationKey(c))) &&
+      inner.absent.every((c) => outerAbsent.has(expectationKey(c))) &&
+      (!inner.presenceOnly || outer.presenceOnly)
+    )
+  }
+  const kept = raw.filter((x, i) =>
+    raw.slice(i + 1).every((later) => {
+      if (!within(later.from, x.from)) return true
+      if (expectationKey(later.e) === expectationKey(x.e)) return false
+      const removed = later.e.kind === 'role' && !later.e.exists ? later.e.role : null
+      return removed === null || !rolesOf(x.e).includes(removed)
+    }),
+  )
+  return kept.map(({ e, from }) => {
+    const key = expectationKey(e)
+    const undoes = 'exists' in e && !e.exists
+    const when = from.when.filter((c) => !(undoes && expectationKey(c) === key))
+    const eitherWay =
+      'exists' in e && e.exists && from.absent.some((c) => expectationKey(c) === key)
+    if (from.absent.length > 0 && !eitherWay) return { ...e, when }
+    return when.length === 0 ? e : { ...e, when }
+  })
 }

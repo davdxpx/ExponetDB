@@ -76,10 +76,9 @@ END $$;`
           ['membership', true, true],
           // No such role: the grant states nothing on this cluster.
           ['membership', false, false],
-          // REVOKE undoes what its guard asked: the guard does not apply to it, and the
-          // membership exists, so it does not hold.
-          ['membership', true, false],
-          // The membership exists, so the grant's guard holds; ADMIN was never granted.
+          // REVOKE then GRANT … WITH ADMIN OPTION in one block: the grant supersedes the
+          // revoke (review P2-2). The membership exists, so the guard holds; ADMIN was never
+          // granted, so that option does not hold.
           ['membership', true, true],
           ['membership_option', true, false],
         ])

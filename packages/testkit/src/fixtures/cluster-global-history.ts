@@ -113,7 +113,7 @@ $$;
   IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${legacy}') THEN
     CREATE ROLE ${legacy} NOLOGIN;
   END IF;
-  RAISE NOTICE 'roles checked';
+  PERFORM pg_catalog.pg_sleep(0);
 END $$;
 `,
     },
