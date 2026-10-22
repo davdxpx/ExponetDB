@@ -832,3 +832,29 @@ done from this session):
    what the scratch target still lacks (the `auth` copy made by hand
    already covers `auth.uid()`).
 4. The analysis runs again.
+
+**Independent reviews of follow-up 2** (2026-10-22). A security review and
+a correctness review read the five commits; neither found a P1. Every
+finding is fixed on this pull request, each with a test, unless noted.
+
+| # | Review | Finding | Fix |
+|---|---|---|---|
+| S-F3-a | security P2 | Nested `LANGUAGE sql` bodies made the reference scan exhaust `serve` (a 300 KB file above 512 MiB, deeper ones a stack overflow) | bodies followed two levels deep; beyond, `legacy_references` is `unknown` (`too_complex`) |
+| S-F2-a | security P2 | The reset dropped, unseen, a server and a foreign table outside the scope that hung off an extension's member (a regression of F2) | the reset lists every object outside the scope by identity before and after; anything missing refuses and rolls back |
+| S-F2-b | security P2 (older) | An extension outside the scope holding an object inside it was dropped and never re-created | the same inventory |
+| S-F1-a | security P2 (older) | A declared `found`/`sqlstate`/`sqlerrm` with a default passed the implicit-variable check; its default ran on the target, the replay elided the block | only the implicit variables pass |
+| S-F5-a | security P3 | `LANGUAGE` after a body was read with a regex, so `'language sql'` in a literal made a `plpython3u` body code | read as tokens |
+| S-F4-a | security P3 | The process-wide parse slot was held across a caller's target connections | removed: the parse is synchronous, the slot bounded nothing |
+| S-F1-b | security P3 | A temporary `pg_roles` made by the file is found before `pg_catalog`'s | in such a file only qualified guards count; one made by an earlier file is a residual (§2.4) |
+| S-F1-c | security P3 | Long names in guards; `NOT EXISTS` on another subject made a removal unconditional | names cut to 63 bytes; see C-P3-1 |
+| C-P2-1 | correctness P2 | The copy carried the history's policies on `storage.objects`; the restore failed | policies and their comments are left out like triggers |
+| C-P2-2 | correctness P2 | A guarded `DROP ROLE x; CREATE ROLE x` (or `REVOKE`; `GRANT`) gave a contradictory pair and an unconditional removal | a later statement of a block supersedes an earlier one behind no extra guard |
+| C-P3-1 | correctness P3 | Under `NOT EXISTS` facts about other subjects were unconditional | only the guard's own subject made present is; anything else never supersedes |
+| C-P3-2 | correctness P3 | Safe shapes stayed mixed | notices, an `ELSE` of notices, `AND`, `LIMIT n` accepted; `pg_user` guards stay mixed |
+| C-P3-3 | correctness P3 (older) | as S-F2-b | the inventory |
+| C-P3-4 | correctness P3 | `copySchemas` named schemas of extension members, which a schema-only dump never holds | such members are named with their extension and their schema is not copied |
+| C-P3-5 | correctness P3 | References made before the history creates the object, `CALL`, `COMMENT ON` and schema-level needs were missed | read; operator classes and qualified operators are not (§2.5) |
+| C-P3-6 | correctness P3 | The hints' not-applicable files were checked | left out (`notApplicable`, CLI `--hints`) |
+| C-P3-7 | correctness P3 | A missing legacy directory failed the CLI with `ENOENT` | a usage error naming it |
+| C-P3-8 | correctness P3 | Docs: 32 MiB in `resources.md`; the reset after a replay | corrected |
+| C-P3-9 | correctness P3 | The gate and the analysis bound were untested | the gate is gone; the bound is tested on both schemas |
