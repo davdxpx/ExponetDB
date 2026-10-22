@@ -151,5 +151,26 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       // Without them the reset goes through again.
       await reset()
     })
+
+    it('re-creates an extension after the one it requires, also when that one was updated later (verification review P3-5)', async () => {
+      // An updated extension's catalog row moves to the end: the order of the rows is not the
+      // order of the requirements.
+      await runAsSuperuser(server, database, [
+        "CREATE EXTENSION cube SCHEMA public VERSION '1.4'",
+        'CREATE EXTENSION earthdistance SCHEMA public',
+        "ALTER EXTENSION cube UPDATE TO '1.5'",
+      ])
+      const versions = () =>
+        withSuperuser(server, database, (c) =>
+          c.query(
+            `SELECT x.extname AS name, x.extversion AS version FROM pg_catalog.pg_extension x
+              WHERE x.extname IN ('cube', 'earthdistance') ORDER BY 1`,
+          ),
+        )
+      const before = (await versions()).rows
+      expect(before.map((r) => r.name)).toEqual(['cube', 'earthdistance'])
+      await reset()
+      expect((await versions()).rows).toEqual(before)
+    })
   },
 )

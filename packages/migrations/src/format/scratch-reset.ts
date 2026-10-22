@@ -190,8 +190,19 @@ BEGIN
   -- can reach further than the dependencies above show (a server of a wrapper an extension of
   -- the scope holds, an extension outside the scope that holds an object inside it).
   CREATE TEMPORARY TABLE exdb_reset_outside ON COMMIT DROP AS ${OUTSIDE_INVENTORY};
+  -- Each with how many extensions it requires in a row: re-created after what it requires,
+  -- whatever order the catalog holds them in (an updated extension's row moves to the end).
   CREATE TEMPORARY TABLE exdb_reset_extensions ON COMMIT DROP AS
-    SELECT x.extname::text AS name, n.nspname::text AS schema, x.extversion AS version
+    WITH RECURSIVE requires(ext, level) AS (
+      SELECT x.oid, 0 FROM pg_catalog.pg_extension x
+      UNION ALL
+      SELECT d.objid, r.level + 1
+        FROM pg_catalog.pg_depend d JOIN requires r ON r.ext = d.refobjid
+       WHERE d.classid = 'pg_catalog.pg_extension'::regclass
+         AND d.refclassid = 'pg_catalog.pg_extension'::regclass
+         AND d.deptype = 'n' AND r.level < 100)
+    SELECT x.extname::text AS name, n.nspname::text AS schema, x.extversion AS version,
+           (SELECT pg_catalog.max(r.level) FROM requires r WHERE r.ext = x.oid) AS level
       FROM pg_catalog.pg_extension x JOIN pg_catalog.pg_namespace n ON n.oid = x.extnamespace
      WHERE n.nspname = ANY (managed);
   FOR s IN SELECT n.nspname::text AS name, pg_catalog.pg_get_userbyid(n.nspowner) AS owner, n.nspowner, n.nspacl
@@ -205,7 +216,7 @@ BEGIN
         CASE WHEN g.is_grantable THEN ' WITH GRANT OPTION' ELSE '' END);
     END LOOP;
   END LOOP;
-  FOR e IN SELECT * FROM exdb_reset_extensions LOOP
+  FOR e IN SELECT * FROM exdb_reset_extensions ORDER BY level, name LOOP
     EXECUTE pg_catalog.format('CREATE EXTENSION %I WITH SCHEMA %I VERSION %L', e.name, e.schema, e.version);
   END LOOP;
   SELECT pg_catalog.count(*), pg_catalog.string_agg(o.object, ', ' ORDER BY o.object)

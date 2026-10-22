@@ -679,7 +679,11 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   changed`, naming them) and the transaction rolls back. Then, in one
   transaction, it drops and re-creates each schema of the managed scope with
   its owner and grants (read from the catalog before the drop) and
-  re-creates the extensions that lived there in their versions. A
+  re-creates the extensions that lived there in their versions, each after
+  the extensions it requires (`pg_depend`; the catalog's row order is not
+  that order once an extension was updated: `cube` updated after
+  `earthdistance` made the reset fail, the verification review of
+  follow-up 2, P3-5). A
   publication's membership of a table or schema is no reason to refuse
   (the drop ends the membership, the publication stays); a refusal names
   how many objects depend and marks a list cut at 2 000 characters. The
