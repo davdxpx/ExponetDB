@@ -438,13 +438,54 @@ export interface ClusterGlobalStatement {
   readonly effects: RoleStatementEffects
 }
 
+/**
+ * How far a guard must name `pg_catalog` itself to be read as the system
+ * catalog's:
+ *
+ * - `none`: `pg_roles`, `::regrole` and `=` as written (PostgreSQL searches
+ *   `pg_catalog` first unless a `search_path` names it later);
+ * - `relations`: the history creates or renames a relation under a guard
+ *   catalog's name (a temporary `pg_roles` is found before `pg_catalog`'s),
+ *   so only `pg_catalog.pg_roles` and `pg_catalog.pg_auth_members` count;
+ * - `all`: the history creates an operator named `=`, or sets a
+ *   `search_path` that names `pg_catalog` after another schema, so the
+ *   relation, every cast (`::pg_catalog.regrole`) and the operator
+ *   (`OPERATOR(pg_catalog.=)`) must be qualified.
+ *
+ * Read from the text of the whole history, string literals included (the
+ * verification review of follow-up 2, P2-2 and P3-3); a name built at run
+ * time (`format('%I', …)`) is not seen (legacy-import.md §2.4).
+ */
+export type GuardStrictness = 'none' | 'relations' | 'all'
+
+const SHADOWING =
+  /\b(?:table|view|into|to|exists)\s+(?:only\s+)?(?:"?[\w$]+"?\s*\.\s*)?"?(?:pg_roles|pg_auth_members)\b/i
+const EQUALS_OPERATOR = /\b(?:create|alter)\s+operator\s+(?:[\w$"]+\s*\.\s*)?=\s*\(/i
+const CATALOG_LATER = /\bsearch_path\b[^;]*?,\s*["']?\s*pg_catalog\b/i
+
+/** The strictness a history's guards are read with (see {@link GuardStrictness}). */
+export function guardStrictness(texts: readonly string[]): GuardStrictness {
+  let strictness: GuardStrictness = 'none'
+  for (const text of texts) {
+    if (EQUALS_OPERATOR.test(text) || CATALOG_LATER.test(text)) return 'all'
+    if (SHADOWING.test(text)) strictness = 'relations'
+  }
+  return strictness
+}
+
+const STRICTER: Record<GuardStrictness, number> = { none: 0, relations: 1, all: 2 }
+
 /** Loads the file's major and the PL/pgSQL parser (18). */
 export async function loadClusterGlobalParsers(major: SupportedMajor): Promise<void> {
   await Promise.all([loadParser(major), loadParser(18)])
 }
 
-/** Implicit variables of every PL/pgSQL block (and of each exception block). */
-const IMPLICIT = new Set(['found', 'sqlstate', 'sqlerrm'])
+/**
+ * How deep a parse tree is followed (JSON levels). Ordinary statements stay
+ * far below; deeper is not read, and is said so, before the stack ends.
+ */
+const MAX_TREE_DEPTH = 1000
+
 /** RAISE levels below EXCEPTION (ERROR is 21 in PostgreSQL's elog.h). */
 const MAX_RAISE_LEVEL = 19
 
@@ -454,10 +495,15 @@ function objects(value: unknown): JsonNode[] {
     : []
 }
 
-/** Every embedded SQL statement anywhere in a PL/pgSQL tree (for the mixed check). */
-function embeddedQueries(value: unknown, out: string[] = []): string[] {
+/**
+ * Every embedded SQL statement anywhere in a PL/pgSQL tree (for the mixed
+ * check), or `undefined` when the tree is deeper than it is followed (the
+ * verification review of follow-up 2, P3-6).
+ */
+function embeddedQueries(value: unknown, out: string[] = [], depth = 0): string[] | undefined {
+  if (depth > MAX_TREE_DEPTH) return undefined
   if (Array.isArray(value)) {
-    for (const v of value) embeddedQueries(v, out)
+    for (const v of value) if (embeddedQueries(v, out, depth + 1) === undefined) return undefined
   } else if (typeof value === 'object' && value !== null) {
     const execsql = (value as JsonNode)['PLpgSQL_stmt_execsql']
     if (typeof execsql === 'object' && execsql !== null) {
@@ -465,9 +511,46 @@ function embeddedQueries(value: unknown, out: string[] = []): string[] {
       const query = str((q as JsonNode | undefined)?.['query'])
       if (query !== null) out.push(query)
     }
-    for (const v of Object.values(value)) embeddedQueries(v, out)
+    for (const v of Object.values(value))
+      if (embeddedQueries(v, out, depth + 1) === undefined) return undefined
   }
   return out
+}
+
+/** How many exception blocks a PL/pgSQL tree holds (each brings SQLSTATE and SQLERRM). */
+function exceptionBlocks(value: unknown, depth = 0): number {
+  if (depth > MAX_TREE_DEPTH || typeof value !== 'object' || value === null) return 0
+  let n = !Array.isArray(value) && 'PLpgSQL_exception_block' in value ? 1 : 0
+  for (const v of Object.values(value)) n += exceptionBlocks(v, depth + 1)
+  return n
+}
+
+/**
+ * The function's datums are the parser's own and nothing else: `found`,
+ * then SQLSTATE and SQLERRM (`text` constants) of each exception block. A
+ * declared variable, even a constant named like them, runs code at block
+ * entry through a default or a domain's check (the verification review of
+ * follow-up 2, P2-1).
+ */
+function implicitDatumsOnly(fn: JsonNode): boolean {
+  const datums = objects(fn['datums']).map((d) => nodeType(d))
+  if (datums.length !== 1 + 2 * exceptionBlocks(fn['action'])) return false
+  return datums.every((v, i) => {
+    if (v?.type !== 'PLpgSQL_var') return false
+    const type = str(
+      ((v.body['datatype'] as JsonNode | undefined)?.['PLpgSQL_type'] as JsonNode | undefined)?.[
+        'typname'
+      ],
+    )
+    const name = i === 0 ? 'found' : i % 2 === 1 ? 'sqlstate' : 'sqlerrm'
+    if (v.body['refname'] !== name) return false
+    if (i === 0) return type === 'boolean' && onlyKeys(v.body, ['refname', 'datatype'])
+    return (
+      type === 'text' &&
+      v.body['isconst'] === true &&
+      onlyKeys(v.body, ['refname', 'lineno', 'datatype', 'isconst'])
+    )
+  })
 }
 
 interface Collected {
@@ -478,26 +561,48 @@ interface Collected {
   readonly when: readonly ClusterGlobalCondition[]
   /** The `IF NOT EXISTS` guards around it: it ran only while these were missing. */
   readonly absent: readonly ClusterGlobalCondition[]
+  /**
+   * The IF statements around it, one id each: a guard is evaluated where its
+   * IF stands, after what ran before it, so two IFs with the same guard are
+   * two decisions (the verification review of follow-up 2, P3-1).
+   */
+  readonly guards: readonly number[]
 }
 
 interface Scope {
   readonly presenceOnly: boolean
   readonly when: readonly ClusterGlobalCondition[]
   readonly absent: readonly ClusterGlobalCondition[]
-  /**
-   * The file creates a relation named like a guard's catalog (a temporary
-   * `pg_roles` is found before `pg_catalog`'s): only `pg_catalog.` guards count.
-   */
-  readonly qualifiedOnly: boolean
+  readonly guards: readonly number[]
+  /** How far a guard must name `pg_catalog` (see {@link GuardStrictness}). */
+  readonly strictness: GuardStrictness
+  /** The IF statements and blocks it is nested in: deeper than {@link MAX_BLOCK_DEPTH} is mixed. */
+  readonly depth: number
+  /** The next IF statement's id. */
+  readonly ids: { next: number }
 }
 
-/** A RAISE below EXCEPTION with at most SQLERRM or SQLSTATE as parameters: it changes nothing. */
-function harmlessRaise(n: { readonly type: string; readonly body: JsonNode } | undefined): boolean {
+/** How deep a role-only block may nest blocks and IF statements. */
+const MAX_BLOCK_DEPTH = 64
+
+/**
+ * A RAISE below EXCEPTION that changes nothing: without parameters, or, in
+ * an exception handler only, with SQLERRM or SQLSTATE (outside a handler
+ * they are no variables: the RAISE fails at run time, and a handler around
+ * it would swallow what follows; the verification review of follow-up 2,
+ * P3-2).
+ */
+function harmlessRaise(
+  n: { readonly type: string; readonly body: JsonNode } | undefined,
+  inHandler: boolean,
+): boolean {
   if (n?.type !== 'PLpgSQL_stmt_raise') return false
   const level = n.body['elog_level']
   if (typeof level !== 'number' || level > MAX_RAISE_LEVEL) return false
   if (n.body['options'] !== undefined || n.body['condname'] !== undefined) return false
-  return objects(n.body['params']).every((p) => {
+  const params = objects(n.body['params'])
+  if (!inHandler) return params.length === 0
+  return params.every((p) => {
     const q = str(((p as JsonNode)['PLpgSQL_expr'] as JsonNode | undefined)?.['query'])
     return q !== null && /^\s*(sqlerrm|sqlstate)\s*$/i.test(q)
   })
@@ -512,14 +617,18 @@ function roleOnlyBlock(
   top: boolean,
 ): boolean {
   const exceptions = (block['exceptions'] as JsonNode | undefined)?.['PLpgSQL_exception_block']
-  const inner = { ...scope, presenceOnly: scope.presenceOnly || exceptions !== undefined }
+  const inner = {
+    ...scope,
+    presenceOnly: scope.presenceOnly || exceptions !== undefined,
+    depth: scope.depth + 1,
+  }
   if (!roleOnlyBody(major, block['body'], inner, out, top)) return false
   if (exceptions !== undefined) {
     for (const exc of objects((exceptions as JsonNode)['exc_list'])) {
       const e = nodeType(exc)
       if (e?.type !== 'PLpgSQL_exception') return false
       for (const action of objects(e.body['action'])) {
-        if (!harmlessRaise(nodeType(action))) return false
+        if (!harmlessRaise(nodeType(action), true)) return false
       }
     }
   }
@@ -533,24 +642,26 @@ function roleOnlyBody(
   out: Collected[],
   top: boolean,
 ): boolean {
+  if (scope.depth > MAX_BLOCK_DEPTH) return false
   const body = objects(items)
   for (const [at, item] of body.entries()) {
     const n = nodeType(item)
     if (n?.type === 'PLpgSQL_stmt_block') {
       if (!roleOnlyBlock(major, n.body, scope, out, false)) return false
-    } else if (harmlessRaise(n)) {
+    } else if (harmlessRaise(n, false)) {
       // A notice changes nothing.
     } else if (n?.type === 'PLpgSQL_stmt_if') {
       // A guard and its THEN branch: an ELSIF branch, or an ELSE branch that does more than
       // raise a notice, runs when the guard is false.
       if (n.body['elsif_list'] !== undefined) return false
-      if (!objects(n.body['else_body']).every((e) => harmlessRaise(nodeType(e)))) return false
+      if (!objects(n.body['else_body']).every((e) => harmlessRaise(nodeType(e), false)))
+        return false
       const cond = str(
         ((n.body['cond'] as JsonNode | undefined)?.['PLpgSQL_expr'] as JsonNode | undefined)?.[
           'query'
         ],
       )
-      const guard = cond === null ? undefined : roleGuard(major, cond, scope.qualifiedOnly)
+      const guard = cond === null ? undefined : roleGuard(major, cond, scope.strictness)
       if (guard === undefined) return false
       // NOT EXISTS: the branch ran only if the role or membership was missing, so only what
       // holds either way is kept. EXISTS: what the branch states holds only while the guard does.
@@ -559,6 +670,8 @@ function roleOnlyBody(
         presenceOnly: scope.presenceOnly || guard.absent.length > 0,
         when: [...scope.when, ...guard.holds],
         absent: [...scope.absent, ...guard.absent],
+        guards: [...scope.guards, scope.ids.next++],
+        depth: scope.depth + 1,
       }
       if (!roleOnlyBody(major, n.body['then_body'], next, out, false)) return false
     } else if (n?.type === 'PLpgSQL_stmt_execsql') {
@@ -569,7 +682,13 @@ function roleOnlyBody(
       if (query === null || n.body['into'] !== undefined || n.body['target'] !== undefined) {
         return false
       }
-      out.push({ query, presenceOnly: scope.presenceOnly, when: scope.when, absent: scope.absent })
+      out.push({
+        query,
+        presenceOnly: scope.presenceOnly,
+        when: scope.when,
+        absent: scope.absent,
+        guards: scope.guards,
+      })
     } else if (n?.type === 'PLpgSQL_stmt_return') {
       // The parser adds a bare RETURN at the end of the outermost block; one anywhere else
       // would skip what follows it.
@@ -589,14 +708,14 @@ function onlyKeys(node: JsonNode, allowed: readonly string[]): boolean {
   return Object.keys(node).every((k) => allowed.includes(k))
 }
 
-/** `=` or `OPERATOR(pg_catalog.=)`. */
-function isEquals(name: unknown): boolean {
+/** `=` (unless every name must be qualified) or `OPERATOR(pg_catalog.=)`. */
+function isEquals(name: unknown, qualified: boolean): boolean {
   const parts = list(name).map((p) => {
     const n = nodeType(p)
     return n?.type === 'String' ? str(n.body['sval']) : null
   })
   return (
-    (parts.length === 1 && parts[0] === '=') ||
+    (!qualified && parts.length === 1 && parts[0] === '=') ||
     (parts.length === 2 && parts[0] === 'pg_catalog' && parts[1] === '=')
   )
 }
@@ -605,6 +724,7 @@ function isEquals(name: unknown): boolean {
 function stringConstant(
   value: unknown,
   types: readonly string[],
+  qualified: boolean,
 ): { readonly value: string; readonly type: string | null } | undefined {
   let n = nodeType(value)
   let type: string | null = null
@@ -619,7 +739,7 @@ function stringConstant(
       return s?.type === 'String' ? str(s.body['sval']) : null
     })
     const last =
-      names.length === 1
+      names.length === 1 && !qualified
         ? names[0]
         : names.length === 2 && names[0] === 'pg_catalog'
           ? names[1]
@@ -664,7 +784,7 @@ function regroleName(input: string): string | undefined {
 function roleGuard(
   major: SupportedMajor,
   query: string,
-  qualifiedOnly: boolean,
+  strictness: GuardStrictness,
 ):
   | {
       readonly holds: readonly ClusterGlobalCondition[]
@@ -687,7 +807,7 @@ function roleGuard(
   const holds: ClusterGlobalCondition[] = []
   const absent: ClusterGlobalCondition[] = []
   for (const part of parts) {
-    const c = existsCondition(part, qualifiedOnly)
+    const c = existsCondition(part, strictness)
     if (c === undefined) return undefined
     ;(c.negated ? absent : holds).push(c.condition)
   }
@@ -697,7 +817,7 @@ function roleGuard(
 /** One `[NOT] EXISTS (SELECT … FROM pg_roles | pg_auth_members WHERE …)`, or `undefined`. */
 function existsCondition(
   node: unknown,
-  qualifiedOnly: boolean,
+  strictness: GuardStrictness,
 ): { readonly negated: boolean; readonly condition: ClusterGlobalCondition } | undefined {
   let value = nodeType(node)
   let negated = false
@@ -747,7 +867,8 @@ function existsCondition(
   const relation = str(range.body['relname'])
   const schema = range.body['schemaname']
   if (relation === null || !GUARD_RELATIONS.has(relation)) return undefined
-  if (schema !== undefined ? schema !== 'pg_catalog' : qualifiedOnly) return undefined
+  if (schema !== undefined ? schema !== 'pg_catalog' : strictness !== 'none') return undefined
+  const qualified = strictness === 'all'
   let qualifier = relation
   const alias = range.body['alias'] as JsonNode | undefined
   if (alias !== undefined) {
@@ -786,7 +907,7 @@ function existsCondition(
     if (
       e?.type !== 'A_Expr' ||
       e.body['kind'] !== 'AEXPR_OP' ||
-      !isEquals(e.body['name']) ||
+      !isEquals(e.body['name'], qualified) ||
       !onlyKeys(e.body, ['kind', 'name', 'lexpr', 'rexpr', 'location'])
     ) {
       return undefined
@@ -800,8 +921,15 @@ function existsCondition(
           ? [right, e.body['lexpr']]
           : [null, undefined]
     if (col === null || equal.has(col)) return undefined
-    const v = stringConstant(constant, relation === 'pg_roles' ? ['name', 'text'] : ['regrole'])
+    const v = stringConstant(
+      constant,
+      relation === 'pg_roles' ? ['name', 'text'] : ['regrole'],
+      qualified,
+    )
     if (v === undefined) return undefined
+    // `name = text` compares as text: a longer constant is never equal to a role name, and
+    // is not cut to one (the verification review of follow-up 2, P3-4). Not a guard.
+    if (v.type === 'text' && new TextEncoder().encode(v.value).length > 63) return undefined
     equal.set(col, v)
   }
   if (relation === 'pg_roles') {
@@ -871,15 +999,13 @@ function singleRoleStatement(
 export function clusterGlobalStatements(
   major: SupportedMajor,
   text: string,
+  /** The whole history's ({@link guardStrictness}); the file's own is always read too. */
+  history: GuardStrictness = 'none',
 ): ClusterGlobalStatement[] | undefined {
   const parsed = parseWith(major, text, MAX_MIGRATION_PARSE_BYTES)
   if (!parsed.ok) return undefined
-  // A relation the file creates under a guard catalog's name would be found before it.
-  const shadowed = parsed.statements.some(
-    (st) =>
-      ['CreateStmt', 'ViewStmt', 'CreateTableAsStmt', 'CreateForeignTableStmt'].includes(st.type) &&
-      /"relname":"pg_(roles|auth_members)"/.test(JSON.stringify(st.node)),
-  )
+  const own = guardStrictness([text])
+  const strictness = STRICTER[own] > STRICTER[history] ? own : history
   const out: ClusterGlobalStatement[] = []
   for (const [index, st] of parsed.statements.entries()) {
     if (isRoleStatement(st.type, st.node)) {
@@ -894,32 +1020,31 @@ export function clusterGlobalStatements(
       'PLpgSQL_function'
     ] as JsonNode | undefined
     const queries = fn === undefined ? [] : embeddedQueries(fn['action'])
-    const roleQueries = queries.filter((q) => singleRoleStatement(major, q) !== undefined)
+    // Too deep to follow: whatever it holds, it is not elided.
+    const roleQueries =
+      queries === undefined
+        ? ['']
+        : queries.filter((q) => singleRoleStatement(major, q) !== undefined)
     // A DO block without role statements (or one no parser can read) is ordinary procedural SQL.
     if (fn === undefined || roleQueries.length === 0) continue
     const statements: Collected[] = []
-    // Only the implicit variables (FOUND, and SQLSTATE and SQLERRM of a handler, constants): a
-    // declared one, even named like them, may run code at block entry through its default
-    // (security review of follow-up 2).
-    const datums = objects(fn['datums']).every((d) => {
-      const v = nodeType(d)
-      const name = String(v?.body['refname'] ?? '')
-      return (
-        v?.type === 'PLpgSQL_var' &&
-        IMPLICIT.has(name) &&
-        v.body['default_val'] === undefined &&
-        v.body['cursor_explicit_expr'] === undefined &&
-        (name === 'found' ? v.body['lineno'] === undefined : v.body['isconst'] === true)
-      )
-    })
     const action = nodeType(fn['action'])
     const roleOnly =
-      datums &&
+      queries !== undefined &&
+      implicitDatumsOnly(fn) &&
       action?.type === 'PLpgSQL_stmt_block' &&
       roleOnlyBlock(
         major,
         action.body,
-        { presenceOnly: false, when: [], absent: [], qualifiedOnly: shadowed },
+        {
+          presenceOnly: false,
+          when: [],
+          absent: [],
+          guards: [],
+          strictness,
+          depth: 0,
+          ids: { next: 0 },
+        },
         statements,
         true,
       ) &&
@@ -961,8 +1086,8 @@ export function clusterGlobalStatements(
 /**
  * What a role-only block states, in its order. The block runs top to
  * bottom, so a later statement about the same thing (or a later removal of
- * a role) supersedes an earlier one whenever it ran at least as often: its
- * guards are among the earlier one's. Then each surviving expectation gets
+ * a role) supersedes an earlier one whenever it ran at least as often: it
+ * stands in no IF statement the earlier one is outside of. Then each surviving expectation gets
  * its guards: a statement that undoes what its own `EXISTS` guard asked
  * (`IF EXISTS … THEN DROP ROLE`, `REVOKE`) leaves the same state either way,
  * so that guard does not apply; under a `NOT EXISTS` guard only the guard's
@@ -972,16 +1097,11 @@ export function clusterGlobalStatements(
 function blockExpectations(
   raw: readonly { readonly e: ClusterGlobalExpectation; readonly from: Collected }[],
 ): ClusterGlobalExpectation[] {
-  const keys = (cs: readonly ClusterGlobalCondition[]) => new Set(cs.map(expectationKey))
-  const within = (inner: Collected, outer: Collected) => {
-    const outerWhen = keys(outer.when)
-    const outerAbsent = keys(outer.absent)
-    return (
-      inner.when.every((c) => outerWhen.has(expectationKey(c))) &&
-      inner.absent.every((c) => outerAbsent.has(expectationKey(c))) &&
-      (!inner.presenceOnly || outer.presenceOnly)
-    )
-  }
+  // The later statement ran whenever the earlier did: it stands in no IF the earlier one is
+  // outside of (the same IF statements, not merely the same guards).
+  const within = (inner: Collected, outer: Collected) =>
+    inner.guards.every((g) => outer.guards.includes(g)) &&
+    (!inner.presenceOnly || outer.presenceOnly)
   const kept = raw.filter((x, i) =>
     raw.slice(i + 1).every((later) => {
       if (!within(later.from, x.from)) return true
@@ -994,8 +1114,14 @@ function blockExpectations(
     const key = expectationKey(e)
     const undoes = 'exists' in e && !e.exists
     const when = from.when.filter((c) => !(undoes && expectationKey(c) === key))
+    // Only when the subject is the one missing thing the branch waited for: with another
+    // (`NOT EXISTS (a) AND NOT EXISTS (b)`), it may not have run while the subject was missing
+    // (the verification review of follow-up 2, P2-5).
     const eitherWay =
-      'exists' in e && e.exists && from.absent.some((c) => expectationKey(c) === key)
+      'exists' in e &&
+      e.exists &&
+      from.absent.length === 1 &&
+      from.absent.some((c) => expectationKey(c) === key)
     if (from.absent.length > 0 && !eitherWay) return { ...e, when }
     return when.length === 0 ? e : { ...e, when }
   })

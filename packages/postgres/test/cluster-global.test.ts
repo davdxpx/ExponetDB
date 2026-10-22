@@ -3,6 +3,7 @@ import {
   type ClusterGlobalStatement,
   clusterGlobalStatements,
   expectationKey,
+  guardStrictness,
   loadClusterGlobalParsers,
   quoteIdentLike,
 } from '../src/parser/index.ts'
@@ -529,5 +530,136 @@ DO $$ BEGIN IF EXISTS (SELECT 1 FROM ${from} WHERE rolname = 'acme_x') THEN GRAN
     )
     const [e] = s.effects.expectations
     expect(e).toMatchObject({ member: long.slice(0, 63), when: [{ role: long.slice(0, 63) }] })
+  })
+})
+
+describe('guarded DO blocks: the verification review of follow-up 2', () => {
+  const guard = (role: string) => `SELECT FROM pg_catalog.pg_roles WHERE rolname = '${role}'`
+
+  it('stays mixed with any datum but the parser own: a constant of a domain or %TYPE (P2-1)', () => {
+    for (const declare of [
+      'DECLARE sqlstate CONSTANT public.carrier.v%TYPE;',
+      'DECLARE sqlstate CONSTANT public.acme_domain;',
+      'DECLARE sqlerrm CONSTANT text;',
+    ]) {
+      expect(
+        one(
+          `DO $$ ${declare} BEGIN IF NOT EXISTS (${guard('acme_a')}) THEN CREATE ROLE acme_a; END IF; END $$`,
+        ).form,
+        declare,
+      ).toBe('mixed_do_block')
+    }
+    // The implicit ones of two exception blocks are the parser's own.
+    expect(
+      one(`DO $$ BEGIN
+  BEGIN CREATE ROLE acme_a; EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%', sqlerrm; END;
+  BEGIN CREATE ROLE acme_b; EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%', sqlstate; END;
+END $$`).form,
+    ).toBe('role_do_block')
+  })
+
+  it('reads guards only as written in pg_catalog when the history may resolve them elsewhere (P2-2, P3-3)', () => {
+    const block = (from: string, cast = '::regrole', op = '=') =>
+      `DO $$ BEGIN IF NOT EXISTS (SELECT FROM ${from} WHERE roleid ${op} 'acme_a'${cast} AND member ${op} 'acme_b'${cast}) THEN GRANT acme_a TO acme_b; END IF; END $$;`
+    const form = (history: string, text: string) =>
+      clusterGlobalStatements(17, text, guardStrictness([history, text]))?.at(-1)?.form
+    // An operator named = (here, or in another file of the history): only OPERATOR(pg_catalog.=)
+    // and qualified casts count.
+    const operator =
+      'CREATE OPERATOR public.= (LEFTARG = oid, RIGHTARG = regrole, FUNCTION = public.acme_eq);'
+    expect(guardStrictness([operator])).toBe('all')
+    expect(form(operator, block('pg_catalog.pg_auth_members'))).toBe('mixed_do_block')
+    expect(
+      form(
+        operator,
+        block('pg_catalog.pg_auth_members', '::pg_catalog.regrole', 'OPERATOR(pg_catalog.=)'),
+      ),
+    ).toBe('role_do_block')
+    // A search_path that names pg_catalog after another schema: the same.
+    const path = "SELECT pg_catalog.set_config('search_path', 'public, pg_catalog', false);"
+    expect(guardStrictness([path])).toBe('all')
+    expect(form(path, block('pg_catalog.pg_auth_members'))).toBe('mixed_do_block')
+    // An empty search_path, as pg_dump sets it, keeps pg_catalog first.
+    expect(guardStrictness(["SELECT pg_catalog.set_config('search_path', '', false);"])).toBe(
+      'none',
+    )
+    // A relation under a guard catalog's name, made in any way and in any file: only
+    // pg_catalog.pg_roles counts.
+    for (const shadow of [
+      "SELECT 'acme_a'::name AS rolname INTO TEMPORARY TABLE pg_roles;",
+      'ALTER VIEW acme_v RENAME TO pg_roles;',
+      "DO $x$ BEGIN EXECUTE 'CREATE TEMPORARY VIEW pg_roles AS SELECT 1'; END $x$;",
+      'CREATE TEMP TABLE IF NOT EXISTS "pg_auth_members" (roleid oid);',
+    ]) {
+      expect(guardStrictness([shadow]), shadow).toBe('relations')
+      expect(form(shadow, block('pg_auth_members')), shadow).toBe('mixed_do_block')
+      expect(form(shadow, block('pg_catalog.pg_auth_members')), shadow).toBe('role_do_block')
+    }
+    expect(guardStrictness(['SELECT rolname FROM pg_roles;'])).toBe('none')
+  })
+
+  it('keeps conditional what waited for another missing thing too (P2-5)', () => {
+    const s = one(`DO $$ BEGIN
+  IF NOT EXISTS (${guard('acme_a')}) AND NOT EXISTS (${guard('acme_b')}) THEN
+    CREATE ROLE acme_a;
+  END IF;
+END $$`)
+    expect(s.effects.expectations).toEqual([
+      { kind: 'role', role: 'acme_a', exists: true, when: [] },
+    ])
+    const nested = one(`DO $$ BEGIN
+  IF NOT EXISTS (${guard('acme_b')}) THEN
+    IF NOT EXISTS (${guard('acme_a')}) THEN CREATE ROLE acme_a; END IF;
+  END IF;
+END $$`)
+    expect(nested.effects.expectations).toEqual([
+      { kind: 'role', role: 'acme_a', exists: true, when: [] },
+    ])
+  })
+
+  it('never lets a later IF supersede an earlier one with the same guard: each decides anew (P3-1)', () => {
+    const s = one(`DO $$ BEGIN
+  IF EXISTS (${guard('acme_a')}) THEN DROP ROLE acme_a; END IF;
+  IF EXISTS (${guard('acme_a')}) THEN CREATE ROLE acme_a; END IF;
+END $$`)
+    expect(s.effects.expectations).toEqual([
+      { kind: 'role', role: 'acme_a', exists: false },
+      {
+        kind: 'role',
+        role: 'acme_a',
+        exists: true,
+        when: [{ kind: 'role', role: 'acme_a', exists: true }],
+      },
+    ])
+  })
+
+  it('stays mixed with a notice that names SQLERRM outside a handler (P3-2)', () => {
+    expect(
+      one(`DO $$ BEGIN
+  BEGIN
+    RAISE NOTICE 'creating (%)', sqlerrm;
+    CREATE ROLE acme_raise_a;
+  EXCEPTION WHEN others THEN
+    RAISE NOTICE 'skipped: %', sqlerrm;
+  END;
+END $$`).form,
+    ).toBe('mixed_do_block')
+  })
+
+  it('does not read a ::text guard longer than a name as one (P3-4)', () => {
+    const long = 'a'.repeat(70)
+    expect(
+      one(
+        `DO $$ BEGIN IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${long}'::text) THEN DROP ROLE ${long}; END IF; END $$`,
+      ).form,
+    ).toBe('mixed_do_block')
+  })
+
+  it('calls a block nested deeper than it follows mixed, without running out of stack (P3-6)', () => {
+    const n = 3000
+    const text = `DO $$ BEGIN ${'IF true THEN '.repeat(n)}CREATE ROLE acme_a;${' END IF;'.repeat(n)} END $$`
+    expect(one(text).form).toBe('mixed_do_block')
+    const guarded = `DO $$ BEGIN ${`IF EXISTS (${guard('acme_b')}) THEN `.repeat(80)}CREATE ROLE acme_a;${' END IF;'.repeat(80)} END $$`
+    expect(one(guarded).form).toBe('mixed_do_block')
   })
 })

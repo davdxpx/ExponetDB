@@ -29,6 +29,8 @@ export {
   type ClusterGlobalStatement,
   clusterGlobalStatements,
   expectationKey,
+  type GuardStrictness,
+  guardStrictness,
   isRoleStatement,
   loadClusterGlobalParsers,
   type MembershipOption,

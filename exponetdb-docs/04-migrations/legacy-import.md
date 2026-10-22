@@ -453,18 +453,35 @@ refusing role statements):
   not, `=` written either way round, several joined by `AND`, a `LIMIT` of
   a positive constant), nested, around such statements, with a `THEN`
   branch and at most an `ELSE` branch that only raises notices; a `RAISE`
-  below `EXCEPTION` with at most `SQLERRM` or `SQLSTATE` as parameters may
-  stand anywhere (review of follow-up 2). Anything else in a guard (a
+  below `EXCEPTION` without parameters may stand anywhere, and one with
+  `SQLERRM` or `SQLSTATE` in a handler (outside a handler they are no
+  variables and the `RAISE` fails at run time; the verification review of
+  follow-up 2, P3-2). Anything else in a guard (a
   function, a subquery, a variable, `OR`, `LIKE`, an oid, another
   relation), an `ELSIF` branch, an `ELSE` branch that does more, or a
-  `RETURN` before the end of the block makes it mixed. So does a declared
-  variable, also one named `found`, `sqlstate` or `sqlerrm` (its default
-  runs at block entry), and in a file that itself creates a relation named
-  `pg_roles` or `pg_auth_members` an unqualified guard (that relation would
-  be found first; review of follow-up 2). A name in a guard is cut to 63
-  bytes, as PostgreSQL cuts it. **[ASSUMPTION]** A temporary relation of
-  that name made by an earlier file of the same session is not seen; it
-  would only make a guarded statement unchecked, never run one.
+  `RETURN` before the end of the block makes it mixed, and so does a block
+  nested more than 64 blocks and IF statements deep. So does any datum but
+  the PL/pgSQL parser's own (`found`, then `sqlstate` and `sqlerrm`, `text`
+  constants, of each exception block): a declared variable, also a
+  constant named like them, runs code at block entry through its default
+  or a domain's check (the verification review of follow-up 2, P2-1). A
+  name in a guard is cut to 63 bytes, as PostgreSQL cuts it, except a
+  `::text` constant, which compares as text and is then no guard (P3-4).
+  **[DECIDED]** (the verification review of follow-up 2, P2-2 and P3-3) A
+  guard reads the system catalog only if nothing else answers to its
+  names, so the **whole history** is read first, string literals included
+  (a dynamic `EXECUTE` too): if any file creates or renames a relation
+  named `pg_roles` or `pg_auth_members` (`CREATE`, `SELECT … INTO`, `ALTER
+  … RENAME TO`; a temporary one is found before `pg_catalog`'s), only
+  guards on `pg_catalog.pg_roles` and `pg_catalog.pg_auth_members` count;
+  if any file creates or alters an operator named `=`, or sets a
+  `search_path` that names `pg_catalog` after another schema, a guard
+  counts only when the relation, every cast (`::pg_catalog.regrole`) and
+  the operator (`OPERATOR(pg_catalog.=)`) name `pg_catalog`; any other
+  guard makes the block mixed. `set_config('search_path', '', false)`, as
+  `pg_dump` writes it, keeps `pg_catalog` first. **[ASSUMPTION]** A name
+  built at run time (`format('%I', …)`) is not seen; a guard it fools only
+  makes a guarded statement wrongly checked, never runs one.
   **[OBSERVED]** The first real import (2026-10-22) failed with `42501` on a
   `GRANT <role> TO <role>` behind `IF EXISTS (… pg_roles …)`: the guard
   held, so the grant ran as the execution role. A `DO` block that holds role
@@ -490,8 +507,11 @@ refusing role statements):
   it is kept: that the role or the membership exists. Behind a `NOT EXISTS`
   guard the same holds: the branch ran only when the role or membership was
   missing, so only its presence is kept, and only the presence of the
-  guard's own subject unconditionally; anything else there (`GRANT x TO y`
-  after `CREATE ROLE x`) is checked but never supersedes. Behind an `EXISTS`
+  guard's own subject unconditionally, when it is the only thing the branch
+  waited to be missing; anything else there (`GRANT x TO y` after `CREATE
+  ROLE x`, or `CREATE ROLE a` behind `NOT EXISTS (a) AND NOT EXISTS (b)`;
+  the verification review of follow-up 2, P2-5) is checked but never
+  supersedes. Behind an `EXISTS`
   guard the expectations are **conditional**: the observer checks one only
   while every guard around it holds on the imported target (`IF EXISTS
   (role) THEN GRANT … TO role` is checked while that role exists), else it
@@ -499,10 +519,14 @@ refusing role statements):
   expectation sat behind an unmet guard proves nothing and is `ambiguous`
   unless a ledger records it. A block runs top to bottom: a later statement
   of the same block about the same thing (or a later `DROP ROLE` of a role
-  an earlier one names) supersedes the earlier one when it sits behind no
-  guard the earlier one lacks (`DROP ROLE x; CREATE ROLE x LOGIN` behind
-  `IF EXISTS (x)` states that `x` exists with `LOGIN`; review of follow-up
-  2). A surviving statement that undoes what its own guard asked (`IF
+  an earlier one names) supersedes the earlier one when it stands in no IF
+  statement the earlier one is outside of (`DROP ROLE x; CREATE ROLE x
+  LOGIN` behind one `IF EXISTS (x)` states that `x` exists with `LOGIN`;
+  review of follow-up 2). Two IF statements with the same guard are two
+  decisions, each made after what ran before it, so neither supersedes the
+  other (`IF EXISTS (a) THEN DROP ROLE a; END IF; IF EXISTS (a) THEN CREATE
+  ROLE a; END IF;` states that `a` is absent, and that it exists while it
+  exists; the verification review of follow-up 2, P3-1). A surviving statement that undoes what its own guard asked (`IF
   EXISTS (role) THEN DROP ROLE`, `REVOKE` behind a membership guard) leaves
   the same state either way, so that guard does not apply to it. A
   conditional expectation **never supersedes** another one, since its

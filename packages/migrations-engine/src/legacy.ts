@@ -37,6 +37,8 @@ import {
 import {
   type ClusterGlobalExpectation,
   type Expectation,
+  type GuardStrictness,
+  guardStrictness,
   loadClusterGlobalParsers,
   loadParser,
   type StatementFacts,
@@ -640,10 +642,11 @@ async function replaySummary(
   const autocommit: JsonObject[] = []
   const noStatements: string[] = []
   const counts = { elided: 0, mixedDoBlocks: 0, autocommit: 0, noStatements: 0, expectations: 0 }
+  const strictness = historyStrictness(files)
   for (const f of files) {
     if (skipped.has(f.stem)) continue
     const text = normalizeSqlSource(f.bytes)
-    const r = text.ok ? fileReplay(major, text.value) : undefined
+    const r = text.ok ? fileReplay(major, text.value, [], strictness) : undefined
     if (r === undefined) continue
     for (const e of r.elided) {
       counts.elided++
@@ -857,6 +860,19 @@ function analyzeChain(
   })
 }
 
+/**
+ * How every file's guards are read: from the whole history, since what one
+ * file creates or sets stays for the files after it (legacy-import.md §2.4).
+ */
+function historyStrictness(files: readonly Pick<ImportFile, 'bytes'>[]): GuardStrictness {
+  return guardStrictness(
+    files.flatMap((f) => {
+      const text = normalizeSqlSource(f.bytes)
+      return text.ok ? [text.value] : []
+    }),
+  )
+}
+
 /** Each file's replay (legacy-import.md §2.4); a file its major cannot read has none. */
 async function replaysOf(
   major: 16 | 17 | 18,
@@ -865,9 +881,10 @@ async function replaysOf(
 ): Promise<Map<string, FileReplay>> {
   await loadClusterGlobalParsers(major)
   const out = new Map<string, FileReplay>()
+  const strictness = historyStrictness(files)
   for (const f of files) {
     const text = normalizeSqlSource(f.bytes)
-    const r = text.ok ? fileReplay(major, text.value, trusted) : undefined
+    const r = text.ok ? fileReplay(major, text.value, trusted, strictness) : undefined
     if (r !== undefined) out.set(f.stem, r)
   }
   return out

@@ -4,6 +4,7 @@ import {
   type ClusterGlobalForm,
   clusterGlobalStatements,
   expectationKey,
+  type GuardStrictness,
   rolesOf,
   type StatementFacts,
 } from '@exponetdb/postgres/parser'
@@ -59,11 +60,13 @@ export function fileReplay(
   major: 16 | 17 | 18,
   text: string,
   trustedExtensions: readonly string[] = [],
+  /** How the history's guards are read ({@link guardStrictness} of every file). */
+  strictness: GuardStrictness = 'none',
 ): FileReplay | undefined {
   const analysis = analyzeMigrationSql(major, text, { trustedExtensions })
   // The parser calls a text without statements (comments only) empty.
   const empty = !analysis.ok && analysis.failure.kind === 'empty'
-  const globals = empty ? [] : clusterGlobalStatements(major, text)
+  const globals = empty ? [] : clusterGlobalStatements(major, text, strictness)
   if ((!analysis.ok && !empty) || globals === undefined) return undefined
   const statements = analysis.ok ? analysis.statements : []
   if (statements.length === 0) {
