@@ -196,6 +196,7 @@ task in order. "Must" means the implementation will be reviewed against it.
 - [`ledger.md`](./04-migrations/ledger.md): canonical ledger schema
 - [`staging-production-policy.md`](./04-migrations/staging-production-policy.md): evidence chain, break-glass
 - [`legacy-import.md`](./04-migrations/legacy-import.md): baseline and import of existing histories
+- [`owner-test-package.md`](./04-migrations/owner-test-package.md): Wave 9 Part A on the local lab: an external, Supabase-shaped cluster onboarded and its history imported
 - [`failure-and-recovery.md`](./04-migrations/failure-and-recovery.md): edge cases, non-transactional migrations, `down.sql`
 - [`authoring-and-ci.md`](./04-migrations/authoring-and-ci.md): source references, bundle submission, CLI, CI
 
