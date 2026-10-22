@@ -494,4 +494,40 @@ END $$`)
       { kind: 'role', role: 'acme_y', exists: false, when: [] },
     ])
   })
+
+  it('stays mixed with a declared variable, a guard catalog the file shadows (security review)', () => {
+    for (const declare of [
+      'DECLARE found boolean := public.acme_seed();',
+      "DECLARE sqlstate text := nextval('public.acme_s')::text;",
+      'DECLARE sqlerrm CONSTANT text := public.acme_seed();',
+      'DECLARE found boolean;',
+    ]) {
+      expect(one(`DO $$ ${declare} BEGIN GRANT acme_a TO acme_b; END $$`).form, declare).toBe(
+        'mixed_do_block',
+      )
+    }
+    expect(
+      one(
+        'DO $$ BEGIN DECLARE found boolean := public.acme_seed(); BEGIN GRANT acme_a TO acme_b; END; END $$',
+      ).form,
+    ).toBe('mixed_do_block')
+    // A temporary pg_roles is found before pg_catalog's: in such a file only qualified guards count.
+    const shadowed = (from: string) =>
+      (clusterGlobalStatements(
+        17,
+        `CREATE TEMP TABLE pg_roles (rolname name);
+DO $$ BEGIN IF EXISTS (SELECT 1 FROM ${from} WHERE rolname = 'acme_x') THEN GRANT acme_a TO acme_x; END IF; END $$;`,
+      ) ?? [])[0]?.form
+    expect(shadowed('pg_roles')).toBe('mixed_do_block')
+    expect(shadowed('pg_catalog.pg_roles')).toBe('role_do_block')
+  })
+
+  it('cuts a guard name to 63 bytes as PostgreSQL does (security review)', () => {
+    const long = `acme_${'x'.repeat(70)}`
+    const s = one(
+      `DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${long}') THEN GRANT acme_a TO ${long}; END IF; END $$`,
+    )
+    const [e] = s.effects.expectations
+    expect(e).toMatchObject({ member: long.slice(0, 63), when: [{ role: long.slice(0, 63) }] })
+  })
 })

@@ -484,6 +484,11 @@ interface Scope {
   readonly presenceOnly: boolean
   readonly when: readonly ClusterGlobalCondition[]
   readonly absent: readonly ClusterGlobalCondition[]
+  /**
+   * The file creates a relation named like a guard's catalog (a temporary
+   * `pg_roles` is found before `pg_catalog`'s): only `pg_catalog.` guards count.
+   */
+  readonly qualifiedOnly: boolean
 }
 
 /** A RAISE below EXCEPTION with at most SQLERRM or SQLSTATE as parameters: it changes nothing. */
@@ -545,11 +550,12 @@ function roleOnlyBody(
           'query'
         ],
       )
-      const guard = cond === null ? undefined : roleGuard(major, cond)
+      const guard = cond === null ? undefined : roleGuard(major, cond, scope.qualifiedOnly)
       if (guard === undefined) return false
       // NOT EXISTS: the branch ran only if the role or membership was missing, so only what
       // holds either way is kept. EXISTS: what the branch states holds only while the guard does.
       const next = {
+        ...scope,
         presenceOnly: scope.presenceOnly || guard.absent.length > 0,
         when: [...scope.when, ...guard.holds],
         absent: [...scope.absent, ...guard.absent],
@@ -563,7 +569,7 @@ function roleOnlyBody(
       if (query === null || n.body['into'] !== undefined || n.body['target'] !== undefined) {
         return false
       }
-      out.push({ query, ...scope })
+      out.push({ query, presenceOnly: scope.presenceOnly, when: scope.when, absent: scope.absent })
     } else if (n?.type === 'PLpgSQL_stmt_return') {
       // The parser adds a bare RETURN at the end of the outermost block; one anywhere else
       // would skip what follows it.
@@ -627,6 +633,20 @@ function stringConstant(
   return v === null ? undefined : { value: v, type }
 }
 
+/**
+ * A value as a `name` holds it: at most 63 bytes, cut at a character
+ * boundary, as PostgreSQL cuts a longer literal or identifier (the
+ * statements' own role names arrive cut by the scanner already).
+ */
+function asName(value: string): string {
+  const bytes = new TextEncoder().encode(value)
+  if (bytes.length <= 63) return value
+  let end = 63
+  // A UTF-8 continuation byte (10xxxxxx) never starts a character.
+  while (end > 0 && ((bytes[end] ?? 0) & 0xc0) === 0x80) end--
+  return new TextDecoder().decode(bytes.subarray(0, end))
+}
+
 /** A role name as `regrole` input reads it (an identifier), or `undefined` (an oid, anything else). */
 function regroleName(input: string): string | undefined {
   const quoted = /^"((?:[^"]|"")+)"$/.exec(input)
@@ -644,6 +664,7 @@ function regroleName(input: string): string | undefined {
 function roleGuard(
   major: SupportedMajor,
   query: string,
+  qualifiedOnly: boolean,
 ):
   | {
       readonly holds: readonly ClusterGlobalCondition[]
@@ -666,7 +687,7 @@ function roleGuard(
   const holds: ClusterGlobalCondition[] = []
   const absent: ClusterGlobalCondition[] = []
   for (const part of parts) {
-    const c = existsCondition(part)
+    const c = existsCondition(part, qualifiedOnly)
     if (c === undefined) return undefined
     ;(c.negated ? absent : holds).push(c.condition)
   }
@@ -676,6 +697,7 @@ function roleGuard(
 /** One `[NOT] EXISTS (SELECT … FROM pg_roles | pg_auth_members WHERE …)`, or `undefined`. */
 function existsCondition(
   node: unknown,
+  qualifiedOnly: boolean,
 ): { readonly negated: boolean; readonly condition: ClusterGlobalCondition } | undefined {
   let value = nodeType(node)
   let negated = false
@@ -725,7 +747,7 @@ function existsCondition(
   const relation = str(range.body['relname'])
   const schema = range.body['schemaname']
   if (relation === null || !GUARD_RELATIONS.has(relation)) return undefined
-  if (schema !== undefined && schema !== 'pg_catalog') return undefined
+  if (schema !== undefined ? schema !== 'pg_catalog' : qualifiedOnly) return undefined
   let qualifier = relation
   const alias = range.body['alias'] as JsonNode | undefined
   if (alias !== undefined) {
@@ -785,7 +807,7 @@ function existsCondition(
   if (relation === 'pg_roles') {
     const role = equal.get('rolname')
     if (equal.size !== 1 || role === undefined) return undefined
-    return { negated, condition: { kind: 'role', role: role.value, exists: true } }
+    return { negated, condition: { kind: 'role', role: asName(role.value), exists: true } }
   }
   const role = equal.get('roleid')
   const member = equal.get('member')
@@ -795,7 +817,12 @@ function existsCondition(
   if (grantedRole === undefined || memberName === undefined) return undefined
   return {
     negated,
-    condition: { kind: 'membership', role: grantedRole, member: memberName, exists: true },
+    condition: {
+      kind: 'membership',
+      role: asName(grantedRole),
+      member: asName(memberName),
+      exists: true,
+    },
   }
 }
 
@@ -847,6 +874,12 @@ export function clusterGlobalStatements(
 ): ClusterGlobalStatement[] | undefined {
   const parsed = parseWith(major, text, MAX_MIGRATION_PARSE_BYTES)
   if (!parsed.ok) return undefined
+  // A relation the file creates under a guard catalog's name would be found before it.
+  const shadowed = parsed.statements.some(
+    (st) =>
+      ['CreateStmt', 'ViewStmt', 'CreateTableAsStmt', 'CreateForeignTableStmt'].includes(st.type) &&
+      /"relname":"pg_(roles|auth_members)"/.test(JSON.stringify(st.node)),
+  )
   const out: ClusterGlobalStatement[] = []
   for (const [index, st] of parsed.statements.entries()) {
     if (isRoleStatement(st.type, st.node)) {
@@ -865,9 +898,19 @@ export function clusterGlobalStatements(
     // A DO block without role statements (or one no parser can read) is ordinary procedural SQL.
     if (fn === undefined || roleQueries.length === 0) continue
     const statements: Collected[] = []
+    // Only the implicit variables (FOUND, and SQLSTATE and SQLERRM of a handler, constants): a
+    // declared one, even named like them, may run code at block entry through its default
+    // (security review of follow-up 2).
     const datums = objects(fn['datums']).every((d) => {
       const v = nodeType(d)
-      return v?.type === 'PLpgSQL_var' && IMPLICIT.has(String(v.body['refname'] ?? ''))
+      const name = String(v?.body['refname'] ?? '')
+      return (
+        v?.type === 'PLpgSQL_var' &&
+        IMPLICIT.has(name) &&
+        v.body['default_val'] === undefined &&
+        v.body['cursor_explicit_expr'] === undefined &&
+        (name === 'found' ? v.body['lineno'] === undefined : v.body['isconst'] === true)
+      )
     })
     const action = nodeType(fn['action'])
     const roleOnly =
@@ -876,7 +919,7 @@ export function clusterGlobalStatements(
       roleOnlyBlock(
         major,
         action.body,
-        { presenceOnly: false, when: [], absent: [] },
+        { presenceOnly: false, when: [], absent: [], qualifiedOnly: shadowed },
         statements,
         true,
       ) &&

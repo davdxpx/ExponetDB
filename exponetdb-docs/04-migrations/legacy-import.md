@@ -457,7 +457,14 @@ refusing role statements):
   stand anywhere (review of follow-up 2). Anything else in a guard (a
   function, a subquery, a variable, `OR`, `LIKE`, an oid, another
   relation), an `ELSIF` branch, an `ELSE` branch that does more, or a
-  `RETURN` before the end of the block makes it mixed.
+  `RETURN` before the end of the block makes it mixed. So does a declared
+  variable, also one named `found`, `sqlstate` or `sqlerrm` (its default
+  runs at block entry), and in a file that itself creates a relation named
+  `pg_roles` or `pg_auth_members` an unqualified guard (that relation would
+  be found first; review of follow-up 2). A name in a guard is cut to 63
+  bytes, as PostgreSQL cuts it. **[ASSUMPTION]** A temporary relation of
+  that name made by an earlier file of the same session is not seen; it
+  would only make a guarded statement unchecked, never run one.
   **[OBSERVED]** The first real import (2026-10-22) failed with `42501` on a
   `GRANT <role> TO <role>` behind `IF EXISTS (… pg_roles …)`: the guard
   held, so the grant ran as the execution role. A `DO` block that holds role
