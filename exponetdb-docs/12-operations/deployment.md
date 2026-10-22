@@ -115,11 +115,66 @@ cluster whose bundle does not trust this CA
 **[OBSERVED]** (first rollout, Coolify 4.3.23) Docker Image applications do
 not pass `start_command` to the container. Set Custom Docker Options to
 `--entrypoint "node /app/bin/exponetdb.mjs serve"` (or `worker`, `gateway`)
-to select the role while keeping one image digest. The migration is a separate
+to select the role while keeping one image digest. **[DECIDED]** (follow-up
+2, F4) Since the release with §2a the option is `--entrypoint "node
+--liftoff-only /app/bin/exponetdb.mjs serve"`. The migration is a separate
 one-shot Compose service with `command: ["control-store", "migrate"]` and
 `restart: "no"`. The release is stored in a private registry bound to server
 loopback, so Coolify can pull the exact digest. The effective configuration
 and evidence are in the [deployment record](./deployments/2026-10-06-reos-01.md).
+
+## 2a. Memory
+
+**[OBSERVED]** (follow-up 2, F4, 2026-10-22) The first real legacy import
+(556 files, about 2.7 MB of SQL) had `serve` restarted during `migration
+import analyze` at a 512 MiB limit; at 1 536 MiB the same request passed.
+Measured here with `packages/migrations-engine/scripts/measure-analyze-memory.ts`
+(a history of 600 files, 3 MB, in the shape of a Supabase-origin product:
+`largeLegacyHistory` of the test kit) on Node 24.22 in a container limited
+to 512 MiB with swap equal, against PostgreSQL 17:
+
+| Step | With `--liftoff-only` | Without |
+|---|---|---|
+| process start, world ready | 116, 130 MiB | 128, 139 MiB |
+| the analysis planned as `serve` plans it (digests, every file parsed for the replay summary, 600 rows written) | peak 164 MiB | **killed** (exit 137) |
+| replayed and classified as the worker runs it | peak 250 MiB | (not reached) |
+| one legacy file of 3.6 MiB parsed (the per-file bound is 4 MiB) | peak 156 MiB | **killed** at 518 MiB |
+
+The numbers are of the measuring process, which holds both roles' pools;
+each role adds its own baseline. **Cause:** V8 tiers up hot WebAssembly
+functions with its optimizing compiler, and the PostgreSQL parser's grammar
+is one very large function. On Node 24 that compilation takes hundreds of
+MiB **outside** the JavaScript heap; the heap limit Node derives from the
+container's limit (259 MiB under 512 MiB) does not cover it, so the kernel
+kills the process without a log line. The same parse on Node 22 stayed
+bounded. With `--liftoff-only` (WebAssembly runs on V8's baseline compiler
+only) memory stays flat and parsing is as fast (1 200 parses of a 2 KiB file:
+1.36 s against 1.23 s).
+
+**[DECIDED]** (follow-up 2, F4)
+
+- The image starts every role as `node --liftoff-only /app/bin/exponetdb.mjs`.
+  **On `reos-01` the Coolify resources override the entrypoint** (§2): their
+  Custom Docker Options become `--entrypoint "node --liftoff-only
+  /app/bin/exponetdb.mjs serve"` (`worker`, `gateway` likewise) with the
+  release that carries this change. `NODE_OPTIONS` cannot carry the flag
+  (Node refuses it there). A role started without it logs
+  `process.wasm_tier_up_enabled` once at startup.
+- A legacy history is bounded per request: at most 8 MiB of SQL (UTF-8) in
+  all and 4 MiB per file, in a JSON body of at most 16 MiB; above that the
+  request is `422 VALIDATION_FAILED` (`/files`, `too_large`) before anything
+  is parsed. The first real history used a third of it.
+- `serve` parses one legacy history at a time (an import analysis plan, a
+  scratch preflight with files); another such request meanwhile is `429
+  RATE_LIMITED` with `Retry-After: 5`.
+- Memory limits: `serve` and `worker` **512 MiB** each with the flag (the
+  measured peaks leave about half of it free); the limit of 1 536 MiB set
+  after the restart can stay until the flag is deployed. `gateway` parses
+  no SQL: its limit is unchanged (**[ASSUMPTION]**, not measured).
+- **[OBSERVED]** (owner, 2026-10-22) Coolify refuses to start a container
+  whose memory limit is above its swap limit (`Minimum memoryswap limit
+  should be larger than memory limit`) and has removed the old container by
+  then: change the memory and the swap limit together, in one save.
 
 ## 3. Startup and readiness
 

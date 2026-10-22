@@ -54,6 +54,14 @@ import {
  * than the limit is split by the client (the CLI ingests in batches).
  */
 export const MIGRATION_BODY_LIMIT_BYTES = 32 * 1024 * 1024
+/**
+ * A legacy history per request (follow-up 2, F4): every file is parsed in
+ * the serving process, so the history is bounded as a whole, in UTF-8 bytes
+ * of the files' text (the first real one had about 2.7 MB), and so is the
+ * JSON body that carries it (escaping may double the text).
+ */
+export const LEGACY_FILES_LIMIT_BYTES = 8 * 1024 * 1024
+export const LEGACY_BODY_LIMIT_BYTES = 2 * LEGACY_FILES_LIMIT_BYTES
 /** Bundles per request and migration ids per plan request. */
 export const MIGRATION_REQUEST_LIMITS = { bundles: 50, migrationIds: 200 } as const
 
@@ -635,6 +643,27 @@ export const LegacyFileSchema = z
   })
   .meta({ id: 'LegacyFile' })
 
+/** The files of one legacy history: at most 1 000, and `LEGACY_FILES_LIMIT_BYTES` of text in all. */
+const LegacyFilesSchema = z
+  .array(LegacyFileSchema)
+  .min(1)
+  .max(1000)
+  .superRefine((files, ctx) => {
+    const encoder = new TextEncoder()
+    let total = 0
+    for (const f of files) total += encoder.encode(f.text).length
+    if (total > LEGACY_FILES_LIMIT_BYTES) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `At most ${LEGACY_FILES_LIMIT_BYTES} bytes of SQL in all; this history has ${total}.`,
+        params: { code: 'too_large' },
+      })
+    }
+  })
+  .meta({
+    description: `The legacy files in their order, at most ${LEGACY_FILES_LIMIT_BYTES} bytes of SQL (UTF-8) in all.`,
+  })
+
 /**
  * `migration.import.analyze` (legacy-import.md §2): plans the replay of the
  * submitted legacy files, in the declared order, on an explicit scratch
@@ -652,7 +681,7 @@ export const ImportAnalysisRequestSchema = z
       .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/)
       .max(64)
       .meta({ description: 'The baseline slug new bundles depend on (baseline:<slug>).' }),
-    files: z.array(LegacyFileSchema).min(1).max(1000),
+    files: LegacyFilesSchema,
     ledgers: z
       .array(z.enum(['supabase', 'drizzle', 'applied_migrations']))
       .max(3)
@@ -705,7 +734,7 @@ export const ScratchCheckRequestSchema = z
         description:
           'The execution role alias the replay runs as (the analysis hint role; default owner).',
       }),
-    files: z.array(LegacyFileSchema).min(1).max(1000),
+    files: LegacyFilesSchema,
   })
   .meta({ id: 'ScratchCheckRequest' })
 

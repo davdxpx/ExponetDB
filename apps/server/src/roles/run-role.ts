@@ -40,6 +40,13 @@ export async function runRole(run: RoleRun): Promise<number> {
   })
   const log = runtime.logger
   log.info('process.starting', { buildVersion: BUILD.version, buildCommit: BUILD.commit })
+  // The image starts Node with --liftoff-only: without it V8 recompiles the PostgreSQL parser's
+  // WebAssembly, which took hundreds of MiB outside the heap on a large legacy history and had
+  // a 512 MiB container killed (deployment.md §2a). A start that overrides the entrypoint must
+  // keep the flag; NODE_OPTIONS cannot carry it.
+  if (!process.execArgv.includes('--liftoff-only')) {
+    log.warn('process.wasm_tier_up_enabled', { expectedNodeFlag: '--liftoff-only' })
+  }
   let services: RoleServices
   try {
     services = await composeRole(config, runtime, {

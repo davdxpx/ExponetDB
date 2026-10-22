@@ -330,6 +330,32 @@ function bundleFileOf(raw: unknown): (typeof BUNDLE_FILES)[number] {
 /** The request header that names a CLI step-up receipt (ADR-0026). */
 export const STEP_UP_HEADER = 'exponetdb-step-up'
 
+/**
+ * A legacy history is parsed file by file in this process (the replay
+ * summary, the references of the scratch preflight): one such request at a
+ * time, so their memory never adds up (follow-up 2, F4). Another one is
+ * told to try again.
+ */
+export const LEGACY_PARSE_SLOTS = 1
+let legacyParses = 0
+
+class LegacyParseBusy extends HttpRefusal {
+  readonly retryAfterSeconds = 5
+  constructor() {
+    super('RATE_LIMITED')
+  }
+}
+
+export async function oneLegacyParse<T>(run: () => Promise<T>): Promise<T> {
+  if (legacyParses >= LEGACY_PARSE_SLOTS) throw new LegacyParseBusy()
+  legacyParses++
+  try {
+    return await run()
+  } finally {
+    legacyParses--
+  }
+}
+
 export const HANDLERS: Readonly<Record<string, Handler>> = {
   // ----- /auth: sign-in and enrollment (public ceremonies) -----
   loginPasskeyOptions: async (app, call) => outcome(await app.loginPasskeyOptions(call.meta)),
@@ -1403,11 +1429,13 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     ),
   planImportAnalysis: async (app, call) =>
     value(
-      await app.migrations.planImportAnalysis(
-        caller(call),
-        target(call),
-        ImportAnalysisRequestSchema.parse(call.body),
-        idempotency(call),
+      await oneLegacyParse(() =>
+        app.migrations.planImportAnalysis(
+          caller(call),
+          target(call),
+          ImportAnalysisRequestSchema.parse(call.body),
+          idempotency(call),
+        ),
       ),
     ),
   checkScratchTarget: async (app, call) =>
@@ -1422,12 +1450,14 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   checkScratchTargetForFiles: async (app, call) => {
     const body = ScratchCheckRequestSchema.parse(call.body)
     return value(
-      await app.migrations.scratchCheck(
-        caller(call),
-        target(call),
-        body.scratchTarget,
-        body.role,
-        body.files,
+      await oneLegacyParse(() =>
+        app.migrations.scratchCheck(
+          caller(call),
+          target(call),
+          body.scratchTarget,
+          body.role,
+          body.files,
+        ),
       ),
     )
   },
@@ -1741,18 +1771,24 @@ function honoPath(path: string): string {
   return path.replace(/\{([A-Za-z]+)\}/g, ':$1')
 }
 
-function issues(
+export function issues(
   list: readonly {
     readonly path: readonly PropertyKey[]
     readonly code: string
     readonly message: string
+    readonly params?: Readonly<Record<string, unknown>> | undefined
   }[],
 ): { path: string; code: string; message: string }[] {
-  return list.slice(0, 100).map((issue) => ({
-    path: `/${issue.path.map(String).join('/')}`,
-    code: issue.code.replace(/[^a-z0-9_]/g, '_').slice(0, 64) || 'invalid',
-    message: issue.message.slice(0, 512),
-  }))
+  return list.slice(0, 100).map((issue) => {
+    // A refinement of the contract names its own code (too_large, say); Zod calls it custom.
+    const own = issue.code === 'custom' ? issue.params?.['code'] : undefined
+    const code = typeof own === 'string' ? own : issue.code
+    return {
+      path: `/${issue.path.map(String).join('/')}`,
+      code: code.replace(/[^a-z0-9_]/g, '_').slice(0, 64) || 'invalid',
+      message: issue.message.slice(0, 512),
+    }
+  })
 }
 
 function applyCookies(headers: Headers, cookies: Outcome<unknown>['cookies']): void {

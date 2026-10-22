@@ -96,6 +96,7 @@ import {
   ImportAnalysisRequestSchema,
   ImportDecisionRequestSchema,
   ImportReportSchema,
+  LEGACY_BODY_LIMIT_BYTES,
   LedgerReconcileRequestSchema,
   MIGRATION_BODY_LIMIT_BYTES,
   MigrationDetailSchema,
@@ -2291,7 +2292,7 @@ export const MIGRATION_ROUTES = [
     body: ScratchCheckRequestSchema,
     response: { status: 200, schema: ScratchCheckSchema },
     errors: ['VALIDATION_FAILED', 'CSRF_FAILED', ...TARGET_ERRORS],
-    maxBodyBytes: MIGRATION_BODY_LIMIT_BYTES,
+    maxBodyBytes: LEGACY_BODY_LIMIT_BYTES,
   },
   {
     operationId: 'getTargetMigration',
@@ -2419,7 +2420,7 @@ export const MIGRATION_ROUTES = [
     body: ImportAnalysisRequestSchema,
     response: { status: 201, schema: PlanViewSchema },
     errors: [...LIVE_TARGET_ERRORS, 'CSRF_FAILED', 'IDEMPOTENCY_KEY_REUSED', 'PRECONDITION_FAILED'],
-    maxBodyBytes: MIGRATION_BODY_LIMIT_BYTES,
+    maxBodyBytes: LEGACY_BODY_LIMIT_BYTES,
   },
   {
     operationId: 'getImportReport',
