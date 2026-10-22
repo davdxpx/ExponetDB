@@ -450,10 +450,14 @@ refusing role statements):
   WHERE rolname = '<role>')` or `IF [NOT] EXISTS (SELECT … FROM
   pg_auth_members WHERE roleid = '<role>'::regrole AND member =
   '<member>'::regrole)` (unqualified or in `pg_catalog`, with an alias or
-  not, `=` written either way round), nested, around such statements, with
-  a `THEN` branch only. Anything else in a guard (a function, a subquery, a
-  variable, `OR`, `LIKE`, `LIMIT`, an oid, another relation), an `ELSE` or
-  `ELSIF` branch, or a `RETURN` before the end of the block makes it mixed.
+  not, `=` written either way round, several joined by `AND`, a `LIMIT` of
+  a positive constant), nested, around such statements, with a `THEN`
+  branch and at most an `ELSE` branch that only raises notices; a `RAISE`
+  below `EXCEPTION` with at most `SQLERRM` or `SQLSTATE` as parameters may
+  stand anywhere (review of follow-up 2). Anything else in a guard (a
+  function, a subquery, a variable, `OR`, `LIKE`, an oid, another
+  relation), an `ELSIF` branch, an `ELSE` branch that does more, or a
+  `RETURN` before the end of the block makes it mixed.
   **[OBSERVED]** The first real import (2026-10-22) failed with `42501` on a
   `GRANT <role> TO <role>` behind `IF EXISTS (… pg_roles …)`: the guard
   held, so the grant ran as the execution role. A `DO` block that holds role
@@ -478,16 +482,23 @@ refusing role statements):
   handler only what holds whether the statement created something or found
   it is kept: that the role or the membership exists. Behind a `NOT EXISTS`
   guard the same holds: the branch ran only when the role or membership was
-  missing, so only its presence is kept, unconditionally. Behind an `EXISTS`
+  missing, so only its presence is kept, and only the presence of the
+  guard's own subject unconditionally; anything else there (`GRANT x TO y`
+  after `CREATE ROLE x`) is checked but never supersedes. Behind an `EXISTS`
   guard the expectations are **conditional**: the observer checks one only
   while every guard around it holds on the imported target (`IF EXISTS
   (role) THEN GRANT … TO role` is checked while that role exists), else it
   is not checked (`cluster_global_guard_unmet:<n>`); a file whose every
   expectation sat behind an unmet guard proves nothing and is `ambiguous`
-  unless a ledger records it. A statement that undoes what its own guard
-  asked (`IF EXISTS (role) THEN DROP ROLE`, `REVOKE` behind a membership
-  guard) leaves the same state either way, so that guard does not apply to
-  it. A conditional expectation **never supersedes** another one, since its
+  unless a ledger records it. A block runs top to bottom: a later statement
+  of the same block about the same thing (or a later `DROP ROLE` of a role
+  an earlier one names) supersedes the earlier one when it sits behind no
+  guard the earlier one lacks (`DROP ROLE x; CREATE ROLE x LOGIN` behind
+  `IF EXISTS (x)` states that `x` exists with `LOGIN`; review of follow-up
+  2). A surviving statement that undoes what its own guard asked (`IF
+  EXISTS (role) THEN DROP ROLE`, `REVOKE` behind a membership guard) leaves
+  the same state either way, so that guard does not apply to it. A
+  conditional expectation **never supersedes** another one, since its
   guard may have been false when the file ran; it is superseded like any
   other. Over the whole chain the last
   statement about the same thing wins (the others are superseded). The
@@ -573,11 +584,13 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   prints the shell commands (read only, nothing is run; **[OBSERVED]**
   verified on PostgreSQL 17 on 2026-10-22): `pg_dump --schema-only` of
   exactly the `copySchemas` (each written as a literal pattern) from
-  `$IMPORTED_URL`, a TOC filter that leaves out every trigger and trigger
-  comment (a trigger on `auth.users` calling a function in the managed
-  scope, the `on_auth_user_created` pattern, would need that function
-  before the replay creates it; the history creates the trigger again if
-  it does), and `pg_restore --single-transaction --exit-on-error` into
+  `$IMPORTED_URL`, a TOC filter that leaves out every trigger and row
+  security policy and their comments (a trigger on `auth.users` calling a
+  function in the managed scope, the `on_auth_user_created` pattern, or a
+  policy on `storage.objects` calling one, would need that function before
+  the replay creates it; the history creates them again if it does; review
+  of follow-up 2: such a policy failed the whole restore before), and
+  `pg_restore --single-transaction --exit-on-error` into
   `$SCRATCH_URL`. No data, no credential: the person sets both connection
   strings. Owners and grants are kept, so the roles must exist where the
   copy goes (the same cluster does). The copies are outside the managed
