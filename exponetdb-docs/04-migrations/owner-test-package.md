@@ -177,7 +177,7 @@ replay ends `Succeeded`; the report is `open` with:
 |---|---|---|---|
 | `0100_accounts` | `recorded_present` | medium | `supabase:statements_normalized` |
 | `0101_account_members` | `recorded_present` | medium | `supabase:statements_normalized` |
-| `0102_member_count` | `recorded_present` | low | `supabase:statements_bodies` (that entry's stripper removed a comment inside a function body too) |
+| `0102_member_count` | `recorded_present` | medium | `supabase:statements_bodies` (that entry's stripper removed a comment inside a function body too, as the hosted connector does; `low` before follow-up 2) |
 | `0103_notes`, `0104_notes_index` | `recorded_present` | medium | one ledger entry for both files (the alias in `hints.yaml`) |
 | `0105_events` | `ambiguous` | weak | only the name matches: the file was edited after it was applied |
 | `0106_tags` | `unrecorded_present` | weak | an entry without statements |

@@ -32,6 +32,7 @@ import { normalizeSqlSource, scanExecutableText } from '@exponetdb/migrations/fo
  * - `weak`: a name only (the ledger's name equals the stem). Never makes a
  *   file `recorded`.
  */
+/** `low` is no longer given (follow-up 2, F5); a report made before may hold it. */
 export type EvidenceStrength = 'strong' | 'medium' | 'low' | 'curated' | 'weak'
 
 export const STRENGTH_RANK: Readonly<Record<EvidenceStrength, number>> = {
@@ -209,7 +210,8 @@ function retokenize(text: string, bodies: boolean): string {
       const close = text.indexOf(delimiter, open)
       const end = close < 0 ? n : close + delimiter.length
       if (bodies && close >= 0 && isCodeBody(out, text, end)) {
-        // The weaker tier: the body as code, its comments gone and its whitespace collapsed.
+        // The body as code, normalized as the statement around it: comments gone, whitespace
+        // collapsed, literals and quoted names as written.
         const body = scanExecutableText(text.slice(open, close))
         out.push(delimiter, body.ok ? body.value.trim() : text.slice(open, close), delimiter)
       } else {
@@ -311,8 +313,11 @@ export function matchKeys(entry: ContentKeys, files: ContentKeys): ContentMatch 
   if (entry.normalized !== null && entry.normalized === files.normalized) {
     return { strength: 'medium', how: 'statements_normalized' }
   }
+  // A code body normalized as the statement around it is (follow-up 2, F5): the hosted
+  // connector strips comments inside dollar-quoted bodies too, so this is the normal case for
+  // a routine it applied, and the same code ran.
   if (entry.bodies !== null && entry.bodies === files.bodies) {
-    return { strength: 'low', how: 'statements_bodies' }
+    return { strength: 'medium', how: 'statements_bodies' }
   }
   return null
 }

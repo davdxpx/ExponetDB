@@ -139,7 +139,7 @@ The replay ends with fingerprint `F_replay`.
 | Drizzle `hash` equals SHA-256 of a file's bytes | `strong` (content) | hash comparison; independent of names |
 | Supabase `statements[]` equal a file's statements one by one | `strong` (content) | byte for byte, only the ends of each statement trimmed (review round 1; Wave 6 collapsed whitespace, which also made data and commented-out text equal) |
 | Supabase `statements[]` equal a file as a normalized statement sequence | `medium` (content) | both sides joined and normalized lexically like `c1`: comments, drizzle breakpoints and whitespace do not matter (§2.3) |
-| … equal only when comments and whitespace inside the code bodies of `DO` blocks and `plpgsql`/`sql` routines are ignored too | `low` (content) | the same code ran; the stored body text differs; dollar-quoted data and other languages are compared as written (§2.3) |
+| … equal only when comments and whitespace inside the code bodies of `DO` blocks and `plpgsql`/`sql` routines are ignored too | `medium` (content; `low` before follow-up 2) | the same code ran; the stored body text differs, as for every routine the hosted connector applied; dollar-quoted data and other languages are compared as written (§2.3) |
 | Alias table entry (`0252_task_sync_runs` → `0260_task_sync_runs`, or one entry → several files) | `curated` | project hints; for several files, the entry's statements are compared with the files' statements joined in file order and the stronger result counts; statements that differ contradict the alias (`alias_contradicted`, `weak`, §2.3) |
 | Exact name match (Supabase `name`, or `<version>_<name>` of older ledgers; a runner's file name) | `weak` | a hint only: **never makes a file `recorded`** |
 | Numeric prefix match | none | never used alone (60 prefixes are ambiguous) |
@@ -376,11 +376,19 @@ The engine (`packages/migrations-engine/src/legacy-evidence.ts`) now:
   `strong` is a tool's hash of the file's bytes, or the statements equal
   one by one **byte for byte** with only their ends trimmed (whitespace
   inside a literal, or a line a comment ended, can change what a statement
-  means); `medium` is the normalized joined sequence above; `low` also
-  removes comments and whitespace inside the code bodies of `DO` blocks
-  and of `plpgsql` or `sql` functions and procedures, and nowhere else (a
-  dollar-quoted literal is data, and a body in another language, such as
-  Python, keeps its whitespace);
+  means); `medium` is the normalized joined sequence above, and
+  **[DECIDED]** (follow-up 2, F5, 2026-10-22) also that sequence with the
+  code bodies of `DO` blocks and of `plpgsql` or `sql` functions and
+  procedures normalized the same way: their comments removed, their
+  whitespace collapsed to one separator, literals and quoted names as
+  written (`statements_bodies`), and nowhere else (a dollar-quoted literal
+  is data, and a body in another language, such as Python, keeps its
+  whitespace). **[OBSERVED]** The hosted connector strips comments inside
+  dollar-quoted bodies too: ten functions applied through it differed from
+  the files byte for byte and were equal after that normalization, so it
+  is the normal case for a routine applied that way, not an edge case.
+  Before this change the tier was `low`; `low` is no longer given, and a
+  report made earlier may still show it;
 - gives one entry's content to **one file only**, and each ledger records
   a file once: content proves that a file ran, not which of several files
   with the same content. **[DECIDED]** (Wave 9 Part A, review rounds 1
@@ -398,8 +406,9 @@ The engine (`packages/migrations-engine/src/legacy-evidence.ts`) now:
   not the files' joined content, each file gets `<ledger>:alias_contradicted`
   (`weak`) and is `ambiguous` unless content records it by itself;
 - records per item the **strength** of the strongest evidence
-  (`evidenceStrength` in the report): `strong`, `medium`, `low`, `curated`,
-  `weak`, or none. Content (`strong`, `medium`, `low`) and `curated` make a
+  (`evidenceStrength` in the report): `strong`, `medium`, `curated`,
+  `weak`, or none (`low` only in reports made before follow-up 2). Content
+  (`strong`, `medium`, an earlier `low`) and `curated` make a
   file `recorded`; `weak` never does: a file with only a name match is
   `unrecorded_present` when its effects hold (imported with
   `checksum_provenance = legacy_file_at_import`, basis "effect observed")

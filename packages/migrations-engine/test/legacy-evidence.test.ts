@@ -71,11 +71,37 @@ describe('statement sequences', () => {
     })
   })
 
-  it('match only the weaker tier when the stripper also removed comments inside a body', () => {
+  it('match a code body the stripper also removed comments from: medium, as the hosted connector does (F5)', () => {
     expect(statementsMatch([STRIPPED_EVERYWHERE], [PARSED], [FILE])).toEqual({
-      strength: 'low',
+      strength: 'medium',
       how: 'statements_bodies',
     })
+    // The connector's shape (follow-up 2, F5): every comment line and the blank lines of a
+    // routine's body gone, the indentation as it was.
+    const file = `CREATE OR REPLACE FUNCTION public.acme_touch()
+RETURNS trigger LANGUAGE plpgsql AS $fn$
+BEGIN
+  -- Keeps updated_at current.
+
+  NEW.updated_at := now();  -- the time of the change
+  RETURN NEW;
+END;
+$fn$;`
+    const applied = `CREATE OR REPLACE FUNCTION public.acme_touch()
+RETURNS trigger LANGUAGE plpgsql AS $fn$
+BEGIN
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$fn$`
+    expect(statementsMatch([applied], [[file]], [file])).toEqual({
+      strength: 'medium',
+      how: 'statements_bodies',
+    })
+    // A changed literal inside the body is another body.
+    expect(
+      statementsMatch([applied.replace('now()', "'now'::timestamptz")], [[file]], [file]),
+    ).toBe(null)
   })
 
   it('match statement by statement as strong only when each is the same text', () => {
@@ -162,7 +188,7 @@ describe('statement sequences', () => {
       ],
     ] as const) {
       expect(statementsMatch([stored], [[file]], [`${file};`])).toEqual({
-        strength: 'low',
+        strength: 'medium',
         how: 'statements_bodies',
       })
     }

@@ -1025,7 +1025,7 @@ function relateLedger(
       const tiers: [Map<string, string[]>, string | null, ContentMatch][] = [
         [byExact, entryKeys.exact, { strength: 'strong', how: 'statements' }],
         [byNormalized, entryKeys.normalized, { strength: 'medium', how: 'statements_normalized' }],
-        [byBodies, entryKeys.bodies, { strength: 'low', how: 'statements_bodies' }],
+        [byBodies, entryKeys.bodies, { strength: 'medium', how: 'statements_bodies' }],
       ]
       for (const [index, key, match] of tiers)
         offer(key === null ? [] : (index.get(key) ?? []), match)
