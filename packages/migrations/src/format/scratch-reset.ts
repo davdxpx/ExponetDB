@@ -35,6 +35,48 @@ const array = (values: readonly string[]) =>
   values.length === 0 ? 'ARRAY[]::text[]' : `ARRAY[${values.map(literal).join(', ')}]::text[]`
 const ID = /^[a-z]{3}_[0-7][0-9A-HJKMNP-TV-Z]{25}$/
 
+/**
+ * Every object outside the managed scope, by its identity (`pg_identify_object`),
+ * as the reset compares them before and after (review of follow-up 2): an
+ * object of a schema outside the scope, or one without a schema. Objects of
+ * the managed schemas, TOAST and temporary schemas and the system schemas
+ * are not listed. An extension of the scope is re-created before the
+ * comparison, so its members are found again under the same identity.
+ * Its aliases never name a variable of the script's block (`s`, `g`, `e`).
+ */
+const OUTSIDE_INVENTORY = `SELECT DISTINCT (pg_catalog.pg_identify_object(o.classid, o.objid, o.objsubid)).type
+         || ' ' || (pg_catalog.pg_identify_object(o.classid, o.objid, o.objsubid)).identity AS object
+    FROM (SELECT 'pg_catalog.pg_class'::regclass AS classid, c.oid AS objid, 0 AS objsubid, c.relnamespace AS ns FROM pg_catalog.pg_class c
+          UNION ALL SELECT 'pg_catalog.pg_class'::regclass, a.attrelid, a.attnum, c.relnamespace
+                      FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
+                     WHERE a.attnum > 0 AND NOT a.attisdropped
+          UNION ALL SELECT 'pg_catalog.pg_attrdef'::regclass, d.oid, 0, c.relnamespace FROM pg_catalog.pg_attrdef d JOIN pg_catalog.pg_class c ON c.oid = d.adrelid
+          UNION ALL SELECT 'pg_catalog.pg_constraint'::regclass, k.oid, 0, k.connamespace FROM pg_catalog.pg_constraint k
+          UNION ALL SELECT 'pg_catalog.pg_trigger'::regclass, tg.oid, 0, c.relnamespace FROM pg_catalog.pg_trigger tg JOIN pg_catalog.pg_class c ON c.oid = tg.tgrelid
+          UNION ALL SELECT 'pg_catalog.pg_policy'::regclass, y.oid, 0, c.relnamespace FROM pg_catalog.pg_policy y JOIN pg_catalog.pg_class c ON c.oid = y.polrelid
+          UNION ALL SELECT 'pg_catalog.pg_rewrite'::regclass, r.oid, 0, c.relnamespace FROM pg_catalog.pg_rewrite r JOIN pg_catalog.pg_class c ON c.oid = r.ev_class
+          UNION ALL SELECT 'pg_catalog.pg_proc'::regclass, f.oid, 0, f.pronamespace FROM pg_catalog.pg_proc f
+          UNION ALL SELECT 'pg_catalog.pg_type'::regclass, t.oid, 0, t.typnamespace FROM pg_catalog.pg_type t
+          UNION ALL SELECT 'pg_catalog.pg_operator'::regclass, q.oid, 0, q.oprnamespace FROM pg_catalog.pg_operator q
+          UNION ALL SELECT 'pg_catalog.pg_opclass'::regclass, q.oid, 0, q.opcnamespace FROM pg_catalog.pg_opclass q
+          UNION ALL SELECT 'pg_catalog.pg_opfamily'::regclass, q.oid, 0, q.opfnamespace FROM pg_catalog.pg_opfamily q
+          UNION ALL SELECT 'pg_catalog.pg_collation'::regclass, q.oid, 0, q.collnamespace FROM pg_catalog.pg_collation q
+          UNION ALL SELECT 'pg_catalog.pg_statistic_ext'::regclass, q.oid, 0, q.stxnamespace FROM pg_catalog.pg_statistic_ext q
+          UNION ALL SELECT 'pg_catalog.pg_namespace'::regclass, n.oid, 0, n.oid FROM pg_catalog.pg_namespace n
+          UNION ALL SELECT 'pg_catalog.pg_extension'::regclass, x.oid, 0, NULL FROM pg_catalog.pg_extension x
+          UNION ALL SELECT 'pg_catalog.pg_foreign_data_wrapper'::regclass, w.oid, 0, NULL FROM pg_catalog.pg_foreign_data_wrapper w
+          UNION ALL SELECT 'pg_catalog.pg_foreign_server'::regclass, v.oid, 0, NULL FROM pg_catalog.pg_foreign_server v
+          UNION ALL SELECT 'pg_catalog.pg_user_mapping'::regclass, u.oid, 0, NULL FROM pg_catalog.pg_user_mapping u
+          UNION ALL SELECT 'pg_catalog.pg_cast'::regclass, k.oid, 0, NULL FROM pg_catalog.pg_cast k
+          UNION ALL SELECT 'pg_catalog.pg_am'::regclass, m.oid, 0, NULL FROM pg_catalog.pg_am m
+          UNION ALL SELECT 'pg_catalog.pg_language'::regclass, l.oid, 0, NULL FROM pg_catalog.pg_language l
+          UNION ALL SELECT 'pg_catalog.pg_event_trigger'::regclass, et.oid, 0, NULL FROM pg_catalog.pg_event_trigger et
+          UNION ALL SELECT 'pg_catalog.pg_publication'::regclass, b.oid, 0, NULL FROM pg_catalog.pg_publication b) o
+    LEFT JOIN pg_catalog.pg_namespace n ON n.oid = o.ns
+   WHERE o.ns IS NULL
+      OR NOT (n.nspname = ANY (managed) OR n.nspname IN ('pg_catalog', 'information_schema', 'pg_toast')
+              OR n.nspname LIKE 'pg\\_temp\\_%' OR n.nspname LIKE 'pg\\_toast\\_temp\\_%')`
+
 export function scratchResetSql(input: ScratchResetInput): string {
   if (!ID.test(input.installationId) || !ID.test(input.targetId)) {
     throw new Error('an installation and a target id are canonical ids')
@@ -54,6 +96,8 @@ export function scratchResetSql(input: ScratchResetInput): string {
   managed text[] := ${managed};
   outside text;
   outside_count bigint;
+  lost text;
+  lost_count bigint;
   s record;
   g record;
   e record;
@@ -142,6 +186,10 @@ BEGIN
     RAISE EXCEPTION 'objects outside the managed scope depend on it and would be dropped (%): %', outside_count,
       pg_catalog.left(outside, 2000) || CASE WHEN pg_catalog.length(outside) > 2000 THEN ' (list cut)' ELSE '' END;
   END IF;
+  -- What lies outside the scope now, so the reset can prove it dropped none of it: a cascade
+  -- can reach further than the dependencies above show (a server of a wrapper an extension of
+  -- the scope holds, an extension outside the scope that holds an object inside it).
+  CREATE TEMPORARY TABLE exdb_reset_outside ON COMMIT DROP AS ${OUTSIDE_INVENTORY};
   CREATE TEMPORARY TABLE exdb_reset_extensions ON COMMIT DROP AS
     SELECT x.extname::text AS name, n.nspname::text AS schema, x.extversion AS version
       FROM pg_catalog.pg_extension x JOIN pg_catalog.pg_namespace n ON n.oid = x.extnamespace
@@ -160,6 +208,14 @@ BEGIN
   FOR e IN SELECT * FROM exdb_reset_extensions LOOP
     EXECUTE pg_catalog.format('CREATE EXTENSION %I WITH SCHEMA %I VERSION %L', e.name, e.schema, e.version);
   END LOOP;
+  SELECT pg_catalog.count(*), pg_catalog.string_agg(o.object, ', ' ORDER BY o.object)
+    INTO lost_count, lost
+    FROM exdb_reset_outside o
+   WHERE NOT EXISTS (SELECT FROM (${OUTSIDE_INVENTORY}) cur WHERE cur.object = o.object);
+  IF lost IS NOT NULL THEN
+    RAISE EXCEPTION 'the reset would drop objects outside the managed scope (%), nothing was changed: %', lost_count,
+      pg_catalog.left(lost, 2000) || CASE WHEN pg_catalog.length(lost) > 2000 THEN ' (list cut)' ELSE '' END;
+  END IF;
 END`
   // A dollar-quote tag that cannot occur in the body: schema names may hold `$`.
   let tag = 'reset'

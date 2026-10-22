@@ -89,5 +89,67 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       )
       expect(left.rows[0]).toEqual({ dropped: true, hnsw: 1, marker: TARGET })
     })
+
+    const reset = () =>
+      runAsSuperuser(server, database, [
+        scratchResetSql({
+          installationId: INSTALLATION,
+          targetId: TARGET,
+          targetPath: 'acme/platform/scratch',
+          generation: 1,
+          includeSchemas: ['public'],
+        }),
+      ])
+
+    it('refuses, changing nothing, when a cascade would reach past the scope (security review)', async () => {
+      // A server of a wrapper an extension of the scope holds, and a foreign table of it
+      // outside the scope: no dependency names them, the cascade would drop both.
+      await runAsSuperuser(server, database, [
+        'CREATE EXTENSION postgres_fdw SCHEMA public',
+        'CREATE SERVER acme_remote FOREIGN DATA WRAPPER postgres_fdw',
+        'CREATE SCHEMA acme_outside',
+        'CREATE FOREIGN TABLE acme_outside.remote_users (id int) SERVER acme_remote',
+      ])
+      await expect(reset()).rejects.toMatchObject({
+        message: expect.stringMatching(
+          /^the reset would drop objects outside the managed scope \(\d+\), nothing was changed: .*foreign table acme_outside\.remote_users.*server acme_remote/,
+        ),
+      })
+      const kept = await withSuperuser(server, database, (c) =>
+        c.query(
+          `SELECT pg_catalog.to_regclass('acme_outside.remote_users') IS NOT NULL AS table_kept,
+                  (SELECT count(*)::int FROM pg_catalog.pg_extension WHERE extname = 'vector') AS vector`,
+        ),
+      )
+      expect(kept.rows[0]).toEqual({ table_kept: true, vector: 1 })
+      await runAsSuperuser(server, database, [
+        'DROP SCHEMA acme_outside CASCADE',
+        'DROP SERVER acme_remote',
+        'DROP EXTENSION postgres_fdw',
+      ])
+      // An extension outside the scope that holds an object inside it (ALTER EXTENSION ADD):
+      // dropping the object would drop the extension, which the reset never re-creates.
+      await runAsSuperuser(server, database, [
+        'CREATE SCHEMA acme_ext',
+        'CREATE EXTENSION citext SCHEMA acme_ext',
+        'CREATE TABLE public.acme_planted (i int)',
+        'ALTER EXTENSION citext ADD TABLE public.acme_planted',
+      ])
+      await expect(reset()).rejects.toMatchObject({
+        message: expect.stringMatching(/nothing was changed: .*extension citext/),
+      })
+      const citext = await withSuperuser(server, database, (c) =>
+        c.query(`SELECT count(*)::int AS n FROM pg_catalog.pg_extension WHERE extname = 'citext'`),
+      )
+      expect(citext.rows[0]).toEqual({ n: 1 })
+      await runAsSuperuser(server, database, [
+        'ALTER EXTENSION citext DROP TABLE public.acme_planted',
+        'DROP TABLE public.acme_planted',
+        'DROP EXTENSION citext',
+        'DROP SCHEMA acme_ext',
+      ])
+      // Without them the reset goes through again.
+      await reset()
+    })
   },
 )

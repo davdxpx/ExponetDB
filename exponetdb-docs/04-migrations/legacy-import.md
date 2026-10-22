@@ -619,7 +619,15 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   `vector`, **[OBSERVED]** 25 of them refused the first real reset) is no
   reason to refuse. A member of such an extension in a schema **outside**
   the scope refuses (the drop would take it, and a replay that owns an
-  extension can add its own objects to it). Then, in one
+  extension can add its own objects to it). **[DECIDED]** (security
+  review of follow-up 2) Dependencies do not show everything a cascade
+  reaches (a server of a wrapper an extension of the scope holds, and a
+  foreign table of it elsewhere; an extension outside the scope that holds
+  an object inside it). So the script also lists, by identity, every
+  object outside the managed scope before it drops anything, and again
+  once the extensions are re-created; if any is missing it refuses (`the
+  reset would drop objects outside the managed scope …, nothing was
+  changed`, naming them) and the transaction rolls back. Then, in one
   transaction, it drops and re-creates each schema of the managed scope with
   its owner and grants (read from the catalog before the drop) and
   re-creates the extensions that lived there in their versions. A
