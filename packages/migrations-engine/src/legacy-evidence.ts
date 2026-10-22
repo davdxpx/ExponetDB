@@ -73,9 +73,64 @@ function isTagCont(c: number): boolean {
 const CODE_LANGUAGES = new Set(['plpgsql', 'sql'])
 
 /**
+ * The language a `LANGUAGE` clause after a routine's body names, read as
+ * tokens up to the statement's end: a literal, a quoted name or a
+ * dollar-quoted string is one token, so `SET application_name = 'language
+ * sql'` names none (security review of follow-up 2). `null` when none.
+ */
+function languageAfter(text: string, from: number): string | null {
+  const tokens: { readonly word: boolean; readonly value: string }[] = []
+  let i = from
+  const n = text.length
+  while (i < n) {
+    const c = text.charCodeAt(i)
+    if (c === SEMICOLON) break
+    if (c === QUOTE || ((c === 0x65 || c === 0x45) && text.charCodeAt(i + 1) === QUOTE)) {
+      const escapes = c !== QUOTE
+      let j = escapes ? i + 2 : i + 1
+      while (j < n) {
+        const d = text.charCodeAt(j)
+        if (escapes && d === BACKSLASH) j += 2
+        else if (d === QUOTE && text.charCodeAt(j + 1) === QUOTE) j += 2
+        else if (d === QUOTE) break
+        else j++
+      }
+      tokens.push({ word: false, value: text.slice(escapes ? i + 2 : i + 1, j) })
+      i = j + 1
+    } else if (c === DQUOTE) {
+      let j = i + 1
+      while (j < n && !(text.charCodeAt(j) === DQUOTE && text.charCodeAt(j + 1) !== DQUOTE)) {
+        j += text.charCodeAt(j) === DQUOTE ? 2 : 1
+      }
+      tokens.push({ word: false, value: text.slice(i + 1, j).replaceAll('""', '"') })
+      i = j + 1
+    } else if (c === DOLLAR) {
+      const tag = /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/.exec(text.slice(i))?.[0]
+      if (tag === undefined) {
+        i++
+        continue
+      }
+      const close = text.indexOf(tag, i + tag.length)
+      tokens.push({ word: false, value: '' })
+      i = close < 0 ? n : close + tag.length
+    } else if (isIdentStart(c)) {
+      let j = i + 1
+      while (j < n && isIdentCont(text.charCodeAt(j))) j++
+      tokens.push({ word: true, value: text.slice(i, j).toLowerCase() })
+      i = j
+    } else {
+      i++
+    }
+  }
+  const at = tokens.findIndex((t) => t.word && t.value === 'language')
+  const next = at < 0 ? undefined : tokens[at + 1]
+  return next === undefined ? null : next.value.toLowerCase()
+}
+
+/**
  * Whether the dollar-quoted body that ends at `end` is the code of a `DO`
  * block or of a function or procedure in `plpgsql` or `sql`: only such a
- * body is compared without its comments and whitespace (the `low` tier).
+ * body is compared without its comments and whitespace (`statements_bodies`).
  * A dollar-quoted literal (data, a parameter's default) or a body in another
  * language (whose whitespace may matter) never is. `prefix` holds the
  * statement's tokens so far; the `LANGUAGE` clause may also follow the body.
@@ -103,9 +158,7 @@ function isCodeBody(prefix: readonly string[], text: string, end: number): boole
   if (named !== undefined) {
     language = unquote(named)
   } else {
-    const rest = text.slice(end, text.indexOf(';', end) < 0 ? text.length : text.indexOf(';', end))
-    const m = /\blanguage\s+("[^"]*"|'[^']*'|[a-z_][a-z0-9_]*)/i.exec(rest)
-    language = m?.[1] === undefined ? null : unquote(m[1])
+    language = languageAfter(text, end)
   }
   // A DO block without a LANGUAGE clause is PL/pgSQL.
   return CODE_LANGUAGES.has(language ?? (isDo ? 'plpgsql' : ''))

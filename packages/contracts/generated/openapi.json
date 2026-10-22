@@ -16306,6 +16306,15 @@
             "minItems": 1,
             "type": "array"
           },
+          "notApplicable": {
+            "description": "File stems the replay skips (the analysis hints): what they name is not checked.",
+            "items": {
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "type": "array"
+          },
           "role": {
             "description": "The execution role alias the replay runs as (the analysis hint role; default owner).",
             "pattern": "^[a-z][a-z0-9_]{0,62}$",

@@ -18,7 +18,9 @@ describe('scratchCopyCommands', () => {
     expect(text).toContain(
       `pg_dump --schema-only --format=custom --file=exdb-scratch-copy.dump --schema='"auth"' --schema='"storage"' "$IMPORTED_URL"`,
     )
-    expect(text).toContain(`grep -v -E '^[0-9]+; [0-9]+ [0-9]+ (TRIGGER|POLICY|COMMENT [^ ]+ (TRIGGER|POLICY)) '`)
+    expect(text).toContain(
+      `grep -v -E '^[0-9]+; [0-9]+ [0-9]+ (TRIGGER|POLICY|COMMENT [^ ]+ (TRIGGER|POLICY)) '`,
+    )
     expect(text).toContain(
       'pg_restore --exit-on-error --single-transaction --use-list=exdb-scratch-copy.list --dbname="$SCRATCH_URL"',
     )

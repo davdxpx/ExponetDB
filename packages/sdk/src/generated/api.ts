@@ -2333,6 +2333,7 @@ export type ScratchCheck = {
 
 export type ScratchCheckRequest = {
   readonly files: readonly LegacyFile[]
+  readonly notApplicable?: readonly string[]
   readonly role?: string
   readonly scratchTarget: string
 }

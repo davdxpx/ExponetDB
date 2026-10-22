@@ -26,7 +26,7 @@ import {
  * of 18 (for `DO` bodies) must be loaded.
  */
 export interface LegacyReference {
-  readonly kind: 'relation' | 'function' | 'type'
+  readonly kind: 'relation' | 'function' | 'type' | 'schema'
   readonly schema: string
   readonly name: string
   /** The first file (stem) that names it. */
@@ -37,7 +37,12 @@ export interface LegacyReferences {
   readonly references: readonly LegacyReference[]
   /** Files the major's grammar cannot read (the replay refuses them). */
   readonly unparsed: readonly string[]
+  /** Bodies nest deeper than the scan follows: what they name is not known. */
+  readonly tooComplex: boolean
 }
+
+/** How deep bodies inside bodies are followed (a file's statements are level 0). */
+export const MAX_BODY_NESTING = 2
 
 export interface ScopeTest {
   readonly includeSchemas?: readonly string[] | null
@@ -60,8 +65,11 @@ export function outsideScope(scope: ScopeTest, schema: string): boolean {
 type Kind = LegacyReference['kind']
 
 interface Collector {
+  /** What the statement being read names. */
   readonly refs: Map<string, { kind: Kind; schema: string; name: string }>
+  /** What the history created so far (`schema\u0000name`; a schema as `\u0000schema`). */
   readonly created: Set<string>
+  tooComplex: boolean
 }
 
 const key = (schema: string, name: string) => `${schema}\u0000${name}`
@@ -89,15 +97,30 @@ function add(c: Collector, kind: Kind, at: readonly [string, string] | undefined
   if (!c.refs.has(k)) c.refs.set(k, { kind, schema: at[0], name: at[1] })
 }
 
+/** An object created in a schema needs the schema. */
 function create(c: Collector, at: readonly [string, string] | undefined): void {
-  if (at !== undefined) c.created.add(key(at[0], at[1]))
+  if (at === undefined) return
+  c.created.add(key(at[0], at[1]))
+  add(c, 'schema', [at[0], at[0]])
+}
+
+function schemaRef(c: Collector, name: unknown): void {
+  const n = nodeType(name)
+  const schema = n?.type === 'String' ? str(n.body['sval']) : str(name)
+  if (schema !== null) add(c, 'schema', [schema, schema])
 }
 
 /** What one statement's tree names and creates (and its SQL function bodies). */
-function visit(major: SupportedMajor, value: unknown, c: Collector, depth = 0): void {
+function visit(
+  major: SupportedMajor,
+  value: unknown,
+  c: Collector,
+  level: number,
+  depth = 0,
+): void {
   if (depth > 2000) return
   if (Array.isArray(value)) {
-    for (const v of value) visit(major, v, c, depth + 1)
+    for (const v of value) visit(major, v, c, level, depth + 1)
     return
   }
   if (typeof value !== 'object' || value === null) return
@@ -108,7 +131,10 @@ function visit(major: SupportedMajor, value: unknown, c: Collector, depth = 0): 
     if (Array.isArray(body['names']) && 'typemod' in body) add(c, 'type', qualified(body['names']))
     if (typeof body['relname'] === 'string' && 'relpersistence' in body)
       add(c, 'relation', rangeVar(body))
-    for (const v of Object.values(body)) visit(major, v, c, depth + 1)
+    // So is the call of CALL.
+    if (Array.isArray(body['funcname']) && 'funcformat' in body)
+      add(c, 'function', qualified(body['funcname']))
+    for (const v of Object.values(body)) visit(major, v, c, level, depth + 1)
     return
   }
   const body = n.body
@@ -124,8 +150,41 @@ function visit(major: SupportedMajor, value: unknown, c: Collector, depth = 0): 
           const f = nodeType(o)
           if (f?.type === 'ObjectWithArgs') add(c, 'function', qualified(f.body['objname']))
         }
+      } else if (body['objtype'] === 'OBJECT_SCHEMA') {
+        for (const o of Array.isArray(body['objects']) ? body['objects'] : []) schemaRef(c, o)
       }
       break
+    case 'AlterDefaultPrivilegesStmt':
+      for (const o of Array.isArray(body['options']) ? body['options'] : []) {
+        const d = nodeType(o)
+        if (d?.type !== 'DefElem' || d.body['defname'] !== 'schemas') continue
+        const items = nodeType(d.body['arg'])?.body['items'] ?? d.body['arg']
+        for (const item of Array.isArray(items) ? items : []) schemaRef(c, item)
+      }
+      break
+    case 'CreateSchemaStmt': {
+      const name = str(body['schemaname'])
+      if (name !== null) c.created.add(key('', name))
+      break
+    }
+    case 'CommentStmt': {
+      const objtype = String(body['objtype'])
+      const object = nodeType(body['object'])
+      if (
+        [
+          'OBJECT_TABLE',
+          'OBJECT_VIEW',
+          'OBJECT_MATVIEW',
+          'OBJECT_FOREIGN_TABLE',
+          'OBJECT_SEQUENCE',
+        ].includes(objtype)
+      ) {
+        add(c, 'relation', qualified(object?.type === 'List' ? object.body['items'] : undefined))
+      } else if (['OBJECT_FUNCTION', 'OBJECT_PROCEDURE'].includes(objtype)) {
+        if (object?.type === 'ObjectWithArgs') add(c, 'function', qualified(object.body['objname']))
+      }
+      break
+    }
     case 'FuncCall':
       add(c, 'function', qualified(body['funcname']))
       break
@@ -176,25 +235,41 @@ function visit(major: SupportedMajor, value: unknown, c: Collector, depth = 0): 
       const asArg = option('as')
       const as = names(nodeType(asArg)?.type === 'List' ? nodeType(asArg)?.body['items'] : asArg)
       // A LANGUAGE sql body is parsed and checked at CREATE FUNCTION (BEGIN ATOMIC is in the tree).
-      if (lang === 'sql' && as?.length === 1 && as[0] !== undefined) statements(major, as[0], c)
+      if (lang === 'sql' && as?.length === 1 && as[0] !== undefined)
+        statements(major, as[0], c, level + 1)
       break
     }
   }
-  for (const v of Object.values(body)) visit(major, v, c, depth + 1)
+  for (const v of Object.values(body)) visit(major, v, c, level, depth + 1)
 }
 
-function statements(major: SupportedMajor, text: string, c: Collector): boolean {
+/** Reads one text's statements at `level`; `false` when its grammar cannot read it. */
+function statements(major: SupportedMajor, text: string, c: Collector, level: number): boolean {
+  if (level > MAX_BODY_NESTING) {
+    c.tooComplex = true
+    return true
+  }
   const parsed = parseWith(major, text, MAX_MIGRATION_PARSE_BYTES)
   if (!parsed.ok) return false
   for (const st of parsed.statements) {
-    visit(major, { [st.type]: st.node }, c)
-    if (st.type === 'DoStmt') doBlock(major, text.slice(st.start, st.end), st.node, c)
+    visit(major, { [st.type]: st.node }, c, level)
+    if (st.type === 'DoStmt') doBlock(major, text.slice(st.start, st.end), st.node, c, level + 1)
   }
   return true
 }
 
 /** Every SQL statement and expression of a PL/pgSQL DO block. */
-function doBlock(major: SupportedMajor, text: string, node: JsonNode, c: Collector): void {
+function doBlock(
+  major: SupportedMajor,
+  text: string,
+  node: JsonNode,
+  c: Collector,
+  level: number,
+): void {
+  if (level > MAX_BODY_NESTING) {
+    c.tooComplex = true
+    return
+  }
   for (const arg of Array.isArray(node['args']) ? node['args'] : []) {
     const d = nodeType(arg)
     if (d?.type === 'DefElem' && d.body['defname'] === 'language') {
@@ -217,7 +292,8 @@ function doBlock(major: SupportedMajor, text: string, node: JsonNode, c: Collect
   collect(parsePlpgsql(text))
   for (const q of queries) {
     // A statement's text is parsed as it is; an expression as a SELECT of it.
-    if (!statements(major, q.query, c) && !q.statement) statements(major, `SELECT ${q.query}`, c)
+    if (!statements(major, q.query, c, level) && !q.statement)
+      statements(major, `SELECT ${q.query}`, c, level)
   }
 }
 
@@ -227,23 +303,31 @@ export function legacyReferences(
   files: readonly { readonly name: string; readonly text: string }[],
   scope: ScopeTest,
 ): LegacyReferences {
-  const created = new Set<string>()
+  const c: Collector = { refs: new Map(), created: new Set(), tooComplex: false }
   const first = new Map<string, LegacyReference>()
   const unparsed: string[] = []
   for (const file of files) {
     const stem = file.name.replace(/\.sql$/, '')
-    const c: Collector = { refs: new Map(), created }
-    if (!statements(major, file.text, c)) {
+    const parsed = parseWith(major, file.text, MAX_MIGRATION_PARSE_BYTES)
+    if (!parsed.ok) {
       // A file without statements (comments only) is no failure; the parser calls it empty.
-      const parsed = parseWith(major, file.text, MAX_MIGRATION_PARSE_BYTES)
-      if (parsed.ok || parsed.failure.kind !== 'empty') unparsed.push(stem)
+      if (parsed.failure.kind !== 'empty') unparsed.push(stem)
       continue
     }
-    for (const [k, r] of c.refs) {
-      if (!first.has(k) && outsideScope(scope, r.schema)) first.set(k, { ...r, file: stem })
+    for (const st of parsed.statements) {
+      c.refs.clear()
+      visit(major, { [st.type]: st.node }, c, 0)
+      if (st.type === 'DoStmt') doBlock(major, file.text.slice(st.start, st.end), st.node, c, 1)
+      // What this statement or an earlier one created is the history's own.
+      for (const [k, r] of c.refs) {
+        const own =
+          r.kind === 'schema'
+            ? c.created.has(key('', r.name))
+            : c.created.has(key(r.schema, r.name))
+        if (!own && !first.has(k) && outsideScope(scope, r.schema))
+          first.set(k, { ...r, file: stem })
+      }
     }
   }
-  // An object the history creates anywhere is the history's own (any kind: a table is a type too).
-  const references = [...first.values()].filter((r) => !created.has(key(r.schema, r.name)))
-  return { references, unparsed }
+  return { references: [...first.values()], unparsed, tooComplex: c.tooComplex }
 }

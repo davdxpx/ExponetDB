@@ -273,6 +273,7 @@ export class MigrationUseCases {
     scratchRef: string,
     alias?: string,
     files?: readonly { readonly name: string; readonly text: string }[],
+    notApplicable: readonly string[] = [],
   ): Promise<ScratchCheck> {
     const { observation } = this.#services()
     const target = await this.#target('migration.import.scratch_check', caller, ref)
@@ -289,7 +290,8 @@ export class MigrationUseCases {
       target,
       scratch?.targetId ?? scratchRef,
       alias,
-      files,
+      // The replay skips what the hints call not applicable; so does the check.
+      files?.filter((f) => !notApplicable.includes(f.name.slice(0, -'.sql'.length))),
     )
   }
 

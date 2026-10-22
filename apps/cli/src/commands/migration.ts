@@ -59,6 +59,19 @@ const SCRATCH_CHECK_FLAGS: FlagSpec[] = [
     placeholder: 'alias',
     description: 'The execution role alias the replay runs as (the hints role; default owner).',
   },
+  {
+    name: 'hints',
+    type: 'string',
+    placeholder: 'path',
+    description:
+      'The analysis hints file: its role and notApplicable apply here too (the replay skips those files).',
+  },
+  {
+    name: 'not-applicable',
+    type: 'list',
+    placeholder: 'files',
+    description: 'Legacy files the replay skips, so the check does not read them either.',
+  },
 ]
 
 const workdir = (ctx: RunContext) => ctx.global.workdir ?? ctx.io.cwd
@@ -1211,7 +1224,16 @@ async function legacyFiles(
   if (legacy === undefined) return []
   const { readdir, readFile } = await import('node:fs/promises')
   const dir = join(project.root, legacy.directory)
-  const names = (await readdir(dir)).filter((n) => n.endsWith('.sql')).sort()
+  let entries: string[]
+  try {
+    entries = await readdir(dir)
+  } catch (error) {
+    if ((error as { code?: unknown }).code !== 'ENOENT') throw error
+    throw new UsageError(
+      `The project's legacy directory ${legacy.directory} does not exist (exponetdb.project.yaml, legacy.directory).`,
+    )
+  }
+  const names = entries.filter((n) => n.endsWith('.sql')).sort()
   const files = []
   for (const name of names) files.push({ name, text: await readFile(join(dir, name), 'utf8') })
   return files
@@ -1228,17 +1250,25 @@ async function runScratchCheck(
   readonly remote: Awaited<ReturnType<RunContext['remote']>>
   readonly check: ScratchCheck
 }> {
-  let files: { readonly name: string; readonly text: string }[] = []
+  let project: LocalProject | undefined
   try {
-    files = await legacyFiles(await currentProject(workdir(ctx)))
+    project = await currentProject(workdir(ctx))
   } catch (error) {
     // Outside a project the check runs without the files.
     if (!(error instanceof UsageError)) throw error
   }
+  // A project whose legacy directory is missing says so (it is not read silently as none).
+  const files = project === undefined ? [] : await legacyFiles(project)
+  const hintsPath = flag(input, 'hints')
+  const hints = hintsPath === undefined ? {} : await importHints(ctx, hintsPath, input.flags)
+  const notApplicable = (input.flags['not-applicable'] ?? hints['notApplicable']) as
+    | readonly string[]
+    | undefined
   const remote = await ctx.remote()
   const params = { target: String(input.flags['target']) }
   const scratchTarget = String(input.flags['scratch'])
-  const role = typeof input.flags['role'] === 'string' ? { role: input.flags['role'] } : {}
+  const alias = flag(input, 'role') ?? hints['role']
+  const role = typeof alias === 'string' ? { role: alias } : {}
   const check =
     files.length === 0
       ? must(
@@ -1254,6 +1284,7 @@ async function runScratchCheck(
               scratchTarget,
               ...role,
               files,
+              ...(notApplicable === undefined ? {} : { notApplicable }),
             }) as never,
           }),
         )

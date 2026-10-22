@@ -1,61 +1,44 @@
 import { readFileSync } from 'node:fs'
-import { LEGACY_FILES_LIMIT_BYTES, ScratchCheckRequestSchema } from '@exponetdb/contracts'
+import {
+  ImportAnalysisRequestSchema,
+  LEGACY_FILES_LIMIT_BYTES,
+  ScratchCheckRequestSchema,
+} from '@exponetdb/contracts'
 import { describe, expect, it } from 'vitest'
-import { issues, LEGACY_PARSE_SLOTS, oneLegacyParse } from '../src/interfaces/http/api.ts'
-import { problemResponse } from '../src/interfaces/http/request.ts'
+import { issues } from '../src/interfaces/http/api.ts'
 
 /**
- * A legacy history is parsed in serve (follow-up 2, F4): one such request
- * at a time, a second one is told to try again; a history above the bound
- * is refused before anything is parsed, naming the bound.
+ * A legacy history is parsed in serve (follow-up 2, F4): a history above
+ * the bound is refused before anything is parsed, naming the bound, by both
+ * routes that carry one; every role runs with WebAssembly tier-up off.
  */
 describe('legacy parse work in serve', () => {
-  it('runs one at a time and answers another with RATE_LIMITED and Retry-After', async () => {
-    expect(LEGACY_PARSE_SLOTS).toBe(1)
-    let release: () => void = () => undefined
-    const first = oneLegacyParse(
-      () =>
-        new Promise<string>((resolve) => {
-          release = () => resolve('done')
-        }),
-    )
-    const busy = await oneLegacyParse(async () => 'never').catch((e: unknown) => e)
-    const response = problemResponse('req_01M5K000000000000000000001' as never, busy, {
-      retryAfterSeconds: (busy as { retryAfterSeconds: number }).retryAfterSeconds,
-    })
-    expect(response.status).toBe(429)
-    expect(response.headers.get('retry-after')).toBe('5')
-    expect(await response.json()).toMatchObject({
-      code: 'RATE_LIMITED',
-      details: { retryAfterSeconds: 5 },
-    })
-    release()
-    expect(await first).toBe('done')
-    // The slot is free again, also after a failure.
-    await expect(oneLegacyParse(async () => Promise.reject(new Error('x')))).rejects.toThrow('x')
-    expect(await oneLegacyParse(async () => 'again')).toBe('again')
-  })
-
   it('refuses a history above the bound as /files too_large, before any parse', () => {
     // Three files of 3 MiB: each within the file bound, more than the history bound together.
     const big = 'SELECT 1;\n'.repeat((3 * 1024 * 1024) / 10)
-    const parsed = ScratchCheckRequestSchema.safeParse({
-      scratchTarget: 'acme/platform/scratch',
-      files: [
-        { name: '0001_a.sql', text: big },
-        { name: '0002_b.sql', text: big },
-        { name: '0003_c.sql', text: big },
-      ],
-    })
-    expect(parsed.success).toBe(false)
-    if (parsed.success) return
-    expect(issues(parsed.error.issues)).toEqual([
-      {
-        path: '/files',
-        code: 'too_large',
-        message: expect.stringMatching(new RegExp(`^At most ${LEGACY_FILES_LIMIT_BYTES} bytes`)),
-      },
-    ])
+    const files = [
+      { name: '0001_a.sql', text: big },
+      { name: '0002_b.sql', text: big },
+      { name: '0003_c.sql', text: big },
+    ]
+    for (const parsed of [
+      ScratchCheckRequestSchema.safeParse({ scratchTarget: 'acme/platform/scratch', files }),
+      ImportAnalysisRequestSchema.safeParse({
+        scratchTarget: 'acme/platform/scratch',
+        baseline: 'acme-2026',
+        files,
+      }),
+    ]) {
+      expect(parsed.success).toBe(false)
+      if (parsed.success) return
+      expect(issues(parsed.error.issues)).toEqual([
+        {
+          path: '/files',
+          code: 'too_large',
+          message: expect.stringMatching(new RegExp(`^At most ${LEGACY_FILES_LIMIT_BYTES} bytes`)),
+        },
+      ])
+    }
     expect(
       ScratchCheckRequestSchema.safeParse({
         scratchTarget: 'acme/platform/scratch',

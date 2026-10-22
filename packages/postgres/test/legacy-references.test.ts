@@ -37,6 +37,7 @@ describe('legacyReferences', () => {
           { kind: 'function', schema: 'auth', name: 'uid', file: '0013_tenant_members_own_read' },
         ],
         unparsed: [],
+        tooComplex: false,
       })
     }
   })
@@ -103,7 +104,7 @@ describe('legacyReferences', () => {
       ],
       ['0003_notes.sql', '-- folded into 0002\n'],
     ])
-    expect(r).toEqual({ references: [], unparsed: [] })
+    expect(r).toEqual({ references: [], unparsed: [], tooComplex: false })
   })
 
   it('names a file its grammar cannot read, and counts a schema only once per object', () => {
@@ -115,6 +116,7 @@ describe('legacyReferences', () => {
     expect(r).toEqual({
       references: [{ kind: 'function', schema: 'auth', name: 'uid', file: '0001_a' }],
       unparsed: ['0002_b'],
+      tooComplex: false,
     })
   })
 
@@ -131,5 +133,50 @@ describe('legacyReferences', () => {
       scope as never,
     )
     expect(r.references.map((x) => `${x.schema}.${x.name}`)).toEqual(['auth.uid'])
+  })
+
+  it('follows nested bodies two levels deep, and says when a history nests deeper (security review)', () => {
+    const nest = (depth: number): string => {
+      let text = 'SELECT auth.uid()'
+      for (let i = depth; i > 0; i--) {
+        text = `CREATE FUNCTION public.acme_f${i}() RETURNS void LANGUAGE sql AS $t${i}$ ${text} $t${i}$`
+      }
+      return `${text};`
+    }
+    expect(refs([['0001.sql', nest(2)]])).toMatchObject({
+      references: [{ kind: 'function', schema: 'auth', name: 'uid' }],
+      tooComplex: false,
+    })
+    expect(refs([['0001.sql', nest(3)]])).toMatchObject({ references: [], tooComplex: true })
+    // A deep nest is cut off quickly instead of exhausting the process.
+    const started = Date.now()
+    expect(refs([['0001.sql', nest(2000)]]).tooComplex).toBe(true)
+    expect(Date.now() - started).toBeLessThan(5_000)
+  })
+
+  it('names what is used before the history creates it, CALL, COMMENT ON and schemas (review)', () => {
+    const r = refs([
+      ['0001_use.sql', 'SELECT acme_private.f(); CALL extensions.acme_proc();'],
+      [
+        '0002_create.sql',
+        'CREATE SCHEMA acme_private; CREATE FUNCTION acme_private.f() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;',
+      ],
+      [
+        '0003_schemas.sql',
+        `COMMENT ON TABLE auth.users IS 'people';
+CREATE TABLE auth.acme_extra (id int);
+GRANT USAGE ON SCHEMA storage TO authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA graphql GRANT SELECT ON TABLES TO authenticated;
+SELECT acme_private.f();`,
+      ],
+    ])
+    expect(r.references.map((x) => `${x.kind} ${x.schema}.${x.name} ${x.file}`)).toEqual([
+      'function acme_private.f 0001_use',
+      'function extensions.acme_proc 0001_use',
+      'relation auth.users 0003_schemas',
+      'schema auth.auth 0003_schemas',
+      'schema storage.storage 0003_schemas',
+      'schema graphql.graphql 0003_schemas',
+    ])
   })
 })

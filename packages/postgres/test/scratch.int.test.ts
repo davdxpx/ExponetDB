@@ -1,6 +1,6 @@
 import { dropDatabase, matrix, runAsSuperuser } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { missingObjects } from '../src/index.ts'
+import { extensionMembers, missingObjects } from '../src/index.ts'
 import { open, prepareDatabase } from './targets.ts'
 
 /**
@@ -21,6 +21,8 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         'CREATE SCHEMA acme_identity',
         'CREATE TABLE acme_identity.users (id uuid PRIMARY KEY)',
         "CREATE FUNCTION acme_identity.uid(uuid) RETURNS uuid LANGUAGE sql STABLE AS 'SELECT $1'",
+        'CREATE SCHEMA acme_ext',
+        'CREATE EXTENSION citext SCHEMA acme_ext',
       ])
     }, 120_000)
 
@@ -39,12 +41,28 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
             { kind: 'function', schema: 'acme_identity', name: 'jwt', args: null },
             { kind: 'relation', schema: 'acme_identity', name: 'users', args: null },
             { kind: 'type', schema: 'acme_identity', name: 'account_kind', args: null },
+            { kind: 'schema', schema: 'acme_identity', name: 'acme_identity', args: null },
+            { kind: 'schema', schema: 'storage', name: 'storage', args: null },
           ]),
         )
         expect(missing.map((m) => `${m.kind} ${m.name}(${m.args ?? '*'})`)).toEqual([
           'function uid()',
           'function jwt(*)',
           'type account_kind(*)',
+          'schema storage(*)',
+        ])
+        // An extension's member is installed with it, never copied (review of follow-up 2).
+        const members = await s.readOnly((rtx) =>
+          extensionMembers(rtx, [
+            { kind: 'type', schema: 'acme_ext', name: 'citext' },
+            { kind: 'function', schema: 'acme_ext', name: 'citext_eq' },
+            { kind: 'relation', schema: 'acme_identity', name: 'users' },
+            { kind: 'schema', schema: 'acme_ext', name: 'acme_ext' },
+          ]),
+        )
+        expect([...members]).toEqual([
+          ['type acme_ext.citext', 'citext'],
+          ['function acme_ext.citext_eq', 'citext'],
         ])
       } finally {
         await s.close()

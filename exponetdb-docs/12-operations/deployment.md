@@ -164,9 +164,13 @@ only) memory stays flat and parsing is as fast (1 200 parses of a 2 KiB file:
   all and 4 MiB per file, in a JSON body of at most 16 MiB; above that the
   request is `422 VALIDATION_FAILED` (`/files`, `too_large`) before anything
   is parsed. The first real history used a third of it.
-- `serve` parses one legacy history at a time (an import analysis plan, a
-  scratch preflight with files); another such request meanwhile is `429
-  RATE_LIMITED` with `Retry-After: 5`.
+- No gate around the parse **[DECIDED]** (security review of follow-up 2):
+  the parse of a history is synchronous, so two requests never parse at
+  the same time, and one parse is bounded by the flag and the limits
+  above. A process-wide slot (`429 RATE_LIMITED`), as first built, bounded
+  nothing more and let a caller with a slow target hold it across its
+  connections; it was removed. The reference scan of the scratch preflight
+  follows bodies two levels deep and stops there (`too_complex`).
 - Memory limits: `serve` and `worker` **512 MiB** each with the flag (the
   measured peaks leave about half of it free); the limit of 1 536 MiB set
   after the restart can stay until the flag is deployed. `gateway` parses

@@ -579,13 +579,23 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   FUNCTION`, and every statement and expression of a PL/pgSQL `DO` block
   count; a PL/pgSQL function body runs only when called and does not; a
   `DROP` needs nothing; an unqualified name resolves through the replay's
-  search path and is not counted; an object the history creates itself is
-  not a reference), must exist on the scratch target (a function in any
-  overload: a call site names no argument types). It fails with
-  `missing:<n>` and names each object with the first file that names it,
-  and is `unknown` (`unparsed:<n>`) when a file cannot be parsed. Both
-  checks give `copySchemas`, the schemas outside the scope the scratch
-  target lacks objects of.
+  search path and is not counted; an object an **earlier** statement of
+  the history creates is not a reference; `CALL`, `COMMENT ON` and a
+  schema an object is created in, granted on (`GRANT … ON SCHEMA`) or given
+  default privileges in count; review of follow-up 2), must exist on the
+  scratch target (a function in any overload: a call site names no
+  argument types). It fails with `missing:<n>` and names each object with
+  the first file that names it, an extension's member with its extension;
+  it is `unknown` with `unparsed:<n>` when a file cannot be parsed, and with
+  `too_complex` when bodies nest more than two levels deep (**[DECIDED]**,
+  security review of follow-up 2: deeper nesting exhausted the process; the
+  scan stops there). The files the hints call not applicable are left out,
+  as the replay skips them (`notApplicable`; CLI `--hints` or
+  `--not-applicable`). Both checks give `copySchemas`, the schemas outside
+  the scope the scratch target lacks objects of; never the schema of an
+  extension's member, which comes with the extension (install the
+  extensions first, the `extensions` check names them). Operator classes
+  and qualified operators are not read.
 - **Schema-only copies.** `exponetdb migration import
   scratch-copy-commands --target … --scratch …` runs the preflight and
   prints the shell commands (read only, nothing is run; **[OBSERVED]**
@@ -601,7 +611,10 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   `$SCRATCH_URL`. No data, no credential: the person sets both connection
   strings. Owners and grants are kept, so the roles must exist where the
   copy goes (the same cluster does). The copies are outside the managed
-  scope, so an in-place reset keeps them.
+  scope, so an in-place reset keeps them. After a replay the history's own
+  triggers and policies on them (on `auth.users`, on `storage.objects`)
+  depend on the managed scope, so the reset refuses and names them; drop
+  them on the scratch target first, the next replay creates them again.
 - **In-place reset.** A used scratch target is reset without re-creating
   its database (which would change the oid the registry recorded and fail
   `database_mismatch`): `exponetdb migration import scratch-reset-sql

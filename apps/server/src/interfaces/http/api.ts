@@ -330,32 +330,6 @@ function bundleFileOf(raw: unknown): (typeof BUNDLE_FILES)[number] {
 /** The request header that names a CLI step-up receipt (ADR-0026). */
 export const STEP_UP_HEADER = 'exponetdb-step-up'
 
-/**
- * A legacy history is parsed file by file in this process (the replay
- * summary, the references of the scratch preflight): one such request at a
- * time, so their memory never adds up (follow-up 2, F4). Another one is
- * told to try again.
- */
-export const LEGACY_PARSE_SLOTS = 1
-let legacyParses = 0
-
-class LegacyParseBusy extends HttpRefusal {
-  readonly retryAfterSeconds = 5
-  constructor() {
-    super('RATE_LIMITED')
-  }
-}
-
-export async function oneLegacyParse<T>(run: () => Promise<T>): Promise<T> {
-  if (legacyParses >= LEGACY_PARSE_SLOTS) throw new LegacyParseBusy()
-  legacyParses++
-  try {
-    return await run()
-  } finally {
-    legacyParses--
-  }
-}
-
 export const HANDLERS: Readonly<Record<string, Handler>> = {
   // ----- /auth: sign-in and enrollment (public ceremonies) -----
   loginPasskeyOptions: async (app, call) => outcome(await app.loginPasskeyOptions(call.meta)),
@@ -1429,13 +1403,11 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     ),
   planImportAnalysis: async (app, call) =>
     value(
-      await oneLegacyParse(() =>
-        app.migrations.planImportAnalysis(
-          caller(call),
-          target(call),
-          ImportAnalysisRequestSchema.parse(call.body),
-          idempotency(call),
-        ),
+      await app.migrations.planImportAnalysis(
+        caller(call),
+        target(call),
+        ImportAnalysisRequestSchema.parse(call.body),
+        idempotency(call),
       ),
     ),
   checkScratchTarget: async (app, call) =>
@@ -1450,14 +1422,13 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   checkScratchTargetForFiles: async (app, call) => {
     const body = ScratchCheckRequestSchema.parse(call.body)
     return value(
-      await oneLegacyParse(() =>
-        app.migrations.scratchCheck(
-          caller(call),
-          target(call),
-          body.scratchTarget,
-          body.role,
-          body.files,
-        ),
+      await app.migrations.scratchCheck(
+        caller(call),
+        target(call),
+        body.scratchTarget,
+        body.role,
+        body.files,
+        body.notApplicable,
       ),
     )
   },

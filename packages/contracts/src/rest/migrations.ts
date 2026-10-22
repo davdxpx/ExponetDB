@@ -735,6 +735,10 @@ export const ScratchCheckRequestSchema = z
           'The execution role alias the replay runs as (the analysis hint role; default owner).',
       }),
     files: LegacyFilesSchema,
+    notApplicable: z.array(z.string().max(200)).max(1000).optional().meta({
+      description:
+        'File stems the replay skips (the analysis hints): what they name is not checked.',
+    }),
   })
   .meta({ id: 'ScratchCheckRequest' })
 

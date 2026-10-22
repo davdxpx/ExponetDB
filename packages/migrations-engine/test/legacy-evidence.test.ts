@@ -194,6 +194,29 @@ $fn$`
     }
   })
 
+  it("never take a LANGUAGE inside a literal for the routine's language (security review)", () => {
+    const python = (indent: string) => `CREATE FUNCTION public.acme_py(x int) RETURNS int AS $py$
+if x > 1:
+${indent}return 2
+return 1
+$py$ SET application_name = 'language sql' LANGUAGE plpython3u`
+    // The two bodies differ in meaning by their indentation alone.
+    expect(statementsMatch([python('    ')], [[python('')]], [`${python('')};`])).toBe(null)
+    // A real LANGUAGE sql after the body, also after a literal, is still code.
+    const sql = (body: string) =>
+      `CREATE FUNCTION public.acme_s() RETURNS int SET application_name = 'x' AS $s$ ${body} $s$ LANGUAGE sql`
+    expect(
+      statementsMatch(
+        [sql('SELECT 1')],
+        [[sql('SELECT  1 -- one')]],
+        [`${sql('SELECT  1 -- one')};`],
+      ),
+    ).toEqual({
+      strength: 'medium',
+      how: 'statements_bodies',
+    })
+  })
+
   it('never match a different executable text, an empty entry or unreadable text', () => {
     expect(statementsMatch([STRIPPED_OUTSIDE.replace('bigint', 'int')], [PARSED], [FILE])).toBe(
       null,

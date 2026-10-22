@@ -1911,6 +1911,8 @@ Runs: against the server; effect: read; action: `migration.import.scratch_check`
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
 | `--scratch <target>` | The scratch target (path or tgt_ id). (required) |
 | `--role <alias>` | The execution role alias the replay runs as (the hints role; default owner). |
+| `--hints <path>` | The analysis hints file: its role and notApplicable apply here too (the replay skips those files). |
+| `--not-applicable <files>` | Legacy files the replay skips, so the check does not read them either. |
 
 ### migration import scratch-copy-commands
 
@@ -1927,6 +1929,8 @@ Runs: against the server; effect: read; action: `migration.import.scratch_check`
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
 | `--scratch <target>` | The scratch target (path or tgt_ id). (required) |
 | `--role <alias>` | The execution role alias the replay runs as (the hints role; default owner). |
+| `--hints <path>` | The analysis hints file: its role and notApplicable apply here too (the replay skips those files). |
+| `--not-applicable <files>` | Legacy files the replay skips, so the check does not read them either. |
 
 ### migration import report
 
