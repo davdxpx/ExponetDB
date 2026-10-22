@@ -12,10 +12,14 @@ const BASE = {
 describe('scratchResetSql', () => {
   it('stops unless the marker names this target and the ledger is empty', () => {
     const sql = scratchResetSql({ ...BASE, includeSchemas: ['public', 'app'] })
-    expect(sql).toContain("installation_id = 'ins_01M5G6EQ7KP3PMPC7G3HJ7KH7R'")
-    expect(sql).toContain("target_id = 'tgt_01M5G6EQ7KP3PMPC7G3HJ7KH7R'")
-    expect(sql).toContain('generation = 2')
-    expect(sql).toContain('IF EXISTS (SELECT FROM exponetdb.schema_migrations)')
+    expect(sql).toContain(
+      "installation_id OPERATOR(pg_catalog.=) 'ins_01M5G6EQ7KP3PMPC7G3HJ7KH7R'::pg_catalog.text",
+    )
+    expect(sql).toContain(
+      "target_id OPERATOR(pg_catalog.=) 'tgt_01M5G6EQ7KP3PMPC7G3HJ7KH7R'::pg_catalog.text",
+    )
+    expect(sql).toContain('generation OPERATOR(pg_catalog.=) 2::pg_catalog.int4')
+    expect(sql).toContain('IF EXISTS (SELECT FROM ONLY exponetdb.schema_migrations)')
     expect(sql).toContain("managed text[] := ARRAY['public', 'app']::text[];")
     expect(sql.startsWith('-- ExponetDB')).toBe(true)
     expect(sql.trimEnd().endsWith('COMMIT;')).toBe(true)
@@ -45,6 +49,18 @@ describe('scratchResetSql', () => {
     expect(sql).toContain('DO $reset2$\n')
     expect(sql.trimEnd().endsWith('$reset2$;\nCOMMIT;')).toBe(true)
     expect(sql.split('$reset2$')).toHaveLength(3)
+  })
+
+  it('reads the marker and the ledger only once the catalog shows them as ExponetDB made them', () => {
+    const sql = scratchResetSql({ ...BASE, includeSchemas: ['public'] })
+    const shape = sql.indexOf("c.relkind OPERATOR(pg_catalog.=) 'r'")
+    expect(shape).toBeGreaterThan(0)
+    expect(sql).toContain(
+      "pg_catalog.pg_get_userbyid(c.relowner) OPERATOR(pg_catalog.=) 'exponetdb_ledger_owner'",
+    )
+    expect(shape).toBeLessThan(sql.indexOf('SELECT FROM ONLY exponetdb.target_identity'))
+    expect(sql).toContain('SELECT FROM ONLY exponetdb.schema_migrations')
+    expect(sql).not.toMatch(/FROM exponetdb\./)
   })
 
   it('resolves every name in the system catalog only', () => {

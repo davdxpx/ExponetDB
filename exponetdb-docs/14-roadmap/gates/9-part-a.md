@@ -4,7 +4,7 @@
 |---|---|
 | What this is | The progress and evidence record of **Part A** of the owner's Wave 9 order: "Part A correction and pull-forward". Part A corrects Wave 6 defects against DECIDED documents and contracts (A1 to A3) and brings forward the product capabilities of Wave 10 that every Supabase-origin adopter needs (A4 to A9). It is not a gate of its own: its items are evidence for G9 and for the later G10; the G9 record (`gates/9.md`) follows with Part B |
 | Wave | [Wave 9](../implementation-waves.md#wave-9-backup-restore-performance) |
-| Status | **IN PROGRESS.** Phase 0 (inventory, the order committed, the decisions recorded, this record) done (§1, §2); the items are listed in §3 and their evidence in §4. Only the owner accepts G9 |
+| Status | **DONE, waiting for the owner.** Phase 0 (§1, §2), A1 to A10 (§3, evidence in §4), two independent review rounds and a verification round (§6), every finding fixed or opened as an owner decision (OD-53, OD-54, OD-55); the pull request is `davdxpx/ExponetDB#34`. Open for the owner: OD-8 before Part B, OD-53, OD-54, OD-55, the owner test package run on the lab (NOT PROVEN until then), the execution-role membership check on REOSA staging (§5). Only the owner accepts G9 |
 | Authorized | 2026-10-21, by the owner's Wave 9 order ([`../orders/wave-9-order.md`](../orders/wave-9-order.md), "ExponetDB — Wave 9: Backup, restore, performance, with the migration engine made fit for real imported schemas", the implementation prompt the owner issued for this session) |
 | Base | `main` at `485619c54b3cc49b0397a1f7ad16fc9a0a6f6d1d` (merge of `davdxpx/ExponetDB#32`; the order was prepared on the same commit) |
 | Branch | `ccr-3132aada-w0z6wp`, assigned by the session (the session's branch rule wins over the `feat/…` naming, order §2) |
@@ -21,11 +21,17 @@ it here, with the commit). **G7 and G8 are not accepted yet; this record
 claims nothing about them. G2 off-host deployment evidence is still
 outstanding.** **[OBSERVED]** (2026-10-22) CI runs for this pull request
 (GitHub Actions, 17 jobs including the systemd host scenarios; the earlier
-statement that no runner starts is no longer true): on `4a26597` (run
-39705305083) 16 jobs pass and `Host scenario journal (systemd)` fails; it
-fails the same way on `main` at `485619c` (run 39656574621), so it is not
-this pull request's (noted on the pull request; no fix exists yet). No PASS
-here is derived from a workflow file alone. Nothing
+statement that no runner starts is no longer true). On `ba763db` (run
+39712668586) 15 of 17 jobs pass. `Host scenario journal (systemd)` fails
+every time, as it does on `main` at `485619c` (run 39656574621), so it is
+not this pull request's (noted on the pull request; no fix exists yet). The
+TypeScript job passed every test and failed in `bun audit` (the audit
+service closed the connection); its one re-run failed in an intermittent
+`apps/design-system` filter bar test that Part A does not touch and that
+passed in the first attempt and locally (a race between two key presses;
+the proposed fix for `main` is on the pull request). Earlier heads showed
+other one-off failures in code Part A does not touch (§6, the pull
+request). No PASS here is derived from a workflow file alone. Nothing
 in Part A deploys anything, enrolls a node, or connects to a real database
 (order §1): every PostgreSQL claim is proven against disposable containers.
 
@@ -118,7 +124,7 @@ another repository.
 | A7 | Scratch targets: preflight, in-place reset, database retire | `ScratchCheck`, action `migration.import.scratch_check` and route `checkScratchTarget`; actions `registry.database.retire(.plan)`, route `planDatabaseRetirement`, `DatabaseRetireRequest`, conflicts `database_retired`, `database_in_use` (additive) | `migrations-engine/src/scratch-check.ts`, `postgres/src/scratch.ts` (objects outside the scope, presence by catalog lookup); `migrations/src/format/scratch-reset.ts` (the reset script); registry planner and `DatabaseRetireKind`; CLI `migration import scratch-check`, `migration import scratch-reset-sql`, `cluster database retire` | §4.7 | PASS (MCP not offered; see §5) |
 | A8 | External-cluster onboarding without hand-made SQL | `getClusterBootstrapSql` query `database` (repeatable), `project`, `environment`, `ledgers`; `ClusterBootstrapSql.pendingDatabases`, `executionRoles`, `legacyLedgers` (additive) | `postgres/src/bootstrap.ts` (guarded `DO` blocks, the execution-role grant under the planner's checks, the psql `\connect` conninfo), `registry/src/bootstrap.ts` (roles of placed and requested projects, excused `BYPASSRLS`); CLI `cluster bootstrap-sql --database --project --environment --ledger`, `cluster declare-tier`; testkit `runPsql`; docs credentials-and-roles §8, registry §2.2, [`onboard-external-cluster.md`](../../12-operations/onboard-external-cluster.md), threat T36; OD-54 opened | §4.8 | PASS (the installed-CLI run of the new commands lands with A1's end-to-end test) |
 | A9 | Documents brought up to the real state | — | docs only (§4.9) | §4.9 | PASS |
-| A10 | Part A done: two independent review rounds, the pull request, the owner test package | — | — | open | open |
+| A10 | Part A done: two independent review rounds, the pull request, the owner test package | — | — | §6.2 to §6.4, [`owner-test-package.md`](../../04-migrations/owner-test-package.md), `davdxpx/ExponetDB#34` | PASS: two full review rounds and a verification round, every finding fixed or opened as OD-55; the lab walk of the owner test package is NOT PROVEN until the owner runs it |
 
 ## 4. Evidence log
 
@@ -590,6 +596,14 @@ written as **[OBSERVED]** with that source, everything still to come as
 - A8: a database whose name holds a double quote gets no legacy ledger
   grant from the script (psql cannot `\connect` to it); the script says so,
   and a person grants the read by hand.
+- **OD-55 (open), threat T38.** Procedural code a migration or a replay
+  runs (a `DO` block, a routine it creates and calls) can switch to any
+  role the migrator holds and back, unseen by the executor's guard: the
+  ledger owner (the target's ledger and marker inside the transaction),
+  the migrator, other projects' execution roles on the cluster. A forged
+  ledger diverges from the Control Store mirror (C-19); production needs a
+  person and Control Store verification runs. Part A closed its one path
+  to superuser code (§6.4).
 - Review round 2 (C2-S2), for the owner: an execution role that is a
   member of a role with `BYPASSRLS` (Supabase's `service_role`) or of a
   `pg_*` role is never usable, declared or not (ADR-0034 excuses the role's
@@ -711,3 +725,21 @@ with a test that fails on the code before it unless the row says otherwise.
 | C2-P3-4 | P3 | The `low` tier normalized a dollar-quoted default before a routine's body | only the string after `AS` (or `DO`) is a code body | `legacy-evidence.test.ts` |
 | C2-S1 | suspected | An imported target unreachable during the replay left the report `pending`, not `incomplete` as §6 says | `incomplete`, `target_unavailable` (before the replay: not applied; after it: the scratch target took the files) | `legacy-ledger-match.int.test.ts` "an imported target that cannot be read" (a connector that refuses it) |
 | C2-S2 | suspected, owner question | ADR-0034 excuses only the role's own `BYPASSRLS`: an owner that is a member of a role with `BYPASSRLS` (Supabase's `service_role`) or of a `pg_*` role reaches a protected role and is never usable, declared or not | not changed: the reach rule is a DECIDED security rule (order §1, stop-and-ask); the owner checks the `<env>_owner` memberships on REOSA staging before §8 of the owner test package (§5) | — |
+
+### 6.4 Review round 3: the round-2 fixes verified (2026-10-22)
+
+Round 2 found a P1 and the ledger matching was rewritten, so a third fresh
+reviewer (no part in building or in rounds 1 and 2) verified the round-2
+commits `65b4837` and `ba763db` on disposable containers, edited nothing,
+and confirmed the frozen pieces unchanged. Every other round-2 fix it
+verified as correct and complete: the reset's `search_path`, the
+bootstrap's path in every session, the `FOR SHARE` lock in both orders (no
+deadlock), the `relateLedger` rewrite (per ledger; named first, then
+unnamed pairing; leftover entries kept; `content_names_other_file` never
+hides a recorded file), `isCodeBody`, and `target_unavailable` (no read
+swallowed as empty).
+
+| # | Severity | Finding | Fix | Test |
+|---|---|---|---|---|
+| S3-P1-1 | P1 (since Wave 6; it defeated S2-P1-1) | The reset read its marker with `SELECT FROM exponetdb.target_identity`, qualified, so the pinned path did not help: a replayed `DO` block that ran `EXECUTE 'SET ROLE exponetdb_ledger_owner'` (the migrator holds `SET` on the ledger owner) and switched back could replace the marker with a view whose condition calls a planted function, which then ran as the superuser running the reset (the reviewer: `ALTER ROLE … SUPERUSER` ran) | the reset reads the marker and the ledger only once the catalog shows plain tables of `exponetdb_ledger_owner` with built-in column types, no children, no row security; it reads them `ONLY` and with qualified operators and casts; otherwise it refuses and says to re-create the scratch database (legacy-import.md §2.5, T37) | `scratch-check.int.test.ts` replaces the marker with such a view: refused, the planted function never runs (without the fix it ran and the reset went on to its dependency check); `scratch-reset.test.ts` |
+| S3-OD | open decision | The general cause: procedural code in a migration session can act as any role the migrator holds (the ledger owner, the migrator, other projects' execution roles on the cluster) and switch back unseen; also for authored bundles, also an agent's nonprod plan (proven on PostgreSQL 17) | not changed in Part A: the containment needs a change to a DECIDED rule (the ledger in the same transaction, C-19; `NOLOGIN` execution roles), a stop-and-ask point of the order; **OD-55** and threat T38 opened with options and a recommendation | — |

@@ -56,13 +56,35 @@ export function scratchResetSql(input: ScratchResetInput): string {
   g record;
   e record;
 BEGIN
-  IF NOT EXISTS (SELECT FROM exponetdb.target_identity
-                  WHERE installation_id = ${literal(input.installationId)}
-                    AND target_id = ${literal(input.targetId)}
-                    AND generation = ${input.generation}) THEN
+  -- The marker and the ledger are read only once the catalog shows them as ExponetDB made
+  -- them: plain tables of the ledger owner, without children or row security, of built-in
+  -- column types. A replay that reached the ledger owner could have put a view or a type
+  -- there whose code would run as the superuser running this script.
+  IF EXISTS (
+       SELECT FROM pg_catalog.unnest(ARRAY['target_identity', 'schema_migrations']) AS t(name)
+        WHERE NOT EXISTS (
+                SELECT FROM pg_catalog.pg_class c
+                  JOIN pg_catalog.pg_namespace n ON n.oid OPERATOR(pg_catalog.=) c.relnamespace
+                 WHERE n.nspname OPERATOR(pg_catalog.=) 'exponetdb'
+                   AND c.relname OPERATOR(pg_catalog.=) t.name
+                   AND c.relkind OPERATOR(pg_catalog.=) 'r'
+                   AND NOT c.relrowsecurity AND NOT c.relhassubclass
+                   AND pg_catalog.pg_get_userbyid(c.relowner) OPERATOR(pg_catalog.=) 'exponetdb_ledger_owner'
+                   AND NOT EXISTS (
+                         SELECT FROM pg_catalog.pg_attribute a
+                           JOIN pg_catalog.pg_type ty ON ty.oid OPERATOR(pg_catalog.=) a.atttypid
+                          WHERE a.attrelid OPERATOR(pg_catalog.=) c.oid AND a.attnum OPERATOR(pg_catalog.>) 0
+                            AND NOT a.attisdropped
+                            AND ty.typnamespace OPERATOR(pg_catalog.<>) 'pg_catalog'::pg_catalog.regnamespace))) THEN
+    RAISE EXCEPTION 'the identity marker or the ledger of this database is not as ExponetDB made it: re-create the scratch database';
+  END IF;
+  IF NOT EXISTS (SELECT FROM ONLY exponetdb.target_identity
+                  WHERE installation_id OPERATOR(pg_catalog.=) ${literal(input.installationId)}::pg_catalog.text
+                    AND target_id OPERATOR(pg_catalog.=) ${literal(input.targetId)}::pg_catalog.text
+                    AND generation OPERATOR(pg_catalog.=) ${input.generation}::pg_catalog.int4) THEN
     RAISE EXCEPTION 'this database is not the scratch target %', ${literal(shown(input.targetPath))};
   END IF;
-  IF EXISTS (SELECT FROM exponetdb.schema_migrations) THEN
+  IF EXISTS (SELECT FROM ONLY exponetdb.schema_migrations) THEN
     RAISE EXCEPTION 'the database has ledger rows: it was migrated, not only replayed';
   END IF;
   -- DROP SCHEMA ... CASCADE would also drop what lies outside the scope and depends on it (a

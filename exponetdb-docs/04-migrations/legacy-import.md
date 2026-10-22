@@ -519,7 +519,13 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   target id, generation, the project's managed scope) that a person runs
   with `psql -v ON_ERROR_STOP=1` as a superuser connected to that database.
   It stops unless the database carries the scratch target's marker and has
-  no ledger row, and **[DECIDED]** (Wave 9 Part A, review round 1) when an
+  no ledger row (**[DECIDED]**, review round 3: it reads both only once the
+  catalog shows them as ExponetDB made them, plain tables of the ledger
+  owner with built-in column types, without children or row security, and
+  with qualified operators; a replay's procedural code can act as the
+  ledger owner, [OD-55](../00-product/open-decisions.md#od-55-procedural-code-in-a-migration-session-can-act-as-any-role-the-migrator-holds),
+  and could otherwise have left a view there whose code runs as the
+  superuser; a refused script says to re-create the scratch database), and **[DECIDED]** (Wave 9 Part A, review round 1) when an
   object outside the managed scope depends on one inside it (a view, a
   column's type, a default, a trigger, a policy, a cast): `DROP SCHEMA …
   CASCADE` would drop it too, so the script refuses and names them (from

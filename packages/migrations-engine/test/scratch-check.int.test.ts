@@ -343,6 +343,28 @@ describe('the scratch preflight', () => {
       c.query('SELECT count(*)::int AS calls FROM acme_identity.exdb_hijacked'),
     )
     expect(hijacked.rows[0]).toEqual({ calls: 0 })
+    // A replay that reached the ledger owner (a DO block's dynamic SET ROLE, OD-55) could put
+    // a view in the marker's place whose condition runs a planted function as the superuser
+    // (review round 3): the reset refuses before it reads the marker, and nothing runs.
+    await runAsSuperuser(pg17, scratchDb, [
+      `CREATE FUNCTION public.exdb_marker_hijack() RETURNS boolean LANGUAGE plpgsql AS $f$
+         BEGIN INSERT INTO acme_identity.exdb_hijacked VALUES (2); RETURN true; END $f$`,
+      'ALTER TABLE exponetdb.target_identity RENAME TO target_identity_kept',
+      'CREATE VIEW exponetdb.target_identity AS SELECT * FROM exponetdb.target_identity_kept WHERE public.exdb_marker_hijack()',
+      'ALTER VIEW exponetdb.target_identity OWNER TO exponetdb_ledger_owner',
+    ])
+    await expect(runAsSuperuser(pg17, scratchDb, [script])).rejects.toMatchObject({
+      message: expect.stringContaining('is not as ExponetDB made it'),
+    })
+    const viaMarker = await withSuperuser(pg17, scratchDb, (c) =>
+      c.query('SELECT count(*)::int AS calls FROM acme_identity.exdb_hijacked'),
+    )
+    expect(viaMarker.rows[0]).toEqual({ calls: 0 })
+    await runAsSuperuser(pg17, scratchDb, [
+      'DROP VIEW exponetdb.target_identity',
+      'ALTER TABLE exponetdb.target_identity_kept RENAME TO target_identity',
+      'DROP FUNCTION public.exdb_marker_hijack()',
+    ])
     await runAsSuperuser(pg17, scratchDb, ['DROP TABLE acme_identity.exdb_hijacked'])
     const publication = await withSuperuser(pg17, scratchDb, (c) =>
       c.query(

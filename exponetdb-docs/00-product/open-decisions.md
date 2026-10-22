@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); OD-50 added on 2026-10-21 with the CLI's scope presets; on 2026-10-21 the owner's Wave 9 order ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)) split OD-7 into OD-7a (staging: yes) and OD-7b (production: no applies before Wave 11), decided the engine part of OD-4 (pgBackRest; the storage stays open until the measured spike B0), and added OD-51 (a declared `BYPASSRLS` execution-role exception) and OD-52 (adopting a running pgBackRest setup), both decided by the order's defaults; OD-53 (fingerprint lineage across per-environment owner roles) added on 2026-10-21 by Part A (A5); OD-54 (how an external cluster gains the node agent) added on 2026-10-22 by Part A (A8); OD-8 stays open and blocks Part B of Wave 9 (see ["Decisions of the Wave 9 order"](#decisions-of-the-wave-9-order-2026-10-21)); all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); OD-50 added on 2026-10-21 with the CLI's scope presets; on 2026-10-21 the owner's Wave 9 order ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)) split OD-7 into OD-7a (staging: yes) and OD-7b (production: no applies before Wave 11), decided the engine part of OD-4 (pgBackRest; the storage stays open until the measured spike B0), and added OD-51 (a declared `BYPASSRLS` execution-role exception) and OD-52 (adopting a running pgBackRest setup), both decided by the order's defaults; OD-53 (fingerprint lineage across per-environment owner roles) added on 2026-10-21 by Part A (A5); OD-54 (how an external cluster gains the node agent) added on 2026-10-22 by Part A (A8); OD-55 (procedural code in a migration session can act as any role the migrator holds) added on 2026-10-22 by Part A's review round 3; OD-8 stays open and blocks Part B of Wave 9 (see ["Decisions of the Wave 9 order"](#decisions-of-the-wave-9-order-2026-10-21)); all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -74,6 +74,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-52 | Adopting a running, hand-made pgBackRest setup | **resolved 2026-10-21** (Wave 9 order default D-B2; stands unless the owner overruled it) | adopt, then own: first observe the existing stanza, repositories and schedules without changing them, then take ownership of configuration and scheduling through a planned, verified hand-over that stays reversible until confirmed; an ADR in Wave 9 B0 | Wave 9 Part B (B0, B2) | decided |
 | OD-53 | Fingerprint lineage when environments use different owner roles | open | (a) keep it fail closed: a lineage mismatch caused by owner names needs an approval, as today; (b) compare the two stored documents with the execution roles mapped by alias (fp1 unchanged, a new lineage comparison); (c) treat a mismatch only in owners and grantees of execution roles as a warning | production plans of a non-legacy project whose environments are bound to different owner roles (ADR-0034 §5) | yes |
 | OD-54 | How an external cluster gains the node agent | open | (a) an additive, one-way operation `registry.cluster.adopt_agent` (human, production authority, re-authentication): an enrolled node on a server whose report carries the cluster's pinned `system_identifier`; the record gains the server and `management_mode = agent`, targets keep placement and generation; an additive bundle relaxes `EXG07` for exactly this transition; (b) register a second cluster record in agent mode and move each target (§3 of registry.md: new generation, marker re-stamped), then retire the external record; (c) external stays external in V1 | node capabilities (backups, roles, `pg_hba`, TLS) on a cluster first registered external, such as REOSA staging on `reos-db-01` (OD-7a) in Wave 9 Part B | yes |
+| OD-55 | Procedural code in a migration session can act as any role the migrator holds | open | (d) the executor compares the `exponetdb` schema's tables before and after each authored statement in the transaction and refuses a change it did not make, plus (c) a person approves every agent-initiated plan with procedural statements on every tier; (a) per-project migrator logins and (b) refusing role switches and dynamic `EXECUTE` in parsed PL/pgSQL bodies stay for later | agents applying bundles with `DO` blocks or routines without a person; the trust in a target's ledger and marker written in a migration's transaction | no (Part A closed its one path to superuser code) |
 
 ---
 
@@ -1579,6 +1580,60 @@ History:
 - **Blocks.** Node capabilities on a cluster first registered external
   (Part B's B2 on `reos-db-01` if staging is registered external first).
   Nothing in Part A.
+
+## OD-55. Procedural code in a migration session can act as any role the migrator holds
+
+- **Status.** OPEN (found in Wave 9 Part A, review round 3, 2026-10-22;
+  the engine has worked this way since Wave 6)
+- **Question.** How is code a migration runs kept to the project's
+  execution role when that code is procedural?
+- **Why it matters.** **[OBSERVED]** (PostgreSQL 17, 2026-10-22) An
+  authored statement runs in the migrator's session under `SET LOCAL ROLE
+  <execution role>`. The parser refuses `SET ROLE`, `RESET ROLE` and
+  `set_config('role', …)` at the top level, and the executor compares
+  `current_user` before and after each statement. Procedural code is
+  opaque to both: a `DO` block, or a routine the migration creates and
+  calls, can run `EXECUTE 'SET ROLE exponetdb_ledger_owner'`, `RESET ROLE`
+  (the migrator itself) or `SET ROLE` to another project's execution role
+  on the same cluster, act, and switch back before it returns. Proven: a
+  block went from `app_owner` to the ledger owner, to the migrator, to
+  another project's owner, and back, unseen by the guard. As the ledger
+  owner it can write the target's ledger and identity marker inside the
+  migration's transaction; as another project's owner it can change that
+  project's objects in the same database. The ledger is written in the
+  same transaction as the change (C-19, `ledger.md`), so the migrator's
+  session must be able to become the ledger owner, and execution roles
+  are `NOLOGIN` by rule. That is why no session-level containment exists
+  in the current design. An agent can plan and apply such a bundle on
+  nonprod without a person; production needs a person's approval and the
+  evidence of another environment, which Control Store records hold (a
+  forged target ledger does not create verification runs, and a ledger
+  that diverges from the Control Store mirror is reported as drift and
+  blocks schema changes, C-19). Part A's legacy
+  replay runs adopted files the same way, on the scratch target only.
+  Part A closed the one path from there to superuser code: the reset
+  script now reads the scratch marker only once the catalog shows it as
+  ExponetDB made it (Part A record §6.4, threat T37).
+- **Options.** (a) per-project migrator logins that hold `SET` on one
+  project's execution roles only (more credentials per cluster; the ledger
+  owner is still reachable, so this addresses cross-project use, not the
+  ledger); (b) parse the PL/pgSQL bodies of `DO` blocks and of routines a
+  migration creates (the PL/pgSQL parser of `libpg_query` 18, as in A6) and
+  refuse role switches and dynamic `EXECUTE` (Supabase-origin histories use
+  `EXECUTE format(…)` widely, and SQL-language bodies need their own
+  check); (c) a person approves every agent-initiated plan whose
+  statements are procedural, on every tier (a new, stricter policy rule);
+  (d) the executor compares the `exponetdb` schema's tables (rows and
+  relation shapes) before and after each authored statement in the
+  transaction, and refuses and rolls back a change it did not make itself
+  (closes ledger and marker forging without changing the model).
+- **Recommendation.** (d) together with (c): both fail closed, need no new
+  role or credential and relax nothing; (a) and (b) stay for a later wave.
+  Cross-project use inside one shared database remains a residual risk
+  until (a); projects normally have their own database.
+- **Blocks.** Nothing in Part A. It should be decided before agents apply
+  bundles with procedural statements without a person on targets whose
+  ledger is trusted.
 
 ## Decisions of the Wave 9 order (2026-10-21)
 
