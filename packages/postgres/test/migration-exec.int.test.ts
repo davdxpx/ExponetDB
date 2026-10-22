@@ -189,7 +189,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
           'exponetdb_migrator',
           'no_such_role',
         ])
-        expect(facts.map(executionRoleProblem)).toEqual([
+        expect(facts.map((f) => executionRoleProblem(f))).toEqual([
           null,
           'can_login',
           'exponetdb_role',
@@ -200,7 +200,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
           ['app_owner', 'app_inherits', 'app_reacher'],
           'mx_member',
         )
-        expect(other.map(executionRoleProblem)).toEqual([
+        expect(other.map((f) => executionRoleProblem(f))).toEqual([
           null,
           'membership_inherits',
           'reaches_protected_role',
@@ -211,7 +211,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
           const seen = await observer0.readOnly((tx) =>
             executionRoleFacts(tx, ['app_owner', 'app_inherits'], 'exponetdb_migrator'),
           )
-          expect(seen.map(executionRoleProblem)).toEqual([null, 'not_a_member'])
+          expect(seen.map((f) => executionRoleProblem(f))).toEqual([null, 'not_a_member'])
         } finally {
           await observer0.close()
         }

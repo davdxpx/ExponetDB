@@ -20,9 +20,9 @@ flowchart TB
     G[exponetdb gateway<br/>agent mTLS :7443 on 10.8.2.2]
     CS[(Control Store<br/>Coolify PostgreSQL resource)]
   end
-  subgraph db01["reos-db-01 (Hetzner Cloud, Falkenstein), 10.8.1.2"]
-    PG[(PostgreSQL 17 + pgvector<br/>reosa production, reosa staging)]
-    AG[exponetdb-node + helper]
+  subgraph db01["reos-db-01 (Hetzner Cloud, Falkenstein), 10.8.1.1"]
+    PG[(PostgreSQL 17.11 + pgvector<br/>reosa staging; reosa production planned)]
+    AG[exponetdb-node + helper<br/>planned, not installed]
   end
   OS[(Object storage<br/>backups)]
   U -- HTTPS --> T --> S
@@ -44,8 +44,8 @@ flowchart TB
 | Image | one container image `exponetdb`, three Coolify resources from it: `serve`, `worker`, `gateway` (command argument selects the role) |
 | Control Store | dedicated Coolify PostgreSQL resource (PostgreSQL 17) on `reos-01`, database `exponetdb_control`, not published outside the Docker network |
 | Gateway | from Wave 5: listens on the private address `10.8.2.2:7443` only, mTLS; not routed through Traefik ([OD-18](../00-product/open-decisions.md#od-18-agent-gateway-exposure)). Wave 2: process role without an agent listener |
-| Node agent | `exponetdb-node` + `exponetdb-node-helper` as systemd units on `reos-db-01`, installed from a signed package or a release binary with checksum |
-| Managed PostgreSQL | on `reos-db-01`, installed from PGDG, systemd-managed, listening on `10.8.1.2` and loopback |
+| Node agent | `exponetdb-node` + `exponetdb-node-helper` as systemd units on `reos-db-01`, installed from a signed package or a release binary with checksum. **[OBSERVED]** (owner's Wave 9 order §6, 2026-10-21) not installed: the host runs without an agent (an external cluster); installing it waits for the G5 waiver's expiry condition and [OD-54](../00-product/open-decisions.md#od-54-how-an-external-cluster-gains-the-node-agent) |
+| Managed PostgreSQL | on `reos-db-01`, PostgreSQL 17.11 installed from PGDG, systemd-managed, on the private address `10.8.1.1`; TLS name `reosdb01.exponet.cloud` with the host's own name-constrained CA (`DNS:exponet.cloud`, `IP:10.8.0.0/16`), `hostssl` with SCRAM only (**[OBSERVED]** owner's Wave 9 order §6, 2026-10-21) |
 
 **Why three resources and not one** ([ADR-0019](../01-architecture/adr/0019-process-roles-and-web-app.md)):
 the roles hold different secrets (only `worker` decrypts target credentials and
@@ -82,7 +82,7 @@ startup; problems name the variable and a reason, never a value.
 | `EXPONETDB_LISTEN` | serve | default `0.0.0.0:8080`; probes only in Wave 2 |
 | `EXPONETDB_PUBLIC_URL` | serve (**required since Wave 3A**), `bootstrap owner`, `auth recover-owner` | the public origin only (`https://db.exponet.cloud`, no path): the Web App, the exact `Origin` check of every mutating request, the WebAuthn origin and the setup and recovery links; `http:` only on a loopback host; also the OAuth issuer from Wave 3B |
 | `EXPONETDB_WEBAUTHN_RP_ID` | serve, `bootstrap owner`, `auth recover-owner` (optional) | the WebAuthn relying-party ID: the host of `EXPONETDB_PUBLIC_URL` (default) or a parent domain of it; never taken from a request. Changing it later makes every registered passkey unusable |
-| `EXPONETDB_EGRESS_ADDRESSES` | serve (optional; needed before a `pg_hba` plan on an agent-managed cluster with active credentials) | up to 8 single IP addresses (comma separated, lowercase) from which `serve` and the worker connect to managed clusters; a `pg_hba` plan protects ExponetDB's own access from them ([control-plane.md §9.6](../07-node-agent/control-plane.md#96-verification-by-kind)). On `reos-01` that is the private address `10.8.2.2` (an owner setting; [ASSUMPTION] as in credentials-and-roles.md §7) |
+| `EXPONETDB_EGRESS_ADDRESSES` | serve (optional; needed before a `pg_hba` plan on an agent-managed cluster with active credentials) | up to 8 single IP addresses (comma separated, lowercase) from which `serve` and the worker connect to managed clusters; a `pg_hba` plan protects ExponetDB's own access from them ([control-plane.md §9.6](../07-node-agent/control-plane.md#96-verification-by-kind)). On `reos-01` that is the private address `10.8.2.2` (an owner setting; **[OBSERVED]** by the owner's Wave 9 order §6, 2026-10-21: containers on `reos-01` reach `reos-db-01` SNAT'ed from it) |
 | `EXPONETDB_TRUSTED_PROXIES` | serve (optional) | up to 16 addresses or CIDRs (comma separated) of the reverse proxies whose `X-Forwarded-For` is believed; the client address is the right-most hop that is not a trusted proxy. Empty (default): the peer address is the client address. On `reos-01` this is the Traefik network of Coolify (an owner setting) |
 | `EXPONETDB_MCP_ALLOWED_ORIGINS` | serve (optional, Wave 7) | up to 8 exact HTTPS origins (comma separated; `http:` only on a loopback host; no path, no wildcard, never `null`) of browser-based MCP clients allowed to call `/mcp` besides the public origin. A request without `Origin` (a native client) is not affected; a request with any other `Origin` is `403`. Empty (default): only the public origin ([`../05-mcp/protocol-baseline.md` §5](../05-mcp/protocol-baseline.md#5-situation-http-status-json-rpc-code-body)) |
 | `EXPONETDB_OAUTH_CLIENT_REGISTRATION` | serve (optional, owner decision 2026-10-13) | `open` (default): new MCP clients (CIMD, DCR) are approved automatically and every person still consents; `review`: an administrator approves each new client on Admin → Clients first ([`../05-mcp/oauth.md` §3](../05-mcp/oauth.md#3-client-registration)) |
@@ -148,7 +148,7 @@ and evidence are in the [deployment record](./deployments/2026-10-06-reos-01.md)
 
 | Rule | Where |
 |---|---|
-| `reos-db-01` accepts PostgreSQL only from `10.8.2.2` (and loopback) | `pg_hba.conf` (managed by `postgres.hba.apply`) + host firewall |
+| `reos-db-01` accepts PostgreSQL only from `10.8.2.2` (and loopback) | `pg_hba.conf` (managed by `postgres.hba.apply` on an agent-managed cluster; today by the owner's scripts, the cluster being external: [credentials-and-roles.md §8.2](../03-database-model/credentials-and-roles.md#82-pg_hba-and-network-for-an-external-cluster)) + host firewall. **[OBSERVED]** (owner's Wave 9 order §6) containers on `reos-01` arrive SNAT'ed from `10.8.2.2`, ExponetDB's and REOSA's alike |
 | `reos-01` accepts `:7443` only from `10.8.1.0/24` | host firewall |
 | Gateway is not reachable from the internet | listener bound to the private address |
 | MTU 1400 on the private path | as-built (REOSA handbook); the agent's `system.health` checks path MTU with a do-not-fragment probe |
@@ -166,7 +166,7 @@ to a deployment:
   live reads with the observer credential only, the worker for health
   samples, drift checks, credential verification and registry operations.
   On `reos-01` that is the private path to `reos-db-01`
-  (from `10.8.2.2` to `10.8.1.2:5432`); `pg_hba` must allow the ExponetDB roles from
+  (from `10.8.2.2` to `10.8.1.1:5432`, TLS name `reosdb01.exponet.cloud`); `pg_hba` must allow the ExponetDB roles from
   that source only (owner action with the deployment).
 - **Connections per cluster:** `serve` at most 3, the worker at most 5
   (one budget per process, postgres-adapter.md §3); a cluster's
@@ -176,18 +176,30 @@ to a deployment:
   test (`bun run smoke:image`) checks that serve answers Wave 4 routes with
   401 and a later wave's with 404.
 - **Role bootstrap on a managed cluster** is a person's step: `GET
-  /api/v1/clusters/{id}/bootstrap-sql` gives the script (roles with
-  verifiers, never a password), run once by an administrator of that
-  cluster; then each password is submitted once through the write-only
-  endpoint and verified by the worker.
+  /api/v1/clusters/{id}/bootstrap-sql` (`exponetdb cluster bootstrap-sql`)
+  gives the script (never a password), run with psql by an administrator
+  of that cluster, and again whenever a database or an execution role is
+  added (it is idempotent, Wave 9); then each password is submitted once
+  through the write-only endpoint and verified by the worker
+  ([`onboard-external-cluster.md`](./onboard-external-cluster.md)).
 
 ## 5. Data plane host baseline (`reos-db-01`)
 
-Facts as planned in the REOSA handbook (not yet measured on the device): Hetzner
-Cloud in Falkenstein, PostgreSQL 17, pgvector; the owner brief names CX43 with
-16 GB RAM while the REOSA handbook plans a smaller instance with 8 GB. ExponetDB
-makes no assumption about the size and none about production and staging sharing
-one host ([`../01-architecture/control-plane-and-data-plane.md`](../01-architecture/control-plane-and-data-plane.md)).
+**[OBSERVED]** (owner's Wave 9 order §6, 2026-10-21; measured by the owner,
+ExponetDB has not connected to the host) The host runs: Hetzner Cloud in
+Falkenstein, PostgreSQL 17.11 from PGDG, private address `10.8.1.1`, TLS
+name `reosdb01.exponet.cloud` with its own name-constrained CA, `hostssl`
+with SCRAM only; external management (no node agent; configuration and
+backups by shell scripts and systemd timers); database `reosa_staging`;
+pgBackRest 2.59.3 with repository 1 on Cloudflare R2 (EU) and a monthly
+bundle as repository 2, `aes-256-cbc`, `archive_mode on`,
+`archive_timeout 300`, timers for differential (Monday to Saturday), full
+(Sunday) and monthly backups. pgBackRest 2.60.0 was released on 2026-10-18.
+REOSA production still runs on the hosted provider and gets its own role
+set on this cluster when it moves (Wave 11). The size: the owner brief
+names CX43 with 16 GB RAM while the REOSA handbook planned 8 GB; ExponetDB
+makes no assumption about the size and none about production and staging
+sharing one host ([`../01-architecture/control-plane-and-data-plane.md`](../01-architecture/control-plane-and-data-plane.md)).
 
 ExponetDB's responsibilities on the host, in order of introduction:
 
@@ -196,9 +208,17 @@ ExponetDB's responsibilities on the host, in order of introduction:
 | 5 | agent enrolled; read capabilities (status, config inspect, disk/memory/CPU, service status, log inspect, WAL status); role and hba desired state; TLS inspect, plan and rotate |
 | 6 | migration engine exercised against test databases on the host (never REOSA's), via SQL from `worker` (not via the agent) |
 | 9 | WAL archiving and backups through the engine; restore drills into scratch |
-| 10 | REOSA migrations through ExponetDB start, on REOSA's current hosted databases |
-| 11 | REOSA staging and production move onto this host; from then on REOSA migrations run here |
+| after 9 Part A | the owner registers REOSA staging (already on this host) and its scratch database as an external cluster, imports the history and lets sessions apply staging migrations (OD-7a) |
+| 10 | REOSA's side of the integration (bundle roots, REOSA Admin, runtime schema contract); REOSA production on the hosted provider at most read-only (OD-7b) |
+| 11 | REOSA production moves onto this host with its own role set; from then on its migrations run here |
 | after 9 | package updates, PostgreSQL minor upgrades as planned operations |
+
+**[OBSERVED]** (2026-10-21) The rows for Waves 5, 6 and 9 have not happened on
+this host: no agent is installed or enrolled (G5 items 2 and 4 are waived
+until "before a node agent is installed on, or enrolled for, any real
+host"; a cluster registered external stays external as built, OD-54), and
+ExponetDB has not registered or connected to it. Its backups are the
+owner's pgBackRest setup, adopted then owned in Part B of Wave 9 (OD-52).
 
 ## 6. Releases
 

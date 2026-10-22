@@ -48,6 +48,10 @@ exit codes are in [`README.md`](./README.md).
 | [`project show`](#project-show) | remote | read | Show a project and its managed scope. |
 | [`project create`](#project-create) | remote | plan | Plan a new project of a product. |
 | [`project update`](#project-update) | remote | plan | Plan a project change (name, managed scope, execution roles, trusted extensions). |
+| [`project execution-roles`](#project-execution-roles) | remote | read | Show a project's execution roles: the default map, each environment's bindings and the declared exceptions. |
+| [`project execution-roles set`](#project-execution-roles-set) | remote | plan | Plan one environment's execution roles (aliases of the project map bound to other roles); the set replaces the environment's bindings. |
+| [`project role-exception declare`](#project-role-exception-declare) | remote | plan | Plan a declared exception: one role may carry BYPASSRLS as an execution role of the project in one environment (nothing else is ever excused). |
+| [`project role-exception revoke`](#project-role-exception-revoke) | remote | plan | Plan the revocation of a declared exception; every plan that relied on it becomes stale. |
 | [`target list`](#target-list) | remote | read | List targets with tier, state and health. |
 | [`target show`](#target-show) | remote | read | Show a target: placement, ledger, health, findings. |
 | [`target register`](#target-register) | remote | plan | Plan registering a database of a cluster as a target of a project environment. |
@@ -67,6 +71,8 @@ exit codes are in [`README.md`](./README.md).
 | [`cluster confirm`](#cluster-confirm) | remote | plan | Plan confirming a cluster’s identity (its system identifier). |
 | [`cluster endpoint add`](#cluster-endpoint-add) | remote | plan | Plan a new endpoint of a cluster. |
 | [`cluster endpoint retire`](#cluster-endpoint-retire) | remote | plan | Plan retiring an endpoint. |
+| [`cluster database retire`](#cluster-database-retire) | remote | plan | Plan retiring a registered database record that is no current placement (decommission its target first); the database itself is not touched. |
+| [`cluster declare-tier`](#cluster-declare-tier) | remote | plan | Plan declaring the tier a cluster is meant for (OD-22): prod makes every database registered on it need production authority; nonprod leaves it to the environment. |
 | [`cluster database register`](#cluster-database-register) | remote | plan | Plan registering a database of a cluster. |
 | [`cluster credential submit`](#cluster-credential-submit) | remote | read | Open the Web App’s write-only form for a role’s password, then wait until the worker verified it. |
 | [`cluster credential rotate`](#cluster-credential-rotate) | remote | plan | Plan rotating a cluster credential through the node (a new SCRAM verifier, set locally). |
@@ -102,6 +108,8 @@ exit codes are in [`README.md`](./README.md).
 | [`migration resume`](#migration-resume) | remote | plan | Plan resuming a non-transactional migration that stopped part-way (an explicit new plan). |
 | [`migration rollback`](#migration-rollback) | remote | plan | Plan rolling back the latest migration with its down.sql (an explicit new plan; never automatic). |
 | [`migration import analyze`](#migration-import-analyze) | remote | plan | Plan a legacy import analysis: replay the legacy files on a scratch target and classify them. |
+| [`migration import scratch-reset-sql`](#migration-import-scratch-reset-sql) | remote | read | Print the SQL that resets a used scratch target in place (run it with psql -v ON_ERROR_STOP=1 as a superuser on that database): it keeps the database and its identity marker and recreates the managed schemas with their grants and extensions. |
+| [`migration import scratch-check`](#migration-import-scratch-check) | remote | read | Check, read only, whether a scratch target can take this target’s legacy replay: usable, its identity, empty, the same extensions, the objects outside the managed scope, the execution role. |
 | [`migration import report`](#migration-import-report) | remote | read | An import report: every legacy file’s classification and the decisions so far. |
 | [`migration import resolve`](#migration-import-resolve) | remote | mutation | Record your decision for one item of an import report (with a note). |
 | [`migration import baseline`](#migration-import-baseline) | remote | plan | Plan the baseline of a resolved import report (records the legacy ledger; changes no schema). |
@@ -757,6 +765,86 @@ Runs: against the server; effect: plan; action: `registry.project.update.plan`; 
 | `--no-wait` | Return once the server accepted the operation. |
 | `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
 
+### project execution-roles
+
+Show a project's execution roles: the default map, each environment's bindings and the declared exceptions.
+
+```text
+exponetdb project execution-roles <project>
+```
+
+Runs: against the server; effect: read; action: `project.execution_roles.get`; scopes: `migrations.read`; output: `ProjectExecutionRoles`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `project` (required) | A project id (prj_…). |
+
+### project execution-roles set
+
+Plan one environment's execution roles (aliases of the project map bound to other roles); the set replaces the environment's bindings.
+
+```text
+exponetdb project execution-roles set <project> [flags]
+```
+
+Runs: against the server; effect: plan; action: `registry.execution_role_binding.set.plan`; scopes: `registry.manage`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `project` (required) | A project id. |
+| `--environment <env>` | An environment of the project's product (id or slug). Required unless --file is given. |
+| `--role <alias=role>` | A binding (alias=PostgreSQL role); repeat for each alias. |
+| `--clear` | Remove every binding: the project map applies again. |
+| `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### project role-exception declare
+
+Plan a declared exception: one role may carry BYPASSRLS as an execution role of the project in one environment (nothing else is ever excused).
+
+```text
+exponetdb project role-exception declare <project> [flags]
+```
+
+Runs: against the server; effect: plan; action: `registry.execution_role_exception.declare.plan`; scopes: `registry.manage`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `project` (required) | A project id. |
+| `--environment <env>` | An environment of the project's product (id or slug). Required unless --file is given. |
+| `--role <role>` | The PostgreSQL role. Required unless --file is given. |
+| `--reason <text>` | Why the role needs BYPASSRLS (20 to 1000 characters). Required unless --file is given. |
+| `--review-by <YYYY-MM-DD>` | After this date the exception excuses nothing. |
+| `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### project role-exception revoke
+
+Plan the revocation of a declared exception; every plan that relied on it becomes stale.
+
+```text
+exponetdb project role-exception revoke <project> <exception> [flags]
+```
+
+Runs: against the server; effect: plan; action: `registry.execution_role_exception.revoke.plan`; scopes: `registry.manage`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `project` (required) | A project id. |
+| `exception` (required) | The exception (rxe_…). |
+| `--reason <text>` | Why it is revoked (up to 1000 characters). Required unless --file is given. |
+| `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
 ### target list
 
 List targets with tier, state and health.
@@ -1000,7 +1088,7 @@ Runs: against the server; effect: read; action: `credential.list`; scopes: `node
 
 Write the cluster’s bootstrap SQL (roles, grants) to stdout or a new file, for a DBA to review and run.
 
-The SQL is the server’s, generated for this cluster; the CLI never runs it. Review it before a database administrator runs it by hand.
+The SQL is the server’s, generated for this cluster; the CLI never runs it. Review it before a database administrator runs it with psql. It is idempotent: run it again after a database is added or an execution role is created. It covers the registered databases and those named with --database (before registration), grants the migrator SET ROLE into the execution roles of the projects placed on the cluster or named with --project, where they exist and are fit, and lets the observer read the legacy ledgers named with --ledger.
 
 ```text
 exponetdb cluster bootstrap-sql <cluster> [flags]
@@ -1012,6 +1100,10 @@ Runs: against the server; effect: read; action: `cluster.bootstrap_sql.get`; sco
 |---|---|
 | `cluster` (required) | A cluster id. |
 | `--file <path>` | A new file to write (0600). |
+| `--database <names>` | Databases of the cluster not registered yet. |
+| `--project <prj_…>` | A project whose targets will be placed here: its execution roles too (needs migrations.read on it). |
+| `--environment <env_…>` | Only this environment of --project. |
+| `--ledger <supabase,drizzle,applied_migrations>` | Legacy ledgers the observer may read during an import. |
 
 ### cluster register
 
@@ -1091,6 +1183,47 @@ Runs: against the server; effect: plan; action: `registry.endpoint.retire.plan`;
 | `cluster` (required) | A cluster id. |
 | `endpoint` (required) | An endpoint id. |
 | `--reason <text>` | Why. |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### cluster database retire
+
+Plan retiring a registered database record that is no current placement (decommission its target first); the database itself is not touched.
+
+```text
+exponetdb cluster database retire <cluster> <database> [flags]
+```
+
+Runs: against the server; effect: plan; action: `registry.database.retire.plan`; scopes: `registry.manage`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id. |
+| `database` (required) | A database id (dbs_…). |
+| `--reason <text>` | Why. |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### cluster declare-tier
+
+Plan declaring the tier a cluster is meant for (OD-22): prod makes every database registered on it need production authority; nonprod leaves it to the environment.
+
+The same rules as the Web App: a person with registry.manage:prod plans it, whichever value; applying it (--apply or plan apply) needs a fresh re-authentication (exponetdb auth reauth --plan).
+
+```text
+exponetdb cluster declare-tier <cluster> [flags]
+```
+
+Runs: against the server; effect: plan; action: `registry.cluster.declare_tier.plan`; scopes: `registry.manage`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id. |
+| `--tier <prod\|nonprod>` | The declared tier. (required) |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
@@ -1739,13 +1872,44 @@ Runs: against the server; effect: plan; action: `migration.import.analyze`; scop
 |---|---|
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
 | `--scratch <target>` | An empty disposable target to replay on. (required) |
-| `--baseline <baseline:…>` | The baseline ref (default the project’s). |
+| `--baseline <slug>` | The baseline, as baseline:<slug> or <slug> (default the project’s). |
+| `--hints <path>` | Import hints as a JSON or YAML file: aliases, notApplicable, role, searchPath, ledgers (checked against the contract). |
 | `--ledger <supabase,drizzle,applied_migrations>` | Legacy ledgers to read. |
 | `--not-applicable <files>` | Legacy files that never apply to this target. |
 | `--apply` | Apply the analysis plan at once and wait. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
 | `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### migration import scratch-reset-sql
+
+Print the SQL that resets a used scratch target in place (run it with psql -v ON_ERROR_STOP=1 as a superuser on that database): it keeps the database and its identity marker and recreates the managed schemas with their grants and extensions.
+
+```text
+exponetdb migration import scratch-reset-sql [flags]
+```
+
+Runs: against the server; effect: read; action: `target.get`; scopes: `targets.read`; output: `ScratchResetSql`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `--scratch <target>` | The scratch target (path or tgt_ id); nonprod only. (required) |
+
+### migration import scratch-check
+
+Check, read only, whether a scratch target can take this target’s legacy replay: usable, its identity, empty, the same extensions, the objects outside the managed scope, the execution role.
+
+```text
+exponetdb migration import scratch-check [flags]
+```
+
+Runs: against the server; effect: read; action: `migration.import.scratch_check`; scopes: `migrations.import`; output: `ScratchCheck`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
+| `--scratch <target>` | The scratch target (path or tgt_ id). (required) |
+| `--role <alias>` | The execution role alias the replay runs as (the hints role; default owner). |
 
 ### migration import report
 

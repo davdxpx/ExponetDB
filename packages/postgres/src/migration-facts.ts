@@ -17,7 +17,13 @@ export interface ExecutionRoleFacts {
   readonly createDb: boolean
   readonly replication: boolean
   readonly bypassRls: boolean
-  /** The role reaches (is a member of) a superuser, a predefined `pg_` role or an ExponetDB role. */
+  /**
+   * The role reaches (is a member of) a predefined `pg_` role, an ExponetDB
+   * role, or a role with `SUPERUSER`, `CREATEROLE`, `CREATEDB`, `REPLICATION`
+   * or `BYPASSRLS` (Wave 9: a reached privileged role, say through
+   * `ALTER FUNCTION … OWNER TO`, would give a migration what no declaration
+   * excuses).
+   */
   readonly reachesProtected: boolean
   /** Direct membership of the migrator: `SET` option, `INHERIT` option (PostgreSQL 16+). */
   readonly membership: { readonly set: boolean; readonly inherit: boolean } | null
@@ -33,6 +39,17 @@ export type ExecutionRoleProblem =
   | 'membership_inherits'
   | 'membership_without_set'
   | 'reaches_protected_role'
+  /**
+   * Usable only because a person declared an execution-role exception
+   * (ADR-0034): `BYPASSRLS` is the role's sole problem and it is excused.
+   * Callers bind the exception into the plan; it is never a blocking problem.
+   */
+  | 'declared_exception'
+
+/** The only attribute an execution-role exception can excuse (ADR-0034 §1). */
+export type ExcusableAttribute = 'bypassrls'
+
+const NOTHING_EXCUSED: ReadonlySet<ExcusableAttribute> = new Set()
 
 const EXPONETDB_ROLES: ReadonlySet<string> = new Set([
   ...Object.values(ROLE_NAMES),
@@ -44,7 +61,8 @@ const ROLE_FACTS = sql`SELECT r.rolname::text AS role, r.rolcanlogin AS can_logi
        r.rolbypassrls AS bypass_rls,
        EXISTS (SELECT 1 FROM pg_catalog.pg_roles x
                 WHERE x.oid <> r.oid AND pg_catalog.pg_has_role(r.oid, x.oid, 'MEMBER')
-                  AND (x.rolsuper OR x.rolname LIKE 'pg\\_%' OR x.rolname LIKE 'exponetdb\\_%')) AS reaches_protected,
+                  AND (x.rolsuper OR x.rolcreaterole OR x.rolcreatedb OR x.rolreplication OR x.rolbypassrls
+                       OR x.rolname LIKE 'pg\\_%' OR x.rolname LIKE 'exponetdb\\_%')) AS reaches_protected,
        (SELECT m.set_option FROM pg_catalog.pg_auth_members m
          WHERE m.roleid = r.oid AND m.member = (SELECT u.oid FROM pg_catalog.pg_roles u WHERE u.rolname = coalesce($2, current_user))
          ORDER BY m.set_option DESC LIMIT 1) AS member_set,
@@ -103,27 +121,38 @@ export async function executionRoleFacts(
  * direct member with `SET TRUE` and `INHERIT FALSE` (the migrator never
  * gains its privileges implicitly, and consumer SQL never runs as the
  * ledger owner).
+ *
+ * `excused` (ADR-0034) holds what a declared execution-role exception
+ * excuses for this role: at most `bypassrls`. The answer is
+ * `declared_exception` only when `BYPASSRLS` is the role's sole problem and
+ * it is excused; `SUPERUSER`, `CREATEROLE`, `CREATEDB`, `REPLICATION`,
+ * `LOGIN`, a predefined or ExponetDB role, any reach into one and every
+ * membership defect are never excusable and are reported first.
  */
-export function executionRoleProblem(facts: ExecutionRoleFacts): ExecutionRoleProblem | null {
+export function executionRoleProblem(
+  facts: ExecutionRoleFacts,
+  excused: ReadonlySet<ExcusableAttribute> = NOTHING_EXCUSED,
+): ExecutionRoleProblem | null {
   if (EXPONETDB_ROLES.has(facts.role)) return 'exponetdb_role'
   if (facts.role.startsWith('pg_')) return 'predefined_role'
   if (!facts.exists) return 'missing'
   if (facts.canLogin) return 'can_login'
-  if (
-    facts.superuser ||
-    facts.createRole ||
-    facts.createDb ||
-    facts.replication ||
-    facts.bypassRls
-  ) {
+  if (facts.superuser || facts.createRole || facts.createDb || facts.replication) {
     return 'privileged_attribute'
   }
-  // SET ROLE into it would reach the ledger owner or a predefined role's powers.
+  if (facts.bypassRls && !excused.has('bypassrls')) return 'privileged_attribute'
+  // SET ROLE into it would reach the ledger owner, a predefined role's powers or a
+  // privileged role's attributes; no declaration excuses a reached role.
   if (facts.reachesProtected) return 'reaches_protected_role'
   if (facts.membership === null) return 'not_a_member'
   if (!facts.membership.set) return 'membership_without_set'
   if (facts.membership.inherit) return 'membership_inherits'
-  return null
+  return facts.bypassRls ? 'declared_exception' : null
+}
+
+/** A problem a plan cannot run with: anything but none and a declared exception. */
+export function blocksExecution(problem: ExecutionRoleProblem | null): boolean {
+  return problem !== null && problem !== 'declared_exception'
 }
 
 export interface ExtensionFacts {
@@ -155,6 +184,20 @@ export async function extensionFacts(
     trusted: r.boolOrNull('trusted'),
     defaultVersion: r.textOrNull('default_version'),
   }))
+}
+
+const EXTENSION_PLACEMENTS = sql`SELECT e.extname::text AS name, n.nspname::text AS schema, e.extversion AS version
+  FROM pg_catalog.pg_extension e JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace
+ ORDER BY 1`
+
+/** Where each installed extension lives and its version (a legacy replay compares them, legacy-import.md §2). */
+export async function extensionPlacements(
+  reader: CatalogReader,
+): Promise<Map<string, { readonly schema: string; readonly version: string }>> {
+  const rows = await reader.query(EXTENSION_PLACEMENTS)
+  return new Map(
+    rows.map((r) => [r.text('name'), { schema: r.text('schema'), version: r.text('version') }]),
+  )
 }
 
 /** Every installed extension and its version (bound into a migration plan). */

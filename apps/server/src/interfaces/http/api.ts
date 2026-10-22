@@ -39,12 +39,14 @@ import {
   CLIENT_STATES,
   ClientApprovalRequestSchema,
   ClientDecisionReasonSchema,
+  ClusterBootstrapSqlQuerySchema,
   ClusterConfirmRequestSchema,
   ClusterDeclaredTierRequestSchema,
   ClusterIdSchema,
   ClusterRegisterRequestSchema,
   ConsentDecisionRequestSchema,
   CredentialSubmissionSchema,
+  DatabaseIdSchema,
   DatabaseRegisterRequestSchema,
   DEFAULT_BODY_LIMIT_BYTES,
   DeviceDecisionRequestSchema,
@@ -58,6 +60,10 @@ import {
   EnvironmentChangeRequestSchema,
   EnvironmentCreateRequestSchema,
   EnvironmentIdSchema,
+  ExecutionRoleBindingsRequestSchema,
+  ExecutionRoleExceptionDeclareRequestSchema,
+  ExecutionRoleExceptionIdSchema,
+  ExecutionRoleExceptionRevokeRequestSchema,
   type ExplainRequest,
   FindingIdSchema,
   GrantIdSchema,
@@ -1064,8 +1070,17 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   listClusters: async (app, call) =>
     value(await app.registry.clusters(caller(call), pageOf(call.query))),
   getCluster: async (app, call) => value(await app.registry.cluster(caller(call), clusterId(call))),
-  getClusterBootstrapSql: async (app, call) =>
-    value(await app.registry.bootstrapSql(caller(call), clusterId(call))),
+  getClusterBootstrapSql: async (app, call) => {
+    const q = ClusterBootstrapSqlQuerySchema.parse(call.query ?? {})
+    return value(
+      await app.registry.bootstrapSql(caller(call), clusterId(call), {
+        ...(q.database === undefined ? {} : { databases: q.database }),
+        ...(q.project === undefined ? {} : { projectId: q.project }),
+        ...(q.environment === undefined ? {} : { environmentId: q.environment }),
+        ...(q.ledgers === undefined ? {} : { ledgers: q.ledgers }),
+      }),
+    )
+  },
   listClusterEndpoints: async (app, call) => {
     const state = field(call.query, 'state')
     return value(
@@ -1126,6 +1141,43 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         idempotency(call),
       ),
     ),
+  getProjectExecutionRoles: async (app, call) =>
+    value(
+      await app.registry.projectExecutionRoles(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+      ),
+    ),
+  planExecutionRoleBindings: async (app, call) =>
+    value(
+      await app.registry.planExecutionRoleBindings(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        EnvironmentIdSchema.parse(field(call.params, 'environmentId')),
+        ExecutionRoleBindingsRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planExecutionRoleException: async (app, call) =>
+    value(
+      await app.registry.planExecutionRoleException(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        EnvironmentIdSchema.parse(field(call.params, 'environmentId')),
+        ExecutionRoleExceptionDeclareRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planExecutionRoleExceptionRevocation: async (app, call) =>
+    value(
+      await app.registry.planExecutionRoleExceptionRevocation(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        ExecutionRoleExceptionIdSchema.parse(field(call.params, 'exceptionId')),
+        ExecutionRoleExceptionRevokeRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
   planServer: async (app, call) =>
     value(
       await app.registry.planServer(
@@ -1166,6 +1218,15 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         caller(call),
         clusterId(call),
         EndpointRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planDatabaseRetirement: async (app, call) =>
+    value(
+      await app.registry.planDatabaseRetirement(
+        caller(call),
+        clusterId(call),
+        DatabaseIdSchema.parse(field(call.params, 'databaseId')),
         idempotency(call),
       ),
     ),
@@ -1346,6 +1407,15 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         target(call),
         ImportAnalysisRequestSchema.parse(call.body),
         idempotency(call),
+      ),
+    ),
+  checkScratchTarget: async (app, call) =>
+    value(
+      await app.migrations.scratchCheck(
+        caller(call),
+        target(call),
+        String(field(call.query, 'scratchTarget')),
+        optionalText(call.query, 'role'),
       ),
     ),
   getImportReport: async (app, call) =>

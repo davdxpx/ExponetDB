@@ -216,6 +216,106 @@ describe('plan request files', () => {
   })
 })
 
+describe('migration import analyze from the project file', () => {
+  const LEGACY_PROJECT = (baseline: string) =>
+    [
+      'schema: exponetdb.project/v1',
+      'project: demo/platform',
+      'layout: legacy+bundles',
+      'executionRoles:',
+      '  owner: demo_owner',
+      'managedScope:',
+      '  includeSchemas: [public]',
+      '  excludeSchemas: []',
+      'lintProfile: standard',
+      'bundleRoots:',
+      '  - migrations',
+      'legacy:',
+      '  directory: legacy',
+      `  baseline: ${baseline}`,
+      '',
+    ].join('\n')
+
+  async function legacyProject(baseline = 'baseline:demo-2026') {
+    await mkdir(join(dir, 'repo', 'legacy'), { recursive: true })
+    await mkdir(join(dir, 'repo', 'migrations'), { recursive: true })
+    await writeFile(join(dir, 'repo', 'exponetdb.project.yaml'), LEGACY_PROJECT(baseline))
+    await writeFile(join(dir, 'repo', 'legacy', '0001_init.sql'), 'CREATE TABLE t (id int);\n')
+  }
+
+  const analyze = (...extra: string[]) =>
+    cli([
+      'migration',
+      'import',
+      'analyze',
+      '--server',
+      'https://db.example.test',
+      '--target',
+      'demo/platform/staging',
+      '--scratch',
+      'demo/platform/scratch',
+      '--json',
+      ...extra,
+    ])
+
+  // Past the contract check the command needs the server: this test has no
+  // network, so a request that passed every local check fails as a transport
+  // error, never as a usage error.
+  const passedLocalChecks = (r: { code: number }) => expect(r.code).not.toBe(EXIT.usage)
+
+  it('takes the project baseline (baseline:<slug>) and a --baseline in either form', async () => {
+    await legacyProject()
+    passedLocalChecks(await analyze())
+    passedLocalChecks(await analyze('--baseline', 'baseline:other-2026'))
+    passedLocalChecks(await analyze('--baseline', 'other-2026'))
+    const bad = await analyze('--baseline', 'baseline:Not A Slug')
+    expect(bad.code).toBe(EXIT.usage)
+    expect(JSON.parse(bad.stdout).error.message).toContain('baseline')
+  })
+
+  it('reads aliases, notApplicable, role and searchPath from a --hints file checked against the contract', async () => {
+    await legacyProject()
+    await writeFile(
+      join(dir, 'repo', 'hints.yaml'),
+      [
+        'aliases:',
+        '  0001_old_name: 0001_init',
+        'notApplicable: []',
+        'role: owner',
+        'searchPath: [public, extensions]',
+        'ledgers: [supabase, applied_migrations]',
+        '',
+      ].join('\n'),
+    )
+    passedLocalChecks(await analyze('--hints', 'hints.yaml'))
+    await writeFile(join(dir, 'repo', 'hints.json'), JSON.stringify({ role: 'owner' }))
+    passedLocalChecks(await analyze('--hints', 'hints.json'))
+  })
+
+  it('refuses an unknown hint, a wrong shape, a field given twice and a hints file that is no object', async () => {
+    await legacyProject()
+    const write = (name: string, text: string) => writeFile(join(dir, 'repo', name), text)
+    await write('unknown.yaml', 'role: owner\nscratchTarget: demo/platform/production\n')
+    const unknown = await analyze('--hints', 'unknown.yaml')
+    expect(unknown.code).toBe(EXIT.usage)
+    expect(JSON.parse(unknown.stdout).error.message).toContain('scratchTarget')
+    await write('shape.yaml', 'searchPath: "public; DROP TABLE x"\n')
+    const shape = await analyze('--hints', 'shape.yaml')
+    expect(shape.code).toBe(EXIT.usage)
+    expect(JSON.parse(shape.stdout).error.message).toContain('searchPath')
+    await write('ledgers.yaml', 'ledgers: [supabase]\n')
+    const twice = await analyze('--hints', 'ledgers.yaml', '--ledger', 'drizzle')
+    expect(twice.code).toBe(EXIT.usage)
+    expect(JSON.parse(twice.stdout).error.message).toContain('--ledger')
+    await write('list.yaml', '- role\n')
+    const list = await analyze('--hints', 'list.yaml')
+    expect(list.code).toBe(EXIT.usage)
+    expect(JSON.parse(list.stdout).error.message).toContain('one object')
+    const missing = await analyze('--hints', 'missing.yaml')
+    expect(missing.code).toBe(EXIT.usage)
+  })
+})
+
 describe('the lab image against its source', () => {
   it('is current only while the checkout is at the commit the image was built from, without changes', async () => {
     const { freshness } = await import('../src/lab/stack.ts')
@@ -324,5 +424,42 @@ describe('doctor, agent help and the reference', () => {
     expect(out.stdout).toContain('--no-input')
     expect(out.stdout).toContain('130 interrupted')
     for (const c of COMMANDS) expect(out.stdout).toContain(`### ${c.path.join(' ')}`)
+  })
+})
+
+describe('migration import scratch-reset-sql', () => {
+  // The command reads three REST views; this stub answers them as the server does.
+  const views = (managedScope: unknown): Record<string, unknown> => ({
+    getTarget: {
+      id: 'tgt_01M5GNJDEAT617M685B9PNA4Q4',
+      path: 'acme/platform/scratch',
+      tier: 'nonprod',
+      generation: 1,
+      projectId: 'prj_01M5GNJDEAT617M685B9PNA4Q4',
+    },
+    getProject: { id: 'prj_01M5GNJDEAT617M685B9PNA4Q4', managedScope },
+    getInstallation: { installationId: 'ins_01M5GNJDEAT617M685B9PNA4Q4' },
+  })
+  const reset = async (managedScope: unknown) => {
+    const command = COMMANDS.find((c) => c.path.join(' ') === 'migration import scratch-reset-sql')
+    if (command === undefined) throw new Error('no scratch-reset-sql command')
+    const answers = views(managedScope)
+    const ctx = {
+      remote: async () => ({
+        sdk: { call: async (operation: string) => ({ ok: true, value: answers[operation] }) },
+      }),
+    }
+    const out = await command.run(
+      ctx as never,
+      { flags: { scratch: 'acme/platform/scratch' } } as never,
+    )
+    return (out as { data: { sql: string } }).data.sql
+  }
+
+  it('resets a project scope that lists no schemas (null in the project view) and one that does', async () => {
+    const all = await reset({ includeSchemas: null, excludeSchemas: ['auth', 'storage'] })
+    expect(all).toContain("NOT (n.nspname = ANY (ARRAY['auth', 'storage']::text[]))")
+    const listed = await reset({ includeSchemas: ['public'], excludeSchemas: [] })
+    expect(listed).toContain("managed text[] := ARRAY['public']::text[];")
   })
 })

@@ -188,6 +188,7 @@ later without changes).
 | `LEDGER_DIVERGENCE` | 409 | no | Target ledger and Control Store mirror disagree; schema changes blocked. |
 | `LEDGER_NOT_INITIALIZED` | 409 | no | Target has no `exponetdb` schema / baseline yet. |
 | `LEGACY_IMPORT_AMBIGUOUS` | 409 | no | Import cannot proceed without human resolution of `details.items[]`. |
+| `LEGACY_IMPORT_TRUNCATED` | 409 | no | The import report holds fewer global drift items than exist (`details.driftTotal`, `details.held`); it never becomes a baseline. Narrow the scope or fix the inputs and analyze again (Wave 9 Part A). |
 
 ### Evidence and policy
 

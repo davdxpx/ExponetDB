@@ -156,6 +156,20 @@ REOSA audit found a role-level timeout that would be lost in the planned move).
   continues for a suspended target.
 - `plaintext_connections` opens a security finding
   (`health:plaintext_connections`) and does not change the state.
+- **[DECIDED]** (Wave 9, [ADR-0034 §4](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md#4-drift-and-parity))
+  Every active execution-role exception of the target's environment is
+  compared with the role on the target, on the same diagnostic session and
+  only after the identity marker matched. A declaration that no longer
+  matches keeps one security finding open
+  (`execution_role_exception_drift`, key
+  `health:execution_role_exception:<exceptionId>`), with the reason
+  `privilege_exceeded` (critical: the role gained `SUPERUSER`, `CREATEROLE`,
+  `CREATEDB` or `REPLICATION`), `review_passed`, `role_missing` or
+  `bypassrls_lost` (warnings: the declaration excuses nothing, or is stale
+  and can be revoked). The finding is resolved `cleared` once the role
+  matches again or the declaration is revoked; a failed read changes no
+  finding. It does not change the state, the declaration or the role; it is
+  not a schema drift finding, so a drift acceptance never covers it.
 - When ExponetDB itself cannot probe (no observer credential, no active
   endpoint, no placement), the state is `unknown` with that reason, never
   `unreachable`.

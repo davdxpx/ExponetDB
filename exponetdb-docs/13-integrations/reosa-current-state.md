@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Audit result (Wave 0), 2026-10-04 |
+| Status | Audit result (Wave 0), 2026-10-04; re-audited 2026-10-06 (Wave 4); the real installation as of 2026-10-21 from the owner's Wave 9 order ([last section](#the-real-installation-on-2026-10-21-wave-9-order)) |
 | Source | read-only REOSA repository `davdxpx/REOSA` at commit `f09a302e` (shallow clone; oldest visible commit 2026-09-08) |
 | Method | files read directly; analysis scripts; REOSA's own read-only validators run at HEAD; **full replay of all migrations on PGlite 0.4.5** (PostgreSQL 17.5 in WASM with `vector` 0.8.1 and `pg_trgm` 1.6, the engine REOSA's tests use). Nothing in REOSA was changed. |
 | Used by | [`../04-migrations/legacy-import.md`](../04-migrations/legacy-import.md), [`reosa-integration.md`](./reosa-integration.md), the design of the migration engine, health model and backups |
@@ -46,9 +46,13 @@ treats prose as hints only.
 The same `status_*` tables also exist in the platform database (from migrations
 `0008` to `0012`), so a misconfigured URL "succeeds in the wrong place".
 
-Planned: move to self-hosted PostgreSQL 17 on `reos-db-01` (`10.8.1.2`, private
-network) with production and staging on the same host as separate databases
-(DOC, handbook 4, "not measured on the device").
+Planned (2026-10-04): move to self-hosted PostgreSQL 17 on `reos-db-01`
+(`10.8.1.2` in the handbook, private network) with production and staging on
+the same host as separate databases (DOC, handbook 4, "not measured on the
+device"). **Since then** (OBSERVED by the owner, Wave 9 order §6, 2026-10-21):
+staging runs on `reos-db-01` as `reosa_staging`, at the private address
+`10.8.1.1`, with a self-hosted identity service; production still runs on the
+hosted provider and moves in Wave 11 ([last section](#the-real-installation-on-2026-10-21-wave-9-order)).
 
 ## Migration flows
 
@@ -448,7 +452,7 @@ shows every component still pointing at the old database.
 |---|---|---|
 | Exponet network `10.8.0.0/16` | Hetzner Cloud Network named **`exponent`**, `10.8.0.0/16` | range matches; name spelled differently |
 | Cloud subnet `10.8.1.0/24` | same, zone `eu-central` | matches |
-| `reos-db-01` `10.8.1.2` | same, **planned** ("server not ordered or hardened yet") | matches (planned) |
+| `reos-db-01` `10.8.1.2` | same, **planned** ("server not ordered or hardened yet") | matched then (planned); **wrong**: the running host has `10.8.1.1` (owner's Wave 9 order §6, 2026-10-21) |
 | vSwitch subnet `10.8.2.0/24` | same, gateway `10.8.2.1` | matches |
 | `reos-01` `10.8.2.2` | same, on VLAN interface `enp5s0.4000`, as-built 2026-10-04 | matches |
 | vSwitch `vSwitch-Exponent`, VLAN 4000 | same, vSwitch id 85953 | matches |
@@ -525,3 +529,31 @@ Consequences for ExponetDB (Wave 4): the dual probe is the named condition
 these shapes without REOSA names, data or roles; ExponetDB reports stalled
 sessions but never terminates them on its own.
 
+## The real installation on 2026-10-21 (Wave 9 order)
+
+**OBSERVED** by the owner and given in the owner's Wave 9 order §6
+(2026-10-21, [`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md));
+ExponetDB has not connected to the host and holds none of its data. These
+facts shape synthetic fixtures and documents; product code carries no REOSA
+name.
+
+| Area | State |
+|---|---|
+| Host | `reos-db-01`, Hetzner Cloud, Falkenstein, **running**; PostgreSQL 17.11 from PGDG; private address `10.8.1.1` (earlier documents said `10.8.1.2`) |
+| TLS | name `reosdb01.exponet.cloud`, resolving to the private address inside the private network; its own CA with name constraints (`DNS:exponet.cloud`, `IP:10.8.0.0/16`); `hostssl` with SCRAM only; clients use `verify-full`. Bun's TLS (BoringSSL) rejects a name-constrained CA, Node (OpenSSL) and Go accept it; ExponetDB's image runs on Node 24 |
+| Clients | containers on `reos-01` reach it SNAT'ed from `10.8.2.2`, the source address ExponetDB's worker will have |
+| Management | external: no node agent; configuration and backups by shell scripts and systemd timers |
+| Databases | `reosa_staging` with the managed schema `public`; `auth` owned by the identity service's role (excluded from management); `supabase_migrations` holds a legacy ledger. Production still on the hosted provider |
+| Roles | per environment: `<env>_owner` (`NOLOGIN`, `BYPASSRLS`, owns `public`: 159 tables with `FORCE ROW LEVEL SECURITY`, 48 `SECURITY DEFINER` functions, 41 of them on such tables); `<env>_auth`; `<env>_app` (`LOGIN`, `BYPASSRLS`, member of the owner with `INHERIT`); `<env>_migrator` (`NOLOGIN`, member of the owner with `SET TRUE`, `INHERIT FALSE`). Production will get its own set on the same cluster ([`../03-database-model/credentials-and-roles.md` §3.3](../03-database-model/credentials-and-roles.md#33-the-reference-installations-role-set)) |
+| Legacy history | about 530 flat files `NNNN_name.sql` (about 2.7 MB) with drizzle `--> statement-breakpoint` comments; `supabase_migrations.schema_migrations` 391 rows (`version` a 14-digit timestamp, `name` the file stem, `statements` one element: the whole file with comments stripped); `public.applied_migrations` 187 rows (`filename text`, `applied_at timestamptz`); some files contain role DDL (top level, `CREATE ROLE … EXCEPTION WHEN duplicate_object` in `DO` blocks, `GRANT role TO role`) ([`../04-migrations/legacy-import.md` §1](../04-migrations/legacy-import.md#1-what-reosa-brings-the-design-case)) |
+| Backups | pgBackRest 2.59.3; repository 1 on Cloudflare R2 (EU), repository 2 a monthly bundle; `aes-256-cbc`; `archive_mode on`, `archive_timeout 300`; systemd timers (differential Monday to Saturday, full on Sunday, monthly); PITR drills passed locally and on a freshly built host. pgBackRest 2.60.0 was released on 2026-10-18 |
+
+What this changes against the audit above: staging is no longer on the
+hosted provider; the self-hosting plan's role model (an application login
+owning the tables without `BYPASSRLS`, "Auth dependencies") was replaced by
+per-environment owners that carry `BYPASSRLS`; the backup plan of daily dumps
+on the same host was replaced by pgBackRest with an off-host repository.
+ExponetDB's side: OD-7a and OD-7b ([`reosa-integration.md` §3](./reosa-integration.md#3-wave-10-integration-on-the-current-databases)),
+ADR-0034 for the owner's `BYPASSRLS`, the external-cluster onboarding of Part
+A ([`../12-operations/onboard-external-cluster.md`](../12-operations/onboard-external-cluster.md)),
+and the adoption of the running pgBackRest setup in Part B (OD-52).

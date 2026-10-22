@@ -156,14 +156,22 @@ describe('Wave 4 registry contracts', () => {
       'registry.credential.submit',
       'registry.database.register',
       'registry.database.register.plan',
+      'registry.database.retire',
+      'registry.database.retire.plan',
       'registry.endpoint.add',
       'registry.endpoint.add.plan',
       'registry.endpoint.retire',
       'registry.endpoint.retire.plan',
     ])
-    // A registered target: its environment's tier.
+    // A registered target, or one environment of a project (Wave 9, ADR-0034): the environment's tier.
     expect(by('subject')).toEqual([
       'ledger.initialize',
+      'registry.execution_role_binding.set',
+      'registry.execution_role_binding.set.plan',
+      'registry.execution_role_exception.declare',
+      'registry.execution_role_exception.declare.plan',
+      'registry.execution_role_exception.revoke',
+      'registry.execution_role_exception.revoke.plan',
       'target.decommission',
       'target.decommission.plan',
       'target.identity.stamp',
@@ -233,6 +241,60 @@ describe('Wave 4 registry contracts', () => {
       response: { status: 201 },
     })
     expect(MCP_TOOL_LIST.some((t) => t.action.startsWith('registry.'))).toBe(false)
+  })
+
+  it('make execution roles and their exceptions human-only, re-authenticated registry plans at the environment tier (ADR-0034)', () => {
+    for (const [kind, plan] of [
+      ['registry.execution_role_binding.set', 'registry.execution_role_binding.set.plan'],
+      [
+        'registry.execution_role_exception.declare',
+        'registry.execution_role_exception.declare.plan',
+      ],
+      ['registry.execution_role_exception.revoke', 'registry.execution_role_exception.revoke.plan'],
+    ] as const satisfies readonly (readonly [ActionId, ActionId])[]) {
+      expect(def(kind), kind).toMatchObject({
+        class: { kind: 'fixed', class: 'high' },
+        mechanism: 'stored_plan',
+        subject: 'project',
+        reauthentication: true,
+        humanOnly: true,
+        tierSemantics: 'subject',
+        operationKind: true,
+      })
+      expect(def(plan), plan).toMatchObject({
+        effect: 'control_record',
+        humanOnly: true,
+        clientKinds: ['web', 'cli'],
+      })
+    }
+    expect(def('project.execution_roles.get')).toMatchObject({
+      permission: { kind: 'fixed', permission: 'migrations.read' },
+    })
+    const routes = Object.fromEntries(
+      ROUTE_LIST.filter((r) => /execution-role/.test(r.path)).map((r) => [r.operationId, r]),
+    )
+    expect(routes).toMatchObject({
+      getProjectExecutionRoles: { method: 'get', path: '/projects/{projectId}/execution-roles' },
+      planExecutionRoleBindings: {
+        method: 'post',
+        path: '/projects/{projectId}/environments/{environmentId}/execution-role-plans',
+        action: 'registry.execution_role_binding.set.plan',
+        response: { status: 201 },
+      },
+      planExecutionRoleException: {
+        method: 'post',
+        path: '/projects/{projectId}/environments/{environmentId}/execution-role-exceptions',
+        action: 'registry.execution_role_exception.declare.plan',
+        response: { status: 201 },
+      },
+      planExecutionRoleExceptionRevocation: {
+        method: 'post',
+        path: '/projects/{projectId}/execution-role-exceptions/{exceptionId}/revoke-plans',
+        action: 'registry.execution_role_exception.revoke.plan',
+        response: { status: 201 },
+      },
+    })
+    expect(MCP_TOOL_LIST.some((t) => t.action.includes('execution_role'))).toBe(false)
   })
 
   it('make the credential submission write-only: Web App, re-authentication, inline, verified', () => {

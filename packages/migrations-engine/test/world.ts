@@ -95,6 +95,8 @@ export interface BundleSpec {
   readonly dependsOn?: readonly string[]
   readonly declared?: string
   readonly transactional?: boolean
+  /** A reviewed, safe rollback script (`down.sql`). */
+  readonly down?: string
 }
 
 export async function migrationWorld(label: string, server: TestServer): Promise<World> {
@@ -190,6 +192,9 @@ export async function migrationWorld(label: string, server: TestServer): Promise
         'verification:',
         '  expectations: auto',
         `  runtimeChecks: ${verify === null ? 'none' : 'verify.sql'}`,
+        ...(spec.down === undefined
+          ? []
+          : ['rollback:', '  script: down.sql', '  safety: safe', '  notes: reviewed']),
         '',
       ].join('\n')
       return {
@@ -198,6 +203,7 @@ export async function migrationWorld(label: string, server: TestServer): Promise
           'migration.yaml': yaml,
           'up.sql': spec.up,
           ...(verify === null ? {} : { 'verify.sql': verify }),
+          ...(spec.down === undefined ? {} : { 'down.sql': spec.down }),
         },
       }
     },

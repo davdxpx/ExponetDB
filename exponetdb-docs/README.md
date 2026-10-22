@@ -145,7 +145,7 @@ task in order. "Must" means the implementation will be reviewed against it.
 | Health, diagnostics, performance | [`10-observability/health.md`](./10-observability/health.md), [`10-observability/performance.md`](./10-observability/performance.md), [`03-database-model/statement-redaction.md`](./03-database-model/statement-redaction.md) | [`11-ui/supabase-reference-audit.md`](./11-ui/supabase-reference-audit.md) |
 | ExponetDB's own logs, metrics, tracing | [`10-observability/self-observability.md`](./10-observability/self-observability.md) | [`12-operations/incident-model.md`](./12-operations/incident-model.md) |
 | **Web App, design system** | [`11-ui/information-architecture.md`](./11-ui/information-architecture.md), [`11-ui/design-system.md`](./11-ui/design-system.md), [`11-ui/supabase-reference-audit.md`](./11-ui/supabase-reference-audit.md), [`01-architecture/adr/0030-supabase-ui-source-adoption.md`](./01-architecture/adr/0030-supabase-ui-source-adoption.md), [`11-ui/third-party-register.md`](./11-ui/third-party-register.md) (before copying any file), [`11-ui/studio-parity.md`](./11-ui/studio-parity.md) | [`06-rest-api/resources.md`](./06-rest-api/resources.md), [`14-roadmap/orders/wave-8-order.md`](./14-roadmap/orders/wave-8-order.md), [`14-roadmap/gates/8.md`](./14-roadmap/gates/8.md) |
-| Deployment, bootstrap, upgrades | [`12-operations/deployment.md`](./12-operations/deployment.md), [`12-operations/bootstrap.md`](./12-operations/bootstrap.md), [`12-operations/control-store-runbook.md`](./12-operations/control-store-runbook.md), [`12-operations/upgrades.md`](./12-operations/upgrades.md) | [`12-operations/incident-model.md`](./12-operations/incident-model.md) |
+| Deployment, bootstrap, upgrades | [`12-operations/deployment.md`](./12-operations/deployment.md), [`12-operations/bootstrap.md`](./12-operations/bootstrap.md), [`12-operations/control-store-runbook.md`](./12-operations/control-store-runbook.md), [`12-operations/upgrades.md`](./12-operations/upgrades.md) | [`12-operations/incident-model.md`](./12-operations/incident-model.md), [`12-operations/onboard-external-cluster.md`](./12-operations/onboard-external-cluster.md) |
 | REOSA integration | [`13-integrations/reosa-current-state.md`](./13-integrations/reosa-current-state.md), [`13-integrations/reosa-integration.md`](./13-integrations/reosa-integration.md), [`13-integrations/sdk.md`](./13-integrations/sdk.md) | [`04-migrations/legacy-import.md`](./04-migrations/legacy-import.md) |
 | Planning a wave | [`14-roadmap/implementation-waves.md`](./14-roadmap/implementation-waves.md), [`14-roadmap/acceptance-gates.md`](./14-roadmap/acceptance-gates.md), [`14-roadmap/test-strategy.md`](./14-roadmap/test-strategy.md) | [`00-product/open-decisions.md`](./00-product/open-decisions.md) |
 
@@ -196,6 +196,7 @@ task in order. "Must" means the implementation will be reviewed against it.
 - [`ledger.md`](./04-migrations/ledger.md): canonical ledger schema
 - [`staging-production-policy.md`](./04-migrations/staging-production-policy.md): evidence chain, break-glass
 - [`legacy-import.md`](./04-migrations/legacy-import.md): baseline and import of existing histories
+- [`owner-test-package.md`](./04-migrations/owner-test-package.md): Wave 9 Part A on the local lab: an external, Supabase-shaped cluster onboarded and its history imported
 - [`failure-and-recovery.md`](./04-migrations/failure-and-recovery.md): edge cases, non-transactional migrations, `down.sql`
 - [`authoring-and-ci.md`](./04-migrations/authoring-and-ci.md): source references, bundle submission, CLI, CI
 
@@ -245,6 +246,7 @@ task in order. "Must" means the implementation will be reviewed against it.
 - [`bootstrap.md`](./12-operations/bootstrap.md): from nothing to the first managed target
 - [`control-store-runbook.md`](./12-operations/control-store-runbook.md): first rollout on Coolify, Control Store backups, RB-10
 - [`node-runbook.md`](./12-operations/node-runbook.md): node agent host installation, enrollment, RB-13
+- [`onboard-external-cluster.md`](./12-operations/onboard-external-cluster.md): an existing self-managed cluster without the agent, from `server create` to an active target (Wave 9, A8)
 - [`local-development.md`](./12-operations/local-development.md): developer environment
 - [`upgrades.md`](./12-operations/upgrades.md): upgrading ExponetDB, the agent, PostgreSQL
 - [`incident-model.md`](./12-operations/incident-model.md): runbooks and incident classes

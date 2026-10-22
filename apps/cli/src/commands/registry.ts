@@ -62,6 +62,23 @@ async function environmentRef(remote: Remote, productId: string, ref: string): P
   throw new CliError('NOT_FOUND', `No environment ${ref} in this product is visible to you.`)
 }
 
+/** An environment (id or slug) of a project's product. */
+async function projectEnvironmentRef(remote: Remote, projectId: string, ref: string) {
+  if (/^env_[0-9A-HJKMNP-TV-Z]{26}$/.test(ref)) return ref
+  const project = must(await remote.sdk.call('getProject', { params: { projectId } } as never)) as {
+    readonly productId: string
+  }
+  return environmentRef(remote, project.productId, ref)
+}
+
+const ENVIRONMENT_FLAG = {
+  name: 'environment',
+  type: 'string',
+  placeholder: 'env',
+  description: "An environment of the project's product (id or slug).",
+  required: true,
+} as const
+
 export const registryCommands: readonly CommandSpec[] = [
   // ----- products -----
   listCommand({
@@ -424,6 +441,170 @@ export const registryCommands: readonly CommandSpec[] = [
         ? {}
         : { trustedExtensions: i.flags['trusted-extensions'] }),
     }),
+  }),
+
+  // ----- execution roles (ADR-0034) -----
+  showCommand({
+    path: ['project', 'execution-roles'],
+    summary:
+      "Show a project's execution roles: the default map, each environment's bindings and the declared exceptions.",
+    group: 'registry',
+    args: [{ name: 'project', description: 'A project id (prj_…).', required: true }],
+    action: 'project.execution_roles.get',
+    scopes: ['migrations.read'],
+    output: 'ProjectExecutionRoles',
+    title: 'execution roles',
+    operation: 'getProjectExecutionRoles',
+    params: (i) => ({ projectId: arg(i, 'project') }),
+    view: (v) => [
+      {
+        kind: 'table',
+        columns: [
+          { title: 'ENVIRONMENT' },
+          { title: 'TIER' },
+          { title: 'ALIAS' },
+          { title: 'ROLE', flexible: true },
+          { title: 'SOURCE' },
+        ],
+        rows: v.environments.flatMap((e) =>
+          Object.entries(e.effective).map(([alias, role]) => [
+            e.slug,
+            e.tier,
+            alias,
+            role,
+            Object.hasOwn(e.bindings, alias) ? 'binding' : 'project',
+          ]),
+        ),
+        empty: 'No execution roles: the project maps no alias.',
+      },
+      {
+        kind: 'table',
+        columns: [
+          { title: 'EXCEPTION' },
+          { title: 'ENVIRONMENT' },
+          { title: 'ROLE' },
+          { title: 'EXCUSES' },
+          { title: 'STATE' },
+          { title: 'REVIEW BY' },
+        ],
+        rows: v.exceptions.map((e) => [
+          e.id,
+          v.environments.find((x) => x.environmentId === e.environmentId)?.slug ?? e.environmentId,
+          e.role,
+          e.attributes.join(','),
+          e.state === 'active' && e.expired ? 'expired' : e.state,
+          dash(e.reviewBy),
+        ]),
+        empty: 'No declared exceptions.',
+      },
+    ],
+  }),
+  planCommand({
+    path: ['project', 'execution-roles', 'set'],
+    summary:
+      "Plan one environment's execution roles (aliases of the project map bound to other roles); the set replaces the environment's bindings.",
+    group: 'registry',
+    args: [{ name: 'project', description: 'A project id.', required: true }],
+    flags: [
+      ENVIRONMENT_FLAG,
+      {
+        name: 'role',
+        type: 'list',
+        placeholder: 'alias=role',
+        description: 'A binding (alias=PostgreSQL role); repeat for each alias.',
+      },
+      {
+        name: 'clear',
+        type: 'boolean',
+        description: 'Remove every binding: the project map applies again.',
+      },
+    ],
+    action: 'registry.execution_role_binding.set.plan',
+    scopes: MANAGE,
+    operation: 'planExecutionRoleBindings',
+    params: async (i, r) => {
+      const projectId = arg(i, 'project')
+      return {
+        projectId,
+        environmentId: await projectEnvironmentRef(r, projectId, String(i.flags['environment'])),
+      }
+    },
+    body: (i) => {
+      const roles = i.flags['role'] as string[] | undefined
+      if ((roles === undefined) === (i.flags['clear'] !== true)) {
+        throw new UsageError('Give --role alias=role (repeatable) or --clear.')
+      }
+      return { roles: roles === undefined ? {} : Object.fromEntries(pairs(roles, 'role')) }
+    },
+  }),
+  planCommand({
+    path: ['project', 'role-exception', 'declare'],
+    summary:
+      'Plan a declared exception: one role may carry BYPASSRLS as an execution role of the project in one environment (nothing else is ever excused).',
+    group: 'registry',
+    args: [{ name: 'project', description: 'A project id.', required: true }],
+    flags: [
+      ENVIRONMENT_FLAG,
+      {
+        name: 'role',
+        type: 'string',
+        placeholder: 'role',
+        description: 'The PostgreSQL role.',
+        required: true,
+      },
+      {
+        name: 'reason',
+        type: 'string',
+        placeholder: 'text',
+        description: 'Why the role needs BYPASSRLS (20 to 1000 characters).',
+        required: true,
+      },
+      {
+        name: 'review-by',
+        type: 'string',
+        placeholder: 'YYYY-MM-DD',
+        description: 'After this date the exception excuses nothing.',
+      },
+    ],
+    action: 'registry.execution_role_exception.declare.plan',
+    scopes: MANAGE,
+    operation: 'planExecutionRoleException',
+    params: async (i, r) => {
+      const projectId = arg(i, 'project')
+      return {
+        projectId,
+        environmentId: await projectEnvironmentRef(r, projectId, String(i.flags['environment'])),
+      }
+    },
+    body: (i) => ({
+      role: String(i.flags['role']),
+      reason: String(i.flags['reason']),
+      ...optional(i, 'review-by', (v) => v),
+    }),
+  }),
+  planCommand({
+    path: ['project', 'role-exception', 'revoke'],
+    summary:
+      'Plan the revocation of a declared exception; every plan that relied on it becomes stale.',
+    group: 'registry',
+    args: [
+      { name: 'project', description: 'A project id.', required: true },
+      { name: 'exception', description: 'The exception (rxe_…).', required: true },
+    ],
+    flags: [
+      {
+        name: 'reason',
+        type: 'string',
+        placeholder: 'text',
+        description: 'Why it is revoked (up to 1000 characters).',
+        required: true,
+      },
+    ],
+    action: 'registry.execution_role_exception.revoke.plan',
+    scopes: MANAGE,
+    operation: 'planExecutionRoleExceptionRevocation',
+    params: (i) => ({ projectId: arg(i, 'project'), exceptionId: arg(i, 'exception') }),
+    body: (i) => ({ reason: String(i.flags['reason']) }),
   }),
 
   // ----- targets -----
@@ -836,7 +1017,7 @@ export const registryCommands: readonly CommandSpec[] = [
     summary:
       'Write the cluster’s bootstrap SQL (roles, grants) to stdout or a new file, for a DBA to review and run.',
     description:
-      'The SQL is the server’s, generated for this cluster; the CLI never runs it. Review it before a database administrator runs it by hand.',
+      'The SQL is the server’s, generated for this cluster; the CLI never runs it. Review it before a database administrator runs it with psql. It is idempotent: run it again after a database is added or an execution role is created. It covers the registered databases and those named with --database (before registration), grants the migrator SET ROLE into the execution roles of the projects placed on the cluster or named with --project, where they exist and are fit, and lets the observer read the legacy ledgers named with --ledger.',
     group: 'registry',
     args: [{ name: 'cluster', description: 'A cluster id.', required: true }],
     flags: [
@@ -845,6 +1026,31 @@ export const registryCommands: readonly CommandSpec[] = [
         type: 'string',
         placeholder: 'path',
         description: 'A new file to write (0600).',
+      },
+      {
+        name: 'database',
+        type: 'list',
+        placeholder: 'names',
+        description: 'Databases of the cluster not registered yet.',
+      },
+      {
+        name: 'project',
+        type: 'string',
+        placeholder: 'prj_…',
+        description:
+          'A project whose targets will be placed here: its execution roles too (needs migrations.read on it).',
+      },
+      {
+        name: 'environment',
+        type: 'string',
+        placeholder: 'env_…',
+        description: 'Only this environment of --project.',
+      },
+      {
+        name: 'ledger',
+        type: 'list',
+        placeholder: 'supabase,drizzle,applied_migrations',
+        description: 'Legacy ledgers the observer may read during an import.',
       },
     ],
     locality: 'remote',
@@ -857,6 +1063,22 @@ export const registryCommands: readonly CommandSpec[] = [
       const v = must(
         await remote.sdk.call('getClusterBootstrapSql', {
           params: { clusterId: arg(input, 'cluster') },
+          query: {
+            ...(input.flags['database'] === undefined
+              ? {}
+              : { database: input.flags['database'] as string[] }),
+            ...optional(input, 'project', (v) => v),
+            ...optional(input, 'environment', (v) => v),
+            ...(input.flags['ledger'] === undefined
+              ? {}
+              : {
+                  ledgers: input.flags['ledger'] as (
+                    | 'supabase'
+                    | 'drizzle'
+                    | 'applied_migrations'
+                  )[],
+                }),
+          },
         }),
       )
       const file = flag(input, 'file')
@@ -867,7 +1089,15 @@ export const registryCommands: readonly CommandSpec[] = [
         await createNewPrivateFile(path, v.script.endsWith('\n') ? v.script : `${v.script}\n`)
         return result({
           command: 'cluster bootstrap-sql',
-          data: { clusterId: v.clusterId, roles: v.roles, databases: v.databases, file: path },
+          data: {
+            clusterId: v.clusterId,
+            roles: v.roles,
+            databases: v.databases,
+            pendingDatabases: v.pendingDatabases,
+            executionRoles: v.executionRoles,
+            legacyLedgers: v.legacyLedgers,
+            file: path,
+          },
           blocks: [
             {
               kind: 'text',
@@ -979,6 +1209,47 @@ export const registryCommands: readonly CommandSpec[] = [
     operation: 'planEndpointRetirement',
     params: (i) => ({ clusterId: arg(i, 'cluster'), endpointId: arg(i, 'endpoint') }),
     body: (i) => optional(i, 'reason', (v) => v),
+    file: false,
+  }),
+  planCommand({
+    path: ['cluster', 'database', 'retire'],
+    summary:
+      'Plan retiring a registered database record that is no current placement (decommission its target first); the database itself is not touched.',
+    group: 'registry',
+    args: [
+      { name: 'cluster', description: 'A cluster id.', required: true },
+      { name: 'database', description: 'A database id (dbs_…).', required: true },
+    ],
+    flags: [{ name: 'reason', type: 'string', placeholder: 'text', description: 'Why.' }],
+    action: 'registry.database.retire.plan',
+    scopes: MANAGE,
+    operation: 'planDatabaseRetirement',
+    params: (i) => ({ clusterId: arg(i, 'cluster'), databaseId: arg(i, 'database') }),
+    body: (i) => optional(i, 'reason', (v) => v),
+    file: false,
+  }),
+  planCommand({
+    path: ['cluster', 'declare-tier'],
+    summary:
+      'Plan declaring the tier a cluster is meant for (OD-22): prod makes every database registered on it need production authority; nonprod leaves it to the environment.',
+    description:
+      'The same rules as the Web App: a person with registry.manage:prod plans it, whichever value; applying it (--apply or plan apply) needs a fresh re-authentication (exponetdb auth reauth --plan).',
+    group: 'registry',
+    args: [{ name: 'cluster', description: 'A cluster id.', required: true }],
+    flags: [
+      {
+        name: 'tier',
+        type: 'enum',
+        values: ['prod', 'nonprod'],
+        description: 'The declared tier.',
+        required: true,
+      },
+    ],
+    action: 'registry.cluster.declare_tier.plan',
+    scopes: MANAGE,
+    operation: 'planClusterDeclaredTier',
+    params: (i) => ({ clusterId: arg(i, 'cluster') }),
+    body: (i) => ({ declaredTier: tierOf(flag(i, 'tier') ?? '') }),
     file: false,
   }),
   planCommand({

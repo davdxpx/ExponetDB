@@ -62,13 +62,41 @@ TargetSession (TLS verify-full, session guards, pinned settings)
 
 ### 2.2 External cluster (no agent)
 
-1. Admin creates a cluster record with `management_mode = external`, endpoint(s)
-   and CA bundle.
-2. ExponetDB generates the role-creation SQL (verifiers only) for a human to run.
-3. Admin enters credentials into the write-only credential endpoint (they are
-   encrypted immediately; the Web App never displays them again).
-4. ExponetDB connects, pins `system_identifier`, and the target registration
-   proceeds as above, minus node capabilities.
+**[DECIDED]** (Wave 4; onboarding without hand-made SQL since Wave 9 order
+A8). The walkthrough with commands and expected outputs is
+[`onboard-external-cluster.md`](../12-operations/onboard-external-cluster.md).
+
+1. Admin creates a **server** record (optional for an external cluster; the
+   server cannot be added to the cluster record later).
+2. Admin registers the cluster (`cluster register`): endpoint(s), CA bundle
+   and, optionally, the server. **`cluster register` always creates an
+   external cluster** (`management_mode = external`); the record keeps its
+   server, mode and CA bundle for good (Control Store guard `EXG07`).
+3. Admin declares the cluster's **tier** (`cluster declare-tier`, §4.1;
+   production authority whichever value): an undeclared cluster counts as
+   `prod`, so placing even a nonprod target on it needs production
+   authority; declared `nonprod`, the environment decides.
+4. ExponetDB generates the **bootstrap SQL** (`cluster bootstrap-sql`, with
+   `--database` for databases not registered yet, `--project` for the
+   execution roles of a project whose targets will live there, `--ledger`
+   for the legacy ledger read); a person runs it with psql, sets each
+   password with `\password` and runs it again whenever something is added
+   (it is idempotent;
+   [credentials-and-roles.md §8.1](../03-database-model/credentials-and-roles.md#81-bootstrap-sql)).
+   `pg_hba` and the firewall follow
+   [credentials-and-roles.md §8.2](../03-database-model/credentials-and-roles.md#82-pg_hba-and-network-for-an-external-cluster).
+5. Admin enters each password once into the write-only credential endpoint
+   (it is encrypted immediately; the Web App never displays it again); the
+   worker verifies it over TLS.
+6. ExponetDB connects as the observer, the admin **confirms** the cluster,
+   which pins `system_identifier`; then databases and targets are registered
+   as in §2.1, minus node capabilities (every node capability on an
+   external cluster is `CAPABILITY_UNAVAILABLE`).
+
+**[OPEN: OD-54]** How a cluster registered external later gains the node
+agent ([open-decisions.md](../00-product/open-decisions.md#od-54-how-an-external-cluster-gains-the-node-agent)).
+As built, an enrolled node on the same host does not change the record:
+node capabilities stay unavailable for it.
 
 ### 2.3 Implementation (Wave 4)
 
@@ -204,11 +232,13 @@ objects ([C-24](../00-product/constitution.md#c-24-production-is-its-own-authori
 - server and node tier = max tier of clusters on it.
 
 The derived tier is recomputed on every placement change and is part of the
-authorization of every cluster, server and node operation. **[ASSUMPTION]**
-`reos-db-01` will host both `reosa_staging` and `reosa_production` (REOSA's
-infrastructure documents plan it; the server was not ordered as of 2026-10-04,
-see [`../01-architecture/control-plane-and-data-plane.md` §2.1](../01-architecture/control-plane-and-data-plane.md#21-v1-topology));
-it is then `prod` tier as a whole.
+authorization of every cluster, server and node operation. **[OBSERVED]**
+(owner's Wave 9 order §6, 2026-10-21) `reos-db-01` runs and hosts
+`reosa_staging`; **[PLANNED]** `reosa_production` moves onto the same cluster
+in Wave 11 (OD-7b), which then is `prod` tier as a whole
+([`../01-architecture/control-plane-and-data-plane.md` §2.1](../01-architecture/control-plane-and-data-plane.md#21-v1-topology)).
+Until then the derived tier of the staging cluster is `nonprod`; its declared
+tier (§4.1) is the owner's choice when it is registered.
 
 ### 4.1 The declared intended tier of a cluster (OD-22)
 
@@ -248,6 +278,53 @@ production database is placed. A cluster therefore also carries a
 Tests: `apps/server/test/http-registry-tier.int.test.ts`,
 `packages/auth/test/registry-tier.test.ts`,
 `packages/control-store/test/registry-schema.int.test.ts`.
+
+### 4.2 Execution roles per environment and declared exceptions (Wave 9)
+
+**[DECIDED]** (Wave 9 Part A, [ADR-0034](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md),
+[`../03-database-model/credentials-and-roles.md` §3.1, §3.2](../03-database-model/credentials-and-roles.md#31-execution-roles-per-environment))
+Two registry records refine a project's execution roles:
+
+| Record | What it holds | Changed by |
+|---|---|---|
+| `registry.execution_role_bindings` | per (project, environment of the project's product, alias of the project map) the PostgreSQL role, with the operation that set it and, once replaced or removed, the operation that ended it (nothing is deleted) | `registry.execution_role_binding.set`: the environment's whole set, replaced |
+| `registry.execution_role_exceptions` (`rxe_…`) | a person's declaration that one role may carry `BYPASSRLS` as an execution role of the project in one environment: role, reason, optional review date, `active` or `revoked`, a revision, who declared and revoked it | `registry.execution_role_exception.declare`, `.revoke` |
+
+All three operations are `registry.manage` at the **environment's** tier
+(the subject is the environment), high, re-authenticated and human only;
+declaring or revoking on a production environment also needs an approval
+(`registry.execution-role-exception-production`). An environment subject
+passes only an unrestricted grant: a tier-restricted CLI grant changes
+neither, and a person whose bindings do not cover the environment does not
+see it (`NOT_FOUND`). Control Store guards check the environment's product,
+the operation's kind, that an ended binding and a revoked declaration never
+change again, that a declaration's attributes are exactly `{bypassrls}` and
+that a role is never a predefined or ExponetDB role; an environment keeps
+its tier while it binds execution roles or holds an active exception
+(`tier_in_use`, and a trigger on the environments table). `GET
+/projects/{projectId}/execution-roles` (`migrations.read` on the project)
+shows the default map, each environment's bindings and effective map, and
+the declarations; the CLI's `project execution-roles` and `project
+role-exception` commands use it.
+
+### 4.3 Correcting a wrong registration (Wave 9)
+
+**[DECIDED]** (Wave 9 Part A, A7) A registration on the wrong database is
+corrected through operations, never by editing the Control Store: the
+target is decommissioned (`target.decommission`, which ends its placement
+and leaves the database and its marker untouched), then the database record
+is retired (`registry.database.retire`, `POST
+/clusters/{id}/databases/{databaseId}/retire`, CLI `cluster database
+retire`; `registry.manage` at the cluster's tier, re-authenticated, human
+only, audited). Retirement is final and refused while the database is a
+current placement (`database_in_use`, and the Control Store guard EXG09);
+nothing changes on the cluster. **[DECIDED]** (review round 2) A target
+registration locks the database row (`FOR SHARE`) before it places the
+target, so a retirement and a registration of the same database never both
+commit: whichever comes second waits, and its guard (EXG09 or EXG11) then
+sees the other's result. Afterwards the same name on the cluster
+registers again, for example after the database was re-created with a new
+oid (`databases_one_registered_name` covers registered records only).
 
 ## 5. Registry and REOSA's infrastructure register
 

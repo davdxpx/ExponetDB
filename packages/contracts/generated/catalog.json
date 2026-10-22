@@ -825,6 +825,37 @@
       "wave": "6"
     },
     {
+      "basis": "Wave 9 order A7; legacy-import.md §2.5",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "migration.import.scratch_check",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.import"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.import"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Check a scratch target before a legacy import (read only: usability, identity, emptiness, extensions, objects outside the scope, the execution role)",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
       "basis": "resources.md, tool-catalog.md",
       "class": {
         "class": "read",
@@ -5474,6 +5505,70 @@
       "wave": "4"
     },
     {
+      "basis": "Wave 9 order A7: correct a wrong registration without editing the Control Store",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.database.retire.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "cluster_registry",
+      "title": "Plan the retirement of a registered database without a current placement",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "Wave 9 order A7",
+      "class": {
+        "kind": "by_tier",
+        "nonprod": "standard",
+        "prod": "high"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.database.retire",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "cluster_registry",
+      "title": "Retire a registered database record (final; its name can be registered again)",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
       "basis": "resources.md (Registry): registry changes create a plan",
       "class": {
         "class": "read",
@@ -5503,6 +5598,227 @@
       "title": "Plan the declaration of a cluster's intended tier (OD-22)",
       "verification": "none",
       "wave": "8"
+    },
+    {
+      "basis": "ADR-0034; credentials-and-roles.md §3",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "project.execution_roles.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "migrations.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "migrations.read"
+      },
+      "subject": "project",
+      "tierSemantics": "none",
+      "title": "Get the execution roles of a project: the default map, each environment’s bindings and the declared exceptions",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.execution_role_binding.set.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "project",
+      "tierSemantics": "subject",
+      "title": "Plan the execution roles of one environment of a project (ADR-0034 §5)",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "ADR-0034 §5 (Wave 9 order D-A2): registry.manage at the environment’s tier",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.execution_role_binding.set",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "project",
+      "tierSemantics": "subject",
+      "title": "Set the execution roles of one environment of a project (aliases bound to other roles than the project map)",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.execution_role_exception.declare.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "project",
+      "tierSemantics": "subject",
+      "title": "Plan a declared BYPASSRLS execution-role exception (ADR-0034, OD-51)",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "ADR-0034 §2 (OD-51): human only, registry.manage at the environment’s tier, production with an approval",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.execution_role_exception.declare",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "project",
+      "tierSemantics": "subject",
+      "title": "Declare that one role may carry BYPASSRLS as an execution role of a project in one environment (nothing else is excusable)",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.execution_role_exception.revoke.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "project",
+      "tierSemantics": "subject",
+      "title": "Plan the revocation of an execution-role exception (ADR-0034)",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "ADR-0034 §2: human only, registry.manage at the environment’s tier",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.execution_role_exception.revoke",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "project",
+      "tierSemantics": "subject",
+      "title": "Revoke an execution-role exception: plans that bound it become stale",
+      "verification": "required",
+      "wave": "9"
     },
     {
       "basis": "OD-22 (extended 2026-10-13): setting or changing the declared tier is a production decision; registry.md §4",
@@ -8764,6 +9080,11 @@
             "maxItems": 1000,
             "minItems": 1,
             "type": "array"
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
           }
         },
         "required": [
@@ -8777,6 +9098,46 @@
       "status": 409,
       "title": "Legacy import needs decisions",
       "type": "https://db.exponet.cloud/errors/legacy-import-ambiguous"
+    },
+    {
+      "code": "LEGACY_IMPORT_TRUNCATED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/LEGACY_IMPORT_TRUNCATED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "driftTotal": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "held": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "driftTotal",
+          "held"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "The import report holds fewer global drift items than exist, so it cannot become a baseline.",
+      "remediation": "Narrow the managed schema scope or correct the import inputs so that the drift fits the report, then analyze again.",
+      "retryable": false,
+      "status": 409,
+      "title": "Legacy import report incomplete",
+      "type": "https://db.exponet.cloud/errors/legacy-import-truncated"
     },
     {
       "code": "STAGING_EVIDENCE_MISSING",
@@ -9518,10 +9879,14 @@
               "target_state",
               "endpoint_retired",
               "database_not_found",
+              "database_retired",
+              "database_in_use",
               "no_active_endpoint",
               "observer_credential_missing",
               "system_identifier_taken",
               "credential_missing",
+              "exception_active",
+              "exception_not_active",
               "cluster_unmapped",
               "cluster_not_agent_managed",
               "postgres_ca_missing",

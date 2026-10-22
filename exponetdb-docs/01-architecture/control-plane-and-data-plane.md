@@ -41,12 +41,24 @@
 | Private network range | `10.8.0.0/16` | as-built |
 | Hetzner Cloud Network name | **`exponent`** | as-built (spelled with "n"; brand is "Exponet") |
 | Cloud subnet | `10.8.1.0/24` (zone `eu-central`) | as-built |
-| `reos-db-01` | `10.8.1.2` | **planned**, server not yet ordered |
+| `reos-db-01` | `10.8.1.1` | REOSA's documents (2026-10-04): `10.8.1.2`, **planned**, server not yet ordered; corrected to `10.8.1.1`, **running**, by the owner's Wave 9 order §6 (2026-10-21), see below |
 | vSwitch subnet | `10.8.2.0/24`, gateway `10.8.2.1` | as-built |
 | vSwitch | **`vSwitch-Exponent`**, ID 85953, VLAN 4000 | as-built |
 | `reos-01` private address | `10.8.2.2/24` on `enp5s0.4000` | as-built 2026-10-04 |
 | MTU | 1400 (1500 described as a silent `pg_restore` failure cause) | as-built |
 | Auto-created subnet `10.8.0.0/24` | "can be deleted"; deletion not recorded | unknown |
+
+**[OBSERVED]** (owner's Wave 9 order §6, 2026-10-21; measured by the owner,
+ExponetDB has not connected to the host) `reos-db-01` runs:
+
+| Item | Value |
+|---|---|
+| Host | Hetzner Cloud, Falkenstein; PostgreSQL **17.11** from PGDG packages; private address **`10.8.1.1`** |
+| TLS | server name `reosdb01.exponet.cloud` (resolves to the private address inside the private network); its own CA with name constraints (`DNS:exponet.cloud`, `IP:10.8.0.0/16`); `hostssl` with SCRAM only; clients connect with `verify-full`. Bun's TLS (BoringSSL) rejects a name-constrained CA, Node (OpenSSL) and Go accept it; ExponetDB's image runs on Node 24 (`Dockerfile`, `node:24.21.0`) and its node agent is Go |
+| Clients | containers on `reos-01` reach it SNAT'ed from `10.8.2.2`: the source address ExponetDB's worker will have, and REOSA's applications' too |
+| Management | external: no node agent; configuration and backups by shell scripts and systemd timers |
+| Databases | `reosa_staging`; REOSA production still runs on the hosted provider (**[PLANNED]** to move here in Wave 11, OD-7b) |
+| Backups | pgBackRest 2.59.3; repository 1 on Cloudflare R2 (EU), repository 2 a monthly bundle; `aes-256-cbc`; `archive_mode on`, `archive_timeout 300`; systemd timers (differential Monday to Saturday, full on Sunday, monthly bundle) |
 
 **Discrepancies noted, not resolved here:**
 
@@ -66,21 +78,30 @@
 V1 placement:
 
 ```
-reos-01 (Hetzner dedicated EX44, FSN1; 10.8.2.2)        reos-db-01 (Hetzner Cloud, FSN1; 10.8.1.2) [planned]
-├── Coolify + Traefik                                    ├── PostgreSQL 17 (PGDG) + pgvector, systemd
-├── REOSA applications                                   │     reosa_production, reosa_staging
-├── ExponetDB (serve, worker, gateway)                   └── exponetdb-node (+ helper)
+reos-01 (Hetzner dedicated EX44, FSN1; 10.8.2.2)        reos-db-01 (Hetzner Cloud, FSN1; 10.8.1.1) [running]
+├── Coolify + Traefik                                    ├── PostgreSQL 17.11 (PGDG) + pgvector, systemd
+├── REOSA applications                                   │     reosa_staging; reosa_production [planned, Wave 11]
+├── ExponetDB (serve, worker, gateway)                   └── exponetdb-node (+ helper) [planned, not installed]
 └── ExponetDB Control Store (Coolify PostgreSQL)
         │                                                          ▲
         └──── private network 10.8.0.0/16, MTU 1400 ───────────────┘
-              SQL: ExponetDB → 10.8.1.2:5432 (TLS verify-full)
-              agent: exponetdb-node → 10.8.2.2:7443 (mTLS)
+              SQL: ExponetDB → 10.8.1.1:5432 (TLS name reosdb01.exponet.cloud, verify-full)
+              agent: exponetdb-node → 10.8.2.2:7443 (mTLS) [planned]
 ```
 
 **[DECIDED]** for `reos-db-01` (consistent with REOSA's handbook): PostgreSQL 17
 installed directly on the host from PGDG packages, pgvector from PGDG, managed by
 systemd; no Docker, no Coolify, no Traefik for PostgreSQL; PostgreSQL listens on
 the private address and loopback only.
+
+**[OBSERVED]** (2026-10-21) No node agent runs on `reos-db-01`: it is managed
+by the owner's scripts, and ExponetDB will register it as an **external**
+cluster (OD-7a). Installing or enrolling the agent there waits for the G5
+waiver's expiry condition (items 2 and 4: a run on a real systemd host,
+"before a node agent is installed on, or enrolled for, any real host",
+[G5 record §11](../14-roadmap/gates/5.md)) and for
+[OD-54](../00-product/open-decisions.md#od-54-how-an-external-cluster-gains-the-node-agent):
+a cluster registered external never becomes agent-managed as built.
 
 ### 2.2 Later topology
 
@@ -105,11 +126,11 @@ configuration update job before the old gateway stops.
 | Path | From → To | Protocol | Authentication | Exposure |
 |---|---|---|---|---|
 | Users, agents, programs → ExponetDB | internet → Traefik on `reos-01` → `serve` | HTTPS | sessions, OAuth tokens, API keys | public (`db.exponet.cloud`) |
-| ExponetDB → managed PostgreSQL | `worker` (all roles), `serve` (observer only) → `10.8.1.2:5432` | PostgreSQL wire protocol over TLS (`verify-full`) | SCRAM per access role | private network only |
-| Node agent → ExponetDB | `reos-db-01` → `10.8.2.2:7443` | HTTPS/2 with mutual TLS | client certificate issued at enrollment | private network only; not routed through Traefik |
+| ExponetDB → managed PostgreSQL | `worker` (all roles), `serve` (observer only) → `10.8.1.1:5432` (TLS name `reosdb01.exponet.cloud`), from `10.8.2.2` | PostgreSQL wire protocol over TLS (`verify-full`, the host's name-constrained CA) | SCRAM per access role | private network only |
+| Node agent → ExponetDB | `reos-db-01` → `10.8.2.2:7443` | HTTPS/2 with mutual TLS | client certificate issued at enrollment | private network only; not routed through Traefik; **[PLANNED]** no agent runs there yet |
 | ExponetDB → Control Store | containers → Coolify DB on Docker network | PostgreSQL over the internal Docker network | SCRAM per process role | not published |
-| Node agent → backup storage | `reos-db-01` → object storage | HTTPS | storage credentials held by the agent's backup engine configuration | outbound internet |
-| REOSA apps → managed PostgreSQL | `reos-01` containers → `10.8.1.2:5432` | PostgreSQL over TLS | REOSA's own login roles | private network; **not** through ExponetDB |
+| Node agent → backup storage | `reos-db-01` → object storage | HTTPS | storage credentials held by the agent's backup engine configuration | outbound internet; **[OBSERVED]** today the owner's pgBackRest setup writes to Cloudflare R2 without an agent (adoption: OD-52, Wave 9 Part B) |
+| REOSA apps → managed PostgreSQL | `reos-01` containers → `10.8.1.1:5432`, SNAT'ed from `10.8.2.2` | PostgreSQL over TLS | REOSA's own login roles | private network; **not** through ExponetDB |
 
 **[DECIDED]** ([OD-18](../00-product/open-decisions.md#od-18-agent-gateway-exposure),
 resolved 2026-10-07) The gateway listens on the private network only in V1. A

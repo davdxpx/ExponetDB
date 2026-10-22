@@ -63,6 +63,25 @@ describe('REST read routes', () => {
     expect(new Set(ROUTE_LIST.map((r) => `${r.method} ${r.path}`)).size).toBe(ROUTE_LIST.length)
   })
 
+  it('never shadow a later route: a path with a parameter where a later one of the same method has a literal', () => {
+    // The server registers routes in this order and the first match answers: a GET
+    // /targets/{target}/migrations/{migrationId} listed first took /…/migrations/scratch-check
+    // (found by the CLI end-to-end test of Wave 9 Part A).
+    const param = (s: string) => s.startsWith('{')
+    for (const list of [ROUTE_LIST, AUTH_ROUTES]) {
+      list.forEach((later, j) => {
+        const literal = later.path.split('/')
+        for (const earlier of list.slice(0, j)) {
+          const segments = earlier.path.split('/')
+          if (earlier.method !== later.method || segments.length !== literal.length) continue
+          const covers = segments.every((s, i) => s === literal[i] || param(s))
+          const wider = segments.some((s, i) => param(s) && !param(literal[i] ?? ''))
+          expect(covers && wider, `${earlier.operationId} shadows ${later.operationId}`).toBe(false)
+        }
+      })
+    }
+  })
+
   it('reference registered actions; GET is a pure read; POST and DELETE never mutate without a plan', () => {
     for (const r of [...ROUTE_LIST, ...AUTH_ROUTES]) {
       const a = action(r.action)

@@ -99,6 +99,15 @@ const migrationsMessages = {
   'migrations.import.column.evidence': 'Evidence',
   'migrations.import.column.decision': 'Decision',
   'migrations.import.noEvidence': 'None recorded',
+  'migrations.import.strength': 'Ledger evidence:',
+  'migrations.import.strength.strong': 'Strong (tool hash or the same statements)',
+  'migrations.import.strength.medium': 'Medium (the same statements, comments ignored)',
+  'migrations.import.strength.low': 'Low (the same code, comments in bodies ignored)',
+  'migrations.import.strength.curated': 'Curated (an alias)',
+  'migrations.import.strength.weak': 'Weak (the name only; not recorded)',
+  'migrations.import.truncated.title': 'This report does not hold all of its drift',
+  'migrations.import.truncated.body':
+    'It holds {held} of {total} drift entries, so it cannot become a baseline. Narrow the managed schemas or correct the import inputs, then analyze again.',
   'migrations.import.undecided': 'Waiting for a decision',
   'migrations.import.noDecisionNeeded': 'No decision needed',
   'migrations.import.note':

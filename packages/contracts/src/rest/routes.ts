@@ -4,9 +4,11 @@ import {
   BreakGlassGrantIdSchema,
   ClusterIdSchema,
   CursorSchema,
+  DatabaseIdSchema,
   EndpointIdSchema,
   EnrollmentTokenIdSchema,
   EnvironmentIdSchema,
+  ExecutionRoleExceptionIdSchema,
   FindingIdSchema,
   GrantIdSchema,
   IdentityIdSchema,
@@ -33,6 +35,7 @@ import {
   TimestampSchema,
 } from '../common.ts'
 import type { ErrorCode } from '../errors.ts'
+import { ExecutionRoleAliasSchema } from '../manifest/migration.ts'
 import { CLIENT_STATES } from '../oauth/protocol.ts'
 import {
   ApiKeyCreatedSchema,
@@ -100,6 +103,7 @@ import {
   MigrationResumeRequestSchema,
   MigrationRollbackRequestSchema,
   MigrationVerifyRequestSchema,
+  ScratchCheckSchema,
   StepUpConfirmRequestSchema,
   StepUpRequestSchema,
   StepUpSchema,
@@ -117,6 +121,7 @@ import {
 } from './nodes.ts'
 import {
   AccessRoleSchema,
+  ClusterBootstrapSqlQuerySchema,
   ClusterBootstrapSqlSchema,
   ClusterConfirmRequestSchema,
   ClusterDeclaredTierRequestSchema,
@@ -124,6 +129,7 @@ import {
   CredentialSubmissionSchema,
   CredentialViewSchema,
   DatabaseRegisterRequestSchema,
+  DatabaseRetireRequestSchema,
   DatabaseViewSchema,
   DriftAcceptRequestSchema,
   EndpointRequestSchema,
@@ -131,9 +137,13 @@ import {
   EndpointViewSchema,
   EnvironmentChangeRequestSchema,
   EnvironmentCreateRequestSchema,
+  ExecutionRoleBindingsRequestSchema,
+  ExecutionRoleExceptionDeclareRequestSchema,
+  ExecutionRoleExceptionRevokeRequestSchema,
   ProductCreateRequestSchema,
   ProjectChangeRequestSchema,
   ProjectCreateRequestSchema,
+  ProjectExecutionRolesSchema,
   ServerCreateRequestSchema,
   TargetRegisterRequestSchema,
   TargetStateChangeRequestSchema,
@@ -1719,6 +1729,57 @@ export const REGISTRY_ROUTES = [
     response: planned,
     errors: PLAN_ERRORS,
   },
+  // ----- Wave 9 Part A: execution roles for adopted schemas (ADR-0034) -----
+  {
+    operationId: 'getProjectExecutionRoles',
+    method: 'get',
+    path: '/projects/{projectId}/execution-roles',
+    summary:
+      "A project's execution roles: the default alias map, each environment's bindings and effective map, and the declared BYPASSRLS exceptions (ADR-0034).",
+    action: 'project.execution_roles.get',
+    pathParams: z.strictObject({ projectId: ProjectIdSchema }),
+    response: { status: 200, schema: ProjectExecutionRolesSchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'planExecutionRoleBindings',
+    method: 'post',
+    path: '/projects/{projectId}/environments/{environmentId}/execution-role-plans',
+    summary:
+      'Plan the execution roles of one environment of the project (aliases bound to other roles than the project map; an empty map removes the bindings).',
+    action: 'registry.execution_role_binding.set.plan',
+    pathParams: z.strictObject({ projectId: ProjectIdSchema, environmentId: EnvironmentIdSchema }),
+    body: ExecutionRoleBindingsRequestSchema,
+    response: planned,
+    errors: PLAN_ERRORS,
+  },
+  {
+    operationId: 'planExecutionRoleException',
+    method: 'post',
+    path: '/projects/{projectId}/environments/{environmentId}/execution-role-exceptions',
+    summary:
+      'Plan the declaration of a BYPASSRLS execution-role exception for one role in one environment of the project (ADR-0034, OD-51); human only, production with an approval.',
+    action: 'registry.execution_role_exception.declare.plan',
+    pathParams: z.strictObject({ projectId: ProjectIdSchema, environmentId: EnvironmentIdSchema }),
+    body: ExecutionRoleExceptionDeclareRequestSchema,
+    response: planned,
+    errors: PLAN_ERRORS,
+  },
+  {
+    operationId: 'planExecutionRoleExceptionRevocation',
+    method: 'post',
+    path: '/projects/{projectId}/execution-role-exceptions/{exceptionId}/revoke-plans',
+    summary:
+      'Plan the revocation of an execution-role exception; plans that bound it become stale (ADR-0034).',
+    action: 'registry.execution_role_exception.revoke.plan',
+    pathParams: z.strictObject({
+      projectId: ProjectIdSchema,
+      exceptionId: ExecutionRoleExceptionIdSchema,
+    }),
+    body: ExecutionRoleExceptionRevokeRequestSchema,
+    response: planned,
+    errors: PLAN_ERRORS,
+  },
   {
     operationId: 'planServer',
     method: 'post',
@@ -1776,11 +1837,13 @@ export const REGISTRY_ROUTES = [
     operationId: 'getClusterBootstrapSql',
     method: 'get',
     path: '/clusters/{clusterId}/bootstrap-sql',
-    summary: 'The role bootstrap SQL of an external cluster for a person to run (no password).',
+    summary:
+      'The role bootstrap SQL of an external cluster for a person to run with psql (no password; idempotent): registered and requested databases, the execution roles of the projects placed there or named, the legacy ledger read.',
     action: 'cluster.bootstrap_sql.get',
     pathParams: clusterParams,
+    query: ClusterBootstrapSqlQuerySchema,
     response: { status: 200, schema: ClusterBootstrapSqlSchema },
-    errors: ['NOT_FOUND'],
+    errors: ['NOT_FOUND', 'VALIDATION_FAILED'],
   },
   {
     operationId: 'listClusterEndpoints',
@@ -1846,6 +1909,18 @@ export const REGISTRY_ROUTES = [
       'TARGET_TLS_FAILED',
       'TARGET_CREDENTIAL_INVALID',
     ],
+  },
+  {
+    operationId: 'planDatabaseRetirement',
+    method: 'post',
+    path: '/clusters/{clusterId}/databases/{databaseId}/retire',
+    summary:
+      'Plan the retirement of a registered database that is no current placement (Wave 9): the record ends, its name can be registered again; nothing changes on the cluster.',
+    action: 'registry.database.retire.plan',
+    pathParams: z.strictObject({ clusterId: ClusterIdSchema, databaseId: DatabaseIdSchema }),
+    body: DatabaseRetireRequestSchema,
+    response: planned,
+    errors: PLAN_ERRORS,
   },
   {
     operationId: 'listClusterCredentials',
@@ -2185,6 +2260,24 @@ export const MIGRATION_ROUTES = [
     }),
     response: { status: 200, schema: BundleFileSchema },
     errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'checkScratchTarget',
+    method: 'get',
+    path: '/targets/{target}/migrations/scratch-check',
+    summary:
+      'Check, read only, whether a scratch target can take a legacy import replay of this target: usable, its identity, empty, the same extensions, the objects outside the managed scope the schema depends on, the execution role (Wave 9).',
+    action: 'migration.import.scratch_check',
+    pathParams: z.strictObject({ target: TargetRefSchema }),
+    query: z.strictObject({
+      scratchTarget: TargetRefSchema,
+      role: ExecutionRoleAliasSchema.optional().meta({
+        description:
+          'The execution role alias the replay runs as (the analysis hint role; default owner).',
+      }),
+    }),
+    response: { status: 200, schema: ScratchCheckSchema },
+    errors: ['VALIDATION_FAILED', ...TARGET_ERRORS],
   },
   {
     operationId: 'getTargetMigration',

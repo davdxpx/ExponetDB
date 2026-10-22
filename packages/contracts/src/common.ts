@@ -110,6 +110,7 @@ export const ImportReportIdSchema = entityId('imr')
 export const VerificationRunIdSchema = entityId('vfy')
 export const QueryIdSchema = entityId('qry')
 export const SavedQueryIdSchema = entityId('sqy')
+export const ExecutionRoleExceptionIdSchema = entityId('rxe')
 /** A schema snapshot is a sample batch of the schema observation (`smp_`). */
 export const SnapshotIdSchema = entityId('smp')
 

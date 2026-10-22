@@ -564,6 +564,7 @@
               "migration.stream.get",
               "migration.bundle.get",
               "migration.import.report.get",
+              "migration.import.scratch_check",
               "session.list",
               "lock.list",
               "query_stats.list",
@@ -709,7 +710,16 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.database.retire.plan",
+              "registry.database.retire",
               "registry.cluster.declare_tier.plan",
+              "project.execution_roles.get",
+              "registry.execution_role_binding.set.plan",
+              "registry.execution_role_binding.set",
+              "registry.execution_role_exception.declare.plan",
+              "registry.execution_role_exception.declare",
+              "registry.execution_role_exception.revoke.plan",
+              "registry.execution_role_exception.revoke",
               "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
@@ -3314,6 +3324,51 @@
             },
             "type": "array"
           },
+          "executionRoles": {
+            "description": "Execution roles granted to the migrator WITH INHERIT FALSE, SET TRUE where they exist and are fit.",
+            "items": {
+              "properties": {
+                "bypassRlsExcused": {
+                  "description": "A declared exception (ADR-0034) excuses its BYPASSRLS in an environment on this cluster.",
+                  "type": "boolean"
+                },
+                "name": {
+                  "description": "PostgreSQL role name.",
+                  "maxLength": 63,
+                  "type": "string",
+                  "x-untrusted": true
+                }
+              },
+              "required": [
+                "name",
+                "bypassRlsExcused"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "legacyLedgers": {
+            "description": "Legacy ledgers the observer is granted to read, where they exist.",
+            "items": {
+              "enum": [
+                "supabase",
+                "drizzle",
+                "applied_migrations"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "pendingDatabases": {
+            "description": "Requested databases not registered yet (covered by the script).",
+            "items": {
+              "description": "Database name.",
+              "maxLength": 63,
+              "type": "string",
+              "x-untrusted": true
+            },
+            "type": "array"
+          },
           "roles": {
             "items": {
               "pattern": "^exponetdb_[a-z_]+$",
@@ -3322,8 +3377,8 @@
             "type": "array"
           },
           "script": {
-            "description": "SQL for a person to run with administrative tools; contains no password (set each one with psql \\password).",
-            "maxLength": 65536,
+            "description": "SQL for a person to run with psql; contains no password (set each one with psql \\password).",
+            "maxLength": 8388608,
             "type": "string",
             "x-untrusted": true
           }
@@ -3332,7 +3387,10 @@
           "clusterId",
           "script",
           "roles",
-          "databases"
+          "databases",
+          "pendingDatabases",
+          "executionRoles",
+          "legacyLedgers"
         ],
         "type": "object"
       },
@@ -3547,6 +3605,17 @@
         "required": [
           "name"
         ],
+        "type": "object"
+      },
+      "DatabaseRetireRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "description": "Short machine-readable reason, stored on the target and in the audit.",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "DatabaseView": {
@@ -4477,6 +4546,207 @@
           "slug",
           "displayName",
           "tier"
+        ],
+        "type": "object"
+      },
+      "ExecutionRoleBindingsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "roles": {
+            "additionalProperties": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "description": "Alias → PostgreSQL role for this environment; every alias must exist in the project map; never a pg_ or exponetdb_ role.",
+            "propertyNames": {
+              "description": "Execution role alias defined in the project configuration.",
+              "pattern": "^[a-z][a-z0-9_]{0,62}$",
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "roles"
+        ],
+        "type": "object"
+      },
+      "ExecutionRoleException": {
+        "properties": {
+          "attributes": {
+            "items": {
+              "const": "bypassrls",
+              "type": "string"
+            },
+            "maxItems": 1,
+            "minItems": 1,
+            "type": "array"
+          },
+          "declaredAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "declaredBy": {
+            "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "environmentId": {
+            "description": "Entity id `^env_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^env_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "expired": {
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Entity id `^rxe_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^rxe_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "projectId": {
+            "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "reason": {
+            "description": "The declaring person’s reason.",
+            "maxLength": 1000,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "reviewBy": {
+            "anyOf": [
+              {
+                "format": "date",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "revokeReason": {
+            "anyOf": [
+              {
+                "description": "Why it was revoked.",
+                "maxLength": 1000,
+                "type": "string",
+                "x-untrusted": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revokedAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revokedBy": {
+            "anyOf": [
+              {
+                "description": "Entity id `^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^idn_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "role": {
+            "maxLength": 63,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "state": {
+            "enum": [
+              "active",
+              "revoked"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "environmentId",
+          "role",
+          "attributes",
+          "reason",
+          "reviewBy",
+          "state",
+          "expired",
+          "revision",
+          "declaredBy",
+          "declaredAt",
+          "revokedBy",
+          "revokedAt",
+          "revokeReason"
+        ],
+        "type": "object"
+      },
+      "ExecutionRoleExceptionDeclareRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "description": "Why, in the words of the person declaring (20 to 1000 characters).",
+            "maxLength": 1000,
+            "minLength": 20,
+            "pattern": "^[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]+$",
+            "type": "string",
+            "x-untrusted": true
+          },
+          "reviewBy": {
+            "description": "A date by which a person reviews the exception; after it the exception excuses nothing (fail closed).",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "type": "string"
+          },
+          "role": {
+            "description": "The PostgreSQL role (never pg_ or exponetdb_).",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "ExecutionRoleExceptionRevokeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "description": "Why the exception ends.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "pattern": "^[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]+$",
+            "type": "string",
+            "x-untrusted": true
+          }
+        },
+        "required": [
+          "reason"
         ],
         "type": "object"
       },
@@ -6015,10 +6285,23 @@
         "properties": {
           "aliases": {
             "additionalProperties": {
-              "maxLength": 200,
-              "type": "string"
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "maxItems": 64,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              ]
             },
-            "description": "Curated: an applied ledger name → the file stem it stands for.",
+            "description": "Curated: an applied ledger name → the file stem it stands for, or the stems of the several files one ledger entry stands for (Wave 9).",
             "propertyNames": {
               "maxLength": 200,
               "type": "string"
@@ -6138,6 +6421,23 @@
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
             "type": "string"
           },
+          "driftTotal": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How many global drift entries the analysis found (null until it ran); the report holds at most 500 of them (Wave 9)."
+          },
+          "driftTruncated": {
+            "description": "The report holds fewer drift items than driftTotal: it is never baselined (LEGACY_IMPORT_TRUNCATED); narrow the scope or fix the inputs and analyze again (Wave 9).",
+            "type": "boolean"
+          },
           "fingerprint": {
             "anyOf": [
               {
@@ -6223,13 +6523,31 @@
                   ]
                 },
                 "evidence": {
-                  "description": "The evidence the classification used (ledger hash, statements, alias, expectations held).",
+                  "description": "The evidence the classification used (ledger hash, statements, alias, expectations held); a longer list ends with evidence_truncated:<n>.",
                   "items": {
                     "maxLength": 200,
                     "type": "string"
                   },
                   "maxItems": 16,
                   "type": "array"
+                },
+                "evidenceStrength": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "strong",
+                        "medium",
+                        "low",
+                        "curated",
+                        "weak"
+                      ],
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "The strongest ledger evidence behind the item (legacy-import.md §2.3): strong (a tool hash of the bytes, or the applied statements one by one), medium (the normalized statement sequence), low (equal only with comments inside bodies ignored), curated (an alias), weak (a name only, which never records a file); null when no ledger entry relates to it (Wave 9)."
                 },
                 "itemId": {
                   "pattern": "^[0-9]{1,6}$",
@@ -10960,6 +11278,7 @@
               "migration.stream.get",
               "migration.bundle.get",
               "migration.import.report.get",
+              "migration.import.scratch_check",
               "session.list",
               "lock.list",
               "query_stats.list",
@@ -11105,7 +11424,16 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.database.retire.plan",
+              "registry.database.retire",
               "registry.cluster.declare_tier.plan",
+              "project.execution_roles.get",
+              "registry.execution_role_binding.set.plan",
+              "registry.execution_role_binding.set",
+              "registry.execution_role_exception.declare.plan",
+              "registry.execution_role_exception.declare",
+              "registry.execution_role_exception.revoke.plan",
+              "registry.execution_role_exception.revoke",
               "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
@@ -11391,6 +11719,7 @@
               "migration.stream.get",
               "migration.bundle.get",
               "migration.import.report.get",
+              "migration.import.scratch_check",
               "session.list",
               "lock.list",
               "query_stats.list",
@@ -11536,7 +11865,16 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.database.retire.plan",
+              "registry.database.retire",
               "registry.cluster.declare_tier.plan",
+              "project.execution_roles.get",
+              "registry.execution_role_binding.set.plan",
+              "registry.execution_role_binding.set",
+              "registry.execution_role_exception.declare.plan",
+              "registry.execution_role_exception.declare",
+              "registry.execution_role_exception.revoke.plan",
+              "registry.execution_role_exception.revoke",
               "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
@@ -11878,6 +12216,7 @@
               "migration.stream.get",
               "migration.bundle.get",
               "migration.import.report.get",
+              "migration.import.scratch_check",
               "session.list",
               "lock.list",
               "query_stats.list",
@@ -12023,7 +12362,16 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.database.retire.plan",
+              "registry.database.retire",
               "registry.cluster.declare_tier.plan",
+              "project.execution_roles.get",
+              "registry.execution_role_binding.set.plan",
+              "registry.execution_role_binding.set",
+              "registry.execution_role_exception.declare.plan",
+              "registry.execution_role_exception.declare",
+              "registry.execution_role_exception.revoke.plan",
+              "registry.execution_role_exception.revoke",
               "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
@@ -12280,6 +12628,7 @@
               "migration.stream.get",
               "migration.bundle.get",
               "migration.import.report.get",
+              "migration.import.scratch_check",
               "session.list",
               "lock.list",
               "query_stats.list",
@@ -12425,7 +12774,16 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.database.retire.plan",
+              "registry.database.retire",
               "registry.cluster.declare_tier.plan",
+              "project.execution_roles.get",
+              "registry.execution_role_binding.set.plan",
+              "registry.execution_role_binding.set",
+              "registry.execution_role_exception.declare.plan",
+              "registry.execution_role_exception.declare",
+              "registry.execution_role_exception.revoke.plan",
+              "registry.execution_role_exception.revoke",
               "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
@@ -12986,6 +13344,7 @@
               "LEDGER_DIVERGENCE",
               "LEDGER_NOT_INITIALIZED",
               "LEGACY_IMPORT_AMBIGUOUS",
+              "LEGACY_IMPORT_TRUNCATED",
               "STAGING_EVIDENCE_MISSING",
               "STAGING_VERIFICATION_FAILED",
               "STAGING_EVIDENCE_UNREACHABLE",
@@ -13424,6 +13783,94 @@
           "product",
           "slug",
           "displayName"
+        ],
+        "type": "object"
+      },
+      "ProjectExecutionRoles": {
+        "properties": {
+          "defaults": {
+            "additionalProperties": {
+              "maxLength": 63,
+              "type": "string"
+            },
+            "propertyNames": {
+              "maxLength": 63,
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "environments": {
+            "items": {
+              "properties": {
+                "bindings": {
+                  "additionalProperties": {
+                    "maxLength": 63,
+                    "type": "string"
+                  },
+                  "propertyNames": {
+                    "maxLength": 63,
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "effective": {
+                  "additionalProperties": {
+                    "maxLength": 63,
+                    "type": "string"
+                  },
+                  "propertyNames": {
+                    "maxLength": 63,
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "environmentId": {
+                  "description": "Entity id `^env_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^env_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                "slug": {
+                  "pattern": "^[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                },
+                "tier": {
+                  "description": "Authorization tier (C-24).",
+                  "enum": [
+                    "prod",
+                    "nonprod"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "environmentId",
+                "slug",
+                "tier",
+                "bindings",
+                "effective"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "exceptions": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutionRoleException"
+            },
+            "maxItems": 500,
+            "type": "array"
+          },
+          "projectId": {
+            "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "defaults",
+          "environments",
+          "exceptions"
         ],
         "type": "object"
       },
@@ -15735,6 +16182,105 @@
             "type": "object"
           }
         ]
+      },
+      "ScratchCheck": {
+        "properties": {
+          "checkedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "checks": {
+            "items": {
+              "properties": {
+                "check": {
+                  "enum": [
+                    "scratch_usable",
+                    "identity",
+                    "empty",
+                    "extensions",
+                    "outside_scope",
+                    "execution_role"
+                  ],
+                  "type": "string"
+                },
+                "detail": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[a-z][a-z0-9_:.-]{0,199}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "A machine code: why it failed or could not be checked."
+                },
+                "items": {
+                  "description": "What differs, as catalog names (untrusted text).",
+                  "items": {
+                    "maxLength": 300,
+                    "type": "string",
+                    "x-untrusted": true
+                  },
+                  "maxItems": 100,
+                  "type": "array"
+                },
+                "status": {
+                  "enum": [
+                    "pass",
+                    "fail",
+                    "unknown"
+                  ],
+                  "type": "string"
+                },
+                "truncated": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "check",
+                "status",
+                "detail",
+                "items",
+                "truncated"
+              ],
+              "type": "object"
+            },
+            "maxItems": 6,
+            "type": "array"
+          },
+          "ready": {
+            "description": "Every check passed: an analysis can replay here.",
+            "type": "boolean"
+          },
+          "scratchTargetId": {
+            "anyOf": [
+              {
+                "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+            "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "scratchTargetId",
+          "ready",
+          "checkedAt",
+          "checks"
+        ],
+        "type": "object"
       },
       "Server": {
         "properties": {
@@ -19670,6 +20216,66 @@
               "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
               "type": "string"
             }
+          },
+          {
+            "explode": true,
+            "in": "query",
+            "name": "database",
+            "required": false,
+            "schema": {
+              "description": "Databases of the cluster to cover before they are registered (repeatable); registered ones are always covered.",
+              "items": {
+                "description": "Name of an existing database on the cluster.",
+                "maxLength": 63,
+                "minLength": 1,
+                "pattern": "^[^\\p{Cc}]+$",
+                "type": "string",
+                "x-untrusted": true
+              },
+              "maxItems": 32,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "description": "A project whose targets will be placed on this cluster: its execution roles are granted too.",
+              "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "environment",
+            "required": false,
+            "schema": {
+              "description": "Only this environment of the project (else every environment of the project's product).",
+              "pattern": "^env_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": true,
+            "in": "query",
+            "name": "ledgers",
+            "required": false,
+            "schema": {
+              "description": "Legacy ledgers the observer may read during an import.",
+              "items": {
+                "enum": [
+                  "supabase",
+                  "drizzle",
+                  "applied_migrations"
+                ],
+                "type": "string"
+              },
+              "maxItems": 3,
+              "type": "array"
+            },
+            "style": "form"
           }
         ],
         "responses": {
@@ -19722,7 +20328,7 @@
             "session": []
           }
         ],
-        "summary": "The role bootstrap SQL of an external cluster for a person to run (no password).",
+        "summary": "The role bootstrap SQL of an external cluster for a person to run with psql (no password; idempotent): registered and requested databases, the execution roles of the projects placed there or named, the legacy ledger read.",
         "tags": [
           "clusters"
         ],
@@ -20379,6 +20985,119 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "4"
+      }
+    },
+    "/clusters/{clusterId}/databases/{databaseId}/retire": {
+      "post": {
+        "operationId": "planDatabaseRetirement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "databaseId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^dbs_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^dbs_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseRetireRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan the retirement of a registered database that is no current placement (Wave 9): the record ends, its name can be registered again; nothing changes on the cluster.",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "registry.database.retire.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
       }
     },
     "/clusters/{clusterId}/declared-tier": {
@@ -27668,6 +28387,434 @@
         "x-exponetdb-wave": "4"
       }
     },
+    "/projects/{projectId}/environments/{environmentId}/execution-role-exceptions": {
+      "post": {
+        "operationId": "planExecutionRoleException",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "environmentId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^env_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^env_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecutionRoleExceptionDeclareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan the declaration of a BYPASSRLS execution-role exception for one role in one environment of the project (ADR-0034, OD-51); human only, production with an approval.",
+        "tags": [
+          "projects"
+        ],
+        "x-exponetdb-action": "registry.execution_role_exception.declare.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
+      }
+    },
+    "/projects/{projectId}/environments/{environmentId}/execution-role-plans": {
+      "post": {
+        "operationId": "planExecutionRoleBindings",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "environmentId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^env_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^env_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecutionRoleBindingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan the execution roles of one environment of the project (aliases bound to other roles than the project map; an empty map removes the bindings).",
+        "tags": [
+          "projects"
+        ],
+        "x-exponetdb-action": "registry.execution_role_binding.set.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
+      }
+    },
+    "/projects/{projectId}/execution-role-exceptions/{exceptionId}/revoke-plans": {
+      "post": {
+        "operationId": "planExecutionRoleExceptionRevocation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "exceptionId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^rxe_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^rxe_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecutionRoleExceptionRevokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan the revocation of an execution-role exception; plans that bound it become stale (ADR-0034).",
+        "tags": [
+          "projects"
+        ],
+        "x-exponetdb-action": "registry.execution_role_exception.revoke.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
+      }
+    },
+    "/projects/{projectId}/execution-roles": {
+      "get": {
+        "operationId": "getProjectExecutionRoles",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectExecutionRoles"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.read"
+            ]
+          },
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "A project's execution roles: the default alias map, each environment's bindings and effective map, and the declared BYPASSRLS exceptions (ADR-0034).",
+        "tags": [
+          "projects"
+        ],
+        "x-exponetdb-action": "project.execution_roles.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
+      }
+    },
     "/projects/{projectId}/migrations": {
       "get": {
         "operationId": "getMigrationStream",
@@ -33129,6 +34276,134 @@
           "VERIFY_CONSTRUCT_UNSUPPORTED"
         ],
         "x-exponetdb-wave": "6"
+      }
+    },
+    "/targets/{target}/migrations/scratch-check": {
+      "get": {
+        "operationId": "checkScratchTarget",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "in": "query",
+            "name": "scratchTarget",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Target path <product>/<project>/<environment>.",
+                  "pattern": "^[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}\\/[a-z][a-z0-9-]{0,38}$",
+                  "type": "string"
+                }
+              ],
+              "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
+            }
+          },
+          {
+            "in": "query",
+            "name": "role",
+            "required": false,
+            "schema": {
+              "description": "The execution role alias the replay runs as (the analysis hint role; default owner).",
+              "pattern": "^[a-z][a-z0-9_]{0,62}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScratchCheck"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED, TARGET_NOT_IN_GRANT, TIER_NOT_PERMITTED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: TARGET_NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "migrations.import"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Check, read only, whether a scratch target can take a legacy import replay of this target: usable, its identity, empty, the same extensions, the objects outside the managed scope the schema depends on, the execution role (Wave 9).",
+        "tags": [
+          "targets"
+        ],
+        "x-exponetdb-action": "migration.import.scratch_check",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TARGET_NOT_FOUND",
+          "TARGET_NOT_IN_GRANT",
+          "TIER_NOT_PERMITTED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
       }
     },
     "/targets/{target}/migrations/{migrationId}": {

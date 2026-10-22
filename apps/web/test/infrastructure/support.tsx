@@ -263,6 +263,9 @@ export function bootstrapSql(over: Partial<ClusterBootstrapSql> = {}): ClusterBo
     ].join('\n'),
     roles: ['exponetdb_migrator', 'exponetdb_observer'],
     databases: [],
+    pendingDatabases: [],
+    executionRoles: [],
+    legacyLedgers: [],
     ...over,
   }
 }

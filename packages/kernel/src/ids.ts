@@ -51,6 +51,7 @@ export const ID_PREFIXES = {
   qry: 'Data read (one read-only query of an agent or a person)',
   sqy: 'Saved query (a named SQL text of a person, personal or shared in its scope)',
   rvf: 'Role verifier (a sealed SCRAM verifier submitted for one role of a cluster)',
+  rxe: 'Execution-role exception (a declared, revocable BYPASSRLS exception of one role, ADR-0034)',
   req: 'Request (correlation id, not a stored entity)',
 } as const
 
@@ -111,6 +112,7 @@ export type StepUpId = EntityId<'stu'>
 export type ImportReportId = EntityId<'imr'>
 export type VerificationRunId = EntityId<'vfy'>
 export type RoleVerifierId = EntityId<'rvf'>
+export type ExecutionRoleExceptionId = EntityId<'rxe'>
 export type QueryId = EntityId<'qry'>
 export type SavedQueryId = EntityId<'sqy'>
 export type RequestId = EntityId<'req'>

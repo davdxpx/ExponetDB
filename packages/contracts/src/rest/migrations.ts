@@ -3,6 +3,7 @@ import {
   ApplyChecksumSchema,
   BreakGlassGrantIdSchema,
   CursorSchema,
+  ExecutionRoleExceptionIdSchema,
   IdentityIdSchema,
   ImportReportIdSchema,
   LedgerStateHashSchema,
@@ -409,6 +410,16 @@ export const MigrationPlanContentSchema = z
       ledgerStateHash: LedgerStateHashSchema,
       extensions: z.record(z.string().max(63), z.string().max(64)),
       executionRoles: z.record(z.string().max(63), z.string().max(64)),
+      executionRoleExceptions: z
+        .record(
+          z.string().max(63),
+          z.object({ exceptionId: ExecutionRoleExceptionIdSchema, revision: z.int().min(1) }),
+        )
+        .optional()
+        .meta({
+          description:
+            'Per execution role the declared BYPASSRLS exception the plan relies on (ADR-0034); a revoked, changed or expired one makes the plan stale (Wave 9).',
+        }),
     }),
     evidence: z
       .object({
@@ -440,6 +451,17 @@ export const MigrationPlanContentSchema = z
         lineage: z.enum(['match', 'mismatch', 'unknown', 'not_required']),
         dependenciesVerified: z.boolean(),
         legacyProject: z.boolean(),
+        executionRoleExceptions: z.int().min(0).optional().meta({
+          description:
+            'How many execution roles of the plan run under a declared BYPASSRLS exception (rule migration.execution-role-exception; Wave 9).',
+        }),
+        executionRoleParity: z
+          .enum(['match', 'mismatch', 'unknown', 'not_required'])
+          .optional()
+          .meta({
+            description:
+              "Production: whether the evidence target's execution roles have the same attributes and exception status (rule migration.execution-role-parity; Wave 9).",
+          }),
       })
       .meta({ description: 'What the policy rules decide on (policy-engine.md §4, Migrations).' }),
     resume: MigrationResumeBindingSchema.optional().meta({
@@ -637,10 +659,16 @@ export const ImportAnalysisRequestSchema = z
       .optional()
       .meta({ description: 'The legacy ledgers to read on the imported target (evidence only).' }),
     aliases: z
-      .record(z.string().max(200), z.string().max(200))
+      .record(
+        z.string().max(200),
+        z.union([z.string().max(200), z.array(z.string().max(200)).min(1).max(64)]),
+      )
       .refine((a) => Object.keys(a).length <= 1000, { message: 'At most 1000 aliases.' })
       .optional()
-      .meta({ description: 'Curated: an applied ledger name → the file stem it stands for.' }),
+      .meta({
+        description:
+          'Curated: an applied ledger name → the file stem it stands for, or the stems of the several files one ledger entry stands for (Wave 9).',
+      }),
     notApplicable: z
       .array(z.string().max(200))
       .max(1000)
@@ -660,6 +688,41 @@ export const ImportAnalysisRequestSchema = z
       .meta({ description: 'The search path of the replay (default public).' }),
   })
   .meta({ id: 'ImportAnalysisRequest' })
+
+/** `GET /targets/{target}/migrations/scratch-check` (Wave 9, legacy-import.md §2.5). */
+export const ScratchCheckSchema = z
+  .object({
+    targetId: TargetIdSchema,
+    scratchTargetId: TargetIdSchema.nullable(),
+    ready: z.boolean().meta({ description: 'Every check passed: an analysis can replay here.' }),
+    checkedAt: TimestampSchema,
+    checks: z
+      .array(
+        z.object({
+          check: z.enum([
+            'scratch_usable',
+            'identity',
+            'empty',
+            'extensions',
+            'outside_scope',
+            'execution_role',
+          ]),
+          status: z.enum(['pass', 'fail', 'unknown']),
+          detail: z
+            .string()
+            .regex(/^[a-z][a-z0-9_:.-]{0,199}$/)
+            .nullable()
+            .meta({ description: 'A machine code: why it failed or could not be checked.' }),
+          items: z
+            .array(z.string().max(300).meta({ untrusted: true }))
+            .max(100)
+            .meta({ description: 'What differs, as catalog names (untrusted text).' }),
+          truncated: z.boolean(),
+        }),
+      )
+      .max(6),
+  })
+  .meta({ id: 'ScratchCheck' })
 
 export const ImportReportSchema = z
   .object({
@@ -688,8 +751,16 @@ export const ImportReportSchema = z
         contentDigest: Sha256DigestSchema.nullable(),
         evidence: z.array(z.string().max(200)).max(16).optional().meta({
           description:
-            'The evidence the classification used (ledger hash, statements, alias, expectations held).',
+            'The evidence the classification used (ledger hash, statements, alias, expectations held); a longer list ends with evidence_truncated:<n>.',
         }),
+        evidenceStrength: z
+          .enum(['strong', 'medium', 'low', 'curated', 'weak'])
+          .nullable()
+          .optional()
+          .meta({
+            description:
+              'The strongest ledger evidence behind the item (legacy-import.md §2.3): strong (a tool hash of the bytes, or the applied statements one by one), medium (the normalized statement sequence), low (equal only with comments inside bodies ignored), curated (an alias), weak (a name only, which never records a file); null when no ledger entry relates to it (Wave 9).',
+          }),
         decision: z
           .object({
             state: ImportItemStateSchema,
@@ -700,6 +771,14 @@ export const ImportReportSchema = z
       }),
     ),
     unresolved: z.int().min(0),
+    driftTotal: z.int().min(0).nullable().optional().meta({
+      description:
+        'How many global drift entries the analysis found (null until it ran); the report holds at most 500 of them (Wave 9).',
+    }),
+    driftTruncated: z.boolean().optional().meta({
+      description:
+        'The report holds fewer drift items than driftTotal: it is never baselined (LEGACY_IMPORT_TRUNCATED); narrow the scope or fix the inputs and analyze again (Wave 9).',
+    }),
   })
   .meta({ id: 'ImportReport' })
 
@@ -778,6 +857,7 @@ export type MigrationDetail = z.infer<typeof MigrationDetailSchema>
 export type VerificationRun = z.infer<typeof VerificationRunSchema>
 export type MigrationProgress = z.infer<typeof MigrationProgressSchema>
 export type ImportReport = z.infer<typeof ImportReportSchema>
+export type ScratchCheck = z.infer<typeof ScratchCheckSchema>
 export type StepUpView = z.infer<typeof StepUpSchema>
 export type EvidenceItem = z.infer<typeof EvidenceItemSchema>
 

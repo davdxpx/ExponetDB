@@ -1,6 +1,6 @@
 import type { BundleSubmission, ProjectConfig } from '@exponetdb/contracts'
 import type { Queryable } from '@exponetdb/control-store'
-import { decodeUtf8, isJsonObject } from '@exponetdb/kernel'
+import { decodeUtf8 } from '@exponetdb/kernel'
 import { parseProjectDefaults } from '@exponetdb/migrations/format'
 import { lintBundles, prepareLint } from '@exponetdb/migrations/lint'
 import {
@@ -13,6 +13,7 @@ import {
 import type { Connector, TargetRecord } from '@exponetdb/registry'
 import { ledgerDivergence } from './divergence.ts'
 import { MigrationError } from './errors.ts'
+import { projectAliases } from './execution-roles.ts'
 import { fileDigest, revisionsOf, storedStream, submissionInput } from './store.ts'
 import { readTargetState } from './target.ts'
 
@@ -373,7 +374,7 @@ export async function lintProject(
 ) {
   const { rows } = await q.query(
     'migrations.reads.project',
-    `SELECT p.slug, pr.slug AS product_slug, p.execution_roles, p.trusted_extensions, p.managed_scope
+    `SELECT p.slug, pr.slug AS product_slug, p.trusted_extensions, p.managed_scope
        FROM registry.projects p JOIN registry.products pr ON pr.product_id = p.product_id
       WHERE p.project_id = $1`,
     [projectId],
@@ -392,7 +393,9 @@ export async function lintProject(
   }
   const major = request.postgresMajor ?? 17
   await prepareLint(major)
-  const roles = row.json('execution_roles')
+  // Project-level lint has no target: the aliases of the project map (an environment
+  // binding refines an alias, never adds one).
+  const roles = await projectAliases(q, projectId)
   const trusted = row.json('trusted_extensions')
   const scope = await scopeOf(q, projectId)
   const project = {
@@ -400,10 +403,7 @@ export async function lintProject(
     project: `${row.text('product_slug')}/${row.text('slug')}`,
     layout: 'bundles',
     defaults: defaults.value,
-    executionRoles:
-      isJsonObject(roles as never) && Object.keys(roles as object).length > 0
-        ? roles
-        : { owner: 'none' },
+    executionRoles: Object.keys(roles).length > 0 ? roles : { owner: 'none' },
     managedScope: {
       includeSchemas: scope.includeSchemas ?? '*',
       excludeSchemas: scope.excludeSchemas,

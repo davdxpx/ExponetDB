@@ -5,6 +5,7 @@ import {
   DatabaseIdSchema,
   EndpointIdSchema,
   EnvironmentIdSchema,
+  ExecutionRoleExceptionIdSchema,
   IdentityIdSchema,
   ProjectIdSchema,
   ServerIdSchema,
@@ -290,17 +291,24 @@ export const EndpointRetireRequestSchema = z
   .strictObject({ reason: ReasonSchema.optional() })
   .meta({ id: 'EndpointRetireRequest' })
 
+export const DatabaseRetireRequestSchema = z
+  .strictObject({ reason: ReasonSchema.optional() })
+  .meta({ id: 'DatabaseRetireRequest' })
+
+const DatabaseNameSchema = z
+  .string()
+  .min(1)
+  .max(63)
+  .regex(/^[^\p{Cc}]+$/u)
+  .refine((v) => utf8Length(v) <= 63, 'at most 63 bytes')
+  .meta({ untrusted: true, description: 'Name of an existing database on the cluster.' })
+
 export const DatabaseRegisterRequestSchema = z
-  .strictObject({
-    name: z
-      .string()
-      .min(1)
-      .max(63)
-      .regex(/^[^\p{Cc}]+$/u)
-      .refine((v) => utf8Length(v) <= 63, 'at most 63 bytes')
-      .meta({ untrusted: true, description: 'Name of an existing database on the cluster.' }),
-  })
+  .strictObject({ name: DatabaseNameSchema })
   .meta({ id: 'DatabaseRegisterRequest' })
+
+/** A legacy ledger kind (legacy-import.md §2), as the import request names it. */
+const LegacyLedgerKindSchema = z.enum(['supabase', 'drizzle', 'applied_migrations'])
 
 export const TargetRegisterRequestSchema = z
   .strictObject({
@@ -440,14 +448,161 @@ export const CredentialViewSchema = z
 export const ClusterBootstrapSqlSchema = z
   .object({
     clusterId: ClusterIdSchema,
+    // At most 1 032 databases (registered and requested) with three ledgers and 1 024
+    // execution roles fit (Wave 9 A8: guarded statements are longer).
     script: untrustedText(
-      65_536,
-      'SQL for a person to run with administrative tools; contains no password (set each one with psql \\password).',
+      8_388_608,
+      'SQL for a person to run with psql; contains no password (set each one with psql \\password).',
     ),
     roles: z.array(z.string().regex(/^exponetdb_[a-z_]+$/)),
     databases: z.array(untrustedText(63, 'Database name.')),
+    // Wave 9 order A8 (additive).
+    pendingDatabases: z
+      .array(untrustedText(63, 'Database name.'))
+      .meta({ description: 'Requested databases not registered yet (covered by the script).' }),
+    executionRoles: z
+      .array(
+        z.object({
+          name: untrustedText(63, 'PostgreSQL role name.'),
+          bypassRlsExcused: z.boolean().meta({
+            description:
+              'A declared exception (ADR-0034) excuses its BYPASSRLS in an environment on this cluster.',
+          }),
+        }),
+      )
+      .meta({
+        description:
+          'Execution roles granted to the migrator WITH INHERIT FALSE, SET TRUE where they exist and are fit.',
+      }),
+    legacyLedgers: z
+      .array(LegacyLedgerKindSchema)
+      .meta({ description: 'Legacy ledgers the observer is granted to read, where they exist.' }),
   })
   .meta({ id: 'ClusterBootstrapSql' })
+
+/** The query of the bootstrap SQL (Wave 9 order A8). */
+export const ClusterBootstrapSqlQuerySchema = z.strictObject({
+  database: z.array(DatabaseNameSchema).max(32).optional().meta({
+    description:
+      'Databases of the cluster to cover before they are registered (repeatable); registered ones are always covered.',
+  }),
+  project: ProjectIdSchema.optional().meta({
+    description:
+      'A project whose targets will be placed on this cluster: its execution roles are granted too.',
+  }),
+  environment: EnvironmentIdSchema.optional().meta({
+    description:
+      "Only this environment of the project (else every environment of the project's product).",
+  }),
+  ledgers: z
+    .array(LegacyLedgerKindSchema)
+    .max(3)
+    .optional()
+    .meta({ description: 'Legacy ledgers the observer may read during an import.' }),
+})
+
+// ----- execution roles for adopted schemas (ADR-0034, Wave 9 Part A) -----
+
+/** A reason a person writes: 20 to 1000 characters, line breaks and tabs allowed, no other control character. */
+const DeclarationReasonSchema = z
+  .string()
+  .min(20)
+  .max(1000)
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are refused on purpose
+  .regex(/^[^\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]+$/u)
+  .meta({
+    untrusted: true,
+    description: 'Why, in the words of the person declaring (20 to 1000 characters).',
+  })
+
+/**
+ * The execution roles of one environment of a project (ADR-0034 §5, D-A2):
+ * aliases of the project's map bound to other roles for this environment
+ * only; an alias the request leaves out takes the project's role. An empty
+ * map removes every binding of the environment. Planned like every
+ * registry change; `registry.manage` at the environment's tier.
+ */
+export const ExecutionRoleBindingsRequestSchema = z
+  .strictObject({
+    roles: z
+      .record(ExecutionRoleAliasSchema, PostgresRoleNameSchema)
+      .refine((roles) => Object.keys(roles).length <= 32, { message: 'At most 32 aliases.' })
+      .meta({
+        description:
+          'Alias → PostgreSQL role for this environment; every alias must exist in the project map; never a pg_ or exponetdb_ role.',
+      }),
+  })
+  .meta({ id: 'ExecutionRoleBindingsRequest' })
+
+/**
+ * Declares that one PostgreSQL role may serve as an execution role of the
+ * project in this environment although it has `BYPASSRLS` (ADR-0034 §1,
+ * OD-51). Nothing but `BYPASSRLS` is ever excused. Human only; production
+ * needs an approval and a re-authentication.
+ */
+export const ExecutionRoleExceptionDeclareRequestSchema = z
+  .strictObject({
+    role: PostgresRoleNameSchema.meta({
+      description: 'The PostgreSQL role (never pg_ or exponetdb_).',
+    }),
+    reason: DeclarationReasonSchema,
+    reviewBy: z.iso.date().optional().meta({
+      description:
+        'A date by which a person reviews the exception; after it the exception excuses nothing (fail closed).',
+    }),
+  })
+  .meta({ id: 'ExecutionRoleExceptionDeclareRequest' })
+
+export const ExecutionRoleExceptionRevokeRequestSchema = z
+  .strictObject({
+    reason: z
+      .string()
+      .min(1)
+      .max(1000)
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are refused on purpose
+      .regex(/^[^\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]+$/u)
+      .meta({ untrusted: true, description: 'Why the exception ends.' }),
+  })
+  .meta({ id: 'ExecutionRoleExceptionRevokeRequest' })
+
+export const ExecutionRoleExceptionViewSchema = z
+  .object({
+    id: ExecutionRoleExceptionIdSchema,
+    projectId: ProjectIdSchema,
+    environmentId: EnvironmentIdSchema,
+    role: z.string().max(63).meta({ untrusted: true }),
+    attributes: z.array(z.literal('bypassrls')).length(1),
+    reason: untrustedText(1000, 'The declaring person’s reason.'),
+    reviewBy: z.iso.date().nullable(),
+    state: z.enum(['active', 'revoked']),
+    /** Active, but its review date passed: it excuses nothing until a person declares it again. */
+    expired: z.boolean(),
+    revision: z.int().min(1),
+    declaredBy: IdentityIdSchema,
+    declaredAt: TimestampSchema,
+    revokedBy: IdentityIdSchema.nullable(),
+    revokedAt: TimestampSchema.nullable(),
+    revokeReason: untrustedText(1000, 'Why it was revoked.').nullable(),
+  })
+  .meta({ id: 'ExecutionRoleException' })
+
+/** The execution roles of a project: the default map, each environment's bindings and effective map, the exceptions. */
+export const ProjectExecutionRolesSchema = z
+  .object({
+    projectId: ProjectIdSchema,
+    defaults: z.record(z.string().max(63), z.string().max(63)),
+    environments: z.array(
+      z.object({
+        environmentId: EnvironmentIdSchema,
+        slug: SlugSchema,
+        tier: TierSchema,
+        bindings: z.record(z.string().max(63), z.string().max(63)),
+        effective: z.record(z.string().max(63), z.string().max(63)),
+      }),
+    ),
+    exceptions: z.array(ExecutionRoleExceptionViewSchema).max(500),
+  })
+  .meta({ id: 'ProjectExecutionRoles' })
 
 export type ProductCreateRequest = z.infer<typeof ProductCreateRequestSchema>
 export type EnvironmentCreateRequest = z.infer<typeof EnvironmentCreateRequestSchema>
@@ -460,6 +615,7 @@ export type ClusterRegisterRequest = z.infer<typeof ClusterRegisterRequestSchema
 export type ClusterConfirmRequest = z.infer<typeof ClusterConfirmRequestSchema>
 export type ClusterDeclaredTierRequest = z.infer<typeof ClusterDeclaredTierRequestSchema>
 export type DatabaseRegisterRequest = z.infer<typeof DatabaseRegisterRequestSchema>
+export type DatabaseRetireRequest = z.infer<typeof DatabaseRetireRequestSchema>
 export type TargetRegisterRequest = z.infer<typeof TargetRegisterRequestSchema>
 export type TargetStateChangeRequest = z.infer<typeof TargetStateChangeRequestSchema>
 export type DriftAcceptRequest = z.infer<typeof DriftAcceptRequestSchema>
@@ -467,3 +623,12 @@ export type EndpointView = z.infer<typeof EndpointViewSchema>
 export type DatabaseView = z.infer<typeof DatabaseViewSchema>
 export type CredentialView = z.infer<typeof CredentialViewSchema>
 export type ClusterBootstrapSql = z.infer<typeof ClusterBootstrapSqlSchema>
+export type ExecutionRoleBindingsRequest = z.infer<typeof ExecutionRoleBindingsRequestSchema>
+export type ExecutionRoleExceptionDeclareRequest = z.infer<
+  typeof ExecutionRoleExceptionDeclareRequestSchema
+>
+export type ExecutionRoleExceptionRevokeRequest = z.infer<
+  typeof ExecutionRoleExceptionRevokeRequestSchema
+>
+export type ExecutionRoleExceptionView = z.infer<typeof ExecutionRoleExceptionViewSchema>
+export type ProjectExecutionRoles = z.infer<typeof ProjectExecutionRolesSchema>

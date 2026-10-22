@@ -5,9 +5,13 @@ export {
   type ReadField,
 } from './admitted-read.ts'
 export {
+  type BootstrapExecutionRole,
+  type BootstrapScriptOptions,
   bootstrapScript,
   clusterBootstrapStatements,
   databaseBootstrapStatements,
+  LEGACY_LEDGER_TABLES,
+  type LegacyLedgerKind,
   LOGIN_ROLES,
   passwordStatements,
   type RoleVerifiers,
@@ -21,6 +25,7 @@ export {
   MAX_DETAIL_CHARS,
   redactDetail,
 } from './checks.ts'
+export { type ClusterGlobalResult, checkClusterGlobalExpectations } from './cluster-globals.ts'
 export {
   mapDriverError,
   type ServerFields,
@@ -115,14 +120,17 @@ export {
   type VerificationRecord,
 } from './ledger-history.ts'
 export {
+  blocksExecution,
   changedGuards,
   type EngineGuards,
+  type ExcusableAttribute,
   type ExecutionRoleFacts,
   type ExecutionRoleProblem,
   type ExtensionFacts,
   executionRoleFacts,
   executionRoleProblem,
   extensionFacts,
+  extensionPlacements,
   installedExtensions,
   type RelationSize,
   readEngineGuards,
@@ -150,6 +158,13 @@ export {
   reviewedStatements,
 } from './reviewed.ts'
 export { RowShapeError, TargetRow } from './rows.ts'
+export {
+  MAX_OUTSIDE_SCOPE,
+  type ManagedScopeFilter,
+  missingObjects,
+  type OutsideScopeObject,
+  referencedOutsideScope,
+} from './scratch.ts'
 export {
   ACCESS_ROLES,
   type AccessRole,

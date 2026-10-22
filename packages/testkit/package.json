@@ -24,7 +24,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "fixture:supabase": "bun --conditions=@exponetdb/source scripts/supabase-fixture.ts"
   },
   "dependencies": {
     "@exponetdb/kernel": "workspace:*",

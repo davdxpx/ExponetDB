@@ -12,6 +12,7 @@ import {
 } from '@exponetdb/operations'
 import type { MigrationFacts } from '@exponetdb/policy'
 import {
+  executionRoleFacts,
   insertMigrationEvent,
   insertVerification,
   LockUnavailable,
@@ -38,7 +39,13 @@ import {
 import type { PlanContent, PlanItem } from './content.ts'
 import { type MigrationKindDeps, projectRegistry } from './deps.ts'
 import { MigrationError } from './errors.ts'
-import { runTransactional } from './executor.ts'
+import {
+  boundExceptionsHold,
+  type ExceptionBinding,
+  executionRolesFor,
+  roleUnder,
+} from './execution-roles.ts'
+import { executionRolesChanged, runTransactional } from './executor.ts'
 import type { MigrationPlanContext } from './planner.ts'
 import {
   type Fence,
@@ -187,7 +194,33 @@ export async function planMigrationRollback(
     lockTimeout?: number
     statementTimeout?: number
   }
-  const role = project.executionRoles[execution.role ?? '']
+  // The execution role of this target's environment, checked like an apply's (ADR-0034;
+  // Wave 9 Part A: Wave 6 never checked it for down.sql).
+  const resolved = await executionRolesFor(tx, target)
+  const role = resolved.roles[execution.role ?? '']
+  let roleCheck: { problem: string | null; binding: ExceptionBinding | null } = {
+    problem: 'unmapped_alias',
+    binding: null,
+  }
+  if (role !== undefined) {
+    const checked = await ctx.connector.forTarget(
+      target,
+      'observer',
+      `rollback-role/${target.targetId}`,
+    )
+    try {
+      const [facts] = await checked.session.readOnly((rtx) =>
+        executionRoleFacts(rtx, [role], 'exponetdb_migrator'),
+      )
+      roleCheck =
+        facts === undefined
+          ? { problem: 'missing', binding: null }
+          : roleUnder(facts, resolved.exceptions)
+    } finally {
+      await checked.session.close()
+    }
+  }
+  const roleBlocks = roleCheck.problem !== null && roleCheck.problem !== 'declared_exception'
   const item: PlanItem = {
     migrationId,
     name: revision.name,
@@ -213,11 +246,13 @@ export async function planMigrationRollback(
     nontransactional: false,
     blockingFindings: forbidden,
     consumerCode: 0,
-    requirementsUnmet: role === undefined ? ['execution_role'] : [],
+    requirementsUnmet: roleBlocks ? ['execution_role'] : [],
     evidence: 'not_required',
     lineage: 'not_required',
     dependenciesVerified: true,
     legacyProject: state.meta.baselineId !== null,
+    executionRoleExceptions: roleCheck.binding === null ? 0 : 1,
+    executionRoleParity: 'not_required',
   }
   const content: RollbackContent = {
     projectId: target.projectId,
@@ -237,6 +272,9 @@ export async function planMigrationRollback(
       ledgerStateHash: state.ledgerStateHash,
       extensions: { ...state.extensions },
       executionRoles: role === undefined ? {} : { [execution.role ?? '']: role },
+      ...(roleCheck.binding === null || role === undefined
+        ? {}
+        : { executionRoleExceptions: { [role]: roleCheck.binding } }),
     },
     evidence: null,
     facts,
@@ -378,6 +416,14 @@ export class MigrationRollbackKind implements OperationKind {
         changed.push({ binding: 'ledger', actual: 'changed' })
       if (state.fingerprint !== c.expectedState.schemaFingerprint)
         changed.push({ binding: 'fingerprint', actual: 'changed' })
+      const resolved = await executionRolesFor(this.#deps.store, target)
+      for (const [alias, role] of Object.entries(c.expectedState.executionRoles)) {
+        if (resolved.roles[alias] !== role)
+          changed.push({ binding: 'execution_roles', actual: 'changed' })
+      }
+      if (!boundExceptionsHold(c.expectedState.executionRoleExceptions, resolved.exceptions)) {
+        changed.push({ binding: 'execution_role_exception', actual: 'changed' })
+      }
       return changed
     } catch {
       return [{ binding: 'target', actual: 'unreachable' }]
@@ -466,6 +512,19 @@ export class MigrationRollbackKind implements OperationKind {
           outcome: 'not_applied',
           errorCode: 'PLAN_STALE',
           detail: { changedBindings: ['ledger'] },
+        }
+      }
+      // The execution role again, on this session under the lock, against what the plan bound.
+      const roleChange = await executionRolesChanged(
+        session,
+        c as unknown as PlanContent,
+        await executionRolesFor(this.#deps.store, target),
+      )
+      if (roleChange !== null) {
+        return {
+          outcome: 'not_applied',
+          errorCode: 'PLAN_STALE',
+          detail: { changedBindings: [roleChange] },
         }
       }
       const step = await runTransactional({

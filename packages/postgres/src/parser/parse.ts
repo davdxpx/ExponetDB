@@ -15,6 +15,8 @@ import type { SupportedMajor } from './majors.ts'
 interface Binding {
   loadModule(): Promise<void>
   parseSync(query: string): unknown
+  /** Only the 18 binding has PL/pgSQL (libpg-query 18.1.5). */
+  parsePlPgSQLSync?(query: string): unknown
 }
 
 const loaded = new Map<SupportedMajor, Binding>()
@@ -46,6 +48,28 @@ export async function loadParser(major: SupportedMajor): Promise<void> {
     loading.set(major, pending)
   }
   await pending
+}
+
+/**
+ * The PL/pgSQL tree of a `DO` block or a `CREATE FUNCTION … LANGUAGE
+ * plpgsql` statement, read with the 18 binding (the only one that has a
+ * PL/pgSQL parser; `loadParser(18)` first), or `undefined` when it cannot
+ * be read. Used only to recognize a narrow shape of block (role statements
+ * and exception handlers, legacy replay); anything it cannot read is not
+ * that shape.
+ */
+export function parsePlpgsql(text: string): unknown {
+  const binding = loaded.get(18)
+  if (binding?.parsePlPgSQLSync === undefined) {
+    throw new Error('the PL/pgSQL parser (libpg-query 18) is not loaded')
+  }
+  if (text.includes('\u0000') || encodeUtf8(text).length > MAX_MIGRATION_PARSE_BYTES)
+    return undefined
+  try {
+    return binding.parsePlPgSQLSync(text)
+  } catch {
+    return undefined
+  }
 }
 
 /** The grammar versions the bindings were built from (recorded with every analysis). */

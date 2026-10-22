@@ -24,6 +24,9 @@ import type {
   Environment,
   EnvironmentChangeRequest,
   EnvironmentCreateRequest,
+  ExecutionRoleBindingsRequest,
+  ExecutionRoleExceptionDeclareRequest,
+  ExecutionRoleExceptionRevokeRequest,
   Finding,
   Fleet,
   FleetFinding,
@@ -35,6 +38,7 @@ import type {
   Project,
   ProjectChangeRequest,
   ProjectCreateRequest,
+  ProjectExecutionRoles,
   SchemaDiff,
   SchemaFingerprintResult,
   SchemaObject,
@@ -94,6 +98,7 @@ import {
 import type { IdentityId } from '@exponetdb/kernel'
 import type { PlanRecord } from '@exponetdb/operations'
 import {
+  type BootstrapRequest,
   brand,
   type ClusterRecord,
   CREDENTIAL_LIST_LIMIT,
@@ -109,6 +114,7 @@ import {
   getCluster,
   getDatabase,
   getEnvironment,
+  getExecutionRoleException,
   getProduct,
   getProject,
   getServer,
@@ -128,10 +134,14 @@ import {
   planClusterDeclareTier,
   planClusterRegister,
   planDatabaseRegister,
+  planDatabaseRetire,
   planEndpointAdd,
   planEndpointRetire,
   planEnvironmentCreate,
   planEnvironmentUpdate,
+  planExecutionRoleBindings,
+  planExecutionRoleExceptionDeclare,
+  planExecutionRoleExceptionRevoke,
   planProductCreate,
   planProjectCreate,
   planProjectUpdate,
@@ -139,6 +149,7 @@ import {
   planTargetRegister,
   planTargetStateChange,
   productView,
+  projectExecutionRoles,
   projectView,
   type RegistryActor,
   RegistryError,
@@ -411,6 +422,18 @@ export class RegistryUseCases {
     return projectView(project)
   }
 
+  /** The execution roles of a project (ADR-0034): defaults, bindings per environment, exceptions. */
+  async projectExecutionRoles(
+    caller: CallerLike,
+    projectId: string,
+  ): Promise<ProjectExecutionRoles> {
+    await this.#h.authorize(this.#h.store, 'project.execution_roles.get', caller, {
+      kind: 'project',
+      projectId,
+    })
+    return projectExecutionRoles(this.#h.store, projectId)
+  }
+
   // ----- targets -----
 
   async targets(
@@ -666,9 +689,23 @@ export class RegistryUseCases {
     )
   }
 
-  async bootstrapSql(caller: CallerLike, clusterId: string): Promise<ClusterBootstrapSql> {
+  /**
+   * The bootstrap SQL of a cluster (Wave 9 order A8). A named project's
+   * execution roles are part of it only when the caller may read them.
+   */
+  async bootstrapSql(
+    caller: CallerLike,
+    clusterId: string,
+    request: BootstrapRequest = {},
+  ): Promise<ClusterBootstrapSql> {
     await this.#cluster('cluster.bootstrap_sql.get', caller, clusterId)
-    return clusterBootstrapSql(this.#h.store, clusterId)
+    if (request.projectId !== undefined) {
+      await this.#h.authorize(this.#h.store, 'project.execution_roles.get', caller, {
+        kind: 'project',
+        projectId: request.projectId,
+      })
+    }
+    return clusterBootstrapSql(this.#h.store, clusterId, request)
   }
 
   // ----- registry plans -----
@@ -768,6 +805,73 @@ export class RegistryUseCases {
     )
   }
 
+  /**
+   * An environment of the project's product, as the subject of an execution
+   * role change: its chain carries the environment's tier, so a nonprod
+   * environment needs nonprod authority only (ADR-0034 §2, §5). Another
+   * product's environment is not found under this project.
+   */
+  async #projectEnvironment(tx: Tx, projectId: string, environmentId: string) {
+    const project = await getProject(tx, projectId)
+    const env = await getEnvironment(tx, environmentId)
+    if (project === undefined || env === undefined || env.productId !== project.productId) {
+      throw new RegistryError('NOT_FOUND')
+    }
+    return { kind: 'environment', environmentId } as const
+  }
+
+  planExecutionRoleBindings(
+    caller: CallerLike,
+    projectId: string,
+    environmentId: string,
+    body: ExecutionRoleBindingsRequest,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.execution_role_binding.set.plan',
+      idem,
+      (tx) => this.#projectEnvironment(tx, projectId, environmentId),
+      (tx, c, a) => planExecutionRoleBindings(tx, c, a, projectId, environmentId, body),
+    )
+  }
+
+  planExecutionRoleException(
+    caller: CallerLike,
+    projectId: string,
+    environmentId: string,
+    body: ExecutionRoleExceptionDeclareRequest,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.execution_role_exception.declare.plan',
+      idem,
+      (tx) => this.#projectEnvironment(tx, projectId, environmentId),
+      (tx, c, a) => planExecutionRoleExceptionDeclare(tx, c, a, projectId, environmentId, body),
+    )
+  }
+
+  planExecutionRoleExceptionRevocation(
+    caller: CallerLike,
+    projectId: string,
+    exceptionId: string,
+    body: ExecutionRoleExceptionRevokeRequest,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.execution_role_exception.revoke.plan',
+      idem,
+      async (tx) => {
+        const e = await getExecutionRoleException(tx, exceptionId)
+        if (e === undefined || e.projectId !== projectId) throw new RegistryError('NOT_FOUND')
+        return this.#projectEnvironment(tx, projectId, e.environmentId)
+      },
+      (tx, c, a) => planExecutionRoleExceptionRevoke(tx, c, a, projectId, exceptionId, body),
+    )
+  }
+
   planServer(caller: CallerLike, body: ServerCreateRequest, idem?: Idempotency) {
     return this.#plan(caller, 'registry.server.create.plan', idem, INSTALLATION, (tx, c, a) =>
       planServerCreate(tx, c, a, body),
@@ -822,6 +926,21 @@ export class RegistryUseCases {
       idem,
       { kind: 'cluster', clusterId },
       (tx, c, a) => planEndpointAdd(tx, c, a, clusterId, body),
+    )
+  }
+
+  planDatabaseRetirement(
+    caller: CallerLike,
+    clusterId: string,
+    databaseId: string,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.database.retire.plan',
+      idem,
+      { kind: 'cluster', clusterId },
+      (tx, c, a) => planDatabaseRetire(tx, c, a, clusterId, databaseId),
     )
   }
 

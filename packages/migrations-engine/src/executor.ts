@@ -5,7 +5,6 @@ import {
   checkExpectations,
   type EngineGuards,
   executionRoleFacts,
-  executionRoleProblem,
   ident,
   insertLedgerRow,
   insertMigrationEvent,
@@ -23,6 +22,11 @@ import {
 } from '@exponetdb/postgres'
 import { analyzeMigrationSql, loadParser, survivingExpectations } from '@exponetdb/postgres/parser'
 import type { PlanContent, PlanItem } from './content.ts'
+import {
+  boundExceptionsHold,
+  type ResolvedExecutionRoles,
+  rolesStillUsable,
+} from './execution-roles.ts'
 import type { StoredRevision } from './store.ts'
 import type { ManagedScope } from './target.ts'
 
@@ -296,6 +300,100 @@ export async function runTransactional(input: StepInput): Promise<StepResult> {
     if (!committed && !commitSent && session.usable) {
       await session.query(sql`ROLLBACK`).catch(() => undefined)
     }
+  }
+}
+
+/**
+ * One statement of a legacy file that only runs outside a transaction
+ * (`CONCURRENTLY`), replayed on the scratch target
+ * ([`legacy-import.md` §2.4](../../../exponetdb-docs/04-migrations/legacy-import.md#24-files-with-cluster-global-effects)):
+ * the identity marker checked first, session-level timeouts and search
+ * path, an engine-controlled `SET ROLE` to the execution role, the
+ * statement in autocommit with the engine guards read around it, `RESET
+ * ROLE`. Nothing is recorded on the scratch target (no event, no ledger
+ * row); a failure stops the replay like a failed transactional file.
+ */
+export async function runReplayAutocommit(input: StepInput): Promise<StepResult> {
+  const { session, item } = input
+  await loadParser(session.facts.major)
+  let reviewed: ReturnType<typeof statementsOf>
+  try {
+    reviewed = statementsOf(session, input.revision, input.trustedExtensions)
+  } catch (error) {
+    if (error instanceof ReviewRefused) {
+      return failed('MIGRATION_STATEMENT_FORBIDDEN', { statementIndex: error.statementIndex })
+    }
+    throw error
+  }
+  const [statement, ...others] = reviewed.statements
+  if (statement === undefined || others.length > 0 || !statement.autocommitOnly) {
+    return failed('MIGRATION_STATEMENT_FORBIDDEN')
+  }
+  const started = Date.now()
+  const reader = session.reader()
+  try {
+    await session.transaction(() =>
+      lockMarker(session, {
+        installationId: input.installationId,
+        targetId: input.content.target.targetId,
+        generation: input.content.target.generation,
+        systemIdentifier: input.content.target.clusterSystemIdentifier,
+      }),
+    )
+    await session.query(sql`SELECT pg_catalog.set_config('lock_timeout', $1, false)`, [
+      `${item.lockTimeoutMs}ms`,
+    ])
+    await session.query(sql`SELECT pg_catalog.set_config('statement_timeout', $1, false)`, [
+      `${item.statementTimeoutMs}ms`,
+    ])
+    const searchPath = item.searchPath.map((p) => `"${p.replaceAll('"', '""')}"`).join(', ')
+    await session.query(sql`SELECT pg_catalog.set_config('search_path', $1, false)`, [searchPath])
+    if (!(await input.stillHolds())) return failed('OPERATION_CANCELLED')
+    await session.query(sql`SET ROLE ${ident(item.executionRole)}`)
+    const before = await readEngineGuards(reader)
+    if (before.currentUser !== item.executionRole) {
+      await session.query(sql`RESET ROLE`)
+      return failed('MIGRATION_EXECUTION_FAILED', { gate: { guard: 'current_user' } })
+    }
+    try {
+      await session.executeReviewed(statement, { timeoutMs: item.statementTimeoutMs + 5000 })
+    } catch (error) {
+      // A lost connection during an autocommit statement: its effect is not known.
+      if (error instanceof TargetError && error.code === 'TARGET_UNAVAILABLE') {
+        return { result: 'unknown' }
+      }
+      await session.query(sql`RESET ROLE`).catch(() => undefined)
+      return failed(
+        error instanceof TargetError && error.code === 'MIGRATION_LOCK_TIMEOUT'
+          ? 'MIGRATION_LOCK_TIMEOUT'
+          : 'MIGRATION_EXECUTION_FAILED',
+        {
+          statementIndex: statement.index,
+          sqlstate: sqlstateOf(error),
+          position: error instanceof TargetError ? (error.server.position ?? null) : null,
+        },
+      )
+    }
+    const changed = changedGuards(before, await readEngineGuards(reader))
+    await session.query(sql`RESET ROLE`)
+    if (changed.length > 0) {
+      return failed('MIGRATION_EXECUTION_FAILED', {
+        statementIndex: statement.index,
+        gate: { guard: changed.join(',').slice(0, 200) },
+      })
+    }
+    return { result: 'applied', fingerprintAfter: '', durationMs: Date.now() - started }
+  } catch (error) {
+    if (error instanceof TargetError && error.code === 'TARGET_IDENTITY_MISMATCH') {
+      return failed('TARGET_IDENTITY_MISMATCH')
+    }
+    if (error instanceof TargetError && error.code === 'CLUSTER_IDENTITY_MISMATCH') {
+      return failed('CLUSTER_IDENTITY_MISMATCH')
+    }
+    if (error instanceof TargetError && error.code === 'TARGET_UNAVAILABLE') {
+      return failed('TARGET_UNAVAILABLE', { sqlstate: sqlstateOf(error) })
+    }
+    throw error
   }
 }
 
@@ -611,17 +709,23 @@ export async function runNontransactional(
 
 /**
  * The execution roles the plan bound, read again on the migrator session
- * under the lock: still mapped the same way and still usable.
+ * under the lock (ADR-0034 §3): still resolved the same way for the
+ * target's environment, every exception the plan relied on still the same
+ * (id, revision, active, not past review), and every role still usable,
+ * with `BYPASSRLS` excused only where the plan bound an exception. The
+ * changed binding, or null.
  */
 export async function executionRolesChanged(
   session: TargetSession,
   content: PlanContent,
-  current: Readonly<Record<string, string>>,
-): Promise<boolean> {
+  current: ResolvedExecutionRoles,
+): Promise<'execution_roles' | 'execution_role_exception' | null> {
   for (const [alias, role] of Object.entries(content.expectedState.executionRoles)) {
-    if (current[alias] !== role) return true
+    if (current.roles[alias] !== role) return 'execution_roles'
   }
+  const bound = content.expectedState.executionRoleExceptions
+  if (!boundExceptionsHold(bound, current.exceptions)) return 'execution_role_exception'
   const roles = [...new Set(content.migrations.map((m) => m.executionRole))]
   const facts = await executionRoleFacts(session.reader(), roles)
-  return facts.some((f) => executionRoleProblem(f) !== null)
+  return rolesStillUsable(facts, bound) ? null : 'execution_roles'
 }

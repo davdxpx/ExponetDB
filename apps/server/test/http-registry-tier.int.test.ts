@@ -524,3 +524,135 @@ describe('declared cluster tier and tier-aware registry.manage over REST', () =>
     expect(target.body).toMatchObject({ state: 'active', tier: 'nonprod' })
   })
 })
+
+/**
+ * Execution roles per environment and declared BYPASSRLS exceptions
+ * (ADR-0034) over REST: `registry.manage` at the environment's tier, human
+ * only, re-authenticated; production declarations wait for an approval.
+ */
+describe('execution roles and declared exceptions over REST (ADR-0034)', () => {
+  const project = () => `/api/v1/projects/${ids.project}`
+  const bindings = (environmentId: string) =>
+    `${project()}/environments/${environmentId}/execution-role-plans`
+  const exceptions = (environmentId: string) =>
+    `${project()}/environments/${environmentId}/execution-role-exceptions`
+  const REASON = 'Definer functions of the adopted schema read FORCE tables.'
+
+  it('binds an environment at its tier: nonprod authority binds staging, never production', async () => {
+    await planAndApply(
+      owner,
+      `${project()}/change-plans`,
+      { executionRoles: { owner: 'acme_owner' } },
+      true,
+    )
+    await planAndApply(
+      colleague,
+      bindings(ids.staging),
+      { roles: { owner: 'acme_staging_owner' } },
+      true,
+    )
+    const prod = { roles: { owner: 'acme_prod_owner' } }
+    // An environment outside the colleague's bindings is not visible to them at all.
+    const byColleague = await colleague.browser.call('POST', bindings(ids.production), prod)
+    expect([byColleague.status, byColleague.body.code]).toEqual([404, 'NOT_FOUND'])
+    // An environment subject passes only an unrestricted grant (authorization.md §5): a
+    // nonprod-only CLI grant changes no environment's roles, not even staging's.
+    for (const env of [ids.production, ids.staging]) {
+      const byCli = await cli(tokens.nonprod, 'POST', bindings(env), prod)
+      expect([byCli.status, byCli.body.code]).toEqual([403, 'PERMISSION_DENIED'])
+    }
+    const planned = await cli(tokens.both, 'POST', bindings(ids.production), prod)
+    expect([planned.status, planned.body.kind], planned.text).toEqual([
+      201,
+      'registry.execution_role_binding.set',
+    ])
+    expect(planned.body.subject).toMatchObject({ targetId: null, tier: 'prod' })
+    // An alias outside the project map is refused.
+    const unknown = await colleague.browser.call('POST', bindings(ids.staging), {
+      roles: { reader: 'acme_reader' },
+    })
+    expect([unknown.status, unknown.body.code]).toEqual([422, 'VALIDATION_FAILED'])
+
+    // The project view spans every environment: project-level read, beyond the colleague's staging scope.
+    const hidden = await colleague.browser.call('GET', `${project()}/execution-roles`)
+    expect([hidden.status, hidden.body.code]).toEqual([404, 'NOT_FOUND'])
+    const view = await owner.browser.call('GET', `${project()}/execution-roles`)
+    expect(view.status, view.text).toBe(200)
+    expect(view.body.defaults).toEqual({ owner: 'acme_owner' })
+    const byEnv = Object.fromEntries(
+      view.body.environments.map((e: { environmentId: string }) => [e.environmentId, e]),
+    )
+    expect(byEnv[ids.staging]).toMatchObject({
+      tier: 'nonprod',
+      bindings: { owner: 'acme_staging_owner' },
+      effective: { owner: 'acme_staging_owner' },
+    })
+    expect(byEnv[ids.production]).toMatchObject({
+      tier: 'prod',
+      bindings: {},
+      effective: { owner: 'acme_owner' },
+    })
+  })
+
+  it('declares and revokes an exception: staging by nonprod authority, production only with an approval', async () => {
+    await planAndApply(
+      colleague,
+      exceptions(ids.staging),
+      { role: 'acme_staging_owner', reason: REASON, reviewBy: '2099-01-01' },
+      true,
+    )
+    const listed = await owner.browser.call('GET', `${project()}/execution-roles`)
+    const [declared, ...rest] = listed.body.exceptions
+    expect(rest).toEqual([])
+    expect(declared).toMatchObject({
+      environmentId: ids.staging,
+      role: 'acme_staging_owner',
+      attributes: ['bypassrls'],
+      reason: REASON,
+      reviewBy: '2099-01-01',
+      state: 'active',
+      expired: false,
+      revision: 1,
+    })
+    // One active declaration per role and environment.
+    const twice = await colleague.browser.call('POST', exceptions(ids.staging), {
+      role: 'acme_staging_owner',
+      reason: REASON,
+    })
+    expect([twice.status, twice.body.details?.reason]).toEqual([409, 'exception_active'])
+
+    const toProd = { role: 'acme_prod_owner', reason: REASON }
+    const byColleague = await colleague.browser.call('POST', exceptions(ids.production), toProd)
+    expect([byColleague.status, byColleague.body.code]).toEqual([404, 'NOT_FOUND'])
+    const byCli = await cli(tokens.nonprod, 'POST', exceptions(ids.staging), toProd)
+    expect([byCli.status, byCli.body.code]).toEqual([403, 'PERMISSION_DENIED'])
+    const planned = await owner.browser.call('POST', exceptions(ids.production), toProd)
+    expect(planned.status, planned.text).toBe(201)
+    await reauth(owner)
+    const applied = await owner.browser.call('POST', `/api/v1/plans/${planned.body.id}/apply`, {})
+    expect([applied.status, applied.body.state], applied.text).toEqual([202, 'awaiting_approval'])
+    await drive()
+    const still = await owner.browser.call('GET', `${project()}/execution-roles`)
+    expect(still.body.exceptions.map((e: { role: string }) => e.role)).toEqual([
+      'acme_staging_owner',
+    ])
+
+    const revoke = `${project()}/execution-role-exceptions/${declared.id}/revoke-plans`
+    await planAndApply(
+      colleague,
+      revoke,
+      { reason: 'The definer functions moved to their own role.' },
+      true,
+    )
+    const after = await owner.browser.call('GET', `${project()}/execution-roles`)
+    expect(after.body.exceptions[0]).toMatchObject({
+      id: declared.id,
+      state: 'revoked',
+      revision: 2,
+    })
+    const again = await colleague.browser.call('POST', revoke, {
+      reason: 'Revoked a second time here.',
+    })
+    expect([again.status, again.body.details?.reason]).toEqual([409, 'exception_not_active'])
+  })
+})

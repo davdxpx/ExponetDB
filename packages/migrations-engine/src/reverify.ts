@@ -23,6 +23,7 @@ import {
 import type { PlanItem } from './content.ts'
 import type { MigrationKindDeps } from './deps.ts'
 import { MigrationError } from './errors.ts'
+import { executionRolesFor } from './execution-roles.ts'
 import type { MigrationPlanContext } from './planner.ts'
 import {
   type Fence,
@@ -159,12 +160,8 @@ export async function planMigrationVerify(
   const execution = revision.manifest['execution'] as
     | { searchPath?: string[]; role?: string }
     | undefined
-  const { rows } = await tx.query(
-    'migrations.verify.roles',
-    'SELECT execution_roles FROM registry.projects WHERE project_id = $1',
-    [target.projectId],
-  )
-  const roles = (rows[0]?.json('execution_roles') ?? {}) as Record<string, string>
+  // Recorded for the plan view: verify.sql runs as the verifier, never as this role.
+  const { roles } = await executionRolesFor(tx, target)
   const item: PlanItem = {
     migrationId,
     name: revision.name,

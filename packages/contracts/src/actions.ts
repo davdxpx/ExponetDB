@@ -631,6 +631,17 @@ export const ACTIONS = {
     clientKinds: HUMAN,
     humanOnly: true,
   }),
+  'migration.import.scratch_check': read(
+    'Check a scratch target before a legacy import (read only: usability, identity, emptiness, extensions, objects outside the scope, the execution role)',
+    'target',
+    'migrations.import',
+    {
+      wave: '9',
+      clientKinds: HUMAN,
+      humanOnly: true,
+      basis: 'Wave 9 order A7; legacy-import.md §2.5',
+    },
+  ),
   'session.list': read('List sessions', 'target', 'diagnostics.read'),
   'lock.list': read('List locks', 'target', 'diagnostics.read'),
   'query_stats.list': read('List statement statistics', 'target', 'diagnostics.read', {
@@ -1551,10 +1562,82 @@ export const ACTIONS = {
     fixed('standard'),
     'cluster',
   ),
+  'registry.database.retire.plan': registryPlan(
+    'Plan the retirement of a registered database without a current placement',
+    'cluster',
+    {
+      wave: '9',
+      basis: 'Wave 9 order A7: correct a wrong registration without editing the Control Store',
+    },
+  ),
+  'registry.database.retire': registryKind(
+    'Retire a registered database record (final; its name can be registered again)',
+    byTier('standard', 'high'),
+    'cluster',
+    { ...REAUTH, wave: '9', basis: 'Wave 9 order A7' },
+  ),
   'registry.cluster.declare_tier.plan': registryPlan(
     "Plan the declaration of a cluster's intended tier (OD-22)",
     'cluster',
     { tierSemantics: 'production', wave: '8' },
+  ),
+  // ----- Wave 9 Part A: execution roles for adopted schemas (ADR-0034) -----
+  // A project's environment: the environment's tier ('subject'), never production authority
+  // for a nonprod environment; human only like every registry change; re-authentication.
+  'project.execution_roles.get': read(
+    'Get the execution roles of a project: the default map, each environment’s bindings and the declared exceptions',
+    'project',
+    'migrations.read',
+    { clientKinds: REST_ONLY, wave: '9', basis: 'ADR-0034; credentials-and-roles.md §3' },
+  ),
+  'registry.execution_role_binding.set.plan': registryPlan(
+    'Plan the execution roles of one environment of a project (ADR-0034 §5)',
+    'project',
+    { tierSemantics: 'subject', wave: '9' },
+  ),
+  'registry.execution_role_binding.set': registryKind(
+    'Set the execution roles of one environment of a project (aliases bound to other roles than the project map)',
+    fixed('high'),
+    'project',
+    {
+      ...REAUTH,
+      tierSemantics: 'subject',
+      wave: '9',
+      basis: 'ADR-0034 §5 (Wave 9 order D-A2): registry.manage at the environment’s tier',
+    },
+  ),
+  'registry.execution_role_exception.declare.plan': registryPlan(
+    'Plan a declared BYPASSRLS execution-role exception (ADR-0034, OD-51)',
+    'project',
+    { tierSemantics: 'subject', wave: '9' },
+  ),
+  'registry.execution_role_exception.declare': registryKind(
+    'Declare that one role may carry BYPASSRLS as an execution role of a project in one environment (nothing else is excusable)',
+    fixed('high'),
+    'project',
+    {
+      ...REAUTH,
+      tierSemantics: 'subject',
+      wave: '9',
+      basis:
+        'ADR-0034 §2 (OD-51): human only, registry.manage at the environment’s tier, production with an approval',
+    },
+  ),
+  'registry.execution_role_exception.revoke.plan': registryPlan(
+    'Plan the revocation of an execution-role exception (ADR-0034)',
+    'project',
+    { tierSemantics: 'subject', wave: '9' },
+  ),
+  'registry.execution_role_exception.revoke': registryKind(
+    'Revoke an execution-role exception: plans that bound it become stale',
+    fixed('high'),
+    'project',
+    {
+      ...REAUTH,
+      tierSemantics: 'subject',
+      wave: '9',
+      basis: 'ADR-0034 §2: human only, registry.manage at the environment’s tier',
+    },
   ),
   'registry.cluster.declare_tier': registryKind(
     "Declare a cluster's intended tier: prod or nonprod (OD-22); production authority whichever value",

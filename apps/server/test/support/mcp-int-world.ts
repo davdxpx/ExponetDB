@@ -53,6 +53,8 @@ import {
   enrollOwner,
   ORIGIN,
   type Person,
+  SITE,
+  type Site,
 } from './node-world.ts'
 
 /**
@@ -128,6 +130,12 @@ export interface McpWorld {
   rest(token: string, method: string, path: string, body?: unknown): Promise<Json>
   /** Tokens for the audience `api` (the first-party CLI) with the same scopes and tiers. */
   apiToken(scopes: readonly Scope[], tiers: readonly Tier[], person?: Person): Promise<string>
+  /** The same, with the refresh token a CLI login stores. */
+  apiTokens(
+    scopes: readonly Scope[],
+    tiers: readonly Tier[],
+    person?: Person,
+  ): Promise<{ access_token: string; refresh_token: string; scope: string }>
   /** Waits for the engine's background audit writes (a denial's `authz.denied`). */
   settled(): Promise<void>
   /** The worker's data-read lane (ADR-0028): started with the world, stopped and started by tests. */
@@ -141,8 +149,17 @@ export type Json = BrowserResponse
 
 export async function mcpWorld(
   name: string,
-  options: { readonly web?: WebAssets } = {},
+  options: {
+    readonly web?: WebAssets
+    /** The public origin (default `https://db.example.test`); the RP ID is its host. */
+    readonly origin?: string
+  } = {},
 ): Promise<McpWorld> {
+  const site: Site =
+    options.origin === undefined
+      ? SITE
+      : { origin: options.origin, rpId: new URL(options.origin).hostname }
+  const ORIGIN = site.origin
   const pg17 = serverFor(17)
   const db = await migratedTestDatabase(name)
   const parsed = parseKeyring(generateKeyringText('test-key'))
@@ -248,7 +265,7 @@ export async function mcpWorld(
     `GRANT ${OWNER_ROLE} TO ${ROLE_NAMES.migrator} WITH INHERIT FALSE, SET TRUE`,
   ])
   const request = (input: string, init: RequestInit) => app.request(input, init)
-  const owner = await enrollOwner(db, request)
+  const owner = await enrollOwner(db, request, site)
 
   async function drive(): Promise<void> {
     // Parallel suites share the target cluster and its per-role connection limits: take turns.
@@ -291,6 +308,19 @@ export async function mcpWorld(
     expect(authorize.status, authorize.text).toBe(302)
     const location = authorize.headers.get('location') ?? ''
     return location.slice(location.indexOf('#request=') + '#request='.length)
+  }
+
+  /** The first-party CLI's tokens for the audience `api` (a login's access and refresh token). */
+  function apiTokens(scopes: readonly Scope[], tiers: readonly Tier[], person?: Person) {
+    return codeFlow(
+      'exponetdb-cli',
+      'http://127.0.0.1:51234/callback',
+      'api',
+      scopes,
+      tiers,
+      undefined,
+      person,
+    )
   }
 
   async function codeFlow(
@@ -563,7 +593,7 @@ export async function mcpWorld(
       await owner.reauth()
       const invited = await owner.browser.call('POST', '/api/v1/identities', { email })
       expect(invited.status, invited.text).toBe(201)
-      const person = await enrollFromLink(request, invited.body.invitation.link)
+      const person = await enrollFromLink(request, invited.body.invitation.link, site)
       await owner.reauth()
       const planned = await owner.browser.call('POST', '/api/v1/role-bindings', {
         identityId: person.identityId,
@@ -591,17 +621,9 @@ export async function mcpWorld(
         }),
       ),
     async apiToken(scopes, tiers, person) {
-      const tokens = await codeFlow(
-        'exponetdb-cli',
-        'http://127.0.0.1:51234/callback',
-        'api',
-        scopes,
-        tiers,
-        undefined,
-        person,
-      )
-      return tokens.access_token
+      return (await apiTokens(scopes, tiers, person)).access_token
     },
+    apiTokens,
     async rest(token, method, path, body) {
       const response = await app.request(`${ORIGIN}${path}`, {
         method,

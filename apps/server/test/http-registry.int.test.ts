@@ -350,6 +350,37 @@ describe('registry over REST', () => {
     expect(sql.status).toBe(200)
     expect(sql.body.script).toContain('CREATE ROLE')
     expect(sql.body.script).not.toMatch(/PASSWORD\s+'/i)
+    // Wave 9 A8: databases before registration, a project's execution roles, the ledger read.
+    const before = await owner.browser.call(
+      'GET',
+      `/api/v1/clusters/${ids.cluster}/bootstrap-sql?database=app_pending&database=app_two&project=${ids.project}&ledgers=supabase`,
+    )
+    expect(before.status).toBe(200)
+    expect(before.body).toMatchObject({
+      databases: ['app_pending', 'app_two'],
+      pendingDatabases: ['app_pending', 'app_two'],
+      legacyLedgers: ['supabase'],
+      executionRoles: [],
+    })
+    expect(before.body.script).toContain(
+      String.raw`\connect -reuse-previous=on 'dbname=''app_pending'''`,
+    )
+    const refused = await Promise.all([
+      owner.browser.call(
+        'GET',
+        `/api/v1/clusters/${ids.cluster}/bootstrap-sql?environment=env_01M5GZZZZZZZZZZZZZZZZZZZZZ`,
+      ),
+      owner.browser.call(
+        'GET',
+        `/api/v1/clusters/${ids.cluster}/bootstrap-sql?project=prj_01M5GZZZZZZZZZZZZZZZZZZZZZ`,
+      ),
+      owner.browser.call('GET', `/api/v1/clusters/${ids.cluster}/bootstrap-sql?ledgers=liquibase`),
+    ])
+    expect(refused.map((r) => [r.status, r.body.code])).toEqual([
+      [422, 'VALIDATION_FAILED'],
+      [404, 'NOT_FOUND'],
+      [422, 'VALIDATION_FAILED'],
+    ])
     // The write-only endpoint: accepted, pending, never shown again.
     await reauth()
     const submitted = await owner.browser.call(

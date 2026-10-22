@@ -8,7 +8,6 @@ import {
   type CatalogReader,
   checkExpectations,
   executionRoleFacts,
-  executionRoleProblem,
   type IndexState,
   type MigrationEventRecord,
   pinSearchPath,
@@ -39,6 +38,7 @@ import {
 } from './content.ts'
 import { projectRegistry } from './deps.ts'
 import { MigrationError } from './errors.ts'
+import { executionRolesFor, roleUnder } from './execution-roles.ts'
 import type { MigrationPlanContext } from './planner.ts'
 import { readRevision } from './store.ts'
 import { readTargetState } from './target.ts'
@@ -303,14 +303,22 @@ export async function planMigrationResume(
         findings.push({ rule: 'statement_forbidden', statementIndex: s.index, message: s.kind })
       }
     }
-    // The execution role is still mapped the same way and still usable.
+    // The execution role is still resolved the same way for the target's environment and
+    // still usable, under the exceptions declared there now (ADR-0034).
     const alias = (revision.manifest['execution'] as { role?: string } | undefined)?.role ?? ''
     const roleFacts = await opened.session.readOnly((rtx) =>
       executionRoleFacts(rtx, [item.executionRole], 'exponetdb_migrator'),
     )
+    const resolved = await executionRolesFor(tx, target)
+    const checks = roleFacts.map((f) => roleUnder(f, resolved.exceptions))
     const roleUsable =
-      project.executionRoles[alias] === item.executionRole &&
-      roleFacts.every((f) => executionRoleProblem(f) === null)
+      resolved.roles[alias] === item.executionRole &&
+      checks.every((c) => c.problem === null || c.problem === 'declared_exception')
+    const resumeExceptions = Object.fromEntries(
+      checks.flatMap((c, i) =>
+        c.binding === null ? [] : [[roleFacts[i]?.role ?? '', c.binding] as const],
+      ),
+    )
     const flags: CompatibilityClass[] = remaining.flatMap((s) => [...s.compatibility])
     const facts: MigrationFacts = {
       // Dropping an INVALID index loses no data; the remaining statements decide.
@@ -325,6 +333,8 @@ export async function planMigrationResume(
       lineage: 'not_required',
       dependenciesVerified: true,
       legacyProject: read.state.meta.baselineId !== null,
+      executionRoleExceptions: Object.keys(resumeExceptions).length,
+      executionRoleParity: 'not_required',
     }
     const resume: ResumeBinding = {
       originalOperationId: log.originalOperationId,
@@ -358,6 +368,9 @@ export async function planMigrationResume(
         ledgerStateHash: read.state.ledgerStateHash,
         extensions: { ...read.state.extensions },
         executionRoles: { ...before.expectedState.executionRoles },
+        ...(Object.keys(resumeExceptions).length === 0
+          ? {}
+          : { executionRoleExceptions: resumeExceptions }),
       },
       evidence: null,
       facts,

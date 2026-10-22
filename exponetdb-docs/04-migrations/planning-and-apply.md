@@ -132,8 +132,17 @@ requirements:                            # from policy
   refuses when its bundle digest or checksum differ. Editing files after
   planning has no effect on the plan.
 - `executionRole` is the PostgreSQL role the registry maps the manifest's
-  alias to (`registry.projects.execution_roles`, set by `registry.project.update`);
-  `expectedState.executionRoles` binds the map.
+  alias to for the target's environment (the environment's binding, else
+  the project map `registry.projects.execution_roles`, set by
+  `registry.project.update`; Wave 9, ADR-0034 §5);
+  `expectedState.executionRoles` binds the resolved map, and
+  `expectedState.executionRoleExceptions` binds `{exceptionId, revision}`
+  per role whose `BYPASSRLS` a declared exception excuses (ADR-0034 §3).
+  Acceptance and the executor under the lock resolve again: a changed
+  binding (`execution_roles`) or a revoked, changed or expired declaration
+  (`execution_role_exception`) is `PLAN_STALE`. `content.facts` counts the
+  declarations used (`executionRoleExceptions`) and, on production, whether
+  the evidence environment ran under equal roles (`executionRoleParity`).
 - `content.consumerCode` per migration binds each declared consumer
   function or view of `verify.sql` with oid, owner and definition digest
   (a function or view the plan itself creates is bound by its declaration).
