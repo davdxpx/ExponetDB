@@ -798,3 +798,37 @@ pull request. Each has a test that fails on the merged code.
 | F-B | Admission admitted `GRANT`/`REVOKE … ON DATABASE`, `COMMENT` and `SECURITY LABEL ON DATABASE`, which an owning execution role can now run (a `REVOKE CONNECT` from ExponetDB) | every statement on the database object is refused (`database`), including `ALTER DATABASE … OWNER TO` and `RENAME TO` | `migration-analysis.test.ts` |
 | F-C | The scratch reset script quoted values as plain literals, so a database owner who turned `standard_conforming_strings` off let a schema name holding a backslash end its literal and run code as the superuser (the reviewer proved it on 16, 17 and 18) | `E''` literals and `SET LOCAL standard_conforming_strings = on` | `scratch-check.int.test.ts` (the payload never runs); `scratch-reset.test.ts` |
 
+
+## 8. Follow-up 2: the legacy import against a real Supabase-origin history (2026-10-22)
+
+**[OBSERVED]** The owner ran the first real legacy import on `reos-db-01`
+(PostgreSQL 17.11) with the deployed release `04b3edcd`: 556 legacy files,
+the ledgers `supabase` and `applied_migrations`. `scratch-check` passed all
+six checks (the `pg_database_owner` fix works). The owner's request: fix in
+ExponetDB (contracts, tests on PostgreSQL 16, 17 and 18 with a synthetic
+fixture of that shape, docs), no consumer-side workaround. Nothing on the
+cluster changed.
+
+| # | Observed | Decision | Evidence |
+|---|---|---|---|
+| F1 | The second replay stopped with `42501` at a `DO` block `IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = …) THEN GRANT <role> TO <role>; END IF` (two of 556 files): the guard made the block mixed, so it ran as the execution role | A role-only `DO` block may hold `[NOT] EXISTS` guards over `pg_roles` or `pg_auth_members`, `THEN` only, nothing else in them. `NOT EXISTS` keeps presence only; `EXISTS` makes the expectations conditional: checked only while the guard holds on the imported target, never superseding another one ([legacy-import.md §2.4](../../04-migrations/legacy-import.md#24-files-with-cluster-global-effects)) | `cluster-global.test.ts` (both real shapes on 16, 17, 18, nested guards, nineteen guards that stay mixed), `cluster-globals.int.test.ts` (16, 17, 18), `legacy-replay.test.ts`, `legacy-cluster-global.int.test.ts` (the `42501` measured on 16, 17, 18; fails on the code before) |
+| F2 | `scratch-reset-sql` refused with 25 "objects outside the managed scope": the casts and access methods of `vector` in `public` | A member without a schema of an extension in the scope goes with it and is re-created; a member in a schema outside the scope now refuses (it was dropped silently before: `pg_depend` `e` rows were not read) ([§2.5](../../04-migrations/legacy-import.md#25-scratch-targets)) | `scratch-reset.int.test.ts` with `vector` and `pg_trgm` in `public` on 16, 17, 18 (the 25 objects on the script before); `scratch-check.int.test.ts` |
+| F3 | `scratch-check` passed; the replay stopped at a policy calling `auth.uid()` (`3F000`): no current object depended on it any more | The preflight with the legacy files (`POST …/scratch-check`) adds `legacy_references` from the files' parse trees and `copySchemas`; `migration import scratch-copy-commands` prints a schema-only copy without triggers (§2.5) | `legacy-references.test.ts` (16, 17, 18), `scratch.int.test.ts` (16, 17, 18), `scratch-check.int.test.ts`, `scratch-copy.test.ts`; the copy commands run once on PostgreSQL 17 |
+| F4 | `serve` restarted during the first `import analyze` at 512 MiB; at 1 536 MiB the request passed (cause not proven by the owner) | **Proven here:** on Node 24 V8's tier-up of the parser's WebAssembly takes hundreds of MiB outside the heap; in a 512 MiB container the plan of a 600-file, 3 MB history was killed, and so was one 3.6 MiB file. Every role starts with `node --liftoff-only` (plan peak 164 MiB, replay 250 MiB); a history is at most 8 MiB per request; `serve` parses one at a time ([deployment.md §2a](../../12-operations/deployment.md#2a-memory)) | `legacy-large.int.test.ts` (600 files, 3 MB, end to end on 17), `legacy-parse.test.ts`, `scripts/measure-analyze-memory.ts` |
+| F5 | The hosted connector strips comments inside dollar-quoted bodies: ten functions differed byte for byte and matched once normalized | The `statements_bodies` tier is `medium` (a code body normalized as the statement around it); `low` is no longer given (§2.3) | `legacy-evidence.test.ts` (the connector's shape), `legacy-supabase.int.test.ts` |
+
+**Owner actions after this is deployed** (in this order; nothing here is
+done from this session):
+
+1. The Coolify resources' Custom Docker Options become `--entrypoint "node
+   --liftoff-only /app/bin/exponetdb.mjs serve"` (`worker`, `gateway`
+   likewise); the startup log no longer shows
+   `process.wasm_tier_up_enabled`. Memory and swap limits are changed
+   together.
+2. The consumed scratch database is reset with `migration import
+   scratch-reset-sql` (F2).
+3. `migration import scratch-check` runs in the project directory, so it
+   sends the legacy files; `migration import scratch-copy-commands` prints
+   what the scratch target still lacks (the `auth` copy made by hand
+   already covers `auth.uid()`).
+4. The analysis runs again.
