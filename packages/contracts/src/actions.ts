@@ -1551,6 +1551,20 @@ export const ACTIONS = {
     fixed('standard'),
     'cluster',
   ),
+  'registry.database.retire.plan': registryPlan(
+    'Plan the retirement of a registered database without a current placement',
+    'cluster',
+    {
+      wave: '9',
+      basis: 'Wave 9 order A7: correct a wrong registration without editing the Control Store',
+    },
+  ),
+  'registry.database.retire': registryKind(
+    'Retire a registered database record (final; its name can be registered again)',
+    byTier('standard', 'high'),
+    'cluster',
+    { ...REAUTH, wave: '9', basis: 'Wave 9 order A7' },
+  ),
   'registry.cluster.declare_tier.plan': registryPlan(
     "Plan the declaration of a cluster's intended tier (OD-22)",
     'cluster',

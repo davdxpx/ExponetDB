@@ -156,6 +156,8 @@ describe('Wave 4 registry contracts', () => {
       'registry.credential.submit',
       'registry.database.register',
       'registry.database.register.plan',
+      'registry.database.retire',
+      'registry.database.retire.plan',
       'registry.endpoint.add',
       'registry.endpoint.add.plan',
       'registry.endpoint.retire',

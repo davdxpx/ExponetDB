@@ -21,6 +21,7 @@ import {
   clusterBySystemIdentifier,
   findTarget,
   getCluster,
+  getDatabase,
   getEndpoint,
   getEnvironment,
   getProject,
@@ -774,6 +775,67 @@ export class EndpointRetireKind extends RegistryKind {
   }
 }
 
+/** `registry.database.retire`: the record ends (final); the cluster is not touched. */
+export class DatabaseRetireKind extends RegistryKind {
+  readonly kind = 'registry.database.retire'
+  readonly actionClass = 'high'
+
+  async bindings(_plan: PlanRecord, c: Body) {
+    const database = await getDatabase(this.deps.store, c.text('databaseId'))
+    const changed: ChangedBinding[] = []
+    if (database === undefined || database.state !== 'registered') {
+      changed.push({
+        binding: 'databaseState',
+        expected: 'registered',
+        actual: database?.state ?? null,
+      })
+    } else if (database.placedTargetId !== null) {
+      changed.push({ binding: 'placed', expected: false, actual: true })
+    }
+    return changed
+  }
+
+  async run(ctx: ExecutionContext, c: Body) {
+    return this.effect(async (tx) => {
+      // The guard refuses a current placement (EXG09); retirement is final.
+      const { rowCount } = await tx.query(
+        'registry.kind.database.retire',
+        `UPDATE registry.databases SET state = 'retired'
+          WHERE database_id = $1 AND cluster_id = $2 AND state = 'registered'`,
+        [c.id('dbs', 'databaseId'), c.id('cls', 'clusterId')],
+      )
+      if (rowCount !== 1) return false
+      await this.audit(
+        tx,
+        ctx,
+        { databaseId: c.text('databaseId') },
+        { clusterId: c.text('clusterId') },
+      )
+      return true
+    })
+  }
+
+  async check(ctx: ExecutionContext, c: Body) {
+    // No column names the retiring operation: its audit event does.
+    return (
+      (await this.exists(
+        'registry.kind.database_retire.verify',
+        `SELECT 1 FROM registry.databases WHERE database_id = $1 AND state = 'retired'`,
+        [c.text('databaseId')],
+      )) &&
+      (await this.exists(
+        'registry.kind.database_retire.audited',
+        'SELECT 1 FROM audit.audit_events WHERE operation_id = $1 AND action = $2',
+        [ctx.operationId, this.kind],
+      ))
+    )
+  }
+
+  applied(ctx: ExecutionContext, c: Body) {
+    return this.check(ctx, c)
+  }
+}
+
 export class DatabaseRegisterKind extends RegistryKind {
   readonly kind = 'registry.database.register'
   readonly actionClass = 'standard'
@@ -1002,6 +1064,7 @@ export function registryKinds(deps: RegistryKindDeps): readonly OperationKind[] 
     new ClusterDeclareTierKind(deps),
     new EndpointAddKind(deps),
     new EndpointRetireKind(deps),
+    new DatabaseRetireKind(deps),
     new DatabaseRegisterKind(deps),
     new TargetRegisterKind(deps),
     new TargetStateKind(deps, 'target.suspend'),

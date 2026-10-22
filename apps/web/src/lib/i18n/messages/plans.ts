@@ -77,6 +77,7 @@ export const plansMessages = {
   'plans.title.registry.project.create': 'Create a project',
   'plans.title.registry.project.update': 'Change a project',
   'plans.title.registry.execution_role_binding.set': "Set an environment's execution roles",
+  'plans.title.registry.database.retire': 'Retire a database record of cluster {subject}',
   'plans.title.registry.execution_role_exception.declare':
     'Declare a BYPASSRLS exception for an execution role',
   'plans.title.registry.execution_role_exception.revoke':

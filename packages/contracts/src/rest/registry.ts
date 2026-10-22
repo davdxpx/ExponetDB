@@ -291,6 +291,10 @@ export const EndpointRetireRequestSchema = z
   .strictObject({ reason: ReasonSchema.optional() })
   .meta({ id: 'EndpointRetireRequest' })
 
+export const DatabaseRetireRequestSchema = z
+  .strictObject({ reason: ReasonSchema.optional() })
+  .meta({ id: 'DatabaseRetireRequest' })
+
 export const DatabaseRegisterRequestSchema = z
   .strictObject({
     name: z
@@ -564,6 +568,7 @@ export type ClusterRegisterRequest = z.infer<typeof ClusterRegisterRequestSchema
 export type ClusterConfirmRequest = z.infer<typeof ClusterConfirmRequestSchema>
 export type ClusterDeclaredTierRequest = z.infer<typeof ClusterDeclaredTierRequestSchema>
 export type DatabaseRegisterRequest = z.infer<typeof DatabaseRegisterRequestSchema>
+export type DatabaseRetireRequest = z.infer<typeof DatabaseRetireRequestSchema>
 export type TargetRegisterRequest = z.infer<typeof TargetRegisterRequestSchema>
 export type TargetStateChangeRequest = z.infer<typeof TargetStateChangeRequestSchema>
 export type DriftAcceptRequest = z.infer<typeof DriftAcceptRequestSchema>

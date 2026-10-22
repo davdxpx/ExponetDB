@@ -33,6 +33,8 @@ export type ConflictReason =
   | 'target_state'
   | 'endpoint_retired'
   | 'database_not_found'
+  | 'database_retired'
+  | 'database_in_use'
   | 'no_active_endpoint'
   | 'observer_credential_missing'
   | 'system_identifier_taken'

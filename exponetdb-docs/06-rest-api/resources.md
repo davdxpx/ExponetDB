@@ -39,6 +39,7 @@ state directly.
 | `GET /clusters/{id}/bootstrap-sql` | role bootstrap SQL for a person to run (no password) | `registry.manage` | Wave 4 |
 | `GET /clusters/{id}/endpoints`, `POST /clusters/{id}/endpoints` | endpoints | `registry.manage` | addresses visible only to `registry.manage`; POST: plan, re-authentication |
 | `POST /clusters/{id}/endpoints/{endpointId}/retire` | retire an endpoint (a changed address is a new endpoint) | `registry.manage` | plan; re-authentication |
+| `POST /clusters/{id}/databases/{databaseId}/retire` | retire a registered database record that is no current placement (Wave 9; final; the name can be registered again; the cluster is not touched) | `registry.manage` | plan; re-authentication; `database_retired`, `database_in_use` |
 | `GET /clusters/{id}/databases`, `POST /clusters/{id}/databases` | databases (external clusters: register an existing database; agent clusters: create via node capability, Wave 5) | `registry.manage` | plan |
 | `GET /clusters/{id}/credentials` | credential metadata (role, state, times) | `registry.manage` | never a secret or a secret reference |
 | `POST /clusters/{id}/credentials/{role}` | write-only credential submission (external clusters) | `registry.manage` | Web App, re-authentication; `202` with the pending metadata; never readable |

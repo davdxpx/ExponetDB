@@ -709,6 +709,8 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.database.retire.plan",
+              "registry.database.retire",
               "registry.cluster.declare_tier.plan",
               "project.execution_roles.get",
               "registry.execution_role_binding.set.plan",
@@ -3554,6 +3556,17 @@
         "required": [
           "name"
         ],
+        "type": "object"
+      },
+      "DatabaseRetireRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "description": "Short machine-readable reason, stored on the target and in the audit.",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "DatabaseView": {
@@ -11361,6 +11374,8 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.database.retire.plan",
+              "registry.database.retire",
               "registry.cluster.declare_tier.plan",
               "project.execution_roles.get",
               "registry.execution_role_binding.set.plan",
@@ -11799,6 +11814,8 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.database.retire.plan",
+              "registry.database.retire",
               "registry.cluster.declare_tier.plan",
               "project.execution_roles.get",
               "registry.execution_role_binding.set.plan",
@@ -12293,6 +12310,8 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.database.retire.plan",
+              "registry.database.retire",
               "registry.cluster.declare_tier.plan",
               "project.execution_roles.get",
               "registry.execution_role_binding.set.plan",
@@ -12702,6 +12721,8 @@
               "registry.endpoint.add",
               "registry.endpoint.retire",
               "registry.database.register",
+              "registry.database.retire.plan",
+              "registry.database.retire",
               "registry.cluster.declare_tier.plan",
               "project.execution_roles.get",
               "registry.execution_role_binding.set.plan",
@@ -20752,6 +20773,119 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "4"
+      }
+    },
+    "/clusters/{clusterId}/databases/{databaseId}/retire": {
+      "post": {
+        "operationId": "planDatabaseRetirement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "databaseId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^dbs_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^dbs_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatabaseRetireRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan the retirement of a registered database that is no current placement (Wave 9): the record ends, its name can be registered again; nothing changes on the cluster.",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "registry.database.retire.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
       }
     },
     "/clusters/{clusterId}/declared-tier": {

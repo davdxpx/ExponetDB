@@ -83,6 +83,7 @@ export const KIND_TITLES: Readonly<Record<string, KindTitle>> = {
   'registry.project.create': none('plans.title.registry.project.create'),
   'registry.project.update': none('plans.title.registry.project.update'),
   'registry.execution_role_binding.set': none('plans.title.registry.execution_role_binding.set'),
+  'registry.database.retire': cluster('plans.title.registry.database.retire'),
   'registry.execution_role_exception.declare': none(
     'plans.title.registry.execution_role_exception.declare',
   ),

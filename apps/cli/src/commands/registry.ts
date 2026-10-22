@@ -1163,6 +1163,23 @@ export const registryCommands: readonly CommandSpec[] = [
     file: false,
   }),
   planCommand({
+    path: ['cluster', 'database', 'retire'],
+    summary:
+      'Plan retiring a registered database record that is no current placement (decommission its target first); the database itself is not touched.',
+    group: 'registry',
+    args: [
+      { name: 'cluster', description: 'A cluster id.', required: true },
+      { name: 'database', description: 'A database id (dbs_…).', required: true },
+    ],
+    flags: [{ name: 'reason', type: 'string', placeholder: 'text', description: 'Why.' }],
+    action: 'registry.database.retire.plan',
+    scopes: MANAGE,
+    operation: 'planDatabaseRetirement',
+    params: (i) => ({ clusterId: arg(i, 'cluster'), databaseId: arg(i, 'database') }),
+    body: (i) => optional(i, 'reason', (v) => v),
+    file: false,
+  }),
+  planCommand({
     path: ['cluster', 'database', 'register'],
     summary: 'Plan registering a database of a cluster.',
     group: 'registry',

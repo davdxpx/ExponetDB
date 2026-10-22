@@ -277,6 +277,21 @@ shows the default map, each environment's bindings and effective map, and
 the declarations; the CLI's `project execution-roles` and `project
 role-exception` commands use it.
 
+### 4.3 Correcting a wrong registration (Wave 9)
+
+**[DECIDED]** (Wave 9 Part A, A7) A registration on the wrong database is
+corrected through operations, never by editing the Control Store: the
+target is decommissioned (`target.decommission`, which ends its placement
+and leaves the database and its marker untouched), then the database record
+is retired (`registry.database.retire`, `POST
+/clusters/{id}/databases/{databaseId}/retire`, CLI `cluster database
+retire`; `registry.manage` at the cluster's tier, re-authenticated, human
+only, audited). Retirement is final and refused while the database is a
+current placement (`database_in_use`, and the Control Store guard EXG09);
+nothing changes on the cluster. Afterwards the same name on the cluster
+registers again, for example after the database was re-created with a new
+oid (`databases_one_registered_name` covers registered records only).
+
 ## 5. Registry and REOSA's infrastructure register
 
 **[OBSERVED]** REOSA already keeps an infrastructure register in its admin

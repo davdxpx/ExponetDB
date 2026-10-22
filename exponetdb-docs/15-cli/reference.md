@@ -71,6 +71,7 @@ exit codes are in [`README.md`](./README.md).
 | [`cluster confirm`](#cluster-confirm) | remote | plan | Plan confirming a cluster’s identity (its system identifier). |
 | [`cluster endpoint add`](#cluster-endpoint-add) | remote | plan | Plan a new endpoint of a cluster. |
 | [`cluster endpoint retire`](#cluster-endpoint-retire) | remote | plan | Plan retiring an endpoint. |
+| [`cluster database retire`](#cluster-database-retire) | remote | plan | Plan retiring a registered database record that is no current placement (decommission its target first); the database itself is not touched. |
 | [`cluster database register`](#cluster-database-register) | remote | plan | Plan registering a database of a cluster. |
 | [`cluster credential submit`](#cluster-credential-submit) | remote | read | Open the Web App’s write-only form for a role’s password, then wait until the worker verified it. |
 | [`cluster credential rotate`](#cluster-credential-rotate) | remote | plan | Plan rotating a cluster credential through the node (a new SCRAM verifier, set locally). |
@@ -1174,6 +1175,26 @@ Runs: against the server; effect: plan; action: `registry.endpoint.retire.plan`;
 |---|---|
 | `cluster` (required) | A cluster id. |
 | `endpoint` (required) | An endpoint id. |
+| `--reason <text>` | Why. |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### cluster database retire
+
+Plan retiring a registered database record that is no current placement (decommission its target first); the database itself is not touched.
+
+```text
+exponetdb cluster database retire <cluster> <database> [flags]
+```
+
+Runs: against the server; effect: plan; action: `registry.database.retire.plan`; scopes: `registry.manage`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id. |
+| `database` (required) | A database id (dbs_…). |
 | `--reason <text>` | Why. |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
 | `--wait` | Wait until applied and verified (the default). |

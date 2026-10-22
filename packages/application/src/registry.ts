@@ -133,6 +133,7 @@ import {
   planClusterDeclareTier,
   planClusterRegister,
   planDatabaseRegister,
+  planDatabaseRetire,
   planEndpointAdd,
   planEndpointRetire,
   planEnvironmentCreate,
@@ -910,6 +911,21 @@ export class RegistryUseCases {
       idem,
       { kind: 'cluster', clusterId },
       (tx, c, a) => planEndpointAdd(tx, c, a, clusterId, body),
+    )
+  }
+
+  planDatabaseRetirement(
+    caller: CallerLike,
+    clusterId: string,
+    databaseId: string,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.database.retire.plan',
+      idem,
+      { kind: 'cluster', clusterId },
+      (tx, c, a) => planDatabaseRetire(tx, c, a, clusterId, databaseId),
     )
   }
 

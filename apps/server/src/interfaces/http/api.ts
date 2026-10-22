@@ -45,6 +45,7 @@ import {
   ClusterRegisterRequestSchema,
   ConsentDecisionRequestSchema,
   CredentialSubmissionSchema,
+  DatabaseIdSchema,
   DatabaseRegisterRequestSchema,
   DEFAULT_BODY_LIMIT_BYTES,
   DeviceDecisionRequestSchema,
@@ -1207,6 +1208,15 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         caller(call),
         clusterId(call),
         EndpointRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planDatabaseRetirement: async (app, call) =>
+    value(
+      await app.registry.planDatabaseRetirement(
+        caller(call),
+        clusterId(call),
+        DatabaseIdSchema.parse(field(call.params, 'databaseId')),
         idempotency(call),
       ),
     ),

@@ -5474,6 +5474,70 @@
       "wave": "4"
     },
     {
+      "basis": "Wave 9 order A7: correct a wrong registration without editing the Control Store",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.database.retire.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "cluster_registry",
+      "title": "Plan the retirement of a registered database without a current placement",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "Wave 9 order A7",
+      "class": {
+        "kind": "by_tier",
+        "nonprod": "standard",
+        "prod": "high"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.database.retire",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "cluster_registry",
+      "title": "Retire a registered database record (final; its name can be registered again)",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
       "basis": "resources.md (Registry): registry changes create a plan",
       "class": {
         "class": "read",
@@ -9772,6 +9836,8 @@
               "target_state",
               "endpoint_retired",
               "database_not_found",
+              "database_retired",
+              "database_in_use",
               "no_active_endpoint",
               "observer_credential_missing",
               "system_identifier_taken",

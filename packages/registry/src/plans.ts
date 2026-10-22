@@ -748,6 +748,43 @@ export async function planEndpointRetire(
 
 // ----- databases -----
 
+/**
+ * `registry.database.retire.plan` (Wave 9 order A7): a registered database
+ * that is no current placement (its target decommissioned, or never placed)
+ * leaves the registry for good; its name on the cluster can be registered
+ * again (for example after the database was re-created). Nothing changes on
+ * the cluster.
+ */
+export async function planDatabaseRetire(
+  tx: Tx,
+  context: RegistryPlanContext,
+  actor: RegistryActor,
+  clusterId: string,
+  databaseId: string,
+): Promise<PlanRecord> {
+  const cluster = await getCluster(tx, clusterId)
+  const database = await getDatabase(tx, databaseId)
+  if (cluster === undefined || database === undefined || database.clusterId !== clusterId) {
+    throw new RegistryError('NOT_FOUND')
+  }
+  if (database.state !== 'registered') throw conflict('database_retired')
+  // Decommission the target first: a current placement keeps its database (EXG09).
+  if (database.placedTargetId !== null) throw conflict('database_in_use')
+  const tier = cluster.derivedTier ?? undefined
+  return store(tx, context, actor, {
+    kind: 'registry.database.retire',
+    actionClass: cluster.derivedTier === 'nonprod' ? 'standard' : 'high',
+    subject: { clusterId, ...(tier === undefined ? {} : { tier }) },
+    content: { clusterId, databaseId },
+    expectedState: { databaseState: 'registered', placed: false },
+    analysis: {
+      name: database.name,
+      observedOid: database.observedOid,
+      effect: 'The registry record ends; the database on the cluster is not touched.',
+    },
+  })
+}
+
 export async function planDatabaseRegister(
   tx: Tx,
   context: RegistryPlanContext,
