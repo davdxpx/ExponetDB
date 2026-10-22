@@ -743,3 +743,46 @@ swallowed as empty).
 |---|---|---|---|---|
 | S3-P1-1 | P1 (since Wave 6; it defeated S2-P1-1) | The reset read its marker with `SELECT FROM exponetdb.target_identity`, qualified, so the pinned path did not help: a replayed `DO` block that ran `EXECUTE 'SET ROLE exponetdb_ledger_owner'` (the migrator holds `SET` on the ledger owner) and switched back could replace the marker with a view whose condition calls a planted function, which then ran as the superuser running the reset (the reviewer: `ALTER ROLE … SUPERUSER` ran) | the reset reads the marker and the ledger only once the catalog shows plain tables of `exponetdb_ledger_owner` with built-in column types, no children, no row security; it reads them `ONLY` and with qualified operators and casts; otherwise it refuses and says to re-create the scratch database (legacy-import.md §2.5, T37) | `scratch-check.int.test.ts` replaces the marker with such a view: refused, the planted function never runs (without the fix it ran and the reset went on to its dependency check); `scratch-reset.test.ts` |
 | S3-OD | open decision | The general cause: procedural code in a migration session can act as any role the migrator holds (the ledger owner, the migrator, other projects' execution roles on the cluster) and switch back unseen; also for authored bundles, also an agent's nonprod plan (proven on PostgreSQL 17) | not changed in Part A: the containment needs a change to a DECIDED rule (the ledger in the same transaction, C-19; `NOLOGIN` execution roles), a stop-and-ask point of the order; **OD-55** and threat T38 opened with options and a recommendation | — |
+
+## 7. Follow-up after the merge: an execution role that owns its database (2026-10-22)
+
+**[OBSERVED]** While the first real external cluster (`reos-db-01`,
+PostgreSQL 17.11) was onboarded with the merged release `41ebcbb`, the
+scratch preflight refused `reosa_stg_owner` with `reaches_protected_role`.
+Every plan and replay on a target whose execution role owns its database
+was refused the same way.
+
+- **Cause.** Inside a database its owner is an implicit member of
+  `pg_database_owner`, and the reach predicate counted every `pg_*` role.
+  The bootstrap SQL evaluates in `postgres`, where that membership does not
+  exist, so it granted the role; the planner and the bootstrap disagreed.
+- **The owner's request.** Fix it in ExponetDB as a Part A follow-up, with
+  no consumer-side workaround.
+- **Decision.** [ADR-0034 §3.1](../../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md#31-pg_database_owner-is-not-a-protected-reach-2026-10-22):
+  - `pg_database_owner` is excluded by its oid;
+  - every other predefined role stays protected;
+  - the predicate is one fragment, `REACHES_PROTECTED_ROLE`, used by the
+    role facts and embedded in the bootstrap SQL;
+  - no per-database bootstrap check is needed, because no other membership
+    depends on the database.
+- **Evidence:**
+  - `packages/postgres/test/migration-exec.int.test.ts` on PostgreSQL 16,
+    17 and 18:
+    - a role that owns its database is usable and applies a migration;
+    - the predicate gives the same answer in that database and in
+      `postgres`;
+    - a database owner that reaches `pg_read_all_data` is still refused;
+    - without the exclusion the test fails on all three majors.
+  - `legacy-supabase.int.test.ts` and `scratch-check.int.test.ts` (17): the
+    databases are now owned by their execution role, as on `reos-db-01`.
+    The replay under the declared exception, the classification, the
+    preflight and the reset pass; without the exclusion 9 of their 12
+    tests fail.
+  - `adapter.test.ts`: the bootstrap embeds the planner's text, and the
+    exclusion is by oid only.
+  - The owner test package creates `acme_staging` and `acme_scratch` owned
+    by `acme_staging_owner`, and its fixture's SQL loads into such a
+    database (PostgreSQL 17).
+- **On `reos-db-01`** nothing changes. After this is deployed, the owner
+  runs `scratch-check` again.
+

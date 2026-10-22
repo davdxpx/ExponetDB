@@ -56,13 +56,31 @@ const EXPONETDB_ROLES: ReadonlySet<string> = new Set([
   LEDGER_OWNER_ROLE,
 ])
 
+/**
+ * Whether the role `r` reaches, through any chain of memberships, a role
+ * with a privileged attribute, a predefined role or an ExponetDB role
+ * (credentials-and-roles.md §3, ADR-0034 §3). The one definition: the role
+ * facts below and the bootstrap SQL's grant check use this same text.
+ *
+ * `pg_database_owner` is not a protected reach (ADR-0034 §3.1): PostgreSQL
+ * makes the owner of the current database its implicit member, it can
+ * neither have explicit members nor be a member of any role, and it holds
+ * only what the database's owner holds (the `public` schema). Without the
+ * exception every role that owns its database (Supabase-origin and most
+ * self-managed installations) would be refused inside that database alone.
+ * It is excluded by its fixed oid, never by a name pattern; every other
+ * predefined role stays protected.
+ */
+export const REACHES_PROTECTED_ROLE = sql`EXISTS (SELECT 1 FROM pg_catalog.pg_roles x
+                WHERE x.oid <> r.oid AND x.oid <> 'pg_database_owner'::pg_catalog.regrole
+                  AND pg_catalog.pg_has_role(r.oid, x.oid, 'MEMBER')
+                  AND (x.rolsuper OR x.rolcreaterole OR x.rolcreatedb OR x.rolreplication OR x.rolbypassrls
+                       OR x.rolname LIKE 'pg\\_%' OR x.rolname LIKE 'exponetdb\\_%'))`
+
 const ROLE_FACTS = sql`SELECT r.rolname::text AS role, r.rolcanlogin AS can_login, r.rolsuper AS superuser,
        r.rolcreaterole AS create_role, r.rolcreatedb AS create_db, r.rolreplication AS replication,
        r.rolbypassrls AS bypass_rls,
-       EXISTS (SELECT 1 FROM pg_catalog.pg_roles x
-                WHERE x.oid <> r.oid AND pg_catalog.pg_has_role(r.oid, x.oid, 'MEMBER')
-                  AND (x.rolsuper OR x.rolcreaterole OR x.rolcreatedb OR x.rolreplication OR x.rolbypassrls
-                       OR x.rolname LIKE 'pg\\_%' OR x.rolname LIKE 'exponetdb\\_%')) AS reaches_protected,
+       ${REACHES_PROTECTED_ROLE} AS reaches_protected,
        (SELECT m.set_option FROM pg_catalog.pg_auth_members m
          WHERE m.roleid = r.oid AND m.member = (SELECT u.oid FROM pg_catalog.pg_roles u WHERE u.rolname = coalesce($2, current_user))
          ORDER BY m.set_option DESC LIMIT 1) AS member_set,

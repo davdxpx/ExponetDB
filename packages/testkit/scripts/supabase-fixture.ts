@@ -11,7 +11,8 @@ import { SUPABASE_ALIASES, SUPABASE_FILES, supabaseTargetStatements } from '../s
  *   a default owner and the staging owner, `NOLOGIN`, the staging owner with
  *   `BYPASSRLS` like the reference installation's;
  * - `imported.sql`: the imported database as the history left it (run in
- *   that database): the objects, owned by the staging owner, the Supabase
+ *   that database, created owned by the staging owner, as real
+ *   installations are): the objects, owned by the staging owner, the Supabase
  *   ledger in its real shape and a name-only runner's table. The observer's
  *   read of the ledgers comes from the bootstrap SQL, not from here;
  * - `legacy/*.sql`, `hints.yaml` (the multi-file alias and the ledgers) and
@@ -56,7 +57,8 @@ await writeFile(
   join(out, 'imported.sql'),
   [
     '-- The imported database as its history left it (run in that database, as a superuser).',
-    `GRANT USAGE, CREATE ON SCHEMA public TO ${STAGING_OWNER};`,
+    `-- The database is owned by ${STAGING_OWNER} (CREATE DATABASE ... OWNER), as real installations are:`,
+    '-- public is its schema through pg_database_owner, so it needs no grant.',
     ...supabaseTargetStatements(STAGING_OWNER, 'exponetdb_observer')
       .filter((s) => !observerGrant.test(s))
       .map((s) => (s.trimEnd().endsWith(';') ? s.trimEnd() : `${s.trimEnd()};`)),

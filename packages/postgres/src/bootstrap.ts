@@ -1,4 +1,5 @@
 import { SCRAM_VERIFIER } from '@exponetdb/kernel/hash'
+import { REACHES_PROTECTED_ROLE } from './migration-facts.ts'
 import { type AccessRole, LEDGER_OWNER_ROLE, ROLE_NAMES } from './session.ts'
 import { quoteIdent, quoteLiteral } from './sql.ts'
 
@@ -199,10 +200,7 @@ function executionRoleGrant(role: BootstrapExecutionRole): string {
     RAISE NOTICE 'execution role % does not exist yet: create it, then run this script again', ${name};
   ELSIF EXISTS (SELECT FROM pg_catalog.pg_roles r WHERE r.rolname = ${name}
                    AND (r.rolcanlogin OR r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication${bypass}
-                        OR EXISTS (SELECT FROM pg_catalog.pg_roles x
-                                    WHERE x.oid <> r.oid AND pg_catalog.pg_has_role(r.oid, x.oid, 'MEMBER')
-                                      AND (x.rolsuper OR x.rolcreaterole OR x.rolcreatedb OR x.rolreplication OR x.rolbypassrls
-                                           OR x.rolname LIKE 'pg\\_%' OR x.rolname LIKE 'exponetdb\\_%')))) THEN
+                        OR ${REACHES_PROTECTED_ROLE.text})) THEN
     RAISE WARNING 'execution role % is not granted: it can log in, holds a privileged attribute or reaches a protected role', ${name};
   ELSE
     GRANT ${quoteIdent(role.name)} TO ${quoteIdent(ROLE_NAMES.migrator)} WITH INHERIT FALSE, SET TRUE;

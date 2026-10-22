@@ -132,6 +132,7 @@ export {
   extensionFacts,
   extensionPlacements,
   installedExtensions,
+  REACHES_PROTECTED_ROLE,
   type RelationSize,
   readEngineGuards,
   relationSizes,

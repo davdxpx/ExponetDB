@@ -128,7 +128,15 @@ of them**, nor a role with `SUPERUSER`, `CREATEROLE`, `CREATEDB`,
 runs as the ledger owner, with a predefined role's powers, or hands an object
 to a privileged role; the privileged-role part since Wave 9, found by the
 independent review of Part A), and the migrator is its direct
-member with `SET TRUE` and `INHERIT FALSE`. **The one exception:**
+member with `SET TRUE` and `INHERIT FALSE`. **`pg_database_owner` is not a
+protected reach** ([ADR-0034 §3.1](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md#31-pg_database_owner-is-not-a-protected-reach-2026-10-22),
+2026-10-22). PostgreSQL makes the owner of the current database its
+implicit member, and the role can neither have explicit members nor be a
+member of any role. So an execution role may own its database, as
+Supabase-origin installations do, and `public` is then its schema. The
+predicate is one SQL fragment (`REACHES_PROTECTED_ROLE`), shared by the
+planner, the executor, the replay, the scratch preflight, the health finding
+and the bootstrap SQL (§8), and it gives the same answer in every database. **The one exception:**
 `BYPASSRLS` is accepted for a role a person declared for that project and
 environment (§3.2); nothing else is ever excused. The planner reads these
 facts with the observer for the migrator; the executor reads them again

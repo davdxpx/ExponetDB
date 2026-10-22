@@ -1,15 +1,23 @@
-import { dropDatabase, matrix, runAsSuperuser, type TestServer } from '@exponetdb/testkit'
+import {
+  dropDatabase,
+  matrix,
+  runAsSuperuser,
+  type TestServer,
+  withSuperuser,
+} from '@exponetdb/testkit'
 import { beforeAll, describe, expect, it } from 'vitest'
 import {
   changedGuards,
   checkExpectations,
   executionRoleFacts,
   executionRoleProblem,
+  ident,
   insertLedgerRow,
   insertMigrationEvent,
   isReviewedStatement,
   lockMarker,
   pinSearchPath,
+  REACHES_PROTECTED_ROLE,
   ReviewRefused,
   readEngineGuards,
   readLedgerRows,
@@ -54,8 +62,10 @@ async function prepared(server: TestServer, label: string): Promise<string> {
        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_inherits') THEN CREATE ROLE app_inherits NOLOGIN; END IF;
        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_reacher') THEN CREATE ROLE app_reacher NOLOGIN; END IF;
        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'mx_member') THEN CREATE ROLE mx_member NOLOGIN; END IF;
+       IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_db_owner') THEN CREATE ROLE app_db_owner NOLOGIN; END IF;
      END $$`,
     'GRANT app_owner TO exponetdb_migrator WITH INHERIT FALSE, SET TRUE',
+    'GRANT app_db_owner TO exponetdb_migrator WITH INHERIT FALSE, SET TRUE',
     // Memberships of a shape the migrator must never have are made for another
     // role (the servers are shared with the registry's credential checks).
     'GRANT app_inherits TO mx_member WITH INHERIT TRUE, SET TRUE',
@@ -110,6 +120,7 @@ async function applyOnce(
   major: SupportedMajor,
   text: string,
   migrationId: string,
+  role = 'app_owner',
 ): Promise<Applied> {
   const analysis = analyzeMigrationSql(major, text)
   const statements = reviewedStatements(text, analysis)
@@ -125,9 +136,9 @@ async function applyOnce(
     })
     const reader = migrator.reader()
     await pinSearchPath(reader, ['public'])
-    await migrator.query(sql`SET LOCAL ROLE app_owner`)
+    await migrator.query(sql`SET LOCAL ROLE ${ident(role)}`)
     const before = await readEngineGuards(reader)
-    expect(before.currentUser).toBe('app_owner')
+    expect(before.currentUser).toBe(role)
     for (const statement of statements) {
       await migrator.executeReviewed(statement)
       expect(changedGuards(before, await readEngineGuards(reader))).toEqual([])
@@ -179,6 +190,67 @@ beforeAll(async () => {
 describe.each(matrix().map((s) => [s.major, s] as const))(
   'the migration execution path on PostgreSQL %i',
   (_m, server) => {
+    it('lets an execution role own its database, and keeps every other predefined role protected (pg_database_owner)', async () => {
+      const db = await prepared(server, `mx_dbo_${server.major}`)
+      // As Supabase-origin and most self-managed installations: the owner owns the database,
+      // and so, through pg_database_owner, its public schema.
+      await runAsSuperuser(server, db, [`ALTER DATABASE "${db}" OWNER TO app_db_owner`])
+      const reach = (database: string) =>
+        withSuperuser(server, database, async (c) => {
+          const r = await c.query(
+            `SELECT r.rolname AS role, ${REACHES_PROTECTED_ROLE.text} AS protected,
+                    pg_catalog.pg_has_role(r.oid, 'pg_database_owner', 'MEMBER') AS owns_here
+               FROM pg_catalog.pg_roles r WHERE r.rolname = ANY ($1) ORDER BY 1`,
+            [['app_db_owner', 'app_reacher']],
+          )
+          return r.rows
+        })
+      // Inside the database the owner is an implicit member of pg_database_owner; that is no
+      // protected reach, and the answer is the same in postgres, where the bootstrap SQL runs.
+      const inside = await reach(db)
+      expect(inside).toEqual([
+        { role: 'app_db_owner', protected: false, owns_here: true },
+        { role: 'app_reacher', protected: true, owns_here: false },
+      ])
+      expect((await reach('postgres')).map((r) => [r.role, r.protected])).toEqual(
+        inside.map((r) => [r.role, r.protected]),
+      )
+      const migrator = await open(server, db, 'migrator')
+      try {
+        const [owner] = await executionRoleFacts(migrator.reader(), ['app_db_owner'])
+        expect(owner?.reachesProtected).toBe(false)
+        expect(owner === undefined ? 'missing' : executionRoleProblem(owner)).toBe(null)
+        const applied = await applyOnce(
+          migrator,
+          server.major,
+          UP,
+          '01M4A00000000000000000003D',
+          'app_db_owner',
+        )
+        expect(applied.results.filter((r) => !r.ok)).toEqual([])
+        const owned = await migrator.query(
+          sql`SELECT pg_catalog.pg_get_userbyid(c.relowner) AS owner FROM pg_catalog.pg_class c
+               WHERE c.oid = 'public.leads'::pg_catalog.regclass`,
+        )
+        expect(owned[0]?.text('owner')).toBe('app_db_owner')
+      } finally {
+        await migrator.close()
+      }
+      // A role that owns the database and reaches pg_read_all_data is still refused there.
+      await runAsSuperuser(server, db, [`ALTER DATABASE "${db}" OWNER TO app_reacher`])
+      const reacher = await open(server, db, 'migrator')
+      try {
+        const [facts] = await executionRoleFacts(reacher.reader(), ['app_reacher'], 'mx_member')
+        expect(facts === undefined ? 'missing' : executionRoleProblem(facts)).toBe(
+          'reaches_protected_role',
+        )
+      } finally {
+        await reacher.close()
+      }
+      await runAsSuperuser(server, 'postgres', [`ALTER DATABASE "${db}" OWNER TO postgres`])
+      await dropDatabase(server, db)
+    })
+
     it('applies a migration as the declared owner, checks L0 in the transaction and records the ledger row', async () => {
       const db = await prepared(server, `mx_${server.major}`)
       const migrator = await open(server, db, 'migrator')
