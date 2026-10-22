@@ -101,7 +101,8 @@ an execution role is decided when a plan names it (§3).
 ## 3. Execution roles (who owns application objects)
 
 Migrations run as the project's **execution role**, the role that owns the
-application's objects (for example `reosa_owner`). It is a `NOLOGIN` role. The
+application's objects (for example `<env>_owner` on the reference
+installation, §3.3). It is a `NOLOGIN` role. The
 migrator switches into it with `SET LOCAL ROLE` inside the migration transaction.
 
 **[DECIDED]** ExponetDB requires each project to declare, per environment
@@ -109,12 +110,12 @@ migrator switches into it with `SET LOCAL ROLE` inside the migration transaction
 before Wave 9 this paragraph said "per target" while the code resolved per
 project, ADR-0034 §5):
 
-| Declaration | Example (proposed for REOSA on `reos-db-01`) |
+| Declaration | Example (REOSA staging on `reos-db-01`, the reference installation, §3.3) |
 |---|---|
-| execution role(s) and their aliases | `owner → reosa_owner` |
-| application login roles and what they may do | `reosa_app` (LOGIN, member of `authenticated`, `service_role`, …), `website_renderer_login`, `consent_writer_login`, `sales_login` |
-| whether any login role relies on owning objects or on `BYPASSRLS` | REOSA today relies on its login role (`postgres` on the hosted provider) bypassing RLS for console and maintenance paths |
-| protected and foreign-owned schemas | `auth` (owned by the auth service role), excluded from migrations |
+| execution role(s) and their aliases | `owner → <env>_owner` (an environment binding per environment, §3.1) |
+| application login roles and what they may do | `<env>_app` (LOGIN, `BYPASSRLS`, member of `<env>_owner` with `INHERIT`); on the hosted production database still the provider's `postgres` and REOSA's restricted logins (`website_renderer_login`, `consent_writer_login`, `sales_login`) |
+| whether any login role relies on owning objects or on `BYPASSRLS` | yes: `<env>_app` inherits the owner's privileges and bypasses RLS; on the hosted provider REOSA relies on `postgres` bypassing RLS for console and maintenance paths |
+| protected and foreign-owned schemas | `auth` (owned by the identity service's role `<env>_auth`), excluded from the managed scope |
 
 **[DECIDED]** (Wave 6, `executionRoleProblem` in
 `packages/postgres/src/migration-facts.ts`; amended in Wave 9 by
@@ -190,14 +191,55 @@ declaration (`execution_role_exception_drift`,
 dedicated definer role, so the execution role can drop `BYPASSRLS` and the
 declaration can be revoked (ADR-0034 §7).
 
-The declaration is checked continuously (drift kind E). **[OBSERVED]** REOSA's
-current self-hosting plan makes the application login role `reosa_app` the owner
-of the restored tables and does not give it `BYPASSRLS`; combined with 82
-`FORCE ROW LEVEL SECURITY` tables that are read through the "service connection",
-this would turn errors into empty results after the move (REOSA audits). ExponetDB
-cannot decide REOSA's role model, but it makes the dependency explicit and its
-cutover checks fail when the declared semantics are not reproduced
+The declaration is checked continuously (drift kind E). **[OBSERVED]** (REOSA
+audits, 2026-10-04) REOSA's self-hosting plan of that time made the application
+login role `reosa_app` the owner of the restored tables without `BYPASSRLS`;
+combined with the `FORCE ROW LEVEL SECURITY` tables read through the "service
+connection", this would have turned errors into empty results after the move.
+**[OBSERVED]** (owner's Wave 9 order §6, 2026-10-21) The role set REOSA staging
+runs with on `reos-db-01` resolves this differently: the owner and the
+application login both carry `BYPASSRLS` (§3.3). ExponetDB cannot decide
+REOSA's role model, but it makes the dependency explicit and its cutover checks
+fail when the declared semantics are not reproduced
 ([`../13-integrations/reosa-integration.md`](../13-integrations/reosa-integration.md)).
+
+### 3.3 The reference installation's role set
+
+**[OBSERVED]** (owner's Wave 9 order §6, 2026-10-21; measured by the owner on
+REOSA staging, `reos-db-01`; ExponetDB has not connected to it) Each
+environment has its own set of roles on the cluster; production will get its
+own set on the same cluster when it moves (Wave 11):
+
+| Role | Attributes and memberships | What it is |
+|---|---|---|
+| `<env>_owner` | `NOLOGIN`, **`BYPASSRLS`**; owns `public` | the object owner: 159 tables with `FORCE ROW LEVEL SECURITY`, 48 `SECURITY DEFINER` functions, 41 of them on `FORCE ROW LEVEL SECURITY` tables |
+| `<env>_auth` | owns `auth` | the self-hosted identity service's role |
+| `<env>_app` | `LOGIN`, `BYPASSRLS`; member of `<env>_owner` with `INHERIT` | the application login |
+| `<env>_migrator` | `NOLOGIN`; member of `<env>_owner` with `SET TRUE`, `INHERIT FALSE` | REOSA's own migration role (the same shape ExponetDB requires of `exponetdb_migrator`) |
+
+How ExponetDB maps it, with what Part A of Wave 9 delivers (**[PLANNED]**:
+the owner registers staging after Part A, OD-7a; nothing is registered yet):
+
+- the project's alias `owner` is bound per environment to that
+  environment's `<env>_owner` (§3.1), so staging and, later, production on
+  the same cluster run under their own owners;
+- `<env>_owner` has `BYPASSRLS`, which the execution-role check refuses
+  unless a person declares the exception for that environment and role
+  (§3.2, ADR-0034, OD-51); the definer functions on `FORCE ROW LEVEL
+  SECURITY` tables are the case the exception was made for. Every other
+  check still applies to it: `NOLOGIN`, no other privileged attribute, no
+  reach into a privileged, predefined or ExponetDB role;
+- `exponetdb_migrator` gets `SET TRUE`, `INHERIT FALSE` on `<env>_owner`
+  from the bootstrap SQL (§8.1), only if the role passes those checks;
+- `auth` is excluded from the project's managed scope; objects there that
+  managed objects depend on must exist as schema-only copies on the scratch
+  target ([legacy-import.md §2.5](../04-migrations/legacy-import.md#25-scratch-targets));
+- `<env>_app` and `<env>_auth` are consumer roles: ExponetDB neither uses
+  nor changes them (§4 applies once a cluster is agent-managed);
+- per-environment owners make fp1 fingerprints of staging and production
+  differ in owners: for an imported legacy project that is the lineage
+  warning only, otherwise an approval per production plan
+  ([OD-53](../00-product/open-decisions.md#od-53-fingerprint-lineage-when-environments-use-different-owner-roles)).
 
 ## 4. Consumer roles as cluster desired state
 
@@ -442,12 +484,12 @@ roles:
   [control-plane.md §9.6](../07-node-agent/control-plane.md#96-verification-by-kind));
 - `exponetdb_node` only via `local … peer map=exponetdb`.
 
-**[ASSUMPTION]** Containers on `reos-01` reach the private network through the
-host's private address (`10.8.2.2`, as-built per REOSA's infrastructure
-documents; not measured from a container), so `pg_hba` cannot distinguish
-ExponetDB's connections from REOSA's by source address; separation relies on
-roles and credentials. Checked when `pg_hba` is configured in Wave 5. Moving ExponetDB to its own
-host later (`exponet-01`) makes source restriction meaningful.
+**[OBSERVED]** (owner's Wave 9 order §6, 2026-10-21; measured by the owner)
+Containers on `reos-01` reach `reos-db-01` SNAT'ed from the host's private
+address `10.8.2.2`, so `pg_hba` cannot distinguish ExponetDB's connections
+from REOSA's by source address; separation relies on roles and credentials.
+Moving ExponetDB to its own host later (`exponet-01`) makes source
+restriction meaningful.
 
 ## 8. External clusters (no node agent)
 
@@ -466,10 +508,12 @@ period. The walkthrough from `server create` to an active target is
   guidance for the person who manages them).
 - The ledger and migration engine work if the migrator can `SET ROLE` into the
   project's execution roles (§3); the bootstrap SQL grants that where the
-  roles are fit. **[ASSUMPTION]** On REOSA's hosted databases the owner is
-  the provider's `postgres` role, which a new role can be granted membership in;
-  to be verified before any migration runs there through ExponetDB
-  ([OD-7](../00-product/open-decisions.md#od-7-manage-reosas-current-hosted-databases-before-the-move)).
+  roles are fit. REOSA staging is self-managed on `reos-db-01` with its own
+  owner role (§3.3). **[ASSUMPTION]** On REOSA's hosted production database
+  the owner is the provider's `postgres` role, which a new role can be
+  granted membership in; to be verified before any migration runs there
+  through ExponetDB, which is not before Wave 11
+  ([OD-7](../00-product/open-decisions.md#od-7-manage-reosas-current-hosted-databases-before-the-move), OD-7b).
 - **[OBSERVED]** `cluster register` always creates an **external** cluster
   (`packages/registry/src/kinds.ts`, the cluster insert), and the
   management mode of a cluster record never changes (a Control Store

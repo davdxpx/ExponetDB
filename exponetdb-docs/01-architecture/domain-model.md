@@ -37,7 +37,7 @@ credentials, and the cluster to its server and node for host capabilities
                                ▼
            database: reosa_production  on  cluster: postgres-main
                                               │            │
-                         endpoint: 10.8.1.2:5432 (private,  │
+                         endpoint: 10.8.1.1:5432 (private,  │
                          TLS verify-full)                   │ runs on
                                                             ▼
                                      server: reos-db-01 ── node: nod_… (exponetdb-node)

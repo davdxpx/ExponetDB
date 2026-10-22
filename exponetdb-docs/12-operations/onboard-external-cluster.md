@@ -42,7 +42,13 @@ Verification  passed
 ```
 
 Any other status is not success: the CLI exits nonzero and names the
-error code and the next step.
+error code and the next step. Some applies need a fresh confirmation in
+the browser (cluster registration and confirmation, target registration,
+the tier declaration): the CLI prints the address and a code and waits;
+confirm only commands you started. A change the CLI sees as production (on
+an undeclared cluster, everything is) also asks for a confirmation on the
+terminal, which `--yes` gives; `--yes` never replaces the browser
+confirmation.
 
 ## 1. The server and the cluster
 
@@ -74,8 +80,7 @@ exponetdb cluster list           # note cls_…; state pending, mode external
 exponetdb cluster declare-tier cls_… --tier nonprod --apply
 ```
 
-The declaration asks for a fresh re-authentication in the browser (`auth
-reauth --plan` when the CLI prints `REAUTH_REQUIRED`). Declare `prod` for a
+The declaration asks for a fresh confirmation in the browser. Declare `prod` for a
 cluster meant for production; `nonprod` lets each environment's tier decide
 who may place a target there.
 

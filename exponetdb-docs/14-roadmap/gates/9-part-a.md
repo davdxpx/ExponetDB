@@ -104,7 +104,7 @@ another repository.
 | # | Item | Contract | Implementation | Evidence | Status |
 |---|---|---|---|---|---|
 | A0 | Phase 0: inventory, order, decisions, record | — | — | §1, §2 | PASS |
-| A1 | The CLI starts a legacy import from the project file (`baseline:<slug>` and `<slug>`, `--hints`) | none needed (the request contract is unchanged) | `apps/cli/src/commands/migration.ts` (`baselineSlug`, `importHints`, flag `--hints`) | unit tests §4.2; the end-to-end run of the CLI process (analyze → report → resolve → baseline) lands with the real-shape fixture of A2 | open (end-to-end pending) |
+| A1 | The CLI starts a legacy import from the project file (`baseline:<slug>` and `<slug>`, `--hints`) | none needed (the request contract is unchanged) | `apps/cli/src/commands/migration.ts` (`baselineSlug`, `importHints`, flag `--hints`); the CLI end-to-end test `apps/server/test/cli-import.int.test.ts` (also A7, A8) | §4.2 | PASS |
 | A2 | Supabase ledger matching on real data (names, statement sequences, evidence strength, multi-file aliases, real-shape fixture) | `ImportAnalysisRequest.aliases` takes a stem or a list of stems; `ImportReport.items[].evidenceStrength` (additive) | `migrations-engine/src/legacy-evidence.ts`, `legacy.ts` (`relateLedger`, `classify`, extension check); bundle `01M5G6EQ7GKZV615Y680AHT52B_legacy-import-evidence`; fixture `testkit/src/fixtures/supabase-history.ts`; the Web App shows the strength (§4.4) | §4.3 | PASS |
 | A3 | The replay checks the execution role; no silent cap in the import path | error `LEGACY_IMPORT_TRUNCATED`; `ImportReport.driftTotal`, `driftTruncated` (additive) | `legacy.ts` (role check at planning and under the scratch lock, binding check, drift totals, evidence and attribute lists capped with a mark); rule `migration.import-execution-role`; Web App: strength and truncation warning | §4.4 | PASS (the A4 exception model joins the same check with A4) |
 | A4 | Declared `BYPASSRLS` execution-role exception (ADR-0034, OD-51) **S** | `rxe_` ids; `ExecutionRoleExceptionDeclareRequest`, `…RevokeRequest`, `ExecutionRoleExceptionView`, `ProjectExecutionRoles`; actions `registry.execution_role_exception.declare(.plan)`, `.revoke(.plan)`, `project.execution_roles.get`; routes `planExecutionRoleException`, `planExecutionRoleExceptionRevocation`, `getProjectExecutionRoles`; `REGISTRY_CONFLICT` reasons `exception_active`, `exception_not_active`; `MigrationPlanContent.expectedState.executionRoleExceptions`, `facts.executionRoleExceptions`, `facts.executionRoleParity` (all additive) | bundle `01M5G6EQ7KP3PMPC7G3HJ7KH7R_execution-role-exceptions`; `registry/src/execution-roles.ts` (plans, kinds); `postgres/src/migration-facts.ts` (`executionRoleProblem(facts, excused)`, `declared_exception`); `migrations-engine/src/execution-roles.ts` (`roleUnder`, `boundExceptionsHold`, `rolesStillUsable`); planner, kind, executor, resume, rollback, legacy replay; rules `migration.execution-role-exception`, `migration.execution-role-parity`, `registry.execution-role-exception-production`; the health sampler's `execution_role_exception_drift` finding; CLI `project role-exception declare/revoke` | §4.5, §6.1 | PASS (independent security review §6.1, its findings fixed) |
@@ -112,7 +112,7 @@ another repository.
 | A6 | Legacy files with cluster-global effects (replay elision, cluster-global expectations, `CONCURRENTLY`, comment-only files) | none needed (report evidence strings and the replay plan's analysis are additive data) | `postgres/src/parser/cluster-global.ts` (role statement effects, `DO` blocks through the PL/pgSQL parser of 18), `postgres/src/cluster-globals.ts` (the catalog check), `migrations-engine/src/legacy-replay.ts` (segments, chain supersession), `executor.ts` (`runReplayAutocommit`), `legacy.ts` (plan summary, segmented replay, classification, baseline verification); fixture `testkit/src/fixtures/cluster-global-history.ts` | §4.6 | PASS |
 | A7 | Scratch targets: preflight, in-place reset, database retire | `ScratchCheck`, action `migration.import.scratch_check` and route `checkScratchTarget`; actions `registry.database.retire(.plan)`, route `planDatabaseRetirement`, `DatabaseRetireRequest`, conflicts `database_retired`, `database_in_use` (additive) | `migrations-engine/src/scratch-check.ts`, `postgres/src/scratch.ts` (objects outside the scope, presence by catalog lookup); `migrations/src/format/scratch-reset.ts` (the reset script); registry planner and `DatabaseRetireKind`; CLI `migration import scratch-check`, `migration import scratch-reset-sql`, `cluster database retire` | §4.7 | PASS (MCP not offered; see §5) |
 | A8 | External-cluster onboarding without hand-made SQL | `getClusterBootstrapSql` query `database` (repeatable), `project`, `environment`, `ledgers`; `ClusterBootstrapSql.pendingDatabases`, `executionRoles`, `legacyLedgers` (additive) | `postgres/src/bootstrap.ts` (guarded `DO` blocks, the execution-role grant under the planner's checks, the psql `\connect` conninfo), `registry/src/bootstrap.ts` (roles of placed and requested projects, excused `BYPASSRLS`); CLI `cluster bootstrap-sql --database --project --environment --ledger`, `cluster declare-tier`; testkit `runPsql`; docs credentials-and-roles §8, registry §2.2, [`onboard-external-cluster.md`](../../12-operations/onboard-external-cluster.md), threat T36; OD-54 opened | §4.8 | PASS (the installed-CLI run of the new commands lands with A1's end-to-end test) |
-| A9 | Documents brought up to the real state | — | — | open | open |
+| A9 | Documents brought up to the real state | — | docs only (§4.9) | §4.9 | PASS |
 | A10 | Part A done: two independent review rounds, the pull request, the owner test package | — | — | open | open |
 
 ## 4. Evidence log
@@ -143,6 +143,42 @@ another repository.
 - `bun run --cwd apps/cli typecheck` clean; `vitest run` in `apps/cli`:
   5 files, 78 tests passed; `biome check apps/cli` clean;
   `bun run --cwd apps/cli reference` regenerated `15-cli/reference.md`.
+- **End to end (2026-10-22).** `apps/server/test/cli-import.int.test.ts`
+  (PostgreSQL 17, 3 tests) runs the CLI as a process (`bun` on the
+  source, or `EXDB_CLI_BIN` for an installed CLI) against serve's public
+  app over HTTP and the real worker. The person's CLI holds the token pair
+  a `login` stores, issued by the real code flow and consent for the
+  audience `api` (the scopes `login --preset admin` asks for that these
+  commands use). From the project file (`layout: legacy+bundles`,
+  `baseline: baseline:acme-supabase-2026`) and a `--hints` file (the
+  multi-file alias, the two ledgers) `migration import analyze` plans the
+  replay (`baselineId` from the project), `plan apply` replays it while the
+  worker runs, `migration import report` shows the real-shape history by
+  content (`0100_accounts` recorded with medium strength from
+  `supabase:statements_normalized`, `0107_settings` unrecorded and weak),
+  `migration import resolve` decides each open item with a note, and
+  `migration import baseline --apply` exits 0 only once verified; the
+  target's ledger then holds the legacy rows with their provenance and the
+  baseline. No output carries a token. Command:
+  `bunx vitest run --config vitest.integration.config.ts test/cli-import.int.test.ts`
+  in `apps/server` (3 passed), and the same with the **installed** CLI:
+  `bun run --cwd apps/cli pack`, `npm install --global --offline --prefix
+  <dir> dist/artifacts/exponetdb-cli-0.6.0.tgz` with Node 24.22.1 outside the
+  repository, then `EXDB_CLI_BIN=<dir>/bin/exponetdb` (3 passed).
+- **Found by the end-to-end run:** `GET /targets/{target}/migrations/scratch-check`
+  (A7) was answered by the earlier route
+  `/targets/{target}/migrations/{migrationId}` (the server registers routes
+  in contract order and the first match answers): over HTTP the preflight
+  was a `VALIDATION_FAILED` on a migration id. The route is listed before
+  it now, and `packages/contracts/test/interfaces.test.ts` "never shadow a
+  later route" fails for any route of the same method whose parameter
+  covers a later literal path (it found only this one).
+- **Observed, not changed (pre-existing, Wave 3B):** the server answers
+  `REAUTH_REQUIRED` with 401, and the SDK renews a renewable credential on
+  every 401 before it returns the error: a CLI apply that needs a step-up
+  first rotates the person's refresh token once. Harmless (the request is
+  sent again and refused the same way, then the step-up starts), but a
+  needless rotation; noted for a later SDK change, not widened into Part A.
 
 ### 4.3 A2: Supabase ledger matching on real data (2026-10-21)
 
@@ -316,6 +352,16 @@ another repository.
   postgres (483), diagnostics (162) and the server's migration, registry,
   MCP plan, break-glass, drift-accept and Wave 8 suites (87) plus
   `http-registry-tier` (8), all passed.
+- **Found by the whole server suite (2026-10-22):** the MCP replay
+  `plan-staging.modern` (`apps/server/test/mcp-replay.int.test.ts`) no
+  longer equalled its recording: the plan a tool returns now carries the
+  additive facts of A4 (`facts.executionRoleExceptions: 0`,
+  `facts.executionRoleParity: "not_required"`, `analysis.executionRoleExceptions: []`).
+  Recorded again on purpose (`EXDB_RECORD_TRANSCRIPTS=1`); the fixture diff
+  is exactly those fields, in the text and the structured content, nothing
+  environment-specific; the replay then passed twice (4/4) and its
+  non-vacuity test still reports a changed answer. The tool catalog
+  digests are unchanged (the output schemas did not change).
 
 ### 4.6 A6: legacy files with cluster-global effects (2026-10-21)
 
@@ -456,6 +502,47 @@ another repository.
   no operation makes a cluster agent-managed. Opened as OD-54 (it decides
   whether Part B's node capabilities can reach REOSA staging if it is
   registered external first).
+
+### 4.9 A9: documents brought up to the real state (2026-10-22)
+
+The facts of the order §6 (and §5.1 where they bear on the documents) are
+written as **[OBSERVED]** with that source, everything still to come as
+**[PLANNED]**; ExponetDB never connected to the host.
+
+- Private address `10.8.1.1` (the documents said `10.8.1.2`) and the TLS
+  facts (`reosdb01.exponet.cloud`, the name-constrained CA, `hostssl` with
+  SCRAM, `verify-full`, BoringSSL versus OpenSSL and Go) in
+  `control-plane-and-data-plane.md` (the topology, the V1 diagram, the
+  network paths), `domain-model.md`, `deployment.md` (the diagram, the
+  host rows, the network rules, the egress note, §5), `bootstrap.md`
+  (§1, §5) and `reosa-current-state.md` (the network table and a closing
+  section with the installation as of 2026-10-21).
+- The host runs without a node agent (an external cluster): the V1
+  diagram, `deployment.md` and `bootstrap.md` say so, with the G5 waiver's
+  expiry condition and OD-54 as what an agent there waits for; the
+  per-wave host table records that the Wave 5, 6 and 9 rows have not
+  happened there.
+- `reosa-integration.md` §3 (staging already on `reos-db-01` as an external
+  cluster, a self-hosted identity service, production still hosted; OD-7a
+  and OD-7b) and §4 (11.1 starts from the running host; 11.5 the
+  pgBackRest adoption, OD-52).
+- `legacy-import.md` §1: the real history's shape (about 530 files, the
+  Supabase ledger's 391 rows and its shape, `public.applied_migrations`'
+  187 rows, role DDL in files, the managed scope).
+- `credentials-and-roles.md` §3 (the reference shape in the declaration
+  table, and §3.3 "The reference installation's role set" with how
+  ExponetDB maps it under ADR-0034 and OD-53), §7 (SNAT from `10.8.2.2`
+  now observed), §8 (the hosted-provider assumption narrowed to
+  production).
+- `registry.md` §4: `reos-db-01` runs and hosts staging; production moves
+  in Wave 11.
+- Not given by the order and so not stated as fact: pgvector on the host
+  (kept from the earlier plan in two diagrams), whether the containers on
+  `reos-01` resolve `reosdb01.exponet.cloud` (the documents give the
+  endpoint as `10.8.1.1:5432` with that TLS name), whether PostgreSQL also
+  listens on loopback (dropped from the deployment row), and whether
+  `<env>_owner` is itself a member of a privileged role (the reach check
+  decides when it is registered).
 
 ## 5. Limits and residual risks
 

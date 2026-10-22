@@ -33,6 +33,23 @@ and creates a **baseline** that new migrations depend on.
   exists.
 - Comment headers edited after apply.
 
+**[OBSERVED]** (owner's Wave 9 order §5.1 and §6, 2026-10-21; measured by the
+owner on REOSA staging, `reos-db-01`; ExponetDB has not connected to it) The
+history the first real import meets has grown and its ledgers have a known
+shape:
+
+| What | Shape |
+|---|---|
+| Files | about 530 flat files `NNNN_name.sql`, about 2.7 MB in all (within the request limits: 1 000 files, 4 MiB each, 32 MiB per body), with drizzle `--> statement-breakpoint` comments |
+| `supabase_migrations.schema_migrations` | 391 rows; `version` a 14-digit timestamp (the apply time, e.g. `20261021180932`), `name` the file stem (e.g. `0445_account_service`), `statements` **one** element: the whole file with its comments stripped |
+| `public.applied_migrations` | 187 rows; `filename text`, `applied_at timestamptz` (a name-only ledger) |
+| Role DDL in files | some files contain role statements: at top level, `CREATE ROLE … EXCEPTION WHEN duplicate_object` inside `DO` blocks, and `GRANT role TO role` (§2.4) |
+| Managed scope | `public`; `auth` is owned by the identity service's role and excluded; `supabase_migrations` holds the legacy ledger |
+
+The Supabase ledger therefore names a file by its stem, not by
+`<version>_<name>`, and holds one statement per file; §2.2 and §2.3 match
+on that shape (Wave 9 Part A, A2).
+
 Name matching cannot work here. **[DECIDED]** The import decides by **content and
 objects**, uses names only as hints, and turns every contradiction into an explicit
 review item.
