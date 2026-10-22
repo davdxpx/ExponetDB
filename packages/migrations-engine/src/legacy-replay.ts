@@ -4,6 +4,7 @@ import {
   type ClusterGlobalForm,
   clusterGlobalStatements,
   expectationKey,
+  type GuardStrictness,
   rolesOf,
   type StatementFacts,
 } from '@exponetdb/postgres/parser'
@@ -59,11 +60,13 @@ export function fileReplay(
   major: 16 | 17 | 18,
   text: string,
   trustedExtensions: readonly string[] = [],
+  /** How the history's guards are read ({@link guardStrictness} of every file). */
+  strictness: GuardStrictness = 'none',
 ): FileReplay | undefined {
   const analysis = analyzeMigrationSql(major, text, { trustedExtensions })
   // The parser calls a text without statements (comments only) empty.
   const empty = !analysis.ok && analysis.failure.kind === 'empty'
-  const globals = empty ? [] : clusterGlobalStatements(major, text)
+  const globals = empty ? [] : clusterGlobalStatements(major, text, strictness)
   if ((!analysis.ok && !empty) || globals === undefined) return undefined
   const statements = analysis.ok ? analysis.statements : []
   if (statements.length === 0) {
@@ -147,7 +150,8 @@ export interface SurvivingGlobals {
 /**
  * Over the whole chain the last statement about the same thing wins; a
  * role's removal (`DROP ROLE`, a rename) supersedes everything earlier
- * that names the role.
+ * that names the role. A statement inside an `IF EXISTS` guard supersedes
+ * nothing: the guard may have been false when the file ran.
  */
 export function survivingGlobals(files: readonly FileReplay[]): SurvivingGlobals {
   const flat: { file: number; order: number; e: ClusterGlobalExpectation }[] = []
@@ -159,12 +163,13 @@ export function survivingGlobals(files: readonly FileReplay[]): SurvivingGlobals
   const lastByKey = new Map<string, number>()
   const removedAt = new Map<string, number>()
   for (const x of flat) {
+    if (x.e.when !== undefined) continue
     lastByKey.set(expectationKey(x.e), x.order)
     if (x.e.kind === 'role' && !x.e.exists) removedAt.set(x.e.role, x.order)
   }
   const surviving = files.map(() => [] as ClusterGlobalExpectation[])
   for (const x of flat) {
-    if (lastByKey.get(expectationKey(x.e)) !== x.order) continue
+    if ((lastByKey.get(expectationKey(x.e)) ?? -1) > x.order) continue
     const removedLater = rolesOf(x.e).some((r) => (removedAt.get(r) ?? -1) > x.order)
     if (removedLater) continue
     surviving[x.file]?.push(x.e)

@@ -118,6 +118,7 @@ import {
   SchemaDiffRequestSchema,
   SchemaObjectKindSchema,
   type Scope,
+  ScratchCheckRequestSchema,
   ServerCreateRequestSchema,
   ServerIdSchema,
   ServiceAccountCreateRequestSchema,
@@ -328,6 +329,34 @@ function bundleFileOf(raw: unknown): (typeof BUNDLE_FILES)[number] {
 
 /** The request header that names a CLI step-up receipt (ADR-0026). */
 export const STEP_UP_HEADER = 'exponetdb-step-up'
+
+/**
+ * How many requests that carry a legacy history serve works on at once. The
+ * parse is synchronous and never runs twice at once; what this bounds is
+ * the histories held across their target connections (a body of up to
+ * 16 MiB and its files, each), so slow targets never let them add up
+ * (deployment.md §2a; the verification review of follow-up 2, P3-7).
+ * Another one is told to try again.
+ */
+export const LEGACY_REQUESTS_IN_FLIGHT = 2
+let legacyRequests = 0
+
+class LegacyRequestsBusy extends HttpRefusal {
+  readonly retryAfterSeconds = 5
+  constructor() {
+    super('RATE_LIMITED')
+  }
+}
+
+export async function legacyRequest<T>(run: () => Promise<T>): Promise<T> {
+  if (legacyRequests >= LEGACY_REQUESTS_IN_FLIGHT) throw new LegacyRequestsBusy()
+  legacyRequests++
+  try {
+    return await run()
+  } finally {
+    legacyRequests--
+  }
+}
 
 export const HANDLERS: Readonly<Record<string, Handler>> = {
   // ----- /auth: sign-in and enrollment (public ceremonies) -----
@@ -1400,15 +1429,14 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         BreakGlassReviewRequestSchema.parse(call.body),
       ),
     ),
-  planImportAnalysis: async (app, call) =>
-    value(
-      await app.migrations.planImportAnalysis(
-        caller(call),
-        target(call),
-        ImportAnalysisRequestSchema.parse(call.body),
-        idempotency(call),
+  planImportAnalysis: async (app, call) => {
+    const body = ImportAnalysisRequestSchema.parse(call.body)
+    return value(
+      await legacyRequest(() =>
+        app.migrations.planImportAnalysis(caller(call), target(call), body, idempotency(call)),
       ),
-    ),
+    )
+  },
   checkScratchTarget: async (app, call) =>
     value(
       await app.migrations.scratchCheck(
@@ -1418,6 +1446,21 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         optionalText(call.query, 'role'),
       ),
     ),
+  checkScratchTargetForFiles: async (app, call) => {
+    const body = ScratchCheckRequestSchema.parse(call.body)
+    return value(
+      await legacyRequest(() =>
+        app.migrations.scratchCheck(
+          caller(call),
+          target(call),
+          body.scratchTarget,
+          body.role,
+          body.files,
+          body.notApplicable,
+        ),
+      ),
+    )
+  },
   getImportReport: async (app, call) =>
     value(
       await app.migrations.importReport(
@@ -1728,18 +1771,24 @@ function honoPath(path: string): string {
   return path.replace(/\{([A-Za-z]+)\}/g, ':$1')
 }
 
-function issues(
+export function issues(
   list: readonly {
     readonly path: readonly PropertyKey[]
     readonly code: string
     readonly message: string
+    readonly params?: Readonly<Record<string, unknown>> | undefined
   }[],
 ): { path: string; code: string; message: string }[] {
-  return list.slice(0, 100).map((issue) => ({
-    path: `/${issue.path.map(String).join('/')}`,
-    code: issue.code.replace(/[^a-z0-9_]/g, '_').slice(0, 64) || 'invalid',
-    message: issue.message.slice(0, 512),
-  }))
+  return list.slice(0, 100).map((issue) => {
+    // A refinement of the contract names its own code (too_large, say); Zod calls it custom.
+    const own = issue.code === 'custom' ? issue.params?.['code'] : undefined
+    const code = typeof own === 'string' ? own : issue.code
+    return {
+      path: `/${issue.path.map(String).join('/')}`,
+      code: code.replace(/[^a-z0-9_]/g, '_').slice(0, 64) || 'invalid',
+      message: issue.message.slice(0, 512),
+    }
+  })
 }
 
 function applyCookies(headers: Headers, cookies: Outcome<unknown>['cookies']): void {

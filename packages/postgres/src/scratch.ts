@@ -16,10 +16,11 @@ import { sql } from './sql.ts'
  *   schema-only copy of each).
  */
 export interface OutsideScopeObject {
-  readonly kind: 'relation' | 'function' | 'type'
+  /** `schema`: the schema itself (`schema` and `name` both name it). */
+  readonly kind: 'relation' | 'function' | 'type' | 'schema'
   readonly schema: string
   readonly name: string
-  /** A function's argument types (`oidvectortypes`), else null. */
+  /** A function's argument types (`oidvectortypes`); null: any (a call names no types). */
   readonly args: string | null
 }
 
@@ -83,9 +84,10 @@ const PRESENT = sql`SELECT r.kind, r.schema, r.name, r.args,
                                        WHERE n.nspname = r.schema AND c.relname = r.name)
          WHEN 'function' THEN EXISTS (SELECT FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
                                        WHERE n.nspname = r.schema AND p.proname = r.name
-                                         AND pg_catalog.oidvectortypes(p.proargtypes) = coalesce(r.args, ''))
+                                         AND (r.args IS NULL OR pg_catalog.oidvectortypes(p.proargtypes) = r.args))
          WHEN 'type' THEN EXISTS (SELECT FROM pg_catalog.pg_type t JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
                                    WHERE n.nspname = r.schema AND t.typname = r.name)
+         WHEN 'schema' THEN EXISTS (SELECT FROM pg_catalog.pg_namespace n WHERE n.nspname = r.name)
        END AS present
   FROM pg_catalog.jsonb_to_recordset($1::jsonb) AS r(kind text, schema text, name text, args text)`
 
@@ -127,4 +129,41 @@ export async function missingObjects(
       name: r.text('name'),
       args: r.textOrNull('args'),
     }))
+}
+
+// Which of the objects belong to an extension (pg_depend 'e'): a schema-only copy never holds
+// them; the extension is installed instead.
+const MEMBERS = sql`SELECT r.kind, r.schema, r.name,
+       (SELECT x.extname::text FROM pg_catalog.pg_depend d JOIN pg_catalog.pg_extension x ON x.oid = d.refobjid
+         WHERE d.deptype = 'e' AND d.refclassid = 'pg_catalog.pg_extension'::regclass
+           AND d.classid = CASE r.kind WHEN 'relation' THEN 'pg_catalog.pg_class'::regclass
+                                       WHEN 'function' THEN 'pg_catalog.pg_proc'::regclass
+                                       ELSE 'pg_catalog.pg_type'::regclass END
+           AND d.objid IN (SELECT c.oid FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                            WHERE r.kind = 'relation' AND n.nspname = r.schema AND c.relname = r.name
+                           UNION ALL
+                           SELECT p.oid FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+                            WHERE r.kind = 'function' AND n.nspname = r.schema AND p.proname = r.name
+                           UNION ALL
+                           SELECT t.oid FROM pg_catalog.pg_type t JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+                            WHERE r.kind = 'type' AND n.nspname = r.schema AND t.typname = r.name)
+         LIMIT 1) AS extension
+  FROM pg_catalog.jsonb_to_recordset($1::jsonb) AS r(kind text, schema text, name text)`
+
+/** The objects that are members of an extension here, with the extension's name. */
+export async function extensionMembers(
+  reader: CatalogReader,
+  objects: readonly Pick<OutsideScopeObject, 'kind' | 'schema' | 'name'>[],
+): Promise<Map<string, string>> {
+  const wanted = objects.filter((o) => o.kind !== 'schema')
+  if (wanted.length === 0) return new Map()
+  const rows = await reader.query(MEMBERS, [JSON.stringify(wanted)])
+  const out = new Map<string, string>()
+  for (const r of rows) {
+    const extension = r.textOrNull('extension')
+    if (extension !== null) {
+      out.set(`${r.text('kind')} ${r.text('schema')}.${r.text('name')}`, extension)
+    }
+  }
+  return out
 }

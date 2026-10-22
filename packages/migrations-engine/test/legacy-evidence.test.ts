@@ -71,11 +71,37 @@ describe('statement sequences', () => {
     })
   })
 
-  it('match only the weaker tier when the stripper also removed comments inside a body', () => {
+  it('match a code body the stripper also removed comments from: medium, as the hosted connector does (F5)', () => {
     expect(statementsMatch([STRIPPED_EVERYWHERE], [PARSED], [FILE])).toEqual({
-      strength: 'low',
+      strength: 'medium',
       how: 'statements_bodies',
     })
+    // The connector's shape (follow-up 2, F5): every comment line and the blank lines of a
+    // routine's body gone, the indentation as it was.
+    const file = `CREATE OR REPLACE FUNCTION public.acme_touch()
+RETURNS trigger LANGUAGE plpgsql AS $fn$
+BEGIN
+  -- Keeps updated_at current.
+
+  NEW.updated_at := now();  -- the time of the change
+  RETURN NEW;
+END;
+$fn$;`
+    const applied = `CREATE OR REPLACE FUNCTION public.acme_touch()
+RETURNS trigger LANGUAGE plpgsql AS $fn$
+BEGIN
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$fn$`
+    expect(statementsMatch([applied], [[file]], [file])).toEqual({
+      strength: 'medium',
+      how: 'statements_bodies',
+    })
+    // A changed literal inside the body is another body.
+    expect(
+      statementsMatch([applied.replace('now()', "'now'::timestamptz")], [[file]], [file]),
+    ).toBe(null)
   })
 
   it('match statement by statement as strong only when each is the same text', () => {
@@ -162,10 +188,69 @@ describe('statement sequences', () => {
       ],
     ] as const) {
       expect(statementsMatch([stored], [[file]], [`${file};`])).toEqual({
-        strength: 'low',
+        strength: 'medium',
         how: 'statements_bodies',
       })
     }
+  })
+
+  it("never take a LANGUAGE inside a literal for the routine's language (security review)", () => {
+    const python = (indent: string) => `CREATE FUNCTION public.acme_py(x int) RETURNS int AS $py$
+if x > 1:
+${indent}return 2
+return 1
+$py$ SET application_name = 'language sql' LANGUAGE plpython3u`
+    // The two bodies differ in meaning by their indentation alone.
+    expect(statementsMatch([python('    ')], [[python('')]], [`${python('')};`])).toBe(null)
+    // A real LANGUAGE sql after the body, also after a literal, is still code.
+    const sql = (body: string) =>
+      `CREATE FUNCTION public.acme_s() RETURNS int SET application_name = 'x' AS $s$ ${body} $s$ LANGUAGE sql`
+    expect(
+      statementsMatch(
+        [sql('SELECT 1')],
+        [[sql('SELECT  1 -- one')]],
+        [`${sql('SELECT  1 -- one')};`],
+      ),
+    ).toEqual({
+      strength: 'medium',
+      how: 'statements_bodies',
+    })
+  })
+
+  it('never take a language from a SET value, a non-ASCII tag or a second clause (verification review P2-3)', () => {
+    const python = (after: string) => (indent: string) =>
+      `CREATE FUNCTION public.acme_py(x int) RETURNS int AS $py$
+if x > 1:
+${indent}return 2
+return 1
+$py$ ${after}`
+    for (const after of [
+      'SET application_name = $é$ language sql $é$ LANGUAGE plpython3u',
+      'SET search_path = language, sql LANGUAGE plpython3u',
+      'SET search_path TO "$user", language, sql LANGUAGE plpython3u',
+      'TRANSFORM FOR TYPE language LANGUAGE plpython3u',
+    ]) {
+      const f = python(after)
+      expect(statementsMatch([f('    ')], [[f('')]], [`${f('')};`]), after).toBe(null)
+    }
+    // A parameter named language before the body is no LANGUAGE clause either.
+    const param = (
+      indent: string,
+    ) => `CREATE FUNCTION public.acme_py(language sql) RETURNS int LANGUAGE plpython3u AS $py$
+if x > 1:
+${indent}return 2
+$py$`
+    expect(statementsMatch([param('    ')], [[param('')]], [`${param('')};`])).toBe(null)
+    // One clause after a SET of ordinary values is still read.
+    const sql = (body: string) =>
+      `CREATE FUNCTION public.acme_s() RETURNS int AS $s$ ${body} $s$ SET search_path = public, extensions LANGUAGE sql`
+    expect(
+      statementsMatch(
+        [sql('SELECT 1')],
+        [[sql('SELECT  1 -- one')]],
+        [`${sql('SELECT  1 -- one')};`],
+      ),
+    ).toEqual({ strength: 'medium', how: 'statements_bodies' })
   })
 
   it('never match a different executable text, an empty entry or unreadable text', () => {

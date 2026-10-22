@@ -7,6 +7,10 @@
 # - The program contains no build time; the commit comes from the build
 #   argument EXPONETDB_BUILD_COMMIT (CI passes the commit being built).
 # - Runs as the unprivileged `node` user; no shell is needed at runtime.
+# - Node runs with --liftoff-only: V8 never recompiles the PostgreSQL parser's
+#   WebAssembly with its optimizing compiler, which took hundreds of MiB of
+#   memory outside the heap for a large legacy history and had a 512 MiB
+#   container killed; parsing is as fast (deployment.md §2a).
 
 FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS build
 WORKDIR /src
@@ -32,6 +36,6 @@ USER node
 EXPOSE 8080
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
-  CMD ["node", "/app/bin/exponetdb.mjs", "healthcheck"]
-ENTRYPOINT ["node", "/app/bin/exponetdb.mjs"]
+  CMD ["node", "--liftoff-only", "/app/bin/exponetdb.mjs", "healthcheck"]
+ENTRYPOINT ["node", "--liftoff-only", "/app/bin/exponetdb.mjs"]
 CMD ["help"]

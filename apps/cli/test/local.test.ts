@@ -458,8 +458,8 @@ describe('migration import scratch-reset-sql', () => {
 
   it('resets a project scope that lists no schemas (null in the project view) and one that does', async () => {
     const all = await reset({ includeSchemas: null, excludeSchemas: ['auth', 'storage'] })
-    expect(all).toContain("NOT (n.nspname = ANY (ARRAY['auth', 'storage']::text[]))")
+    expect(all).toContain("NOT (n.nspname = ANY (ARRAY[E'auth', E'storage']::text[]))")
     const listed = await reset({ includeSchemas: ['public'], excludeSchemas: [] })
-    expect(listed).toContain("managed text[] := ARRAY['public']::text[];")
+    expect(listed).toContain("managed text[] := ARRAY[E'public']::text[];")
   })
 })

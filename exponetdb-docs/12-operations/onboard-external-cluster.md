@@ -177,7 +177,10 @@ owned by the ledger owner. The target is now managed: the scratch target
 for a legacy import is registered the same way in its own environment
 ([legacy-import.md §2.5](../04-migrations/legacy-import.md#25-scratch-targets)),
 then `migration import scratch-check` and `migration import analyze`
-follow.
+follow. Run `scratch-check` in the project directory: it then sends the
+legacy files and also checks what they reference outside the managed scope
+(`legacy_references`); `migration import scratch-copy-commands` prints the
+schema-only copies the scratch target still needs (`auth`, for example).
 
 ## 6. When something is wrong
 
@@ -190,3 +193,6 @@ follow.
 | `REGISTRY_CONFLICT` `database_taken` | the database is already a placement | `target show`; a wrong registration is corrected with `target decommission` and `cluster database retire` |
 | a migration plan's lint names `execution_role` (`Execution role alias owner: …`) | the role is missing, unfit or not granted `SET` (the reason follows the colon) | run the bootstrap SQL again and read its `WARNING` and `NOTICE` lines |
 | `scratch-check` or a plan names `reaches_protected_role` with the role | the execution role is, through some membership, a member of a role with `SUPERUSER`, `CREATEROLE`, `CREATEDB`, `REPLICATION` or `BYPASSRLS` (Supabase's `service_role`, for example), of a predefined `pg_*` role or of an ExponetDB role; owning the database (`pg_database_owner`) is not one ([ADR-0034 §3.1](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md#31-pg_database_owner-is-not-a-protected-reach-2026-10-22); an older release refused it) | as a superuser in the target's database: `SELECT x.rolname FROM pg_roles r, pg_roles x WHERE r.rolname = '<role>' AND x.oid <> r.oid AND pg_has_role(r.oid, x.oid, 'MEMBER')`; revoke the membership that leads there (a declared exception never excuses a reach) |
+| `scratch-check` passed, but the analysis ends `incomplete` with `replay_failed:<file>:…:3F000` (or `42883`, `42P01`, `42704`) | a legacy file names a schema, function, table or type outside the managed scope that the scratch target lacks (a policy calling `auth.uid()`); the imported target's current schema no longer depends on it, so `outside_scope` could not see it | run `scratch-check` in the project directory (it sends the legacy files: `legacy_references` names each object), then `migration import scratch-copy-commands --target … --scratch …`, run the printed commands with `IMPORTED_URL` and `SCRATCH_URL` set (install missing extensions first: the items name an extension's members with their extension), reset the scratch target (if the reset names the history's own triggers or policies on the copies, drop them there first) and analyze again |
+| `scratch-reset-sql`'s script refuses: `objects outside the managed scope depend on it and would be dropped` | an object outside the scope depends on one inside it; a release before follow-up 2 also counted the casts and access methods of an extension in the scope (`vector` in `public`) | upgrade; otherwise drop or move the named objects (each is listed) and run the script again |
+| `migration import analyze` answers `RESPONSE_INVALID`, then `TRANSPORT_FAILED`, and `serve` has restarted | the process was killed for memory while it parsed the history: a role started without `--liftoff-only`, or a limit below the measured need ([deployment.md §2a](./deployment.md#2a-memory)) | the entrypoint with `--liftoff-only` (Coolify: Custom Docker Options), memory and swap limits of at least 512 MiB set together; the startup log names a missing flag (`process.wasm_tier_up_enabled`) |

@@ -139,7 +139,7 @@ The replay ends with fingerprint `F_replay`.
 | Drizzle `hash` equals SHA-256 of a file's bytes | `strong` (content) | hash comparison; independent of names |
 | Supabase `statements[]` equal a file's statements one by one | `strong` (content) | byte for byte, only the ends of each statement trimmed (review round 1; Wave 6 collapsed whitespace, which also made data and commented-out text equal) |
 | Supabase `statements[]` equal a file as a normalized statement sequence | `medium` (content) | both sides joined and normalized lexically like `c1`: comments, drizzle breakpoints and whitespace do not matter (§2.3) |
-| … equal only when comments and whitespace inside the code bodies of `DO` blocks and `plpgsql`/`sql` routines are ignored too | `low` (content) | the same code ran; the stored body text differs; dollar-quoted data and other languages are compared as written (§2.3) |
+| … equal only when comments and whitespace inside the code bodies of `DO` blocks and `plpgsql`/`sql` routines are ignored too | `medium` (content; `low` before follow-up 2) | the same code ran; the stored body text differs, as for every routine the hosted connector applied; dollar-quoted data and other languages are compared as written (§2.3) |
 | Alias table entry (`0252_task_sync_runs` → `0260_task_sync_runs`, or one entry → several files) | `curated` | project hints; for several files, the entry's statements are compared with the files' statements joined in file order and the stronger result counts; statements that differ contradict the alias (`alias_contradicted`, `weak`, §2.3) |
 | Exact name match (Supabase `name`, or `<version>_<name>` of older ledgers; a runner's file name) | `weak` | a hint only: **never makes a file `recorded`** |
 | Numeric prefix match | none | never used alone (60 prefixes are ambiguous) |
@@ -376,11 +376,19 @@ The engine (`packages/migrations-engine/src/legacy-evidence.ts`) now:
   `strong` is a tool's hash of the file's bytes, or the statements equal
   one by one **byte for byte** with only their ends trimmed (whitespace
   inside a literal, or a line a comment ended, can change what a statement
-  means); `medium` is the normalized joined sequence above; `low` also
-  removes comments and whitespace inside the code bodies of `DO` blocks
-  and of `plpgsql` or `sql` functions and procedures, and nowhere else (a
-  dollar-quoted literal is data, and a body in another language, such as
-  Python, keeps its whitespace);
+  means); `medium` is the normalized joined sequence above, and
+  **[DECIDED]** (follow-up 2, F5, 2026-10-22) also that sequence with the
+  code bodies of `DO` blocks and of `plpgsql` or `sql` functions and
+  procedures normalized the same way: their comments removed, their
+  whitespace collapsed to one separator, literals and quoted names as
+  written (`statements_bodies`), and nowhere else (a dollar-quoted literal
+  is data, and a body in another language, such as Python, keeps its
+  whitespace). **[OBSERVED]** The hosted connector strips comments inside
+  dollar-quoted bodies too: ten functions applied through it differed from
+  the files byte for byte and were equal after that normalization, so it
+  is the normal case for a routine applied that way, not an edge case.
+  Before this change the tier was `low`; `low` is no longer given, and a
+  report made earlier may still show it;
 - gives one entry's content to **one file only**, and each ledger records
   a file once: content proves that a file ran, not which of several files
   with the same content. **[DECIDED]** (Wave 9 Part A, review rounds 1
@@ -398,8 +406,9 @@ The engine (`packages/migrations-engine/src/legacy-evidence.ts`) now:
   not the files' joined content, each file gets `<ledger>:alias_contradicted`
   (`weak`) and is `ambiguous` unless content records it by itself;
 - records per item the **strength** of the strongest evidence
-  (`evidenceStrength` in the report): `strong`, `medium`, `low`, `curated`,
-  `weak`, or none. Content (`strong`, `medium`, `low`) and `curated` make a
+  (`evidenceStrength` in the report): `strong`, `medium`, `curated`,
+  `weak`, or none (`low` only in reports made before follow-up 2). Content
+  (`strong`, `medium`, an earlier `low`) and `curated` make a
   file `recorded`; `weak` never does: a file with only a name match is
   `unrecorded_present` when its effects hold (imported with
   `checksum_provenance = legacy_file_at_import`, basis "effect observed")
@@ -436,8 +445,48 @@ refusing role statements):
   such statements, in nested blocks, with exception handlers whose actions
   are `NULL` or a `RAISE` below `EXCEPTION` (with at most `SQLERRM` or
   `SQLSTATE` as parameters), and no declared variable, is **not run** on
-  the scratch target. A `DO` block that holds role statements and also does
-  anything else (an `IF`, a query, a `PERFORM`, a dynamic `EXECUTE`, a
+  the scratch target. **[DECIDED]** (follow-up 2, F1, 2026-10-22) Such a
+  block may also hold **guards**: `IF [NOT] EXISTS (SELECT … FROM pg_roles
+  WHERE rolname = '<role>')` or `IF [NOT] EXISTS (SELECT … FROM
+  pg_auth_members WHERE roleid = '<role>'::regrole AND member =
+  '<member>'::regrole)` (unqualified or in `pg_catalog`, with an alias or
+  not, `=` written either way round, several joined by `AND`, a `LIMIT` of
+  a positive constant), nested, around such statements, with a `THEN`
+  branch and at most an `ELSE` branch that only raises notices; a `RAISE`
+  below `EXCEPTION` without parameters may stand anywhere, and one with
+  `SQLERRM` or `SQLSTATE` in a handler (outside a handler they are no
+  variables and the `RAISE` fails at run time; the verification review of
+  follow-up 2, P3-2). Anything else in a guard (a
+  function, a subquery, a variable, `OR`, `LIKE`, an oid, another
+  relation), an `ELSIF` branch, an `ELSE` branch that does more, or a
+  `RETURN` before the end of the block makes it mixed, and so does a block
+  nested more than 64 blocks and IF statements deep. So does any datum but
+  the PL/pgSQL parser's own (`found`, then `sqlstate` and `sqlerrm`, `text`
+  constants, of each exception block): a declared variable, also a
+  constant named like them, runs code at block entry through its default
+  or a domain's check (the verification review of follow-up 2, P2-1). A
+  name in a guard is cut to 63 bytes, as PostgreSQL cuts it, except a
+  `::text` constant, which compares as text and is then no guard (P3-4).
+  **[DECIDED]** (the verification review of follow-up 2, P2-2 and P3-3) A
+  guard reads the system catalog only if nothing else answers to its
+  names, so the **whole history** is read first, string literals included
+  (a dynamic `EXECUTE` too): if any file creates or renames a relation
+  named `pg_roles` or `pg_auth_members` (`CREATE`, `SELECT … INTO`, `ALTER
+  … RENAME TO`; a temporary one is found before `pg_catalog`'s), only
+  guards on `pg_catalog.pg_roles` and `pg_catalog.pg_auth_members` count;
+  if any file creates or alters an operator named `=`, or sets a
+  `search_path` that names `pg_catalog` after another schema, a guard
+  counts only when the relation, every cast (`::pg_catalog.regrole`) and
+  the operator (`OPERATOR(pg_catalog.=)`) name `pg_catalog`; any other
+  guard makes the block mixed. `set_config('search_path', '', false)`, as
+  `pg_dump` writes it, keeps `pg_catalog` first. **[ASSUMPTION]** A name
+  built at run time (`format('%I', …)`) is not seen; a guard it fools only
+  makes a guarded statement wrongly checked, never runs one.
+  **[OBSERVED]** The first real import (2026-10-22) failed with `42501` on a
+  `GRANT <role> TO <role>` behind `IF EXISTS (… pg_roles …)`: the guard
+  held, so the grant ran as the execution role. A `DO` block that holds role
+  statements and also does
+  anything else (a query, a `PERFORM`, a dynamic `EXECUTE`, a
   declared variable, any other statement) is **mixed**: it runs unchanged,
   and its file is `ambiguous` (`do_block_mixed:<statement>`), a human
   decision. A `DO` block without role statements is ordinary procedural SQL,
@@ -455,7 +504,34 @@ refusing role statements):
   `SET`), a role setting (`pg_db_role_setting`, per database or for all) has
   the value or is reset, a role's comment. Inside a block with an exception
   handler only what holds whether the statement created something or found
-  it is kept: that the role or the membership exists. Over the whole chain the last
+  it is kept: that the role or the membership exists. Behind a `NOT EXISTS`
+  guard the same holds: the branch ran only when the role or membership was
+  missing, so only its presence is kept, and only the presence of the
+  guard's own subject unconditionally, when it is the only thing the branch
+  waited to be missing; anything else there (`GRANT x TO y` after `CREATE
+  ROLE x`, or `CREATE ROLE a` behind `NOT EXISTS (a) AND NOT EXISTS (b)`;
+  the verification review of follow-up 2, P2-5) is checked but never
+  supersedes. Behind an `EXISTS`
+  guard the expectations are **conditional**: the observer checks one only
+  while every guard around it holds on the imported target (`IF EXISTS
+  (role) THEN GRANT … TO role` is checked while that role exists), else it
+  is not checked (`cluster_global_guard_unmet:<n>`); a file whose every
+  expectation sat behind an unmet guard proves nothing and is `ambiguous`
+  unless a ledger records it. A block runs top to bottom: a later statement
+  of the same block about the same thing (or a later `DROP ROLE` of a role
+  an earlier one names) supersedes the earlier one when it stands in no IF
+  statement the earlier one is outside of (`DROP ROLE x; CREATE ROLE x
+  LOGIN` behind one `IF EXISTS (x)` states that `x` exists with `LOGIN`;
+  review of follow-up 2). Two IF statements with the same guard are two
+  decisions, each made after what ran before it, so neither supersedes the
+  other (`IF EXISTS (a) THEN DROP ROLE a; END IF; IF EXISTS (a) THEN CREATE
+  ROLE a; END IF;` states that `a` is absent, and that it exists while it
+  exists; the verification review of follow-up 2, P3-1). A surviving statement that undoes what its own guard asked (`IF
+  EXISTS (role) THEN DROP ROLE`, `REVOKE` behind a membership guard) leaves
+  the same state either way, so that guard does not apply to it. A
+  conditional expectation **never supersedes** another one, since its
+  guard may have been false when the file ran; it is superseded like any
+  other. Over the whole chain the last
   statement about the same thing wins (the others are superseded). The
   observer checks the surviving ones against the **imported** target's
   catalog: evidence `cluster_global_held:<n>/<m>`. A file whose cluster-global
@@ -512,6 +588,62 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   drift. The alias is `owner` unless `role` (CLI `--role`) names the one the
   hints use. The preflight changes
   nothing; the replay checks again under its own lock.
+- **What the history references** **[DECIDED]** (follow-up 2, F3,
+  2026-10-22). `outside_scope` reads what the imported target's **current**
+  schema depends on; an old file can need more. **[OBSERVED]** The first
+  real import passed the preflight and its replay stopped at a policy
+  calling `auth.uid()` (`3F000`): the scratch target had no `auth` schema,
+  and no current object depended on it any more. With the legacy files
+  (`POST /targets/{id}/migrations/scratch-check`, body `{ scratchTarget,
+  role?, files }`; the CLI sends the project's legacy directory when there
+  is one), the preflight adds `legacy_references`: every schema-qualified
+  relation, function and type in a schema outside the managed scope that a
+  file names, read from the parse trees with the scratch target's major (a
+  `LANGUAGE sql` function body, which PostgreSQL checks at `CREATE
+  FUNCTION`, and every statement and expression of a PL/pgSQL `DO` block
+  count; a PL/pgSQL function body runs only when called and does not; a
+  `DROP` needs nothing; an unqualified name resolves through the replay's
+  search path and is not counted; an object an **earlier** statement of
+  the history creates is not a reference; `CALL`, `COMMENT ON` and a
+  schema an object is created in, granted on (`GRANT … ON SCHEMA`) or given
+  default privileges in count; review of follow-up 2), must exist on the
+  scratch target (a function in any overload: a call site names no
+  argument types). It fails with `missing:<n>` and names each object with
+  the first file that names it, an extension's member with its extension;
+  it is `unknown` with `unparsed:<n>` when a file cannot be parsed, and with
+  `too_complex` when bodies nest more than two levels deep (**[DECIDED]**,
+  security review of follow-up 2: deeper nesting exhausted the process; the
+  scan stops there), and when a tree is more than 1 000 levels deep or a
+  body cannot be given to its parser (**[DECIDED]**, the verification
+  review of follow-up 2, P2-4: such a reference was dropped and the check
+  passed). A file, or a body in it, of more than 200 000 tokens is refused
+  before the check runs, as by the analysis (`422`, `/files/<i>/text`,
+  `too_large`: split it; [deployment.md §2a](../12-operations/deployment.md#2a-memory)). The files the hints call not applicable are left out,
+  as the replay skips them (`notApplicable`; CLI `--hints` or
+  `--not-applicable`). Both checks give `copySchemas`, the schemas outside
+  the scope the scratch target lacks objects of; never the schema of an
+  extension's member, which comes with the extension (install the
+  extensions first, the `extensions` check names them). Operator classes
+  and qualified operators are not read.
+- **Schema-only copies.** `exponetdb migration import
+  scratch-copy-commands --target … --scratch …` runs the preflight and
+  prints the shell commands (read only, nothing is run; **[OBSERVED]**
+  verified on PostgreSQL 17 on 2026-10-22): `pg_dump --schema-only` of
+  exactly the `copySchemas` (each written as a literal pattern) from
+  `$IMPORTED_URL`, a TOC filter that leaves out every trigger and row
+  security policy and their comments (a trigger on `auth.users` calling a
+  function in the managed scope, the `on_auth_user_created` pattern, or a
+  policy on `storage.objects` calling one, would need that function before
+  the replay creates it; the history creates them again if it does; review
+  of follow-up 2: such a policy failed the whole restore before), and
+  `pg_restore --single-transaction --exit-on-error` into
+  `$SCRATCH_URL`. No data, no credential: the person sets both connection
+  strings. Owners and grants are kept, so the roles must exist where the
+  copy goes (the same cluster does). The copies are outside the managed
+  scope, so an in-place reset keeps them. After a replay the history's own
+  triggers and policies on them (on `auth.users`, on `storage.objects`)
+  depend on the managed scope, so the reset refuses and names them; drop
+  them on the scratch target first, the next replay creates them again.
 - **In-place reset.** A used scratch target is reset without re-creating
   its database (which would change the oid the registry recorded and fail
   `database_mismatch`): `exponetdb migration import scratch-reset-sql
@@ -529,10 +661,29 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   object outside the managed scope depends on one inside it (a view, a
   column's type, a default, a trigger, a policy, a cast): `DROP SCHEMA …
   CASCADE` would drop it too, so the script refuses and names them (from
-  `pg_depend`, normal and automatic dependencies). Then, in one
+  `pg_depend`, normal and automatic dependencies). **[DECIDED]**
+  (follow-up 2, F2, 2026-10-22) The members of an extension that lives in
+  the scope go with it and are re-created with it: an object of such an
+  extension without a schema of its own (the casts and access methods of
+  `vector`, **[OBSERVED]** 25 of them refused the first real reset) is no
+  reason to refuse. A member of such an extension in a schema **outside**
+  the scope refuses (the drop would take it, and a replay that owns an
+  extension can add its own objects to it). **[DECIDED]** (security
+  review of follow-up 2) Dependencies do not show everything a cascade
+  reaches (a server of a wrapper an extension of the scope holds, and a
+  foreign table of it elsewhere; an extension outside the scope that holds
+  an object inside it). So the script also lists, by identity, every
+  object outside the managed scope before it drops anything, and again
+  once the extensions are re-created; if any is missing it refuses (`the
+  reset would drop objects outside the managed scope …, nothing was
+  changed`, naming them) and the transaction rolls back. Then, in one
   transaction, it drops and re-creates each schema of the managed scope with
   its owner and grants (read from the catalog before the drop) and
-  re-creates the extensions that lived there in their versions. A
+  re-creates the extensions that lived there in their versions, each after
+  the extensions it requires (`pg_depend`; the catalog's row order is not
+  that order once an extension was updated: `cube` updated after
+  `earthdistance` made the reset fail, the verification review of
+  follow-up 2, P3-5). A
   publication's membership of a table or schema is no reason to refuse
   (the drop ends the membership, the publication stays); a refusal names
   how many objects depend and marks a list cut at 2 000 characters. The
@@ -541,7 +692,10 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   **[DECIDED]** (review round 2) it first sets `search_path = pg_catalog,
   pg_temp` for its transaction: an operator or function a replay left in a
   managed schema (an exact-type `public.=(oid, regclass)`, say) would
-  otherwise win over the built-in one and run as the superuser. The
+  otherwise win over the built-in one and run as the superuser. It also
+  writes every value as an `E''` string and pins `standard_conforming_strings
+  = on`: a database's owner may turn that setting off for the database, and
+  a backslash in a schema name would then end a plain literal. The
   database, its oid, the `exponetdb` schema with the marker and every
   schema outside the scope stay; default privileges set inside a dropped
   schema go with it. Run the preflight afterwards.
@@ -618,7 +772,7 @@ the new target directly. See
 | Scratch target on another PostgreSQL major | The preflight fails `extensions` (`major_differs`), the replay refuses (`major_differs:<target>/<scratch>`, §2 step 2). |
 | A view or column outside the managed scope depends on a scratch object | The in-place reset refuses and names it; drop or move it first (§2.5). |
 | Legacy ledger table missing on a target | Fine; evidence comes from objects. |
-| A file creates or grants roles (top level or in a `DO` block that swallows `duplicate_object`) | Elided from the replay, checked as cluster-global expectations on the imported target (`cluster_global_held:<n>/<m>`, §2.4); a mixed `DO` block runs and makes the file `ambiguous`. |
+| A file creates or grants roles (top level, or in a `DO` block that swallows `duplicate_object` or guards with `IF [NOT] EXISTS` on `pg_roles` or `pg_auth_members`) | Elided from the replay, checked as cluster-global expectations on the imported target (`cluster_global_held:<n>/<m>`; behind an `EXISTS` guard only while the guard holds, `cluster_global_guard_unmet:<n>`; §2.4); a mixed `DO` block runs and makes the file `ambiguous`. |
 | `CREATE INDEX CONCURRENTLY` in a file | Replayed alone in autocommit between transactional segments (§2.4). |
 | A file with comments only | Not replayed; `no_statements` (§2.4). |
 | Target unreachable mid-analysis | Report marked `incomplete` (`target_unavailable`, review round 2: it stayed `pending` before); cannot be applied. |

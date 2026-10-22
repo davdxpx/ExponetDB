@@ -1,4 +1,4 @@
-import type { ClusterGlobalExpectation } from './parser/cluster-global.ts'
+import type { ClusterGlobalCondition, ClusterGlobalExpectation } from './parser/cluster-global.ts'
 import type { CatalogReader } from './session.ts'
 import { sql } from './sql.ts'
 
@@ -11,6 +11,11 @@ import { sql } from './sql.ts'
  */
 export interface ClusterGlobalResult {
   readonly expectation: ClusterGlobalExpectation
+  /**
+   * `false`: an `IF EXISTS` guard of the statement does not hold on the
+   * target, so the expectation is not checked (`ok` is then `false` too).
+   */
+  readonly applies: boolean
   readonly ok: boolean
 }
 
@@ -47,11 +52,13 @@ export async function checkClusterGlobalExpectations(
   if (expectations.length === 0) return []
   const names = new Set<string>()
   for (const e of expectations) {
-    if (e.kind === 'membership' || e.kind === 'membership_option') {
-      names.add(e.role)
-      names.add(e.member)
-    } else if (e.role !== null) {
-      names.add(e.role)
+    for (const x of [e, ...(e.when ?? [])]) {
+      if (x.kind === 'membership' || x.kind === 'membership_option') {
+        names.add(x.role)
+        names.add(x.member)
+      } else if (x.role !== null) {
+        names.add(x.role)
+      }
     }
   }
   const param = JSON.stringify([...names].sort())
@@ -72,9 +79,12 @@ export async function checkClusterGlobalExpectations(
     }
     settings.set(pair(r.text('role'), r.text('database')), entries)
   }
-  return expectations.map((e) => ({ expectation: e, ok: holds(e) }))
+  return expectations.map((e) => {
+    const applies = (e.when ?? []).every(holds)
+    return { expectation: e, applies, ok: applies && holds(e) }
+  })
 
-  function holds(e: ClusterGlobalExpectation): boolean {
+  function holds(e: ClusterGlobalExpectation | ClusterGlobalCondition): boolean {
     switch (e.kind) {
       case 'role':
         return roles.has(e.role) === e.exists

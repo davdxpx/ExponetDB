@@ -1460,6 +1460,16 @@ function classify(statement: ParsedStatement, trusted: ReadonlySet<string>): Dra
       .replace(/([a-z])([A-Z])/g, '$1 $2')
       .toUpperCase(),
   )
+  // The database itself belongs to the cluster's operator, not to a migration: its grants,
+  // comment, label, owner and name, like ALTER DATABASE below. An execution role may own its
+  // database (ADR-0034 §3.1), so these would otherwise run (a REVOKE CONNECT from ExponetDB).
+  const objectType = str(body['objtype']) ?? str(body['objectType']) ?? str(body['renameType'])
+  if (
+    objectType === 'OBJECT_DATABASE' &&
+    ['GrantStmt', 'CommentStmt', 'SecLabelStmt', 'AlterOwnerStmt', 'RenameStmt'].includes(type)
+  ) {
+    return forbid(d, 'database', type)
+  }
   switch (type) {
     case 'TransactionStmt':
       return forbid(d, 'transaction_control', str(body['kind']) ?? 'transaction control')

@@ -786,3 +786,100 @@ was refused the same way.
 - **On `reos-db-01`** nothing changes. After this is deployed, the owner
   runs `scratch-check` again.
 
+**Independent security review of this follow-up** (2026-10-22). It found
+the core change sound: `pg_database_owner` is a leaf of the membership
+graph, and the predicate is the same in every database. It also found
+three P2 defects, merged with `davdxpx/ExponetDB#35` and fixed in the next
+pull request. Each has a test that fails on the merged code.
+
+| # | Finding | Fix | Test |
+|---|---|---|---|
+| F-A | The credential verifier's own reach query kept `pg_database_owner`, so the migrator credential failed (`role_attributes`) on a database its execution role owns. On `reos-db-01` that would happen at the next verification once such a database is registered | the same oid exclusion in `credentials.ts`; ADR-0034 §3.1 | `packages/registry/test/credential-db-owner.int.test.ts` on 16, 17 and 18 |
+| F-B | Admission admitted `GRANT`/`REVOKE … ON DATABASE`, `COMMENT` and `SECURITY LABEL ON DATABASE`, which an owning execution role can now run (a `REVOKE CONNECT` from ExponetDB) | every statement on the database object is refused (`database`), including `ALTER DATABASE … OWNER TO` and `RENAME TO` | `migration-analysis.test.ts` |
+| F-C | The scratch reset script quoted values as plain literals, so a database owner who turned `standard_conforming_strings` off let a schema name holding a backslash end its literal and run code as the superuser (the reviewer proved it on 16, 17 and 18) | `E''` literals and `SET LOCAL standard_conforming_strings = on` | `scratch-check.int.test.ts` (the payload never runs); `scratch-reset.test.ts` |
+
+
+## 8. Follow-up 2: the legacy import against a real Supabase-origin history (2026-10-22)
+
+**[OBSERVED]** The owner ran the first real legacy import on `reos-db-01`
+(PostgreSQL 17.11) with the deployed release `04b3edcd`: 556 legacy files,
+the ledgers `supabase` and `applied_migrations`. `scratch-check` passed all
+six checks (the `pg_database_owner` fix works). The owner's request: fix in
+ExponetDB (contracts, tests on PostgreSQL 16, 17 and 18 with a synthetic
+fixture of that shape, docs), no consumer-side workaround. Nothing on the
+cluster changed.
+
+| # | Observed | Decision | Evidence |
+|---|---|---|---|
+| F1 | The second replay stopped with `42501` at a `DO` block `IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = …) THEN GRANT <role> TO <role>; END IF` (two of 556 files): the guard made the block mixed, so it ran as the execution role | A role-only `DO` block may hold `[NOT] EXISTS` guards over `pg_roles` or `pg_auth_members`, `THEN` only, nothing else in them. `NOT EXISTS` keeps presence only; `EXISTS` makes the expectations conditional: checked only while the guard holds on the imported target, never superseding another one ([legacy-import.md §2.4](../../04-migrations/legacy-import.md#24-files-with-cluster-global-effects)) | `cluster-global.test.ts` (both real shapes on 16, 17, 18, nested guards, nineteen guards that stay mixed), `cluster-globals.int.test.ts` (16, 17, 18), `legacy-replay.test.ts`, `legacy-cluster-global.int.test.ts` (the `42501` measured on 16, 17, 18; fails on the code before) |
+| F2 | `scratch-reset-sql` refused with 25 "objects outside the managed scope": the casts and access methods of `vector` in `public` | A member without a schema of an extension in the scope goes with it and is re-created; a member in a schema outside the scope now refuses (it was dropped silently before: `pg_depend` `e` rows were not read) ([§2.5](../../04-migrations/legacy-import.md#25-scratch-targets)) | `scratch-reset.int.test.ts` with `vector` and `pg_trgm` in `public` on 16, 17, 18 (the 25 objects on the script before); `scratch-check.int.test.ts` |
+| F3 | `scratch-check` passed; the replay stopped at a policy calling `auth.uid()` (`3F000`): no current object depended on it any more | The preflight with the legacy files (`POST …/scratch-check`) adds `legacy_references` from the files' parse trees and `copySchemas`; `migration import scratch-copy-commands` prints a schema-only copy without triggers (§2.5) | `legacy-references.test.ts` (16, 17, 18), `scratch.int.test.ts` (16, 17, 18), `scratch-check.int.test.ts`, `scratch-copy.test.ts`; the copy commands run once on PostgreSQL 17 |
+| F4 | `serve` restarted during the first `import analyze` at 512 MiB; at 1 536 MiB the request passed (cause not proven by the owner) | **Proven here:** on Node 24 V8's tier-up of the parser's WebAssembly takes hundreds of MiB outside the heap; in a 512 MiB container the plan of a 600-file, 3 MB history was killed, and so was one 3.6 MiB file. Every role starts with `node --liftoff-only` (plan peak 164 MiB, replay 250 MiB); a history is at most 8 MiB per request; one parse is given at most 200 000 tokens, and `serve` holds at most two such requests at once (after the verification review, below) ([deployment.md §2a](../../12-operations/deployment.md#2a-memory)) | `legacy-large.int.test.ts` (600 files, 3 MB, end to end on 17), `legacy-parse.test.ts`, `scripts/measure-analyze-memory.ts` |
+| F5 | The hosted connector strips comments inside dollar-quoted bodies: ten functions differed byte for byte and matched once normalized | The `statements_bodies` tier is `medium` (a code body normalized as the statement around it); `low` is no longer given (§2.3) | `legacy-evidence.test.ts` (the connector's shape), `legacy-supabase.int.test.ts` |
+
+**Owner actions after this is deployed** (in this order; nothing here is
+done from this session):
+
+1. The Coolify resources' Custom Docker Options become `--entrypoint "node
+   --liftoff-only /app/bin/exponetdb.mjs serve"` (`worker`, `gateway`
+   likewise); the startup log no longer shows
+   `process.wasm_tier_up_enabled`. Memory and swap limits are changed
+   together.
+2. The consumed scratch database is reset with `migration import
+   scratch-reset-sql` (F2).
+3. `migration import scratch-check` runs in the project directory, so it
+   sends the legacy files; `migration import scratch-copy-commands` prints
+   what the scratch target still lacks (the `auth` copy made by hand
+   already covers `auth.uid()`).
+4. The analysis runs again.
+
+**Independent reviews of follow-up 2** (2026-10-22). A security review and
+a correctness review read the five commits; neither found a P1. Every
+finding is fixed on this pull request, each with a test, unless noted.
+
+| # | Review | Finding | Fix |
+|---|---|---|---|
+| S-F3-a | security P2 | Nested `LANGUAGE sql` bodies made the reference scan exhaust `serve` (a 300 KB file above 512 MiB, deeper ones a stack overflow) | bodies followed two levels deep; beyond, `legacy_references` is `unknown` (`too_complex`) |
+| S-F2-a | security P2 | The reset dropped, unseen, a server and a foreign table outside the scope that hung off an extension's member (a regression of F2) | the reset lists every object outside the scope by identity before and after; anything missing refuses and rolls back |
+| S-F2-b | security P2 (older) | An extension outside the scope holding an object inside it was dropped and never re-created | the same inventory |
+| S-F1-a | security P2 (older) | A declared `found`/`sqlstate`/`sqlerrm` with a default passed the implicit-variable check; its default ran on the target, the replay elided the block | only the implicit variables pass |
+| S-F5-a | security P3 | `LANGUAGE` after a body was read with a regex, so `'language sql'` in a literal made a `plpython3u` body code | read as tokens |
+| S-F4-a | security P3 | The process-wide parse slot was held across a caller's target connections | removed: the parse is synchronous, the slot bounded nothing (replaced by a cap of two requests in flight, V-P3-7) |
+| S-F1-b | security P3 | A temporary `pg_roles` made by the file is found before `pg_catalog`'s | in such a file only qualified guards count; one made by an earlier file is a residual (§2.4) |
+| S-F1-c | security P3 | Long names in guards; `NOT EXISTS` on another subject made a removal unconditional | names cut to 63 bytes; see C-P3-1 |
+| C-P2-1 | correctness P2 | The copy carried the history's policies on `storage.objects`; the restore failed | policies and their comments are left out like triggers |
+| C-P2-2 | correctness P2 | A guarded `DROP ROLE x; CREATE ROLE x` (or `REVOKE`; `GRANT`) gave a contradictory pair and an unconditional removal | a later statement of a block supersedes an earlier one behind no extra guard |
+| C-P3-1 | correctness P3 | Under `NOT EXISTS` facts about other subjects were unconditional | only the guard's own subject made present is; anything else never supersedes |
+| C-P3-2 | correctness P3 | Safe shapes stayed mixed | notices, an `ELSE` of notices, `AND`, `LIMIT n` accepted; `pg_user` guards stay mixed |
+| C-P3-3 | correctness P3 (older) | as S-F2-b | the inventory |
+| C-P3-4 | correctness P3 | `copySchemas` named schemas of extension members, which a schema-only dump never holds | such members are named with their extension and their schema is not copied |
+| C-P3-5 | correctness P3 | References made before the history creates the object, `CALL`, `COMMENT ON` and schema-level needs were missed | read; operator classes and qualified operators are not (§2.5) |
+| C-P3-6 | correctness P3 | The hints' not-applicable files were checked | left out (`notApplicable`, CLI `--hints`) |
+| C-P3-7 | correctness P3 | A missing legacy directory failed the CLI with `ENOENT` | a usage error naming it |
+| C-P3-8 | correctness P3 | Docs: 32 MiB in `resources.md`; the reset after a replay | corrected |
+| C-P3-9 | correctness P3 | The gate and the analysis bound were untested | the gate is gone; the bound is tested on both schemas |
+
+**Verification review of the fixes** (2026-10-22). An independent reviewer
+re-tested the fixes above (`0d684e9..a263a46`) against PostgreSQL 16, 17
+and 18 and the parser, with its own inputs. It confirmed S-F2-a, S-F2-b,
+F1-a (for defaults), F1-b (for `CREATE`), F1-c (for untyped constants),
+F3-a (nesting), F5-a (the literal) and the reset's inventory (no way found
+for it to run replay-owned code; 2.3 s with 3 000 tables outside the
+scope), and found the following. Every one is fixed on this pull request,
+each with a regression test on the reviewer's own input.
+
+| # | Review | Finding | Fix |
+|---|---|---|---|
+| V-P1-1 | P1 | `serve` could still be pushed far past 512 MiB inside the byte bounds: the parser's memory grows with the tokens, not the bytes (4 MiB of `SELECT 1;` took 930 MiB, a 4 MiB `DO` block 1 144 MiB, 4 MiB of dump-like DDL 486 MiB), and WebAssembly memory never shrinks | one parse is given at most 200 000 tokens on every path (`MAX_PARSE_TOKENS`; the worst shapes below it peak at 165 to 233 MiB with the parsers); a legacy file or a body in it above it is refused before any work (`422`, `/files/<i>/text`, `too_large`); redaction falls back to the lexer ([deployment.md §2a](../../12-operations/deployment.md#2a-memory)) |
+| V-P2-1 | P2 | A declared `sqlstate` constant of a domain type (`%TYPE`) passed the implicit-variable check; the domain's check ran at block entry | only the parser's own datums pass: `found`, then `sqlstate`/`sqlerrm` `text` constants per exception block |
+| V-P2-2 | P2 (older) | An operator `public.=(oid, regrole)` answered a membership guard's `=` under the default `search_path` | the whole history is read first: an operator named `=`, or a `search_path` naming `pg_catalog` after another schema, makes only fully qualified guards count (§2.4) |
+| V-P2-3 | P2 | `LANGUAGE` after a body was still taken from a non-ASCII dollar tag or a `SET` value (`SET search_path = language, sql`) | `SET` values are skipped, any tag is one token, and exactly one `LANGUAGE` clause must name the language |
+| V-P2-4 | P2 | The reference scan dropped references deeper than its depth cap and reported itself complete | `too_complex` at the cap (1 000 levels), and for a body that cannot be given to its parser |
+| V-P2-5 | P2 | `NOT EXISTS (a) AND NOT EXISTS (b) THEN CREATE ROLE a` gave an unconditional "a exists" | unconditional only when the subject is the one missing thing the branch waited for |
+| V-P3-1 | P3 | Two IF statements with the same guard were read as one decision (`DROP` then `CREATE` hid the removal) | supersession needs the same IF statements, not the same guards |
+| V-P3-2 | P3 | `RAISE NOTICE '%', sqlerrm` outside a handler fails at run time, and a handler around it swallowed the rest | parameters only in a handler |
+| V-P3-3 | P3 | `SELECT … INTO TEMPORARY TABLE pg_roles`, `ALTER VIEW … RENAME TO pg_roles`, a dynamic `EXECUTE`, an earlier file | read from the whole history's text, string literals included; a name built at run time is a residual (§2.4) |
+| V-P3-4 | P3 | A `::text` guard constant longer than 63 bytes was cut, which PostgreSQL never does | such a guard is no guard |
+| V-P3-5 | P3 (older) | The reset re-created `earthdistance` before `cube` once `cube` was updated after it, and failed | extensions re-created after the ones they require (`pg_depend`) |
+| V-P3-6 | P3 | 3 000 nested IFs overflowed the stack | blocks deeper than 64 are mixed; trees deeper than 1 000 levels are not followed |
+| V-P3-7 | P3 | With the slot gone, slow targets let requests holding 16 MiB bodies add up | at most two requests that carry a history at once, `429 RATE_LIMITED` with `Retry-After: 5` |

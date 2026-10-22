@@ -19,6 +19,7 @@ export {
   type LargeCatalogShape,
   largeCatalogStatements,
 } from './fixtures/large-catalog.ts'
+export { type LargeHistoryOptions, largeLegacyHistory } from './fixtures/large-history.ts'
 export {
   LEGACY_ALIASES,
   LEGACY_FILES,

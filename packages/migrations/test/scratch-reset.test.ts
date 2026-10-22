@@ -13,23 +13,23 @@ describe('scratchResetSql', () => {
   it('stops unless the marker names this target and the ledger is empty', () => {
     const sql = scratchResetSql({ ...BASE, includeSchemas: ['public', 'app'] })
     expect(sql).toContain(
-      "installation_id OPERATOR(pg_catalog.=) 'ins_01M5G6EQ7KP3PMPC7G3HJ7KH7R'::pg_catalog.text",
+      "installation_id OPERATOR(pg_catalog.=) E'ins_01M5G6EQ7KP3PMPC7G3HJ7KH7R'::pg_catalog.text",
     )
     expect(sql).toContain(
-      "target_id OPERATOR(pg_catalog.=) 'tgt_01M5G6EQ7KP3PMPC7G3HJ7KH7R'::pg_catalog.text",
+      "target_id OPERATOR(pg_catalog.=) E'tgt_01M5G6EQ7KP3PMPC7G3HJ7KH7R'::pg_catalog.text",
     )
     expect(sql).toContain('generation OPERATOR(pg_catalog.=) 2::pg_catalog.int4')
     expect(sql).toContain('IF EXISTS (SELECT FROM ONLY exponetdb.schema_migrations)')
-    expect(sql).toContain("managed text[] := ARRAY['public', 'app']::text[];")
+    expect(sql).toContain("managed text[] := ARRAY[E'public', E'app']::text[];")
     expect(sql.startsWith('-- ExponetDB')).toBe(true)
     expect(sql.trimEnd().endsWith('COMMIT;')).toBe(true)
   })
 
   it('never lets the target path or a schema name out of a literal', () => {
     const sql = scratchResetSql({ ...BASE, includeSchemas: ["o'brien"] })
-    expect(sql).toContain("ARRAY['o''brien']::text[]")
+    expect(sql).toContain("ARRAY[E'o''brien']::text[]")
     // The path appears in comments and in one literal, quotes doubled.
-    expect(sql).toContain("'acme/platform/scratch''; DROP DATABASE x; --'")
+    expect(sql).toContain("E'acme/platform/scratch''; DROP DATABASE x; --'")
     expect(
       sql
         .split('\n')
@@ -63,6 +63,17 @@ describe('scratchResetSql', () => {
     expect(sql).not.toMatch(/FROM exponetdb\./)
   })
 
+  it('keeps a backslash inside its literal whatever standard_conforming_strings says (review)', () => {
+    const sql = scratchResetSql({
+      ...BASE,
+      includeSchemas: ['a\\', ']::text[];p int:=(SELECT public.evil());--'],
+    })
+    expect(sql).toContain("ARRAY[E'a\\\\', E']::text[];p int:=(SELECT public.evil());--']::text[]")
+    expect(sql.indexOf('SET LOCAL standard_conforming_strings = on;')).toBeLessThan(
+      sql.indexOf('DO $reset$'),
+    )
+  })
+
   it('resolves every name in the system catalog only', () => {
     const sql = scratchResetSql({ ...BASE, includeSchemas: ['public'] })
     expect(sql).toContain('BEGIN;\n-- ')
@@ -79,7 +90,7 @@ describe('scratchResetSql', () => {
 
   it('takes every schema but the excluded ones when the scope lists none', () => {
     const sql = scratchResetSql({ ...BASE, excludeSchemas: ['auth'] })
-    expect(sql).toContain("NOT (n.nspname = ANY (ARRAY['auth']::text[]))")
+    expect(sql).toContain("NOT (n.nspname = ANY (ARRAY[E'auth']::text[]))")
     expect(sql).toContain("n.nspname NOT IN ('information_schema', 'exponetdb')")
     // The REST project view gives such a scope as null (review round 2: it threw).
     expect(scratchResetSql({ ...BASE, includeSchemas: null, excludeSchemas: ['auth'] })).toBe(sql)

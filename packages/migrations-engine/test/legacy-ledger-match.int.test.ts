@@ -199,8 +199,9 @@ const roles = (s: TestServer) =>
 beforeAll(async () => {
   h = await harness('exdb_it_ledger_match')
   a = actor()
-  await roles(pg17)
+  // readyCluster creates ExponetDB's roles; the grant to the migrator needs them.
   clusterId = await readyCluster(h, a, pg17)
+  await roles(pg17)
   await submit(h, a, clusterId, 'verifier')
   await verifyCredentials(h)
   ctx = {
@@ -358,8 +359,8 @@ describe('a scratch target that cannot stand for the imported one', () => {
   })
 
   it('refuses a scratch target on another major, in the preflight and in the replay', async () => {
-    await roles(pg16)
     const cluster16 = await readyCluster(h, a, pg16)
+    await roles(pg16)
     await submit(h, a, cluster16, 'verifier')
     await verifyCredentials(h)
     const on16 = await registerTarget('scratch16', [], { server: pg16, clusterId: cluster16 })

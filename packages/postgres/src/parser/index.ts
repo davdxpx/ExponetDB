@@ -23,11 +23,14 @@ export {
   READ_NODES,
 } from './allowlist.ts'
 export {
+  type ClusterGlobalCondition,
   type ClusterGlobalExpectation,
   type ClusterGlobalForm,
   type ClusterGlobalStatement,
   clusterGlobalStatements,
   expectationKey,
+  type GuardStrictness,
+  guardStrictness,
   isRoleStatement,
   loadClusterGlobalParsers,
   type MembershipOption,
@@ -38,7 +41,14 @@ export {
   roleStatementEffects,
   rolesOf,
 } from './cluster-global.ts'
-export { isLiteral, type LexMode, lex, type Token, type TokenKind } from './lexer.ts'
+export {
+  type LegacyReference,
+  type LegacyReferences,
+  legacyReferences,
+  outsideScope,
+  type ScopeTest,
+} from './legacy-references.ts'
+export { countTokens, isLiteral, type LexMode, lex, type Token, type TokenKind } from './lexer.ts'
 export { isSupportedMajor, SUPPORTED_MAJORS, type SupportedMajor } from './majors.ts'
 export {
   type AnalyzeOptions,
@@ -64,11 +74,14 @@ export {
 } from './migration.ts'
 export {
   byteIndex,
+  dollarBody,
+  exceedsParseWork,
   GRAMMARS,
   type JsonNode,
   loadParser,
   MAX_MIGRATION_PARSE_BYTES,
   MAX_PARSE_BYTES,
+  MAX_PARSE_TOKENS,
   names,
   nodeType,
   type ParsedStatement,

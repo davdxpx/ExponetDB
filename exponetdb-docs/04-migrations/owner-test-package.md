@@ -151,9 +151,12 @@ exponetdb target list                                            # acme/platform
 exponetdb migration import scratch-check --target acme/platform/staging --scratch acme/platform/scratch
 ```
 
-Expected: `ready`, six checks `pass`: `scratch_usable`, `identity`, `empty`,
-`extensions`, `outside_scope`, `execution_role` (the last one passes as a
-declared exception). Counter-check: `exponetdb dev sql staging --lab parta
+Expected: `ready`, seven checks `pass`: `scratch_usable`, `identity`, `empty`,
+`extensions`, `outside_scope`, `execution_role` (it passes as a declared
+exception) and `legacy_references` (run in the project directory, the
+command sends the legacy files; this history names nothing outside
+`public`, and `migration import scratch-copy-commands` answers `nothing to
+copy`). Counter-check: `exponetdb dev sql staging --lab parta
 --db acme_scratch` with `CREATE TABLE public.x (id int);` makes `empty` fail
 with `objects:1`; drop the table again.
 
@@ -174,7 +177,7 @@ replay ends `Succeeded`; the report is `open` with:
 |---|---|---|---|
 | `0100_accounts` | `recorded_present` | medium | `supabase:statements_normalized` |
 | `0101_account_members` | `recorded_present` | medium | `supabase:statements_normalized` |
-| `0102_member_count` | `recorded_present` | low | `supabase:statements_bodies` (that entry's stripper removed a comment inside a function body too) |
+| `0102_member_count` | `recorded_present` | medium | `supabase:statements_bodies` (that entry's stripper removed a comment inside a function body too, as the hosted connector does; `low` before follow-up 2) |
 | `0103_notes`, `0104_notes_index` | `recorded_present` | medium | one ledger entry for both files (the alias in `hints.yaml`) |
 | `0105_events` | `ambiguous` | weak | only the name matches: the file was edited after it was applied |
 | `0106_tags` | `unrecorded_present` | weak | an entry without statements |

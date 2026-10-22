@@ -1,3 +1,4 @@
+import { encodeUtf8 } from '@exponetdb/kernel'
 import * as z from 'zod'
 import {
   ApplyChecksumSchema,
@@ -54,6 +55,14 @@ import {
  * than the limit is split by the client (the CLI ingests in batches).
  */
 export const MIGRATION_BODY_LIMIT_BYTES = 32 * 1024 * 1024
+/**
+ * A legacy history per request (follow-up 2, F4): every file is parsed in
+ * the serving process, so the history is bounded as a whole, in UTF-8 bytes
+ * of the files' text (the first real one had about 2.7 MB), and so is the
+ * JSON body that carries it (escaping may double the text).
+ */
+export const LEGACY_FILES_LIMIT_BYTES = 8 * 1024 * 1024
+export const LEGACY_BODY_LIMIT_BYTES = 2 * LEGACY_FILES_LIMIT_BYTES
 /** Bundles per request and migration ids per plan request. */
 export const MIGRATION_REQUEST_LIMITS = { bundles: 50, migrationIds: 200 } as const
 
@@ -635,6 +644,26 @@ export const LegacyFileSchema = z
   })
   .meta({ id: 'LegacyFile' })
 
+/** The files of one legacy history: at most 1 000, and `LEGACY_FILES_LIMIT_BYTES` of text in all. */
+const LegacyFilesSchema = z
+  .array(LegacyFileSchema)
+  .min(1)
+  .max(1000)
+  .superRefine((files, ctx) => {
+    let total = 0
+    for (const f of files) total += encodeUtf8(f.text).length
+    if (total > LEGACY_FILES_LIMIT_BYTES) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `At most ${LEGACY_FILES_LIMIT_BYTES} bytes of SQL in all; this history has ${total}.`,
+        params: { code: 'too_large' },
+      })
+    }
+  })
+  .meta({
+    description: `The legacy files in their order, at most ${LEGACY_FILES_LIMIT_BYTES} bytes of SQL (UTF-8) in all.`,
+  })
+
 /**
  * `migration.import.analyze` (legacy-import.md §2): plans the replay of the
  * submitted legacy files, in the declared order, on an explicit scratch
@@ -652,7 +681,7 @@ export const ImportAnalysisRequestSchema = z
       .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/)
       .max(64)
       .meta({ description: 'The baseline slug new bundles depend on (baseline:<slug>).' }),
-    files: z.array(LegacyFileSchema).min(1).max(1000),
+    files: LegacyFilesSchema,
     ledgers: z
       .array(z.enum(['supabase', 'drizzle', 'applied_migrations']))
       .max(3)
@@ -689,6 +718,30 @@ export const ImportAnalysisRequestSchema = z
   })
   .meta({ id: 'ImportAnalysisRequest' })
 
+/**
+ * `POST /targets/{target}/migrations/scratch-check` (follow-up 2, F3): the
+ * same read-only preflight, with the legacy files, so it also checks what
+ * they reference outside the managed scope (`legacy_references`).
+ */
+export const ScratchCheckRequestSchema = z
+  .strictObject({
+    scratchTarget: TargetRefSchema,
+    role: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{0,62}$/)
+      .optional()
+      .meta({
+        description:
+          'The execution role alias the replay runs as (the analysis hint role; default owner).',
+      }),
+    files: LegacyFilesSchema,
+    notApplicable: z.array(z.string().max(200)).max(1000).optional().meta({
+      description:
+        'File stems the replay skips (the analysis hints): what they name is not checked.',
+    }),
+  })
+  .meta({ id: 'ScratchCheckRequest' })
+
 /** `GET /targets/{target}/migrations/scratch-check` (Wave 9, legacy-import.md §2.5). */
 export const ScratchCheckSchema = z
   .object({
@@ -706,6 +759,8 @@ export const ScratchCheckSchema = z
             'extensions',
             'outside_scope',
             'execution_role',
+            // Only when the check was given the legacy files (follow-up 2, F3).
+            'legacy_references',
           ]),
           status: z.enum(['pass', 'fail', 'unknown']),
           detail: z
@@ -720,7 +775,15 @@ export const ScratchCheckSchema = z
           truncated: z.boolean(),
         }),
       )
-      .max(6),
+      .max(7),
+    copySchemas: z
+      .array(z.string().max(63).meta({ untrusted: true }))
+      .max(100)
+      .optional()
+      .meta({
+        description:
+          'The schemas outside the managed scope the scratch target lacks objects of (outside_scope, legacy_references): copy them schema-only from the imported target (migration import scratch-copy-commands).',
+      }),
   })
   .meta({ id: 'ScratchCheck' })
 
@@ -858,6 +921,7 @@ export type VerificationRun = z.infer<typeof VerificationRunSchema>
 export type MigrationProgress = z.infer<typeof MigrationProgressSchema>
 export type ImportReport = z.infer<typeof ImportReportSchema>
 export type ScratchCheck = z.infer<typeof ScratchCheckSchema>
+export type ScratchCheckRequest = z.infer<typeof ScratchCheckRequestSchema>
 export type StepUpView = z.infer<typeof StepUpSchema>
 export type EvidenceItem = z.infer<typeof EvidenceItemSchema>
 

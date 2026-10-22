@@ -355,10 +355,11 @@ describe('legacy import of a real-shape Supabase history', () => {
       state: 'recorded_present',
       evidenceStrength: 'medium',
     })
-    // The stripper removed the comment inside the function body too: the weaker tier.
+    // The stripper removed the comment inside the function body too, as the hosted connector
+    // does for every routine (follow-up 2, F5): the body normalized as code, medium.
     expect(item('legacy:0102_member_count')).toMatchObject({
       state: 'recorded_present',
-      evidenceStrength: 'low',
+      evidenceStrength: 'medium',
       evidence: expect.arrayContaining(['supabase:statements_bodies']),
     })
     // One entry for two files: the entry's statements against both files in file order.

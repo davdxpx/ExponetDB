@@ -37,6 +37,8 @@ import {
 import {
   type ClusterGlobalExpectation,
   type Expectation,
+  type GuardStrictness,
+  guardStrictness,
   loadClusterGlobalParsers,
   loadParser,
   type StatementFacts,
@@ -71,6 +73,7 @@ import {
   STRENGTH_RANK,
   supabaseVersionTime,
 } from './legacy-evidence.ts'
+import { refuseOversizedLegacyFiles } from './legacy-files.ts'
 import { type FileReplay, fileReplay, survivingGlobals } from './legacy-replay.ts'
 import type { MigrationPlanContext } from './planner.ts'
 import { type Fence, fenced, LeaseLost, writeMirror } from './records.ts'
@@ -430,6 +433,7 @@ export async function planImportAnalysis(
   if (executionRole === undefined) {
     throw invalid('/role', 'execution_role_unmapped', 'The execution role alias is not mapped.')
   }
+  refuseOversizedLegacyFiles(request.files)
   const files: Omit<ImportFile, 'position'>[] = []
   const stems = new Set<string>()
   for (const [i, f] of request.files.entries()) {
@@ -638,10 +642,11 @@ async function replaySummary(
   const autocommit: JsonObject[] = []
   const noStatements: string[] = []
   const counts = { elided: 0, mixedDoBlocks: 0, autocommit: 0, noStatements: 0, expectations: 0 }
+  const strictness = historyStrictness(files)
   for (const f of files) {
     if (skipped.has(f.stem)) continue
     const text = normalizeSqlSource(f.bytes)
-    const r = text.ok ? fileReplay(major, text.value) : undefined
+    const r = text.ok ? fileReplay(major, text.value, [], strictness) : undefined
     if (r === undefined) continue
     for (const e of r.elided) {
       counts.elided++
@@ -855,6 +860,19 @@ function analyzeChain(
   })
 }
 
+/**
+ * How every file's guards are read: from the whole history, since what one
+ * file creates or sets stays for the files after it (legacy-import.md §2.4).
+ */
+function historyStrictness(files: readonly Pick<ImportFile, 'bytes'>[]): GuardStrictness {
+  return guardStrictness(
+    files.flatMap((f) => {
+      const text = normalizeSqlSource(f.bytes)
+      return text.ok ? [text.value] : []
+    }),
+  )
+}
+
 /** Each file's replay (legacy-import.md §2.4); a file its major cannot read has none. */
 async function replaysOf(
   major: 16 | 17 | 18,
@@ -863,9 +881,10 @@ async function replaysOf(
 ): Promise<Map<string, FileReplay>> {
   await loadClusterGlobalParsers(major)
   const out = new Map<string, FileReplay>()
+  const strictness = historyStrictness(files)
   for (const f of files) {
     const text = normalizeSqlSource(f.bytes)
-    const r = text.ok ? fileReplay(major, text.value, trusted) : undefined
+    const r = text.ok ? fileReplay(major, text.value, trusted, strictness) : undefined
     if (r !== undefined) out.set(f.stem, r)
   }
   return out
@@ -1025,7 +1044,7 @@ function relateLedger(
       const tiers: [Map<string, string[]>, string | null, ContentMatch][] = [
         [byExact, entryKeys.exact, { strength: 'strong', how: 'statements' }],
         [byNormalized, entryKeys.normalized, { strength: 'medium', how: 'statements_normalized' }],
-        [byBodies, entryKeys.bodies, { strength: 'low', how: 'statements_bodies' }],
+        [byBodies, entryKeys.bodies, { strength: 'medium', how: 'statements_bodies' }],
       ]
       for (const [index, key, match] of tiers)
         offer(key === null ? [] : (index.get(key) ?? []), match)
@@ -1188,15 +1207,22 @@ async function classify(
           unreadable = true
           globalsHold = false
         } else {
-          const ok = results.filter((r) => r.ok).length
-          evidence.push(`cluster_global_held:${ok}/${results.length}`)
-          globalsHold = ok === results.length
+          // A guarded statement whose guard does not hold on the target states nothing there.
+          const applied = results.filter((r) => r.applies)
+          const unmet = results.length - applied.length
+          if (unmet > 0) evidence.push(`cluster_global_guard_unmet:${unmet}`)
+          const ok = applied.filter((r) => r.ok).length
+          if (applied.length > 0) evidence.push(`cluster_global_held:${ok}/${applied.length}`)
+          globalsHold = ok === applied.length
           held += ok
-          total += results.length
+          total += applied.length
         }
       }
       if (unreadable || (held > 0 && held < total)) {
         state = 'ambiguous'
+      } else if (total === 0) {
+        // Every expectation sat behind a guard that does not hold: nothing was checked.
+        state = recorded ? 'recorded_present' : 'ambiguous'
       } else if (held === total) {
         state = recorded ? 'recorded_present' : 'unrecorded_present'
       } else {
@@ -2277,7 +2303,9 @@ export class MigrationBaselineKind implements OperationKind {
               if (!accepted.has(a.file.stem)) continue
               const results = [
                 ...(a.surviving.length === 0 ? [] : await checkExpectations(rtx, a.surviving)),
-                ...(await checkClusterGlobalExpectations(rtx, a.survivingGlobals)),
+                ...(await checkClusterGlobalExpectations(rtx, a.survivingGlobals)).filter(
+                  (r) => r.applies,
+                ),
               ]
               checked += results.length
               held += results.filter((r) => r.ok).length

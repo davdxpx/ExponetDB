@@ -160,6 +160,7 @@ export {
 } from './reviewed.ts'
 export { RowShapeError, TargetRow } from './rows.ts'
 export {
+  extensionMembers,
   MAX_OUTSIDE_SCOPE,
   type ManagedScopeFilter,
   missingObjects,

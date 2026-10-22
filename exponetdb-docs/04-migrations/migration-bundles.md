@@ -497,7 +497,10 @@ multi-statement string, see [`planning-and-apply.md`](./planning-and-apply.md#7-
 - psql meta-commands (`\i`, `\set`, `\connect` …): rejected by the parser;
 - cluster-level and privileged statements that belong to node capabilities:
   `CREATE/ALTER/DROP ROLE|USER|GROUP`, `ALTER SYSTEM`, `CREATE/DROP DATABASE`,
-  `CREATE/ALTER/DROP TABLESPACE`, `LOAD`, `CREATE EXTENSION` of an extension not
+  `CREATE/ALTER/DROP TABLESPACE`, `LOAD`, every statement on the database
+  object (`GRANT`/`REVOKE … ON DATABASE`, `COMMENT` or `SECURITY LABEL ON
+  DATABASE`, `ALTER DATABASE … OWNER TO` or `RENAME TO`; an execution role
+  may own its database, ADR-0034 §3.1), `CREATE EXTENSION` of an extension not
   listed as trusted for the project, `COPY ... TO/FROM PROGRAM`, `COPY ... FILE`;
 - statements touching the `exponetdb` schema.
 

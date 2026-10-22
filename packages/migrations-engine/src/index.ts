@@ -29,6 +29,7 @@ export {
   planBaseline,
   planImportAnalysis,
 } from './legacy.ts'
+export { refuseOversizedLegacyFiles } from './legacy-files.ts'
 export { type MigrationPlanContext, planMigrationApply } from './planner.ts'
 export {
   bundleFile,

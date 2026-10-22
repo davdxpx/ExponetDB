@@ -2,6 +2,7 @@ import type { ScratchCheck } from '@exponetdb/contracts'
 import type { Queryable } from '@exponetdb/control-store'
 import {
   executionRoleFacts,
+  extensionMembers,
   extensionPlacements,
   missingObjects,
   type OutsideScopeObject,
@@ -11,6 +12,11 @@ import {
   snapshotWithin,
   type TargetSession,
 } from '@exponetdb/postgres'
+import {
+  type LegacyReferences,
+  legacyReferences,
+  loadClusterGlobalParsers,
+} from '@exponetdb/postgres/parser'
 import { brand, type Connector, findTarget, type TargetRecord } from '@exponetdb/registry'
 import { projectRegistry } from './deps.ts'
 import { executionRolesFor, roleUnder } from './execution-roles.ts'
@@ -58,25 +64,42 @@ export interface ScratchCheckDeps {
   readonly installationId: string
 }
 
+/**
+ * With `files` (the legacy history), the preflight also checks what they
+ * reference in schemas outside the managed scope against the scratch
+ * target (`legacy_references`, follow-up 2 F3): the imported target's
+ * current schema may no longer depend on something an old file needs.
+ */
 export async function scratchCheck(
   q: Queryable,
   deps: ScratchCheckDeps,
   target: TargetRecord,
   scratchRef: string,
   alias = 'owner',
+  files?: readonly { readonly name: string; readonly text: string }[],
 ): Promise<ScratchCheck> {
   const checkedAt = new Date().toISOString()
   const scratch = await findTarget(q, scratchRef)
-  const LATER = ['identity', 'empty', 'extensions', 'outside_scope', 'execution_role'] as const
+  const LATER: readonly Check['check'][] = [
+    'identity',
+    'empty',
+    'extensions',
+    'outside_scope',
+    'execution_role',
+    ...(files === undefined ? [] : (['legacy_references'] as const)),
+  ]
   /** The checks after `from` cannot run: unknown, with why. */
-  const unknownAfter = (from: (typeof LATER)[number] | null, detail: string): Check[] =>
+  const unknownAfter = (from: Check['check'] | null, detail: string): Check[] =>
     LATER.slice(from === null ? 0 : LATER.indexOf(from) + 1).map((c) => check(c, 'unknown', detail))
+  /** Schemas outside the scope the scratch target lacks objects of: to copy schema-only. */
+  const copy = new Set<string>()
   const result = (checks: Check[]): ScratchCheck => ({
     targetId: brand('tgt', target.targetId),
     scratchTargetId: scratch === undefined ? null : brand('tgt', scratch.targetId),
     ready: checks.every((c) => c.status === 'pass'),
     checkedAt,
     checks,
+    ...(copy.size === 0 ? {} : { copySchemas: [...copy].sort().slice(0, MAX_ITEMS) }),
   })
   // The registry's rules for a scratch target (the analysis refuses the same).
   const unusable =
@@ -133,6 +156,13 @@ export async function scratchCheck(
     if (identity !== null) {
       return result([...checks, ...unknownAfter('identity', 'identity')])
     }
+    // What the legacy files name outside the scope, read with the scratch target's major (the
+    // replay's; the extensions check makes it the imported one's).
+    let found: LegacyReferences | undefined
+    if (files !== undefined) {
+      await loadClusterGlobalParsers(scratchSession.facts.major)
+      found = legacyReferences(scratchSession.facts.major, files, scope)
+    }
     const ours = await scratchSession.readOnly(async (rtx) => ({
       snapshot: await snapshotWithin(rtx, scope),
       ledger: await readLedgerRows(rtx),
@@ -161,6 +191,7 @@ export async function scratchCheck(
           readonly major: number
           readonly extensions: Awaited<ReturnType<typeof extensionPlacements>>
           readonly outside: Awaited<ReturnType<typeof referencedOutsideScope>>
+          readonly members: ReadonlyMap<string, string>
         }
       | undefined
     try {
@@ -174,6 +205,8 @@ export async function scratchCheck(
           major: opened.session.facts.major,
           extensions: await extensionPlacements(rtx),
           outside: await referencedOutsideScope(rtx, scope),
+          // A referenced object that is an extension's member there comes with the extension.
+          members: found === undefined ? new Map() : await extensionMembers(rtx, found.references),
         }))
       } finally {
         await opened.session.close()
@@ -215,6 +248,7 @@ export async function scratchCheck(
             ),
       )
       const missing = await scratchSession.readOnly((rtx) => missingObjects(rtx, outside.objects))
+      for (const m of missing) copy.add(m.schema)
       checks.push(
         outside.truncated
           ? check('outside_scope', 'unknown', 'too_many_objects', missing.map(label))
@@ -247,8 +281,65 @@ export async function scratchCheck(
             : check('execution_role', 'fail', problem, [role]),
       )
     }
+    if (found !== undefined) {
+      const refs = await legacyReferencesCheck(scratchSession, found, theirs?.members)
+      checks.push(refs.check)
+      for (const schema of refs.schemas) copy.add(schema)
+    }
     return result(checks)
   } finally {
     await scratchSession.close()
   }
+}
+
+/**
+ * What the legacy files name outside the managed scope that the scratch
+ * target lacks, and the schemas to copy for it: never the schema of an
+ * object that is an extension's member on the imported target (the
+ * extension is installed instead; `members` is unknown when the imported
+ * target could not be read).
+ */
+async function legacyReferencesCheck(
+  scratch: TargetSession,
+  found: LegacyReferences,
+  members: ReadonlyMap<string, string> | undefined,
+): Promise<{ readonly check: Check; readonly schemas: readonly string[] }> {
+  const missing = await scratch.readOnly((rtx) =>
+    missingObjects(
+      rtx,
+      found.references.map((r) => ({ kind: r.kind, schema: r.schema, name: r.name, args: null })),
+    ),
+  )
+  const name = (m: { kind: string; schema: string; name: string }) =>
+    `${m.kind} ${m.schema}.${m.name}`
+  const firstFile = new Map(found.references.map((r) => [name(r), r.file]))
+  const items = missing.map((m) => {
+    const shown =
+      m.kind === 'schema' ? `schema ${m.name}` : `${name(m)}${m.kind === 'function' ? '()' : ''}`
+    const extension = members?.get(name(m))
+    return `${shown} (${firstFile.get(name(m)) ?? ''}${extension === undefined ? '' : `; extension ${extension}`})`
+  })
+  const schemas = [
+    ...new Set(missing.filter((m) => members?.get(name(m)) === undefined).map((m) => m.schema)),
+  ]
+  if (missing.length > 0) {
+    return {
+      check: check('legacy_references', 'fail', `missing:${missing.length}`, items),
+      schemas,
+    }
+  }
+  // What a file no grammar reads, or bodies nested deeper than the scan follows, name is not
+  // known here: the replay refuses the first, the second may fail.
+  if (found.unparsed.length > 0) {
+    return {
+      check: check('legacy_references', 'unknown', `unparsed:${found.unparsed.length}`, [
+        ...found.unparsed,
+      ]),
+      schemas,
+    }
+  }
+  if (found.tooComplex) {
+    return { check: check('legacy_references', 'unknown', 'too_complex'), schemas }
+  }
+  return { check: check('legacy_references', 'pass', null), schemas }
 }

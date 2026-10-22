@@ -153,7 +153,12 @@ self-managed installations do.
   `REACHES_PROTECTED_ROLE` (`packages/postgres/src/migration-facts.ts`).
   The role facts use it, and so does everything built on them: the planner,
   the executor, the replay, the scratch preflight and the health finding.
-  The bootstrap SQL's grant check embeds the same text.
+  The bootstrap SQL's grant check embeds the same text. The credential
+  verifier (`packages/registry/src/credentials.ts`) leaves
+  `pg_database_owner` out of the ExponetDB roles' reach in the same way, by
+  oid. Its check is a different one: each role's reach must equal a
+  documented list. Without the exclusion it failed the migrator, a member
+  of an execution role, on a database that role owns (review, 2026-10-22).
 - **No per-database bootstrap check.** `pg_database_owner` is the only role
   whose membership depends on the current database; every other membership
   is cluster-wide. With it excluded, the predicate gives the same answer in
@@ -161,8 +166,19 @@ self-managed installations do.
   target's database cannot disagree. A test asserts this on 16, 17 and 18,
   and asserts that the bootstrap embeds the planner's text.
 - **What database ownership still allows, and what refuses it.**
-  - `ALTER DATABASE`, its `SET` form, `DROP DATABASE` and `CREATE DATABASE`
-    are refused by bundle admission (`database`).
+  - Bundle admission refuses every statement on the database object
+    (`database`):
+    - `ALTER DATABASE`, its `SET` form, `DROP DATABASE`, `CREATE DATABASE`;
+    - and, since the review of 2026-10-22, `GRANT` and `REVOKE … ON
+      DATABASE`, `COMMENT ON DATABASE`, `SECURITY LABEL ON DATABASE`,
+      `ALTER DATABASE … OWNER TO` and `… RENAME TO`.
+
+    An owning execution role could otherwise revoke ExponetDB's own
+    `CONNECT` or grant `CREATE` on the database through an ordinary
+    statement.
+  - A database's owner may set `standard_conforming_strings` for it. The
+    scratch reset script therefore writes every value as an `E''` string
+    and pins the setting for its transaction (threat T37).
   - Procedural code that issues them belongs to OD-55. As database owner,
     such code could also change the database's settings, connection limit
     or `ALLOW_CONNECTIONS`.

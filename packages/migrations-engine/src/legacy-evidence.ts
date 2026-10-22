@@ -32,6 +32,7 @@ import { normalizeSqlSource, scanExecutableText } from '@exponetdb/migrations/fo
  * - `weak`: a name only (the ledger's name equals the stem). Never makes a
  *   file `recorded`.
  */
+/** `low` is no longer given (follow-up 2, F5); a report made before may hold it. */
 export type EvidenceStrength = 'strong' | 'medium' | 'low' | 'curated' | 'weak'
 
 export const STRENGTH_RANK: Readonly<Record<EvidenceStrength, number>> = {
@@ -72,9 +73,90 @@ function isTagCont(c: number): boolean {
 const CODE_LANGUAGES = new Set(['plpgsql', 'sql'])
 
 /**
+ * The `LANGUAGE` clauses after a routine's body, read as tokens up to the
+ * statement's end: a literal, a quoted name or a dollar-quoted string (any
+ * tag, non-ASCII ones too) is one token, and the value of a `SET` clause is
+ * skipped, so `SET application_name = 'language sql'` and `SET search_path
+ * = language, sql` name none (security review of follow-up 2, and its
+ * verification review P2-3). Every `language` word counts: the caller takes
+ * a language only from exactly one.
+ */
+function languagesAfter(text: string, from: number): (string | null)[] {
+  const tokens: { readonly word: boolean; readonly value: string }[] = []
+  let i = from
+  const n = text.length
+  while (i < n) {
+    const c = text.charCodeAt(i)
+    if (c === SEMICOLON) break
+    if (c === QUOTE || ((c === 0x65 || c === 0x45) && text.charCodeAt(i + 1) === QUOTE)) {
+      const escapes = c !== QUOTE
+      let j = escapes ? i + 2 : i + 1
+      while (j < n) {
+        const d = text.charCodeAt(j)
+        if (escapes && d === BACKSLASH) j += 2
+        else if (d === QUOTE && text.charCodeAt(j + 1) === QUOTE) j += 2
+        else if (d === QUOTE) break
+        else j++
+      }
+      tokens.push({ word: false, value: text.slice(escapes ? i + 2 : i + 1, j) })
+      i = j + 1
+    } else if (c === DQUOTE) {
+      let j = i + 1
+      while (j < n && !(text.charCodeAt(j) === DQUOTE && text.charCodeAt(j + 1) !== DQUOTE)) {
+        j += text.charCodeAt(j) === DQUOTE ? 2 : 1
+      }
+      tokens.push({ word: false, value: text.slice(i + 1, j).replaceAll('""', '"') })
+      i = j + 1
+    } else if (c === DOLLAR) {
+      // A tag is `$`, then an identifier start and identifier characters without `$`, then `$`.
+      let j = i + 1
+      if (j < n && isIdentStart(text.charCodeAt(j))) {
+        j++
+        while (j < n && isTagCont(text.charCodeAt(j))) j++
+      }
+      if (text.charCodeAt(j) !== DOLLAR) {
+        i++
+        continue
+      }
+      const tag = text.slice(i, j + 1)
+      const close = text.indexOf(tag, j + 1)
+      tokens.push({ word: false, value: '' })
+      i = close < 0 ? n : close + tag.length
+    } else if (isIdentStart(c)) {
+      let j = i + 1
+      while (j < n && isIdentCont(text.charCodeAt(j))) j++
+      tokens.push({ word: true, value: text.slice(i, j).toLowerCase() })
+      i = j
+    } else {
+      if (c === 0x3d || c === 0x2c || c === 0x2e) tokens.push({ word: false, value: text[i] ?? '' })
+      i++
+    }
+  }
+  const languages: (string | null)[] = []
+  for (let k = 0; k < tokens.length; k++) {
+    const t = tokens[k]
+    if (t?.word && t.value === 'set') {
+      // SET name [. name] { = | TO } value [, value …] | SET name FROM CURRENT
+      k++
+      while (tokens[k + 1]?.value === '.') k += 2
+      if (tokens[k + 1]?.word && tokens[k + 1]?.value === 'from') {
+        k += 2
+        continue
+      }
+      k += 2
+      while (tokens[k + 1]?.value === ',') k += 2
+      continue
+    }
+    if (t?.word && t.value === 'language')
+      languages.push(tokens[k + 1]?.value.toLowerCase() ?? null)
+  }
+  return languages
+}
+
+/**
  * Whether the dollar-quoted body that ends at `end` is the code of a `DO`
  * block or of a function or procedure in `plpgsql` or `sql`: only such a
- * body is compared without its comments and whitespace (the `low` tier).
+ * body is compared without its comments and whitespace (`statements_bodies`).
  * A dollar-quoted literal (data, a parameter's default) or a body in another
  * language (whose whitespace may matter) never is. `prefix` holds the
  * statement's tokens so far; the `LANGUAGE` clause may also follow the body.
@@ -96,18 +178,23 @@ function isCodeBody(prefix: readonly string[], text: string, end: number): boole
     words[words.length - 1] === 'as'
   if (!isDo && !isRoutine) return false
   const unquote = (t: string) => t.replace(/^(["'])(.*)\1$/, '$2').toLowerCase()
-  let language: string | null = null
-  const at = words.lastIndexOf('language')
-  const named = at >= 0 ? words[at + 1] : undefined
-  if (named !== undefined) {
-    language = unquote(named)
-  } else {
-    const rest = text.slice(end, text.indexOf(';', end) < 0 ? text.length : text.indexOf(';', end))
-    const m = /\blanguage\s+("[^"]*"|'[^']*'|[a-z_][a-z0-9_]*)/i.exec(rest)
-    language = m?.[1] === undefined ? null : unquote(m[1])
-  }
+  // Exactly one LANGUAGE clause, before the body or after it: a `language` word anywhere else
+  // (a parameter, a type, a SET value before the body) makes the language unknown, and an
+  // unknown language is no code (the verification review of follow-up 2, P2-3).
+  const before = words.flatMap((w, i) => (w === 'language' ? [words[i + 1] ?? null] : []))
+  const languages = [
+    ...before.map((w) => (w === null ? null : unquote(w))),
+    ...languagesAfter(text, end),
+  ]
   // A DO block without a LANGUAGE clause is PL/pgSQL.
-  return CODE_LANGUAGES.has(language ?? (isDo ? 'plpgsql' : ''))
+  if (languages.length === 0) return isDo
+  const [language] = languages
+  return (
+    languages.length === 1 &&
+    language !== null &&
+    language !== undefined &&
+    CODE_LANGUAGES.has(language)
+  )
 }
 
 /**
@@ -209,7 +296,8 @@ function retokenize(text: string, bodies: boolean): string {
       const close = text.indexOf(delimiter, open)
       const end = close < 0 ? n : close + delimiter.length
       if (bodies && close >= 0 && isCodeBody(out, text, end)) {
-        // The weaker tier: the body as code, its comments gone and its whitespace collapsed.
+        // The body as code, normalized as the statement around it: comments gone, whitespace
+        // collapsed, literals and quoted names as written.
         const body = scanExecutableText(text.slice(open, close))
         out.push(delimiter, body.ok ? body.value.trim() : text.slice(open, close), delimiter)
       } else {
@@ -311,8 +399,11 @@ export function matchKeys(entry: ContentKeys, files: ContentKeys): ContentMatch 
   if (entry.normalized !== null && entry.normalized === files.normalized) {
     return { strength: 'medium', how: 'statements_normalized' }
   }
+  // A code body normalized as the statement around it is (follow-up 2, F5): the hosted
+  // connector strips comments inside dollar-quoted bodies too, so this is the normal case for
+  // a routine it applied, and the same code ran.
   if (entry.bodies !== null && entry.bodies === files.bodies) {
-    return { strength: 'low', how: 'statements_bodies' }
+    return { strength: 'medium', how: 'statements_bodies' }
   }
   return null
 }

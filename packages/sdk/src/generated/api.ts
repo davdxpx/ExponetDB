@@ -2319,15 +2319,23 @@ export type SchemaSide = ({
 export type ScratchCheck = {
   readonly checkedAt: string
   readonly checks: ReadonlyArray<{
-    readonly check: "scratch_usable" | "identity" | "empty" | "extensions" | "outside_scope" | "execution_role"
+    readonly check: "scratch_usable" | "identity" | "empty" | "extensions" | "outside_scope" | "execution_role" | "legacy_references"
     readonly detail: string | null
     readonly items: readonly string[]
     readonly status: "pass" | "fail" | "unknown"
     readonly truncated: boolean
   }>
+  readonly copySchemas?: readonly string[]
   readonly ready: boolean
   readonly scratchTargetId: string | null
   readonly targetId: string
+}
+
+export type ScratchCheckRequest = {
+  readonly files: readonly LegacyFile[]
+  readonly notApplicable?: readonly string[]
+  readonly role?: string
+  readonly scratchTarget: string
 }
 
 export type Server = {
@@ -2718,6 +2726,12 @@ export interface Operations {
     readonly params: { readonly target: string }
     readonly query: { readonly role?: string; readonly scratchTarget: string }
     readonly body: never
+    readonly response: ScratchCheck
+  }
+  checkScratchTargetForFiles: {
+    readonly params: { readonly target: string }
+    readonly query: Record<string, never>
+    readonly body: ScratchCheckRequest
     readonly response: ScratchCheck
   }
   classifySql: {
@@ -3772,6 +3786,7 @@ export const OPERATIONS = {
   cancelQuery: { method: "POST", path: "/targets/{target}/queries/{queryId}/cancel", status: 200, wave: "7", action: "query.cancel", shape: "object" },
   cancelStepUp: { method: "POST", path: "/step-ups/{stepUpId}/cancel", status: 200, wave: "6", action: "step_up.cancel", shape: "object" },
   checkScratchTarget: { method: "GET", path: "/targets/{target}/migrations/scratch-check", status: 200, wave: "9", action: "migration.import.scratch_check", shape: "object" },
+  checkScratchTargetForFiles: { method: "POST", path: "/targets/{target}/migrations/scratch-check", status: 200, wave: "9", action: "migration.import.scratch_check", shape: "object" },
   classifySql: { method: "POST", path: "/sql/classifications", status: 200, wave: "8", action: "sql.classify", shape: "object" },
   confirmStepUp: { method: "POST", path: "/step-ups/{stepUpId}/confirm", status: 200, wave: "6", action: "step_up.confirm", shape: "object" },
   createApiKey: { method: "POST", path: "/service-accounts/{identityId}/api-keys", status: 201, wave: "3B", action: "api_key.create", shape: "object" },
