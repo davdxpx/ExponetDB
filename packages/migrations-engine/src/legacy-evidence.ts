@@ -73,12 +73,15 @@ function isTagCont(c: number): boolean {
 const CODE_LANGUAGES = new Set(['plpgsql', 'sql'])
 
 /**
- * The language a `LANGUAGE` clause after a routine's body names, read as
- * tokens up to the statement's end: a literal, a quoted name or a
- * dollar-quoted string is one token, so `SET application_name = 'language
- * sql'` names none (security review of follow-up 2). `null` when none.
+ * The `LANGUAGE` clauses after a routine's body, read as tokens up to the
+ * statement's end: a literal, a quoted name or a dollar-quoted string (any
+ * tag, non-ASCII ones too) is one token, and the value of a `SET` clause is
+ * skipped, so `SET application_name = 'language sql'` and `SET search_path
+ * = language, sql` name none (security review of follow-up 2, and its
+ * verification review P2-3). Every `language` word counts: the caller takes
+ * a language only from exactly one.
  */
-function languageAfter(text: string, from: number): string | null {
+function languagesAfter(text: string, from: number): (string | null)[] {
   const tokens: { readonly word: boolean; readonly value: string }[] = []
   let i = from
   const n = text.length
@@ -105,12 +108,18 @@ function languageAfter(text: string, from: number): string | null {
       tokens.push({ word: false, value: text.slice(i + 1, j).replaceAll('""', '"') })
       i = j + 1
     } else if (c === DOLLAR) {
-      const tag = /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/.exec(text.slice(i))?.[0]
-      if (tag === undefined) {
+      // A tag is `$`, then an identifier start and identifier characters without `$`, then `$`.
+      let j = i + 1
+      if (j < n && isIdentStart(text.charCodeAt(j))) {
+        j++
+        while (j < n && isTagCont(text.charCodeAt(j))) j++
+      }
+      if (text.charCodeAt(j) !== DOLLAR) {
         i++
         continue
       }
-      const close = text.indexOf(tag, i + tag.length)
+      const tag = text.slice(i, j + 1)
+      const close = text.indexOf(tag, j + 1)
       tokens.push({ word: false, value: '' })
       i = close < 0 ? n : close + tag.length
     } else if (isIdentStart(c)) {
@@ -119,12 +128,29 @@ function languageAfter(text: string, from: number): string | null {
       tokens.push({ word: true, value: text.slice(i, j).toLowerCase() })
       i = j
     } else {
+      if (c === 0x3d || c === 0x2c || c === 0x2e) tokens.push({ word: false, value: text[i] ?? '' })
       i++
     }
   }
-  const at = tokens.findIndex((t) => t.word && t.value === 'language')
-  const next = at < 0 ? undefined : tokens[at + 1]
-  return next === undefined ? null : next.value.toLowerCase()
+  const languages: (string | null)[] = []
+  for (let k = 0; k < tokens.length; k++) {
+    const t = tokens[k]
+    if (t?.word && t.value === 'set') {
+      // SET name [. name] { = | TO } value [, value …] | SET name FROM CURRENT
+      k++
+      while (tokens[k + 1]?.value === '.') k += 2
+      if (tokens[k + 1]?.word && tokens[k + 1]?.value === 'from') {
+        k += 2
+        continue
+      }
+      k += 2
+      while (tokens[k + 1]?.value === ',') k += 2
+      continue
+    }
+    if (t?.word && t.value === 'language')
+      languages.push(tokens[k + 1]?.value.toLowerCase() ?? null)
+  }
+  return languages
 }
 
 /**
@@ -152,16 +178,23 @@ function isCodeBody(prefix: readonly string[], text: string, end: number): boole
     words[words.length - 1] === 'as'
   if (!isDo && !isRoutine) return false
   const unquote = (t: string) => t.replace(/^(["'])(.*)\1$/, '$2').toLowerCase()
-  let language: string | null = null
-  const at = words.lastIndexOf('language')
-  const named = at >= 0 ? words[at + 1] : undefined
-  if (named !== undefined) {
-    language = unquote(named)
-  } else {
-    language = languageAfter(text, end)
-  }
+  // Exactly one LANGUAGE clause, before the body or after it: a `language` word anywhere else
+  // (a parameter, a type, a SET value before the body) makes the language unknown, and an
+  // unknown language is no code (the verification review of follow-up 2, P2-3).
+  const before = words.flatMap((w, i) => (w === 'language' ? [words[i + 1] ?? null] : []))
+  const languages = [
+    ...before.map((w) => (w === null ? null : unquote(w))),
+    ...languagesAfter(text, end),
+  ]
   // A DO block without a LANGUAGE clause is PL/pgSQL.
-  return CODE_LANGUAGES.has(language ?? (isDo ? 'plpgsql' : ''))
+  if (languages.length === 0) return isDo
+  const [language] = languages
+  return (
+    languages.length === 1 &&
+    language !== null &&
+    language !== undefined &&
+    CODE_LANGUAGES.has(language)
+  )
 }
 
 /**

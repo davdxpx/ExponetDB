@@ -217,6 +217,42 @@ $py$ SET application_name = 'language sql' LANGUAGE plpython3u`
     })
   })
 
+  it('never take a language from a SET value, a non-ASCII tag or a second clause (verification review P2-3)', () => {
+    const python = (after: string) => (indent: string) =>
+      `CREATE FUNCTION public.acme_py(x int) RETURNS int AS $py$
+if x > 1:
+${indent}return 2
+return 1
+$py$ ${after}`
+    for (const after of [
+      'SET application_name = $é$ language sql $é$ LANGUAGE plpython3u',
+      'SET search_path = language, sql LANGUAGE plpython3u',
+      'SET search_path TO "$user", language, sql LANGUAGE plpython3u',
+      'TRANSFORM FOR TYPE language LANGUAGE plpython3u',
+    ]) {
+      const f = python(after)
+      expect(statementsMatch([f('    ')], [[f('')]], [`${f('')};`]), after).toBe(null)
+    }
+    // A parameter named language before the body is no LANGUAGE clause either.
+    const param = (
+      indent: string,
+    ) => `CREATE FUNCTION public.acme_py(language sql) RETURNS int LANGUAGE plpython3u AS $py$
+if x > 1:
+${indent}return 2
+$py$`
+    expect(statementsMatch([param('    ')], [[param('')]], [`${param('')};`])).toBe(null)
+    // One clause after a SET of ordinary values is still read.
+    const sql = (body: string) =>
+      `CREATE FUNCTION public.acme_s() RETURNS int AS $s$ ${body} $s$ SET search_path = public, extensions LANGUAGE sql`
+    expect(
+      statementsMatch(
+        [sql('SELECT 1')],
+        [[sql('SELECT  1 -- one')]],
+        [`${sql('SELECT  1 -- one')};`],
+      ),
+    ).toEqual({ strength: 'medium', how: 'statements_bodies' })
+  })
+
   it('never match a different executable text, an empty entry or unreadable text', () => {
     expect(statementsMatch([STRIPPED_OUTSIDE.replace('bigint', 'int')], [PARSED], [FILE])).toBe(
       null,
