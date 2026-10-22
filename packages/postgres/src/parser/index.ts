@@ -23,6 +23,7 @@ export {
   READ_NODES,
 } from './allowlist.ts'
 export {
+  type ClusterGlobalCondition,
   type ClusterGlobalExpectation,
   type ClusterGlobalForm,
   type ClusterGlobalStatement,

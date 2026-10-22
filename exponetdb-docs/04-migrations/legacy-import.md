@@ -436,8 +436,20 @@ refusing role statements):
   such statements, in nested blocks, with exception handlers whose actions
   are `NULL` or a `RAISE` below `EXCEPTION` (with at most `SQLERRM` or
   `SQLSTATE` as parameters), and no declared variable, is **not run** on
-  the scratch target. A `DO` block that holds role statements and also does
-  anything else (an `IF`, a query, a `PERFORM`, a dynamic `EXECUTE`, a
+  the scratch target. **[DECIDED]** (follow-up 2, F1, 2026-10-22) Such a
+  block may also hold **guards**: `IF [NOT] EXISTS (SELECT … FROM pg_roles
+  WHERE rolname = '<role>')` or `IF [NOT] EXISTS (SELECT … FROM
+  pg_auth_members WHERE roleid = '<role>'::regrole AND member =
+  '<member>'::regrole)` (unqualified or in `pg_catalog`, with an alias or
+  not, `=` written either way round), nested, around such statements, with
+  a `THEN` branch only. Anything else in a guard (a function, a subquery, a
+  variable, `OR`, `LIKE`, `LIMIT`, an oid, another relation), an `ELSE` or
+  `ELSIF` branch, or a `RETURN` before the end of the block makes it mixed.
+  **[OBSERVED]** The first real import (2026-10-22) failed with `42501` on a
+  `GRANT <role> TO <role>` behind `IF EXISTS (… pg_roles …)`: the guard
+  held, so the grant ran as the execution role. A `DO` block that holds role
+  statements and also does
+  anything else (a query, a `PERFORM`, a dynamic `EXECUTE`, a
   declared variable, any other statement) is **mixed**: it runs unchanged,
   and its file is `ambiguous` (`do_block_mixed:<statement>`), a human
   decision. A `DO` block without role statements is ordinary procedural SQL,
@@ -455,7 +467,20 @@ refusing role statements):
   `SET`), a role setting (`pg_db_role_setting`, per database or for all) has
   the value or is reset, a role's comment. Inside a block with an exception
   handler only what holds whether the statement created something or found
-  it is kept: that the role or the membership exists. Over the whole chain the last
+  it is kept: that the role or the membership exists. Behind a `NOT EXISTS`
+  guard the same holds: the branch ran only when the role or membership was
+  missing, so only its presence is kept, unconditionally. Behind an `EXISTS`
+  guard the expectations are **conditional**: the observer checks one only
+  while every guard around it holds on the imported target (`IF EXISTS
+  (role) THEN GRANT … TO role` is checked while that role exists), else it
+  is not checked (`cluster_global_guard_unmet:<n>`); a file whose every
+  expectation sat behind an unmet guard proves nothing and is `ambiguous`
+  unless a ledger records it. A statement that undoes what its own guard
+  asked (`IF EXISTS (role) THEN DROP ROLE`, `REVOKE` behind a membership
+  guard) leaves the same state either way, so that guard does not apply to
+  it. A conditional expectation **never supersedes** another one, since its
+  guard may have been false when the file ran; it is superseded like any
+  other. Over the whole chain the last
   statement about the same thing wins (the others are superseded). The
   observer checks the surviving ones against the **imported** target's
   catalog: evidence `cluster_global_held:<n>/<m>`. A file whose cluster-global
@@ -621,7 +646,7 @@ the new target directly. See
 | Scratch target on another PostgreSQL major | The preflight fails `extensions` (`major_differs`), the replay refuses (`major_differs:<target>/<scratch>`, §2 step 2). |
 | A view or column outside the managed scope depends on a scratch object | The in-place reset refuses and names it; drop or move it first (§2.5). |
 | Legacy ledger table missing on a target | Fine; evidence comes from objects. |
-| A file creates or grants roles (top level or in a `DO` block that swallows `duplicate_object`) | Elided from the replay, checked as cluster-global expectations on the imported target (`cluster_global_held:<n>/<m>`, §2.4); a mixed `DO` block runs and makes the file `ambiguous`. |
+| A file creates or grants roles (top level, or in a `DO` block that swallows `duplicate_object` or guards with `IF [NOT] EXISTS` on `pg_roles` or `pg_auth_members`) | Elided from the replay, checked as cluster-global expectations on the imported target (`cluster_global_held:<n>/<m>`; behind an `EXISTS` guard only while the guard holds, `cluster_global_guard_unmet:<n>`; §2.4); a mixed `DO` block runs and makes the file `ambiguous`. |
 | `CREATE INDEX CONCURRENTLY` in a file | Replayed alone in autocommit between transactional segments (§2.4). |
 | A file with comments only | Not replayed; `no_statements` (§2.4). |
 | Target unreachable mid-analysis | Report marked `incomplete` (`target_unavailable`, review round 2: it stayed `pending` before); cannot be applied. |

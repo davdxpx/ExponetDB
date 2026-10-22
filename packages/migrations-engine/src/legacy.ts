@@ -1188,15 +1188,22 @@ async function classify(
           unreadable = true
           globalsHold = false
         } else {
-          const ok = results.filter((r) => r.ok).length
-          evidence.push(`cluster_global_held:${ok}/${results.length}`)
-          globalsHold = ok === results.length
+          // A guarded statement whose guard does not hold on the target states nothing there.
+          const applied = results.filter((r) => r.applies)
+          const unmet = results.length - applied.length
+          if (unmet > 0) evidence.push(`cluster_global_guard_unmet:${unmet}`)
+          const ok = applied.filter((r) => r.ok).length
+          if (applied.length > 0) evidence.push(`cluster_global_held:${ok}/${applied.length}`)
+          globalsHold = ok === applied.length
           held += ok
-          total += results.length
+          total += applied.length
         }
       }
       if (unreadable || (held > 0 && held < total)) {
         state = 'ambiguous'
+      } else if (total === 0) {
+        // Every expectation sat behind a guard that does not hold: nothing was checked.
+        state = recorded ? 'recorded_present' : 'ambiguous'
       } else if (held === total) {
         state = recorded ? 'recorded_present' : 'unrecorded_present'
       } else {
@@ -2277,7 +2284,9 @@ export class MigrationBaselineKind implements OperationKind {
               if (!accepted.has(a.file.stem)) continue
               const results = [
                 ...(a.surviving.length === 0 ? [] : await checkExpectations(rtx, a.surviving)),
-                ...(await checkClusterGlobalExpectations(rtx, a.survivingGlobals)),
+                ...(await checkClusterGlobalExpectations(rtx, a.survivingGlobals)).filter(
+                  (r) => r.applies,
+                ),
               ]
               checked += results.length
               held += results.filter((r) => r.ok).length

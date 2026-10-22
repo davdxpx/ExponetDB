@@ -56,7 +56,7 @@ ALTER ROLE acme_anon SET search_path = public;
 
   it('replays a mixed DO block unchanged and names it', () => {
     const r = replay(
-      "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'acme_anon') THEN CREATE ROLE acme_anon; END IF; END $$;\n",
+      "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'acme_anon') THEN CREATE ROLE acme_anon; CREATE TABLE public.acme_t (id int); END IF; END $$;\n",
     )
     expect(r.mixedDoBlocks).toEqual([0])
     expect(r.elided).toEqual([])
@@ -110,5 +110,32 @@ describe('survivingGlobals', () => {
       replay('CREATE ROLE acme_anon;\n'),
     ])
     expect(surviving).toEqual([[], [{ kind: 'role', role: 'acme_anon', exists: true }]])
+  })
+
+  it('never lets a guarded statement supersede another one (follow-up 2, F1)', () => {
+    const guarded = (body: string) =>
+      replay(
+        `DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'acme_x') THEN ${body} END IF; END $$;\n`,
+      )
+    const x = [{ kind: 'role', role: 'acme_x', exists: true }]
+    const { surviving } = survivingGlobals([
+      replay('GRANT acme_a TO acme_b;\nCREATE ROLE acme_c;\n'),
+      guarded('REVOKE acme_a FROM acme_b; DROP ROLE acme_c;'),
+      guarded('GRANT acme_a TO acme_x;'),
+      replay('REVOKE acme_a FROM acme_x;\n'),
+    ])
+    expect(surviving[0]).toEqual([
+      { kind: 'membership', role: 'acme_a', member: 'acme_b', exists: true },
+      { kind: 'role', role: 'acme_c', exists: true },
+    ])
+    expect(surviving[1]).toEqual([
+      { kind: 'membership', role: 'acme_a', member: 'acme_b', exists: false, when: x },
+      { kind: 'role', role: 'acme_c', exists: false, when: x },
+    ])
+    // A later statement without a guard supersedes a guarded one.
+    expect(surviving[2]).toEqual([])
+    expect(surviving[3]).toEqual([
+      { kind: 'membership', role: 'acme_a', member: 'acme_x', exists: false },
+    ])
   })
 })

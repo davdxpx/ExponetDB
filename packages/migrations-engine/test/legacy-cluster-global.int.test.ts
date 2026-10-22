@@ -224,6 +224,8 @@ describe('role statements as an execution role (measured, legacy-import.md §2.4
             ROLE_ONLY_DO(existing),
             `DO $$ BEGIN GRANT ${existing} TO ${owner}; EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
             `ALTER ROLE ${existing} SET search_path = public`,
+            // The first real import's shape (follow-up 2, F1): the guard holds, the grant fails.
+            `DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${owner}') THEN GRANT ${existing} TO ${owner}; END IF; END $$`,
           ]) {
             await expect(c.query(statement), statement).rejects.toMatchObject({ code: '42501' })
           }
@@ -258,7 +260,7 @@ describe('legacy import of files with cluster-global effects (PostgreSQL 17)', (
     expect(p).toMatchObject({ kind: 'migration.import.replay', decision: 'allow' })
     const replay = (p.body['analysis'] as { replay: Record<string, unknown> }).replay
     expect(replay).toMatchObject({
-      counts: { elided: 7, mixedDoBlocks: 1, autocommit: 1, noStatements: 1 },
+      counts: { elided: 11, mixedDoBlocks: 1, autocommit: 1, noStatements: 1 },
       elided: [
         { file: '0200_roles', statement: 0, form: 'role_statement', type: 'CreateRoleStmt' },
         { file: '0200_roles', statement: 1, form: 'role_statement', type: 'CreateRoleStmt' },
@@ -266,9 +268,14 @@ describe('legacy import of files with cluster-global effects (PostgreSQL 17)', (
         { file: '0201_service_role', statement: 0, form: 'role_do_block', type: 'DoStmt' },
         { file: '0202_grants', statement: 2, form: 'role_statement', type: 'GrantRoleStmt' },
         { file: '0202_grants', statement: 3, form: 'role_statement', type: 'AlterRoleSetStmt' },
+        // A guard on pg_roles around role statements only (follow-up 2, F1).
+        { file: '0203_optional_role', statement: 0, form: 'role_do_block', type: 'DoStmt' },
         { file: '0206_limits', statement: 0, form: 'role_statement', type: 'AlterRoleStmt' },
+        { file: '0207_case_studies', statement: 0, form: 'role_statement', type: 'CreateRoleStmt' },
+        { file: '0207_case_studies', statement: 3, form: 'role_do_block', type: 'DoStmt' },
+        { file: '0208_absent_role', statement: 0, form: 'role_do_block', type: 'DoStmt' },
       ],
-      mixedDoBlocks: [{ file: '0203_optional_role', statement: 0 }],
+      mixedDoBlocks: [{ file: '0209_mixed', statement: 0 }],
       autocommit: [{ file: '0204_index', statement: 1 }],
       noStatements: ['0205_notes'],
     })
@@ -298,9 +305,10 @@ describe('legacy import of files with cluster-global effects (PostgreSQL 17)', (
       state: 'unrecorded_present',
       evidence: expect.arrayContaining(['cluster_global_held:4/4']),
     })
+    // NOT EXISTS: only that the role exists, whether the block created it or found it.
     expect(item('0203_optional_role')).toMatchObject({
-      state: 'ambiguous',
-      evidence: expect.arrayContaining(['do_block_mixed:0']),
+      state: 'unrecorded_present',
+      evidence: expect.arrayContaining(['cluster_global_held:1/1']),
     })
     expect(item('0204_index')).toMatchObject({
       state: 'unrecorded_present',
@@ -309,6 +317,21 @@ describe('legacy import of files with cluster-global effects (PostgreSQL 17)', (
     expect(item('0205_notes')).toMatchObject({
       state: 'unrecorded_present',
       evidence: expect.arrayContaining(['no_statements']),
+    })
+    // EXISTS: the grant is checked because its guard's role exists on the target; replayed as
+    // the execution role it failed with 42501 on the first real import.
+    expect(item('0207_case_studies')).toMatchObject({
+      state: 'unrecorded_present',
+      evidence: expect.arrayContaining(['expectations_held:5/5', 'cluster_global_held:3/3']),
+    })
+    // The guard's role does not exist: nothing is checked, and nothing proves the file ran.
+    expect(item('0208_absent_role')).toMatchObject({
+      state: 'ambiguous',
+      evidence: ['cluster_global_guard_unmet:1'],
+    })
+    expect(item('0209_mixed')).toMatchObject({
+      state: 'ambiguous',
+      evidence: expect.arrayContaining(['do_block_mixed:0']),
     })
     // Changed by hand on the target since: the file's limit does not hold.
     expect(item('0206_limits')).toMatchObject({

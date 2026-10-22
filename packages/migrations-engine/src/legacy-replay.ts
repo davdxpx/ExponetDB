@@ -147,7 +147,8 @@ export interface SurvivingGlobals {
 /**
  * Over the whole chain the last statement about the same thing wins; a
  * role's removal (`DROP ROLE`, a rename) supersedes everything earlier
- * that names the role.
+ * that names the role. A statement inside an `IF EXISTS` guard supersedes
+ * nothing: the guard may have been false when the file ran.
  */
 export function survivingGlobals(files: readonly FileReplay[]): SurvivingGlobals {
   const flat: { file: number; order: number; e: ClusterGlobalExpectation }[] = []
@@ -159,12 +160,13 @@ export function survivingGlobals(files: readonly FileReplay[]): SurvivingGlobals
   const lastByKey = new Map<string, number>()
   const removedAt = new Map<string, number>()
   for (const x of flat) {
+    if (x.e.when !== undefined) continue
     lastByKey.set(expectationKey(x.e), x.order)
     if (x.e.kind === 'role' && !x.e.exists) removedAt.set(x.e.role, x.order)
   }
   const surviving = files.map(() => [] as ClusterGlobalExpectation[])
   for (const x of flat) {
-    if (lastByKey.get(expectationKey(x.e)) !== x.order) continue
+    if ((lastByKey.get(expectationKey(x.e)) ?? -1) > x.order) continue
     const removedLater = rolesOf(x.e).some((r) => (removedAt.get(r) ?? -1) > x.order)
     if (removedLater) continue
     surviving[x.file]?.push(x.e)
