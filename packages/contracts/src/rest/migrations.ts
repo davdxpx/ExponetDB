@@ -1,3 +1,4 @@
+import { encodeUtf8 } from '@exponetdb/kernel'
 import * as z from 'zod'
 import {
   ApplyChecksumSchema,
@@ -649,9 +650,8 @@ const LegacyFilesSchema = z
   .min(1)
   .max(1000)
   .superRefine((files, ctx) => {
-    const encoder = new TextEncoder()
     let total = 0
-    for (const f of files) total += encoder.encode(f.text).length
+    for (const f of files) total += encodeUtf8(f.text).length
     if (total > LEGACY_FILES_LIMIT_BYTES) {
       ctx.addIssue({
         code: 'custom',
