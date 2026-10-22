@@ -72,6 +72,7 @@ exit codes are in [`README.md`](./README.md).
 | [`cluster endpoint add`](#cluster-endpoint-add) | remote | plan | Plan a new endpoint of a cluster. |
 | [`cluster endpoint retire`](#cluster-endpoint-retire) | remote | plan | Plan retiring an endpoint. |
 | [`cluster database retire`](#cluster-database-retire) | remote | plan | Plan retiring a registered database record that is no current placement (decommission its target first); the database itself is not touched. |
+| [`cluster declare-tier`](#cluster-declare-tier) | remote | plan | Plan declaring the tier a cluster is meant for (OD-22): prod makes every database registered on it need production authority; nonprod leaves it to the environment. |
 | [`cluster database register`](#cluster-database-register) | remote | plan | Plan registering a database of a cluster. |
 | [`cluster credential submit`](#cluster-credential-submit) | remote | read | Open the Web App’s write-only form for a role’s password, then wait until the worker verified it. |
 | [`cluster credential rotate`](#cluster-credential-rotate) | remote | plan | Plan rotating a cluster credential through the node (a new SCRAM verifier, set locally). |
@@ -1087,7 +1088,7 @@ Runs: against the server; effect: read; action: `credential.list`; scopes: `node
 
 Write the cluster’s bootstrap SQL (roles, grants) to stdout or a new file, for a DBA to review and run.
 
-The SQL is the server’s, generated for this cluster; the CLI never runs it. Review it before a database administrator runs it by hand.
+The SQL is the server’s, generated for this cluster; the CLI never runs it. Review it before a database administrator runs it with psql. It is idempotent: run it again after a database is added or an execution role is created. It covers the registered databases and those named with --database (before registration), grants the migrator SET ROLE into the execution roles of the projects placed on the cluster or named with --project, where they exist and are fit, and lets the observer read the legacy ledgers named with --ledger.
 
 ```text
 exponetdb cluster bootstrap-sql <cluster> [flags]
@@ -1099,6 +1100,10 @@ Runs: against the server; effect: read; action: `cluster.bootstrap_sql.get`; sco
 |---|---|
 | `cluster` (required) | A cluster id. |
 | `--file <path>` | A new file to write (0600). |
+| `--database <names>` | Databases of the cluster not registered yet. |
+| `--project <prj_…>` | A project whose targets will be placed here: its execution roles too (needs migrations.read on it). |
+| `--environment <env_…>` | Only this environment of --project. |
+| `--ledger <supabase,drizzle,applied_migrations>` | Legacy ledgers the observer may read during an import. |
 
 ### cluster register
 
@@ -1198,6 +1203,27 @@ Runs: against the server; effect: plan; action: `registry.database.retire.plan`;
 | `cluster` (required) | A cluster id. |
 | `database` (required) | A database id (dbs_…). |
 | `--reason <text>` | Why. |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### cluster declare-tier
+
+Plan declaring the tier a cluster is meant for (OD-22): prod makes every database registered on it need production authority; nonprod leaves it to the environment.
+
+The same rules as the Web App: a person with registry.manage:prod plans it, whichever value; applying it (--apply or plan apply) needs a fresh re-authentication (exponetdb auth reauth --plan).
+
+```text
+exponetdb cluster declare-tier <cluster> [flags]
+```
+
+Runs: against the server; effect: plan; action: `registry.cluster.declare_tier.plan`; scopes: `registry.manage`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id. |
+| `--tier <prod\|nonprod>` | The declared tier. (required) |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |

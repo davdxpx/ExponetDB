@@ -98,6 +98,7 @@ import {
 import type { IdentityId } from '@exponetdb/kernel'
 import type { PlanRecord } from '@exponetdb/operations'
 import {
+  type BootstrapRequest,
   brand,
   type ClusterRecord,
   CREDENTIAL_LIST_LIMIT,
@@ -688,9 +689,23 @@ export class RegistryUseCases {
     )
   }
 
-  async bootstrapSql(caller: CallerLike, clusterId: string): Promise<ClusterBootstrapSql> {
+  /**
+   * The bootstrap SQL of a cluster (Wave 9 order A8). A named project's
+   * execution roles are part of it only when the caller may read them.
+   */
+  async bootstrapSql(
+    caller: CallerLike,
+    clusterId: string,
+    request: BootstrapRequest = {},
+  ): Promise<ClusterBootstrapSql> {
     await this.#cluster('cluster.bootstrap_sql.get', caller, clusterId)
-    return clusterBootstrapSql(this.#h.store, clusterId)
+    if (request.projectId !== undefined) {
+      await this.#h.authorize(this.#h.store, 'project.execution_roles.get', caller, {
+        kind: 'project',
+        projectId: request.projectId,
+      })
+    }
+    return clusterBootstrapSql(this.#h.store, clusterId, request)
   }
 
   // ----- registry plans -----

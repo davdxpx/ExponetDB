@@ -120,6 +120,7 @@ import {
 } from './nodes.ts'
 import {
   AccessRoleSchema,
+  ClusterBootstrapSqlQuerySchema,
   ClusterBootstrapSqlSchema,
   ClusterConfirmRequestSchema,
   ClusterDeclaredTierRequestSchema,
@@ -1835,11 +1836,13 @@ export const REGISTRY_ROUTES = [
     operationId: 'getClusterBootstrapSql',
     method: 'get',
     path: '/clusters/{clusterId}/bootstrap-sql',
-    summary: 'The role bootstrap SQL of an external cluster for a person to run (no password).',
+    summary:
+      'The role bootstrap SQL of an external cluster for a person to run with psql (no password; idempotent): registered and requested databases, the execution roles of the projects placed there or named, the legacy ledger read.',
     action: 'cluster.bootstrap_sql.get',
     pathParams: clusterParams,
+    query: ClusterBootstrapSqlQuerySchema,
     response: { status: 200, schema: ClusterBootstrapSqlSchema },
-    errors: ['NOT_FOUND'],
+    errors: ['NOT_FOUND', 'VALIDATION_FAILED'],
   },
   {
     operationId: 'listClusterEndpoints',

@@ -3324,6 +3324,51 @@
             },
             "type": "array"
           },
+          "executionRoles": {
+            "description": "Execution roles granted to the migrator WITH INHERIT FALSE, SET TRUE where they exist and are fit.",
+            "items": {
+              "properties": {
+                "bypassRlsExcused": {
+                  "description": "A declared exception (ADR-0034) excuses its BYPASSRLS in an environment on this cluster.",
+                  "type": "boolean"
+                },
+                "name": {
+                  "description": "PostgreSQL role name.",
+                  "maxLength": 63,
+                  "type": "string",
+                  "x-untrusted": true
+                }
+              },
+              "required": [
+                "name",
+                "bypassRlsExcused"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "legacyLedgers": {
+            "description": "Legacy ledgers the observer is granted to read, where they exist.",
+            "items": {
+              "enum": [
+                "supabase",
+                "drizzle",
+                "applied_migrations"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "pendingDatabases": {
+            "description": "Requested databases not registered yet (covered by the script).",
+            "items": {
+              "description": "Database name.",
+              "maxLength": 63,
+              "type": "string",
+              "x-untrusted": true
+            },
+            "type": "array"
+          },
           "roles": {
             "items": {
               "pattern": "^exponetdb_[a-z_]+$",
@@ -3332,8 +3377,8 @@
             "type": "array"
           },
           "script": {
-            "description": "SQL for a person to run with administrative tools; contains no password (set each one with psql \\password).",
-            "maxLength": 65536,
+            "description": "SQL for a person to run with psql; contains no password (set each one with psql \\password).",
+            "maxLength": 8388608,
             "type": "string",
             "x-untrusted": true
           }
@@ -3342,7 +3387,10 @@
           "clusterId",
           "script",
           "roles",
-          "databases"
+          "databases",
+          "pendingDatabases",
+          "executionRoles",
+          "legacyLedgers"
         ],
         "type": "object"
       },
@@ -20168,6 +20216,66 @@
               "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
               "type": "string"
             }
+          },
+          {
+            "explode": true,
+            "in": "query",
+            "name": "database",
+            "required": false,
+            "schema": {
+              "description": "Databases of the cluster to cover before they are registered (repeatable); registered ones are always covered.",
+              "items": {
+                "description": "Name of an existing database on the cluster.",
+                "maxLength": 63,
+                "minLength": 1,
+                "pattern": "^[^\\p{Cc}]+$",
+                "type": "string",
+                "x-untrusted": true
+              },
+              "maxItems": 32,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "description": "A project whose targets will be placed on this cluster: its execution roles are granted too.",
+              "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "environment",
+            "required": false,
+            "schema": {
+              "description": "Only this environment of the project (else every environment of the project's product).",
+              "pattern": "^env_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": true,
+            "in": "query",
+            "name": "ledgers",
+            "required": false,
+            "schema": {
+              "description": "Legacy ledgers the observer may read during an import.",
+              "items": {
+                "enum": [
+                  "supabase",
+                  "drizzle",
+                  "applied_migrations"
+                ],
+                "type": "string"
+              },
+              "maxItems": 3,
+              "type": "array"
+            },
+            "style": "form"
           }
         ],
         "responses": {
@@ -20220,7 +20328,7 @@
             "session": []
           }
         ],
-        "summary": "The role bootstrap SQL of an external cluster for a person to run (no password).",
+        "summary": "The role bootstrap SQL of an external cluster for a person to run with psql (no password; idempotent): registered and requested databases, the execution roles of the projects placed there or named, the legacy ledger read.",
         "tags": [
           "clusters"
         ],

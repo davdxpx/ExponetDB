@@ -62,13 +62,41 @@ TargetSession (TLS verify-full, session guards, pinned settings)
 
 ### 2.2 External cluster (no agent)
 
-1. Admin creates a cluster record with `management_mode = external`, endpoint(s)
-   and CA bundle.
-2. ExponetDB generates the role-creation SQL (verifiers only) for a human to run.
-3. Admin enters credentials into the write-only credential endpoint (they are
-   encrypted immediately; the Web App never displays them again).
-4. ExponetDB connects, pins `system_identifier`, and the target registration
-   proceeds as above, minus node capabilities.
+**[DECIDED]** (Wave 4; onboarding without hand-made SQL since Wave 9 order
+A8). The walkthrough with commands and expected outputs is
+[`onboard-external-cluster.md`](../12-operations/onboard-external-cluster.md).
+
+1. Admin creates a **server** record (optional for an external cluster; the
+   server cannot be added to the cluster record later).
+2. Admin registers the cluster (`cluster register`): endpoint(s), CA bundle
+   and, optionally, the server. **`cluster register` always creates an
+   external cluster** (`management_mode = external`); the record keeps its
+   server, mode and CA bundle for good (Control Store guard `EXG07`).
+3. Admin declares the cluster's **tier** (`cluster declare-tier`, §4.1;
+   production authority whichever value): an undeclared cluster counts as
+   `prod`, so placing even a nonprod target on it needs production
+   authority; declared `nonprod`, the environment decides.
+4. ExponetDB generates the **bootstrap SQL** (`cluster bootstrap-sql`, with
+   `--database` for databases not registered yet, `--project` for the
+   execution roles of a project whose targets will live there, `--ledger`
+   for the legacy ledger read); a person runs it with psql, sets each
+   password with `\password` and runs it again whenever something is added
+   (it is idempotent;
+   [credentials-and-roles.md §8.1](../03-database-model/credentials-and-roles.md#81-bootstrap-sql)).
+   `pg_hba` and the firewall follow
+   [credentials-and-roles.md §8.2](../03-database-model/credentials-and-roles.md#82-pg_hba-and-network-for-an-external-cluster).
+5. Admin enters each password once into the write-only credential endpoint
+   (it is encrypted immediately; the Web App never displays it again); the
+   worker verifies it over TLS.
+6. ExponetDB connects as the observer, the admin **confirms** the cluster,
+   which pins `system_identifier`; then databases and targets are registered
+   as in §2.1, minus node capabilities (every node capability on an
+   external cluster is `CAPABILITY_UNAVAILABLE`).
+
+**[OPEN: OD-54]** How a cluster registered external later gains the node
+agent ([open-decisions.md](../00-product/open-decisions.md#od-54-how-an-external-cluster-gains-the-node-agent)).
+As built, an enrolled node on the same host does not change the record:
+node capabilities stay unavailable for it.
 
 ### 2.3 Implementation (Wave 4)
 

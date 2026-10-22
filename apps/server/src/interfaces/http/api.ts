@@ -39,6 +39,7 @@ import {
   CLIENT_STATES,
   ClientApprovalRequestSchema,
   ClientDecisionReasonSchema,
+  ClusterBootstrapSqlQuerySchema,
   ClusterConfirmRequestSchema,
   ClusterDeclaredTierRequestSchema,
   ClusterIdSchema,
@@ -1069,8 +1070,17 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   listClusters: async (app, call) =>
     value(await app.registry.clusters(caller(call), pageOf(call.query))),
   getCluster: async (app, call) => value(await app.registry.cluster(caller(call), clusterId(call))),
-  getClusterBootstrapSql: async (app, call) =>
-    value(await app.registry.bootstrapSql(caller(call), clusterId(call))),
+  getClusterBootstrapSql: async (app, call) => {
+    const q = ClusterBootstrapSqlQuerySchema.parse(call.query ?? {})
+    return value(
+      await app.registry.bootstrapSql(caller(call), clusterId(call), {
+        ...(q.database === undefined ? {} : { databases: q.database }),
+        ...(q.project === undefined ? {} : { projectId: q.project }),
+        ...(q.environment === undefined ? {} : { environmentId: q.environment }),
+        ...(q.ledgers === undefined ? {} : { ledgers: q.ledgers }),
+      }),
+    )
+  },
   listClusterEndpoints: async (app, call) => {
     const state = field(call.query, 'state')
     return value(

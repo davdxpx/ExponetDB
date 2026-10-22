@@ -7,7 +7,7 @@ export {
   type SystemSuspension,
   suspendForIdentityMismatch,
 } from './apply.ts'
-export { clusterBootstrapSql } from './bootstrap.ts'
+export { type BootstrapRequest, clusterBootstrapSql } from './bootstrap.ts'
 export {
   type BreakGlassGrant,
   type BreakGlassGrantRecord,

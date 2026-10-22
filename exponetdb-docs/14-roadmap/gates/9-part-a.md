@@ -111,7 +111,7 @@ another repository.
 | A5 | Execution roles per environment (one resolver) | `ExecutionRoleBindingsRequest`; actions `registry.execution_role_binding.set(.plan)`; route `planExecutionRoleBindings` (additive) | bundle `01M5G6EQ7MFWM3TVK3YN5WRK8W_execution-role-bindings` (append-only); `executionRolesFor` replaces every direct reader (planner, kind, executor, resume, rollback, reverify, reads, legacy); a source test forbids other readers; CLI `project execution-roles`, `project execution-roles set` | §4.5 | PASS, with OD-53 opened (§5) |
 | A6 | Legacy files with cluster-global effects (replay elision, cluster-global expectations, `CONCURRENTLY`, comment-only files) | none needed (report evidence strings and the replay plan's analysis are additive data) | `postgres/src/parser/cluster-global.ts` (role statement effects, `DO` blocks through the PL/pgSQL parser of 18), `postgres/src/cluster-globals.ts` (the catalog check), `migrations-engine/src/legacy-replay.ts` (segments, chain supersession), `executor.ts` (`runReplayAutocommit`), `legacy.ts` (plan summary, segmented replay, classification, baseline verification); fixture `testkit/src/fixtures/cluster-global-history.ts` | §4.6 | PASS |
 | A7 | Scratch targets: preflight, in-place reset, database retire | `ScratchCheck`, action `migration.import.scratch_check` and route `checkScratchTarget`; actions `registry.database.retire(.plan)`, route `planDatabaseRetirement`, `DatabaseRetireRequest`, conflicts `database_retired`, `database_in_use` (additive) | `migrations-engine/src/scratch-check.ts`, `postgres/src/scratch.ts` (objects outside the scope, presence by catalog lookup); `migrations/src/format/scratch-reset.ts` (the reset script); registry planner and `DatabaseRetireKind`; CLI `migration import scratch-check`, `migration import scratch-reset-sql`, `cluster database retire` | §4.7 | PASS (MCP not offered; see §5) |
-| A8 | External-cluster onboarding without hand-made SQL | open | open | open | open |
+| A8 | External-cluster onboarding without hand-made SQL | `getClusterBootstrapSql` query `database` (repeatable), `project`, `environment`, `ledgers`; `ClusterBootstrapSql.pendingDatabases`, `executionRoles`, `legacyLedgers` (additive) | `postgres/src/bootstrap.ts` (guarded `DO` blocks, the execution-role grant under the planner's checks, the psql `\connect` conninfo), `registry/src/bootstrap.ts` (roles of placed and requested projects, excused `BYPASSRLS`); CLI `cluster bootstrap-sql --database --project --environment --ledger`, `cluster declare-tier`; testkit `runPsql`; docs credentials-and-roles §8, registry §2.2, [`onboard-external-cluster.md`](../../12-operations/onboard-external-cluster.md), threat T36; OD-54 opened | §4.8 | PASS (the installed-CLI run of the new commands lands with A1's end-to-end test) |
 | A9 | Documents brought up to the real state | — | — | open | open |
 | A10 | Part A done: two independent review rounds, the pull request, the owner test package | — | — | open | open |
 
@@ -396,6 +396,67 @@ another repository.
   baseline (`SCHEMA_FINGERPRINT_MISMATCH` at planning, `PLAN_STALE` under the
   lock), `legacy-import.md` §2.5.
 
+### 4.8 A8: external-cluster onboarding without hand-made SQL (2026-10-22)
+
+- Design: [`credentials-and-roles.md` §8](../../03-database-model/credentials-and-roles.md#8-external-clusters-no-node-agent),
+  [`registry.md` §2.2](../../02-control-plane/registry.md#22-external-cluster-no-agent),
+  the walkthrough [`onboard-external-cluster.md`](../../12-operations/onboard-external-cluster.md).
+- **The grant is guarded where it runs.** The script would otherwise be a
+  way to give the migrator `SET ROLE` into any role a project names
+  (`postgres` included). The grant runs only if the role passes the
+  planner's checks in the administrator's session (`LOGIN`, the privileged
+  attributes, `BYPASSRLS` unless a declared exception excuses it in an
+  environment on the cluster, a reach into a privileged, predefined or
+  ExponetDB role); otherwise a `WARNING` names it. The planner checks again
+  at plan and apply (threat T36).
+- **The psql connection to each database is by name only.** A database
+  name with `=` or a URI prefix would make psql's `\connect` read it as a
+  connection string (another host); the script passes a conninfo holding
+  only `dbname`, single-quoted for psql (no variable, no backquote command),
+  with `-reuse-previous=on`. **[OBSERVED]** psql 17 inside the PostgreSQL
+  17 test container connects to a database named `we'ird\db host=evil`
+  from that line; the host's psql 16, connected with `verify-full`, keeps
+  it across `\connect` (`pg_stat_ssl`: TLSv1.3 after the switch, the TLS
+  name kept).
+- **A project named in the request** adds its execution roles only when
+  the caller may also read them (`project.execution_roles.get`), so the
+  cluster's `registry.manage` alone does not reveal another project's
+  role names.
+- `packages/registry/test/bootstrap.int.test.ts` (PostgreSQL 16, 17, 18; 3
+  tests): the script generated from the registry (a placed target's
+  project, a second project named in the request, a registered and an
+  unregistered database, the `supabase` and `drizzle` ledgers) runs with
+  psql without an error; the migrator holds `SET` without `INHERIT` on the
+  fit roles only (the excused `BYPASSRLS` role included); a `LOGIN` role and
+  one reaching `pg_read_all_data` get a `WARNING`, a missing one a `NOTICE`;
+  a second run leaves the roles, memberships, settings and database and
+  ledger privileges identical; a role created afterwards is granted on the
+  next run; the observer reads the declared ledger. Command:
+  `bunx vitest run --config vitest.integration.config.ts test/bootstrap.int.test.ts`
+  in `packages/registry` (3 passed).
+- `packages/postgres/test/adapter.test.ts` (36 tests, 4 new): no bare
+  `CREATE`; six guarded roles; the grant list and its checks (`BYPASSRLS`
+  only where excused); predefined and ExponetDB names refused; the
+  `\connect` line of a hostile name; control characters refused; the
+  largest registry state (1 032 databases, three ledgers, 1 024 roles:
+  3.0 MB) stays under the response's limit.
+- **Found while building:** the server checks every response against its
+  contract, and `ClusterBootstrapSql.script` was capped at 65 536
+  characters; the guarded statements reach that at about 20 databases with
+  three ledgers, which would have answered `INTERNAL`. The cap is 8 MiB
+  now (a widening of an output field).
+- `apps/server/test/http-registry.int.test.ts` (14 tests): the query over
+  REST (repeated `database`, `project`, `ledgers`), and its refusals: an
+  `environment` without its `project` and an unknown ledger kind are
+  `VALIDATION_FAILED` (422), an unknown project `NOT_FOUND`.
+- CLI unit tests (78) pass; `exponetdb-docs/15-cli/reference.md` regenerated
+  (`bun run --cwd apps/cli reference`).
+- **Found while building:** `cluster register` always creates an external
+  cluster and the record never changes its mode or server (guard `EXG07`);
+  no operation makes a cluster agent-managed. Opened as OD-54 (it decides
+  whether Part B's node capabilities can reach REOSA staging if it is
+  registered external first).
+
 ## 5. Limits and residual risks
 
 - **OD-53 (open).** fp1 includes owners, so a non-legacy project whose
@@ -419,6 +480,15 @@ another repository.
   schema.
 - The health finding compares on the 15-second sample; between two samples
   a changed role is caught by the plan and the executor's own checks.
+- A8: the bootstrap SQL does not remove what a person granted by hand
+  beyond it (an extra membership or attribute of an ExponetDB role or of
+  an execution role); the planner refuses an execution role that gained
+  one. The legacy ledger section needs psql (`\connect`). The Web App's
+  cluster page shows the registry's default script (registered databases,
+  placed projects) and does not take the new query parameters yet.
+- **OD-54 (open).** A cluster registered external stays external: node
+  capabilities on it are `CAPABILITY_UNAVAILABLE` until the owner decides
+  how it gains the agent.
 
 ## 6. Reviews
 

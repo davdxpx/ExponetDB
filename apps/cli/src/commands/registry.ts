@@ -1017,7 +1017,7 @@ export const registryCommands: readonly CommandSpec[] = [
     summary:
       'Write the cluster’s bootstrap SQL (roles, grants) to stdout or a new file, for a DBA to review and run.',
     description:
-      'The SQL is the server’s, generated for this cluster; the CLI never runs it. Review it before a database administrator runs it by hand.',
+      'The SQL is the server’s, generated for this cluster; the CLI never runs it. Review it before a database administrator runs it with psql. It is idempotent: run it again after a database is added or an execution role is created. It covers the registered databases and those named with --database (before registration), grants the migrator SET ROLE into the execution roles of the projects placed on the cluster or named with --project, where they exist and are fit, and lets the observer read the legacy ledgers named with --ledger.',
     group: 'registry',
     args: [{ name: 'cluster', description: 'A cluster id.', required: true }],
     flags: [
@@ -1026,6 +1026,31 @@ export const registryCommands: readonly CommandSpec[] = [
         type: 'string',
         placeholder: 'path',
         description: 'A new file to write (0600).',
+      },
+      {
+        name: 'database',
+        type: 'list',
+        placeholder: 'names',
+        description: 'Databases of the cluster not registered yet.',
+      },
+      {
+        name: 'project',
+        type: 'string',
+        placeholder: 'prj_…',
+        description:
+          'A project whose targets will be placed here: its execution roles too (needs migrations.read on it).',
+      },
+      {
+        name: 'environment',
+        type: 'string',
+        placeholder: 'env_…',
+        description: 'Only this environment of --project.',
+      },
+      {
+        name: 'ledger',
+        type: 'list',
+        placeholder: 'supabase,drizzle,applied_migrations',
+        description: 'Legacy ledgers the observer may read during an import.',
       },
     ],
     locality: 'remote',
@@ -1038,6 +1063,22 @@ export const registryCommands: readonly CommandSpec[] = [
       const v = must(
         await remote.sdk.call('getClusterBootstrapSql', {
           params: { clusterId: arg(input, 'cluster') },
+          query: {
+            ...(input.flags['database'] === undefined
+              ? {}
+              : { database: input.flags['database'] as string[] }),
+            ...optional(input, 'project', (v) => v),
+            ...optional(input, 'environment', (v) => v),
+            ...(input.flags['ledger'] === undefined
+              ? {}
+              : {
+                  ledgers: input.flags['ledger'] as (
+                    | 'supabase'
+                    | 'drizzle'
+                    | 'applied_migrations'
+                  )[],
+                }),
+          },
         }),
       )
       const file = flag(input, 'file')
@@ -1048,7 +1089,15 @@ export const registryCommands: readonly CommandSpec[] = [
         await createNewPrivateFile(path, v.script.endsWith('\n') ? v.script : `${v.script}\n`)
         return result({
           command: 'cluster bootstrap-sql',
-          data: { clusterId: v.clusterId, roles: v.roles, databases: v.databases, file: path },
+          data: {
+            clusterId: v.clusterId,
+            roles: v.roles,
+            databases: v.databases,
+            pendingDatabases: v.pendingDatabases,
+            executionRoles: v.executionRoles,
+            legacyLedgers: v.legacyLedgers,
+            file: path,
+          },
           blocks: [
             {
               kind: 'text',
@@ -1177,6 +1226,30 @@ export const registryCommands: readonly CommandSpec[] = [
     operation: 'planDatabaseRetirement',
     params: (i) => ({ clusterId: arg(i, 'cluster'), databaseId: arg(i, 'database') }),
     body: (i) => optional(i, 'reason', (v) => v),
+    file: false,
+  }),
+  planCommand({
+    path: ['cluster', 'declare-tier'],
+    summary:
+      'Plan declaring the tier a cluster is meant for (OD-22): prod makes every database registered on it need production authority; nonprod leaves it to the environment.',
+    description:
+      'The same rules as the Web App: a person with registry.manage:prod plans it, whichever value; applying it (--apply or plan apply) needs a fresh re-authentication (exponetdb auth reauth --plan).',
+    group: 'registry',
+    args: [{ name: 'cluster', description: 'A cluster id.', required: true }],
+    flags: [
+      {
+        name: 'tier',
+        type: 'enum',
+        values: ['prod', 'nonprod'],
+        description: 'The declared tier.',
+        required: true,
+      },
+    ],
+    action: 'registry.cluster.declare_tier.plan',
+    scopes: MANAGE,
+    operation: 'planClusterDeclaredTier',
+    params: (i) => ({ clusterId: arg(i, 'cluster') }),
+    body: (i) => ({ declaredTier: tierOf(flag(i, 'tier') ?? '') }),
     file: false,
   }),
   planCommand({

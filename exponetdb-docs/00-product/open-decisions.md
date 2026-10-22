@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); OD-50 added on 2026-10-21 with the CLI's scope presets; on 2026-10-21 the owner's Wave 9 order ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)) split OD-7 into OD-7a (staging: yes) and OD-7b (production: no applies before Wave 11), decided the engine part of OD-4 (pgBackRest; the storage stays open until the measured spike B0), and added OD-51 (a declared `BYPASSRLS` execution-role exception) and OD-52 (adopting a running pgBackRest setup), both decided by the order's defaults; OD-53 (fingerprint lineage across per-environment owner roles) added on 2026-10-21 by Part A (A5); OD-8 stays open and blocks Part B of Wave 9 (see ["Decisions of the Wave 9 order"](#decisions-of-the-wave-9-order-2026-10-21)); all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); OD-50 added on 2026-10-21 with the CLI's scope presets; on 2026-10-21 the owner's Wave 9 order ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)) split OD-7 into OD-7a (staging: yes) and OD-7b (production: no applies before Wave 11), decided the engine part of OD-4 (pgBackRest; the storage stays open until the measured spike B0), and added OD-51 (a declared `BYPASSRLS` execution-role exception) and OD-52 (adopting a running pgBackRest setup), both decided by the order's defaults; OD-53 (fingerprint lineage across per-environment owner roles) added on 2026-10-21 by Part A (A5); OD-54 (how an external cluster gains the node agent) added on 2026-10-22 by Part A (A8); OD-8 stays open and blocks Part B of Wave 9 (see ["Decisions of the Wave 9 order"](#decisions-of-the-wave-9-order-2026-10-21)); all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -73,6 +73,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-51 | An execution role with `BYPASSRLS` for adopted schemas | **resolved 2026-10-21** (Wave 9 order default D-A1; stands unless the owner overrules it) | a declared, audited, revocable exception per (project, environment, PostgreSQL role) that excuses exactly `BYPASSRLS` and nothing else; declared and revoked by people only (never MCP), production with an approval and a re-authentication; a warn rule in every plan that uses it; on production at least `high` and agent applies still need a human approval ([ADR-0034](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md)) | Wave 9 Part A (A4) | decided |
 | OD-52 | Adopting a running, hand-made pgBackRest setup | **resolved 2026-10-21** (Wave 9 order default D-B2; stands unless the owner overruled it) | adopt, then own: first observe the existing stanza, repositories and schedules without changing them, then take ownership of configuration and scheduling through a planned, verified hand-over that stays reversible until confirmed; an ADR in Wave 9 B0 | Wave 9 Part B (B0, B2) | decided |
 | OD-53 | Fingerprint lineage when environments use different owner roles | open | (a) keep it fail closed: a lineage mismatch caused by owner names needs an approval, as today; (b) compare the two stored documents with the execution roles mapped by alias (fp1 unchanged, a new lineage comparison); (c) treat a mismatch only in owners and grantees of execution roles as a warning | production plans of a non-legacy project whose environments are bound to different owner roles (ADR-0034 §5) | yes |
+| OD-54 | How an external cluster gains the node agent | open | (a) an additive, one-way operation `registry.cluster.adopt_agent` (human, production authority, re-authentication): an enrolled node on a server whose report carries the cluster's pinned `system_identifier`; the record gains the server and `management_mode = agent`, targets keep placement and generation; an additive bundle relaxes `EXG07` for exactly this transition; (b) register a second cluster record in agent mode and move each target (§3 of registry.md: new generation, marker re-stamped), then retire the external record; (c) external stays external in V1 | node capabilities (backups, roles, `pg_hba`, TLS) on a cluster first registered external, such as REOSA staging on `reos-db-01` (OD-7a) in Wave 9 Part B | yes |
 
 ---
 
@@ -1540,6 +1541,44 @@ History:
   real difference behind a role name.
 - **Blocks.** Nothing in Part A; production plans of a non-legacy project
   with per-environment owner roles need an approval until it is decided.
+
+## OD-54. How an external cluster gains the node agent
+
+- **Status.** OPEN (found in Wave 9 Part A, A8, 2026-10-22)
+- **Question.** When a cluster that was registered as external (no agent)
+  later runs on a host with an enrolled node agent, how does its registry
+  record become agent-managed?
+- **Why it matters.** **[OBSERVED]** `cluster register` always creates an
+  external cluster (`packages/registry/src/kinds.ts`), and a cluster
+  record keeps its id, server, management mode and CA bundle for good
+  (Control Store guard `EXG07`, Wave 4 registry bundle, frozen). Every node
+  capability on an external cluster is `CAPABILITY_UNAVAILABLE`
+  (`packages/nodes/src/mapping.ts`), and no operation creates an
+  agent-managed cluster record (the agent-managed flow of registry.md §2.1
+  ends at the node's cluster report). REOSA staging on `reos-db-01` is to
+  be registered as an external cluster after Part A (OD-7a); Part B's node
+  capabilities (backups through pgBackRest, role and `pg_hba` desired
+  state) need that cluster to be agent-managed.
+- **Options.** (a) an additive, one-way operation
+  `registry.cluster.adopt_agent` (human only, production authority,
+  re-authentication, audited): the cluster's server record has an
+  enrolled, served node whose last report carries the cluster's pinned
+  `system_identifier` exactly once; the record gains that server and
+  `management_mode = agent`; targets keep their placement, generation and
+  marker; a new, additive Control Store bundle allows exactly this
+  transition (external with no server or the same server → agent) and
+  nothing else; (b) register a second cluster record in agent mode and
+  move every target to it (registry.md §3: a new generation, the marker
+  re-stamped, active plans stale), then retire the external record; (c)
+  external stays external in V1: an agent-managed cluster is only one
+  registered through the agent flow (which then has to be built).
+- **Recommendation.** (a): the cluster is the same physical cluster
+  (`system_identifier` pinned), so its identity, targets and history stay;
+  (b) costs a generation change and a marker re-stamp of every target for
+  no change in what is managed.
+- **Blocks.** Node capabilities on a cluster first registered external
+  (Part B's B2 on `reos-db-01` if staging is registered external first).
+  Nothing in Part A.
 
 ## Decisions of the Wave 9 order (2026-10-21)
 

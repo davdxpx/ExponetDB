@@ -471,6 +471,12 @@ export type Cluster = {
 export type ClusterBootstrapSql = {
   readonly clusterId: string
   readonly databases: readonly string[]
+  readonly executionRoles: ReadonlyArray<{
+    readonly bypassRlsExcused: boolean
+    readonly name: string
+  }>
+  readonly legacyLedgers: ReadonlyArray<"supabase" | "drizzle" | "applied_migrations">
+  readonly pendingDatabases: readonly string[]
   readonly roles: readonly string[]
   readonly script: string
 }
@@ -2826,7 +2832,7 @@ export interface Operations {
   }
   getClusterBootstrapSql: {
     readonly params: { readonly clusterId: string }
-    readonly query: Record<string, never>
+    readonly query: { readonly database?: readonly string[]; readonly environment?: string; readonly ledgers?: ReadonlyArray<"supabase" | "drizzle" | "applied_migrations">; readonly project?: string }
     readonly body: never
     readonly response: ClusterBootstrapSql
   }

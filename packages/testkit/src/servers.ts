@@ -297,3 +297,69 @@ export async function catalogChecksum(s: TestServer, database: string): Promise<
     return String(rows[0]?.checksum)
   })
 }
+
+export interface PsqlRun {
+  readonly status: number
+  readonly stdout: string
+  readonly stderr: string
+}
+
+/**
+ * Runs a script with psql as the superuser, the way a person runs the
+ * product's bootstrap SQL: inside the server's container when it has one
+ * (as `tooling/dev/targets.sh` and CI start them), else the host's psql
+ * over verified TLS. `ON_ERROR_STOP` is on; the result carries the exit
+ * status and both streams (psql writes notices and warnings to stderr).
+ */
+export async function runPsql(
+  s: TestServer,
+  script: string,
+  database = 'postgres',
+): Promise<PsqlRun> {
+  const { spawn } = await import('node:child_process')
+  const t = testTargets()
+  const psqlArgs = ['-X', '-v', 'ON_ERROR_STOP=1']
+  let command: string
+  let args: string[]
+  let env: NodeJS.ProcessEnv = process.env
+  let cleanup = async () => {}
+  if (s.container !== undefined) {
+    command = 'docker'
+    args = ['exec', '-i', s.container, 'psql', ...psqlArgs, '-U', t.superuser, '-d', database]
+  } else {
+    const { mkdtemp, rm, writeFile } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { isIP } = await import('node:net')
+    const dir = await mkdtemp(join(tmpdir(), 'exdb-psql-'))
+    const ca = join(dir, 'ca.crt')
+    await writeFile(ca, t.caPem, { mode: 0o600 })
+    cleanup = () => rm(dir, { recursive: true, force: true })
+    const address =
+      isIP(s.host) === 0 ? `host=${s.host}` : `host=${t.serverName} hostaddr=${s.host}`
+    command = 'psql'
+    args = [
+      ...psqlArgs,
+      `${address} port=${s.port} user=${t.superuser} dbname=${database} sslmode=verify-full sslrootcert=${ca}`,
+    ]
+    env = { ...process.env, PGPASSWORD: t.superuserPassword }
+  }
+  try {
+    return await new Promise<PsqlRun>((resolve, reject) => {
+      const child = spawn(command, args, { env, stdio: ['pipe', 'pipe', 'pipe'] })
+      let stdout = ''
+      let stderr = ''
+      child.stdout.on('data', (d: Buffer) => {
+        stdout += d.toString('utf8')
+      })
+      child.stderr.on('data', (d: Buffer) => {
+        stderr += d.toString('utf8')
+      })
+      child.on('error', reject)
+      child.on('close', (code) => resolve({ status: code ?? -1, stdout, stderr }))
+      child.stdin.end(script)
+    })
+  } finally {
+    await cleanup()
+  }
+}

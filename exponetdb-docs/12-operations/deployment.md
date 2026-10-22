@@ -176,10 +176,12 @@ to a deployment:
   test (`bun run smoke:image`) checks that serve answers Wave 4 routes with
   401 and a later wave's with 404.
 - **Role bootstrap on a managed cluster** is a person's step: `GET
-  /api/v1/clusters/{id}/bootstrap-sql` gives the script (roles with
-  verifiers, never a password), run once by an administrator of that
-  cluster; then each password is submitted once through the write-only
-  endpoint and verified by the worker.
+  /api/v1/clusters/{id}/bootstrap-sql` (`exponetdb cluster bootstrap-sql`)
+  gives the script (never a password), run with psql by an administrator
+  of that cluster, and again whenever a database or an execution role is
+  added (it is idempotent, Wave 9); then each password is submitted once
+  through the write-only endpoint and verified by the worker
+  ([`onboard-external-cluster.md`](./onboard-external-cluster.md)).
 
 ## 5. Data plane host baseline (`reos-db-01`)
 

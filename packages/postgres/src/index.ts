@@ -5,9 +5,13 @@ export {
   type ReadField,
 } from './admitted-read.ts'
 export {
+  type BootstrapExecutionRole,
+  type BootstrapScriptOptions,
   bootstrapScript,
   clusterBootstrapStatements,
   databaseBootstrapStatements,
+  LEGACY_LEDGER_TABLES,
+  type LegacyLedgerKind,
   LOGIN_ROLES,
   passwordStatements,
   type RoleVerifiers,

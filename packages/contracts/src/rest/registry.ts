@@ -295,17 +295,20 @@ export const DatabaseRetireRequestSchema = z
   .strictObject({ reason: ReasonSchema.optional() })
   .meta({ id: 'DatabaseRetireRequest' })
 
+const DatabaseNameSchema = z
+  .string()
+  .min(1)
+  .max(63)
+  .regex(/^[^\p{Cc}]+$/u)
+  .refine((v) => utf8Length(v) <= 63, 'at most 63 bytes')
+  .meta({ untrusted: true, description: 'Name of an existing database on the cluster.' })
+
 export const DatabaseRegisterRequestSchema = z
-  .strictObject({
-    name: z
-      .string()
-      .min(1)
-      .max(63)
-      .regex(/^[^\p{Cc}]+$/u)
-      .refine((v) => utf8Length(v) <= 63, 'at most 63 bytes')
-      .meta({ untrusted: true, description: 'Name of an existing database on the cluster.' }),
-  })
+  .strictObject({ name: DatabaseNameSchema })
   .meta({ id: 'DatabaseRegisterRequest' })
+
+/** A legacy ledger kind (legacy-import.md §2), as the import request names it. */
+const LegacyLedgerKindSchema = z.enum(['supabase', 'drizzle', 'applied_migrations'])
 
 export const TargetRegisterRequestSchema = z
   .strictObject({
@@ -445,14 +448,58 @@ export const CredentialViewSchema = z
 export const ClusterBootstrapSqlSchema = z
   .object({
     clusterId: ClusterIdSchema,
+    // At most 1 032 databases (registered and requested) with three ledgers and 1 024
+    // execution roles fit (Wave 9 A8: guarded statements are longer).
     script: untrustedText(
-      65_536,
-      'SQL for a person to run with administrative tools; contains no password (set each one with psql \\password).',
+      8_388_608,
+      'SQL for a person to run with psql; contains no password (set each one with psql \\password).',
     ),
     roles: z.array(z.string().regex(/^exponetdb_[a-z_]+$/)),
     databases: z.array(untrustedText(63, 'Database name.')),
+    // Wave 9 order A8 (additive).
+    pendingDatabases: z
+      .array(untrustedText(63, 'Database name.'))
+      .meta({ description: 'Requested databases not registered yet (covered by the script).' }),
+    executionRoles: z
+      .array(
+        z.object({
+          name: untrustedText(63, 'PostgreSQL role name.'),
+          bypassRlsExcused: z.boolean().meta({
+            description:
+              'A declared exception (ADR-0034) excuses its BYPASSRLS in an environment on this cluster.',
+          }),
+        }),
+      )
+      .meta({
+        description:
+          'Execution roles granted to the migrator WITH INHERIT FALSE, SET TRUE where they exist and are fit.',
+      }),
+    legacyLedgers: z
+      .array(LegacyLedgerKindSchema)
+      .meta({ description: 'Legacy ledgers the observer is granted to read, where they exist.' }),
   })
   .meta({ id: 'ClusterBootstrapSql' })
+
+/** The query of the bootstrap SQL (Wave 9 order A8). */
+export const ClusterBootstrapSqlQuerySchema = z.strictObject({
+  database: z.array(DatabaseNameSchema).max(32).optional().meta({
+    description:
+      'Databases of the cluster to cover before they are registered (repeatable); registered ones are always covered.',
+  }),
+  project: ProjectIdSchema.optional().meta({
+    description:
+      'A project whose targets will be placed on this cluster: its execution roles are granted too.',
+  }),
+  environment: EnvironmentIdSchema.optional().meta({
+    description:
+      "Only this environment of the project (else every environment of the project's product).",
+  }),
+  ledgers: z
+    .array(LegacyLedgerKindSchema)
+    .max(3)
+    .optional()
+    .meta({ description: 'Legacy ledgers the observer may read during an import.' }),
+})
 
 // ----- execution roles for adopted schemas (ADR-0034, Wave 9 Part A) -----
 
