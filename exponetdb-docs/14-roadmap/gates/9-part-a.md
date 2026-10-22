@@ -786,3 +786,15 @@ was refused the same way.
 - **On `reos-db-01`** nothing changes. After this is deployed, the owner
   runs `scratch-check` again.
 
+**Independent security review of this follow-up** (2026-10-22). It found
+the core change sound: `pg_database_owner` is a leaf of the membership
+graph, and the predicate is the same in every database. It also found
+three P2 defects, merged with `davdxpx/ExponetDB#35` and fixed in the next
+pull request. Each has a test that fails on the merged code.
+
+| # | Finding | Fix | Test |
+|---|---|---|---|
+| F-A | The credential verifier's own reach query kept `pg_database_owner`, so the migrator credential failed (`role_attributes`) on a database its execution role owns. On `reos-db-01` that would happen at the next verification once such a database is registered | the same oid exclusion in `credentials.ts`; ADR-0034 §3.1 | `packages/registry/test/credential-db-owner.int.test.ts` on 16, 17 and 18 |
+| F-B | Admission admitted `GRANT`/`REVOKE … ON DATABASE`, `COMMENT` and `SECURITY LABEL ON DATABASE`, which an owning execution role can now run (a `REVOKE CONNECT` from ExponetDB) | every statement on the database object is refused (`database`), including `ALTER DATABASE … OWNER TO` and `RENAME TO` | `migration-analysis.test.ts` |
+| F-C | The scratch reset script quoted values as plain literals, so a database owner who turned `standard_conforming_strings` off let a schema name holding a backslash end its literal and run code as the superuser (the reviewer proved it on 16, 17 and 18) | `E''` literals and `SET LOCAL standard_conforming_strings = on` | `scratch-check.int.test.ts` (the payload never runs); `scratch-reset.test.ts` |
+

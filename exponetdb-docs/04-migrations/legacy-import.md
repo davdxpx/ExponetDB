@@ -541,7 +541,10 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   **[DECIDED]** (review round 2) it first sets `search_path = pg_catalog,
   pg_temp` for its transaction: an operator or function a replay left in a
   managed schema (an exact-type `public.=(oid, regclass)`, say) would
-  otherwise win over the built-in one and run as the superuser. The
+  otherwise win over the built-in one and run as the superuser. It also
+  writes every value as an `E''` string and pins `standard_conforming_strings
+  = on`: a database's owner may turn that setting off for the database, and
+  a backslash in a schema name would then end a plain literal. The
   database, its oid, the `exponetdb` schema with the marker and every
   schema outside the scope stay; default privileges set inside a dropped
   schema go with it. Run the preflight afterwards.

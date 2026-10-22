@@ -28,7 +28,9 @@ export interface ScratchResetInput {
   readonly excludeSchemas?: readonly string[] | null
 }
 
-const literal = (value: string) => `'${value.replaceAll("'", "''")}'`
+// E-strings: their quoting does not depend on standard_conforming_strings, which a database's
+// owner may set for the database (the script also pins it, below).
+const literal = (value: string) => `E'${value.replaceAll('\\', '\\\\').replaceAll("'", "''")}'`
 const array = (values: readonly string[]) =>
   values.length === 0 ? 'ARRAY[]::text[]' : `ARRAY[${values.map(literal).join(', ')}]::text[]`
 const ID = /^[a-z]{3}_[0-7][0-9A-HJKMNP-TV-Z]{25}$/
@@ -153,6 +155,7 @@ BEGIN;
 -- Only the system catalog resolves names: an operator a replay left in a managed schema
 -- (public.=(oid, regclass), say) never runs as the superuser running this script.
 SET LOCAL search_path = pg_catalog, pg_temp;
+SET LOCAL standard_conforming_strings = on;
 DO $${tag}$
 ${body}
 $${tag}$;

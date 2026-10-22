@@ -345,6 +345,36 @@ describe('the scratch preflight', () => {
       c.query('SELECT count(*)::int AS calls FROM acme_identity.exdb_hijacked'),
     )
     expect(hijacked.rows[0]).toEqual({ calls: 0 })
+    // The database's owner may set standard_conforming_strings off for its database: a
+    // backslash in a schema name then still never ends its literal (review of ADR-0034 §3.1).
+    await runAsSuperuser(pg17, scratchDb, [
+      `ALTER DATABASE "${scratchDb}" SET standard_conforming_strings = off`,
+      `CREATE FUNCTION public.exdb_scs_hijack() RETURNS int LANGUAGE plpgsql AS $f$
+         BEGIN INSERT INTO acme_identity.exdb_hijacked VALUES (3); RETURN 1; END $f$`,
+    ])
+    try {
+      await runAsSuperuser(pg17, scratchDb, [
+        scratchResetSql({
+          installationId: h.db.installationId,
+          targetId: scratch.targetId,
+          targetPath: scratch.path,
+          generation: scratch.generation,
+          includeSchemas: [
+            'public',
+            'a\\',
+            ']::text[];p int:=(SELECT public.exdb_scs_hijack());--',
+          ],
+        }),
+      ])
+    } finally {
+      await runAsSuperuser(pg17, scratchDb, [
+        `ALTER DATABASE "${scratchDb}" RESET standard_conforming_strings`,
+      ])
+    }
+    const viaStrings = await withSuperuser(pg17, scratchDb, (c) =>
+      c.query('SELECT count(*)::int AS calls FROM acme_identity.exdb_hijacked'),
+    )
+    expect(viaStrings.rows[0]).toEqual({ calls: 0 })
     // A replay that reached the ledger owner (a DO block's dynamic SET ROLE, OD-55) could put
     // a view in the marker's place whose condition runs a planted function as the superuser
     // (review round 3): the reset refuses before it reads the marker, and nothing runs.

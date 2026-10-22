@@ -96,7 +96,10 @@ neither predefined (`pg_…`) nor ExponetDB's (`exponetdb_…`), and the roles
 reached through it, and nothing else; an inheriting or a non-`SET`
 membership, or one in a predefined or ExponetDB role, still fails it
 (`packages/registry/src/credentials.ts`). Whether such a role may serve as
-an execution role is decided when a plan names it (§3).
+an execution role is decided when a plan names it (§3). `pg_database_owner`
+is left out of the reach, by oid. The migrator reaches it through an
+execution role that owns the verified database, and it is that role's
+identity, not a privilege (§3, ADR-0034 §3.1).
 
 ## 3. Execution roles (who owns application objects)
 
