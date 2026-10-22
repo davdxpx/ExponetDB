@@ -33,6 +33,7 @@ import {
   planMigrationRollback,
   planMigrationVerify,
   projectStream,
+  refuseOversizedLegacyFiles,
   scratchCheck,
 } from '@exponetdb/migrations-engine'
 import {
@@ -277,6 +278,7 @@ export class MigrationUseCases {
   ): Promise<ScratchCheck> {
     const { observation } = this.#services()
     const target = await this.#target('migration.import.scratch_check', caller, ref)
+    if (files !== undefined) refuseOversizedLegacyFiles(files)
     const scratch = await findTarget(this.#h.store, scratchRef)
     if (scratch !== undefined) {
       await this.#h.authorize(this.#h.store, 'migration.import.scratch_check', caller, {

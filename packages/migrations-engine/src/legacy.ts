@@ -71,6 +71,7 @@ import {
   STRENGTH_RANK,
   supabaseVersionTime,
 } from './legacy-evidence.ts'
+import { refuseOversizedLegacyFiles } from './legacy-files.ts'
 import { type FileReplay, fileReplay, survivingGlobals } from './legacy-replay.ts'
 import type { MigrationPlanContext } from './planner.ts'
 import { type Fence, fenced, LeaseLost, writeMirror } from './records.ts'
@@ -430,6 +431,7 @@ export async function planImportAnalysis(
   if (executionRole === undefined) {
     throw invalid('/role', 'execution_role_unmapped', 'The execution role alias is not mapped.')
   }
+  refuseOversizedLegacyFiles(request.files)
   const files: Omit<ImportFile, 'position'>[] = []
   const stems = new Set<string>()
   for (const [i, f] of request.files.entries()) {

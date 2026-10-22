@@ -140,6 +140,20 @@ to 512 MiB with swap equal, against PostgreSQL 17:
 | replayed and classified as the worker runs it | peak 250 MiB | (not reached) |
 | one legacy file of 3.6 MiB parsed (the per-file bound is 4 MiB) | peak 156 MiB | **killed** at 518 MiB |
 
+**[OBSERVED]** (the verification review of follow-up 2, P1-1, 2026-10-22)
+The 3.6 MiB file above is body-heavy: its bulk is function bodies, one
+token each to the SQL parser. The parser's memory grows with the tokens it
+is given, not with the bytes, and it is WebAssembly memory, which never
+shrinks. With `--liftoff-only`, on Node 24, one process with the parsers
+loaded (75 MiB):
+
+| One parse of | Before the token bound | With it |
+|---|---|---|
+| 4 MiB of `SELECT 1;` (1.4 million tokens) | 930 MiB | refused before parsing, 99 MiB |
+| a 4 MiB `DO` block of `PERFORM 1;` | 1 144 MiB | refused before parsing, 134 MiB |
+| 4 MiB of dump-like DDL (900 000 tokens) | 392 to 486 MiB | refused before parsing |
+| the worst shapes just below the bound (199 000 tokens) | | 165 to 233 MiB |
+
 The numbers are of the measuring process, which holds both roles' pools;
 each role adds its own baseline. **Cause:** V8 tiers up hot WebAssembly
 functions with its optimizing compiler, and the PostgreSQL parser's grammar
@@ -164,13 +178,28 @@ only) memory stays flat and parsing is as fast (1 200 parses of a 2 KiB file:
   all and 4 MiB per file, in a JSON body of at most 16 MiB; above that the
   request is `422 VALIDATION_FAILED` (`/files`, `too_large`) before anything
   is parsed. The first real history used a third of it.
-- No gate around the parse **[DECIDED]** (security review of follow-up 2):
-  the parse of a history is synchronous, so two requests never parse at
-  the same time, and one parse is bounded by the flag and the limits
-  above. A process-wide slot (`429 RATE_LIMITED`), as first built, bounded
-  nothing more and let a caller with a slow target hold it across its
-  connections; it was removed. The reference scan of the scratch preflight
-  follows bodies two levels deep and stops there (`too_complex`).
+- One parse is given at most **200 000 tokens** (`MAX_PARSE_TOKENS`, other
+  than space and comments) on every path: migration files, legacy files,
+  `DO` and function bodies, data reads, verify checks, statement
+  redaction. That keeps one parse below about 160 MiB above the parsers,
+  whatever the text (about 900 KB of dump-like DDL; the 600-file history's
+  largest file has 2 000). **[DECIDED]** (the verification review of
+  follow-up 2, P1-1) A legacy file, or a body in it, above the bound is
+  refused before any work, `422 VALIDATION_FAILED` (`/files/<i>/text`,
+  `too_large`, "split it into several files"); a migration file above it
+  does not parse (`parse_error`, `too_large`); a statement above it is
+  redacted by the lexer (statement-redaction.md §2). The 4 MiB file bound
+  of a bundle stays; above about 900 KB of dense SQL the tokens decide.
+- At most **two** requests that carry a legacy history at once
+  (`LEGACY_REQUESTS_IN_FLIGHT`); a third is `429 RATE_LIMITED` with
+  `Retry-After: 5`. **[DECIDED]** (the verification review of follow-up 2,
+  P3-7) The parse is synchronous and never runs twice at once, so this
+  does not bound the parse: it bounds the histories held across their
+  target connections (a body of up to 16 MiB and its files, each), which a
+  slow target would otherwise let add up. (A first slot of one, around the
+  parse only, was removed after the security review; this one replaces it.)
+  The reference scan of the scratch preflight follows bodies two levels
+  deep, and trees 1 000 levels deep, and stops there (`too_complex`).
 - Memory limits: `serve` and `worker` **512 MiB** each with the flag (the
   measured peaks leave about half of it free); the limit of 1 536 MiB set
   after the restart can stay until the flag is deployed. `gateway` parses

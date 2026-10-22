@@ -46,7 +46,7 @@ export {
   outsideScope,
   type ScopeTest,
 } from './legacy-references.ts'
-export { isLiteral, type LexMode, lex, type Token, type TokenKind } from './lexer.ts'
+export { countTokens, isLiteral, type LexMode, lex, type Token, type TokenKind } from './lexer.ts'
 export { isSupportedMajor, SUPPORTED_MAJORS, type SupportedMajor } from './majors.ts'
 export {
   type AnalyzeOptions,
@@ -72,11 +72,14 @@ export {
 } from './migration.ts'
 export {
   byteIndex,
+  dollarBody,
+  exceedsParseWork,
   GRAMMARS,
   type JsonNode,
   loadParser,
   MAX_MIGRATION_PARSE_BYTES,
   MAX_PARSE_BYTES,
+  MAX_PARSE_TOKENS,
   names,
   nodeType,
   type ParsedStatement,

@@ -1,4 +1,5 @@
 import { encodeUtf8 } from '@exponetdb/kernel'
+import { countTokens, lex } from './lexer.ts'
 import type { SupportedMajor } from './majors.ts'
 
 /**
@@ -65,6 +66,8 @@ export function parsePlpgsql(text: string): unknown {
   }
   if (text.includes('\u0000') || encodeUtf8(text).length > MAX_MIGRATION_PARSE_BYTES)
     return undefined
+  // The PL/pgSQL parser reads the body: its tokens, not the one literal they are outside.
+  if (countTokens(text, MAX_PARSE_TOKENS, 'standard', true) > MAX_PARSE_TOKENS) return undefined
   try {
     return binding.parsePlPgSQLSync(text)
   } catch {
@@ -89,6 +92,45 @@ export const MAX_PARSE_BYTES = 1024 * 1024
  * (G6, order §11).
  */
 export const MAX_MIGRATION_PARSE_BYTES = 4 * 1024 * 1024
+
+/**
+ * The most tokens (other than space and comments) one parse is given, on
+ * every path. The parser's memory is WebAssembly memory, which never
+ * shrinks, and it grows with the nodes of the tree, which grow with the
+ * tokens: about 650 bytes per token for `SELECT 1;` repeated, 350 for
+ * dump-like DDL, 800 for a PL/pgSQL body of `PERFORM 1;` (measured on Node
+ * 24 with `--liftoff-only`; deployment.md §2a). 200 000 tokens keep one
+ * parse below about 160 MiB, whatever the text; that is about 900 KB of
+ * dump-like DDL. A larger file is split into several (follow-up 2, the
+ * verification review P1-1).
+ */
+export const MAX_PARSE_TOKENS = 200_000
+
+/**
+ * Whether a parse of the text, or of a body in it (a dollar-quoted body is
+ * parsed on its own: a `DO` block's PL/pgSQL, a function's SQL), up to two
+ * levels down, would be given more than {@link MAX_PARSE_TOKENS} tokens: the
+ * early refusal of a legacy history's file before any work on it.
+ */
+export function exceedsParseWork(text: string, depth = 0): boolean {
+  if (countTokens(text, MAX_PARSE_TOKENS) > MAX_PARSE_TOKENS) return true
+  if (depth >= 2 || !text.includes('$')) return false
+  for (const token of lex(text)) {
+    if (token.kind !== 'dollar') continue
+    const body = dollarBody(text.slice(token.start, token.end))
+    if (body !== undefined && exceedsParseWork(body, depth + 1)) return true
+  }
+  return false
+}
+
+/** The text between the tags of a dollar-quoted literal (`undefined` when unterminated). */
+export function dollarBody(literal: string): string | undefined {
+  const tag = /^\$[^$]*\$/.exec(literal)?.[0]
+  if (tag === undefined || literal.length < tag.length * 2 || !literal.endsWith(tag)) {
+    return undefined
+  }
+  return literal.slice(tag.length, literal.length - tag.length)
+}
 
 export type ParseFailure =
   | { readonly kind: 'nul' }
@@ -187,7 +229,10 @@ export function parseWith(
   if (text.includes('\u0000')) {
     return { ok: false, failure: { kind: 'nul' } }
   }
-  if (encodeUtf8(text).length > maxBytes) {
+  if (
+    encodeUtf8(text).length > maxBytes ||
+    countTokens(text, MAX_PARSE_TOKENS) > MAX_PARSE_TOKENS
+  ) {
     return { ok: false, failure: { kind: 'too_large' } }
   }
   const binding = loaded.get(major)

@@ -589,7 +589,12 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   it is `unknown` with `unparsed:<n>` when a file cannot be parsed, and with
   `too_complex` when bodies nest more than two levels deep (**[DECIDED]**,
   security review of follow-up 2: deeper nesting exhausted the process; the
-  scan stops there). The files the hints call not applicable are left out,
+  scan stops there), and when a tree is more than 1 000 levels deep or a
+  body cannot be given to its parser (**[DECIDED]**, the verification
+  review of follow-up 2, P2-4: such a reference was dropped and the check
+  passed). A file, or a body in it, of more than 200 000 tokens is refused
+  before the check runs, as by the analysis (`422`, `/files/<i>/text`,
+  `too_large`: split it; [deployment.md §2a](../12-operations/deployment.md#2a-memory)). The files the hints call not applicable are left out,
   as the replay skips them (`notApplicable`; CLI `--hints` or
   `--not-applicable`). Both checks give `copySchemas`, the schemas outside
   the scope the scratch target lacks objects of; never the schema of an

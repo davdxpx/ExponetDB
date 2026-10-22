@@ -44,6 +44,12 @@ export interface LegacyReferences {
 /** How deep bodies inside bodies are followed (a file's statements are level 0). */
 export const MAX_BODY_NESTING = 2
 
+/**
+ * How deep a parse tree is followed (JSON levels). Ordinary statements stay
+ * far below; deeper is not read, and is said so, before the stack ends.
+ */
+const MAX_TREE_DEPTH = 1000
+
 export interface ScopeTest {
   readonly includeSchemas?: readonly string[] | null
   readonly excludeSchemas?: readonly string[] | null
@@ -118,7 +124,11 @@ function visit(
   level: number,
   depth = 0,
 ): void {
-  if (depth > 2000) return
+  // Deeper than the scan follows: what is below is not read, so the scan is not complete.
+  if (depth > MAX_TREE_DEPTH) {
+    c.tooComplex = true
+    return
+  }
   if (Array.isArray(value)) {
     for (const v of value) visit(major, v, c, level, depth + 1)
     return
@@ -250,7 +260,12 @@ function statements(major: SupportedMajor, text: string, c: Collector, level: nu
     return true
   }
   const parsed = parseWith(major, text, MAX_MIGRATION_PARSE_BYTES)
-  if (!parsed.ok) return false
+  if (!parsed.ok) {
+    // A body too large to parse is not read: the scan is not complete.
+    if (parsed.failure.kind !== 'too_large') return false
+    c.tooComplex = true
+    return true
+  }
   for (const st of parsed.statements) {
     visit(major, { [st.type]: st.node }, c, level)
     if (st.type === 'DoStmt') doBlock(major, text.slice(st.start, st.end), st.node, c, level + 1)
@@ -279,7 +294,10 @@ function doBlock(
   }
   const queries: { query: string; statement: boolean }[] = []
   const collect = (value: unknown, depth = 0): void => {
-    if (depth > 2000) return
+    if (depth > MAX_TREE_DEPTH) {
+      c.tooComplex = true
+      return
+    }
     if (Array.isArray(value)) {
       for (const v of value) collect(v, depth + 1)
     } else if (typeof value === 'object' && value !== null) {
@@ -289,7 +307,13 @@ function doBlock(
       for (const v of Object.values(value)) collect(v, depth + 1)
     }
   }
-  collect(parsePlpgsql(text))
+  const tree = parsePlpgsql(text)
+  // A body the PL/pgSQL parser cannot be given (too large) or cannot read is not scanned.
+  if (tree === undefined) {
+    c.tooComplex = true
+    return
+  }
+  collect(tree)
   for (const q of queries) {
     // A statement's text is parsed as it is; an expression as a SELECT of it.
     if (!statements(major, q.query, c, level) && !q.statement)

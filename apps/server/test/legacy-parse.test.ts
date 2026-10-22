@@ -5,7 +5,8 @@ import {
   ScratchCheckRequestSchema,
 } from '@exponetdb/contracts'
 import { describe, expect, it } from 'vitest'
-import { issues } from '../src/interfaces/http/api.ts'
+import { issues, LEGACY_REQUESTS_IN_FLIGHT, legacyRequest } from '../src/interfaces/http/api.ts'
+import { problemResponse } from '../src/interfaces/http/request.ts'
 
 /**
  * A legacy history is parsed in serve (follow-up 2, F4): a history above
@@ -13,6 +14,35 @@ import { issues } from '../src/interfaces/http/api.ts'
  * routes that carry one; every role runs with WebAssembly tier-up off.
  */
 describe('legacy parse work in serve', () => {
+  it('works on two histories at once and answers a third with RATE_LIMITED and Retry-After (verification review P3-7)', async () => {
+    expect(LEGACY_REQUESTS_IN_FLIGHT).toBe(2)
+    const releases: (() => void)[] = []
+    const held = () =>
+      legacyRequest(
+        () =>
+          new Promise<string>((resolve) => {
+            releases.push(() => resolve('done'))
+          }),
+      )
+    const first = held()
+    const second = held()
+    const busy = await legacyRequest(async () => 'never').catch((e: unknown) => e)
+    const response = problemResponse('req_01M5K000000000000000000001' as never, busy, {
+      retryAfterSeconds: (busy as { retryAfterSeconds: number }).retryAfterSeconds,
+    })
+    expect(response.status).toBe(429)
+    expect(response.headers.get('retry-after')).toBe('5')
+    expect(await response.json()).toMatchObject({
+      code: 'RATE_LIMITED',
+      details: { retryAfterSeconds: 5 },
+    })
+    for (const release of releases) release()
+    expect([await first, await second]).toEqual(['done', 'done'])
+    // The slots are free again, also after a failure.
+    await expect(legacyRequest(async () => Promise.reject(new Error('x')))).rejects.toThrow('x')
+    expect(await legacyRequest(async () => 'again')).toBe('again')
+  })
+
   it('refuses a history above the bound as /files too_large, before any parse', () => {
     // Three files of 3 MiB: each within the file bound, more than the history bound together.
     const big = 'SELECT 1;\n'.repeat((3 * 1024 * 1024) / 10)

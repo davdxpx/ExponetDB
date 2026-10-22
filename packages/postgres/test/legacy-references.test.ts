@@ -1,5 +1,13 @@
 import { beforeAll, describe, expect, it } from 'vitest'
-import { legacyReferences, loadClusterGlobalParsers, outsideScope } from '../src/parser/index.ts'
+import {
+  countTokens,
+  exceedsParseWork,
+  legacyReferences,
+  loadClusterGlobalParsers,
+  MAX_PARSE_TOKENS,
+  outsideScope,
+  parseWith,
+} from '../src/parser/index.ts'
 
 /**
  * What a legacy history references outside the managed scope
@@ -178,5 +186,46 @@ SELECT acme_private.f();`,
       'schema storage.storage 0003_schemas',
       'schema graphql.graphql 0003_schemas',
     ])
+  })
+})
+
+describe('what the scan cannot follow (the verification review of follow-up 2)', () => {
+  it('reports a reference deeper than it follows as too complex, never as complete (P2-4)', () => {
+    const deepIf = refs([
+      [
+        '0001_deep.sql',
+        `DO $$ BEGIN ${'IF true THEN '.repeat(800)}PERFORM auth.uid();${' END IF;'.repeat(800)} END $$;`,
+      ],
+    ])
+    expect(deepIf.tooComplex).toBe(true)
+    const deepExpr = refs([['0001_deep.sql', `SELECT auth.uid()${'+1'.repeat(3000)};`]])
+    expect(deepExpr.tooComplex).toBe(true)
+    // At a depth it follows, the reference is found and the scan is complete.
+    const shallow = refs([['0001_ok.sql', `SELECT auth.uid()${'+1'.repeat(10)};`]])
+    expect([shallow.references.length, shallow.tooComplex]).toEqual([1, false])
+  })
+
+  it('gives the parser no more than its token budget, and says which file is too large (P1-1)', () => {
+    const select = 'SELECT 1;'.repeat(Math.ceil(MAX_PARSE_TOKENS / 3) + 1)
+    expect(countTokens(select, MAX_PARSE_TOKENS)).toBeGreaterThan(MAX_PARSE_TOKENS)
+    expect(parseWith(17, select, 4 * 1024 * 1024)).toEqual({
+      ok: false,
+      failure: { kind: 'too_large' },
+    })
+    expect(exceedsParseWork(select)).toBe(true)
+    // A body is one token to the SQL parser, and its own parse to the PL/pgSQL one.
+    const body = `DO $$BEGIN ${'PERFORM 1;'.repeat(Math.ceil(MAX_PARSE_TOKENS / 3) + 1)} END$$;`
+    expect(countTokens(body, MAX_PARSE_TOKENS)).toBeLessThan(10)
+    expect(countTokens(body, MAX_PARSE_TOKENS, 'standard', true)).toBeGreaterThan(MAX_PARSE_TOKENS)
+    expect(exceedsParseWork(body)).toBe(true)
+    const r = refs([['0001_big.sql', body]])
+    expect(r.tooComplex).toBe(true)
+    // Many small bodies in one file are many small parses.
+    const library = Array.from(
+      { length: 2000 },
+      (_, i) =>
+        `CREATE FUNCTION public.f${i}() RETURNS int LANGUAGE sql AS $$ SELECT ${'1 + '.repeat(40)}1 $$;`,
+    ).join('\n')
+    expect(exceedsParseWork(library)).toBe(false)
   })
 })

@@ -56,10 +56,54 @@ export function isLiteral(token: Token): boolean {
 
 export function lex(text: string, mode: LexMode = 'standard'): Token[] {
   const out: Token[] = []
+  scan(text, mode, (kind, start, end, unterminated) => {
+    out.push(unterminated ? { kind, start, end, unterminated } : { kind, start, end })
+    return true
+  })
+  return out
+}
+
+/**
+ * The number of tokens of a text other than space and comments, counted
+ * without keeping them, up to `max + 1`: what bounds the parser's work
+ * before it runs ([`parse.ts`](./parse.ts), deployment.md §2a). The parser's
+ * memory grows with the nodes of its tree, which grow with the tokens, not
+ * with the bytes: a function body is one token, `SELECT 1;` is three.
+ */
+export function countTokens(
+  text: string,
+  max: number,
+  mode: LexMode = 'standard',
+  /** Counts the tokens of a dollar-quoted body instead of the literal (a PL/pgSQL parse). */
+  bodies = false,
+): number {
+  let count = 0
+  scan(text, mode, (kind, start, end, unterminated) => {
+    if (kind === 'space' || kind === 'comment') return true
+    if (bodies && kind === 'dollar' && !unterminated) {
+      DOLLAR_TAG.lastIndex = start
+      const tag = DOLLAR_TAG.exec(text)?.[0] ?? ''
+      const inner = text.slice(start + tag.length, end - tag.length)
+      count += Math.max(1, countTokens(inner, max - count, mode))
+    } else {
+      count++
+    }
+    return count <= max
+  })
+  return count
+}
+
+/** Scans a text and hands every token to `emit`; `emit` returns false to stop. */
+function scan(
+  text: string,
+  mode: LexMode,
+  emit: (kind: TokenKind, start: number, end: number, unterminated: boolean) => boolean,
+): void {
   let i = 0
   const n = text.length
+  let stopped = false
   const push = (kind: TokenKind, start: number, end: number, unterminated = false) => {
-    out.push(unterminated ? { kind, start, end, unterminated } : { kind, start, end })
+    if (!emit(kind, start, end, unterminated)) stopped = true
   }
   /** A quoted run ending at an unescaped `quote`; `''` (doubled) escapes; `backslash` escapes too. */
   const quoted = (
@@ -101,7 +145,7 @@ export function lex(text: string, mode: LexMode = 'standard'): Token[] {
       if (q.open) return j
     }
   }
-  while (i < n) {
+  while (i < n && !stopped) {
     const c = text[i] ?? ''
     const next = text[i + 1] ?? ''
     if (SPACE.test(c)) {
@@ -214,5 +258,4 @@ export function lex(text: string, mode: LexMode = 'standard'): Token[] {
     push('op', i, i + 1)
     i++
   }
-  return out
 }

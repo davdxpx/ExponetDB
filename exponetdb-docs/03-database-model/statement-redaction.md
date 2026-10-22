@@ -57,6 +57,13 @@ the default everywhere is the redacted form.
    path, which assumes the setting is on, falls back to this when the other
    reading finds a literal that the parse would print. Dollar-quote tags are
    matched without a length limit, as PostgreSQL does.
+   **[DECIDED]** (Wave 9 Part A, follow-up 2, the verification review P1-1)
+   A text of more than 200 000 tokens (`MAX_PARSE_TOKENS`) is never given
+   to the parser, on this path as on every other: the parser's WebAssembly
+   memory grows with the tokens and never shrinks, so one huge statement an
+   application sent could take `serve` past its memory. Such a text is
+   redacted by the lexer (`redaction: lexical`), every literal masked
+   (deployment.md §2a).
    **[DECIDED]** (G4 correction, 2026-10-07) A constant written as a bare or
    quoted word (`SET app.claims = hunter2`, `ALTER ROLE r SET x TO "v"`) is a
    value, not an identifier: the parse path hides every word the parse tree
