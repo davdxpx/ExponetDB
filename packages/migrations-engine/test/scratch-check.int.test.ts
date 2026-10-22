@@ -69,6 +69,9 @@ const OWNER = 'exdb_it_scratch_check_owner'
 /** The imported target: a public schema that depends on an identity service's schema (outside the scope). */
 const IMPORTED = [
   'CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public',
+  // Embeddings, as in every Supabase-origin project that uses them: access methods and casts
+  // without a schema of their own (follow-up 2, F2).
+  'CREATE EXTENSION IF NOT EXISTS vector SCHEMA public',
   'CREATE SCHEMA acme_identity',
   'CREATE TABLE acme_identity.users (id uuid PRIMARY KEY)',
   "CREATE FUNCTION acme_identity.uid() RETURNS uuid LANGUAGE sql STABLE AS 'SELECT NULL::uuid'",
@@ -225,12 +228,15 @@ describe('the scratch preflight', () => {
       scratch_usable: ['pass', null],
       identity: ['pass', null],
       empty: ['pass', null],
-      extensions: ['fail', 'extensions_differ:1'],
+      extensions: ['fail', 'extensions_differ:2'],
       outside_scope: ['fail', 'missing:3'],
       execution_role: ['pass', null],
     })
     const items = Object.fromEntries(r.checks.map((c) => [c.check, c.items]))
-    expect(items['extensions']?.[0]).toMatch(/^pg_trgm: target public@[0-9.]+, scratch missing$/)
+    expect(items['extensions']).toEqual([
+      expect.stringMatching(/^pg_trgm: target public@[0-9.]+, scratch missing$/),
+      expect.stringMatching(/^vector: target public@[0-9.]+, scratch missing$/),
+    ])
     // The foreign key needs the table and its unique index; the policy needs the function.
     expect(items['outside_scope']).toEqual([
       'function acme_identity.uid()',
@@ -242,6 +248,7 @@ describe('the scratch preflight', () => {
   it('passes once the scratch target is prepared like the imported one', async () => {
     await runAsSuperuser(pg17, scratchDb, [
       'CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public',
+      'CREATE EXTENSION IF NOT EXISTS vector SCHEMA public',
       // A schema-only copy of what the imported schema depends on outside its scope.
       'CREATE SCHEMA acme_identity',
       'CREATE TABLE acme_identity.users (id uuid PRIMARY KEY)',
@@ -313,6 +320,21 @@ describe('the scratch preflight', () => {
       ),
     })
     await runAsSuperuser(pg17, scratchDb, ['DROP VIEW acme_identity.profile_handles'])
+    // The casts and access methods of vector in public go with it and are re-created
+    // (follow-up 2, F2); a member of it outside the scope would be dropped too: refused.
+    await runAsSuperuser(pg17, scratchDb, [
+      'CREATE TABLE acme_identity.exdb_vector_member (i int)',
+      'ALTER EXTENSION vector ADD TABLE acme_identity.exdb_vector_member',
+    ])
+    await expect(runAsSuperuser(pg17, scratchDb, [script])).rejects.toMatchObject({
+      message: expect.stringMatching(
+        /would be dropped \(3\): table acme_identity\.exdb_vector_member, type acme_identity\.exdb_vector_member, type acme_identity\.exdb_vector_member\[\]$/,
+      ),
+    })
+    await runAsSuperuser(pg17, scratchDb, [
+      'ALTER EXTENSION vector DROP TABLE acme_identity.exdb_vector_member',
+      'DROP TABLE acme_identity.exdb_vector_member',
+    ])
     // A publication's member is no dependent worth refusing: the drop ends the membership only.
     await runAsSuperuser(pg17, scratchDb, [
       'CREATE PUBLICATION exdb_it_reset_pub FOR TABLE public.acme_profiles',
@@ -411,11 +433,12 @@ describe('the scratch preflight', () => {
         `SELECT (SELECT oid::text FROM pg_catalog.pg_database WHERE datname = current_database()) AS oid,
                 (SELECT target_id FROM exponetdb.target_identity) AS marker,
                 (SELECT count(*)::int FROM pg_catalog.pg_extension WHERE extname = 'pg_trgm') AS trgm,
+                (SELECT count(*)::int FROM pg_catalog.pg_extension WHERE extname = 'vector') AS vector,
                 pg_catalog.has_schema_privilege($1, 'public', 'CREATE') AS owner_creates`,
         [OWNER],
       ),
     )
-    expect(after.rows[0]).toEqual({ ...before.rows[0], trgm: 1, owner_creates: true })
+    expect(after.rows[0]).toEqual({ ...before.rows[0], trgm: 1, vector: 1, owner_creates: true })
     const r = await check(scratch.targetId)
     expect(r.ready, JSON.stringify(r.checks)).toBe(true)
     // The same target takes the next analysis.

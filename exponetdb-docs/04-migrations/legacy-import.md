@@ -554,7 +554,14 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   object outside the managed scope depends on one inside it (a view, a
   column's type, a default, a trigger, a policy, a cast): `DROP SCHEMA …
   CASCADE` would drop it too, so the script refuses and names them (from
-  `pg_depend`, normal and automatic dependencies). Then, in one
+  `pg_depend`, normal and automatic dependencies). **[DECIDED]**
+  (follow-up 2, F2, 2026-10-22) The members of an extension that lives in
+  the scope go with it and are re-created with it: an object of such an
+  extension without a schema of its own (the casts and access methods of
+  `vector`, **[OBSERVED]** 25 of them refused the first real reset) is no
+  reason to refuse. A member of such an extension in a schema **outside**
+  the scope refuses (the drop would take it, and a replay that owns an
+  extension can add its own objects to it). Then, in one
   transaction, it drops and re-creates each schema of the managed scope with
   its owner and grants (read from the catalog before the drop) and
   re-creates the extensions that lived there in their versions. A

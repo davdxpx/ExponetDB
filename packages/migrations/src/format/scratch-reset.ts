@@ -97,6 +97,10 @@ BEGIN
     SELECT d.classid, d.objid, d.objsubid,
            CASE WHEN d.refclassid = 'pg_catalog.pg_namespace'::regclass
                 THEN (SELECT n.nspname::text FROM pg_catalog.pg_namespace n WHERE n.oid = d.refobjid)
+                -- An extension's members go with the extension, which lives in its schema.
+                WHEN d.refclassid = 'pg_catalog.pg_extension'::regclass
+                THEN (SELECT n.nspname::text FROM pg_catalog.pg_extension x
+                        JOIN pg_catalog.pg_namespace n ON n.oid = x.extnamespace WHERE x.oid = d.refobjid)
                 ELSE (pg_catalog.pg_identify_object(d.refclassid, d.refobjid, 0)).schema
            END AS referenced,
            coalesce(
@@ -113,7 +117,8 @@ BEGIN
              (pg_catalog.pg_identify_object(d.classid, d.objid, d.objsubid)).schema) AS dependent
       FROM pg_catalog.pg_depend d
      -- A publication's member row goes with its table; the publication itself stays.
-     WHERE d.deptype IN ('n', 'a')
+     WHERE (d.deptype IN ('n', 'a')
+            OR (d.deptype = 'e' AND d.refclassid = 'pg_catalog.pg_extension'::regclass))
        AND d.classid NOT IN ('pg_catalog.pg_default_acl'::regclass, 'pg_catalog.pg_publication_rel'::regclass,
                              'pg_catalog.pg_publication_namespace'::regclass))
   SELECT pg_catalog.count(DISTINCT (dep.classid, dep.objid, dep.objsubid)),
@@ -121,7 +126,18 @@ BEGIN
     INTO outside_count, outside
     FROM dep
    WHERE dep.referenced = ANY (managed)
-     AND (dep.dependent IS NULL OR NOT dep.dependent = ANY (managed));
+     AND (dep.dependent IS NULL OR NOT dep.dependent = ANY (managed))
+     -- An object without a schema of its own (a cast, an access method) that belongs to an
+     -- extension in the scope goes with that extension, which is re-created below. A member in
+     -- a schema outside the scope refuses: the drop would take it, and a replay that owns an
+     -- extension can add its own objects to it (ALTER EXTENSION ... ADD).
+     AND NOT (dep.dependent IS NULL AND EXISTS (
+           SELECT FROM pg_catalog.pg_depend m
+             JOIN pg_catalog.pg_extension x ON x.oid = m.refobjid
+             JOIN pg_catalog.pg_namespace n ON n.oid = x.extnamespace
+            WHERE m.classid = dep.classid AND m.objid = dep.objid AND m.objsubid = 0
+              AND m.refclassid = 'pg_catalog.pg_extension'::regclass AND m.deptype = 'e'
+              AND n.nspname = ANY (managed)));
   IF outside IS NOT NULL THEN
     RAISE EXCEPTION 'objects outside the managed scope depend on it and would be dropped (%): %', outside_count,
       pg_catalog.left(outside, 2000) || CASE WHEN pg_catalog.length(outside) > 2000 THEN ' (list cut)' ELSE '' END;
