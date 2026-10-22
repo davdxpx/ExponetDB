@@ -14,6 +14,7 @@ import {
   SUPABASE_FILES,
   serverFor,
   supabaseTargetStatements,
+  withRolesHeld,
   withSuperuser,
 } from '@exponetdb/testkit'
 import { type ServerType, serve } from '@hono/node-server'
@@ -246,7 +247,8 @@ describe('the CLI for an external cluster and a legacy import', () => {
     const script = await readFile(join(repo, 'bootstrap.sql'), 'utf8')
     expect(script).not.toMatch(/PASSWORD/)
     for (let i = 0; i < 2; i++) {
-      const ran = await runPsql(pg17, shared(script))
+      // The script alters the shared ExponetDB roles: under the test kit's role lock.
+      const ran = await withRolesHeld(pg17, () => runPsql(pg17, shared(script)))
       expect(ran.stderr).not.toMatch(/ERROR/)
       expect(ran.status).toBe(0)
     }

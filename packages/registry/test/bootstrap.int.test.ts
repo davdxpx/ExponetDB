@@ -6,6 +6,7 @@ import {
   runAsSuperuser,
   runPsql,
   type TestServer,
+  withRolesHeld,
   withSuperuser,
 } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -51,8 +52,9 @@ import {
  *
  * The test servers are shared, and their ExponetDB roles carry the shared
  * connection limit of the test kit (several installations per cluster), so
- * the run replaces the product's per-installation limits with that value;
- * everything else is the product's text. The unit tests pin the limits.
+ * the run replaces the product's per-installation limits with that value
+ * and holds the kit's role lock; everything else is the product's text.
+ * The unit tests pin the limits.
  */
 const suffix = Date.now().toString(36)
 const role = (name: string) => `exdb_it_bs_${name}_${suffix}`
@@ -67,6 +69,12 @@ const ROLES = [OWNER, ADOPTED, LOGIN, REACH, LATER, OTHER]
 const SHARED_CONNECTION_LIMIT = 32
 const shared = (script: string) =>
   script.replaceAll(/CONNECTION LIMIT [0-9]+/g, `CONNECTION LIMIT ${SHARED_CONNECTION_LIMIT}`)
+/**
+ * The script alters ExponetDB's shared roles: it runs under the test kit's role lock, so
+ * no parallel suite provisions them at the same time (`tuple concurrently updated`).
+ */
+const runBootstrap = (s: TestServer, script: string) =>
+  withRolesHeld(s, () => runPsql(s, shared(script)))
 
 let h: Harness
 let a: RegistryActor
@@ -241,7 +249,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       const withOther = await generate({ projectId: otherProjectId })
       expect(withOther.executionRoles.map((r) => r.name)).toContain(OTHER)
 
-      const first = await runPsql(s, shared(withOther.script))
+      const first = await runBootstrap(s, withOther.script)
       expect(first.stderr).not.toMatch(/ERROR/)
       expect(first.status).toBe(0)
       expect(first.stderr).toContain(`execution role ${LATER} does not exist yet`)
@@ -260,7 +268,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       }
 
       // Again: the same state, the same notices, no error.
-      const second = await runPsql(s, shared(withOther.script))
+      const second = await runBootstrap(s, withOther.script)
       expect(second.status).toBe(0)
       expect(second.stderr).not.toMatch(/ERROR/)
       expect(await state(s, [registered, pending])).toEqual(after)
@@ -279,7 +287,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
 
       // A role created afterwards is granted on the next run.
       await runAsSuperuser(s, 'postgres', [`CREATE ROLE ${LATER} NOLOGIN`])
-      const third = await runPsql(s, shared(withOther.script))
+      const third = await runBootstrap(s, withOther.script)
       expect(third.status).toBe(0)
       expect(third.stderr).not.toContain(`execution role ${LATER}`)
       expect((await migratorGrants(s)).map((r) => r.role)).toContain(LATER)
