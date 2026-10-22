@@ -220,6 +220,8 @@ function psqlArgument(value: string): string {
  * with `=` or a URI prefix is never read as a connection string, and the
  * host, port and user of the current connection are reused.
  */
+const SEARCH_PATH = 'SET search_path = pg_catalog, pg_temp;'
+
 function connectTo(database: string): string {
   const conninfo = `dbname='${database.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`
   return `\\connect -reuse-previous=on ${psqlArgument(conninfo)}`
@@ -249,6 +251,8 @@ export function bootstrapScript(
     '-- No password is in this script. After it ran, set each login password with',
     '-- psql \\password <role> (psql sends a SCRAM verifier, never the password) and',
     "-- submit the same password once through ExponetDB's write-only credential endpoint.",
+    "-- Names resolve in the system catalog only, never in a schema a database's owner controls.",
+    SEARCH_PATH,
     ensureRole(
       LEDGER_OWNER_ROLE,
       'NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS',
@@ -325,6 +329,8 @@ ${databaseBootstrapStatements(database)
         `SELECT EXISTS (SELECT FROM pg_catalog.pg_database WHERE datname = ${quoteLiteral(database)}) AS exdb_database_exists \\gset`,
         '\\if :exdb_database_exists',
         connectTo(database),
+        // A new session: the path again.
+        SEARCH_PATH,
       )
       // The grants run only in the database named: never in one a \connect reached instead.
       const here = `  IF pg_catalog.current_database() OPERATOR(pg_catalog.<>) ${quoteLiteral(database)} THEN
@@ -350,5 +356,6 @@ ${databaseBootstrapStatements(database)
       )
     }
   }
+  lines.push('RESET search_path;')
   return `${lines.join('\n')}\n`
 }

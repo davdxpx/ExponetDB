@@ -1,7 +1,9 @@
+import { readOperation } from '@exponetdb/operations'
 import { databaseBootstrapStatements } from '@exponetdb/postgres'
 import { dropDatabase, runAsSuperuser, serverFor, withSuperuser } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  findTarget,
   getDatabase,
   planDatabaseRetire,
   planEnvironmentCreate,
@@ -12,7 +14,9 @@ import {
   type RegistryActor,
 } from '../src/index.ts'
 import {
+  accept,
   actor,
+  drive,
   type Harness,
   harness,
   plan,
@@ -39,6 +43,8 @@ let clusterId = ''
 let projectId = ''
 let environmentId = ''
 let name = ''
+let racing = ''
+let productIdOf = ''
 
 beforeAll(async () => {
   h = await harness('exdb_it_db_retire')
@@ -53,6 +59,7 @@ beforeAll(async () => {
     planProductCreate(tx, h.context, a, { slug, displayName: 'Retire' }),
   )
   const productId = String((await planContent(h, product.plan.planId))['productId'])
+  productIdOf = productId
   const env = await run(h, a, (tx) =>
     planEnvironmentCreate(tx, h.context, a, productId, {
       slug: 'staging',
@@ -70,6 +77,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await h?.close()
   if (name !== '') await dropDatabase(pg17, name).catch(() => undefined)
+  if (racing !== '') await dropDatabase(pg17, racing).catch(() => undefined)
 })
 
 const retire = (databaseId: string) =>
@@ -131,6 +139,56 @@ describe('registry.database.retire', () => {
     expect(record?.state).toBe('registered')
     expect(record?.observedOid).not.toBe((await getDatabase(h.worker, databaseId))?.observedOid)
   })
+
+  it('never leaves a placement on a database a retirement in flight ends (review round 2)', async () => {
+    racing = await targetDatabase(pg17, 'retire_race')
+    const databaseId = await registerDatabase(h, a, clusterId, racing)
+    // Its own environment: the first test's target keeps its path.
+    const env = await run(h, a, (tx) =>
+      planEnvironmentCreate(tx, h.context, a, productIdOf, {
+        slug: 'race',
+        displayName: 'Race',
+        tier: 'nonprod',
+      }),
+    )
+    const raceEnvironmentId = String((await planContent(h, env.plan.planId))['environmentId'])
+    const p = await plan(h, (tx) =>
+      planTargetRegister(tx, h.context, a, {
+        projectId: projectId as never,
+        environmentId: raceEnvironmentId as never,
+        databaseId: databaseId as never,
+      }),
+    )
+    const operation = await accept(h, p, a)
+    // A retirement's transaction, as the worker runs it: updated, not committed yet. The
+    // database guard sees no placement, so it passes.
+    await h.db.asRole('exdb_worker', async (c) => {
+      await c.query('BEGIN')
+      await c.query(`UPDATE registry.databases SET state = 'retired' WHERE database_id = $1`, [
+        databaseId,
+      ])
+      let settled = false
+      const driving = drive(h).finally(() => {
+        settled = true
+      })
+      await new Promise((r) => setTimeout(r, 1500))
+      // The registration waits on the database row instead of placing it meanwhile.
+      expect(settled).toBe(false)
+      await c.query('COMMIT')
+      await driving
+    })
+    const after = await readOperation(h.worker, operation.operationId)
+    expect(after?.state).not.toBe('succeeded')
+    expect((await getDatabase(h.worker, databaseId))?.state).toBe('retired')
+    const placed = await h.worker.query(
+      'test.retire.race.placements',
+      'SELECT 1 FROM registry.placements WHERE database_id = $1',
+      [databaseId],
+    )
+    expect(placed.rows).toEqual([])
+    const targetId = String((await planContent(h, p.planId))['targetId'])
+    expect(await findTarget(h.worker, targetId)).toBeUndefined()
+  }, 60_000)
 
   it('refuses a database of another cluster or one that does not exist', async () => {
     await expect(retire('dbs_01M5GZZZZZZZZZZZZZZZZZZZZZ')).rejects.toMatchObject({

@@ -168,6 +168,14 @@ describe('bootstrap SQL', () => {
       script.match(/GRANT SELECT ON "drizzle"\."__drizzle_migrations" TO "exponetdb_observer";/g),
     ).toHaveLength(2)
     expect(bootstrapScript(['app'])).not.toContain(String.raw`\connect`)
+    // Names resolve in the system catalog only, in the first session and after each \connect.
+    const path = 'SET search_path = pg_catalog, pg_temp;'
+    expect(script.split('\n').filter((l) => l === path)).toHaveLength(3)
+    expect(script.indexOf(path)).toBeLessThan(script.indexOf('DO $exdb$'))
+    expect(script.trimEnd().endsWith('RESET search_path;')).toBe(true)
+    for (const c of script.split(String.raw`\connect`).slice(1)) {
+      expect(c.split('\n')[1]).toBe(path)
+    }
     // Each grant block checks that psql reached the database it names.
     expect(script).toContain(
       "IF pg_catalog.current_database() OPERATOR(pg_catalog.<>) E'app' THEN\n    RAISE EXCEPTION 'connected to database % instead of %",

@@ -47,6 +47,14 @@ describe('scratchResetSql', () => {
     expect(sql.split('$reset2$')).toHaveLength(3)
   })
 
+  it('resolves every name in the system catalog only', () => {
+    const sql = scratchResetSql({ ...BASE, includeSchemas: ['public'] })
+    expect(sql).toContain('BEGIN;\n-- ')
+    expect(sql.indexOf('SET LOCAL search_path = pg_catalog, pg_temp;')).toBeLessThan(
+      sql.indexOf('DO $reset$'),
+    )
+  })
+
   it('refuses to drop what outside the scope depends on the scope', () => {
     const sql = scratchResetSql({ ...BASE, includeSchemas: ['public'] })
     expect(sql).toContain("RAISE EXCEPTION 'objects outside the managed scope depend on it")

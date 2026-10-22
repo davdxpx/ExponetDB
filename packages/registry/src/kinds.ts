@@ -797,7 +797,9 @@ export class DatabaseRetireKind extends RegistryKind {
 
   async run(ctx: ExecutionContext, c: Body) {
     return this.effect(async (tx) => {
-      // The guard refuses a current placement (EXG09); retirement is final.
+      // The guard refuses a current placement (EXG09); retirement is final. The update's row
+      // lock waits for a registration that locked the row first (FOR SHARE), and the guard then
+      // sees its placement.
       const { rowCount } = await tx.query(
         'registry.kind.database.retire',
         `UPDATE registry.databases SET state = 'retired'

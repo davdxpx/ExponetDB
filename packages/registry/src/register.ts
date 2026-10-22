@@ -156,6 +156,14 @@ export class TargetRegisterKind extends RegistryKind {
           }
     }
     const outcome = await this.effect(async (tx) => {
+      // The database row stays locked until commit: a retirement in flight waits, or this waits
+      // for it and the placement guard (EXG11) then sees the database retired. The foreign key
+      // alone takes a lock a retirement does not conflict with.
+      await tx.query(
+        'registry.kind.target.database_lock',
+        'SELECT 1 FROM registry.databases WHERE database_id = $1 FOR SHARE',
+        [c.id('dbs', 'databaseId')],
+      )
       await tx.query(
         'registry.kind.target.insert',
         `INSERT INTO registry.targets (target_id, project_id, environment_id, path, tier, generation, state,

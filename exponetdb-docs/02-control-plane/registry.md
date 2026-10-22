@@ -318,7 +318,11 @@ is retired (`registry.database.retire`, `POST
 retire`; `registry.manage` at the cluster's tier, re-authenticated, human
 only, audited). Retirement is final and refused while the database is a
 current placement (`database_in_use`, and the Control Store guard EXG09);
-nothing changes on the cluster. Afterwards the same name on the cluster
+nothing changes on the cluster. **[DECIDED]** (review round 2) A target
+registration locks the database row (`FOR SHARE`) before it places the
+target, so a retirement and a registration of the same database never both
+commit: whichever comes second waits, and its guard (EXG09 or EXG11) then
+sees the other's result. Afterwards the same name on the cluster
 registers again, for example after the database was re-created with a new
 oid (`databases_one_registered_name` covers registered records only).
 

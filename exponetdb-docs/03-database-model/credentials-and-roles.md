@@ -580,6 +580,11 @@ order:
    `\connect` at all, only an `\echo` telling the person to grant the ledger
    reads there by hand.
 
+The script sets `search_path = pg_catalog, pg_temp` in its first session and
+again after each `\connect` (review round 2), so an operator or function a
+database's owner created never stands in for a built-in one while an
+administrator runs it; it resets the path at the end.
+
 Every statement is guarded or converges (a role grant run again converges
 to the stated options on PostgreSQL 16+), so the script is **run again**
 after a database is added, an execution role is created or mapped, or a

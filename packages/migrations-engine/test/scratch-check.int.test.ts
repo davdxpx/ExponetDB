@@ -326,7 +326,20 @@ describe('the scratch preflight', () => {
       c.query(`SELECT pg_catalog.to_regclass('public.exdb_breakout') IS NULL AS absent`),
     )
     expect(breakout.rows[0]).toEqual({ absent: true })
+    // An operator a replay left in a managed schema, with the exact types of a comparison the
+    // script makes (oid = regclass), never runs as the superuser running it (review round 2).
+    await runAsSuperuser(pg17, scratchDb, [
+      'CREATE TABLE acme_identity.exdb_hijacked (n int)',
+      `CREATE FUNCTION public.exdb_hijack(oid, regclass) RETURNS boolean LANGUAGE plpgsql AS $f$
+         BEGIN INSERT INTO acme_identity.exdb_hijacked VALUES (1); RETURN $1 = $2::oid; END $f$`,
+      'CREATE OPERATOR public.= (LEFTARG = oid, RIGHTARG = regclass, FUNCTION = public.exdb_hijack)',
+    ])
     await runAsSuperuser(pg17, scratchDb, [script])
+    const hijacked = await withSuperuser(pg17, scratchDb, (c) =>
+      c.query('SELECT count(*)::int AS calls FROM acme_identity.exdb_hijacked'),
+    )
+    expect(hijacked.rows[0]).toEqual({ calls: 0 })
+    await runAsSuperuser(pg17, scratchDb, ['DROP TABLE acme_identity.exdb_hijacked'])
     const after = await withSuperuser(pg17, scratchDb, (c) =>
       c.query(
         `SELECT (SELECT oid::text FROM pg_catalog.pg_database WHERE datname = current_database()) AS oid,

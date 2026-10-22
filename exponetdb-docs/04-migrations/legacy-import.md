@@ -523,7 +523,11 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   its owner and grants (read from the catalog before the drop) and
   re-creates the extensions that lived there in their versions. The script
   is one `DO` block whose dollar-quote tag occurs nowhere in its body (a
-  schema name may hold `$`), so no registry value leaves its literal. The
+  schema name may hold `$`), so no registry value leaves its literal, and
+  **[DECIDED]** (review round 2) it first sets `search_path = pg_catalog,
+  pg_temp` for its transaction: an operator or function a replay left in a
+  managed schema (an exact-type `public.=(oid, regclass)`, say) would
+  otherwise win over the built-in one and run as the superuser. The
   database, its oid, the `exponetdb` schema with the marker and every
   schema outside the scope stay; default privileges set inside a dropped
   schema go with it. Run the preflight afterwards.

@@ -119,6 +119,9 @@ END`
 -- Run it with psql -v ON_ERROR_STOP=1 as a superuser connected to ${input.databaseName === undefined ? "the scratch target's database" : `the database ${shown(input.databaseName)}`}; it stops anywhere else.
 -- Keeps the database (its oid), the identity marker and every schema outside the managed scope.
 BEGIN;
+-- Only the system catalog resolves names: an operator a replay left in a managed schema
+-- (public.=(oid, regclass), say) never runs as the superuser running this script.
+SET LOCAL search_path = pg_catalog, pg_temp;
 DO $${tag}$
 ${body}
 $${tag}$;
