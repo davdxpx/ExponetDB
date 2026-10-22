@@ -9080,6 +9080,11 @@
             "maxItems": 1000,
             "minItems": 1,
             "type": "array"
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
           }
         },
         "required": [
@@ -9103,9 +9108,16 @@
         "additionalProperties": false,
         "properties": {
           "driftTotal": {
-            "maximum": 9007199254740991,
-            "minimum": 0,
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "held": {
             "maximum": 9007199254740991,

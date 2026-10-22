@@ -945,7 +945,7 @@ const remoteCommands: readonly CommandSpec[] = [
   {
     path: ['migration', 'import', 'scratch-reset-sql'],
     summary:
-      'Print the SQL that resets a used scratch target in place (run it as a superuser on that database): it keeps the database and its identity marker and recreates the managed schemas with their grants and extensions.',
+      'Print the SQL that resets a used scratch target in place (run it with psql -v ON_ERROR_STOP=1 as a superuser on that database): it keeps the database and its identity marker and recreates the managed schemas with their grants and extensions.',
     group: 'migration',
     flags: [
       {
@@ -1012,6 +1012,12 @@ const remoteCommands: readonly CommandSpec[] = [
         description: 'The scratch target (path or tgt_ id).',
         required: true,
       },
+      {
+        name: 'role',
+        type: 'string',
+        placeholder: 'alias',
+        description: 'The execution role alias the replay runs as (the hints role; default owner).',
+      },
     ],
     action: 'migration.import.scratch_check',
     scopes: ['migrations.import'],
@@ -1019,7 +1025,10 @@ const remoteCommands: readonly CommandSpec[] = [
     title: 'scratch check',
     operation: 'checkScratchTarget',
     params: (i) => ({ target: String(i.flags['target']) }),
-    query: (i) => ({ scratchTarget: String(i.flags['scratch']) }),
+    query: (i) => ({
+      scratchTarget: String(i.flags['scratch']),
+      ...(typeof i.flags['role'] === 'string' ? { role: i.flags['role'] } : {}),
+    }),
     view: (r) => [
       {
         kind: 'status',

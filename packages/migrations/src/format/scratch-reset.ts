@@ -45,13 +45,9 @@ export function scratchResetSql(input: ScratchResetInput): string {
       : array(input.includeSchemas.filter((s) => s !== 'exponetdb'))
   // The path and the database name are shown in comments only, never executed.
   const shown = (v: string) => v.replace(/[^\x20-\x7e]/g, '?')
-  return `-- ExponetDB: reset the scratch target ${shown(input.targetPath)} in place (legacy-import.md §2.5).
--- Run as a superuser connected to ${input.databaseName === undefined ? "the scratch target's database" : `the database ${shown(input.databaseName)}`}; it stops anywhere else.
--- Keeps the database (its oid), the identity marker and every schema outside the managed scope.
-BEGIN;
-DO $reset$
-DECLARE
+  const body = `DECLARE
   managed text[] := ${managed};
+  outside text;
   s record;
   g record;
   e record;
@@ -64,6 +60,38 @@ BEGIN
   END IF;
   IF EXISTS (SELECT FROM exponetdb.schema_migrations) THEN
     RAISE EXCEPTION 'the database has ledger rows: it was migrated, not only replayed';
+  END IF;
+  -- DROP SCHEMA ... CASCADE would also drop what lies outside the scope and depends on it (a
+  -- view or a column of a copy, a trigger or a default on a table there, a cast): refuse
+  -- instead, naming it. Triggers, policies, rules, defaults and operator-family members carry
+  -- no schema of their own: theirs is their table's or family's. Extensions are re-created.
+  WITH dep AS (
+    SELECT d.classid, d.objid, d.objsubid,
+           CASE WHEN d.refclassid = 'pg_catalog.pg_namespace'::regclass
+                THEN (SELECT n.nspname::text FROM pg_catalog.pg_namespace n WHERE n.oid = d.refobjid)
+                ELSE (pg_catalog.pg_identify_object(d.refclassid, d.refobjid, 0)).schema
+           END AS referenced,
+           coalesce(
+             (SELECT n.nspname::text FROM pg_catalog.pg_namespace n
+               WHERE n.oid = CASE d.classid
+                 WHEN 'pg_catalog.pg_rewrite'::regclass THEN (SELECT c.relnamespace FROM pg_catalog.pg_rewrite r JOIN pg_catalog.pg_class c ON c.oid = r.ev_class WHERE r.oid = d.objid)
+                 WHEN 'pg_catalog.pg_trigger'::regclass THEN (SELECT c.relnamespace FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid WHERE t.oid = d.objid)
+                 WHEN 'pg_catalog.pg_policy'::regclass THEN (SELECT c.relnamespace FROM pg_catalog.pg_policy p JOIN pg_catalog.pg_class c ON c.oid = p.polrelid WHERE p.oid = d.objid)
+                 WHEN 'pg_catalog.pg_attrdef'::regclass THEN (SELECT c.relnamespace FROM pg_catalog.pg_attrdef a JOIN pg_catalog.pg_class c ON c.oid = a.adrelid WHERE a.oid = d.objid)
+                 WHEN 'pg_catalog.pg_amop'::regclass THEN (SELECT f.opfnamespace FROM pg_catalog.pg_amop o JOIN pg_catalog.pg_opfamily f ON f.oid = o.amopfamily WHERE o.oid = d.objid)
+                 WHEN 'pg_catalog.pg_amproc'::regclass THEN (SELECT f.opfnamespace FROM pg_catalog.pg_amproc o JOIN pg_catalog.pg_opfamily f ON f.oid = o.amprocfamily WHERE o.oid = d.objid)
+                 WHEN 'pg_catalog.pg_extension'::regclass THEN (SELECT x.extnamespace FROM pg_catalog.pg_extension x WHERE x.oid = d.objid)
+               END),
+             (pg_catalog.pg_identify_object(d.classid, d.objid, d.objsubid)).schema) AS dependent
+      FROM pg_catalog.pg_depend d
+     WHERE d.deptype IN ('n', 'a') AND d.classid <> 'pg_catalog.pg_default_acl'::regclass)
+  SELECT pg_catalog.string_agg(DISTINCT pg_catalog.pg_describe_object(dep.classid, dep.objid, dep.objsubid), ', ')
+    INTO outside
+    FROM dep
+   WHERE dep.referenced = ANY (managed)
+     AND (dep.dependent IS NULL OR NOT dep.dependent = ANY (managed));
+  IF outside IS NOT NULL THEN
+    RAISE EXCEPTION 'objects outside the managed scope depend on it and would be dropped: %', pg_catalog.left(outside, 2000);
   END IF;
   CREATE TEMPORARY TABLE exdb_reset_extensions ON COMMIT DROP AS
     SELECT x.extname::text AS name, n.nspname::text AS schema, x.extversion AS version
@@ -83,8 +111,17 @@ BEGIN
   FOR e IN SELECT * FROM exdb_reset_extensions LOOP
     EXECUTE pg_catalog.format('CREATE EXTENSION %I WITH SCHEMA %I VERSION %L', e.name, e.schema, e.version);
   END LOOP;
-END
-$reset$;
+END`
+  // A dollar-quote tag that cannot occur in the body: schema names may hold `$`.
+  let tag = 'reset'
+  for (let i = 1; body.includes(`$${tag}$`); i++) tag = `reset${i}`
+  return `-- ExponetDB: reset the scratch target ${shown(input.targetPath)} in place (legacy-import.md §2.5).
+-- Run it with psql -v ON_ERROR_STOP=1 as a superuser connected to ${input.databaseName === undefined ? "the scratch target's database" : `the database ${shown(input.databaseName)}`}; it stops anywhere else.
+-- Keeps the database (its oid), the identity marker and every schema outside the managed scope.
+BEGIN;
+DO $${tag}$
+${body}
+$${tag}$;
 COMMIT;
 `
 }

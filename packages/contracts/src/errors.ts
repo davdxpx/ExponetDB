@@ -611,6 +611,8 @@ export const ERRORS = {
         .array(z.strictObject({ itemId: z.string().regex(/^[A-Za-z0-9_:-]{1,128}$/) }))
         .min(1)
         .max(1000),
+      // Wave 9 (additive): how many items wait, when more than `items` lists.
+      total: z.int().min(1).optional(),
     }),
   },
   LEGACY_IMPORT_TRUNCATED: {
@@ -623,7 +625,8 @@ export const ERRORS = {
     remediation:
       'Narrow the managed schema scope or correct the import inputs so that the drift fits the report, then analyze again.',
     details: z.strictObject({
-      driftTotal: z.int().min(0),
+      // null: the report was analyzed before drift totals were kept; analyze again.
+      driftTotal: z.int().min(0).nullable(),
       held: z.int().min(0),
     }),
   },

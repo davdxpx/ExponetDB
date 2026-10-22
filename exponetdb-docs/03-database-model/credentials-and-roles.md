@@ -570,7 +570,15 @@ order:
    schema and `SELECT` on the ledger table, where it exists:
    `supabase_migrations.schema_migrations`, `drizzle.__drizzle_migrations`,
    `public.applied_migrations` ([legacy-import.md §2](../04-migrations/legacy-import.md)).
-   Nothing else is readable to the observer.
+   Nothing else is readable to the observer. A database that does not exist
+   yet is skipped with a message (psql would stop at a failed `\connect`).
+   **[DECIDED]** (Wave 9 Part A, review round 1) Each grant block first
+   checks that psql reached the database it names (`current_database()`)
+   and raises otherwise; and because psql drops double quotes from a
+   `\connect` argument whatever the quoting **[OBSERVED]** (psql 16 and 17:
+   `'dbname=''q"w"e'''` reaches `qwe`), a database name holding `"` gets no
+   `\connect` at all, only an `\echo` telling the person to grant the ledger
+   reads there by hand.
 
 Every statement is guarded or converges (a role grant run again converges
 to the stated options on PostgreSQL 16+), so the script is **run again**

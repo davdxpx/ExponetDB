@@ -267,7 +267,12 @@ export class MigrationUseCases {
    * `migration.import.scratch_check`: read only, whether a scratch target can take this
    * target's legacy replay (legacy-import.md §2.5). The caller holds the action on both.
    */
-  async scratchCheck(caller: CallerLike, ref: string, scratchRef: string): Promise<ScratchCheck> {
+  async scratchCheck(
+    caller: CallerLike,
+    ref: string,
+    scratchRef: string,
+    alias?: string,
+  ): Promise<ScratchCheck> {
     const { observation } = this.#services()
     const target = await this.#target('migration.import.scratch_check', caller, ref)
     const scratch = await findTarget(this.#h.store, scratchRef)
@@ -282,6 +287,7 @@ export class MigrationUseCases {
       { connector: observation.connector, installationId: observation.installationId },
       target,
       scratch?.targetId ?? scratchRef,
+      alias,
     )
   }
 

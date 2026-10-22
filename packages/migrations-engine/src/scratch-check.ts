@@ -158,6 +158,7 @@ export async function scratchCheck(
     // The imported target, read only.
     let theirs:
       | {
+          readonly major: number
           readonly extensions: Awaited<ReturnType<typeof extensionPlacements>>
           readonly outside: Awaited<ReturnType<typeof referencedOutsideScope>>
         }
@@ -170,6 +171,7 @@ export async function scratchCheck(
       )
       try {
         theirs = await opened.session.readOnly(async (rtx) => ({
+          major: opened.session.facts.major,
           extensions: await extensionPlacements(rtx),
           outside: await referencedOutsideScope(rtx, scope),
         }))
@@ -182,7 +184,11 @@ export async function scratchCheck(
     }
     if (theirs !== undefined) {
       const outside = theirs.outside
-      const differ: string[] = []
+      // The replay runs and parses on the scratch target's major: it must be the imported one's.
+      const major = theirs.major !== scratchSession.facts.major
+      const differ: string[] = major
+        ? [`postgresql: target ${theirs.major}, scratch ${scratchSession.facts.major}`]
+        : []
       for (const name of [
         ...new Set([...theirs.extensions.keys(), ...ours.extensions.keys()]),
       ].sort()) {
@@ -201,7 +207,12 @@ export async function scratchCheck(
       checks.push(
         differ.length === 0
           ? check('extensions', 'pass', null)
-          : check('extensions', 'fail', `extensions_differ:${differ.length}`, differ),
+          : check(
+              'extensions',
+              'fail',
+              major ? 'major_differs' : `extensions_differ:${differ.length}`,
+              differ,
+            ),
       )
       const missing = await scratchSession.readOnly((rtx) => missingObjects(rtx, outside.objects))
       checks.push(
@@ -212,11 +223,16 @@ export async function scratchCheck(
             : check('outside_scope', 'fail', `missing:${missing.length}`, missing.map(label)),
       )
     }
-    // The execution role, for the migrator, under the scratch environment's exceptions.
+    // The execution role, for the migrator, under the scratch environment's exceptions. The
+    // replay creates objects as it, so it must be the role the imported target's environment
+    // resolves the alias to: another owner would make every replayed object drift.
     const resolved = await executionRolesFor(q, scratch)
     const role = resolved.roles[alias]
+    const imported = (await executionRolesFor(q, target)).roles[alias]
     if (role === undefined) {
       checks.push(check('execution_role', 'fail', 'unmapped_alias'))
+    } else if (imported !== undefined && imported !== role) {
+      checks.push(check('execution_role', 'fail', 'differs_from_target', [role, imported]))
     } else {
       const [facts] = await scratchSession.readOnly((rtx) =>
         executionRoleFacts(rtx, [role], 'exponetdb_migrator'),

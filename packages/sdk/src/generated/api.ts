@@ -2716,7 +2716,7 @@ export interface Operations {
   }
   checkScratchTarget: {
     readonly params: { readonly target: string }
-    readonly query: { readonly scratchTarget: string }
+    readonly query: { readonly role?: string; readonly scratchTarget: string }
     readonly body: never
     readonly response: ScratchCheck
   }

@@ -300,6 +300,32 @@ describe('the scratch preflight', () => {
     await expect(runAsSuperuser(pg17, importedDb, [script])).rejects.toMatchObject({
       message: expect.stringContaining('is not the scratch target'),
     })
+    // A view outside the scope on a table inside it would go with DROP SCHEMA ... CASCADE:
+    // the reset refuses and names it, and drops nothing.
+    await runAsSuperuser(pg17, scratchDb, [
+      'CREATE VIEW acme_identity.profile_handles AS SELECT handle FROM public.acme_profiles',
+    ])
+    await expect(runAsSuperuser(pg17, scratchDb, [script])).rejects.toMatchObject({
+      message: expect.stringMatching(
+        /outside the managed scope.*view acme_identity\.profile_handles/,
+      ),
+    })
+    await runAsSuperuser(pg17, scratchDb, ['DROP VIEW acme_identity.profile_handles'])
+    // A schema name holding the script's own dollar-quote tag stays inside its literal.
+    const hostile = 'x$reset$;COMMIT;CREATE TABLE public.exdb_breakout(i int);--'
+    const tagged = scratchResetSql({
+      installationId: h.db.installationId,
+      targetId: scratch.targetId,
+      targetPath: scratch.path,
+      generation: scratch.generation,
+      includeSchemas: ['public', hostile],
+    })
+    expect(tagged).toContain('DO $reset1$')
+    await runAsSuperuser(pg17, scratchDb, [tagged])
+    const breakout = await withSuperuser(pg17, scratchDb, (c) =>
+      c.query(`SELECT pg_catalog.to_regclass('public.exdb_breakout') IS NULL AS absent`),
+    )
+    expect(breakout.rows[0]).toEqual({ absent: true })
     await runAsSuperuser(pg17, scratchDb, [script])
     const after = await withSuperuser(pg17, scratchDb, (c) =>
       c.query(

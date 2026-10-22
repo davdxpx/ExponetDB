@@ -1415,6 +1415,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         caller(call),
         target(call),
         String(field(call.query, 'scratchTarget')),
+        optionalText(call.query, 'role'),
       ),
     ),
   getImportReport: async (app, call) =>

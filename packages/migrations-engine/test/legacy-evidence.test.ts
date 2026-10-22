@@ -78,19 +78,88 @@ describe('statement sequences', () => {
     })
   })
 
-  it('keep the Wave 6 comparison (statement by statement, whitespace collapsed) as strong', () => {
-    const applied = [
-      'CREATE INDEX flags_name   ON public.flags (name);',
-      'CREATE INDEX other ON public.flags (id)',
-    ]
+  it('match statement by statement as strong only when each is the same text', () => {
     const statements = [
       'CREATE INDEX flags_name ON public.flags (name)',
       'CREATE INDEX other ON public.flags (id)',
     ]
-    expect(statementsMatch(applied, [statements], [statements.join(';\n')])).toEqual({
-      strength: 'strong',
-      how: 'statements',
-    })
+    // Ends trimmed and a final semicolon aside, byte for byte.
+    expect(
+      statementsMatch(
+        [
+          '  CREATE INDEX flags_name ON public.flags (name);',
+          'CREATE INDEX other ON public.flags (id)\n',
+        ],
+        [statements],
+        [statements.join(';\n')],
+      ),
+    ).toEqual({ strength: 'strong', how: 'statements' })
+    // Whitespace that differs inside a statement is the normalized tier, no longer strong.
+    expect(
+      statementsMatch(
+        [
+          'CREATE INDEX flags_name   ON public.flags (name);',
+          'CREATE INDEX other ON public.flags (id)',
+        ],
+        [statements],
+        [statements.join(';\n')],
+      ),
+    ).toEqual({ strength: 'medium', how: 'statements_normalized' })
+  })
+
+  it('never treat whitespace that is data, or a line a comment ended, as equal (review round 1)', () => {
+    // Inside a literal, whitespace is data: no tier matches.
+    expect(
+      statementsMatch(
+        ["INSERT INTO t VALUES ('a b')"],
+        [["INSERT INTO t VALUES ('a  b')"]],
+        ["INSERT INTO t VALUES ('a  b');"],
+      ),
+    ).toBe(null)
+    // A line comment folded into one line comments out what followed it.
+    expect(
+      statementsMatch(
+        ['ALTER TABLE t ADD COLUMN a int -- , ADD COLUMN b int'],
+        [['ALTER TABLE t ADD COLUMN a int --\n, ADD COLUMN b int']],
+        ['ALTER TABLE t ADD COLUMN a int --\n, ADD COLUMN b int;'],
+      ),
+    ).toBe(null)
+  })
+
+  it('remove comments and whitespace only inside code bodies, never inside data (review round 1)', () => {
+    // A dollar-quoted literal is data: `--` in it is not a comment.
+    expect(
+      statementsMatch(
+        ['INSERT INTO t VALUES ($$a$$)'],
+        [['INSERT INTO t VALUES ($$a--b$$)']],
+        ['INSERT INTO t VALUES ($$a--b$$);'],
+      ),
+    ).toBe(null)
+    // A body in another language keeps its whitespace (indentation is code in Python).
+    const python =
+      'CREATE FUNCTION f() RETURNS int LANGUAGE plpython3u AS $py$\nif x:\n    return 1\nreturn 2\n$py$'
+    expect(
+      statementsMatch(
+        [
+          'CREATE FUNCTION f() RETURNS int LANGUAGE plpython3u AS $py$ if x: return 1 return 2 $py$',
+        ],
+        [[python]],
+        [`${python};`],
+      ),
+    ).toBe(null)
+    // A DO block without LANGUAGE, and a plpgsql routine with LANGUAGE after the body, are code.
+    for (const [stored, file] of [
+      ['DO $$ BEGIN PERFORM 1; END $$', 'DO $$\nBEGIN\n  -- once\n  PERFORM 1;\nEND\n$$'],
+      [
+        'CREATE FUNCTION g() RETURNS void AS $$ BEGIN PERFORM 1; END $$ LANGUAGE plpgsql',
+        'CREATE FUNCTION g() RETURNS void AS $$\nBEGIN\n  -- once\n  PERFORM 1;\nEND\n$$ LANGUAGE plpgsql',
+      ],
+    ] as const) {
+      expect(statementsMatch([stored], [[file]], [`${file};`])).toEqual({
+        strength: 'low',
+        how: 'statements_bodies',
+      })
+    }
   })
 
   it('never match a different executable text, an empty entry or unreadable text', () => {

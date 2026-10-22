@@ -36,6 +36,23 @@ describe('scratchResetSql', () => {
     ).toEqual([])
   })
 
+  it('quotes the block with a tag that no schema name contains', () => {
+    expect(scratchResetSql({ ...BASE, includeSchemas: ['public'] })).toContain('DO $reset$\n')
+    const sql = scratchResetSql({
+      ...BASE,
+      includeSchemas: ['a$reset$;COMMIT;CREATE TABLE public.x(i int);--', 'b$reset1$'],
+    })
+    expect(sql).toContain('DO $reset2$\n')
+    expect(sql.trimEnd().endsWith('$reset2$;\nCOMMIT;')).toBe(true)
+    expect(sql.split('$reset2$')).toHaveLength(3)
+  })
+
+  it('refuses to drop what outside the scope depends on the scope', () => {
+    const sql = scratchResetSql({ ...BASE, includeSchemas: ['public'] })
+    expect(sql).toContain("RAISE EXCEPTION 'objects outside the managed scope depend on it")
+    expect(sql.indexOf('INTO outside')).toBeLessThan(sql.indexOf("format('DROP SCHEMA"))
+  })
+
   it('takes every schema but the excluded ones when the scope lists none', () => {
     const sql = scratchResetSql({ ...BASE, excludeSchemas: ['auth'] })
     expect(sql).toContain("NOT (n.nspname = ANY (ARRAY['auth']::text[]))")

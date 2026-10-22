@@ -482,5 +482,37 @@ describe('legacy import of a real-shape Supabase history', () => {
       code: 'LEGACY_IMPORT_TRUNCATED',
       details: { driftTotal: 1012, held: 500 },
     })
+    // Every held item decided: the report still never reads resolved over drift it lacks.
+    const decided = await h.worker.transaction('test.supabase.big.decided', (tx) =>
+      importReportView(tx, big.targetId, r.id),
+    )
+    expect(decided.items.filter((i) => i.state === 'ambiguous' && i.decision === null)).toEqual([])
+    expect(decided.state).toBe('open')
+    // A report analyzed before drift totals were kept (no total, no mark) may have been cut
+    // at 500 items without a sign: it is never baselined either, and never reads resolved.
+    await h.db.asSuperuser(async (c) => {
+      await c.query(
+        'ALTER TABLE migrations.import_reports DISABLE TRIGGER import_reports_drift_guard',
+      )
+      await c.query(
+        'UPDATE migrations.import_reports SET drift_total = NULL, drift_truncated = false WHERE report_id = $1',
+        [r.id],
+      )
+      await c.query(
+        'ALTER TABLE migrations.import_reports ENABLE TRIGGER import_reports_drift_guard',
+      )
+    })
+    const older = await h.worker.transaction('test.supabase.big.older', (tx) =>
+      importReportView(tx, big.targetId, r.id),
+    )
+    expect(older).toMatchObject({ state: 'open', driftTotal: null, driftTruncated: false })
+    await expect(
+      h.serve.transaction('test.supabase.big.baseline.older', (tx) =>
+        planBaseline(tx, ctx, a, big.targetId, r.id),
+      ),
+    ).rejects.toMatchObject({
+      code: 'LEGACY_IMPORT_TRUNCATED',
+      details: { driftTotal: null, held: 500 },
+    })
   })
 })

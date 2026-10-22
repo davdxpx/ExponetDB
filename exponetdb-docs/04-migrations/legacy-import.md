@@ -102,7 +102,11 @@ target's actual partitions).
 scratch target, and checked, never guessed: before the first file runs, the
 replay compares the installed extensions of both targets (name, schema,
 version); any difference makes the report `incomplete` with
-`extensions_differ:<name>` and replays nothing. **Date pinning is not
+`extensions_differ:<name>` and replays nothing. **[DECIDED]** (Wave 9 Part A,
+review round 1) The same holds for the **major version**: the replay runs and
+parses on the scratch target's major, the baseline's verification on the
+imported target's, so a scratch target on another major makes the report
+`incomplete` with `major_differs:<target>/<scratch>` before any file runs. **Date pinning is not
 implemented** **[NON-GOAL]** for now: PostgreSQL offers no way to fix `now()` or
 `current_date` for one session, so date-dependent DDL replays at the replay
 time; the partitions that differ appear as global drift items
@@ -133,10 +137,10 @@ The replay ends with fingerprint `F_replay`.
 | Evidence | Strength | How |
 |---|---|---|
 | Drizzle `hash` equals SHA-256 of a file's bytes | `strong` (content) | hash comparison; independent of names |
-| Supabase `statements[]` equal a file's statements one by one | `strong` (content) | whitespace collapsed per statement (the Wave 6 comparison) |
+| Supabase `statements[]` equal a file's statements one by one | `strong` (content) | byte for byte, only the ends of each statement trimmed (review round 1; Wave 6 collapsed whitespace, which also made data and commented-out text equal) |
 | Supabase `statements[]` equal a file as a normalized statement sequence | `medium` (content) | both sides joined and normalized lexically like `c1`: comments, drizzle breakpoints and whitespace do not matter (§2.3) |
-| … equal only when comments inside dollar-quoted bodies are ignored too | `low` (content) | the same code ran; the stored body text differs (§2.3) |
-| Alias table entry (`0252_task_sync_runs` → `0260_task_sync_runs`, or one entry → several files) | `curated` | project hints; for several files, the entry's statements are compared with the files' statements joined in file order and the stronger result counts |
+| … equal only when comments and whitespace inside the code bodies of `DO` blocks and `plpgsql`/`sql` routines are ignored too | `low` (content) | the same code ran; the stored body text differs; dollar-quoted data and other languages are compared as written (§2.3) |
+| Alias table entry (`0252_task_sync_runs` → `0260_task_sync_runs`, or one entry → several files) | `curated` | project hints; for several files, the entry's statements are compared with the files' statements joined in file order and the stronger result counts; statements that differ contradict the alias (`alias_contradicted`, `weak`, §2.3) |
 | Exact name match (Supabase `name`, or `<version>_<name>` of older ledgers; a runner's file name) | `weak` | a hint only: **never makes a file `recorded`** |
 | Numeric prefix match | none | never used alone (60 prefixes are ambiguous) |
 
@@ -213,7 +217,10 @@ After cutover they can be dropped in a later, deliberate migration.
 
 L1/L3 verification of the baseline: the target's fingerprint still equals the one
 recorded; every `accept as applied` row's surviving expectations hold. The
-baseline is `passed` only then.
+baseline is `passed` only then. **[DECIDED]** (Wave 9 Part A, review round 1)
+A chain the imported target's major cannot parse checks no expectation, so
+the verification fails (`structural.unparsed`, the first file it could not
+read) instead of passing on the fingerprint alone.
 
 ### Step 8: Freeze
 
@@ -305,7 +312,12 @@ ledger such as drizzle's compares) are kept beside it. Golden vectors:
 - **Review** `POST …/import-reports/{id}/items/{itemId}/decision` records a
   state and a note per item (an open report only; the classification never
   changes). The report reads `resolved` when no item that needs a decision
-  is undecided.
+  is undecided and it can become a baseline: **[DECIDED]** (Wave 9 Part A,
+  review round 1) a truncated report, or one analyzed before drift totals
+  were kept (no `driftTotal`), stays `open`. Planning a baseline refuses
+  both (`LEGACY_IMPORT_TRUNCATED`, `driftTotal` null for the older report,
+  which may have been cut at 500 items without a mark), and lists at most
+  1 000 undecided items with their `total` (`LEGACY_IMPORT_AMBIGUOUS`).
 - **Baseline** `POST /targets/{target}/migrations/baseline-plans` with a
   resolved report: the live fingerprint must equal the analyzed one
   (`SCHEMA_FINGERPRINT_MISMATCH` otherwise: analyze again). The plan binds
@@ -360,6 +372,26 @@ The engine (`packages/migrations-engine/src/legacy-evidence.ts`) now:
   statements, drizzle `--> statement-breakpoint` comments, line breaks and
   indentation do not matter; a `;` or a comment marker inside a literal, a
   quoted name or a dollar-quoted body is data;
+- grades the comparison **[DECIDED]** (Wave 9 Part A, review round 1):
+  `strong` is a tool's hash of the file's bytes, or the statements equal
+  one by one **byte for byte** with only their ends trimmed (whitespace
+  inside a literal, or a line a comment ended, can change what a statement
+  means); `medium` is the normalized joined sequence above; `low` also
+  removes comments and whitespace inside the code bodies of `DO` blocks
+  and of `plpgsql` or `sql` functions and procedures, and nowhere else (a
+  dollar-quoted literal is data, and a body in another language, such as
+  Python, keeps its whitespace);
+- gives one entry's content to **one file only**: content proves that a
+  file ran, not which of several files with the same content. When several
+  files hold an entry's content, an entry that names one of them takes it;
+  the others pair up with entries of that content in file and ledger order
+  only when there are at least as many entries as files; otherwise none of
+  them is recorded by that content, and each is `ambiguous` with
+  `content_matches_files:<n>`;
+- treats a **contradicted alias** as no evidence: when an alias says one
+  entry stands for several files and the entry holds statements that are
+  not the files' joined content, each file gets `<ledger>:alias_contradicted`
+  (`weak`) and is `ambiguous` unless content records it by itself;
 - records per item the **strength** of the strongest evidence
   (`evidenceStrength` in the report): `strong`, `medium`, `low`, `curated`,
   `weak`, or none. Content (`strong`, `medium`, `low`) and `curated` make a
@@ -427,7 +459,9 @@ refusing role statements):
   may have changed them), a person decides. A statement whose subject depends on who runs it
   (`CURRENT_USER`, `SESSION_USER`, `CURRENT_ROLE`, `PUBLIC`) or whose value
   comes from the session (`SET … FROM CURRENT`, `RESET ALL`) yields no
-  expectation and makes the file `ambiguous` (`cluster_global_unknown`).
+  expectation and makes the file `ambiguous` (`cluster_global_unknown`),
+  also when later files superseded its other effects: no later statement
+  can supersede what was never known (review round 1).
   A setting value is compared as PostgreSQL stores it after the statement's
   own rendering (list settings such as `search_path` quoted like
   `quote_ident`); a value PostgreSQL would render differently does not hold,
@@ -463,18 +497,33 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   exist on the scratch target as a schema-only copy; at most 1 000 are
   read, more is `unknown`), and `execution_role` (the role resolved for the
   scratch environment, for the migrator, with that environment's declared
-  exceptions). `ready` is all of them passing. The preflight changes
+  exceptions). `ready` is all of them passing. **[DECIDED]** (Wave 9 Part A,
+  review round 1) `extensions` also compares the PostgreSQL major
+  (`major_differs`, item `postgresql: target <n>, scratch <m>`), and
+  `execution_role` fails with `differs_from_target` (items: the scratch
+  role, the imported target's role) when the scratch environment resolves
+  the alias to another role than the imported target's environment does:
+  the replayed objects would be owned by another role and every one would
+  drift. The alias is `owner` unless `role` (CLI `--role`) names the one the
+  hints use. The preflight changes
   nothing; the replay checks again under its own lock.
 - **In-place reset.** A used scratch target is reset without re-creating
   its database (which would change the oid the registry recorded and fail
   `database_mismatch`): `exponetdb migration import scratch-reset-sql
   --scratch …` prints a script built from registry values (installation,
-  target id, generation, the project's managed scope) that a person runs as
-  a superuser connected to that database. It stops unless the database
-  carries the scratch target's marker and has no ledger row; then, in one
+  target id, generation, the project's managed scope) that a person runs
+  with `psql -v ON_ERROR_STOP=1` as a superuser connected to that database.
+  It stops unless the database carries the scratch target's marker and has
+  no ledger row, and **[DECIDED]** (Wave 9 Part A, review round 1) when an
+  object outside the managed scope depends on one inside it (a view, a
+  column's type, a default, a trigger, a policy, a cast): `DROP SCHEMA …
+  CASCADE` would drop it too, so the script refuses and names them (from
+  `pg_depend`, normal and automatic dependencies). Then, in one
   transaction, it drops and re-creates each schema of the managed scope with
   its owner and grants (read from the catalog before the drop) and
-  re-creates the extensions that lived there in their versions. The
+  re-creates the extensions that lived there in their versions. The script
+  is one `DO` block whose dollar-quote tag occurs nowhere in its body (a
+  schema name may hold `$`), so no registry value leaves its literal. The
   database, its oid, the `exponetdb` schema with the marker and every
   schema outside the scope stay; default privileges set inside a dropped
   schema go with it. Run the preflight afterwards.
@@ -527,6 +576,7 @@ the new target directly. See
 | Two legacy files with the same number | Identity is the full file stem, which is unique; numbers are not used. |
 | File renamed after apply (applied name differs) | Alias table maps the applied name to the stem; content evidence (drizzle hash, statements) confirms independently. |
 | One ledger entry for several files | Curated rule in hints (`"0032_0036_…": ["0032_…", …, "0036_…"]`, Wave 9) plus statement comparison against the files joined in file order (§2.3). |
+| Two files with the same content (a fix run twice, a copied file) | One entry's content records one file only: the entry that names a file takes it, as many entries as files pair up, fewer leave each file `ambiguous` (`content_matches_files:<n>`, §2.3). |
 | File edited (comments only) after apply | Executable checksum unchanged; no issue. |
 | File edited (executable text) after apply | The imported checksum is of today's text; the replay uses today's text; if the target's objects match, it imports as present. Divergence is still caught by object comparison. |
 | Conditional DDL took a different branch on the target | Surviving expectations differ; review item with the evaluated branch shown. |
@@ -534,6 +584,8 @@ the new target directly. See
 | Objects created by hand, never in a file | Global drift item → `unmanaged_but_present` or removal. |
 | Provider-managed schemas (`auth`, `storage`, `realtime`, `extensions`, `supabase_migrations`, …) | Excluded from managed scope by the project's configuration; never imported. |
 | Extension in `extensions` schema on the source, `public` on the replay | The scratch target is prepared with the target's extensions in the same schemas and versions; the replay refuses otherwise (`extensions_differ:<name>`, §2 step 2). |
+| Scratch target on another PostgreSQL major | The preflight fails `extensions` (`major_differs`), the replay refuses (`major_differs:<target>/<scratch>`, §2 step 2). |
+| A view or column outside the managed scope depends on a scratch object | The in-place reset refuses and names it; drop or move it first (§2.5). |
 | Legacy ledger table missing on a target | Fine; evidence comes from objects. |
 | A file creates or grants roles (top level or in a `DO` block that swallows `duplicate_object`) | Elided from the replay, checked as cluster-global expectations on the imported target (`cluster_global_held:<n>/<m>`, §2.4); a mixed `DO` block runs and makes the file `ambiguous`. |
 | `CREATE INDEX CONCURRENTLY` in a file | Replayed alone in autocommit between transactional segments (§2.4). |

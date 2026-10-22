@@ -197,7 +197,12 @@ after the replay the preflight fails `empty` (the replayed objects), and a
 second analysis's replay ends with the report `incomplete`
 (`scratch_not_empty`). Reset the scratch target in place with `exponetdb
 migration import scratch-reset-sql --scratch acme/platform/scratch`, run as
-the lab superuser in `acme_scratch`; the preflight is ready again.
+the lab superuser in `acme_scratch` (`exponetdb dev sql staging --lab parta
+--db acme_scratch --file reset.sql`, which stops at the first error); the
+preflight is ready again. Counter-check: before the reset, a view outside
+the scope on a replayed table (`CREATE SCHEMA probe; CREATE VIEW probe.v AS
+SELECT * FROM public.acme_notes;` in `acme_scratch`) makes the reset refuse
+and name `view probe.v`; `DROP SCHEMA probe CASCADE;`, then reset.
 
 ## 7. A first bundle from an MCP agent on staging
 

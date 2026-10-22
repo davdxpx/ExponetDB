@@ -108,7 +108,7 @@ exit codes are in [`README.md`](./README.md).
 | [`migration resume`](#migration-resume) | remote | plan | Plan resuming a non-transactional migration that stopped part-way (an explicit new plan). |
 | [`migration rollback`](#migration-rollback) | remote | plan | Plan rolling back the latest migration with its down.sql (an explicit new plan; never automatic). |
 | [`migration import analyze`](#migration-import-analyze) | remote | plan | Plan a legacy import analysis: replay the legacy files on a scratch target and classify them. |
-| [`migration import scratch-reset-sql`](#migration-import-scratch-reset-sql) | remote | read | Print the SQL that resets a used scratch target in place (run it as a superuser on that database): it keeps the database and its identity marker and recreates the managed schemas with their grants and extensions. |
+| [`migration import scratch-reset-sql`](#migration-import-scratch-reset-sql) | remote | read | Print the SQL that resets a used scratch target in place (run it with psql -v ON_ERROR_STOP=1 as a superuser on that database): it keeps the database and its identity marker and recreates the managed schemas with their grants and extensions. |
 | [`migration import scratch-check`](#migration-import-scratch-check) | remote | read | Check, read only, whether a scratch target can take this target’s legacy replay: usable, its identity, empty, the same extensions, the objects outside the managed scope, the execution role. |
 | [`migration import report`](#migration-import-report) | remote | read | An import report: every legacy file’s classification and the decisions so far. |
 | [`migration import resolve`](#migration-import-resolve) | remote | mutation | Record your decision for one item of an import report (with a note). |
@@ -1883,7 +1883,7 @@ Runs: against the server; effect: plan; action: `migration.import.analyze`; scop
 
 ### migration import scratch-reset-sql
 
-Print the SQL that resets a used scratch target in place (run it as a superuser on that database): it keeps the database and its identity marker and recreates the managed schemas with their grants and extensions.
+Print the SQL that resets a used scratch target in place (run it with psql -v ON_ERROR_STOP=1 as a superuser on that database): it keeps the database and its identity marker and recreates the managed schemas with their grants and extensions.
 
 ```text
 exponetdb migration import scratch-reset-sql [flags]
@@ -1909,6 +1909,7 @@ Runs: against the server; effect: read; action: `migration.import.scratch_check`
 |---|---|
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
 | `--scratch <target>` | The scratch target (path or tgt_ id). (required) |
+| `--role <alias>` | The execution role alias the replay runs as (the hints role; default owner). |
 
 ### migration import report
 

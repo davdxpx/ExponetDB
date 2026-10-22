@@ -19,8 +19,13 @@ and the G6 to G8 records. Item status values: `open`, `PASS`, `FAIL`,
 **implementation** (code serves it) and **evidence** (a test or a run proved
 it here, with the commit). **G7 and G8 are not accepted yet; this record
 claims nothing about them. G2 off-host deployment evidence is still
-outstanding. CI has never run for this repository (no GitHub Actions runner
-starts); no PASS is derived from a workflow file. CI: not waived.** Nothing
+outstanding.** **[OBSERVED]** (2026-10-22) CI runs for this pull request
+(GitHub Actions, 17 jobs including the systemd host scenarios; the earlier
+statement that no runner starts is no longer true): on `4a26597` (run
+39705305083) 16 jobs pass and `Host scenario journal (systemd)` fails; it
+fails the same way on `main` at `485619c` (run 39656574621), so it is not
+this pull request's (noted on the pull request; no fix exists yet). No PASS
+here is derived from a workflow file alone. Nothing
 in Part A deploys anything, enrolls a node, or connects to a real database
 (order §1): every PostgreSQL claim is proven against disposable containers.
 
@@ -576,6 +581,21 @@ written as **[OBSERVED]** with that source, everything still to come as
 - **OD-54 (open).** A cluster registered external stays external: node
   capabilities on it are `CAPABILITY_UNAVAILABLE` until the owner decides
   how it gains the agent.
+- A8 (review round 1, security P3-2): the bootstrap SQL grants the
+  migrator `SET` on an execution role whose `BYPASSRLS` is excused in any
+  environment of the cluster's projects; that role's other attributes and
+  reach are still checked. That the role is used only where its
+  environment's declaration holds is the plan's and the executor's check
+  (`executionRoleExceptions`, re-checked under the lock), not the grant's.
+- A8: a database whose name holds a double quote gets no legacy ledger
+  grant from the script (psql cannot `\connect` to it); the script says so,
+  and a person grants the read by hand.
+- Review round 1, P3-5: the baseline verification fails when the imported
+  target's major cannot parse the chain (`structural.unparsed`); no test
+  drives it, since it needs the imported target's major to change between
+  the analysis and the baseline (a scratch target on another major is now
+  refused before the replay, §6.2). The `total` of `LEGACY_IMPORT_AMBIGUOUS`
+  (more than 1 000 undecided items) has no test either.
 
 ## 6. Reviews
 
@@ -608,3 +628,48 @@ executor under the lock re-check them; the Control Store guards; human-only
 authorization with production approval and re-authentication; no SQL
 injection path; the single resolver; the health finding's read and
 clearing rules; the frozen pieces unchanged.
+
+### 6.2 Review round 1 over the whole Part A diff (2026-10-22)
+
+Two independent reviewers (fresh context, no part in building it), one for
+correctness and truthfulness of states, one for security and authority,
+reviewed `git diff origin/main...4a26597` (13 commits), ran the golden
+checks and the suites they needed on disposable containers, and edited
+nothing. Their probes stayed in the session's scratch directory. Every
+finding is fixed in `fix(migrations): …` after `4a26597`, with a test
+unless the row says otherwise.
+
+**Correctness.** One P1, three P2, nine P3:
+
+| # | Severity | Finding | Fix | Test |
+|---|---|---|---|---|
+| C-P1-1 | P1 | One ledger entry's content recorded every file with the same content: a fix copied into a second, never applied file was `recorded_present` | an entry's content goes to one file: the entry that names one takes it, as many entries as files pair up in order, fewer leave each file `ambiguous` (`content_matches_files:<n>`); legacy-import.md §2.3 | `legacy-ledger-match.int.test.ts` "records a file by content once" (fails on the old code) |
+| C-P2-1 | P2 | `superseded` hid `cluster_global_unknown`: a file whose objects a later file dropped never showed its unknown role effect | `cluster_global_unknown` is always `ambiguous` (§2.4) | same test (`0004_x`) |
+| C-P2-2 | P2 | The reset script's fixed `$reset$` tag broke on a schema name holding it | the tag is chosen to occur nowhere in the body (the same defect as S-P1-1) | `scratch-reset.test.ts`, `scratch-check.int.test.ts` |
+| C-P2-3 | P2 | The `strong` statement tier collapsed whitespace, so data (`'a b'` and `'a  b'`) and text a line comment ended were equal | `strong` is byte equality per statement with only the ends trimmed (§2.3, step 3 table) | `legacy-evidence.test.ts` "never treat whitespace that is data …" |
+| C-P3-1 | P3 | The `low` tier removed comments and whitespace in any dollar-quoted body: data and Python bodies too | only `DO` blocks and `plpgsql`/`sql` routine bodies | `legacy-evidence.test.ts` "remove comments … only inside code bodies" |
+| C-P3-2 | P3 | A report analyzed before drift totals were kept could be baselined though it may have been cut at 500 items | refused (`LEGACY_IMPORT_TRUNCATED`, `driftTotal` null; the detail is nullable, additive) | `legacy-supabase.int.test.ts` drift test |
+| C-P3-3 | P3 | A truncated report with every held item decided read `resolved` | `resolved` only when it can become a baseline | same test |
+| C-P3-4 | P3 | The preflight checked the scratch environment's role, not that it is the role the imported target resolves (every replayed object would drift by owner); the alias was always `owner` | `execution_role` fails `differs_from_target`; `role` query and CLI `--role` (additive) | `legacy-ledger-match.int.test.ts` "names an execution role other than …" |
+| C-P3-5 | P3 | The baseline verification passed on the fingerprint alone when the chain did not parse on the imported target's major | fails (`structural.unparsed`). Found while fixing it: nothing checked that the scratch target runs the imported target's major, which §2 step 2 requires; the preflight (`major_differs`) and the replay (`incomplete`, `major_differs:<target>/<scratch>`) now refuse it | the major: "refuses a scratch target on another major"; the unparsed path: none (§5) |
+| C-P3-6 | P3 | The bootstrap's ledger section stopped psql at the `\connect` to a database that does not exist yet | guarded with `\gset`/`\if`, a message, the next database handled | `bootstrap.int.test.ts` on 16, 17, 18 |
+| C-P3-7 | P3 | The reset's `DROP SCHEMA … CASCADE` also dropped objects outside the scope that depend on it | refused, naming them (`pg_depend`, normal and automatic) | `scratch-check.int.test.ts` (a view); a probe on 16 and 18 named a column type, a default, a view and a trigger and passed operators, operator classes, policies and triggers inside the scope |
+| C-P3-8 | P3 | `LEGACY_IMPORT_AMBIGUOUS` listed 1 000 items without saying more wait | `total` (additive) | none (§5) |
+| C-P3-9 | P3 | An alias that the entry's own statements contradict still recorded every file | `alias_contradicted` (`weak`), `ambiguous` unless content records the file | `legacy-ledger-match.int.test.ts` (`0009_notes_index`) |
+
+**Security.** One P1, one P2, three P3. The reviewer found the A4/A5
+authority model, the replay's elision of role statements, the preflight's
+read-only access, the database retirement, the bootstrap's name escaping
+(backquotes, `\gexec`, `$exdb$`, `:var`, `host=`, URIs, control characters
+run end to end through psql), secrets and the frozen pieces sound.
+
+| # | Severity | Finding | Fix | Test |
+|---|---|---|---|---|
+| S-P1-1 | P1 | A managed-scope schema name holding `$reset$` closed the reset script's `DO` block early, and the rest ran as top-level SQL as the superuser running it, past the marker guard (proven without `ON_ERROR_STOP`; with it, a failed reset); `registry.manage` sets schema names | the collision-free tag; the script stays one transaction with one `DO` block, so nothing runs after an error | `scratch-reset.test.ts` "quotes the block with a tag …"; `scratch-check.int.test.ts` runs the reviewer's name and finds no table created |
+| S-P2-1 | P2 | psql drops double quotes from a `\connect` argument: the ledger grants for `q"w"e` landed in `qwe` (observer read only) | each grant block checks `current_database()` and raises otherwise; a name holding `"` gets no `\connect`, only a message (credentials-and-roles.md §8) | `adapter.test.ts`; `bootstrap.int.test.ts` "never grants the ledger read in another database" on 16, 17, 18; the guard's raise proven with psql 17 |
+| S-P3-1 | P3 | The reset's documents did not name `ON_ERROR_STOP` | the CLI, the script's header and legacy-import.md §2.5 say `psql -v ON_ERROR_STOP=1` | — |
+| S-P3-2 | P3 | The bootstrap excuses `BYPASSRLS` for the grant when any environment declared it | stays: documented (§4.8, §5); the plan and the executor check the declaration per environment | — |
+| S-P3-3 | P3 | The replay's autocommit step leaves session settings set | stays: the Wave 6 autocommit runner does the same, each step sets its own, and the session belongs to one operation and is closed after it | — |
+
+Round 2 (fresh reviewers over the whole diff after these fixes) follows
+before the pull request is marked ready.

@@ -168,6 +168,16 @@ describe('bootstrap SQL', () => {
       script.match(/GRANT SELECT ON "drizzle"\."__drizzle_migrations" TO "exponetdb_observer";/g),
     ).toHaveLength(2)
     expect(bootstrapScript(['app'])).not.toContain(String.raw`\connect`)
+    // Each grant block checks that psql reached the database it names.
+    expect(script).toContain(
+      "IF pg_catalog.current_database() OPERATOR(pg_catalog.<>) E'app' THEN\n    RAISE EXCEPTION 'connected to database % instead of %",
+    )
+    // psql drops double quotes from a \connect argument: such a name gets no \connect at
+    // all (it would reach "qwe"), only a message for the person running the script.
+    const quoted = bootstrapScript(['q"w"e'], { legacyLedgers: ['supabase'] })
+    expect(quoted).not.toContain(String.raw`\connect`)
+    expect(quoted).not.toContain('GRANT SELECT ON "supabase_migrations"')
+    expect(quoted).toContain(String.raw`\echo 'database q"w"e: its name holds a double quote`)
     expect(() => bootstrapScript(['a\nb'])).toThrow()
     expect(() => bootstrapScript([''])).toThrow()
   })

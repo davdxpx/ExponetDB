@@ -20,12 +20,14 @@ import { normalizeSqlSource, scanExecutableText } from '@exponetdb/migrations/fo
  * Strength, strongest first:
  *
  * - `strong`: a tool's hash of the file's bytes (drizzle), or the applied
- *   statements equal to the file's statements one by one, whitespace
- *   collapsed (the Wave 6 comparison);
+ *   statements equal to the file's statements one by one, byte for byte
+ *   with only their ends trimmed (whitespace inside a literal, or after a
+ *   line comment, can change what a statement means);
  * - `medium`: the normalized joined sequences are equal;
- * - `low`: equal only when comments inside dollar-quoted bodies (function
- *   bodies, `DO` blocks) are removed too: what ran is the same code, but the
- *   stored body text differs;
+ * - `low`: equal only when comments and whitespace inside the code bodies
+ *   of `DO` blocks and `plpgsql`/`sql` routines are removed too: what ran is
+ *   the same code, but the stored body text differs (a dollar-quoted
+ *   literal, or a body in another language, is compared as written);
  * - `curated`: a person's alias says the entry stands for the file;
  * - `weak`: a name only (the ledger's name equals the stem). Never makes a
  *   file `recorded`.
@@ -64,6 +66,43 @@ function isIdentCont(c: number): boolean {
 }
 function isTagCont(c: number): boolean {
   return isIdentStart(c) || isDigit(c)
+}
+
+/** The languages whose bodies are SQL text, so comments and whitespace in them are not data. */
+const CODE_LANGUAGES = new Set(['plpgsql', 'sql'])
+
+/**
+ * Whether the dollar-quoted body that ends at `end` is the code of a `DO`
+ * block or of a function or procedure in `plpgsql` or `sql`: only such a
+ * body is compared without its comments and whitespace (the `low` tier).
+ * A dollar-quoted literal (data) or a body in another language (whose
+ * whitespace may matter) never is. `prefix` holds the statement's tokens
+ * so far; the `LANGUAGE` clause may also follow the body.
+ */
+function isCodeBody(prefix: readonly string[], text: string, end: number): boolean {
+  const start = prefix.lastIndexOf(';') + 1
+  const words = prefix
+    .slice(start)
+    .filter((t) => t !== ' ')
+    .map((t) => t.toLowerCase())
+  const head = words.slice(0, 4)
+  const isDo = head[0] === 'do'
+  const isRoutine =
+    head[0] === 'create' && (head.includes('function') || head.includes('procedure'))
+  if (!isDo && !isRoutine) return false
+  const unquote = (t: string) => t.replace(/^(["'])(.*)\1$/, '$2').toLowerCase()
+  let language: string | null = null
+  const at = words.lastIndexOf('language')
+  const named = at >= 0 ? words[at + 1] : undefined
+  if (named !== undefined) {
+    language = unquote(named)
+  } else {
+    const rest = text.slice(end, text.indexOf(';', end) < 0 ? text.length : text.indexOf(';', end))
+    const m = /\blanguage\s+("[^"]*"|'[^']*'|[a-z_][a-z0-9_]*)/i.exec(rest)
+    language = m?.[1] === undefined ? null : unquote(m[1])
+  }
+  // A DO block without a LANGUAGE clause is PL/pgSQL.
+  return CODE_LANGUAGES.has(language ?? (isDo ? 'plpgsql' : ''))
 }
 
 /**
@@ -164,7 +203,7 @@ function retokenize(text: string, bodies: boolean): string {
       const delimiter = text.slice(i, open)
       const close = text.indexOf(delimiter, open)
       const end = close < 0 ? n : close + delimiter.length
-      if (bodies && close >= 0) {
+      if (bodies && close >= 0 && isCodeBody(out, text, end)) {
         // The weaker tier: the body as code, its comments gone and its whitespace collapsed.
         const body = scanExecutableText(text.slice(open, close))
         out.push(delimiter, body.ok ? body.value.trim() : text.slice(open, close), delimiter)
@@ -224,15 +263,19 @@ export function supabaseVersionTime(version: string): string | null {
 /** What one ledger entry proves about one file (or a curated group of files). */
 export interface ContentMatch {
   readonly strength: EvidenceStrength
-  /** `hash`, `statements`, `statements_normalized`, `statements_bodies`, `alias`, `name_hint`. */
+  /**
+   * `hash`, `statements`, `statements_normalized`, `statements_bodies`, `alias`,
+   * `alias_contradicted`, `name_hint`.
+   */
   readonly how: string
 }
 
 /**
  * The comparison keys of one side, computed once: the statements one by one
- * with whitespace collapsed (`exact`), the normalized joined sequence
- * (`normalized`) and the same with comments inside bodies removed
- * (`bodies`). A side without statements, or unreadable, has no key.
+ * as written, their ends trimmed (`exact`), the normalized joined sequence
+ * (`normalized`) and the same with comments and whitespace removed inside
+ * the code bodies of `DO` blocks and `plpgsql`/`sql` routines (`bodies`).
+ * A side without statements, or unreadable, has no key.
  */
 export interface ContentKeys {
   readonly exact: string | null
@@ -240,11 +283,13 @@ export interface ContentKeys {
   readonly bodies: string | null
 }
 
-const collapse = (t: string) => t.replace(/\s+/g, ' ').trim().replace(/;$/, '')
+// The strong tier is byte equality of each statement, its ends trimmed: whitespace inside a
+// literal or after a line comment can change what a statement means.
+const trimmed = (t: string) => t.trim().replace(/;$/, '').trimEnd()
 
 /** The keys of statement texts (the parser's statements, or a ledger's elements) and of whole texts. */
 export function contentKeys(statements: readonly string[], texts: readonly string[]): ContentKeys {
-  const exact = statements.map(collapse).filter((s) => s !== '')
+  const exact = statements.map(trimmed).filter((s) => s !== '')
   const key = (v: string | null) => (v === null || v === '' ? null : v)
   return {
     exact: exact.length === 0 ? null : exact.join('\u0000'),

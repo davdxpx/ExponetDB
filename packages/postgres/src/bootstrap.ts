@@ -311,20 +311,42 @@ ${databaseBootstrapStatements(database)
       '-- the declared legacy ledgers during an import, where they exist; nothing else.',
     )
     for (const database of databases) {
-      lines.push(connectTo(database))
+      // psql drops double quotes from a \connect argument, whatever the quoting: such a name
+      // would reach another database. Its ledger grants are left to a person, named here.
+      if (database.includes('"')) {
+        lines.push(
+          `\\echo ${psqlArgument(`database ${database}: its name holds a double quote, which psql cannot connect to; grant the observer the ledger reads there by hand`)}`,
+        )
+        continue
+      }
+      // psql stops at a \connect that fails: a database that does not exist yet is skipped
+      // with a message, like the database grants above, and the next one is handled.
+      lines.push(
+        `SELECT EXISTS (SELECT FROM pg_catalog.pg_database WHERE datname = ${quoteLiteral(database)}) AS exdb_database_exists \\gset`,
+        '\\if :exdb_database_exists',
+        connectTo(database),
+      )
+      // The grants run only in the database named: never in one a \connect reached instead.
+      const here = `  IF pg_catalog.current_database() OPERATOR(pg_catalog.<>) ${quoteLiteral(database)} THEN
+    RAISE EXCEPTION 'connected to database % instead of %: no ledger read granted', pg_catalog.current_database(), ${quoteLiteral(database)};
+  END IF;`
       lines.push(
         doBlock(
-          ledgers
-            .map((l) => {
+          [
+            here,
+            ...ledgers.map((l) => {
               const [schema, table] = LEGACY_LEDGER_TABLES[l]
               const qualified = `${quoteIdent(schema)}.${quoteIdent(table)}`
               return `  IF pg_catalog.to_regclass(${quoteLiteral(qualified)}) IS NOT NULL THEN
     GRANT USAGE ON SCHEMA ${quoteIdent(schema)} TO ${quoteIdent(ROLE_NAMES.observer)};
     GRANT SELECT ON ${qualified} TO ${quoteIdent(ROLE_NAMES.observer)};
   END IF;`
-            })
-            .join('\n'),
+            }),
+          ].join('\n'),
         ),
+        '\\else',
+        `\\echo ${psqlArgument(`database ${database} does not exist yet: create it, then run this script again`)}`,
+        '\\endif',
       )
     }
   }

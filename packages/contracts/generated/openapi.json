@@ -34321,6 +34321,16 @@
               ],
               "description": "A target as tgt_ id or as path <product>/<project>/<environment>."
             }
+          },
+          {
+            "in": "query",
+            "name": "role",
+            "required": false,
+            "schema": {
+              "description": "The execution role alias the replay runs as (the analysis hint role; default owner).",
+              "pattern": "^[a-z][a-z0-9_]{0,62}$",
+              "type": "string"
+            }
           }
         ],
         "responses": {

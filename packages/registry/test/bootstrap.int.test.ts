@@ -1,3 +1,4 @@
+import { bootstrapScript } from '@exponetdb/postgres'
 import {
   createDatabase,
   dropDatabase,
@@ -65,6 +66,7 @@ const REACH = role('reach')
 const LATER = role('later')
 const OTHER = role('other')
 const ROLES = [OWNER, ADOPTED, LOGIN, REACH, LATER, OTHER]
+const MISSING = `exdb_t_aaa_missing_${suffix}`
 
 const SHARED_CONNECTION_LIMIT = 32
 const shared = (script: string) =>
@@ -227,13 +229,14 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
 
       const generate = (projects: { projectId?: string } = {}) =>
         clusterBootstrapSql(h.worker, clusterId, {
-          databases: [pending, registered],
+          // A database not created yet, sorted before the pending one: psql goes on after it.
+          databases: [pending, registered, MISSING],
           ledgers: ['supabase', 'drizzle'],
           ...projects,
         })
       const bootstrap = await generate()
-      expect(bootstrap.databases).toEqual([registered, pending])
-      expect(bootstrap.pendingDatabases).toEqual([pending])
+      expect(bootstrap.databases).toEqual([registered, MISSING, pending])
+      expect(bootstrap.pendingDatabases).toEqual([MISSING, pending])
       expect(bootstrap.legacyLedgers).toEqual(['drizzle', 'supabase'])
       expect(bootstrap.executionRoles).toEqual(
         [
@@ -253,6 +256,8 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       expect(first.stderr).not.toMatch(/ERROR/)
       expect(first.status).toBe(0)
       expect(first.stderr).toContain(`execution role ${LATER} does not exist yet`)
+      expect(first.stderr).toContain(`database ${MISSING} does not exist yet`)
+      expect(first.stdout).toContain(`database ${MISSING} does not exist yet`)
       expect(first.stderr).toContain(`WARNING:  execution role ${LOGIN} is not granted`)
       expect(first.stderr).toContain(`WARNING:  execution role ${REACH} is not granted`)
       expect(await migratorGrants(s)).toEqual(
@@ -296,5 +301,21 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         ...ROLES.map((r) => `DROP ROLE ${r}`),
       ])
     }, 180_000)
+
+    it('never grants the ledger read in another database than the one named', async () => {
+      // psql drops double quotes from a \connect argument: a \connect to exdb"_t_… would
+      // reach exdb_t_…, which holds a ledger table.
+      const lookalike = await createDatabase(s, 'bs_lookalike')
+      created.push({ server: s, database: lookalike })
+      const quoted = `${lookalike.slice(0, 4)}"${lookalike.slice(4)}`
+      await runAsSuperuser(s, lookalike, [
+        'CREATE SCHEMA supabase_migrations',
+        'CREATE TABLE supabase_migrations.schema_migrations (version text PRIMARY KEY)',
+      ])
+      const r = await runBootstrap(s, bootstrapScript([quoted], { legacyLedgers: ['supabase'] }))
+      expect(r.status, r.stderr).toBe(0)
+      expect(r.stdout).toContain(`database ${quoted}: its name holds a double quote`)
+      expect(String((await ledgerAcl(s, lookalike))?.ledger)).not.toContain('exponetdb_observer')
+    }, 120_000)
   },
 )

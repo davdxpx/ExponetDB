@@ -35,6 +35,7 @@ import {
   TimestampSchema,
 } from '../common.ts'
 import type { ErrorCode } from '../errors.ts'
+import { ExecutionRoleAliasSchema } from '../manifest/migration.ts'
 import { CLIENT_STATES } from '../oauth/protocol.ts'
 import {
   ApiKeyCreatedSchema,
@@ -2268,7 +2269,13 @@ export const MIGRATION_ROUTES = [
       'Check, read only, whether a scratch target can take a legacy import replay of this target: usable, its identity, empty, the same extensions, the objects outside the managed scope the schema depends on, the execution role (Wave 9).',
     action: 'migration.import.scratch_check',
     pathParams: z.strictObject({ target: TargetRefSchema }),
-    query: z.strictObject({ scratchTarget: TargetRefSchema }),
+    query: z.strictObject({
+      scratchTarget: TargetRefSchema,
+      role: ExecutionRoleAliasSchema.optional().meta({
+        description:
+          'The execution role alias the replay runs as (the analysis hint role; default owner).',
+      }),
+    }),
     response: { status: 200, schema: ScratchCheckSchema },
     errors: ['VALIDATION_FAILED', ...TARGET_ERRORS],
   },

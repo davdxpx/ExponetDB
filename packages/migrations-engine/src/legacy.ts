@@ -345,7 +345,14 @@ export async function importReportView(q: Queryable, targetId: string, reportId:
     targetId: report.targetId,
     projectId: report.projectId,
     baselineId: report.baselineId,
-    state: report.state === 'open' && unresolved === 0 ? ('resolved' as const) : report.state,
+    // Resolved only when it can become a baseline: never over drift it does not hold.
+    state:
+      report.state === 'open' &&
+      unresolved === 0 &&
+      !report.driftTruncated &&
+      report.driftTotal !== null
+        ? ('resolved' as const)
+        : report.state,
     createdAt: report.createdAt,
     fingerprint: report.fingerprint,
     replayFingerprint: report.replayFingerprint,
@@ -901,6 +908,7 @@ function provenanceOf(match: ContentMatch): Provenance | null {
     case 'alias':
       return 'legacy_file_at_import'
     case 'name_hint':
+    case 'alias_contradicted':
       return null
     default:
       return 'legacy_applied_statements'
@@ -913,16 +921,43 @@ function provenanceOf(match: ContentMatch): Provenance | null {
  * statements against the file's statements (exact, normalized, or with
  * comments inside bodies ignored); a curated alias, also for one entry that
  * stands for several files (then the entry's statements are compared with
- * the files' statements joined in file order); the name. A numeric prefix
+ * the files' statements joined in file order, and an entry whose statements
+ * differ from them contradicts the alias: `alias_contradicted`, weak); the
+ * name. A numeric prefix
  * is never evidence. Keys are computed once per side.
+ *
+ * Content proves that one file ran, never which of several files with the
+ * same content: an entry's hash or statement evidence goes to one file only.
+ * When several files share the content an entry holds, an entry that names
+ * one of them takes it, and the rest pair up in file and ledger order only
+ * when at least as many entries hold that content; otherwise none of the
+ * remaining files is recorded by it, and each is `contested` (the number of
+ * files sharing the content): a person decides.
  */
 function relateLedger(
   chain: readonly FileAnalysis[],
   ledger: readonly LegacyLedgerEntry[],
   hints: Hints,
-): { related: Map<string, Related[]>; used: Set<LegacyLedgerEntry> } {
+): {
+  related: Map<string, Related[]>
+  used: Set<LegacyLedgerEntry>
+  contested: Map<string, number>
+  contradicted: Set<string>
+} {
   const related = new Map<string, Related[]>()
   const used = new Set<LegacyLedgerEntry>()
+  const contested = new Map<string, number>()
+  const contradicted = new Set<string>()
+  // Matches of one entry with several files of the same content, resolved after every entry.
+  const shared = new Map<
+    string,
+    { stems: string[]; claims: { entry: LegacyLedgerEntry; match: ContentMatch }[] }
+  >()
+  const claim = (key: string, stems: string[], entry: LegacyLedgerEntry, match: ContentMatch) => {
+    const group = shared.get(key) ?? { stems, claims: [] }
+    group.claims.push({ entry, match })
+    shared.set(key, group)
+  }
   const keys = new Map<string, ContentKeys>()
   const statementsOf = new Map<string, string[]>()
   const textOf = new Map<string, string>()
@@ -969,26 +1004,33 @@ function relateLedger(
     ])
   }
   for (const e of ledger) {
-    if (e.bytesDigest !== null) {
-      for (const stem of byDigest.get(e.bytesDigest) ?? []) {
-        add(stem, e, { strength: 'strong', how: 'hash' })
+    const seen = new Set<string>()
+    const offer = (key: string, stems: readonly string[], match: ContentMatch) => {
+      const fresh = stems.filter((stem) => !seen.has(stem))
+      for (const stem of fresh) seen.add(stem)
+      if (fresh.length === 1 && stems.length === 1) {
+        add(fresh[0] as string, e, match)
+      } else if (fresh.length > 0) {
+        used.add(e)
+        claim(key, [...stems], e, match)
       }
+    }
+    if (e.bytesDigest !== null) {
+      const stems = byDigest.get(e.bytesDigest) ?? []
+      if (stems.length > 0)
+        offer(`hash:${e.bytesDigest}`, stems, { strength: 'strong', how: 'hash' })
     }
     const applied = e.statements !== null && e.statements.length > 0 ? e.statements : null
     const entryKeys = applied === null ? null : contentKeys(applied, applied)
     if (entryKeys !== null) {
-      const seen = new Set<string>()
       const tiers: [Map<string, string[]>, string | null, ContentMatch][] = [
         [byExact, entryKeys.exact, { strength: 'strong', how: 'statements' }],
         [byNormalized, entryKeys.normalized, { strength: 'medium', how: 'statements_normalized' }],
         [byBodies, entryKeys.bodies, { strength: 'low', how: 'statements_bodies' }],
       ]
       for (const [index, key, match] of tiers) {
-        for (const stem of key === null ? [] : (index.get(key) ?? [])) {
-          if (seen.has(stem)) continue
-          seen.add(stem)
-          add(stem, e, match)
-        }
+        const stems = key === null ? [] : (index.get(key) ?? [])
+        if (stems.length > 0) offer(`${match.how}:${key}`, stems, match)
       }
     }
     const group = groups.get(e.name) ?? (e.altName === null ? undefined : groups.get(e.altName))
@@ -1003,13 +1045,45 @@ function relateLedger(
                 group.map((s) => textOf.get(s) ?? ''),
               ),
             )
-      for (const stem of group) add(stem, e, joined ?? { strength: 'curated', how: 'alias' })
+      if (joined === null && entryKeys !== null) {
+        // The entry holds statements, and they are not the files' joined content: the alias
+        // is contradicted, so it records none of them; a person decides.
+        for (const stem of group) {
+          add(stem, e, { strength: 'weak', how: 'alias_contradicted' })
+          contradicted.add(stem)
+        }
+      } else {
+        for (const stem of group) add(stem, e, joined ?? { strength: 'curated', how: 'alias' })
+      }
     }
     for (const name of new Set([e.name, e.altName])) {
       if (name !== null && keys.has(name)) add(name, e, { strength: 'weak', how: 'name_hint' })
     }
   }
-  return { related, used }
+  for (const { stems, claims } of shared.values()) {
+    const open = [...stems].sort((x, y) => (position.get(x) ?? 0) - (position.get(y) ?? 0))
+    const waiting: typeof claims = []
+    // An entry that names one of the files takes that one.
+    for (const c of claims) {
+      const named = open.findIndex((stem) => stem === c.entry.name || stem === c.entry.altName)
+      if (named >= 0) {
+        add(open[named] as string, c.entry, c.match)
+        open.splice(named, 1)
+      } else {
+        waiting.push(c)
+      }
+    }
+    if (waiting.length >= open.length) {
+      // As many entries as files: each ran, in file order and ledger order.
+      open.forEach((stem, i) => {
+        const c = waiting[i]
+        if (c !== undefined) add(stem, c.entry, c.match)
+      })
+    } else if (waiting.length > 0) {
+      for (const stem of open) contested.set(stem, Math.max(contested.get(stem) ?? 0, stems.length))
+    }
+  }
+  return { related, used, contested, contradicted }
 }
 
 /** Classifies each file (legacy-import.md §2 step 4); evidence by content first, names last. */
@@ -1022,7 +1096,7 @@ async function classify(
   searchPath: readonly string[],
 ): Promise<Classified[]> {
   const out: Classified[] = []
-  const { related, used } = relateLedger(chain, ledger, hints)
+  const { related, used, contested, contradicted } = relateLedger(chain, ledger, hints)
   for (const a of chain) {
     const stem = a.file.stem
     const evidence: string[] = unreadable.map((l) => `ledger_unreadable:${l}`)
@@ -1119,13 +1193,24 @@ async function classify(
       if (!globalsHold) state = 'ambiguous'
     }
     if (a.globalsUnknown) {
+      // A role effect not derivable from the text is never checked: superseded objects do not
+      // supersede it (legacy-import.md §2.4).
       evidence.push('cluster_global_unknown')
-      if (state !== 'superseded') state = 'ambiguous'
+      state = 'ambiguous'
     }
     for (const statement of a.mixedDoBlocks) {
       evidence.push(`do_block_mixed:${statement}`)
       state = 'ambiguous'
     }
+    // Ledger content that several files share, held by fewer entries than files: it proves
+    // that some of them ran, not that this one did.
+    const sharing = contested.get(stem)
+    if (sharing !== undefined && !recorded) {
+      evidence.push(`content_matches_files:${sharing}`)
+      state = 'ambiguous'
+    }
+    // An alias the entry's own statements contradict records nothing.
+    if (contradicted.has(stem) && !recorded) state = 'ambiguous'
     out.push({
       kind: 'file',
       legacyId: `legacy:${stem}`,
@@ -1428,15 +1513,15 @@ export class ImportReplayKind implements OperationKind {
         )
         return { outcome: 'not_applied', errorCode: 'PRECONDITION_FAILED' }
       }
-      // Extensions are declared on the scratch target, never guessed: each must be
-      // installed there in the same schema and version as on the imported target, or every
-      // object that uses one would differ (legacy-import.md §2, §6).
-      const differs = await extensionsDiffer(this.#deps, target, session)
+      // The same major, and extensions declared on the scratch target, never guessed: each
+      // must be installed there in the same schema and version as on the imported target, or
+      // every object that uses one would differ (legacy-import.md §2, §6).
+      const differs = await scratchDiffers(this.#deps, target, session)
       if (differs !== null) {
         await this.#finish(
           fence,
           c.reportId,
-          { state: 'incomplete', reason: `extensions_differ:${differs}` },
+          { state: 'incomplete', reason: differs },
           ctx.operationId,
         )
         return { outcome: 'not_applied', errorCode: 'PRECONDITION_FAILED' }
@@ -1608,24 +1693,33 @@ export class ImportReplayKind implements OperationKind {
 }
 
 /** The first extension that the scratch target holds differently from the imported one, or null. */
-async function extensionsDiffer(
+/**
+ * Why the scratch target cannot stand for the imported one, or null: another
+ * PostgreSQL major (`major_differs:<target>/<scratch>`), or an extension in
+ * another schema or version (`extensions_differ:<name>`). The replay runs
+ * and parses on the scratch target's major, the verification on the imported
+ * target's: they must be the same (legacy-import.md §2 step 2).
+ */
+async function scratchDiffers(
   deps: MigrationKindDeps,
   target: TargetRecord,
   scratch: TargetSession,
 ): Promise<string | null> {
   const observed = await deps.connector.forTarget(target, 'observer', 'import/extensions')
   let theirs: Awaited<ReturnType<typeof extensionPlacements>>
+  const major = observed.session.facts.major
   try {
     theirs = await observed.session.readOnly((rtx) => extensionPlacements(rtx))
   } finally {
     await observed.session.close()
   }
+  if (major !== scratch.facts.major) return `major_differs:${major}/${scratch.facts.major}`
   const ours = await scratch.readOnly((rtx) => extensionPlacements(rtx))
   for (const name of [...new Set([...theirs.keys(), ...ours.keys()])].sort()) {
     const a = theirs.get(name)
     const b = ours.get(name)
     if (a === undefined || b === undefined || a.schema !== b.schema || a.version !== b.version) {
-      return name.slice(0, 63)
+      return `extensions_differ:${name.slice(0, 63)}`
     }
   }
   return null
@@ -1732,10 +1826,11 @@ export async function planBaseline(
   }
   if (report.state !== 'open' || report.fingerprint === null) throw new MigrationError('CONFLICT')
   const items = await readItems(tx, reportId)
-  if (report.driftTruncated) {
-    // Drift the report does not hold was never shown to anyone: no baseline over it.
+  if (report.driftTruncated || report.driftTotal === null) {
+    // Drift the report does not hold was never shown to anyone: no baseline over it. A report
+    // analyzed before drift totals were kept may have been cut at 500 items without a mark.
     throw new MigrationError('LEGACY_IMPORT_TRUNCATED', {
-      driftTotal: report.driftTotal ?? 0,
+      driftTotal: report.driftTotal,
       held: items.filter((i) => i.kind === 'drift').length,
     })
   }
@@ -1743,6 +1838,7 @@ export async function planBaseline(
   if (unresolved.length > 0) {
     throw new MigrationError('LEGACY_IMPORT_AMBIGUOUS', {
       items: unresolved.slice(0, 1000).map((i) => ({ itemId: String(i.itemId) })),
+      ...(unresolved.length > 1000 ? { total: unresolved.length } : {}),
     })
   }
   const files = await readFiles(tx, reportId)
@@ -2107,7 +2203,7 @@ export class MigrationBaselineKind implements OperationKind {
         'observer',
         `verify/${ctx.operationId}`,
       )
-      let run: { fingerprint: string; held: number; checked: number }
+      let run: { fingerprint: string; held: number; checked: number; unparsed: string | null }
       try {
         await loadParser(opened.session.facts.major)
         const applicable = files.filter((f) => !c.notApplicable.includes(f.stem))
@@ -2121,6 +2217,9 @@ export class MigrationBaselineKind implements OperationKind {
           const chain = analyzeChain(applicable, replays)
           let held = 0
           let checked = 0
+          // A chain the imported target's major cannot parse checks nothing: never passed on
+          // the fingerprint alone.
+          const unparsed = 'failedAt' in chain ? chain.failedAt : null
           if (!('failedAt' in chain)) {
             await pinSearchPath(rtx, c.searchPath)
             for (const a of chain) {
@@ -2133,13 +2232,15 @@ export class MigrationBaselineKind implements OperationKind {
               held += results.filter((r) => r.ok).length
             }
           }
-          return { fingerprint: snapshot.fingerprint, held, checked }
+          return { fingerprint: snapshot.fingerprint, held, checked, unparsed }
         })
       } finally {
         await opened.session.close()
       }
       const passed =
-        run.fingerprint === c.expectedState.schemaFingerprint && run.held === run.checked
+        run.unparsed === null &&
+        run.fingerprint === c.expectedState.schemaFingerprint &&
+        run.held === run.checked
       const status = passed ? 'passed' : 'failed'
       const writer = await this.#deps.connector.forTarget(target, 'migrator', ctx.operationId)
       try {
@@ -2152,7 +2253,11 @@ export class MigrationBaselineKind implements OperationKind {
             startedAt,
             finishedAt: new Date().toISOString(),
             status,
-            structural: { checked: run.checked, held: run.held } as JsonObject,
+            structural: {
+              checked: run.checked,
+              held: run.held,
+              ...(run.unparsed === null ? {} : { unparsed: run.unparsed }),
+            } as JsonObject,
             runtime: null,
             engine: {
               fingerprint:
