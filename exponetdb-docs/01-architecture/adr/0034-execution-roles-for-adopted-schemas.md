@@ -121,6 +121,53 @@ every registry change (C-6):
   exactly like an apply, at plan time and under the lock, with the
   exceptions of the **scratch** target's environment.
 
+#### 3.1 `pg_database_owner` is not a protected reach (2026-10-22)
+
+**[DECIDED]** 2026-10-22, at the owner's request after the first real
+onboarding (`reos-db-01`, PostgreSQL 17.11, release `41ebcbb`). There the
+scratch preflight refused `reosa_stg_owner` with `reaches_protected_role`,
+and so would every plan and replay. The role is `NOLOGIN`, a member of no
+role, and owns both of its databases, as Supabase-origin and most
+self-managed installations do.
+
+- **[OBSERVED]** (PostgreSQL 16, 17 and 18, 2026-10-22):
+  - inside a database, `pg_has_role(owner, 'pg_database_owner', 'MEMBER')`
+    is true for that database's owner, and false in every other database;
+  - `pg_database_owner` (fixed oid 6171) refuses explicit members and
+    refuses to be a member of any role, so reaching it reaches nothing
+    further;
+  - it owns the `public` schema of databases created from the default
+    template.
+
+  The Wave 6 predicate counted it as protected through
+  `rolname LIKE 'pg\_%'`. The bootstrap SQL, which evaluates in `postgres`,
+  granted the role while the planner, which evaluates in the target's
+  database, refused it.
+- **Decision.** Reaching `pg_database_owner` is the database owner's own
+  identity, not a privilege. The protected-reach predicate excludes it by
+  its oid (`'pg_database_owner'::pg_catalog.regrole`), never by a name
+  pattern. Every other predefined role stays protected: `pg_read_all_data`,
+  `pg_write_all_data`, `pg_signal_backend`, `pg_monitor`,
+  `pg_execute_server_program` and the rest.
+- **One definition.** The predicate is one SQL fragment,
+  `REACHES_PROTECTED_ROLE` (`packages/postgres/src/migration-facts.ts`).
+  The role facts use it, and so does everything built on them: the planner,
+  the executor, the replay, the scratch preflight and the health finding.
+  The bootstrap SQL's grant check embeds the same text.
+- **No per-database bootstrap check.** `pg_database_owner` is the only role
+  whose membership depends on the current database; every other membership
+  is cluster-wide. With it excluded, the predicate gives the same answer in
+  every database, so the check in `postgres` and the planner's check in the
+  target's database cannot disagree. A test asserts this on 16, 17 and 18,
+  and asserts that the bootstrap embeds the planner's text.
+- **What database ownership still allows, and what refuses it.**
+  - `ALTER DATABASE`, its `SET` form, `DROP DATABASE` and `CREATE DATABASE`
+    are refused by bundle admission (`database`).
+  - Procedural code that issues them belongs to OD-55. As database owner,
+    such code could also change the database's settings, connection limit
+    or `ALLOW_CONNECTIONS`.
+  - Ownership itself is what adopted schemas have always had.
+
 ### 4. Drift and parity
 
 - A finding (`execution_role_exception_drift`) is raised when the live

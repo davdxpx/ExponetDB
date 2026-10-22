@@ -19,6 +19,7 @@ import {
   passwordStatements,
   quoteIdent,
   quoteLiteral,
+  REACHES_PROTECTED_ROLE,
   SqlBuildError,
   scopeHeader,
   sql,
@@ -141,6 +142,8 @@ describe('bootstrap SQL', () => {
         'r.rolcanlogin OR r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication',
       )
       expect(b).toContain(String.raw`x.rolname LIKE 'pg\_%' OR x.rolname LIKE 'exponetdb\_%'`)
+      // One definition of a protected reach: the planner's role facts and this check agree.
+      expect(b).toContain(REACHES_PROTECTED_ROLE.text)
     }
     for (const name of ['pg_read_all_data', 'exponetdb_ledger_owner']) {
       expect(() =>
@@ -376,5 +379,14 @@ describe('fp1 canonical form', () => {
     const changed = JSON.parse(JSON.stringify(json))
     changed.entries[0].key = ['other']
     expect(documentFromJson(changed)).toBeUndefined()
+  })
+})
+
+describe('a protected reach', () => {
+  it('excludes only pg_database_owner, by its oid, and keeps every other predefined role', () => {
+    const text = REACHES_PROTECTED_ROLE.text
+    expect(text).toContain("x.oid <> 'pg_database_owner'::pg_catalog.regrole")
+    expect(text).not.toMatch(/rolname\s*(<>|!=|NOT LIKE)/)
+    expect(text).toContain(String.raw`x.rolname LIKE 'pg\_%'`)
   })
 })

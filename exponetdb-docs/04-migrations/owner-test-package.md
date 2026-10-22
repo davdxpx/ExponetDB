@@ -54,14 +54,16 @@ imported one:
 ```sh
 exponetdb dev sql staging --lab parta --file roles.sql      # acme_owner; acme_staging_owner NOLOGIN BYPASSRLS
 exponetdb dev sql staging --lab parta <<'SQL'
-CREATE DATABASE acme_staging;
-CREATE DATABASE acme_scratch;
+CREATE DATABASE acme_staging OWNER acme_staging_owner;
+CREATE DATABASE acme_scratch OWNER acme_staging_owner;
 SQL
 exponetdb dev sql staging --lab parta --db acme_staging --file imported.sql
-exponetdb dev sql staging --lab parta --db acme_scratch <<'SQL'
-GRANT USAGE, CREATE ON SCHEMA public TO acme_staging_owner;
-SQL
 ```
+
+The staging owner owns both databases, as on real Supabase-origin
+installations (`reos-db-01` included): `public` is its schema through
+`pg_database_owner`, which is no protected reach (ADR-0034 §3.1), so it
+needs no grant.
 
 ## 3. The registry side
 

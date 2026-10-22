@@ -121,7 +121,9 @@ async function registerTarget(envSlug: string, extra: readonly string[]): Promis
   )
   const environmentId = String((await planContent(h, env.plan.planId))['environmentId'])
   const name = await targetDatabase(pg17, `sup_${envSlug}`, [
-    `GRANT CREATE, USAGE ON SCHEMA public TO ${OWNER}`,
+    // The execution role owns the database, as on real Supabase-origin installations: public
+    // is its schema through pg_database_owner, which is no protected reach (ADR-0034 §3.1).
+    `DO $$ BEGIN EXECUTE pg_catalog.format('ALTER DATABASE %I OWNER TO %I', pg_catalog.current_database(), '${OWNER}'); END $$`,
     ...extra,
   ])
   if (envSlug === 'scratch') scratchDb = name
