@@ -1,9 +1,1066 @@
-ExponetDB
+================================================================================
 
-Copyright (c) 2026 the ExponetDB owner (davdxpx). All rights reserved.
+   E X P O N E T D B   S O U R C E - A V A I L A B L E   L I C E N S E
 
-This repository and everything in it is proprietary and internal. No license,
-express or implied, is granted to use, copy, modify, distribute or publish any
-part of it. Third-party dependencies remain under their own licenses.
+                              Version 1.0
+                  SPDX-style identifier: LicenseRef-ESAL-1.0
 
-Decision record: exponetdb-docs/00-product/open-decisions.md, OD-19.
+   Copyright (c) 2026 davdxpx (the "Licensor"). All rights not expressly
+   granted in this License are reserved.
+
+   Contact:  davdxpx@gmail.com   |   https://github.com/davdxpx
+
+================================================================================
+
+
+   THIS IS NOT AN OPEN SOURCE LICENSE.
+
+   The source code of ExponetDB is published so that you can read it, learn
+   from it, audit it and fork it in public. It is NOT published so that you
+   can run it, ship it, host it or sell it without asking first.
+
+   Nothing in this License lets you use ExponetDB commercially. Nothing in it
+   lets you run ExponetDB in production, for anyone, without the Licensor's
+   written permission. What it does let you do is set out below, in full.
+
+   Read the whole text. If you want something this License does not give you,
+   ask. The Licensor answers real requests, and a commercial license exists
+   for exactly that purpose (Section 5 and Schedule A).
+
+
+--------------------------------------------------------------------------------
+ QUICK REFERENCE (plain language, NOT legally binding, the numbered sections win)
+--------------------------------------------------------------------------------
+
+   You MAY, without asking:
+
+     * read, search, study and audit the source code and the documentation;
+     * fork the repository on a public platform and change your fork, as long
+       as the fork stays public, keeps this License and meets Section 3;
+     * run the software on your own machine, for development and testing of
+       such a public fork or of a Contribution, never against real data of
+       other people and never in production (Section 2.3);
+     * quote small parts for review, criticism, teaching and discussion;
+     * do good-faith security research and report what you find (Section 9).
+
+   You MAY NOT, without a written permission or a commercial license:
+
+     * run ExponetDB in production, or for any real workload, for anyone;
+     * use ExponetDB for any commercial purpose, directly or indirectly;
+     * offer ExponetDB, or anything derived from it, as a hosted or managed
+       service, a product, a template, a white-label or a "database platform";
+     * keep a private fork, a private mirror or a closed-source derivative;
+     * use the names "Exponet" or "ExponetDB", or the logos, for your own thing;
+     * remove or hide this License, the notices or the credit to the Licensor.
+
+   You can ask for permission, or buy a commercial license, at any time:
+
+     davdxpx@gmail.com  (see Schedule A for what to put in the message).
+
+
+--------------------------------------------------------------------------------
+ TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+
+   1.  Definitions
+   2.  The limited permissions this License grants
+   3.  The Public Fork Conditions
+   4.  What is not permitted
+   5.  Commercial use, written permission and commercial licenses
+   6.  Trademarks, names and logos
+   7.  Third-party components
+   8.  Contributions
+   9.  Security research and vulnerability reports
+   10. Automated systems and AI
+   11. Downstream recipients
+   12. Termination, cure and reinstatement
+   13. No warranty
+   14. Limitation of liability
+   15. Indemnification
+   16. Compliance, audit and records
+   17. Governing law and venue
+   18. General provisions
+   19. Versions of this License
+   20. Contact
+
+   Schedule A.  How to ask for permission or a commercial license
+   Schedule B.  The required notice for a Public Fork
+   Schedule C.  Examples (non-exhaustive, for interpretation only)
+   Schedule D.  Plain-language answers to common questions (non-binding)
+
+
+================================================================================
+ 1. DEFINITIONS
+================================================================================
+
+   In this License, the words below have the meaning given here. A word that
+   starts with a capital letter and is not defined here has its ordinary
+   meaning.
+
+   1.1  "ExponetDB" or the "Software" means everything the Licensor publishes
+        in the repository https://github.com/davdxpx/ExponetDB and in any
+        repository, package, container image or archive the Licensor
+        designates as its successor or as an official distribution, in source
+        and in object form. It includes the source code, the build and
+        deployment scripts, the configuration, the schemas, the migrations,
+        the generated artifacts, the tests and fixtures, the design tokens,
+        the documentation, the decision records, and every Release.
+
+   1.2  "Licensor" means davdxpx, the individual identified in the copyright
+        line above, and any person or entity to whom that individual assigns
+        the Software and this License (Section 18.4).
+
+   1.3  "You" means the individual or the legal entity exercising rights under
+        this License. For a legal entity, "You" includes every entity that
+        controls, is controlled by, or is under common control with it, where
+        "control" means the power to direct management, or ownership of more
+        than fifty percent (50%) of the voting securities or equivalent.
+        A person who acts for an entity (an employee, a contractor, an agent)
+        in connection with the Software is treated as that entity.
+
+   1.4  "Release" means any version, tag, commit, branch state, package or
+        image of the Software that the Licensor has made available.
+
+   1.5  "Modification" means any change, addition, deletion, translation,
+        adaptation or port of the Software, in whole or in part, and any work
+        that is based on, derived from or incorporates the Software or a
+        substantial part of its structure, selection, arrangement, expression,
+        protocols, schemas or documentation.
+
+   1.6  "Derivative Work" means a Modification, and any work that combines the
+        Software, or a Modification, with other material in a way that the
+        resulting work could not exist without the Software.
+
+   1.7  "Fork" means a copy of the Software, or of a Release, that You make and
+        that is intended to be developed separately from the Licensor's
+        repository, including a Fork made with a hosting platform's "fork"
+        function and a copy that You re-upload.
+
+   1.8  "Public Fork" means a Fork that meets every condition of Section 3.
+
+   1.9  "Private Copy" means a copy of the Software, a Fork or a Derivative
+        Work that is not publicly accessible in the sense of Section 3.1, or
+        that sits behind authentication, an allow-list, a paywall, a private
+        registry, a private network, an air gap or a similar restriction.
+
+   1.10 "Commercial Use" means any use of the Software, a Fork or a Derivative
+        Work, in whole or in part, that is directed toward, or that results in
+        or supports, commercial advantage, revenue, or compensation of any
+        kind, directly or indirectly, for You or for anyone else. Without
+        limiting that, Commercial Use includes:
+
+        (a) use in, for, or in connection with a business, a company, a
+            partnership, a freelance or consulting activity, a trade, a
+            profession, or any entity that pursues profit;
+        (b) use by or for an employer, a client or a customer, in the course
+            of employment, a contract or a service, whether paid or unpaid;
+        (c) use that saves, avoids or defers a cost that You would otherwise
+            have paid to a third party for a comparable product or service;
+        (d) offering the Software, or any functionality of it, to third parties
+            as a hosted, managed, embedded, white-label, platform, API, "as a
+            service" or similar offering, whether free or paid;
+        (e) selling, licensing, renting, leasing, bundling or otherwise
+            charging for the Software, a Fork, a Derivative Work, or access to
+            any of them, or for support, hosting, training, consulting,
+            integration or customization that depends on them;
+        (f) including the Software, a Fork or a Derivative Work in, or using
+            it to build or operate, a product or service that is sold,
+            licensed, subscribed to, or monetized with advertising, sponsorship
+            placements, affiliate links, data sales or lead generation;
+        (g) using the Software to manage, migrate, back up, observe or operate
+            databases that serve a commercial activity, even if the Software
+            itself is not exposed to the customers of that activity;
+        (h) using the Software in a way that benefits a competitor of the
+            Licensor, or to build, train, evaluate or benchmark a product that
+            competes with the Software (see Section 4.6).
+
+        Receiving a donation or a sponsorship that is not conditioned on
+        features, support, priority, exclusivity or any other consideration
+        related to the Software is NOT, by itself, Commercial Use of the
+        Software by the recipient.
+
+   1.11 "Production Use" means running the Software, a Fork or a Derivative
+        Work, or any part of it, other than for Development Use. In particular,
+        it means running it as a service that other people or systems depend
+        on, running it against databases that hold real data of any person,
+        running it on infrastructure that stays up as a standing service, and
+        running it to manage anything You or somebody else relies on. Whether
+        a use is Production Use does not depend on the size of the deployment.
+
+   1.12 "Development Use" means running the Software, a Fork or a Derivative
+        Work on a machine under Your control, for a limited time, in a
+        non-production environment, only (a) to build, test, debug, review or
+        document a Public Fork, or (b) to prepare and test a Contribution to
+        the Licensor's repository, and only against synthetic data or against
+        data that You own and that contains no personal data of others.
+
+   1.13 "Contribution" means any work of authorship, including code,
+        documentation, tests, translations, designs and issue or discussion
+        text, that You intentionally submit to the Licensor for inclusion in
+        the Software, by pull request, patch, message or any other means.
+
+   1.14 "Third-Party Components" means any file, package, font, icon, library,
+        specification or other material in or distributed with the Software
+        that the Licensor did not author, or that carries its own license
+        notice, as listed in Section 7 and in the file THIRD_PARTY_NOTICES.md.
+
+   1.15 "Written Permission" means a document signed or sent from the
+        Licensor's e-mail address in Section 20 (or another address the
+        Licensor publishes in the repository for this purpose) that expressly
+        refers to this License and grants a specific right. A statement in an
+        issue, a chat, a social-media post or a conversation is not Written
+        Permission. Written Permission is personal to the named grantee, is
+        limited to the scope, the term and the conditions stated in it, and
+        may be withdrawn for future use as it states.
+
+   1.16 "Commercial License" means a separate written agreement between the
+        Licensor and You under Section 5.4.
+
+   1.17 "Exponet Marks" means the names "Exponet" and "ExponetDB", the project's
+        logos, wordmarks, icons, visual identity and domain names, and any
+        confusingly similar name or sign, whether registered or not.
+
+
+================================================================================
+ 2. THE LIMITED PERMISSIONS THIS LICENSE GRANTS
+================================================================================
+
+   Subject to all the terms of this License, and for as long as You comply with
+   them, the Licensor grants You a worldwide, non-exclusive, non-transferable,
+   non-sublicensable (except as stated in Section 11), revocable (only as
+   stated in Section 12), royalty-free license for the following, and ONLY the
+   following.
+
+   2.1  Reading and study.
+        To view, read, search, index locally, compile in Your head and on
+        paper, study, audit and learn from the source code and the
+        documentation, for any purpose that is not Commercial Use.
+
+   2.2  Public Forks.
+        To make a Fork on a public hosting platform, to make Modifications to
+        that Fork, and to publicly reproduce, publicly display and publicly
+        distribute the Fork and its Modifications in source form, ONLY in
+        the form of a Public Fork that meets every condition of Section 3, and
+        only for purposes that are not Commercial Use.
+
+   2.3  Development Use.
+        To run the Software, a Public Fork or a Derivative Work for
+        Development Use only. Development Use grants no right to Production
+        Use and no right to Commercial Use. If Your Development Use turns into
+        something that stays running, serves real data, serves other people or
+        supports a business, it is Production Use and You need a Written
+        Permission or a Commercial License first.
+
+   2.4  Quotation and discussion.
+        To reproduce short excerpts of the source code and the documentation
+        (up to a reasonable amount for the purpose, with attribution to the
+        Licensor and a link to the repository) in reviews, bug reports,
+        academic work, articles, teaching material, talks and technical
+        discussion, as far as this does not replace the Software.
+
+   2.5  Contribution.
+        To prepare and submit Contributions under Section 8.
+
+   2.6  No other rights.
+        No other right is granted. This License does not grant any right to
+        Production Use, to Commercial Use, to a Private Copy, to relicense, to
+        sublicense, to use the Exponet Marks, or to any patent, trade secret
+        or other intellectual property of the Licensor, except to the narrow
+        extent necessary to exercise the permissions in this Section 2 as
+        written. Any right not expressly granted is reserved by the Licensor.
+
+   2.7  Patents.
+        The Licensor grants You, for the permissions above only, a license
+        under the patent claims that the Licensor owns and that are infringed
+        by the Software as published by the Licensor, to use the Software in
+        the ways Section 2 permits. If You start or join any claim, in any
+        forum, alleging that the Software or any part of it infringes a patent
+        or another right, all licenses granted to You under this License end
+        on the day You file the claim.
+
+
+================================================================================
+ 3. THE PUBLIC FORK CONDITIONS
+================================================================================
+
+   A Fork is a Public Fork, and You may keep and distribute it, only for as
+   long as ALL of the following are true.
+
+   3.1  Public availability.
+        The complete source code of the Fork, with its full history of
+        Modifications, is available to everyone, at no charge, without
+        registration, authentication, approval, agreement to additional terms,
+        geographic or organizational restriction, or any other barrier, on a
+        public hosting platform that allows anyone to browse and clone it.
+        You may not remove, hide, archive-and-delete, rename-to-evade, or
+        otherwise make a Public Fork unavailable while You keep distributing
+        any copy or any binary or deployment derived from it.
+
+   3.2  Same License, unmodified.
+        The Fork carries this License, in full and unmodified, as its LICENSE
+        file at the repository root, and every Modification You make is
+        licensed to everyone under this same License (Section 11) and nothing
+        else. You may not add terms that further restrict what this License
+        permits, and You may not apply any other license to Your Modifications
+        as a whole. Your own purely original files that are independent of the
+        Software may carry their own license, but the Fork as a whole remains
+        under this License.
+
+   3.3  Notices and credit.
+        You keep every copyright notice, license notice, attribution notice,
+        provenance header and NOTICE file in the Software. You add the
+        Schedule B notice to the first screen of the Fork's README, and You
+        keep a visible link to the Licensor's repository.
+
+   3.4  Marked changes.
+        You mark every file that You modified, with a prominent statement that
+        You changed it and the date of the change. You keep a changelog or a
+        commit history that shows what You changed. You do not present
+        Your Modifications as the Licensor's work.
+
+   3.5  Own name.
+        The Fork carries a name that is clearly different from the Exponet
+        Marks (Section 6) and states that it is an unofficial Fork of
+        ExponetDB that is neither made nor endorsed by the Licensor.
+
+   3.6  Non-commercial, still.
+        The Fork, its distribution and the way You use it remain free of
+        Commercial Use. You do not charge for the Fork, do not gate any part of
+        it behind payment, do not sell support, hosting or services based on
+        it, do not monetize its repository page, documentation or releases
+        with advertising or affiliate links, and do not condition anything on
+        a purchase.
+
+   3.7  No Production Use through the Fork.
+        Publishing a Fork does not give You, or anyone who gets the Fork, a
+        right to Production Use or to Commercial Use. Those require Written
+        Permission or a Commercial License from the Licensor, for every person
+        who wants them. You say so in Your README (Schedule B).
+
+   3.8  Upstream grant for Public Fork Modifications.
+        For every Modification that You publish in a Public Fork, You grant
+        the Licensor a perpetual, irrevocable, worldwide, non-exclusive,
+        royalty-free, fully paid-up, transferable and sublicensable (through
+        multiple tiers) license to use, reproduce, modify, prepare derivative
+        works of, publicly display, publicly perform, distribute and otherwise
+        exploit that Modification and any Derivative Work of it, in source and
+        object form, under any license terms the Licensor chooses, including
+        commercial and proprietary terms and a Commercial License, together
+        with a license under the patent claims You own that are necessarily
+        infringed by that Modification alone or in combination with the
+        Software. You warrant that You have the right to grant this license.
+        This clause does not transfer ownership of Your Modifications to the
+        Licensor, and it does not oblige the Licensor to use them.
+
+   3.9  Compliance on request.
+        If the Licensor tells You, in writing, that a Fork does not meet this
+        Section 3, You cure the problem within thirty (30) days (Section 12.3)
+        or take the Fork down.
+
+   3.10 Pull requests and issues.
+        Nothing in this Section stops You from sending Your Modifications back
+        to the Licensor as Contributions under Section 8.
+
+
+================================================================================
+ 4. WHAT IS NOT PERMITTED
+================================================================================
+
+   Except with Written Permission or under a Commercial License, You may not,
+   and You may not allow, assist or encourage anyone else to:
+
+   4.1  Commercial Use.
+        Engage in Commercial Use of the Software, a Fork or a Derivative Work.
+
+   4.2  Production Use.
+        Engage in Production Use of the Software, a Fork or a Derivative Work,
+        for any purpose and for any person, including You, Your employer, Your
+        friends, Your community or Your own side project.
+
+   4.3  Hosting and service offerings.
+        Provide the Software, a Fork or a Derivative Work, or any substantial
+        part of its functionality, to third parties as a hosted service, a
+        managed service, a platform, an API, a control plane, a template, a
+        starter kit, a one-click deployment, a marketplace listing, a plugin
+        for a commercial platform, or in any similar way, with or without
+        charge.
+
+   4.4  Private Copies and closed derivatives.
+        Keep a Private Copy, a private mirror or a closed-source Derivative
+        Work for any use other than the short-term, local, personal reading
+        and Development Use that Section 2 allows. Distribution of any
+        Derivative Work, in source or in object form, is permitted only as a
+        Public Fork.
+
+   4.5  Sublicensing, relicensing, selling.
+        Sublicense, relicense, sell, rent, lease, lend, pledge, or transfer
+        the Software or any right under this License, except as Section 11
+        describes, or remove or replace this License with another one.
+
+   4.6  Competing offerings.
+        Use the Software, its documentation, its schemas, its protocols, its
+        decision records, or its design to build, operate, market, train or
+        benchmark a product or service that competes with ExponetDB or with
+        another product of the Licensor, even if You wrote all the code
+        yourself, where the use depends on knowledge, expression or material
+        You took from the Software beyond ordinary facts, ideas and
+        techniques that are not protected by law.
+
+   4.7  Circumvention.
+        Remove, disable, obscure or evade a notice, a header, a provenance
+        statement, a license check, a usage limit or any technical or
+        contractual measure that the Software or the Licensor uses to enforce
+        this License.
+
+   4.8  Misrepresentation.
+        State or imply that the Licensor made, wrote, certified, audited,
+        approved, sponsors or endorses You, Your Fork, Your service or Your
+        product, or that the Software is open source.
+
+   4.9  Unlawful use.
+        Use the Software to violate any law, to infringe the rights of others,
+        to attack systems or people, or to process personal data without a
+        legal basis.
+
+   4.10 Sanctions and restricted use.
+        Use or export the Software in violation of applicable sanctions or
+        export-control laws, or make it available to a person or in a place
+        that those laws prohibit.
+
+   4.11 Misuse of the Licensor's name or likeness.
+        Use the name, the handle, the picture or the likeness of the Licensor
+        in a way that suggests a relationship with You, other than the
+        attribution this License requires.
+
+   An action that this Section prohibits is a breach of this License and, where
+   it also exceeds the scope of the permissions in Section 2, an infringement
+   of the Licensor's copyright, because no license covers it.
+
+
+================================================================================
+ 5. COMMERCIAL USE, WRITTEN PERMISSION AND COMMERCIAL LICENSES
+================================================================================
+
+   5.1  Default: you have to ask.
+        This License does not allow Production Use or Commercial Use. If You
+        want either, You must contact the Licensor first and obtain a Written
+        Permission (5.2) or a Commercial License (5.4) BEFORE You start.
+        Starting first and asking later does not cure the breach; it only
+        affects the Licensor's choice under Section 12.
+
+   5.2  Written Permission for non-commercial Production Use.
+        For individuals, schools, universities, research groups and
+        non-profit organizations who want Production Use that is not Commercial
+        Use, the Licensor may grant a Written Permission, free of charge or
+        for a fee, at the Licensor's discretion, limited in scope and in term,
+        and revocable for future use as the permission states.
+
+   5.3  No obligation.
+        The Licensor has no duty to grant any permission or license, to give a
+        reason, to answer within any time, to offer any price, or to treat
+        similar requests alike. The Licensor may grant a permission or a
+        license to one person and refuse it to another.
+
+   5.4  Commercial Licenses.
+        A Commercial License is a separate written agreement that the Licensor
+        and You sign or accept in text form. It sets the scope, the field of
+        use, the number of installations or environments, the term, the fees,
+        the support and the rest. A Commercial License is the only way to
+        obtain the right to Commercial Use. Its terms replace this License for
+        the rights it covers, and only for those rights. A Commercial License
+        is personal to the licensee and not transferable without the Licensor's
+        written consent.
+
+   5.5  Evaluation of a Commercial License.
+        If You want to evaluate whether to buy a Commercial License, ask for
+        an evaluation permission. The Licensor may grant a short, limited
+        evaluation permission in Written Permission form.
+
+   5.6  Pricing and negotiation.
+        Prices and terms are agreed case by case. A request is not a
+        commitment by either side until a Written Permission or a Commercial
+        License is signed or accepted.
+
+   5.7  Past use.
+        If You used the Software in a way that needed a Commercial License and
+        did not have one, You contact the Licensor promptly. The Licensor may
+        offer a retroactive license for a fee, may require You to stop, or may
+        pursue the remedies that the law gives the Licensor. Nothing here
+        waives any claim.
+
+
+================================================================================
+ 6. TRADEMARKS, NAMES AND LOGOS
+================================================================================
+
+   6.1  This License does not grant any right to the Exponet Marks. "Exponet"
+        and "ExponetDB" identify the Licensor's project, and the Licensor
+        keeps every right to them, whether registered or not.
+
+   6.2  You may use the name "ExponetDB" only (a) to state truthfully that
+        Your Fork is derived from ExponetDB, in plain text and without the
+        logos, as the required attribution, and (b) to refer to the Software
+        in discussion, in documentation and in reviews, in a way that does not
+        suggest that the Licensor made or endorses what You are describing.
+
+   6.3  You do not use an Exponet Mark, or a confusingly similar name, logo,
+        color scheme, domain name, package name, repository name, social media
+        handle or app-store name, as or in the name of Your Fork, product,
+        company, service or domain, and You do not register any of them.
+
+   6.4  Where the Software is renamed for a Fork, the new name appears in the
+        Fork's README and package metadata, and the old name remains only in
+        the required attribution and in historical records.
+
+
+================================================================================
+ 7. THIRD-PARTY COMPONENTS
+================================================================================
+
+   7.1  Not covered by this License.
+        This License covers the Licensor's own work only. Third-Party
+        Components are NOT licensed under this License. Each stays under its
+        own license, which governs that component exclusively. Where this
+        License and a Third-Party Component's license conflict for that
+        component, the component's own license wins for that component.
+
+   7.2  What is known.
+        As of Version 1.0 of this License, the Software includes, among
+        others:
+
+        (a) files of the Web App user interface that are derived from the
+            Supabase open-source repository (https://github.com/supabase/
+            supabase, Apache License 2.0, and MIT as declared by some of its
+            packages), each marked with a provenance header and modified for
+            ExponetDB;
+        (b) files derived from shadcn/ui (MIT);
+        (c) the typefaces Inter and Source Code Pro (SIL Open Font License
+            1.1);
+        (d) provider glyphs from Simple Icons (CC0-1.0);
+        (e) npm, Go and other dependencies that Bun, Go modules and the
+            dependency license scan list, each under its own license.
+
+        The authoritative list, the license texts and the notices are in the
+        files THIRD_PARTY_NOTICES.md, LICENSES/ and
+        exponetdb-docs/11-ui/third-party-register.md. They are part of the
+        Software and You keep them with any copy.
+
+   7.3  Your duties.
+        If You copy or distribute a Third-Party Component, You follow its
+        license (for Apache-2.0 files: keep the license text, the copyright
+        lines and the change notices). If You are unsure, ask the owner of the
+        component.
+
+   7.4  Not a grant by implication.
+        That a Third-Party Component is open source gives You no additional
+        right to any other part of the Software.
+
+
+================================================================================
+ 8. CONTRIBUTIONS
+================================================================================
+
+   8.1  Inbound license.
+        Unless You and the Licensor agree otherwise in writing, every
+        Contribution that You intentionally submit is submitted under a
+        perpetual, irrevocable, worldwide, non-exclusive, royalty-free, fully
+        paid-up, transferable and sublicensable (through multiple tiers)
+        license to the Licensor to use, reproduce, modify, prepare derivative
+        works of, publicly display, publicly perform, distribute and otherwise
+        exploit the Contribution and derivative works of it, in source and
+        object form, under any license terms the Licensor chooses, including
+        commercial and proprietary ones, together with a patent license for
+        the claims You own that are necessarily infringed by the Contribution
+        alone or in combination with the Software.
+
+   8.2  Your warranties.
+        You represent that (a) the Contribution is Your own original work or
+        that You have the right to submit it under this Section; (b) if Your
+        employer or a client has rights in the Contribution, You have their
+        permission or a waiver; (c) the Contribution contains no secret, no
+        credential, no personal data, and no code or text that You are not
+        allowed to publish; and (d) it does not knowingly infringe the rights
+        of anyone.
+
+   8.3  Moral rights.
+        To the extent the law allows, You waive, or agree not to assert,
+        moral rights in the Contribution against the Licensor and its
+        licensees, and You agree to be credited in the repository history in
+        the way the history shows.
+
+   8.4  No obligation.
+        The Licensor may accept, change or reject any Contribution for any
+        reason, and has no duty to compensate You, to keep Your Contribution,
+        or to credit You beyond the history. Submitting a Contribution creates
+        no employment, partnership or agency.
+
+   8.5  Contribution rules.
+        Contributions follow the rules in CONTRIBUTING.md and in CLAUDE.md.
+        These rules are part of how Contributions are accepted; they do not
+        change this Section.
+
+
+================================================================================
+ 9. SECURITY RESEARCH AND VULNERABILITY REPORTS
+================================================================================
+
+   9.1  Good-faith research.
+        The Licensor welcomes good-faith security research on the Software.
+        Reading, analyzing and running the Software in a local lab against
+        synthetic data to find vulnerabilities is permitted under this License,
+        even though it is not a Public Fork, as long as You (a) do not attack
+        systems that You do not own or have permission to test, in particular
+        any deployment of ExponetDB run by the Licensor or by anyone else;
+        (b) do not access, change or keep data of other people; (c) do not
+        disrupt any service; and (d) report what You find as described in
+        SECURITY.md before You publish it, and give the Licensor a reasonable
+        time to fix it.
+
+   9.2  Reporting channel.
+        Vulnerabilities are reported privately, as SECURITY.md describes. Do
+        not open a public issue with exploit details for an unfixed problem.
+
+   9.3  Safe harbor.
+        The Licensor will not bring a claim under this License against research
+        that follows this Section. This is not a promise about the conduct of
+        any third party or about what the law of Your country requires of You.
+
+
+================================================================================
+ 10. AUTOMATED SYSTEMS AND AI
+================================================================================
+
+   10.1 Assisted development is fine.
+        You may use software tools, including AI coding assistants and agents,
+        to read the Software and to help You do what this License permits,
+        for example to explain code, to review a Public Fork or to prepare a
+        Contribution, as long as the use stays within this License.
+
+   10.2 No bulk harvesting for training.
+        You may not copy, scrape, crawl, mirror or bulk-process the Software, its
+        documentation or its decision records for the purpose of training,
+        fine-tuning, distilling, or building the retrieval corpus of a machine
+        learning model or a product that You offer to others, without Written
+        Permission. This does not restrict ordinary search-engine indexing of
+        the Licensor's public repository, and it does not restrict what the law
+        allows regardless of a contract.
+
+   10.3 Responsibility.
+        You are responsible for what tools do in Your name. An agent's action
+        is Your action.
+
+   10.4 Reverse direction.
+        Output that a model produces for You while You exercise rights under
+        this License does not give You more rights than this License gives.
+
+
+================================================================================
+ 11. DOWNSTREAM RECIPIENTS
+================================================================================
+
+   11.1 Direct license from the Licensor.
+        Every person who receives a copy of the Software, or of a Public Fork,
+        from You or from anyone else receives a license directly from the
+        Licensor under this License, on these terms, automatically. You do not
+        grant them rights and You cannot narrow or widen what they get. This is
+        the only way in which the Software passes on.
+
+   11.2 You may not add restrictions.
+        You may not impose any further restriction on the exercise of the
+        rights this License gives, and You may not demand a fee, a royalty or
+        any other consideration for them.
+
+   11.3 Your termination does not reach them.
+        If Your license ends under Section 12, licenses that the Licensor has
+        given directly to downstream recipients under 11.1 continue for as long
+        as they themselves comply.
+
+
+================================================================================
+ 12. TERMINATION, CURE AND REINSTATEMENT
+================================================================================
+
+   12.1 Automatic termination.
+        If You breach this License, Your rights under it end automatically,
+        without notice, on the date of the breach, except as 12.3 provides.
+
+   12.2 Consequences.
+        When Your rights end, You immediately stop all use of the Software, stop
+        all Production Use and Commercial Use, take down any Public Fork that
+        You could not lawfully keep, delete Private Copies, and stop
+        distributing. Sections that by their nature should survive survive,
+        including 1, 3.8, 4, 5.7, 6, 8, 11.3, 13 to 18.
+
+   12.3 Cure for a first, unintended breach.
+        If this is Your first breach, and it was not deliberate, Your rights
+        are reinstated provisionally if You (a) stop the breaching conduct
+        within thirty (30) days after You learn of the breach or the Licensor
+        tells You in writing, whichever is earlier, and (b) tell the Licensor
+        what happened. Reinstatement becomes permanent if the Licensor does not
+        object in writing within sixty (60) days after Your notice. A second
+        breach, or a deliberate one, is not eligible for cure.
+
+   12.4 Reinstatement by the Licensor.
+        The Licensor may at any time reinstate Your rights in writing, on
+        conditions of the Licensor's choice.
+
+   12.5 Termination for patent or license claims.
+        See Section 2.7. Rights also end if You challenge the validity or
+        enforceability of this License, or of the Licensor's rights in the
+        Software, to the extent the law allows that consequence.
+
+   12.6 Other remedies.
+        Termination does not limit any other remedy that the Licensor has,
+        including injunctive relief, damages, an account of profits, a
+        reasonable license fee for past use, and recovery of reasonable legal
+        costs, as far as the law allows.
+
+   12.7 Licensor's right to stop distribution.
+        The Licensor may stop publishing the Software, or a Release of it, at
+        any time. Rights in copies that You lawfully received before that
+        remain, within this License.
+
+
+================================================================================
+ 13. NO WARRANTY
+================================================================================
+
+   13.1 THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY
+        OF ANY KIND, EXPRESS, IMPLIED OR STATUTORY, INCLUDING ANY WARRANTY OF
+        MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT,
+        ACCURACY, NON-INFRINGEMENT, SECURITY, AVAILABILITY OR DATA INTEGRITY.
+        THE LICENSOR DOES NOT WARRANT THAT THE SOFTWARE IS FREE OF DEFECTS, THAT
+        IT WILL OPERATE WITHOUT INTERRUPTION, OR THAT IT WILL NOT DAMAGE OR LOSE
+        DATA.
+
+   13.2 ExponetDB is database infrastructure software. It can change, and
+        therefore break or destroy, databases. Even in Development Use You run
+        it only against data that You can afford to lose, and You keep Your own
+        backups. You alone decide whether to rely on any output of the Software.
+
+   13.3 Where mandatory law gives You a warranty that cannot be excluded, this
+        Section applies only to the extent the law allows.
+
+
+================================================================================
+ 14. LIMITATION OF LIABILITY
+================================================================================
+
+   14.1 TO THE MAXIMUM EXTENT THE LAW ALLOWS, THE LICENSOR IS NOT LIABLE TO YOU
+        OR TO ANYONE ELSE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+        EXEMPLARY, CONSEQUENTIAL OR PUNITIVE DAMAGES, OR FOR LOSS OF DATA, LOSS
+        OF PROFIT, LOSS OF REVENUE, LOSS OF GOODWILL, BUSINESS INTERRUPTION OR
+        THE COST OF SUBSTITUTE GOODS, ARISING FROM OR RELATED TO THE SOFTWARE
+        OR THIS LICENSE, UNDER ANY THEORY OF LIABILITY, EVEN IF THE LICENSOR
+        WAS TOLD THAT SUCH DAMAGE WAS POSSIBLE.
+
+   14.2 IF A COURT HOLDS THE LICENSOR LIABLE DESPITE 14.1, THE TOTAL LIABILITY
+        OF THE LICENSOR IS LIMITED TO ONE HUNDRED EUROS (EUR 100), OR TO THE
+        AMOUNT YOU PAID THE LICENSOR FOR THE SOFTWARE IN THE TWELVE MONTHS
+        BEFORE THE EVENT, WHICHEVER IS GREATER, EXCEPT AS 14.3 PROVIDES.
+
+   14.3 NOTHING IN THIS LICENSE LIMITS OR EXCLUDES LIABILITY THAT CANNOT BE
+        LIMITED OR EXCLUDED BY MANDATORY LAW, IN PARTICULAR LIABILITY FOR
+        INTENT OR GROSS NEGLIGENCE, FOR INJURY TO LIFE, BODY OR HEALTH, FOR THE
+        FRAUDULENT CONCEALMENT OF A DEFECT, FOR A GUARANTEE THAT THE LICENSOR
+        GAVE IN WRITING, OR UNDER PRODUCT LIABILITY LAW. WHERE THE LICENSOR
+        IS LIABLE FOR SLIGHT NEGLIGENCE, THE LIABILITY IS LIMITED TO THE
+        BREACH OF A MATERIAL OBLIGATION AND TO THE DAMAGE THAT WAS TYPICAL AND
+        FORESEEABLE AT THE TIME THE LICENSE WAS GRANTED.
+
+   14.4 The limits in this Section apply to the Licensor's contributors,
+        agents and licensors as well, as far as the law allows.
+
+
+================================================================================
+ 15. INDEMNIFICATION
+================================================================================
+
+   If You are not a consumer, You will defend, indemnify and hold the Licensor
+   harmless from and against every claim, loss, liability, damage, cost and
+   expense (including reasonable legal fees) that arises from (a) Your
+   breach of this License, (b) Your Production Use or Commercial Use of the
+   Software, (c) Your Fork, Your Derivative Work, Your service or Your
+   product, or (d) Your violation of the rights of a third party or of the law.
+   The Licensor will tell You about the claim in reasonable time and
+   may take over its defense at the Licensor's expense; You will not settle
+   a claim in a way that binds the Licensor without the Licensor's consent.
+
+
+================================================================================
+ 16. COMPLIANCE, AUDIT AND RECORDS
+================================================================================
+
+   16.1 If the Licensor has a reasonable suspicion that You use the Software in
+        breach of this License, You answer the Licensor's written questions
+        about Your use truthfully and completely within fourteen (14) days.
+
+   16.2 If You hold a Written Permission or a Commercial License, You keep
+        accurate records of Your use for the term and for two (2) years after
+        it, and You let the Licensor (or an independent auditor bound to
+        secrecy) check them on reasonable notice, no more than once a year, to
+        verify compliance with the scope of that permission or license. If the
+        audit shows a shortfall in fees, You pay it, and if it exceeds five
+        percent (5%), You also bear the cost of the audit.
+
+   16.3 The Licensor's repository, build metadata and logs may show who
+        downloaded what, within what the law and the hosting platform's rules
+        allow. The Licensor may use public information to find breaches.
+
+
+================================================================================
+ 17. GOVERNING LAW AND VENUE
+================================================================================
+
+   17.1 Governing law.
+        This License and any dispute arising from it or from the Software are
+        governed by the substantive law of the country in which the Licensor has
+        their residence or registered seat at the time the dispute starts,
+        excluding its rules on conflict of laws and excluding the United Nations
+        Convention on Contracts for the International Sale of Goods (CISG).
+
+   17.2 Venue.
+        If You are a merchant, a legal entity, a public body or a person with no
+        general place of jurisdiction in the Licensor's country, the courts at
+        the Licensor's place of residence or registered seat have exclusive
+        jurisdiction, to the extent the law allows such an agreement. The
+        Licensor may also sue You at Your place of residence or seat and
+        anywhere where the infringement occurs.
+
+   17.3 Consumers.
+        Nothing in this Section removes the mandatory consumer protections of
+        the country where a consumer lives. This License is not designed for
+        consumers' commercial purposes; if You use the Software as a consumer,
+        only the permissions in Section 2 apply to You.
+
+   17.4 Injunctive relief.
+        The Licensor may seek injunctive relief and other urgent remedies in any
+        competent court against breach of Sections 2 to 6, 8 and 10.
+
+   17.5 Language.
+        The English text of this License is the authoritative text. A
+        translation is for convenience only.
+
+
+================================================================================
+ 18. GENERAL PROVISIONS
+================================================================================
+
+   18.1 Entire agreement.
+        This License, the notices it refers to, and any Written Permission or
+        Commercial License You hold make up the entire agreement between You and
+        the Licensor about the Software and replace earlier statements about it.
+
+   18.2 Severability.
+        If a provision of this License is held invalid or unenforceable, it is
+        replaced by the valid provision that comes closest to its purpose, and
+        the rest of this License stays in force. A provision that is ineffective
+        in one country remains effective in others.
+
+   18.3 No waiver.
+        A delay or failure to enforce a right is not a waiver. A waiver is
+        effective only in writing and only for the case it names. The Licensor's
+        tolerance of one use is no permission for another.
+
+   18.4 Assignment.
+        The Licensor may assign, transfer or license the Software and this
+        License, in whole or in part, to anyone, including in a sale of the
+        Software or of the Licensor's business, or on death or incapacity. You
+        may not assign or transfer Your rights or duties under this License,
+        by law or otherwise, without Written Permission.
+
+   18.5 Relationship.
+        Nothing here creates a partnership, joint venture, employment, agency
+        or fiduciary relationship.
+
+   18.6 Interpretation.
+        Headings and the Quick Reference, Schedule C and Schedule D are for
+        convenience and for interpretation, and they do not change the
+        numbered sections. "Including" means "including without limitation".
+        The singular includes the plural. Where this License says "in writing",
+        text form (e-mail) is enough unless it says otherwise.
+
+   18.7 Third-party beneficiaries.
+        Other than downstream recipients under Section 11 and the Licensor's
+        successors, no third party has a right to enforce this License.
+
+   18.8 Notices.
+        You send notices to the Licensor at the address in Section 20. The
+        Licensor sends notices to the address that You gave in a request or in
+        the repository metadata, and a notice in the repository's issue tracker
+        or in a Public Fork's issue tracker is also effective for a Public Fork.
+
+   18.9 Force majeure.
+        The Licensor is not responsible for a failure or delay caused by events
+        beyond reasonable control.
+
+
+================================================================================
+ 19. VERSIONS OF THIS LICENSE
+================================================================================
+
+   19.1 Versioning.
+        The Licensor may publish new versions of this License. A new version
+        will be distinguished by its version number.
+
+   19.2 What applies to what.
+        A copy of the Software that You received under Version 1.0 stays under
+        Version 1.0 for that copy and for the Releases contained in it, unless
+        You accept a later version. The Licensor may publish later Releases under
+        a later version, or under a different license, including an open-source
+        license or a commercial one. A later Release carrying a new license
+        does not retroactively change the license of an earlier Release.
+
+   19.3 Stricter protection for new work.
+        A Public Fork that takes a later Release of the Software takes it under
+        the license that Release carries.
+
+
+================================================================================
+ 20. CONTACT
+================================================================================
+
+   Licensor:            davdxpx
+   E-mail:              davdxpx@gmail.com
+   GitHub:              https://github.com/davdxpx
+   Repository:          https://github.com/davdxpx/ExponetDB
+
+   For permission requests, commercial licenses, license questions, takedown
+   notices and notices under this License, write to the e-mail address above
+   and put "ExponetDB license" in the subject. For vulnerabilities, follow
+   SECURITY.md.
+
+
+================================================================================
+ SCHEDULE A. HOW TO ASK FOR PERMISSION OR A COMMERCIAL LICENSE
+================================================================================
+
+   Write to the address in Section 20 with the subject "ExponetDB license".
+   A good request makes a quick answer possible. Please say:
+
+   1.  Who You are: Your name, Your organization (if any), its country, and
+       whether You are an individual, a company, a school, a research group or
+       a non-profit.
+   2.  What You want: a Written Permission for non-commercial Production Use,
+       an evaluation permission, or a Commercial License.
+   3.  What for: the use case in a few sentences. Which databases would
+       ExponetDB manage? Which environments? Is the result used for a product,
+       a service or a client?
+   4.  How big: the number of installations, environments, managed PostgreSQL
+       clusters and users.
+   5.  For how long: the term You need.
+   6.  Whether You plan to modify the Software, and whether You can publish the
+       modifications as a Public Fork.
+   7.  How to reach You, and a date by which You need an answer.
+
+   The Licensor reads every serious request. There is no promise of a reply or
+   of a grant (Section 5.3). A request does not give You any right to use the
+   Software before a Written Permission or a Commercial License exists.
+
+
+================================================================================
+ SCHEDULE B. THE REQUIRED NOTICE FOR A PUBLIC FORK
+================================================================================
+
+   A Public Fork shows the following text, translated if needed, near the top of
+   its README, with the name of the Fork filled in and with the link intact:
+
+   -----------------------------------------------------------------------
+   <NAME OF THE FORK> is an unofficial fork of ExponetDB
+   (https://github.com/davdxpx/ExponetDB) by davdxpx. It is not made, endorsed
+   or supported by the original author.
+
+   The code is source-available under the ExponetDB Source-Available License
+   1.0. It is NOT open source. You may read it and fork it publicly, but you
+   may not use it in production or commercially, and you may not keep a
+   private copy, without a written permission or a commercial license from
+   the original author. See the LICENSE file and https://github.com/davdxpx/
+   ExponetDB.
+
+   Changes in this fork are marked in the files and in the history.
+   -----------------------------------------------------------------------
+
+
+================================================================================
+ SCHEDULE C. EXAMPLES (NON-EXHAUSTIVE, FOR INTERPRETATION ONLY)
+================================================================================
+
+   C.1  Permitted:
+
+        * You read the migration engine to learn how plan, apply and verify
+          fit together, and You write a blog post that quotes ten lines of it
+          with a link to the repository.
+        * You fork the repository on GitHub, fix a bug in Your public fork,
+          open a pull request, run the test suite on Your laptop against
+          throw-away containers, and leave Your fork public.
+        * You find a vulnerability in a local lab, tell the Licensor privately,
+          and publish an analysis after the fix.
+        * You use an AI assistant to explain a module of the code to You.
+
+   C.2  Not permitted without Written Permission or a Commercial License:
+
+        * Your agency installs ExponetDB to manage a client's PostgreSQL
+          servers, even if you charge nothing for ExponetDB itself.
+        * Your startup runs ExponetDB internally to manage its production
+          database, even if no customer ever sees it.
+        * You run ExponetDB at home on a server that stays on, to manage the
+          databases of Your hobby project that real people use.
+        * You publish a hosted "ExponetDB Cloud" or "managed Exponet" offer,
+          or a one-click deploy template.
+        * You keep a private fork in Your company's internal Git server.
+        * You take the schemas and the protocol documents and build a competing
+          product from them.
+        * You copy the repository into a training corpus.
+        * You remove the license header and rename the product.
+
+   C.3  Needs a decision by the Licensor (ask first):
+
+        * A university lab wants to run ExponetDB for a course for a semester.
+        * A non-profit wants to manage the databases of its volunteers.
+        * A company wants a paid pilot.
+        * A conference talk wants to demo it live on stage.
+
+
+================================================================================
+ SCHEDULE D. PLAIN-LANGUAGE ANSWERS TO COMMON QUESTIONS (NON-BINDING)
+================================================================================
+
+   Is this open source?
+     No. The source is visible and forkable in public, but running it in
+     production or commercially needs the Licensor's permission. Open Source
+     Initiative definitions and "free software" definitions do not apply to
+     this License.
+
+   Can I try it out?
+     You can run it on your own computer to develop and test a public fork or a
+     contribution, against fake data. For anything beyond that, ask first.
+
+   Can I use it at work?
+     Not without a commercial license. "At work" is Commercial Use even if
+     nobody pays for the software.
+
+   Can I use it for my side project?
+     If the side project is real (real users, real data, or any chance of
+     income), ask first. A written permission for hobby projects may be easy to
+     get.
+
+   Why do forks have to stay public?
+     So that improvements remain visible to everyone, and so that nobody builds
+     a closed product on the work. The Licensor gets a license to forks'
+     modifications (Section 3.8) to be able to include them upstream and in a
+     Commercial License.
+
+   Can I send a pull request?
+     Yes. See Section 8 and CONTRIBUTING.md.
+
+   Can I get a commercial license?
+     Yes. Write to the address in Section 20 and see Schedule A.
+
+   Is this legal advice?
+     No. This License is a legal text written by the Licensor. If a lot depends
+     on it for You, ask a lawyer of Your own.
+
+
+================================================================================
+ END OF THE EXPONETDB SOURCE-AVAILABLE LICENSE, VERSION 1.0
+================================================================================

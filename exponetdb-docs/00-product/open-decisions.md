@@ -38,7 +38,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-16 | Shadow apply before production | **resolved 2026-10-12** | not in V1; staging is the shadow | Wave 6 (scope), later | yes |
 | OD-17 | CA strategy for PostgreSQL server certificates | **resolved 2026-10-07** | option (a): an ExponetDB-managed PostgreSQL server CA per installation; the server's TLS key is generated on the host and never leaves it | (was Wave 5) | decided |
 | OD-18 | Agent gateway exposure | **resolved 2026-10-07** | option (a): the node gateway listens on the private network only in V1 | (was Wave 5) | decided |
-| OD-19 | ExponetDB license | **resolved 2026-10-05** | proprietary, internal, all rights reserved | (was Wave 1) | decided |
+| OD-19 | ExponetDB license | **resolved 2026-10-05, amended 2026-10-23** | source-available: ExponetDB Source-Available License 1.0 (was: proprietary, all rights reserved) | (was Wave 1) | decided |
 | OD-20 | PostgreSQL configuration ownership strategy | **resolved 2026-10-07** | option (b): a dedicated ExponetDB-managed include for its own parameters; no `ALTER SYSTEM` as the normal writer; foreign `postgresql.auto.conf` values never removed automatically; a missing include is reported as a bootstrap need and added by the local administrator in Wave 5 | (was Wave 5) | decided |
 | OD-21 | Delivery channel for invitations and security notifications | open | an EU-hosted transactional e-mail provider over SMTP submission with TLS, configured per installation; links never in logs | production use of notifications (lockout, recovery); not Wave 4 | yes |
 | OD-22 | Authority needed to register a database whose intended tier is unknown | **resolved 2026-10-12, extended 2026-10-13, implemented 2026-10-13** (Wave 6 workflows; on 2026-10-13 the owner decided that both the declared-tier field on clusters and a tier-aware `registry.manage` are built in Wave 8; implemented in Wave 8 part 2, which closes [G6 record §10](../14-roadmap/gates/6.md#10-acceptance-2026-10-12) O7; the OAuth scope stays one `registry.manage` because the frozen scope catalog pins its tiered scopes, see the entry) | a declared intended tier per cluster (optionally per database), set with `registry.manage` of that tier; registering any database of a cluster declared `prod` needs `registry.manage:prod` whatever environment it is placed in | first production registrations by people with nonprod authority only; Wave 5 or 6 | yes |
@@ -630,6 +630,16 @@ History:
 
 - **Status.** RESOLVED (accepted)
 - **Decision date.** 2026-10-05
+- **Amendment (2026-10-23).** The repository is public. The owner replaced the
+  proprietary notice with a custom source-available license, the ExponetDB
+  Source-Available License 1.0 (`LICENSE`): reading and public forks are
+  allowed; production use, commercial use, hosting and private copies need
+  the owner's written permission or a commercial license; contributions
+  come with a license-back so a commercial license stays possible. It is not
+  an open-source license, and no text may call it one. Third-party files keep
+  their own licenses (OD-38 still governs the Supabase-derived UI files). The
+  owner should have the license checked by a lawyer before relying on it
+  commercially. The text below is the original decision.
 - **Decision.** ExponetDB stays proprietary, internal, all rights reserved for
   now. No public open-source release in V1. The decision must not make a later
   opening architecturally impossible: no secrets in the repository, and direct

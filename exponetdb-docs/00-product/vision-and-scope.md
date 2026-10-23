@@ -8,8 +8,9 @@
 
 ## What ExponetDB is
 
-**[DECIDED]** ExponetDB is an internal, standalone product of the Exponet
-ecosystem: an AI-native control plane for PostgreSQL infrastructure. It manages
+**[DECIDED]** ExponetDB is a standalone product of the Exponet ecosystem,
+built first for internal use and published source-available (see
+[OD-19](./open-decisions.md#od-19-exponetdb-license)): an AI-native control plane for PostgreSQL infrastructure. It manages
 PostgreSQL clusters, databases, the hosts they run on, the migrations applied to
 them, their backups, their health and the people and AI agents who change them.
 
@@ -19,7 +20,8 @@ them, their backups, their health and the people and AI agents who change them.
 - Primary domain: `https://db.exponet.cloud`
 - Remote MCP endpoint: `https://db.exponet.cloud/mcp`
 - REST API: `https://db.exponet.cloud/api/v1/...`
-- Status: internal, under development. No public marketing site.
+- Status: alpha, under development. Source published under the ExponetDB
+  Source-Available License 1.0 (not open source). No marketing site.
 
 ### Place in the ecosystem
 
@@ -32,7 +34,7 @@ them, their backups, their health and the people and AI agents who change them.
 | REOS | The company |
 | REOSA | A product (multi-tenant SaaS for real-estate agents) |
 | Exponet | The infrastructure and internal-systems layer, zone `exponet.cloud`, "next to the product, not underneath it" |
-| ExponetDB | A standalone internal product inside Exponet |
+| ExponetDB | A standalone product inside Exponet, built first for internal use |
 
 REOSA is the **first consumer** of ExponetDB, not its owner. Other REOS/Exponet
 products are expected to register their databases as targets later.
