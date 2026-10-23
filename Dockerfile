@@ -12,7 +12,7 @@
 #   memory outside the heap for a large legacy history and had a 512 MiB
 #   container killed; parsing is as fast (deployment.md §2a).
 
-FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS build
+FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS build
 WORKDIR /src
 COPY . .
 RUN bun install --frozen-lockfile --ignore-scripts
@@ -20,7 +20,7 @@ ARG EXPONETDB_BUILD_COMMIT=unknown
 RUN bun run --cwd apps/web build
 RUN EXPONETDB_BUILD_COMMIT="${EXPONETDB_BUILD_COMMIT}" bun run --cwd apps/server bundle
 
-FROM node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS runtime
+FROM node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS runtime
 ARG EXPONETDB_BUILD_COMMIT=unknown
 ARG EXPONETDB_VERSION=0.2.0
 LABEL org.opencontainers.image.title="exponetdb" \
