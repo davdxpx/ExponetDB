@@ -883,3 +883,62 @@ each with a regression test on the reviewer's own input.
 | V-P3-5 | P3 (older) | The reset re-created `earthdistance` before `cube` once `cube` was updated after it, and failed | extensions re-created after the ones they require (`pg_depend`) |
 | V-P3-6 | P3 | 3 000 nested IFs overflowed the stack | blocks deeper than 64 are mixed; trees deeper than 1 000 levels are not followed |
 | V-P3-7 | P3 | With the slot gone, slow targets let requests holding 16 MiB bodies add up | at most two requests that carry a history at once, `429 RATE_LIMITED` with `Retry-After: 5` |
+
+## 9. Follow-up 3: a reviewed baseline can never pass its verification (2026-10-23)
+
+**[OBSERVED]** The import itself worked end to end after follow-up 2 on
+`reos-db-01` (PostgreSQL 17.11, release `d36ba29b`): report
+`imr_01M5MM4KHX4TN0XE4PVY8ZR03B` with 454 review decisions, state `resolved`,
+baseline plan `pln_01M5MQMNS15RMAJ8R5P9CXRCF0`, operation
+`op_01M5MQMZS58HKVQ0M2ZQ4FSQAV`. The apply recorded 555 `legacy_import` rows
+and the baseline; the verification failed (`structural {held: 13115,
+checked: 13507}`, `engine {fingerprint: match}`) and said nothing more; drift
+kept comparing with the registration snapshot (348 findings, 17 critical).
+The owner's request: fix in ExponetDB (contracts, tests on PostgreSQL 16, 17
+and 18, docs), no consumer-side workaround; staging schema changes stay
+frozen until the baseline verifies.
+
+| # | Observed | Decision | Evidence |
+|---|---|---|---|
+| F1 | Step 5 lets a person accept a file whose expectations partly hold; Step 7 required every surviving expectation of every accepted file to hold, so a real history could never verify | The analysis records each file's failing expectations (`ImportReport.items[].failing`, bundle `01M5PZFYDPT065MDFHG5G3WSG1_legacy-import-failing`, bound into the report digest); an accepting decision excuses exactly those while they fail the same way; anything else fails the run; the CLI and the Web App say what an acceptance excuses before it is recorded ([legacy-import.md Steps 5 and 7](../../04-migrations/legacy-import.md#step-5-review)) | `legacy-baseline-verify.int.test.ts` (16, 17, 18), `verification-failures.test.ts` |
+| F2 | A failed verification kept two counts | Every verification layer keeps its failing expectations (the first 200 and how many; names and aspect codes, never catalog values); `Operation.verifications` (REST), `operation show`, `migration show baseline:<slug>` and the Web App's operation page list them; for every verifying kind ([verification.md §5](../../04-migrations/verification.md#5-verification-runs-and-history)) | the same, the CLI suite, `http-migrations.int.test.ts` |
+| F3 | `verification_failed` is final (a trigger of the frozen operations bundle) and a second baseline is refused, so a failed baseline had no way back | `migration.verify` takes `baseline:<slug>`: a planned, audited re-verification with the baseline plan's report and decisions; the baseline operation keeps its outcome, the target's history and the mirror carry the new run ([verification.md §5](../../04-migrations/verification.md#retrying-verification)) | `legacy-baseline-verify.int.test.ts`: fails on a failure the review never saw and on a schema change, passes once the cause is gone |
+| F4 | The baseline kind never adopted the schema for drift, also after a passed verification | A passed baseline verification (own or planned) records the schema as the drift reference; the open findings then resolve `cleared` with the next drift check; `explainedByOperationId` stays `null` (nothing sets it yet) ([drift-detection.md §7](../../03-database-model/drift-detection.md#7-wave-4-implementation-kind-c)) | `legacy-baseline-verify.int.test.ts` (the reference is recorded once per passed run, never for a failed one) |
+
+**Found on the way.** The baseline's verification also checked the files a
+person decided `superseded` (their effects replaced later): it read the
+plan's rows, which only knew the analysis state. Such a file is no longer
+checked. This explains part of the difference the owner saw between the
+report's evidence (226 failed of 5 610) and the verification (392 of 13 507);
+the verification also checked every accepted file, also those no decision
+needed, and a report's evidence list is capped at 16 entries. The next run
+names each failure, so the rest is visible.
+
+**The report on `reos-db-01` was analyzed before failures were recorded**
+(`failing` is null on its items). For such a report a decision that accepts a
+file excuses every failure of that file, bound by the fingerprint of the
+managed scope **[DECIDED]**; a file accepted without a decision, and a file
+decided superseded, are handled as above. Expectations outside the managed
+scope of such a file (role attributes, memberships) are then excused
+unverified; a report analyzed after this change records them and excuses
+only those.
+
+**Owner actions after this is deployed** (nothing here is done from this
+session):
+
+1. Re-verify the baseline: `exponetdb migration verify
+   baseline:reosa-platform-2026-10 --target reosa/platform/staging`. It
+   waits for the result; exit 0 only when it passed.
+2. If it fails, `exponetdb operation show <op>` lists what failed (file,
+   statement, expected object, what differs, excused or not); `--json`
+   gives the first 200.
+3. Once it passed, `exponetdb drift check --target reosa/platform/staging`
+   compares with the reviewed schema; the 348 findings resolve `cleared`.
+4. Then the first bundles can be planned on staging.
+
+**Open after this change:** the second verification review of follow-up 2
+(reported to the owner on 2026-10-22, not part of this order) found three
+P1 that are on `main` and are not fixed here: a single-quoted `DO` body
+passes the parser's token bound, memory adds up across the files of a large
+history, and the `search_path` check of the guard strictness is a
+quadratic regular expression. They wait for the owner's go-ahead.
