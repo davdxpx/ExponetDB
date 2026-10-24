@@ -900,7 +900,7 @@ frozen until the baseline verifies.
 
 | # | Observed | Decision | Evidence |
 |---|---|---|---|
-| F1 | Step 5 lets a person accept a file whose expectations partly hold; Step 7 required every surviving expectation of every accepted file to hold, so a real history could never verify | The analysis records each file's failing expectations (`ImportReport.items[].failing`, bundle `01M5PZFYDPT065MDFHG5G3WSG1_legacy-import-failing`, bound into the report digest); an accepting decision excuses exactly those while they fail the same way; anything else fails the run; the CLI and the Web App say what an acceptance excuses before it is recorded ([legacy-import.md Steps 5 and 7](../../04-migrations/legacy-import.md#step-5-review)) | `legacy-baseline-verify.int.test.ts` (16, 17, 18), `verification-failures.test.ts` |
+| F1 | Step 5 lets a person accept a file whose expectations partly hold; Step 7 required every surviving expectation of every accepted file to hold, so a real history could never verify | The analysis records each file's failing expectations (`ImportReport.items[].failing`, bundle `01M5PZFYDPT065MDFHG5G3WSG1_legacy-import-failing`, bound into the report digest); an accepting decision excuses exactly those while they fail the same way; anything else fails the run; the Web App says what an acceptance excuses before it is recorded, the CLI lists each item's failing count and answers `resolve` with what the recorded decision excuses ([legacy-import.md Steps 5 and 7](../../04-migrations/legacy-import.md#step-5-review)) | `legacy-baseline-verify.int.test.ts` (16, 17, 18), `verification-failures.test.ts` |
 | F2 | A failed verification kept two counts | Every verification layer keeps its failing expectations (the first 200 and how many; names and aspect codes, never catalog values); `Operation.verifications` (REST), `operation show`, `migration show baseline:<slug>` and the Web App's operation page list them; for every verifying kind ([verification.md §5](../../04-migrations/verification.md#5-verification-runs-and-history)) | the same, the CLI suite, `http-migrations.int.test.ts` |
 | F3 | `verification_failed` is final (a trigger of the frozen operations bundle) and a second baseline is refused, so a failed baseline had no way back | `migration.verify` takes `baseline:<slug>`: a planned, audited re-verification with the baseline plan's report and decisions; the baseline operation keeps its outcome, the target's history and the mirror carry the new run ([verification.md §5](../../04-migrations/verification.md#retrying-verification)) | `legacy-baseline-verify.int.test.ts`: fails on a failure the review never saw and on a schema change, passes once the cause is gone |
 | F4 | The baseline kind never adopted the schema for drift, also after a passed verification | A passed baseline verification (own or planned) records the schema as the drift reference; the open findings then resolve `cleared` with the next drift check; `explainedByOperationId` stays `null` (nothing sets it yet) ([drift-detection.md §7](../../03-database-model/drift-detection.md#7-wave-4-implementation-kind-c)) | `legacy-baseline-verify.int.test.ts` (the reference is recorded once per passed run, never for a failed one) |
@@ -935,6 +935,39 @@ session):
 3. Once it passed, `exponetdb drift check --target reosa/platform/staging`
    compares with the reviewed schema; the 348 findings resolve `cleared`.
 4. Then the first bundles can be planned on staging.
+
+### 9.1 Independent review of follow-up 3 (2026-10-24)
+
+**[OBSERVED]** An independent review of `d36ba29..40654f8` (with its own
+adversarial tests on PostgreSQL 17) confirmed the excusal matching, the
+digest binding, the immutability of `failing`, the fingerprint cases, the
+owner's case, the target and generation bindings of the re-verification, that
+no catalog value reaches a failure, the contracts (the MCP tool digests are
+unchanged) and the authorization of a baseline ref. Its findings and what
+this pull request does with them:
+
+| # | Finding | Fix |
+|---|---|---|
+| P1-1 | A check that raised in the baseline's verification (`to_regclass` on a schema the observer may not use: `permission denied for schema`, as on `auth` or `storage` of a Supabase history) made the run `error`; the operation then needed attention, recorded no run and kept the target's schema domain, and neither `migration.baseline` nor `migration.verify` could be retried | Each file's checks run under their own savepoint, as in the analysis; a file that cannot be read is one failure with the aspect `unreadable`, recorded at the analysis too, so an acceptance excuses it explicitly. `migration.baseline` and `migration.verify` are retryable (`retry-verification`); a re-verification's errored run is pending again on a retry. Tests: `legacy-baseline-verify.int` (a schema the observer may not use; a re-verification that errors, retried, releases the target) on 16, 17 and 18; `failures.int` (a re-verification whose `verify.sql` cannot get its lock, retried) |
+| P3-1 | A cluster-global failure of a value (`role_setting`, `role_connection_limit`, `role_comment`: aspect `value`) stays excused whatever the value becomes, as roles are outside the fingerprint | **[OPEN: OD-56]** Not fixed here: the checks return no observed value, and a stored digest of one needs a key the engine does not hold (a setting can hold a secret). Proposal: the checks return a keyed digest (HMAC with an installation key) of the observed value for open-domain kinds, recorded with the failure and compared ([open-decisions.md OD-56](../../00-product/open-decisions.md#od-56-an-excused-value-outside-the-fingerprint-that-changes-after-the-review)) |
+| P3-2 | A decision recorded after the plan's last binding check and before the report is baselined changed what the verification excuses | The verification compares the report's digest with the one the plan bound; a change fails the run (`import_report`, aspect `changed`) |
+| P3-3 | The rule for reports analyzed before failures were recorded (an acceptance excuses everything) was reachable for open reports too | A baseline plan of such a report is refused (`LEGACY_IMPORT_ANALYSIS_OUTDATED`, additive): analyze again. Only a baseline recorded before keeps the rule (the owner's report) |
+| P3-4 | The baseline's mirror write and drift reference were not fenced by the lease | Both run only while the worker holds the operation |
+| P3-5 | The import report's failing items lost the `untrusted` marker (an `omit` drops the meta) | Marked again |
+| P3-6 | An old run with an unparsed chain read as `skipped` | Read as `error`, as runs write it now (`verification-failures.test.ts`) |
+| P3-7 | The docs said the CLI shows what an acceptance excuses before it is recorded; statement numbers differ between the interfaces | The docs say what each interface shows. Statement numbers are 0-based in the contract and the CLI and 1-based in the Web App, as everywhere else in each |
+| P3-8 | An acceptance that excuses nothing said nothing | The Web App's dialog and the CLI's `resolve` say that every expectation must hold. A file the hints call not applicable and a person decides present stays unchecked (as before this change); the re-verification reads the project's current trusted extensions and scope (a change there is a project change, planned and audited) |
+
+**[OBSERVED]** **CI: the PostgreSQL integration job.** It failed twice on this
+branch (`failures.int` E2 read `needs_attention`/`error`, and the three E27
+cases then found the worker busy) and passed on `main`. Cause:
+`node-credential-rotation.int` rotates the verifier's password on the
+shared PostgreSQL 17 test server for its whole file, and every verification
+with a `verify.sql` in another package running at the same time met the
+rotated password. A probe of 150 verifier logins during a rotation failed 44
+times before and 0 times after the fix: the suites against the target servers
+hold a shared advisory lock for each test, and the rotation holds it
+exclusively (`packages/testkit/src/verifier-password.ts`).
 
 **Open after this change:** the second verification review of follow-up 2
 (reported to the owner on 2026-10-22, not part of this order) found three
