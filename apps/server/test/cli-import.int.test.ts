@@ -187,7 +187,7 @@ beforeAll(async () => {
     'migrations.read',
     'migrations.plan',
     'migrations.import',
-    'migrations.apply',
+    'migrations.apply:nonprod',
     'registry.manage',
   ] as const
   const tokens = await w.apiTokens(scope, ['nonprod', 'prod'])

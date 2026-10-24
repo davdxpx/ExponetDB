@@ -599,7 +599,14 @@ export const MigrationDetailSchema = z
     targetId: TargetIdSchema,
     migrationId: z.union([MigrationIdSchema, BaselineRefSchema]),
     state: z.enum(['applied', 'reverted', 'pending', 'partially_applied', 'unknown_to_target']),
-    checksum: ApplyChecksumSchema.nullable(),
+    checksum: z
+      .string()
+      .regex(/^sha256:[a-z0-9:]{64,80}$/)
+      .nullable()
+      .meta({
+        description:
+          "A migration's apply checksum (sha256:c1:…); for a baseline the import report's digest (sha256:…), as in LedgerEntry (Part A follow-up 3).",
+      }),
     appliedAt: TimestampSchema.nullable(),
     operationId: OperationIdSchema.nullable(),
     planId: PlanIdSchema.nullable(),
