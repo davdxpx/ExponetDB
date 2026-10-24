@@ -449,6 +449,13 @@ the target's history and the mirror, and the operation's verification
 outcome. A passed run makes the schema the drift reference. This is how a
 baseline whose verification failed is verified again: `verification_failed`
 is a final state, and `retry-verification` stays for `needs_attention`.
+**[DECIDED]** (follow-up 4, 2026-10-24) After migrations applied on top of
+the baseline, the run accepts the live schema as the verified state of the
+last of them when they form a chain of verified migrations from the reviewed
+schema (`engine.acceptedThrough`); their `up.sql` supersedes the history's
+expectations it changed; a passed run then leaves the drift reference at the
+newest verified schema ([`legacy-import.md` Step
+7](./legacy-import.md#step-7-verify)).
 
 **[OBSERVED]** (2026-10-13, Wave 7; `packages/policy/src/catalog/migrations.ts`,
 `apps/server/test/mcp-plans.int.test.ts`; G7 not yet accepted) On

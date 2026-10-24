@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
-import { newId, systemClock } from '@exponetdb/kernel'
+import type { MigrationPlanRequest } from '@exponetdb/contracts'
+import { newId, newUlid, systemClock } from '@exponetdb/kernel'
 import {
   acceptPlan,
   KindRegistry,
@@ -48,6 +49,7 @@ import {
   migrationKinds,
   planBaseline,
   planImportAnalysis,
+  planMigrationApply,
   planMigrationVerify,
 } from '../src/index.ts'
 
@@ -299,6 +301,56 @@ async function latestRun(w: World) {
   return v
 }
 
+/** A bundle applied on top of the baseline (follow-up 4), as the project's owner. */
+function bundle(spec: {
+  readonly id: string
+  readonly name: string
+  readonly up: string
+  readonly verify?: string
+  readonly dependsOn: readonly string[]
+}) {
+  const yaml = [
+    'schema: exponetdb.migration/v1',
+    `id: ${spec.id}`,
+    `name: ${spec.name}`,
+    'description: "A change on top of the reviewed baseline."',
+    `dependsOn: ${JSON.stringify(spec.dependsOn)}`,
+    'execution:',
+    '  transactional: true',
+    'compatibility:',
+    '  declared: additive',
+    'verification:',
+    '  expectations: auto',
+    `  runtimeChecks: ${spec.verify === undefined ? 'none' : 'verify.sql'}`,
+    '',
+  ].join('\n')
+  return {
+    directory: `${spec.id}_${spec.name}`,
+    files: {
+      'migration.yaml': yaml,
+      'up.sql': spec.up,
+      ...(spec.verify === undefined ? {} : { 'verify.sql': spec.verify }),
+    },
+  }
+}
+
+const applyBundles = async (w: World, bundles: readonly ReturnType<typeof bundle>[]) =>
+  apply(
+    w,
+    await w.h.serve.transaction('test.bv.bundle', (tx) =>
+      planMigrationApply(tx, w.ctx, w.a, w.imported.targetId, {
+        defaults: {
+          lockTimeout: '2s',
+          statementTimeout: '15m',
+          role: 'owner',
+          searchPath: ['public'],
+        },
+        lintProfile: 'standard',
+        bundles,
+      } as MigrationPlanRequest),
+    ),
+  )
+
 const reverify = (w: World) =>
   w.h.serve.transaction('test.bv.reverify', (tx) =>
     planMigrationVerify(tx, w.ctx, w.a, w.imported.targetId, `baseline:${BASELINE}`, {}),
@@ -508,6 +560,94 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         [op.operationId],
       )
       expect(held.rows[0]?.int('n')).toBe(0)
+    })
+
+    // Follow-up 4: the bundles applied on top of the baseline, in order.
+    const first = newUlid(Date.now())
+    const second = newUlid(Date.now() + 1)
+
+    it('accepts the schema a verified bundle on top of the baseline left, and keeps the drift reference (follow-up 4)', async () => {
+      // The bundle changes a table the history created: the history's column expectation of
+      // it is superseded by the bundle, whose own verification checked what it left.
+      const applied = await applyBundles(w, [
+        bundle({
+          id: first,
+          name: 'acme-notes',
+          up: 'ALTER TABLE public.acme_items ADD COLUMN note text;\nCREATE TABLE public.acme_more (id bigint PRIMARY KEY);\n',
+          dependsOn: [`baseline:${BASELINE}`],
+        }),
+      ])
+      expect(applied).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
+      const reference = w.expected.length
+      const passed = await apply(w, await reverify(w))
+      expect(passed).toMatchObject({
+        kind: 'migration.verify',
+        state: 'succeeded',
+        verificationOutcome: 'passed',
+      })
+      const v = await latestRun(w)
+      expect(v.engine).toMatchObject({
+        status: 'passed',
+        firstFailure: null,
+        acceptedThrough: { migrations: 1, last: first },
+      })
+      expect(v.structural).toMatchObject({ failed: 0, excused: 4 })
+      // The drift reference stays the bundle's (newest verified) schema.
+      expect(w.expected).toHaveLength(reference)
+      expect(w.expected.at(-1)?.fingerprint).toBe(v.fingerprint)
+    })
+
+    it('fails while a bundle after the baseline is not verified, and passes once it is', async () => {
+      const failed = await applyBundles(w, [
+        bundle({
+          id: second,
+          name: 'acme-flags',
+          up: 'CREATE TABLE public.acme_flags (id bigint);\n',
+          verify: '-- check: a flag exists\nSELECT count(*) > 0 AS ok FROM public.acme_flags;\n',
+          dependsOn: [first],
+        }),
+      ])
+      expect(failed).toMatchObject({ state: 'verification_failed', applyOutcome: 'applied' })
+      expect(await apply(w, await reverify(w))).toMatchObject({ state: 'verification_failed' })
+      expect((await latestRun(w)).engine).toMatchObject({
+        status: 'failed',
+        firstFailure: {
+          name: `schema after the baseline: ${second}`,
+          detail: 'its latest verification is failed',
+        },
+      })
+      // Its data fixed, the bundle verifies, and so does the baseline again.
+      await runAsSuperuser(server, w.importedDb, ['INSERT INTO public.acme_flags VALUES (1)'])
+      const verified = await apply(
+        w,
+        await w.h.serve.transaction('test.bv.verify', (tx) =>
+          planMigrationVerify(tx, w.ctx, w.a, w.imported.targetId, second, {}),
+        ),
+      )
+      expect(verified).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
+      const reference = w.expected.length
+      expect(await apply(w, await reverify(w))).toMatchObject({ state: 'succeeded' })
+      expect((await latestRun(w)).engine).toMatchObject({
+        acceptedThrough: { migrations: 2, last: second },
+      })
+      expect(w.expected).toHaveLength(reference)
+    })
+
+    it('fails on a change by hand after the last verified bundle', async () => {
+      await runAsSuperuser(server, w.importedDb, ['CREATE TABLE public.acme_by_hand (id int)'])
+      try {
+        expect(await apply(w, await reverify(w))).toMatchObject({ state: 'verification_failed' })
+        expect((await latestRun(w)).engine).toMatchObject({
+          status: 'failed',
+          firstFailure: {
+            name: `schema after the baseline: ${second}`,
+            detail: 'the live schema is not the one the last verified migration left',
+          },
+        })
+      } finally {
+        await runAsSuperuser(server, w.importedDb, ['DROP TABLE public.acme_by_hand'])
+      }
+      expect(await apply(w, await reverify(w))).toMatchObject({ state: 'succeeded' })
     })
 
     it('refuses to re-verify a baseline the target does not hold', async () => {

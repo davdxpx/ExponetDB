@@ -274,8 +274,10 @@ export const migrationStagingVerifyDigest: Rule = {
 
 export const migrationDependenciesVerified: Rule = {
   id: 'migration.dependencies-verified',
-  version: 1,
-  description: 'Dependencies are verified on the production target, not only applied.',
+  // Version 2 (Part A follow-up 4): the target's baseline counts as a dependency of every plan.
+  version: 2,
+  description:
+    "Dependencies, and the target's baseline of an imported history, are verified on the production target, not only applied.",
   appliesTo: MIGRATION_KINDS,
   severity: 'require',
   overridableByBreakGlass: true,
@@ -290,8 +292,10 @@ export const migrationDependenciesVerified: Rule = {
         ? { result: 'pass', message: 'Every applied dependency passed its verification.' }
         : {
             result: 'fail',
-            message: 'An applied dependency has no passing verification on this target.',
-            remediation: 'Run migration.verify for the dependency first.',
+            message:
+              "An applied dependency, or the target's baseline, has no passing verification on this target.",
+            remediation:
+              'Run migration.verify for the dependency, or for the baseline (baseline:<slug>), first.',
           }
     })
   },

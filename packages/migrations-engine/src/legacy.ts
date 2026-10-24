@@ -29,6 +29,7 @@ import {
   pinSearchPath,
   readLedgerMeta,
   readLedgerRows,
+  readVerifications,
   snapshotWithin,
   sql,
   TargetError,
@@ -53,6 +54,7 @@ import {
   RegistryError,
   type TargetRecord,
 } from '@exponetdb/registry'
+import { acceptBaselineSchema, rowsAfterBaseline } from './baseline-chain.ts'
 import type { PlanContent, PlanItem } from './content.ts'
 import { type MigrationKindDeps, projectRegistry } from './deps.ts'
 import { MigrationError } from './errors.ts'
@@ -78,7 +80,7 @@ import { refuseOversizedLegacyFiles } from './legacy-files.ts'
 import { type FileReplay, fileReplay, survivingGlobals } from './legacy-replay.ts'
 import type { MigrationPlanContext } from './planner.ts'
 import { type Fence, fenced, LeaseLost, writeMirror, writeVerificationMirror } from './records.ts'
-import type { StoredRevision } from './store.ts'
+import { revisionsOf, type StoredRevision } from './store.ts'
 import { ledgerHashOf, type ManagedScope } from './target.ts'
 import { keptFailures, type Layer, type VerificationRun } from './verification.ts'
 import {
@@ -2249,17 +2251,55 @@ export async function verifyBaseline(
   let unparsed: string | null
   let checked = 0
   const failures: (ExpectationFailure & { excused: boolean })[] = []
+  // The migrations applied after the baseline (follow-up 4): their verified states are a way
+  // the schema may have moved on, and their up.sql supersedes what the history stated.
+  let later: Awaited<ReturnType<typeof readLedgerRows>> = []
+  let verifications: Awaited<ReturnType<typeof readVerifications>> = []
+  const unstored: string[] = []
   try {
     await loadParser(opened.session.facts.major)
+    ;({ later, verifications } = await opened.session.readOnly(async (rtx) => ({
+      later: rowsAfterBaseline(await readLedgerRows(rtx), c.baselineId),
+      verifications: await readVerifications(rtx),
+    })))
     const applicable = files.filter((f) => !c.notApplicable.includes(f.stem))
+    const bundles: ImportFile[] = []
+    for (const row of later) {
+      if (row.origin !== 'exponetdb') continue
+      const revision = (await revisionsOf(deps.store, c.projectId, row.migrationId)).find(
+        (r) => r.checksum === row.checksum,
+      )
+      if (revision === undefined) {
+        unstored.push(row.migrationId)
+        continue
+      }
+      bundles.push({
+        position: applicable.length + bundles.length,
+        stem: row.migrationId,
+        bytes: revision.files['up.sql'],
+        checksum: revision.checksum,
+        sourceDigest: revision.sourceDigest,
+        bytesDigest: revision.sourceDigest,
+      })
+    }
     const replays = await replaysOf(
       opened.session.facts.major,
       applicable,
       project.trustedExtensions,
     )
+    for (const [stem, replay] of await replaysOf(
+      opened.session.facts.major,
+      bundles,
+      project.trustedExtensions,
+    )) {
+      replays.set(stem, replay)
+    }
     ;({ fingerprint, unparsed } = await opened.session.readOnly(async (rtx) => {
       const snapshot = await snapshotWithin(rtx, scopeOf(project.scope))
-      const chain = analyzeChain(applicable, replays)
+      // The history, then what was migrated on top of it: a baseline expectation a later
+      // migration superseded on purpose is not checked (that migration's own verification
+      // checked what it left). Only the history's files are checked here.
+      const chain = analyzeChain([...applicable, ...bundles], replays)
       // A chain the imported target's major cannot parse checks nothing: never passed on the
       // fingerprint alone.
       if ('failedAt' in chain)
@@ -2309,7 +2349,23 @@ export async function verifyBaseline(
   } finally {
     await opened.session.close()
   }
-  const matches = fingerprint === c.expectedState.schemaFingerprint
+  const accepted = acceptBaselineSchema({
+    reviewed: c.expectedState.schemaFingerprint,
+    live: fingerprint,
+    later,
+    verifications,
+  })
+  const firstUnstored = unstored[0]
+  const engineFailure =
+    firstUnstored !== undefined
+      ? {
+          name: `schema after the baseline: ${firstUnstored}`.slice(0, 128),
+          detail: 'its bundle is not in the bundle store, so what it superseded is unknown',
+        }
+      : accepted.kind === 'failed'
+        ? { name: accepted.name, detail: accepted.detail }
+        : null
+  const matches = engineFailure === null
   if (!reviewed) {
     failures.unshift({
       file: null,
@@ -2346,9 +2402,10 @@ export async function verifyBaseline(
     status: matches ? 'passed' : 'failed',
     checks: 1,
     failed: matches ? 0 : 1,
-    firstFailure: matches
-      ? null
-      : { name: 'schema fingerprint', detail: 'not the one the import report reviewed' },
+    firstFailure: engineFailure,
+    ...(matches && accepted.kind === 'chain'
+      ? { acceptedThrough: { migrations: accepted.migrations, last: accepted.last } }
+      : {}),
   }
   const runtime: Layer = { status: 'skipped', checks: 0, failed: 0, firstFailure: null }
   const status = unparsed === null && matches && open.length === 0 ? 'passed' : 'failed'
@@ -2385,7 +2442,9 @@ export async function verifyBaseline(
       run,
     ),
   )
-  if (status === 'passed') {
+  // After later migrations the drift reference is already the newest verified schema (the last
+  // one's): a passed baseline run never moves it back (follow-up 4).
+  if (status === 'passed' && later.length === 0) {
     try {
       // Only while this worker still holds the operation: a stale one never moves the reference.
       await fenced(fence, 'migrations.baseline.expected', async () => undefined)

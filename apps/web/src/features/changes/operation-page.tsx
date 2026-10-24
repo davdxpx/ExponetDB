@@ -723,7 +723,12 @@ function VerificationFailuresBlock({
 }: {
   readonly runs: readonly VerificationRun[]
 }): ReactNode {
-  const shown = runs.filter((r) => r.status !== 'passed' || (r.structural.excused ?? 0) > 0)
+  const shown = runs.filter(
+    (r) =>
+      r.status !== 'passed' ||
+      (r.structural.excused ?? 0) > 0 ||
+      r.engine.acceptedThrough !== undefined,
+  )
   if (shown.length === 0) return null
   return (
     <PlanBlock
@@ -760,8 +765,19 @@ function VerificationFailuresBlock({
             {run.engine.status === 'failed' && run.engine.firstFailure !== null ? (
               <p className="m-0 text-sm text-foreground-light">
                 {t('changes.verification.engineFailed', { name: run.engine.firstFailure.name })}
+                {run.engine.firstFailure.detail === null
+                  ? null
+                  : ` (${run.engine.firstFailure.detail})`}
               </p>
             ) : null}
+            {run.engine.acceptedThrough === undefined ? null : (
+              <p className="m-0 text-sm text-foreground-light" data-accepted-through="true">
+                {t('changes.verification.acceptedThrough', {
+                  last: run.engine.acceptedThrough.last,
+                  count: run.engine.acceptedThrough.migrations,
+                })}
+              </p>
+            )}
             {failures.length === 0 ? null : (
               <Table>
                 <TableCaption className="sr-only">{t('changes.verification.title')}</TableCaption>

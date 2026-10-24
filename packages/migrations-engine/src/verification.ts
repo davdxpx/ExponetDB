@@ -61,6 +61,12 @@ export interface Layer {
    */
   readonly failures?: readonly (ExpectationFailure & { readonly excused: boolean })[]
   readonly failuresTotal?: number
+  /**
+   * A baseline's engine layer (Part A follow-up 4): the live schema was
+   * accepted as the verified state of the last of these migrations after
+   * the baseline, a chain that starts at the reviewed schema.
+   */
+  readonly acceptedThrough?: { readonly migrations: number; readonly last: string }
 }
 
 /** The failures a layer keeps: what fails first, then what was excused; all of them counted. */

@@ -1382,6 +1382,10 @@ export type MigrationStreamCell = {
 
 export type MigrationVerificationRun = {
   readonly engine: {
+    readonly acceptedThrough?: {
+      readonly last: string
+      readonly migrations: number
+    }
     readonly checks: number
     readonly excused?: number
     readonly failed: number
@@ -1398,6 +1402,10 @@ export type MigrationVerificationRun = {
   readonly migrationId: string
   readonly operationId: string
   readonly runtime: {
+    readonly acceptedThrough?: {
+      readonly last: string
+      readonly migrations: number
+    }
     readonly checks: number
     readonly excused?: number
     readonly failed: number
@@ -1412,6 +1420,10 @@ export type MigrationVerificationRun = {
   readonly startedAt: string
   readonly status: "passed" | "failed" | "partial" | "error"
   readonly structural: {
+    readonly acceptedThrough?: {
+      readonly last: string
+      readonly migrations: number
+    }
     readonly checks: number
     readonly excused?: number
     readonly failed: number
@@ -1701,6 +1713,10 @@ export type Operation = {
   readonly verificationOutcome: VerificationOutcome
   readonly verifications?: ReadonlyArray<{
     readonly engine: {
+      readonly acceptedThrough?: {
+        readonly last: string
+        readonly migrations: number
+      }
       readonly checks: number
       readonly excused?: number
       readonly failed: number
@@ -1717,6 +1733,10 @@ export type Operation = {
     readonly migrationId: string
     readonly operationId: string
     readonly runtime: {
+      readonly acceptedThrough?: {
+        readonly last: string
+        readonly migrations: number
+      }
       readonly checks: number
       readonly excused?: number
       readonly failed: number
@@ -1731,6 +1751,10 @@ export type Operation = {
     readonly startedAt: string
     readonly status: "passed" | "failed" | "partial" | "error"
     readonly structural: {
+      readonly acceptedThrough?: {
+        readonly last: string
+        readonly migrations: number
+      }
       readonly checks: number
       readonly excused?: number
       readonly failed: number
@@ -1778,6 +1802,10 @@ export type OperationRead = {
   readonly verificationOutcome: VerificationOutcome
   readonly verifications?: ReadonlyArray<{
     readonly engine: {
+      readonly acceptedThrough?: {
+        readonly last: string
+        readonly migrations: number
+      }
       readonly checks: number
       readonly excused?: number
       readonly failed: number
@@ -1794,6 +1822,10 @@ export type OperationRead = {
     readonly migrationId: string
     readonly operationId: string
     readonly runtime: {
+      readonly acceptedThrough?: {
+        readonly last: string
+        readonly migrations: number
+      }
       readonly checks: number
       readonly excused?: number
       readonly failed: number
@@ -1808,6 +1840,10 @@ export type OperationRead = {
     readonly startedAt: string
     readonly status: "passed" | "failed" | "partial" | "error"
     readonly structural: {
+      readonly acceptedThrough?: {
+        readonly last: string
+        readonly migrations: number
+      }
       readonly checks: number
       readonly excused?: number
       readonly failed: number

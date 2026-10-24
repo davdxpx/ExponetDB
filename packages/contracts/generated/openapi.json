@@ -9264,6 +9264,26 @@
         "properties": {
           "engine": {
             "properties": {
+              "acceptedThrough": {
+                "description": "Part A follow-up 4, additive: a baseline's engine layer accepted the live schema as the verified state of the last of this many migrations applied after the baseline, a chain that starts at the reviewed schema.",
+                "properties": {
+                  "last": {
+                    "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "migrations": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "migrations",
+                  "last"
+                ],
+                "type": "object"
+              },
               "checks": {
                 "maximum": 9007199254740991,
                 "minimum": 0,
@@ -9378,6 +9398,26 @@
           },
           "runtime": {
             "properties": {
+              "acceptedThrough": {
+                "description": "Part A follow-up 4, additive: a baseline's engine layer accepted the live schema as the verified state of the last of this many migrations applied after the baseline, a chain that starts at the reviewed schema.",
+                "properties": {
+                  "last": {
+                    "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "migrations": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "migrations",
+                  "last"
+                ],
+                "type": "object"
+              },
               "checks": {
                 "maximum": 9007199254740991,
                 "minimum": 0,
@@ -9475,6 +9515,26 @@
           },
           "structural": {
             "properties": {
+              "acceptedThrough": {
+                "description": "Part A follow-up 4, additive: a baseline's engine layer accepted the live schema as the verified state of the last of this many migrations applied after the baseline, a chain that starts at the reviewed schema.",
+                "properties": {
+                  "last": {
+                    "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                    "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                    "type": "string"
+                  },
+                  "migrations": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "migrations",
+                  "last"
+                ],
+                "type": "object"
+              },
               "checks": {
                 "maximum": 9007199254740991,
                 "minimum": 0,
@@ -11755,6 +11815,26 @@
               "properties": {
                 "engine": {
                   "properties": {
+                    "acceptedThrough": {
+                      "description": "Part A follow-up 4, additive: a baseline's engine layer accepted the live schema as the verified state of the last of this many migrations applied after the baseline, a chain that starts at the reviewed schema.",
+                      "properties": {
+                        "last": {
+                          "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                          "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                          "type": "string"
+                        },
+                        "migrations": {
+                          "maximum": 9007199254740991,
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "migrations",
+                        "last"
+                      ],
+                      "type": "object"
+                    },
                     "checks": {
                       "maximum": 9007199254740991,
                       "minimum": 0,
@@ -11869,6 +11949,26 @@
                 },
                 "runtime": {
                   "properties": {
+                    "acceptedThrough": {
+                      "description": "Part A follow-up 4, additive: a baseline's engine layer accepted the live schema as the verified state of the last of this many migrations applied after the baseline, a chain that starts at the reviewed schema.",
+                      "properties": {
+                        "last": {
+                          "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                          "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                          "type": "string"
+                        },
+                        "migrations": {
+                          "maximum": 9007199254740991,
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "migrations",
+                        "last"
+                      ],
+                      "type": "object"
+                    },
                     "checks": {
                       "maximum": 9007199254740991,
                       "minimum": 0,
@@ -11966,6 +12066,26 @@
                 },
                 "structural": {
                   "properties": {
+                    "acceptedThrough": {
+                      "description": "Part A follow-up 4, additive: a baseline's engine layer accepted the live schema as the verified state of the last of this many migrations applied after the baseline, a chain that starts at the reviewed schema.",
+                      "properties": {
+                        "last": {
+                          "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                          "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                          "type": "string"
+                        },
+                        "migrations": {
+                          "maximum": 9007199254740991,
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "migrations",
+                        "last"
+                      ],
+                      "type": "object"
+                    },
                     "checks": {
                       "maximum": 9007199254740991,
                       "minimum": 0,
@@ -12520,6 +12640,26 @@
               "properties": {
                 "engine": {
                   "properties": {
+                    "acceptedThrough": {
+                      "description": "Part A follow-up 4, additive: a baseline's engine layer accepted the live schema as the verified state of the last of this many migrations applied after the baseline, a chain that starts at the reviewed schema.",
+                      "properties": {
+                        "last": {
+                          "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                          "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                          "type": "string"
+                        },
+                        "migrations": {
+                          "maximum": 9007199254740991,
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "migrations",
+                        "last"
+                      ],
+                      "type": "object"
+                    },
                     "checks": {
                       "maximum": 9007199254740991,
                       "minimum": 0,
@@ -12634,6 +12774,26 @@
                 },
                 "runtime": {
                   "properties": {
+                    "acceptedThrough": {
+                      "description": "Part A follow-up 4, additive: a baseline's engine layer accepted the live schema as the verified state of the last of this many migrations applied after the baseline, a chain that starts at the reviewed schema.",
+                      "properties": {
+                        "last": {
+                          "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                          "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                          "type": "string"
+                        },
+                        "migrations": {
+                          "maximum": 9007199254740991,
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "migrations",
+                        "last"
+                      ],
+                      "type": "object"
+                    },
                     "checks": {
                       "maximum": 9007199254740991,
                       "minimum": 0,
@@ -12731,6 +12891,26 @@
                 },
                 "structural": {
                   "properties": {
+                    "acceptedThrough": {
+                      "description": "Part A follow-up 4, additive: a baseline's engine layer accepted the live schema as the verified state of the last of this many migrations applied after the baseline, a chain that starts at the reviewed schema.",
+                      "properties": {
+                        "last": {
+                          "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                          "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                          "type": "string"
+                        },
+                        "migrations": {
+                          "maximum": 9007199254740991,
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "migrations",
+                        "last"
+                      ],
+                      "type": "object"
+                    },
                     "checks": {
                       "maximum": 9007199254740991,
                       "minimum": 0,
