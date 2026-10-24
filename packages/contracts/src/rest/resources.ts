@@ -50,7 +50,7 @@ import {
   BundleSubmissionSchema,
   ProjectDefaultsSchema,
 } from '../manifest/index.ts'
-import { LintCodeSchema, MigrationProgressSchema } from './migrations.ts'
+import { LintCodeSchema, MigrationProgressSchema, VerificationRunSchema } from './migrations.ts'
 import { ServerProviderSchema } from './registry.ts'
 
 /*
@@ -1423,6 +1423,14 @@ export const OperationSchema = z
           'Wave 6, additive: the newest event of the operation (monotonic); a watcher that sees it unchanged knows nothing happened since.',
       }),
     nextAction: OperationNextActionSchema.optional(),
+    verifications: z
+      .array(VerificationRunSchema.omit({ verifyDigest: true }))
+      .max(50)
+      .optional()
+      .meta({
+        description:
+          "Part A follow-up 3, additive: the verification runs of a migration operation (the Control Store's mirror of the target's history), newest last, each with its failing expectations, so a failed verification says what failed.",
+      }),
   })
   .meta({
     id: 'Operation',

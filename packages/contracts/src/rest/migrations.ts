@@ -28,6 +28,7 @@ import { BUNDLE_FILE_NAMES, BundleSubmissionSchema } from '../manifest/bundle.ts
 import {
   BaselineRefSchema,
   CompatibilityClassSchema,
+  DependencyRefSchema,
   MigrationNameSchema,
   RollbackSafetySchema,
 } from '../manifest/migration.ts'
@@ -507,6 +508,35 @@ export const MigrationPlanAnalysisSchema = z
 
 // ----- status and history -----
 
+/** At most this many failing expectations are kept with one verification layer (Part A follow-up 3, F2). */
+export const VERIFICATION_FAILURES_LIMIT = 200
+
+/**
+ * One expectation that did not hold (Part A follow-up 3, F1 and F2): where
+ * it comes from, what was expected by object name, and which aspects differ
+ * as fixed codes (`missing`, `type`, `order`, `body`, …); never a value read
+ * from the catalog.
+ */
+export const VerificationFailureSchema = z
+  .object({
+    file: z.string().max(200).nullable().meta({
+      description: 'The legacy file (stem) or migration it comes from; null for a runtime check.',
+    }),
+    statement: z.int().min(0).nullable().meta({
+      description: 'The statement of that file that states it (0-based); null when none does.',
+    }),
+    kind: z.string().max(64),
+    object: z.string().max(300).meta({ description: 'What was expected, by object name.' }),
+    failed: z.array(z.string().max(32)).max(16).meta({
+      description: 'The aspects that differ (missing, present, type, not_null, order, body, …).',
+    }),
+    excused: z.boolean().meta({
+      description:
+        "A person's recorded decision accepted exactly this failure (a baseline's verification); it does not fail the run.",
+    }),
+  })
+  .meta({ id: 'VerificationFailure', untrusted: true })
+
 export const VerificationLayerSchema = z.object({
   status: z.enum(['passed', 'failed', 'partial', 'error', 'skipped']),
   checks: z.int().min(0),
@@ -515,12 +545,23 @@ export const VerificationLayerSchema = z.object({
     .object({ name: z.string().max(128), detail: z.string().max(200).nullable() })
     .nullable()
     .meta({ untrusted: true }),
+  excused: z.int().min(0).optional().meta({
+    description:
+      'Part A follow-up 3, additive: failing expectations a recorded review decision excused; not counted in failed.',
+  }),
+  failures: z.array(VerificationFailureSchema).max(VERIFICATION_FAILURES_LIMIT).optional().meta({
+    description:
+      'Part A follow-up 3, additive: the failing expectations, excused ones included, at most 200 (failuresTotal counts them all).',
+  }),
+  failuresTotal: z.int().min(0).optional(),
 })
 
 export const VerificationRunSchema = z
   .object({
     verificationId: VerificationRunIdSchema,
-    migrationId: MigrationIdSchema,
+    migrationId: DependencyRefSchema.meta({
+      description: 'A migration, or the baseline of a legacy import (`baseline:<slug>`).',
+    }),
     operationId: OperationIdSchema,
     verifyDigest: ApplyChecksumSchema.nullable(),
     status: z.enum(['passed', 'failed', 'partial', 'error']),
@@ -831,6 +872,17 @@ export const ImportReportSchema = z
             decidedAt: TimestampSchema,
           })
           .nullable(),
+        failing: z
+          .object({
+            total: z.int().min(0),
+            items: z.array(VerificationFailureSchema.omit({ excused: true })).max(20),
+          })
+          .nullable()
+          .optional()
+          .meta({
+            description:
+              "Part A follow-up 3, additive: the file's surviving expectations that did not hold on the imported target at the analysis (the first 20 and how many). Accepting the item as applied excuses exactly these at the baseline's verification; null when the analysis predates this record.",
+          }),
       }),
     ),
     unresolved: z.int().min(0),
@@ -918,6 +970,8 @@ export type SourceClaim = z.infer<typeof SourceClaimSchema>
 export type SourceReference = z.infer<typeof SourceReferenceSchema>
 export type MigrationDetail = z.infer<typeof MigrationDetailSchema>
 export type VerificationRun = z.infer<typeof VerificationRunSchema>
+export type VerificationLayer = z.infer<typeof VerificationLayerSchema>
+export type VerificationFailure = z.infer<typeof VerificationFailureSchema>
 export type MigrationProgress = z.infer<typeof MigrationProgressSchema>
 export type ImportReport = z.infer<typeof ImportReportSchema>
 export type ScratchCheck = z.infer<typeof ScratchCheckSchema>

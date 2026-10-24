@@ -779,6 +779,8 @@ describe('upgrade from the accepted G3B schema', () => {
         // Wave 9 Part A (A5, A4): execution roles per environment and declared exceptions.
         '01M5G6EQ7MFWM3TVK3YN5WRK8W',
         '01M5G6EQ7KP3PMPC7G3HJ7KH7R',
+        // Wave 9 Part A, follow-up 3 (F1): the failing expectations of an import item.
+        '01M5PZFYDPT065MDFHG5G3WSG1',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

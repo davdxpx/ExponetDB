@@ -6550,6 +6550,87 @@
                   ],
                   "description": "The strongest ledger evidence behind the item (legacy-import.md §2.3): strong (a tool hash of the bytes, or the applied statements one by one), medium (the normalized statement sequence), low (equal only with comments inside bodies ignored), curated (an alias), weak (a name only, which never records a file); null when no ledger entry relates to it (Wave 9)."
                 },
+                "failing": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "items": {
+                          "items": {
+                            "properties": {
+                              "failed": {
+                                "description": "The aspects that differ (missing, present, type, not_null, order, body, …).",
+                                "items": {
+                                  "maxLength": 32,
+                                  "type": "string"
+                                },
+                                "maxItems": 16,
+                                "type": "array"
+                              },
+                              "file": {
+                                "anyOf": [
+                                  {
+                                    "maxLength": 200,
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "The legacy file (stem) or migration it comes from; null for a runtime check."
+                              },
+                              "kind": {
+                                "maxLength": 64,
+                                "type": "string"
+                              },
+                              "object": {
+                                "description": "What was expected, by object name.",
+                                "maxLength": 300,
+                                "type": "string"
+                              },
+                              "statement": {
+                                "anyOf": [
+                                  {
+                                    "maximum": 9007199254740991,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "The statement of that file that states it (0-based); null when none does."
+                              }
+                            },
+                            "required": [
+                              "file",
+                              "statement",
+                              "kind",
+                              "object",
+                              "failed"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 20,
+                          "type": "array"
+                        },
+                        "total": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "total",
+                        "items"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Part A follow-up 3, additive: the file's surviving expectations that did not hold on the imported target at the analysis (the first 20 and how many). Accepting the item as applied excuses exactly these at the baseline's verification; null when the analysis predates this record."
+                },
                 "itemId": {
                   "pattern": "^[0-9]{1,6}$",
                   "type": "string"
@@ -9187,7 +9268,26 @@
                 "minimum": 0,
                 "type": "integer"
               },
+              "excused": {
+                "description": "Part A follow-up 3, additive: failing expectations a recorded review decision excused; not counted in failed.",
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
               "failed": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "failures": {
+                "description": "Part A follow-up 3, additive: the failing expectations, excused ones included, at most 200 (failuresTotal counts them all).",
+                "items": {
+                  "$ref": "#/components/schemas/VerificationFailure"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              "failuresTotal": {
                 "maximum": 9007199254740991,
                 "minimum": 0,
                 "type": "integer"
@@ -9255,9 +9355,20 @@
             "type": "string"
           },
           "migrationId": {
-            "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
-            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
-            "type": "string"
+            "anyOf": [
+              {
+                "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "description": "Baseline node baseline:<slug>.",
+                "maxLength": 73,
+                "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+                "type": "string"
+              }
+            ],
+            "description": "A migration, or the baseline of a legacy import (`baseline:<slug>`)."
           },
           "operationId": {
             "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
@@ -9271,7 +9382,26 @@
                 "minimum": 0,
                 "type": "integer"
               },
+              "excused": {
+                "description": "Part A follow-up 3, additive: failing expectations a recorded review decision excused; not counted in failed.",
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
               "failed": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "failures": {
+                "description": "Part A follow-up 3, additive: the failing expectations, excused ones included, at most 200 (failuresTotal counts them all).",
+                "items": {
+                  "$ref": "#/components/schemas/VerificationFailure"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              "failuresTotal": {
                 "maximum": 9007199254740991,
                 "minimum": 0,
                 "type": "integer"
@@ -9349,7 +9479,26 @@
                 "minimum": 0,
                 "type": "integer"
               },
+              "excused": {
+                "description": "Part A follow-up 3, additive: failing expectations a recorded review decision excused; not counted in failed.",
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
               "failed": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "failures": {
+                "description": "Part A follow-up 3, additive: the failing expectations, excused ones included, at most 200 (failuresTotal counts them all).",
+                "items": {
+                  "$ref": "#/components/schemas/VerificationFailure"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              "failuresTotal": {
                 "maximum": 9007199254740991,
                 "minimum": 0,
                 "type": "integer"
@@ -11599,6 +11748,326 @@
           "verificationOutcome": {
             "$ref": "#/components/schemas/VerificationOutcome"
           },
+          "verifications": {
+            "description": "Part A follow-up 3, additive: the verification runs of a migration operation (the Control Store's mirror of the target's history), newest last, each with its failing expectations, so a failed verification says what failed.",
+            "items": {
+              "properties": {
+                "engine": {
+                  "properties": {
+                    "checks": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "excused": {
+                      "description": "Part A follow-up 3, additive: failing expectations a recorded review decision excused; not counted in failed.",
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "failed": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "failures": {
+                      "description": "Part A follow-up 3, additive: the failing expectations, excused ones included, at most 200 (failuresTotal counts them all).",
+                      "items": {
+                        "$ref": "#/components/schemas/VerificationFailure"
+                      },
+                      "maxItems": 200,
+                      "type": "array"
+                    },
+                    "failuresTotal": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "firstFailure": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "detail": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "name": {
+                              "maxLength": 128,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "detail"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "x-untrusted": true
+                    },
+                    "status": {
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "partial",
+                        "error",
+                        "skipped"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "checks",
+                    "failed",
+                    "firstFailure"
+                  ],
+                  "type": "object"
+                },
+                "fingerprint": {
+                  "description": "Schema fingerprint fp<n>:<pg_major>:<hex>.",
+                  "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "finishedAt": {
+                  "description": "RFC 3339 UTC timestamp ending in Z.",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "migrationId": {
+                  "anyOf": [
+                    {
+                      "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                      "type": "string"
+                    },
+                    {
+                      "description": "Baseline node baseline:<slug>.",
+                      "maxLength": 73,
+                      "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+                      "type": "string"
+                    }
+                  ],
+                  "description": "A migration, or the baseline of a legacy import (`baseline:<slug>`)."
+                },
+                "operationId": {
+                  "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                "runtime": {
+                  "properties": {
+                    "checks": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "excused": {
+                      "description": "Part A follow-up 3, additive: failing expectations a recorded review decision excused; not counted in failed.",
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "failed": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "failures": {
+                      "description": "Part A follow-up 3, additive: the failing expectations, excused ones included, at most 200 (failuresTotal counts them all).",
+                      "items": {
+                        "$ref": "#/components/schemas/VerificationFailure"
+                      },
+                      "maxItems": 200,
+                      "type": "array"
+                    },
+                    "failuresTotal": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "firstFailure": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "detail": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "name": {
+                              "maxLength": 128,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "detail"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "x-untrusted": true
+                    },
+                    "status": {
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "partial",
+                        "error",
+                        "skipped"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "checks",
+                    "failed",
+                    "firstFailure"
+                  ],
+                  "type": "object"
+                },
+                "startedAt": {
+                  "description": "RFC 3339 UTC timestamp ending in Z.",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "partial",
+                    "error"
+                  ],
+                  "type": "string"
+                },
+                "structural": {
+                  "properties": {
+                    "checks": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "excused": {
+                      "description": "Part A follow-up 3, additive: failing expectations a recorded review decision excused; not counted in failed.",
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "failed": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "failures": {
+                      "description": "Part A follow-up 3, additive: the failing expectations, excused ones included, at most 200 (failuresTotal counts them all).",
+                      "items": {
+                        "$ref": "#/components/schemas/VerificationFailure"
+                      },
+                      "maxItems": 200,
+                      "type": "array"
+                    },
+                    "failuresTotal": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "firstFailure": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "detail": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "name": {
+                              "maxLength": 128,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "detail"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "x-untrusted": true
+                    },
+                    "status": {
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "partial",
+                        "error",
+                        "skipped"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "checks",
+                    "failed",
+                    "firstFailure"
+                  ],
+                  "type": "object"
+                },
+                "verificationId": {
+                  "description": "Entity id `^vfy_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^vfy_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "verificationId",
+                "migrationId",
+                "operationId",
+                "status",
+                "startedAt",
+                "finishedAt",
+                "structural",
+                "runtime",
+                "engine",
+                "fingerprint"
+              ],
+              "type": "object"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
           "waitingFor": {
             "anyOf": [
               {
@@ -12043,6 +12512,326 @@
           },
           "verificationOutcome": {
             "$ref": "#/components/schemas/VerificationOutcome"
+          },
+          "verifications": {
+            "description": "Part A follow-up 3, additive: the verification runs of a migration operation (the Control Store's mirror of the target's history), newest last, each with its failing expectations, so a failed verification says what failed.",
+            "items": {
+              "properties": {
+                "engine": {
+                  "properties": {
+                    "checks": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "excused": {
+                      "description": "Part A follow-up 3, additive: failing expectations a recorded review decision excused; not counted in failed.",
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "failed": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "failures": {
+                      "description": "Part A follow-up 3, additive: the failing expectations, excused ones included, at most 200 (failuresTotal counts them all).",
+                      "items": {
+                        "$ref": "#/components/schemas/VerificationFailure"
+                      },
+                      "maxItems": 200,
+                      "type": "array"
+                    },
+                    "failuresTotal": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "firstFailure": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "detail": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "name": {
+                              "maxLength": 128,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "detail"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "x-untrusted": true
+                    },
+                    "status": {
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "partial",
+                        "error",
+                        "skipped"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "checks",
+                    "failed",
+                    "firstFailure"
+                  ],
+                  "type": "object"
+                },
+                "fingerprint": {
+                  "description": "Schema fingerprint fp<n>:<pg_major>:<hex>.",
+                  "pattern": "^fp[1-9][0-9]*:[1-9][0-9]*:[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "finishedAt": {
+                  "description": "RFC 3339 UTC timestamp ending in Z.",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "migrationId": {
+                  "anyOf": [
+                    {
+                      "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                      "type": "string"
+                    },
+                    {
+                      "description": "Baseline node baseline:<slug>.",
+                      "maxLength": 73,
+                      "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+                      "type": "string"
+                    }
+                  ],
+                  "description": "A migration, or the baseline of a legacy import (`baseline:<slug>`)."
+                },
+                "operationId": {
+                  "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                "runtime": {
+                  "properties": {
+                    "checks": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "excused": {
+                      "description": "Part A follow-up 3, additive: failing expectations a recorded review decision excused; not counted in failed.",
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "failed": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "failures": {
+                      "description": "Part A follow-up 3, additive: the failing expectations, excused ones included, at most 200 (failuresTotal counts them all).",
+                      "items": {
+                        "$ref": "#/components/schemas/VerificationFailure"
+                      },
+                      "maxItems": 200,
+                      "type": "array"
+                    },
+                    "failuresTotal": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "firstFailure": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "detail": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "name": {
+                              "maxLength": 128,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "detail"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "x-untrusted": true
+                    },
+                    "status": {
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "partial",
+                        "error",
+                        "skipped"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "checks",
+                    "failed",
+                    "firstFailure"
+                  ],
+                  "type": "object"
+                },
+                "startedAt": {
+                  "description": "RFC 3339 UTC timestamp ending in Z.",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "passed",
+                    "failed",
+                    "partial",
+                    "error"
+                  ],
+                  "type": "string"
+                },
+                "structural": {
+                  "properties": {
+                    "checks": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "excused": {
+                      "description": "Part A follow-up 3, additive: failing expectations a recorded review decision excused; not counted in failed.",
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "failed": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "failures": {
+                      "description": "Part A follow-up 3, additive: the failing expectations, excused ones included, at most 200 (failuresTotal counts them all).",
+                      "items": {
+                        "$ref": "#/components/schemas/VerificationFailure"
+                      },
+                      "maxItems": 200,
+                      "type": "array"
+                    },
+                    "failuresTotal": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "firstFailure": {
+                      "anyOf": [
+                        {
+                          "properties": {
+                            "detail": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 200,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "name": {
+                              "maxLength": 128,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "detail"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "x-untrusted": true
+                    },
+                    "status": {
+                      "enum": [
+                        "passed",
+                        "failed",
+                        "partial",
+                        "error",
+                        "skipped"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "checks",
+                    "failed",
+                    "firstFailure"
+                  ],
+                  "type": "object"
+                },
+                "verificationId": {
+                  "description": "Entity id `^vfy_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^vfy_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "verificationId",
+                "migrationId",
+                "operationId",
+                "status",
+                "startedAt",
+                "finishedAt",
+                "structural",
+                "runtime",
+                "engine",
+                "fingerprint"
+              ],
+              "type": "object"
+            },
+            "maxItems": 50,
+            "type": "array"
           },
           "waitingFor": {
             "anyOf": [
@@ -18360,6 +19149,67 @@
           "health"
         ],
         "type": "object"
+      },
+      "VerificationFailure": {
+        "properties": {
+          "excused": {
+            "description": "A person's recorded decision accepted exactly this failure (a baseline's verification); it does not fail the run.",
+            "type": "boolean"
+          },
+          "failed": {
+            "description": "The aspects that differ (missing, present, type, not_null, order, body, …).",
+            "items": {
+              "maxLength": 32,
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": "array"
+          },
+          "file": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The legacy file (stem) or migration it comes from; null for a runtime check."
+          },
+          "kind": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "object": {
+            "description": "What was expected, by object name.",
+            "maxLength": 300,
+            "type": "string"
+          },
+          "statement": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The statement of that file that states it (0-based); null when none does."
+          }
+        },
+        "required": [
+          "file",
+          "statement",
+          "kind",
+          "object",
+          "failed",
+          "excused"
+        ],
+        "type": "object",
+        "x-untrusted": true
       },
       "VerificationOutcome": {
         "enum": [
@@ -34602,9 +35452,19 @@
             "name": "migrationId",
             "required": true,
             "schema": {
-              "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
-              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
-              "type": "string"
+              "anyOf": [
+                {
+                  "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Baseline node baseline:<slug>.",
+                  "maxLength": 73,
+                  "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+                  "type": "string"
+                }
+              ]
             }
           }
         ],
@@ -35023,9 +35883,19 @@
             "name": "migrationId",
             "required": true,
             "schema": {
-              "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
-              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
-              "type": "string"
+              "anyOf": [
+                {
+                  "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "description": "Baseline node baseline:<slug>.",
+                  "maxLength": 73,
+                  "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+                  "type": "string"
+                }
+              ]
             }
           }
         ],
@@ -35101,7 +35971,7 @@
             "session": []
           }
         ],
-        "summary": "Run the verification of an applied migration again (migration.verify): structural, runtime and engine layers; never runs up.sql.",
+        "summary": "Run the verification of an applied migration again (migration.verify): structural, runtime and engine layers; never runs up.sql. With a baseline ref (`baseline:<slug>`), the verification of the legacy import it recorded, with the review decisions that excuse failing expectations (Part A follow-up 3); when it passes, its schema becomes the drift reference.",
         "tags": [
           "targets"
         ],

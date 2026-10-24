@@ -35,7 +35,7 @@ import {
   TimestampSchema,
 } from '../common.ts'
 import type { ErrorCode } from '../errors.ts'
-import { ExecutionRoleAliasSchema } from '../manifest/migration.ts'
+import { DependencyRefSchema, ExecutionRoleAliasSchema } from '../manifest/migration.ts'
 import { CLIENT_STATES } from '../oauth/protocol.ts'
 import {
   ApiKeyCreatedSchema,
@@ -2191,6 +2191,11 @@ export const NODE_ROUTES = [
 ] as const satisfies readonly RouteContract[]
 
 const migrationParams = z.strictObject({ target: TargetRefSchema, migrationId: MigrationIdSchema })
+/** A migration or the baseline of a legacy import (`baseline:<slug>`; Part A follow-up 3). */
+const migrationRefParams = z.strictObject({
+  target: TargetRefSchema,
+  migrationId: DependencyRefSchema,
+})
 const projectParams = z.strictObject({ projectId: ProjectIdSchema })
 const MIGRATION_PLAN_ERRORS: readonly ErrorCode[] = [
   ...LIVE_TARGET_ERRORS,
@@ -2300,7 +2305,7 @@ export const MIGRATION_ROUTES = [
     path: '/targets/{target}/migrations/{migrationId}',
     summary: 'One migration on a target: ledger row, events and verification runs (live read).',
     action: 'migration.get',
-    pathParams: migrationParams,
+    pathParams: migrationRefParams,
     response: { status: 200, schema: MigrationDetailSchema },
     errors: [...LIVE_TARGET_ERRORS, 'LEDGER_NOT_INITIALIZED'],
   },
@@ -2322,9 +2327,9 @@ export const MIGRATION_ROUTES = [
     method: 'post',
     path: '/targets/{target}/migrations/{migrationId}/verifications',
     summary:
-      'Run the verification of an applied migration again (migration.verify): structural, runtime and engine layers; never runs up.sql.',
+      'Run the verification of an applied migration again (migration.verify): structural, runtime and engine layers; never runs up.sql. With a baseline ref (`baseline:<slug>`), the verification of the legacy import it recorded, with the review decisions that excuse failing expectations (Part A follow-up 3); when it passes, its schema becomes the drift reference.',
     action: 'migration.verify',
-    pathParams: migrationParams,
+    pathParams: migrationRefParams,
     body: MigrationVerifyRequestSchema,
     response: { status: 202, schema: OperationSchema },
     errors: [

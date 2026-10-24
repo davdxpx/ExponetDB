@@ -23,7 +23,46 @@ export interface ExpectationResult {
   readonly ok: boolean
   /** What was expected, by object name (no data). */
   readonly description: string
+  /**
+   * When it does not hold, which aspects differ, as fixed codes (`missing`,
+   * `present`, `type`, `not_null`, `order`, `body`, …): how it fails, never a
+   * value read from the catalog (Part A follow-up 3, F1 and F2).
+   */
+  readonly failed?: readonly ExpectationAspect[]
 }
+
+/** The aspects an expectation's check compares; a failed result names those that differ. */
+export type ExpectationAspect =
+  | 'missing'
+  | 'present'
+  | 'relkind'
+  | 'type'
+  | 'typmod'
+  | 'not_null'
+  | 'default'
+  | 'columns'
+  | 'order'
+  | 'valid'
+  | 'table'
+  | 'unique'
+  | 'method'
+  | 'partial'
+  | 'keys'
+  | 'contype'
+  | 'validated'
+  | 'enabled'
+  | 'forced'
+  | 'command'
+  | 'permissive'
+  | 'roles'
+  | 'privileges'
+  | 'security_definer'
+  | 'search_path'
+  | 'language'
+  | 'body'
+  | 'labels'
+  | 'version'
+  | 'text'
 
 /** `SET LOCAL search_path` to the migration's materialized path (inside a transaction). */
 export async function pinSearchPath(
@@ -158,123 +197,156 @@ export async function checkExpectation(
   statement: number,
   e: Expectation,
 ): Promise<ExpectationResult> {
-  const result = (ok: boolean, description: string): ExpectationResult => ({
-    statement,
-    kind: e.kind,
-    ok,
-    description,
-  })
+  const result = (
+    ok: boolean,
+    description: string,
+    failed: readonly ExpectationAspect[] = [],
+  ): ExpectationResult =>
+    ok
+      ? { statement, kind: e.kind, ok, description }
+      : {
+          statement,
+          kind: e.kind,
+          ok,
+          description,
+          failed: failed.length > 0 ? failed : ['missing'],
+        }
+  /** The aspects of `checks` that do not hold. */
+  const differing = (checks: readonly (readonly [boolean, ExpectationAspect])[]) =>
+    checks.filter(([holds]) => !holds).map(([, aspect]) => aspect)
   switch (e.kind) {
     case 'relation': {
       const row = await first(tx, REL, [name(e.schema, e.name)])
       const what = `${e.present ? 'relation' : 'no relation'} ${name(e.schema, e.name)}`
-      return result(
-        e.present
-          ? row !== undefined && e.relkinds.includes(row.text('relkind'))
-          : row === undefined,
-        what,
-      )
+      if (!e.present) return result(row === undefined, what, ['present'])
+      if (row === undefined) return result(false, what, ['missing'])
+      return result(e.relkinds.includes(row.text('relkind')), what, ['relkind'])
     }
     case 'column': {
       const typeName = e.type ?? null
       const row = await first(tx, COLUMN, [name(e.schema, e.table), e.column, typeName ?? 'text'])
       const what = `${e.present ? 'column' : 'no column'} ${name(e.schema, e.table)}.${quoteIdent(e.column)}`
       if (!e.present) {
-        return result(row === undefined, what)
+        return result(row === undefined, what, ['present'])
       }
       if (row === undefined) {
-        return result(false, what)
+        return result(false, what, ['missing'])
       }
-      let ok = true
+      const checks: [boolean, ExpectationAspect][] = []
       if (typeName !== null) {
-        ok &&=
+        checks.push([
           row.textOrNull('expected_oid') !== null &&
-          row.text('type_oid') === row.text('expected_oid')
+            row.text('type_oid') === row.text('expected_oid'),
+          'type',
+        ])
         const typmod = expectedTypmod(typeName, e.typmods)
         if (typmod !== null) {
-          ok &&= row.int('typmod') === typmod
+          checks.push([row.int('typmod') === typmod, 'typmod'])
         }
       }
       if (e.notNull !== undefined && e.notNull !== null) {
-        ok &&= row.bool('not_null') === e.notNull
+        checks.push([row.bool('not_null') === e.notNull, 'not_null'])
       }
       if (e.hasDefault !== undefined && e.hasDefault !== null) {
-        ok &&= row.bool('has_default') === e.hasDefault
+        checks.push([row.bool('has_default') === e.hasDefault, 'default'])
       }
-      return result(ok, what)
+      const failed = differing(checks)
+      return result(failed.length === 0, what, failed)
     }
     case 'columns_exactly': {
       const row = await first(tx, COLUMN_NAMES, [name(e.schema, e.table)])
-      const names = row?.jsonArray('names') ?? []
-      return result(
-        names.length === e.columns.length && names.every((n, i) => n === e.columns[i]),
-        `columns of ${name(e.schema, e.table)} exactly as created`,
-      )
+      const names = (row?.jsonArray('names') ?? []).map(String)
+      const what = `columns of ${name(e.schema, e.table)} exactly as created`
+      if (row === undefined) return result(false, what, ['missing'])
+      const same = (a: readonly string[], b: readonly string[]) =>
+        a.length === b.length && a.every((n, i) => n === b[i])
+      if (same(names, e.columns)) return result(true, what)
+      // The same columns in another order (an ADD COLUMN replayed elsewhere), or other columns.
+      return result(false, what, [
+        same([...names].sort(), [...e.columns].sort()) ? 'order' : 'columns',
+      ])
     }
     case 'index': {
       const table = e.table === undefined ? null : name(e.table.schema, e.table.name)
       const row = await first(tx, INDEX, [name(e.schema, e.name), table])
       const what = `${e.present ? 'valid index' : 'no index'} ${name(e.schema, e.name)}`
       if (!e.present) {
-        return result(row === undefined, what)
+        return result(row === undefined, what, ['present'])
       }
       if (row === undefined) {
-        return result(false, what)
+        return result(false, what, ['missing'])
       }
-      let ok = row.bool('valid') && row.bool('ready')
-      if (table !== null) ok &&= row.bool('on_table')
-      if (e.unique !== undefined) ok &&= row.bool('is_unique') === e.unique
-      if (e.method !== undefined) ok &&= row.text('method') === e.method
-      if (e.partial !== undefined) ok &&= row.bool('partial') === e.partial
-      if (e.keyCount !== undefined) ok &&= row.int('keys') === e.keyCount
-      return result(ok, what)
+      const checks: [boolean, ExpectationAspect][] = [
+        [row.bool('valid') && row.bool('ready'), 'valid'],
+      ]
+      if (table !== null) checks.push([row.bool('on_table'), 'table'])
+      if (e.unique !== undefined) checks.push([row.bool('is_unique') === e.unique, 'unique'])
+      if (e.method !== undefined) checks.push([row.text('method') === e.method, 'method'])
+      if (e.partial !== undefined) checks.push([row.bool('partial') === e.partial, 'partial'])
+      if (e.keyCount !== undefined) checks.push([row.int('keys') === e.keyCount, 'keys'])
+      const failed = differing(checks)
+      return result(failed.length === 0, what, failed)
     }
     case 'constraint': {
       const row = await first(tx, CONSTRAINT, [name(e.schema, e.table), e.name])
       const what = `${e.present ? 'constraint' : 'no constraint'} ${quoteIdent(e.name)} on ${name(e.schema, e.table)}`
       if (!e.present) {
-        return result(row === undefined, what)
+        return result(row === undefined, what, ['present'])
       }
       if (row === undefined) {
-        return result(false, what)
+        return result(false, what, ['missing'])
       }
-      let ok = true
-      if (e.contype !== undefined) ok &&= row.text('contype') === e.contype
-      if (e.validated !== undefined) ok &&= row.bool('validated') === e.validated
-      return result(ok, what)
+      const checks: [boolean, ExpectationAspect][] = []
+      if (e.contype !== undefined) checks.push([row.text('contype') === e.contype, 'contype'])
+      if (e.validated !== undefined)
+        checks.push([row.bool('validated') === e.validated, 'validated'])
+      const failed = differing(checks)
+      return result(failed.length === 0, what, failed)
     }
     case 'not_null': {
       const row = await first(tx, COLUMN, [name(e.schema, e.table), e.column, 'text'])
       return result(
         row !== undefined && row.bool('not_null') === e.notNull,
         `${name(e.schema, e.table)}.${quoteIdent(e.column)} ${e.notNull ? 'NOT NULL' : 'nullable'}`,
+        [row === undefined ? 'missing' : 'not_null'],
       )
     }
     case 'row_security': {
       const row = await first(tx, REL, [name(e.schema, e.table)])
-      let ok = row !== undefined
-      if (row !== undefined && e.enabled !== undefined) ok &&= row.bool('rls') === e.enabled
-      if (row !== undefined && e.forced !== undefined) ok &&= row.bool('forced') === e.forced
-      return result(ok, `row security of ${name(e.schema, e.table)}`)
+      const what = `row security of ${name(e.schema, e.table)}`
+      if (row === undefined) return result(false, what, ['missing'])
+      const checks: [boolean, ExpectationAspect][] = []
+      if (e.enabled !== undefined) checks.push([row.bool('rls') === e.enabled, 'enabled'])
+      if (e.forced !== undefined) checks.push([row.bool('forced') === e.forced, 'forced'])
+      const failed = differing(checks)
+      return result(failed.length === 0, what, failed)
     }
     case 'policy': {
       const row = await first(tx, POLICY, [name(e.schema, e.table), e.name])
       const what = `${e.present ? 'policy' : 'no policy'} ${quoteIdent(e.name)} on ${name(e.schema, e.table)}`
       if (!e.present) {
-        return result(row === undefined, what)
+        return result(row === undefined, what, ['present'])
       }
       if (row === undefined) {
-        return result(false, what)
+        return result(false, what, ['missing'])
       }
-      let ok = true
-      if (e.command !== undefined) ok &&= COMMANDS[row.text('cmd')] === e.command.toUpperCase()
-      if (e.permissive !== undefined) ok &&= row.bool('permissive') === e.permissive
+      const checks: [boolean, ExpectationAspect][] = []
+      if (e.command !== undefined) {
+        checks.push([COMMANDS[row.text('cmd')] === e.command.toUpperCase(), 'command'])
+      }
+      if (e.permissive !== undefined) {
+        checks.push([row.bool('permissive') === e.permissive, 'permissive'])
+      }
       if (e.roles !== undefined) {
         const roles = row.jsonArray('roles').map(String).sort()
         const expected = [...e.roles].map((r) => r.toLowerCase()).sort()
-        ok &&= roles.length === expected.length && roles.every((r, i) => r === expected[i])
+        checks.push([
+          roles.length === expected.length && roles.every((r, i) => r === expected[i]),
+          'roles',
+        ])
       }
-      return result(ok, what)
+      const failed = differing(checks)
+      return result(failed.length === 0, what, failed)
     }
     case 'table_privilege': {
       const row = await first(tx, TABLE_PRIVILEGES, [
@@ -286,6 +358,7 @@ export async function checkExpectation(
       return result(
         row?.bool('present') === true && ok,
         `${e.granted ? 'grant' : 'no grant'} of ${e.privileges.join(', ')} on ${name(e.schema, e.table)} to ${e.grantee}`,
+        [row?.bool('present') === true ? 'privileges' : 'missing'],
       )
     }
     case 'function': {
@@ -293,25 +366,31 @@ export async function checkExpectation(
       const row = await first(tx, FUNCTION, [signature])
       const what = `${e.present ? 'function' : 'no function'} ${signature}`
       if (!e.present) {
-        return result(row === undefined, what)
+        return result(row === undefined, what, ['present'])
       }
       if (row === undefined) {
-        return result(false, what)
+        return result(false, what, ['missing'])
       }
-      let ok = true
-      if (e.securityDefiner !== undefined) ok &&= row.bool('secdef') === e.securityDefiner
-      if (e.searchPathSet === true) ok &&= row.bool('path_set')
-      if (e.language !== undefined) ok &&= row.text('language') === e.language.toLowerCase()
+      const checks: [boolean, ExpectationAspect][] = []
+      if (e.securityDefiner !== undefined) {
+        checks.push([row.bool('secdef') === e.securityDefiner, 'security_definer'])
+      }
+      if (e.searchPathSet === true) checks.push([row.bool('path_set'), 'search_path'])
+      if (e.language !== undefined) {
+        checks.push([row.text('language') === e.language.toLowerCase(), 'language'])
+      }
       if (e.body !== undefined && e.body !== null && !row.bool('sql_body')) {
-        ok &&= row.text('body') === e.body
+        checks.push([row.text('body') === e.body, 'body'])
       }
-      return result(ok, what)
+      const failed = differing(checks)
+      return result(failed.length === 0, what, failed)
     }
     case 'trigger': {
       const row = await first(tx, TRIGGER, [name(e.schema, e.table), e.name])
       return result(
         e.present ? row !== undefined : row === undefined,
         `${e.present ? 'trigger' : 'no trigger'} ${quoteIdent(e.name)} on ${name(e.schema, e.table)}`,
+        [e.present ? 'missing' : 'present'],
       )
     }
     case 'enum_labels': {
@@ -322,30 +401,34 @@ export async function checkExpectation(
         (e.exact
           ? labels.length === e.labels.length && labels.every((l, i) => l === e.labels[i])
           : e.labels.every((l) => labels.includes(l)))
-      return result(ok, `labels of ${name(e.schema, e.name)}`)
+      return result(ok, `labels of ${name(e.schema, e.name)}`, [
+        row?.bool('present') === true ? 'labels' : 'missing',
+      ])
     }
     case 'schema': {
       const row = await first(tx, SCHEMA, [quoteIdent(e.name)])
       return result(
         row !== undefined && row.bool('present') === e.present,
         `${e.present ? 'schema' : 'no schema'} ${quoteIdent(e.name)}`,
+        [e.present ? 'missing' : 'present'],
       )
     }
     case 'extension': {
       const row = await first(tx, EXTENSION, [e.name])
       if (!e.present) {
-        return result(row === undefined, `no extension ${e.name}`)
+        return result(row === undefined, `no extension ${e.name}`, ['present'])
       }
       const ok =
         row !== undefined &&
         (e.version === undefined || e.version === null || row.text('version') === e.version)
-      return result(ok, `extension ${e.name}`)
+      return result(ok, `extension ${e.name}`, [row === undefined ? 'missing' : 'version'])
     }
     case 'type': {
       const row = await first(tx, TYPE, [name(e.schema, e.name)])
       return result(
         row !== undefined && row.bool('present') === e.present,
         `${e.present ? 'type' : 'no type'} ${name(e.schema, e.name)}`,
+        [e.present ? 'missing' : 'present'],
       )
     }
     case 'comment': {
@@ -354,12 +437,14 @@ export async function checkExpectation(
         return result(
           row !== undefined && row.textOrNull('comment') === e.text,
           `comment on ${name(e.schema, e.table)}`,
+          [row === undefined ? 'missing' : 'text'],
         )
       }
       const row = await first(tx, COLUMN, [name(e.schema, e.table), e.column ?? '', 'text'])
       return result(
         row !== undefined && row.textOrNull('comment') === e.text,
         `comment on ${name(e.schema, e.table)}.${quoteIdent(e.column ?? '')}`,
+        [row === undefined ? 'missing' : 'text'],
       )
     }
   }

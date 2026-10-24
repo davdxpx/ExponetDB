@@ -198,6 +198,17 @@ export const MCP_RESULT_BYTE_CAP = 5 * 1024 * 1024
  * not offered through MCP (OD-29). The catalog grows additively; a breaking
  * change is a new tool name or a new catalog version.
  */
+/**
+ * The operation as MCP tools return it: without the verification runs the
+ * REST read carries (Part A follow-up 3, F2), whose failure lists would not
+ * fit the tool list's token budget. An agent reads the outcome here and the
+ * failures through the REST API or the CLI; the tools' definitions, and so
+ * their toolVersion, are unchanged.
+ */
+const McpOperationSchema = OperationSchema.omit({ verifications: true }).meta({
+  description: 'Apply and verification outcomes are separate fields (C-13).',
+})
+
 export const MCP_TOOLS = [
   {
     name: 'targets_list',
@@ -538,7 +549,7 @@ export const MCP_TOOLS = [
       revision: z.int().min(1).optional(),
       idempotencyKey,
     }),
-    output: OperationSchema,
+    output: McpOperationSchema,
     limits: {},
     wave: '7',
     status: 'served',
@@ -575,7 +586,7 @@ export const MCP_TOOLS = [
       openWorldHint: false,
     },
     input: z.strictObject({ planId: PlanIdSchema }),
-    output: OperationSchema,
+    output: McpOperationSchema,
     limits: {},
     wave: '7',
     status: 'served',
@@ -617,7 +628,7 @@ export const MCP_TOOLS = [
           description: `Wait up to this many seconds (at most ${MCP_OPERATION_WAIT_SECONDS}) for the state to change before answering.`,
         }),
     }),
-    output: OperationSchema,
+    output: McpOperationSchema,
     limits: {},
     wave: '7',
     status: 'served',
@@ -640,7 +651,7 @@ export const MCP_TOOLS = [
       limit: limit(200, 50),
       cursor,
     }),
-    output: pageSchema(OperationSchema),
+    output: pageSchema(McpOperationSchema),
     limits: { maxItems: 200, defaultItems: 50 },
     wave: '7',
     status: 'served',
@@ -656,7 +667,7 @@ export const MCP_TOOLS = [
     restOperationId: 'cancelOperation',
     annotations: SETTLES,
     input: z.strictObject({ operationId: OperationIdSchema }),
-    output: OperationSchema,
+    output: McpOperationSchema,
     limits: {},
     wave: '7',
     status: 'served',
