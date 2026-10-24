@@ -39,14 +39,17 @@ import {
   CLIENT_STATES,
   ClientApprovalRequestSchema,
   ClientDecisionReasonSchema,
+  ClusterBootstrapSqlQuerySchema,
   ClusterConfirmRequestSchema,
   ClusterDeclaredTierRequestSchema,
   ClusterIdSchema,
   ClusterRegisterRequestSchema,
   ConsentDecisionRequestSchema,
   CredentialSubmissionSchema,
+  DatabaseIdSchema,
   DatabaseRegisterRequestSchema,
   DEFAULT_BODY_LIMIT_BYTES,
+  DependencyRefSchema,
   DeviceDecisionRequestSchema,
   DisableIdentityRequestSchema,
   DriftAcceptRequestSchema,
@@ -58,6 +61,10 @@ import {
   EnvironmentChangeRequestSchema,
   EnvironmentCreateRequestSchema,
   EnvironmentIdSchema,
+  ExecutionRoleBindingsRequestSchema,
+  ExecutionRoleExceptionDeclareRequestSchema,
+  ExecutionRoleExceptionIdSchema,
+  ExecutionRoleExceptionRevokeRequestSchema,
   type ExplainRequest,
   FindingIdSchema,
   GrantIdSchema,
@@ -112,6 +119,7 @@ import {
   SchemaDiffRequestSchema,
   SchemaObjectKindSchema,
   type Scope,
+  ScratchCheckRequestSchema,
   ServerCreateRequestSchema,
   ServerIdSchema,
   ServiceAccountCreateRequestSchema,
@@ -322,6 +330,34 @@ function bundleFileOf(raw: unknown): (typeof BUNDLE_FILES)[number] {
 
 /** The request header that names a CLI step-up receipt (ADR-0026). */
 export const STEP_UP_HEADER = 'exponetdb-step-up'
+
+/**
+ * How many requests that carry a legacy history serve works on at once. The
+ * parse is synchronous and never runs twice at once; what this bounds is
+ * the histories held across their target connections (a body of up to
+ * 16 MiB and its files, each), so slow targets never let them add up
+ * (deployment.md §2a; the verification review of follow-up 2, P3-7).
+ * Another one is told to try again.
+ */
+export const LEGACY_REQUESTS_IN_FLIGHT = 2
+let legacyRequests = 0
+
+class LegacyRequestsBusy extends HttpRefusal {
+  readonly retryAfterSeconds = 5
+  constructor() {
+    super('RATE_LIMITED')
+  }
+}
+
+export async function legacyRequest<T>(run: () => Promise<T>): Promise<T> {
+  if (legacyRequests >= LEGACY_REQUESTS_IN_FLIGHT) throw new LegacyRequestsBusy()
+  legacyRequests++
+  try {
+    return await run()
+  } finally {
+    legacyRequests--
+  }
+}
 
 export const HANDLERS: Readonly<Record<string, Handler>> = {
   // ----- /auth: sign-in and enrollment (public ceremonies) -----
@@ -657,6 +693,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
           status === 'succeeded' || status === 'failed' || status === 'denied' ? status : undefined,
         client: optionalText(call.query, 'client'),
         grant: optionalText(call.query, 'grant'),
+        identity: optionalText(call.query, 'identity'),
         ...pageOf(call.query),
       }),
     )
@@ -1063,8 +1100,17 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
   listClusters: async (app, call) =>
     value(await app.registry.clusters(caller(call), pageOf(call.query))),
   getCluster: async (app, call) => value(await app.registry.cluster(caller(call), clusterId(call))),
-  getClusterBootstrapSql: async (app, call) =>
-    value(await app.registry.bootstrapSql(caller(call), clusterId(call))),
+  getClusterBootstrapSql: async (app, call) => {
+    const q = ClusterBootstrapSqlQuerySchema.parse(call.query ?? {})
+    return value(
+      await app.registry.bootstrapSql(caller(call), clusterId(call), {
+        ...(q.database === undefined ? {} : { databases: q.database }),
+        ...(q.project === undefined ? {} : { projectId: q.project }),
+        ...(q.environment === undefined ? {} : { environmentId: q.environment }),
+        ...(q.ledgers === undefined ? {} : { ledgers: q.ledgers }),
+      }),
+    )
+  },
   listClusterEndpoints: async (app, call) => {
     const state = field(call.query, 'state')
     return value(
@@ -1125,6 +1171,43 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         idempotency(call),
       ),
     ),
+  getProjectExecutionRoles: async (app, call) =>
+    value(
+      await app.registry.projectExecutionRoles(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+      ),
+    ),
+  planExecutionRoleBindings: async (app, call) =>
+    value(
+      await app.registry.planExecutionRoleBindings(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        EnvironmentIdSchema.parse(field(call.params, 'environmentId')),
+        ExecutionRoleBindingsRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planExecutionRoleException: async (app, call) =>
+    value(
+      await app.registry.planExecutionRoleException(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        EnvironmentIdSchema.parse(field(call.params, 'environmentId')),
+        ExecutionRoleExceptionDeclareRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planExecutionRoleExceptionRevocation: async (app, call) =>
+    value(
+      await app.registry.planExecutionRoleExceptionRevocation(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        ExecutionRoleExceptionIdSchema.parse(field(call.params, 'exceptionId')),
+        ExecutionRoleExceptionRevokeRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
   planServer: async (app, call) =>
     value(
       await app.registry.planServer(
@@ -1165,6 +1248,15 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         caller(call),
         clusterId(call),
         EndpointRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planDatabaseRetirement: async (app, call) =>
+    value(
+      await app.registry.planDatabaseRetirement(
+        caller(call),
+        clusterId(call),
+        DatabaseIdSchema.parse(field(call.params, 'databaseId')),
         idempotency(call),
       ),
     ),
@@ -1286,7 +1378,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       await app.migrations.detail(
         caller(call),
         target(call),
-        MigrationIdSchema.parse(field(call.params, 'migrationId')),
+        DependencyRefSchema.parse(field(call.params, 'migrationId')),
       ),
     ),
   verifyMigration: async (app, call) =>
@@ -1294,7 +1386,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       await app.migrations.verify(
         caller(call),
         target(call),
-        MigrationIdSchema.parse(field(call.params, 'migrationId')),
+        DependencyRefSchema.parse(field(call.params, 'migrationId')),
         MigrationVerifyRequestSchema.parse(call.body ?? {}),
         idempotency(call),
       ),
@@ -1338,15 +1430,38 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         BreakGlassReviewRequestSchema.parse(call.body),
       ),
     ),
-  planImportAnalysis: async (app, call) =>
+  planImportAnalysis: async (app, call) => {
+    const body = ImportAnalysisRequestSchema.parse(call.body)
+    return value(
+      await legacyRequest(() =>
+        app.migrations.planImportAnalysis(caller(call), target(call), body, idempotency(call)),
+      ),
+    )
+  },
+  checkScratchTarget: async (app, call) =>
     value(
-      await app.migrations.planImportAnalysis(
+      await app.migrations.scratchCheck(
         caller(call),
         target(call),
-        ImportAnalysisRequestSchema.parse(call.body),
-        idempotency(call),
+        String(field(call.query, 'scratchTarget')),
+        optionalText(call.query, 'role'),
       ),
     ),
+  checkScratchTargetForFiles: async (app, call) => {
+    const body = ScratchCheckRequestSchema.parse(call.body)
+    return value(
+      await legacyRequest(() =>
+        app.migrations.scratchCheck(
+          caller(call),
+          target(call),
+          body.scratchTarget,
+          body.role,
+          body.files,
+          body.notApplicable,
+        ),
+      ),
+    )
+  },
   getImportReport: async (app, call) =>
     value(
       await app.migrations.importReport(
@@ -1514,12 +1629,39 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       ),
     )
   },
+  // Wave 8 completion: the objects of the snapshot without a search term (REST only).
+  listSchemaObjects: async (app, call) => {
+    const kinds = field(call.query, 'kinds')
+    const limit = field(call.query, 'limit')
+    const cursor = optionalText(call.query, 'cursor')
+    return value(
+      await app.registry.listSchemaObjects(
+        caller(call),
+        target(call),
+        {
+          kinds: Array.isArray(kinds)
+            ? kinds.map((k) => SchemaObjectKindSchema.parse(k))
+            : undefined,
+          schema: optionalText(call.query, 'schema'),
+          parent: optionalText(call.query, 'parent'),
+          q: optionalText(call.query, 'q'),
+        },
+        {
+          limit: typeof limit === 'number' ? limit : 100,
+          ...(cursor === undefined ? {} : { cursor }),
+        },
+      ),
+    )
+  },
   getSchemaFingerprint: async (app, call) =>
     value(await app.registry.schemaFingerprint(caller(call), target(call))),
   createSchemaDiff: async (app, call) =>
     value(await app.registry.schemaDiff(caller(call), SchemaDiffRequestSchema.parse(call.body))),
   runDriftCheck: async (app, call) =>
     value(await app.registry.runDriftCheck(caller(call), target(call))),
+  // Wave 8 completion: the past drift checks of a target (REST only).
+  listDriftChecks: async (app, call) =>
+    value(await app.registry.driftChecks(caller(call), target(call), pageOf(call.query))),
   // ----- data reads (Wave 7, ADR-0028): the same use cases as sql_query, sql_explain, sql_cancel -----
   runQuery: async (app, call) =>
     value(
@@ -1630,18 +1772,24 @@ function honoPath(path: string): string {
   return path.replace(/\{([A-Za-z]+)\}/g, ':$1')
 }
 
-function issues(
+export function issues(
   list: readonly {
     readonly path: readonly PropertyKey[]
     readonly code: string
     readonly message: string
+    readonly params?: Readonly<Record<string, unknown>> | undefined
   }[],
 ): { path: string; code: string; message: string }[] {
-  return list.slice(0, 100).map((issue) => ({
-    path: `/${issue.path.map(String).join('/')}`,
-    code: issue.code.replace(/[^a-z0-9_]/g, '_').slice(0, 64) || 'invalid',
-    message: issue.message.slice(0, 512),
-  }))
+  return list.slice(0, 100).map((issue) => {
+    // A refinement of the contract names its own code (too_large, say); Zod calls it custom.
+    const own = issue.code === 'custom' ? issue.params?.['code'] : undefined
+    const code = typeof own === 'string' ? own : issue.code
+    return {
+      path: `/${issue.path.map(String).join('/')}`,
+      code: code.replace(/[^a-z0-9_]/g, '_').slice(0, 64) || 'invalid',
+      message: issue.message.slice(0, 512),
+    }
+  })
 }
 
 function applyCookies(headers: Headers, cookies: Outcome<unknown>['cookies']): void {

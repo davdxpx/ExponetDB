@@ -7,7 +7,7 @@ export {
   type SystemSuspension,
   suspendForIdentityMismatch,
 } from './apply.ts'
-export { clusterBootstrapSql } from './bootstrap.ts'
+export { type BootstrapRequest, clusterBootstrapSql } from './bootstrap.ts'
 export {
   type BreakGlassGrant,
   type BreakGlassGrantRecord,
@@ -52,6 +52,22 @@ export {
   RegistryError,
   registrationRefused,
 } from './errors.ts'
+export {
+  activeExceptions,
+  ExecutionRoleBindingSetKind,
+  ExecutionRoleExceptionDeclareKind,
+  type ExecutionRoleExceptionRecord,
+  ExecutionRoleExceptionRevokeKind,
+  effectiveExceptions,
+  environmentRoleBindings,
+  exceptionView,
+  getExecutionRoleException,
+  planExecutionRoleBindings,
+  planExecutionRoleExceptionDeclare,
+  planExecutionRoleExceptionRevoke,
+  projectDefaultRoles,
+  projectExecutionRoles,
+} from './execution-roles.ts'
 export { inspectDatabase, type ObservedDatabase } from './inspect.ts'
 export {
   type RegistrationSnapshots,
@@ -64,6 +80,7 @@ export {
   ClusterDeclareTierKind,
   ClusterRegisterKind,
   DatabaseRegisterKind,
+  DatabaseRetireKind,
   EndpointAddKind,
   EndpointRetireKind,
   EnvironmentCreateKind,
@@ -81,6 +98,7 @@ export {
   planClusterDeclareTier,
   planClusterRegister,
   planDatabaseRegister,
+  planDatabaseRetire,
   planEndpointAdd,
   planEndpointRetire,
   planEnvironmentCreate,

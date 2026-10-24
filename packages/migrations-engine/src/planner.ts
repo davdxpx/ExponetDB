@@ -14,9 +14,10 @@ import { type LintReport, lintBundles, prepareLint } from '@exponetdb/migrations
 import { createPlan, type PlanRecord } from '@exponetdb/operations'
 import type { MigrationFacts } from '@exponetdb/policy'
 import {
+  blocksExecution,
   type CatalogReader,
+  type ExecutionRoleFacts,
   executionRoleFacts,
-  executionRoleProblem,
   type LedgerRecord,
   readVerifications,
   resolveVerifyCatalog,
@@ -47,7 +48,13 @@ import { type LintEntry, migrationAnalysis, resolutionFinding } from './analysis
 import type { PlanContent, PlanItem } from './content.ts'
 import { divergenceDetails, ledgerDivergence } from './divergence.ts'
 import { MigrationError } from './errors.ts'
-import { collectEvidence } from './evidence.ts'
+import { collectEvidence, evidenceTargetOf } from './evidence.ts'
+import {
+  type ExceptionBinding,
+  executionRolesFor,
+  type ResolvedExecutionRoles,
+  roleUnder,
+} from './execution-roles.ts'
 import {
   ingestBundles,
   readRevision,
@@ -88,7 +95,6 @@ interface ProjectSettings {
   readonly projectId: string
   readonly slug: string
   readonly productSlug: string
-  readonly executionRoles: Readonly<Record<string, string>>
   readonly trustedExtensions: readonly string[]
   readonly managedScope: { readonly includeSchemas?: string[]; readonly excludeSchemas: string[] }
 }
@@ -96,8 +102,7 @@ interface ProjectSettings {
 async function projectSettings(q: Queryable, projectId: string): Promise<ProjectSettings> {
   const { rows } = await q.query(
     'migrations.plan.project',
-    `SELECT p.project_id, p.slug, pr.slug AS product_slug, p.execution_roles, p.trusted_extensions,
-            p.managed_scope
+    `SELECT p.project_id, p.slug, pr.slug AS product_slug, p.trusted_extensions, p.managed_scope
        FROM registry.projects p JOIN registry.products pr ON pr.product_id = p.product_id
       WHERE p.project_id = $1`,
     [projectId],
@@ -106,15 +111,8 @@ async function projectSettings(q: Queryable, projectId: string): Promise<Project
   if (row === undefined) {
     throw new MigrationError('NOT_FOUND')
   }
-  const roles = row.json('execution_roles') as JsonValue
   const trusted = row.json('trusted_extensions') as JsonValue
   const scope = row.json('managed_scope') as JsonValue
-  const executionRoles: Record<string, string> = {}
-  if (isJsonObject(roles)) {
-    for (const [alias, role] of Object.entries(roles)) {
-      if (typeof role === 'string') executionRoles[alias] = role
-    }
-  }
   const s = isJsonObject(scope) ? scope : {}
   const include = Array.isArray(s['includeSchemas'])
     ? s['includeSchemas'].filter((x): x is string => typeof x === 'string')
@@ -126,7 +124,6 @@ async function projectSettings(q: Queryable, projectId: string): Promise<Project
     projectId: row.text('project_id'),
     slug: row.text('slug'),
     productSlug: row.text('product_slug'),
-    executionRoles,
     trustedExtensions: Array.isArray(trusted)
       ? trusted.filter((x): x is string => typeof x === 'string')
       : [],
@@ -203,7 +200,15 @@ interface Live {
   readonly state: TargetState
   readonly order: readonly StoredRevision[]
   readonly verifications: readonly VerificationRecord[]
-  readonly roleProblems: ReadonlyMap<string, string | null>
+  /** Per execution role: its facts for the migrator, its problem under the exceptions, the exception it relies on. */
+  readonly roleChecks: ReadonlyMap<
+    string,
+    {
+      readonly facts: ExecutionRoleFacts
+      readonly problem: string | null
+      readonly binding: ExceptionBinding | null
+    }
+  >
   readonly verify: ReadonlyMap<
     string,
     { checks: ReturnType<typeof checksOf>; resolution: VerifyResolution | null }
@@ -340,6 +345,7 @@ async function readLive(
   ctx: MigrationPlanContext,
   target: TargetRecord,
   project: ProjectSettings,
+  resolved: ResolvedExecutionRoles,
   chosen: ReadonlyMap<string, StoredRevision>,
 ): Promise<Live> {
   const placement = target.placement
@@ -361,13 +367,14 @@ async function readLive(
   const order = await planOrder(tx, project, state, chosen)
   const verifications = await readVerifications(rtx)
   const roles = [
-    ...new Set(
-      order.map((r) => project.executionRoles[executionAlias(r)]).filter((r) => r !== undefined),
-    ),
+    ...new Set(order.map((r) => resolved.roles[executionAlias(r)]).filter((r) => r !== undefined)),
   ]
   const facts = await executionRoleFacts(rtx, roles, 'exponetdb_migrator')
-  const roleProblems = new Map<string, string | null>()
-  for (const f of facts) roleProblems.set(f.role, executionRoleProblem(f))
+  const roleChecks = new Map<
+    string,
+    { facts: ExecutionRoleFacts; problem: string | null; binding: ExceptionBinding | null }
+  >()
+  for (const f of facts) roleChecks.set(f.role, { facts: f, ...roleUnder(f, resolved.exceptions) })
   const verify = new Map<
     string,
     { checks: ReturnType<typeof checksOf>; resolution: VerifyResolution | null }
@@ -430,11 +437,12 @@ async function readLive(
     }
   }
   const incomplete = (await rtx.query(INCOMPLETE_NONTX)).map((r) => r.text('migration_id'))
-  return { state, order, verifications, roleProblems, verify, untrustedExtensions, incomplete }
+  return { state, order, verifications, roleChecks, verify, untrustedExtensions, incomplete }
 }
 
 function lintConfig(
   project: ProjectSettings,
+  roles: Readonly<Record<string, string>>,
   request: MigrationPlanRequest,
   defaults: JsonObject,
 ): ProjectConfig {
@@ -443,8 +451,7 @@ function lintConfig(
     project: `${project.productSlug}/${project.slug}`,
     layout: 'bundles',
     defaults: defaults as ProjectConfig['defaults'],
-    executionRoles:
-      Object.keys(project.executionRoles).length > 0 ? project.executionRoles : { owner: 'none' },
+    executionRoles: Object.keys(roles).length > 0 ? roles : { owner: 'none' },
     managedScope: {
       includeSchemas: project.managedScope.includeSchemas ?? '*',
       excludeSchemas: project.managedScope.excludeSchemas,
@@ -509,6 +516,8 @@ export async function planMigrationApply(
     throw new MigrationError('TARGET_UNAVAILABLE')
   }
   const project = await projectSettings(tx, target.projectId)
+  // The roles of this target's environment and the exceptions there (ADR-0034).
+  const resolved = await executionRolesFor(tx, target)
   const chosen = new Map<string, StoredRevision>()
   if ((request.bundles?.length ?? 0) > 0) {
     const ingested = await ingestBundles(tx, {
@@ -534,9 +543,12 @@ export async function planMigrationApply(
   let live: Live
   try {
     await prepareLint(opened.session.facts.major)
-    live = await opened.session.readOnly((rtx) => readLive(tx, rtx, ctx, target, project, chosen), {
-      statementTimeoutMs: 60_000,
-    })
+    live = await opened.session.readOnly(
+      (rtx) => readLive(tx, rtx, ctx, target, project, resolved, chosen),
+      {
+        statementTimeoutMs: 60_000,
+      },
+    )
   } finally {
     await opened.session.close()
   }
@@ -571,7 +583,7 @@ export async function planMigrationApply(
   const stream = await storedStream(tx, project.projectId)
   const report: LintReport = lintBundles(order.map(revisionInput), {
     major,
-    project: lintConfig(project, request, defaults),
+    project: lintConfig(project, resolved.roles, request, defaults),
     tier: target.tier,
     stream: [...stream].map(([id, s]) => ({ id, dependsOn: s.dependsOn })),
     baselines: state.meta.baselineId === null ? [] : [state.meta.baselineId],
@@ -596,14 +608,14 @@ export async function planMigrationApply(
     const resolution = verify?.resolution ?? null
     const finding = resolution === null ? null : resolutionFinding(resolution)
     if (finding !== null) extra.push(finding)
-    const role = project.executionRoles[executionAlias(r)]
+    const role = resolved.roles[executionAlias(r)]
     const problem =
       role === undefined
         ? 'unmapped_alias'
-        : live.roleProblems.has(role)
-          ? (live.roleProblems.get(role) ?? null)
+        : live.roleChecks.has(role)
+          ? (live.roleChecks.get(role)?.problem ?? null)
           : 'missing'
-    if (problem !== null) {
+    if (problem !== null && blocksExecution(problem as never)) {
       requirementsUnmet.add('execution_role')
       extra.push({
         rule: 'execution_role',
@@ -673,11 +685,18 @@ export async function planMigrationApply(
   )
 
   const executionRoles: Record<string, string> = {}
+  // The declared exceptions the plan relies on (ADR-0034 §3): bound, shown, counted.
+  const executionRoleExceptions: Record<string, ExceptionBinding> = {}
   for (const r of order) {
     const alias = executionAlias(r)
-    const role = project.executionRoles[alias]
-    if (role !== undefined) executionRoles[alias] = role
+    const role = resolved.roles[alias]
+    if (role === undefined) continue
+    executionRoles[alias] = role
+    const binding = live.roleChecks.get(role)?.binding ?? null
+    if (binding !== null) executionRoleExceptions[role] = binding
   }
+  const exceptionsUsed = Object.keys(executionRoleExceptions).sort()
+  const parity = await roleParity(tx, ctx, target, live, executionRoles)
   const items: PlanItem[] = order.map((r) => {
     const verify = live.verify.get(r.migrationId)
     const resolution = verify?.resolution
@@ -691,7 +710,7 @@ export async function planMigrationApply(
       sourceDigest: r.sourceDigest,
       bundleDigest: r.bundleDigest,
       transactional: r.transactional,
-      executionRole: project.executionRoles[executionAlias(r)] ?? '',
+      executionRole: resolved.roles[executionAlias(r)] ?? '',
       searchPath: searchPathOf(r),
       lockTimeoutMs: manifestNumber(r, 'lockTimeout'),
       statementTimeoutMs: manifestNumber(r, 'statementTimeout'),
@@ -719,6 +738,8 @@ export async function planMigrationApply(
     lineage: evidence.lineage,
     dependenciesVerified: dependenciesVerified(order, state.ledger, live.verifications),
     legacyProject: state.meta.baselineId !== null,
+    executionRoleExceptions: exceptionsUsed.length,
+    executionRoleParity: parity,
   }
   // A break-glass grant names the rules it may override; the engine decides which it does.
   let breakGlass: { readonly grantId: string; readonly rules: readonly string[] } | undefined
@@ -756,6 +777,7 @@ export async function planMigrationApply(
       ledgerStateHash: state.ledgerStateHash,
       extensions: { ...state.extensions },
       executionRoles,
+      ...(exceptionsUsed.length === 0 ? {} : { executionRoleExceptions }),
     },
     evidence: evidence.binding,
     facts,
@@ -772,6 +794,19 @@ export async function planMigrationApply(
       blockingLints: blockingFindings,
     },
     evidence: [...evidence.items],
+    executionRoleExceptions: exceptionsUsed.map((role) => {
+      const e = resolved.exceptions.get(role)
+      return {
+        role,
+        exceptionId: e?.exceptionId ?? null,
+        revision: e?.revision ?? null,
+        // The reason (a person's untrusted text) stays in the registry view, out of a plan
+        // agents read.
+        declaredBy: e?.declaredBy ?? null,
+        reviewBy: e?.reviewBy ?? null,
+      }
+    }),
+    executionRoleParity: parity,
   }
   const subject = {
     productId: target.productId,
@@ -792,6 +827,7 @@ export async function planMigrationApply(
     {
       kind: 'migration.apply',
       kindVersion: 1,
+      // Production is at least `high`, with or without a declared exception (ADR-0034 §3).
       actionClass: target.tier === 'prod' ? 'high' : 'standard',
       actor: operationActor(actor),
       subject: {
@@ -811,4 +847,56 @@ export async function planMigrationApply(
     },
     { clock: ctx.policy.clock },
   )
+}
+
+/**
+ * Production only (ADR-0034 §4): the evidence environment's execution role
+ * of every alias the plan uses has the same attributes and the same
+ * exception status as production's, or the evidence of staging says less
+ * than it seems. `unknown` when the evidence target cannot be read.
+ */
+async function roleParity(
+  tx: Tx,
+  ctx: MigrationPlanContext,
+  target: TargetRecord,
+  live: Live,
+  executionRoles: Readonly<Record<string, string>>,
+): Promise<'match' | 'mismatch' | 'unknown' | 'not_required'> {
+  if (target.tier !== 'prod') return 'not_required'
+  const evidence = await evidenceTargetOf(tx, target)
+  if (evidence === undefined || evidence.placement === null) return 'unknown'
+  const theirs = await executionRolesFor(tx, evidence)
+  const aliases = Object.keys(executionRoles)
+  // An alias the evidence environment does not map at all ran as nothing there.
+  if (aliases.some((a) => theirs.roles[a] === undefined)) return 'mismatch'
+  const roles = [...new Set(aliases.map((a) => theirs.roles[a] as string))]
+  let facts: ExecutionRoleFacts[]
+  try {
+    const opened = await ctx.connector.forTarget(evidence, 'observer', `parity/${target.targetId}`)
+    try {
+      facts = await opened.session.readOnly((rtx) =>
+        executionRoleFacts(rtx, roles, 'exponetdb_migrator'),
+      )
+    } finally {
+      await opened.session.close()
+    }
+  } catch {
+    return 'unknown'
+  }
+  const attributes = (f: ExecutionRoleFacts) =>
+    [f.exists, f.canLogin, f.superuser, f.createRole, f.createDb, f.replication, f.bypassRls].join()
+  for (const alias of aliases) {
+    const ours = live.roleChecks.get(executionRoles[alias] ?? '')
+    const role = theirs.roles[alias]
+    const other = facts.find((f) => f.role === role)
+    if (ours === undefined || other === undefined || role === undefined) return 'unknown'
+    const otherException = roleUnder(other, theirs.exceptions).problem === 'declared_exception'
+    if (
+      attributes(ours.facts) !== attributes(other) ||
+      (ours.problem === 'declared_exception') !== otherException
+    ) {
+      return 'mismatch'
+    }
+  }
+  return 'match'
 }

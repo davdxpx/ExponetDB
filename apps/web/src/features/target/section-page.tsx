@@ -1,7 +1,9 @@
 import {
+  LoadingState,
   NotAvailableYetState,
   PageContainer,
   PageHeader,
+  PageHeaderAside,
   PageHeaderDescription,
   PageHeaderMeta,
   PageHeaderSummary,
@@ -9,16 +11,30 @@ import {
   readableValue,
   TierChip,
 } from '@exponetdb/ui-patterns'
-import type { ReactNode } from 'react'
+import { lazy, type ReactNode, Suspense } from 'react'
 import { t } from '../../lib/i18n/i18n.ts'
 import { TARGET_NAV, type TargetSection } from '../../shell/navigation.ts'
-import { SchemaBody } from '../schema/schema-page.tsx'
-import { SqlBody } from '../sql/sql-page.tsx'
-import { TargetOverviewBody } from '../target-overview/overview-page.tsx'
+import { RefreshBar } from '../target-overview/overview-refresh.tsx'
 import { ContentWrapper } from './content-wrapper.tsx'
 import type { SchemaKind } from './params.ts'
 import { useTargetHealth } from './queries.ts'
 import { useTargetScope } from './scope.tsx'
+
+// Each body is its own chunk, loaded when its section opens: a target page
+// does not download the schema browser, the SQL workspace and the overview
+// together (the bundle budget of `scripts/budgets.ts` checks it).
+const TargetOverviewBody = lazy(async () => {
+  const module = await import('../target-overview/overview-page.tsx')
+  return { default: module.TargetOverviewBody }
+})
+const SchemaBody = lazy(async () => {
+  const module = await import('../schema/schema-page.tsx')
+  return { default: module.SchemaBody }
+})
+const SqlBody = lazy(async () => {
+  const module = await import('../sql/sql-page.tsx')
+  return { default: module.SqlBody }
+})
 
 /**
  * The page of one target section: the title, then `ContentWrapper` with the
@@ -61,6 +77,12 @@ export function TargetSectionPage({
               <PageHeaderDescription>{t('target.schema.kind', { kind })}</PageHeaderDescription>
             )}
           </PageHeaderSummary>
+          {/* The overview's page action, at the top right as Studio places a page's actions. */}
+          {section === 'overview' && value !== undefined ? (
+            <PageHeaderAside>
+              <RefreshBar />
+            </PageHeaderAside>
+          ) : null}
         </PageHeaderMeta>
       </PageHeader>
       <PageContainer size="large" className="py-6">
@@ -73,7 +95,9 @@ export function TargetSectionPage({
           onRetryHealth={health.refetch}
           busy={scope.fetching}
         >
-          <SectionBody section={section} kind={kind} label={label} />
+          <Suspense fallback={<LoadingState what={label} lines={6} />}>
+            <SectionBody section={section} kind={kind} label={label} />
+          </Suspense>
         </ContentWrapper>
       </PageContainer>
     </>

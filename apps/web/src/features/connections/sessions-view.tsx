@@ -8,7 +8,7 @@ import {
   TableRow,
 } from '@exponetdb/ui'
 import { UntrustedName, UntrustedText } from '@exponetdb/ui-patterns'
-import type { ReactNode } from 'react'
+import { memo, type ReactNode } from 'react'
 import { t } from '../../lib/i18n/i18n.ts'
 import { Observation } from './live-read.tsx'
 import {
@@ -17,8 +17,10 @@ import {
   formatDuration,
   groupSessions,
   type LockGraph,
+  orderSessions,
   type Session,
   type SessionList,
+  type SessionOrder,
   stateLabel,
   stateOf,
 } from './model.ts'
@@ -28,25 +30,46 @@ import { RawStatementButton } from './raw-statement.tsx'
 const ROW_STATEMENT_CODE_POINTS = 300
 const ROW_STATEMENT_LINES = 3
 
+/** The id of the row of a process, the target of the "go to row" links of the attention cards. */
+export function sessionRowId(pid: number): string {
+  return `session-row-${pid}`
+}
+
+export type Layout = 'grouped' | 'flat'
+
 /**
- * Sessions grouped by role and application, each with its state, how long it
- * has been in it (an idle-in-transaction session shows how long its
- * transaction has been open), what it waits for, its redacted statement and
- * the "View raw statement" action for a statement the server gave a digest
- * for. There is no cancel or terminate control here: both arrive as planned
- * operations in Wave 9 and the page says so.
+ * Sessions grouped by role and application (or in one flat list), each with
+ * its state, how long it has been in it (an idle-in-transaction session shows
+ * how long its transaction has been open), what it waits for, its redacted
+ * statement and the "View raw statement" action for a statement the server
+ * gave a digest for. There is no cancel or terminate control here: both
+ * arrive as planned operations in Wave 9 and the page says so.
+ *
+ * `list` is the read the sessions come from (its source and time are shown);
+ * `shown` is the part of it that passed the filters.
  */
-export function SessionsView(props: {
+export const SessionsView = memo(function SessionsView(props: {
   readonly list: SessionList
+  readonly shown: readonly Session[]
   readonly locks: LockGraph | undefined
   readonly targetPath: string
+  readonly layout: Layout
+  readonly order: SessionOrder
+  readonly highlight: number | undefined
+  readonly onUnhighlight: () => void
+  /** A summary of the filters ("Showing 3 of 40 sessions"), or nothing when none is set. */
+  readonly summary: string | undefined
 }): ReactNode {
-  const { list } = props
-  const groups = groupSessions(list.sessions)
-  const counts = countByState(list.sessions)
+  const { list, shown } = props
+  const counts = countByState(shown)
   return (
     <div className="flex flex-col gap-4">
       <Observation source={list.source} observedAt={list.observedAt} />
+      {props.summary === undefined ? null : (
+        <p className="text-sm text-foreground-light" data-slot="filter-summary">
+          {props.summary}
+        </p>
+      )}
       <ul aria-label={t('connections.sessions.summary')} className="flex flex-wrap gap-2 text-sm">
         {counts.map(({ kind, count }) => (
           <li
@@ -58,28 +81,88 @@ export function SessionsView(props: {
           </li>
         ))}
       </ul>
-      {groups.map((group) => (
-        <div
-          key={group.role}
-          className="flex flex-col gap-3 rounded-lg border border-default p-4"
-          data-role-group=""
-        >
-          <h3 className="text-sm font-medium text-foreground">
-            <span className="text-foreground-light">{t('connections.group.role')}: </span>
-            <UntrustedName name={group.role} mono label={t('connections.group.role')} />
-          </h3>
-          {group.applications.map((application) => (
-            <ApplicationTable
-              key={application.application}
-              role={group.role}
-              application={application.application}
-              sessions={application.sessions}
+      {props.layout === 'flat' ? (
+        <FlatTable {...props} />
+      ) : (
+        groupSessions(shown, props.order).map((group) => (
+          <div
+            key={group.role}
+            className="flex flex-col gap-3 rounded-lg border border-default p-4"
+            data-role-group=""
+          >
+            <h3 className="text-sm font-medium text-foreground">
+              <span className="text-foreground-light">{t('connections.group.role')}: </span>
+              <UntrustedName name={group.role} mono label={t('connections.group.role')} />
+            </h3>
+            {group.applications.map((application) => (
+              <ApplicationTable
+                key={application.application}
+                role={group.role}
+                application={application.application}
+                sessions={application.sessions}
+                locks={props.locks}
+                targetPath={props.targetPath}
+                highlight={props.highlight}
+                onUnhighlight={props.onUnhighlight}
+              />
+            ))}
+          </div>
+        ))
+      )}
+    </div>
+  )
+})
+
+function Header(props: { readonly owner: boolean }): ReactNode {
+  return (
+    <TableHeader>
+      <TableRow>
+        <TableHead scope="col">{t('connections.column.pid')}</TableHead>
+        {props.owner ? (
+          <>
+            <TableHead scope="col">{t('connections.column.role')}</TableHead>
+            <TableHead scope="col">{t('connections.column.application')}</TableHead>
+          </>
+        ) : null}
+        <TableHead scope="col">{t('connections.column.state')}</TableHead>
+        <TableHead scope="col">{t('connections.column.timing')}</TableHead>
+        <TableHead scope="col">{t('connections.column.wait')}</TableHead>
+        <TableHead scope="col">{t('connections.column.statement')}</TableHead>
+        <TableHead scope="col">{t('connections.column.operation')}</TableHead>
+      </TableRow>
+    </TableHeader>
+  )
+}
+
+/** All shown sessions in one table, with role and application as columns. */
+function FlatTable(props: {
+  readonly shown: readonly Session[]
+  readonly locks: LockGraph | undefined
+  readonly targetPath: string
+  readonly order: SessionOrder
+  readonly highlight: number | undefined
+  readonly onUnhighlight: () => void
+}): ReactNode {
+  return (
+    <div className="flex flex-col gap-2" data-flat-list="">
+      <h3 className="text-sm font-medium text-foreground">{t('connections.flat.title')}</h3>
+      <Table>
+        <TableCaption className="sr-only">{t('connections.flat.caption')}</TableCaption>
+        <Header owner />
+        <TableBody>
+          {orderSessions(props.shown, props.order).map((session) => (
+            <SessionRow
+              key={`${session.pid}:${session.backendStart}`}
+              session={session}
               locks={props.locks}
               targetPath={props.targetPath}
+              owner
+              highlighted={props.highlight === session.pid}
+              onUnhighlight={props.onUnhighlight}
             />
           ))}
-        </div>
-      ))}
+        </TableBody>
+      </Table>
     </div>
   )
 }
@@ -90,6 +173,8 @@ function ApplicationTable(props: {
   readonly sessions: readonly Session[]
   readonly locks: LockGraph | undefined
   readonly targetPath: string
+  readonly highlight: number | undefined
+  readonly onUnhighlight: () => void
 }): ReactNode {
   return (
     <div className="flex flex-col gap-2" data-application-group="">
@@ -112,16 +197,7 @@ function ApplicationTable(props: {
           {t('connections.sessions.caption.role')}{' '}
           <UntrustedName name={props.role} label={t('connections.group.role')} />
         </TableCaption>
-        <TableHeader>
-          <TableRow>
-            <TableHead scope="col">{t('connections.column.pid')}</TableHead>
-            <TableHead scope="col">{t('connections.column.state')}</TableHead>
-            <TableHead scope="col">{t('connections.column.timing')}</TableHead>
-            <TableHead scope="col">{t('connections.column.wait')}</TableHead>
-            <TableHead scope="col">{t('connections.column.statement')}</TableHead>
-            <TableHead scope="col">{t('connections.column.operation')}</TableHead>
-          </TableRow>
-        </TableHeader>
+        <Header owner={false} />
         <TableBody>
           {props.sessions.map((session) => (
             <SessionRow
@@ -129,6 +205,9 @@ function ApplicationTable(props: {
               session={session}
               locks={props.locks}
               targetPath={props.targetPath}
+              owner={false}
+              highlighted={props.highlight === session.pid}
+              onUnhighlight={props.onUnhighlight}
             />
           ))}
         </TableBody>
@@ -141,14 +220,43 @@ function SessionRow(props: {
   readonly session: Session
   readonly locks: LockGraph | undefined
   readonly targetPath: string
+  readonly owner: boolean
+  readonly highlighted: boolean
+  readonly onUnhighlight: () => void
 }): ReactNode {
   const { session } = props
   const kind = stateOf(session)
   const facts = blockingFacts(props.locks, session.pid)
   const statement = session.statement
   return (
-    <TableRow data-pid={session.pid} data-state-kind={kind}>
+    <TableRow
+      id={sessionRowId(session.pid)}
+      tabIndex={-1}
+      data-pid={session.pid}
+      data-state-kind={kind}
+      data-highlighted={props.highlighted ? 'true' : undefined}
+      onBlur={props.highlighted ? props.onUnhighlight : undefined}
+      className="scroll-mt-24 focus-ring focus:bg-surface-200 data-[highlighted=true]:bg-surface-200"
+    >
       <TableCell className="font-mono text-xs">{session.pid}</TableCell>
+      {props.owner ? (
+        <>
+          <TableCell className="text-xs">
+            <UntrustedName name={session.role} mono label={t('connections.column.role')} />
+          </TableCell>
+          <TableCell className="text-xs">
+            {session.applicationName === '' ? (
+              t('connections.group.noApplication')
+            ) : (
+              <UntrustedName
+                name={session.applicationName}
+                mono
+                label={t('connections.column.application')}
+              />
+            )}
+          </TableCell>
+        </>
+      ) : null}
       <TableCell>
         <span className="font-medium">{stateLabel(kind)}</span>
         {kind === 'other' ? (

@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Readable } from '../../src/readable.ts'
@@ -317,6 +318,46 @@ describe('ReadableView: partial', () => {
     const { container } = renderView(partial)
 
     expect(await axeViolations(container)).toEqual([])
+  })
+})
+
+describe('ReadableView: a read that turns old or partial', () => {
+  // The content a person works in (a typed value, a focused control, a pressed
+  // "Load more") must survive the banner coming and going: the row browser lost
+  // a click when its object read turned a minute old and the panel was mounted again.
+  function Draft({ rows }: { readonly rows: readonly string[] }) {
+    const [text, setText] = useState('')
+    return (
+      <label>
+        Note on {rows.join(', ')}
+        <input value={text} onChange={(event) => setText(event.target.value)} />
+      </label>
+    )
+  }
+  const at = (state: 'ready' | 'stale' | 'partial'): Readable<readonly string[]> =>
+    state === 'partial'
+      ? { state, value: ['b1'], source: 'live', observedAt: OBSERVED, missing: ['One node.'] }
+      : { state, value: ['b1'], source: 'live', observedAt: OBSERVED }
+  const view = (state: 'ready' | 'stale' | 'partial') => (
+    <ReadableView
+      readable={at(state)}
+      what="backup inventory"
+      ready={(rows) => <Draft rows={rows} />}
+      now={NOW}
+    />
+  )
+
+  it('keeps the content mounted, with its state and focus, as the banner comes and goes', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(view('ready'))
+    const input = screen.getByRole('textbox', { name: 'Note on b1' })
+    await user.type(input, 'kept')
+    for (const state of ['stale', 'partial', 'ready', 'stale', 'ready'] as const) {
+      rerender(view(state))
+      expect(screen.getByRole('textbox', { name: 'Note on b1' })).toBe(input)
+      expect(input).toHaveValue('kept')
+      expect(input).toHaveFocus()
+    }
   })
 })
 

@@ -278,7 +278,11 @@ describe('hostile content in every surface that shows it', () => {
     await page.goto(link)
     const again = page.locator(`li.card.focused[data-operation="${operationId}"]`)
     await again.locator('.review .computed').waitFor()
-    await again.getByRole('button', { name: 'Approve', exact: true }).click()
+    // The decision is in the page header, beside the title.
+    await page
+      .locator('[data-slot="page-header-actions"]')
+      .getByRole('button', { name: 'Approve', exact: true })
+      .click()
     await confirmPlanDialog('Approve plan', productionPath)
     await withPasskeyIfAsked(page.locator('p.status', { hasText: /^Approved/ }))
     await w.drive()

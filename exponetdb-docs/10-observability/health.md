@@ -71,6 +71,32 @@ The identity, settings and activity reads share one separate diagnostic
 session on a direct path and are recorded one by one: a read that fails is a
 failed probe with its class, the others still count.
 
+### 2.1 Connection capacity (Wave 8 completion)
+
+**[OBSERVED]** (`packages/diagnostics/src/reducer.ts` and `health.ts`) The
+connections in use and the connections available were always measured, but
+they reached a reader only inside a `connections_high` or
+`connections_critical` condition, when a threshold was crossed. The sampler now
+keeps them with the probe rows it already stores, so the latest sample answers
+"how many of how many" without a threshold: the successful `activity` probe
+carries `values.clientBackends`, the successful `settings` probe
+`values.usableSlots` (whole numbers, no text). No Control Store column was
+added; these members are not part of the public probe shape: the reader drops
+them from every probe it returns, so neither REST nor MCP shows a probe
+`values` member.
+
+`GET /targets/{id}/health` derives `capacity` from the latest status row
+only when **both** numbers are there, and then gives it that sample's
+`observedAt` and the view's `source` (`sampled`, or `cached` when the sample is
+older than two intervals; a lagging sampler still shows its last numbers with
+their age, next to `unknown` / `sampler_lagging`). It is absent, never `0`,
+when the latest sample did not measure them: the target was never sampled, was
+unreachable, the `settings` or the `activity` read failed, or the row was
+written before the numbers were stored (the next sample, within 15 seconds,
+has them). `usableSlots: 0` is a measured value (and `connections_critical`).
+The database size is not sampled today and is not part of the view; a probe
+for it is a later decision, not part of this change.
+
 ## 3. Named conditions
 
 **[DECIDED]** Conditions are machine-readable; UI text and MCP output are
@@ -130,6 +156,20 @@ REOSA audit found a role-level timeout that would be lost in the planned move).
   continues for a suspended target.
 - `plaintext_connections` opens a security finding
   (`health:plaintext_connections`) and does not change the state.
+- **[DECIDED]** (Wave 9, [ADR-0034 §4](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md#4-drift-and-parity))
+  Every active execution-role exception of the target's environment is
+  compared with the role on the target, on the same diagnostic session and
+  only after the identity marker matched. A declaration that no longer
+  matches keeps one security finding open
+  (`execution_role_exception_drift`, key
+  `health:execution_role_exception:<exceptionId>`), with the reason
+  `privilege_exceeded` (critical: the role gained `SUPERUSER`, `CREATEROLE`,
+  `CREATEDB` or `REPLICATION`), `review_passed`, `role_missing` or
+  `bypassrls_lost` (warnings: the declaration excuses nothing, or is stale
+  and can be revoked). The finding is resolved `cleared` once the role
+  matches again or the declaration is revoked; a failed read changes no
+  finding. It does not change the state, the declaration or the role; it is
+  not a schema drift finding, so a drift acceptance never covers it.
 - When ExponetDB itself cannot probe (no observer credential, no active
   endpoint, no placement), the state is `unknown` with that reason, never
   `unreachable`.
@@ -276,14 +316,15 @@ one the read is `CAPABILITY_UNAVAILABLE`, never an empty result
 
 | Surface | Content |
 |---|---|
-| REST `GET /targets/{id}/health` | state, conditions, probes per endpoint, sources, timestamps |
+| REST `GET /targets/{id}/health` | state, conditions, probes per endpoint, sources, timestamps; **[OBSERVED]** (Wave 8 completion, additive) the optional `capacity` of the latest sample ([§2.1](#21-connection-capacity-wave-8-completion)) |
 | REST `GET /fleet` and `GET /findings` (Wave 8) | the fleet overview and the findings across targets ([§10](#10-fleet-overview-and-findings-across-targets)); REST only |
 | REST `GET /targets/{id}/health/history?from&to` (Wave 8) | sampled history: buckets with the worst state and the count of each state, and gaps with a derived cause ([§6](#6-failed-reads-and-gaps)); REST only |
 | REST `GET /targets/{id}/sessions` (Wave 4) | live: client backends of the target's database (filters: state, minimum age, application), statements always redacted with a digest of the redaction, capped with `truncated`, the ExponetDB operation behind an `exponetdb/…` application name |
 | REST `GET /targets/{id}/locks` (Wave 4) | live: waiting sessions with the pids blocking them (`pg_blocking_pids`), lock mode and relation; detection only, nothing is terminated |
-| MCP `target_health` | same, compact; untrusted fields (application names, statement text) labeled. **[OBSERVED]** (2026-10-13) Served since Wave 7 through the same use case as the REST route; state, conditions and probes keep their `source` and `observedAt`, and its contract text says a failed read is an error, never a healthy state (`packages/contracts/src/mcp/tools.ts`; parity with REST in `apps/server/test/mcp.int.test.ts`) |
+| MCP `target_health` | same, compact (without the REST-only `capacity`); untrusted fields (application names, statement text) labeled. **[OBSERVED]** (2026-10-13) Served since Wave 7 through the same use case as the REST route; state, conditions and probes keep their `source` and `observedAt`, and its contract text says a failed read is an error, never a healthy state (`packages/contracts/src/mcp/tools.ts`; parity with REST in `apps/server/test/mcp.int.test.ts`) |
 | MCP `sessions_list`, `locks_list` (Wave 7) | the same data as the two REST rows above; statements are redacted and at most 500 characters for MCP with `truncated` and the digest of the whole |
-| Web App target overview | three blocks in incident order (path, answers, stuck), then capacity, then history |
+| Web App target overview | three blocks in incident order (path, answers, stuck), then capacity, then history; **[OBSERVED]** (Wave 8 completion, 2026-10-20) a Refresh with an "Updated" stamp, each condition with the values the server sends (slots, oldest age, transaction id age), connection capacity from `capacity` with its source and age, a Host row from the node read for agent-managed placements ("Not reported" for external clusters), history presets from 1 hour to 14 days and a custom range clamped to what the server serves |
+| Web App connections and locks | **[OBSERVED]** (Wave 8 completion) a "needs attention" strip computed from the reads the page makes (blocked sessions, top blocker over the blocking tree, longest active and idle-in-transaction ages) and the server's connection conditions with their values; only the server's conditions color anything, the page compares no number with a threshold; Live, Pause and Refresh with the observation age; filters (state, blockers only, minimum age, role, application, text over the redacted statement) where a cut read sends what the server can filter and names what ran over a sample; the lock tree with each blocker's session joined by pid "as of" the sessions read |
 | Status integration for consumers | read-only health summary per target for consumer status pages (for example REOSA's `/status/database` link-out, [`../13-integrations/reosa-integration.md`](../13-integrations/reosa-integration.md)) |
 
 **[DECIDED]** (Wave 4, after the G4 adversarial review) Times of health

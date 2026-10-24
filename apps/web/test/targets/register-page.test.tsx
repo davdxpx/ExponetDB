@@ -107,6 +107,50 @@ describe('the register target page', () => {
     )
   })
 
+  it('offers to create a project when the product has none, only to a person who may plan one', async () => {
+    const world = new World()
+    world.permissions = ['registry.manage']
+    world.projects = []
+    mountApp('/targets/register', world)
+    await choose('Product', PRODUCT)
+    expect(await screen.findByText('This product has no project.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Create a project' })).toHaveAttribute(
+      'href',
+      '/settings/projects',
+    )
+    cleanup()
+
+    const plain = new World()
+    plain.projects = []
+    mountApp('/targets/register', plain)
+    await choose('Product', PRODUCT)
+    expect(await screen.findByText('This product has no project.')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Create a project' })).toBeNull()
+  })
+
+  it('does not offer the project link while the project list is unread or has projects', async () => {
+    const world = new World()
+    world.permissions = ['registry.manage']
+    mountApp('/targets/register', world)
+    await choose('Product', PRODUCT)
+    await screen.findByLabelText('Project')
+    expect(screen.queryByRole('link', { name: 'Create a project' })).toBeNull()
+    cleanup()
+
+    const failing = new World()
+    failing.permissions = ['registry.manage']
+    failing.failures.set('GET /api/v1/projects', {
+      status: 500,
+      code: 'INTERNAL',
+      message: 'The registry did not answer.',
+    })
+    mountApp('/targets/register', failing)
+    await choose('Product', PRODUCT).catch(() => undefined)
+    expect(await screen.findByText(/Could not read Project/)).toBeInTheDocument()
+    expect(screen.queryByText('This product has no project.')).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Create a project' })).toBeNull()
+  })
+
   it('summarizes the target and shows the production cue for a production environment', async () => {
     mountApp('/targets/register', new World())
     await fillAll(PRODUCTION)

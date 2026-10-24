@@ -16,14 +16,24 @@ OAuth client is set up, and how credentials are rotated.
 The first databases ExponetDB manages (REOSA's) already exist and have a history
 of migrations applied by REOSA's own tooling. Until ExponetDB takes over:
 
-- REOSA keeps applying migrations with its current flow; ExponetDB does not
-  touch REOSA databases before Wave 10 (read-only first, then legacy import,
+- REOSA keeps applying migrations with its current flow until the owner
+  moves a database under ExponetDB (read-only first, then legacy import,
   [`../04-migrations/legacy-import.md`](../04-migrations/legacy-import.md),
   [`../13-integrations/reosa-integration.md`](../13-integrations/reosa-integration.md)).
-  Waves 4 to 9 work against test databases.
+  Waves 4 to 9 are developed and tested against disposable databases only.
+  **[DECIDED]** (owner, 2026-10-21, OD-7a) REOSA staging, which already runs
+  self-managed on `reos-db-01`, is the first real target: the owner
+  registers and imports it with what Part A of Wave 9 delivers; REOSA
+  production stays untouched until Wave 11 (OD-7b).
 - The database host `reos-db-01` is prepared with REOSA's handbook (PostgreSQL
   from PGDG, private network, TLS). ExponetDB's agent is installed **after**
-  that, on a working host; it does not provision hosts.
+  that, on a working host; it does not provision hosts. **[OBSERVED]**
+  (owner's Wave 9 order §6, 2026-10-21) The host runs: PostgreSQL 17.11,
+  private address `10.8.1.1`, TLS name `reosdb01.exponet.cloud` with its
+  own name-constrained CA, `hostssl` with SCRAM only, configured and backed
+  up (pgBackRest 2.59.3) by the owner's shell scripts and systemd timers,
+  with no node agent. Installing the agent there waits for the G5 waiver's
+  expiry condition and [OD-54](../00-product/open-decisions.md#od-54-how-an-external-cluster-gains-the-node-agent).
 - The Control Store is not managed by ExponetDB, ever, in V1
   ([`../02-control-plane/control-database.md` §6](../02-control-plane/control-database.md#6-self-management-boundary)).
 
@@ -115,6 +125,14 @@ open. The measured proxy setting remains required. This limited operational
 exception does not accept G2 off-host evidence or authorize real managed
 targets; revisit it before real managed targets are registered.
 
+**[DECIDED]** (owner, 2026-10-21, the Wave 9 order, OD-7a) Exactly one real
+nonprod target set is authorized: REOSA staging and its scratch database on
+`reos-db-01` (an external cluster without a node agent). The owner
+registers it, imports its history and lets sessions apply staging
+migrations through ExponetDB after Part A of Wave 9. This does not close
+the G2 off-host evidence and authorizes no production target (OD-7b: no
+applies to REOSA production before Wave 11).
+
 ## 4. Agent root CA ceremony
 
 1. Run `exponetdb ca init-root` on an offline or trusted machine (owner's
@@ -129,24 +147,33 @@ targets; revisit it before real managed targets are registered.
 ## 5. First registry entries and the first target
 
 The steps use REOSA's structure as the example. In Waves 4 to 9 the same steps
-register test databases; REOSA's real targets follow in Wave 10 (current hosted
-databases, as external clusters) and Wave 11 (on `reos-db-01`).
+register test databases. REOSA's first real targets are staging and its
+scratch database on `reos-db-01`, registered by the owner as an external
+cluster after Part A of Wave 9 (OD-7a; the commands and expected outputs are
+in [`onboard-external-cluster.md`](./onboard-external-cluster.md)); REOSA
+production stays on the hosted provider, at most observed read-only, until it
+moves to `reos-db-01` in Wave 11 (OD-7b).
 
 1. Web App → Settings: create product `reosa`, environments `staging` (nonprod)
    and `production` (prod, `evidence_from = staging`), project `platform`.
 2. Infrastructure: create server `reos-db-01` (provider Hetzner Cloud), cluster
-   (PostgreSQL 17, endpoint `10.8.1.2:5432`, TLS mode `verify-full`, CA bundle).
+   (PostgreSQL 17.11, endpoint `10.8.1.1:5432` with TLS server name
+   `reosdb01.exponet.cloud`, TLS mode `verify-full`, the host's CA bundle).
+   `cluster register` creates an **external** cluster; declare its tier
+   (`cluster declare-tier`).
 3. Credentials: on the database host, create ExponetDB's PostgreSQL roles
    (`exponetdb_observer`, `exponetdb_reader`, `exponetdb_verifier`,
    `exponetdb_operator`, `exponetdb_migrator`, `exponetdb_ledger_owner`) with the
-   generated SQL script
-   from the Web App (the script contains SCRAM verifiers, never passwords;
-   [`../03-database-model/credentials-and-roles.md`](../03-database-model/credentials-and-roles.md)).
-   This one-time step uses the local superuser on the host because the agent
-   is not enrolled yet. After Wave 5 the same roles are maintained by
-   `postgres.roles.apply`.
-4. Register targets `reosa/platform/staging` and `reosa/platform/production`
-   with their databases. Registration probes the endpoint with the observer
+   generated, idempotent bootstrap SQL (`cluster bootstrap-sql`; it contains no
+   password, each one is set with psql's `\password`;
+   [`../03-database-model/credentials-and-roles.md` §8.1](../03-database-model/credentials-and-roles.md#81-bootstrap-sql)).
+   This step uses the local superuser on the host because no agent is
+   enrolled. On an agent-managed cluster the same roles are maintained by
+   `postgres.roles.apply`; on an external one that capability is unavailable
+   (OD-54).
+4. Register the target `reosa/platform/staging` (and the scratch target in
+   its own nonprod environment) with its database; `reosa/platform/production`
+   follows in Wave 11. Registration probes the endpoint with the observer
    role, checks the database does not carry an ExponetDB installation marker
    (not the Control Store, not another installation). The `target.register`
    operation then creates the `exponetdb` schema (owned by
@@ -191,13 +218,13 @@ databases, as external clusters) and Wave 11 (on `reos-db-01`).
   unknown clients wait for admin approval
   ([OD-5](../00-product/open-decisions.md#od-5-mcp-client-registration-policy), resolved);
   a CIMD client is added by an admin with its exact `client_id` URL on the
-  Web App page **Clients** (`/admin/clients`) and approved by its metadata
+  Web App page **Access → OAuth clients** (`/access/oauth-clients`; the old `/admin/clients` redirects) and approved by its metadata
   fingerprint.
   In Wave 3B no MCP server answers at `/mcp` yet (Wave 7); its protected
   resource metadata is published so clients can discover the authorization
   server.
 - Service accounts for CI (`private_key_jwt`) are created by an admin on the
-  Web App page **Service accounts** (`/admin/service-accounts`): no role and no credential at first; an
+  Web App page **Access → Service accounts** (`/access/service-accounts`; the old `/admin/service-accounts` redirects): no role and no credential at first; an
   admin registers the public keys, grants scopes (non-production preselected)
   and assigns a role through the access plans.
 

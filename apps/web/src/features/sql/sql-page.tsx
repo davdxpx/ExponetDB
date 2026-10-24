@@ -1,8 +1,17 @@
 import type { SavedQuery } from '@exponetdb/sdk/operations'
-import { Button, KeyboardShortcut } from '@exponetdb/ui'
+import {
+  Button,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@exponetdb/ui'
 import type { EditorHandle, SqlDiagnostic } from '@exponetdb/ui-data'
 import {
   Admonition,
+  formatCount,
   LoadingState,
   MarkedCode,
   TierChip,
@@ -17,6 +26,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -26,6 +36,13 @@ import { ApiError } from '../../lib/api/errors.ts'
 import { withReauth } from '../../lib/api/reauth.ts'
 import { describeError, t } from '../../lib/i18n/i18n.ts'
 import { useMe } from '../../lib/session/guard.tsx'
+import {
+  isRowLimit,
+  loadRowLimit,
+  ROW_LIMITS,
+  type RowLimit,
+  saveRowLimit,
+} from '../../lib/storage/sql-prefs.ts'
 import { actionError } from '../plans/failure.ts'
 import type { TargetRoute } from '../target/params.ts'
 import { nounPhrase } from '../target/phrases.ts'
@@ -42,13 +59,17 @@ import {
   WriteExplanation,
 } from './results-panel.tsx'
 import { SaveDialog, type SaveInput } from './save-dialog.tsx'
+import { RenameDialog, type SavedChange, SavedMenu, useSavedChanges } from './saved-menu.tsx'
+import { ShortcutHint, useAriaKeyShortcuts } from './shortcut-hint.tsx'
 import { SidePanel } from './side-panel.tsx'
 import {
   activeTab,
   addTab,
+  applySavedChange,
   CLASSIFY_MAX_BYTES,
   classificationDiagnostics,
   closeTab,
+  copyName,
   hiddenCharacterCount,
   LINK_MAX_CHARS,
   lineCount,
@@ -58,14 +79,18 @@ import {
   parseSqlLink,
   postgresMajorOf,
   queryVerdict,
+  type RunScope,
   type SavedRef,
   type SqlMode,
   type SqlTab,
+  sqlstateOf,
+  statementAtCursor,
   type TabsState,
   updateTab,
   utf8Bytes,
 } from './sql-model.ts'
 import { loadTabs, saveTabs } from './tab-storage.ts'
+import type { SqlTemplate } from './templates.ts'
 
 /**
  * The SQL section of a target (information-architecture.md §4, order §8 "SQL",
@@ -81,8 +106,14 @@ import { loadTabs, saveTabs } from './tab-storage.ts'
  *   "Create migration" builds a bundle draft whose plan is reviewed on the
  *   plan page. Nothing is applied here.
  *
- * Text from a link (`?sql=`), the history or a saved query opens in a new tab
- * and is never run on opening.
+ * Run sends the selected text when there is a selection; otherwise, when the
+ * server classifies the text into several statements, the statement under the
+ * cursor (and the result says which); otherwise all of the text. It asks for
+ * at most the row limit the person chose. The server still takes exactly one
+ * read-only statement.
+ *
+ * Text from a link (`?sql=`), the history, a saved query or a template opens in
+ * a new tab and is never run on opening.
  */
 const SqlEditor = lazy(async () => {
   const module = await import('@exponetdb/ui-data/editor/sql-editor')
@@ -98,6 +129,7 @@ type LinkNote = { readonly kind: 'too_long'; readonly length: number } | undefin
 
 type SaveNote =
   | { readonly tabId: string; readonly kind: 'saved' }
+  | { readonly tabId: string; readonly kind: 'changed'; readonly text: string }
   | { readonly tabId: string; readonly kind: 'conflict' }
   | { readonly tabId: string; readonly kind: 'failed'; readonly message: string }
   | undefined
@@ -170,10 +202,19 @@ export function SqlBody(props: {
   const [runs, setRuns] = useState<ReadonlyMap<string, RunState>>(() => new Map())
   const [draftOpen, setDraftOpen] = useState<string | undefined>(undefined)
   const [saveOpen, setSaveOpen] = useState(false)
+  // "Save query" saves the tab's own query; "copy" saves its text as a new one.
+  const [saveMode, setSaveMode] = useState<'save' | 'copy'>('save')
+  const [renameOpen, setRenameOpen] = useState(false)
   const [saveNote, setSaveNote] = useState<SaveNote>(undefined)
   const [analyze, setAnalyze] = useState(false)
+  const [rowLimit, setRowLimit] = useState<RowLimit>(loadRowLimit)
+  const [hasSelection, setHasSelection] = useState(false)
+  const rowLimitId = useId()
+  const runKeys = useAriaKeyShortcuts('sql.run')
+  const saveKeys = useAriaKeyShortcuts('sql.save')
   const editorRef = useRef<EditorHandle>(null)
   const inFlight = useRef(new Set<string>())
+  const savedChanges = useSavedChanges(route.path)
 
   useEffect(() => saveTabs(identityId, target.id, tabs), [identityId, target.id, tabs])
 
@@ -264,11 +305,27 @@ export function SqlBody(props: {
   const startRun = async (what: RunWhat): Promise<void> => {
     if (tab.mode !== 'query' || run.kind === 'running' || inFlight.current.has(tab.id)) return
     const selected = editorRef.current?.getSelectionText() ?? ''
-    const text = normalizeBreaks(selected.trim().length > 0 ? selected : tab.sql)
+    const cursor = editorRef.current?.getCursorOffset() ?? 0
+    const maxRows = rowLimit
+    let scope: RunScope = selected.trim().length > 0 ? { kind: 'selection' } : { kind: 'all' }
+    let text = normalizeBreaks(scope.kind === 'selection' ? selected : tab.sql)
     if (text.trim().length === 0) return
     const tabId = tab.id
     inFlight.current.add(tabId)
     try {
+      // No selection and several statements: the statement under the cursor, by the server's offsets.
+      if (scope.kind === 'all' && classifiable(text)) {
+        try {
+          const whole = await queryClient.fetchQuery(classifyQuery(client, major, text))
+          const pick = statementAtCursor(text, whole, cursor)
+          if (pick !== undefined) {
+            text = pick.text
+            scope = pick.scope
+          }
+        } catch {
+          // Not classified: all of the text is sent and the data-read endpoint decides.
+        }
+      }
       // The server's classification of exactly this text: a write is held back, not sent as a read.
       if (classifiable(text)) {
         try {
@@ -276,7 +333,7 @@ export function SqlBody(props: {
             await queryClient.fetchQuery(classifyQuery(client, major, text)),
           )
           if (verdict.kind === 'write') {
-            setRun(tabId, { kind: 'blocked', classes: verdict.classes })
+            setRun(tabId, { kind: 'blocked', classes: verdict.classes, scope })
             return
           }
         } catch {
@@ -284,31 +341,34 @@ export function SqlBody(props: {
         }
       }
       const queryId = `qry_${newUlid()}`
-      setRun(tabId, { kind: 'running', what, queryId, cancel: NO_CANCEL })
+      setRun(tabId, { kind: 'running', what, queryId, cancel: NO_CANCEL, scope })
       const receivedAt = () => new Date().toISOString()
       try {
         if (what === 'query') {
           const result = await client.operation('runQuery', {
             params: { target: route.path },
-            body: { sql: text, queryId },
+            body: { sql: text, queryId, maxRows },
           })
-          setRun(tabId, { kind: 'result', result, receivedAt: receivedAt() })
+          setRun(tabId, { kind: 'result', result, receivedAt: receivedAt(), maxRows, scope })
         } else {
           const result = await client.operation('explainQuery', {
             params: { target: route.path },
             body: { sql: text, queryId, ...(analyze ? { analyze: true } : {}) },
           })
-          setRun(tabId, { kind: 'explain', result, receivedAt: receivedAt() })
+          setRun(tabId, { kind: 'explain', result, receivedAt: receivedAt(), scope })
         }
         void queryClient.invalidateQueries({ queryKey: sqlKeys.history(route.path) })
       } catch (error) {
         const failure = actionError(error)
+        const sqlstate = sqlstateOf(failure.code, failure.details)
         setRun(tabId, (previous) => ({
           kind: 'failed',
           what,
           queryId,
           failure: { code: failure.code, message: failure.message },
+          ...(sqlstate === undefined ? {} : { sqlstate }),
           cancel: previous.kind === 'running' ? previous.cancel : NO_CANCEL,
+          scope,
         }))
         void queryClient.invalidateQueries({ queryKey: sqlKeys.history(route.path) })
       }
@@ -316,6 +376,17 @@ export function SqlBody(props: {
       inFlight.current.delete(tabId)
     }
   }
+
+  const changeRowLimit = (value: string) => {
+    const next = Number(value)
+    if (!isRowLimit(next)) return
+    setRowLimit(next)
+    saveRowLimit(next)
+  }
+
+  // A new tab starts without a selection (its editor is a new one).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the tab id is the trigger
+  useEffect(() => setHasSelection(false), [tab.id])
 
   const patchCancel =
     (queryId: string, cancel: CancelState) =>
@@ -404,10 +475,47 @@ export function SqlBody(props: {
     }
   }
 
+  const openSaveDialog = (mode: 'save' | 'copy') => {
+    setSaveMode(mode)
+    setSaveOpen(true)
+  }
+
   const save = () => {
     if (tab.sql.trim().length === 0) return
     if (tab.saved?.owned === true) void updateSaved(tab.saved)
-    else setSaveOpen(true)
+    else openSaveDialog('save')
+  }
+
+  // Rename and visibility of the saved query of the tab: made against the stored version, so the
+  // tab's unsaved text is never saved by them; the tabs holding the same query follow.
+  const tabChanged = (tabId: string, change: SavedChange, text: string) => {
+    setTabs((current) => applySavedChange(current, change.before, change.after))
+    setSaveNote({ tabId, kind: 'changed', text })
+  }
+
+  const renameSaved = async (saved: SavedRef, name: string): Promise<void> => {
+    const change = await savedChanges.rename(saved.id, name)
+    tabChanged(tab.id, change, t('sql.saved.renamed', { revision: change.after.revision }))
+  }
+
+  const changeVisibility = async (
+    saved: SavedRef,
+    visibility: SavedRef['visibility'],
+  ): Promise<void> => {
+    if (visibility === saved.visibility) return
+    const tabId = tab.id
+    try {
+      const change = await savedChanges.setVisibility(saved.id, visibility)
+      tabChanged(
+        tabId,
+        change,
+        change.after.visibility === 'personal'
+          ? t('sql.saved.nowPersonal', { revision: change.after.revision })
+          : t('sql.saved.nowShared', { revision: change.after.revision }),
+      )
+    } catch (error) {
+      setSaveNote({ tabId, kind: 'failed', message: describeError(error) })
+    }
   }
 
   const openStoredVersion = async (saved: SavedRef): Promise<void> => {
@@ -436,9 +544,16 @@ export function SqlBody(props: {
     >
       <SidePanel
         path={route.path}
+        projectId={target.projectId}
         onOpenText={(sql, origin) => openTab(newTab('query', normalizeBreaks(sql), origin))}
         onOpenSaved={(saved) =>
           openTab(newTab('query', normalizeBreaks(saved.sql), 'saved', savedRefOf(saved)))
+        }
+        onOpenTemplate={(template: SqlTemplate) =>
+          openTab(newTab(template.mode, normalizeBreaks(template.sql), 'template'))
+        }
+        onSavedChanged={(change) =>
+          setTabs((current) => applySavedChange(current, change.before, change.after))
         }
       />
       <div className="flex min-w-0 flex-col gap-4">
@@ -464,6 +579,9 @@ export function SqlBody(props: {
             setTabs((current) => closeTab(current, id, current.tabs[0]?.mode ?? 'query'))
           }
           onNew={() => openTab(newTab(tab.mode))}
+          onRename={() => setRenameOpen(true)}
+          onVisibility={(saved, visibility) => void changeVisibility(saved, visibility)}
+          onCopy={() => openSaveDialog('copy')}
         />
         <div className="flex flex-wrap items-center gap-2" data-block="sql-toolbar">
           <fieldset className="flex items-center gap-1 rounded-md border border-default p-0.5">
@@ -478,9 +596,10 @@ export function SqlBody(props: {
                 size="tiny"
                 onClick={() => void startRun('query')}
                 disabled={run.kind === 'running'}
-                iconRight={<KeyboardShortcut keys={['Meta', 'Enter']} variant="inline" />}
+                iconRight={<ShortcutHint shortcut="sql.run" />}
+                aria-keyshortcuts={runKeys}
               >
-                {t('sql.run.run')}
+                {hasSelection ? t('sql.run.runSelected') : t('sql.run.run')}
               </Button>
               <Button
                 variant="default"
@@ -490,6 +609,23 @@ export function SqlBody(props: {
               >
                 {t('sql.run.explain')}
               </Button>
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor={rowLimitId} className="text-xs">
+                  {t('sql.run.rowLimit')}
+                </Label>
+                <Select value={String(rowLimit)} onValueChange={changeRowLimit}>
+                  <SelectTrigger id={rowLimitId} size="tiny" className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROW_LIMITS.map((limit) => (
+                      <SelectItem key={limit} value={String(limit)}>
+                        {t('sql.run.rowLimitOption', { count: formatCount(limit) })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <label className="flex items-center gap-1.5 text-xs">
                 <input
                   type="checkbox"
@@ -524,11 +660,21 @@ export function SqlBody(props: {
             size="tiny"
             onClick={save}
             disabled={tab.sql.trim().length === 0}
-            iconRight={<KeyboardShortcut keys={['Meta', 's']} variant="inline" />}
+            iconRight={<ShortcutHint shortcut="sql.save" />}
+            aria-keyshortcuts={saveKeys}
           >
             {tab.saved?.owned === true ? t('sql.save.update') : t('sql.save.open')}
           </Button>
         </div>
+        {tab.mode === 'query' &&
+        !hasSelection &&
+        classView.state === 'ready' &&
+        classView.value.status === 'parsed' &&
+        classView.value.statements.length > 1 ? (
+          <p className="text-xs text-foreground-lighter" data-multi-statement-hint="true">
+            {t('sql.run.multiHint', { count: classView.value.statements.length })}
+          </p>
+        ) : null}
         {prod ? (
           <p className="flex flex-wrap items-center gap-2 text-sm" data-production-cue="true">
             <TierChip tier="prod" />
@@ -563,6 +709,7 @@ export function SqlBody(props: {
             diagnostics={diagnostics}
             completion={completion}
             {...(tab.mode === 'query' ? { onRun: () => void startRun('query') } : {})}
+            onSelectionChange={setHasSelection}
             label={tab.mode === 'query' ? t('sql.editor.labelQuery') : t('sql.editor.labelDraft')}
             minLines={10}
             maxLines={28}
@@ -573,7 +720,7 @@ export function SqlBody(props: {
             }
           />
         </Suspense>
-        <p className="text-xs text-foreground-lighter">{t('sql.editor.noFormatter')}</p>
+        <p className="text-xs text-foreground-lighter">{t('sql.editor.hiddenNote')}</p>
         {tab.mode === 'query' ? (
           <>
             {liveVerdict?.kind === 'write' && run.kind !== 'blocked' ? (
@@ -621,7 +768,15 @@ export function SqlBody(props: {
         <SaveDialog
           open={saveOpen}
           onOpenChange={setSaveOpen}
-          initialName={tab.saved?.name ?? ''}
+          variant={saveMode}
+          initialName={
+            saveMode === 'copy' && tab.saved !== undefined
+              ? copyName(tab.saved.name, (name) => t('sql.saved.copyName', { name }))
+              : (tab.saved?.name ?? '')
+          }
+          {...(saveMode === 'copy' && tab.saved !== undefined
+            ? { initialVisibility: tab.saved.visibility }
+            : {})}
           onSave={async (input) => {
             try {
               return await createSaved(input)
@@ -629,6 +784,16 @@ export function SqlBody(props: {
               throw actionError(error)
             }
           }}
+        />
+      ) : null}
+      {renameOpen && tab.saved?.owned === true ? (
+        <RenameDialog
+          open={renameOpen}
+          onOpenChange={setRenameOpen}
+          initialName={tab.saved.name}
+          onRename={(name) =>
+            tab.saved === undefined ? Promise.resolve() : renameSaved(tab.saved, name)
+          }
         />
       ) : null}
     </div>
@@ -687,6 +852,10 @@ function TabStrip(props: {
   readonly onSelect: (id: string) => void
   readonly onClose: (id: string) => void
   readonly onNew: () => void
+  /** The actions of the saved query of the selected tab (its owner only). */
+  readonly onRename: () => void
+  readonly onVisibility: (saved: SavedRef, visibility: SavedRef['visibility']) => void
+  readonly onCopy: () => void
 }): ReactNode {
   return (
     <nav
@@ -718,6 +887,18 @@ function TabStrip(props: {
                 </span>
                 <TabTitle text={tabTitle(tab)} />
               </Button>
+              {selected && tab.saved?.owned === true ? (
+                <SavedMenu
+                  iconOnly
+                  label={t('sql.tabs.savedMenu', { n: index + 1 })}
+                  visibility={tab.saved.visibility}
+                  onRename={props.onRename}
+                  onVisibility={(visibility) => {
+                    if (tab.saved !== undefined) props.onVisibility(tab.saved, visibility)
+                  }}
+                  onCopy={props.onCopy}
+                />
+              ) : null}
               <Button
                 variant="text"
                 size="tiny"
@@ -742,18 +923,18 @@ function OriginNote(props: { readonly tab: SqlTab; readonly onDismiss: () => voi
   const { tab } = props
   const hidden = useMemo(() => hiddenCharacterCount(tab.sql), [tab.sql])
   if (tab.origin === 'new') return null
-  const title =
-    tab.origin === 'link'
-      ? t('sql.link.title')
-      : tab.origin === 'history'
-        ? t('sql.history.openedTitle')
-        : t('sql.saved.openedTitle')
-  const body =
-    tab.origin === 'link'
-      ? t('sql.link.body')
-      : tab.origin === 'history'
-        ? t('sql.history.openedBody')
-        : t('sql.saved.openedBody')
+  const title = {
+    link: t('sql.link.title'),
+    history: t('sql.history.openedTitle'),
+    saved: t('sql.saved.openedTitle'),
+    template: t('sql.template.openedTitle'),
+  }[tab.origin]
+  const body = {
+    link: t('sql.link.body'),
+    history: t('sql.history.openedBody'),
+    saved: t('sql.saved.openedBody'),
+    template: t('sql.template.openedBody'),
+  }[tab.origin]
   return (
     <Admonition
       type={tab.origin === 'link' ? 'warning' : 'default'}
@@ -798,6 +979,12 @@ function SaveNoteView(props: {
       return (
         <p role="status" className="text-sm" data-save-note="saved">
           {t('sql.save.done', { revision: saved?.revision ?? 1 })}
+        </p>
+      )
+    case 'changed':
+      return (
+        <p role="status" className="text-sm" data-save-note="changed">
+          {note.text}
         </p>
       )
     case 'failed':

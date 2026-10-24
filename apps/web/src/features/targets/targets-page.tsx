@@ -1,12 +1,15 @@
-import { Plus, Search } from '@exponetdb/icons'
+import { ChevronDown, LayoutGrid, List, Plus, Search } from '@exponetdb/icons'
 import type { TargetSummary } from '@exponetdb/sdk/operations'
 import {
   Button,
   Card,
   CardContent,
   cn,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   Input,
-  inputVariants,
   Table,
   TableBody,
   TableCaption,
@@ -30,13 +33,24 @@ import {
   useLinkComponent,
 } from '@exponetdb/ui-patterns'
 import { useQuery } from '@tanstack/react-query'
-import { type ChangeEvent, type ReactNode, useId } from 'react'
+import { type ChangeEvent, type ReactNode, useId, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { type MessageKey, t } from '../../lib/i18n/i18n.ts'
+import { readTargetsPreferences, writeTargetsPreferences } from '../../lib/preferences/targets.ts'
 import { toReadable } from '../../lib/query/readable.ts'
+import { TOOLBAR_CONTROL, ToolbarField } from '../../lib/ui/toolbar.tsx'
 import { HEALTH_STATES, HealthCell } from '../fleet/health.tsx'
-import { TARGET_MAX_PAGES, TARGET_PAGE_LIMIT, targetListQuery } from './keys.ts'
+import { copyText } from './copy.tsx'
 import {
+  productsQuery,
+  projectsQuery,
+  TARGET_MAX_PAGES,
+  TARGET_PAGE_LIMIT,
+  targetListQuery,
+} from './keys.ts'
+import {
+  type Defaults,
+  defaultsOf,
   filterTargets,
   type HealthFilter,
   isFiltered,
@@ -45,35 +59,62 @@ import {
   type Sort,
   STATE_FILTERS,
   type StateFilter,
+  shownSort,
+  shownView,
   sortTargets,
   type TargetsSearch,
   TIERS,
   type TierFilter,
   targetHrefOf,
   targetPathParts,
-  type View,
   withSearch,
 } from './model.ts'
+import { phrase } from './phrase.ts'
 
 export const REGISTER_PATH = '/targets/register'
 
-const SELECT = (extra?: string): string => cn(inputVariants({ size: 'small' }), 'w-auto', extra)
-
 /**
  * All targets (`/targets`, labelled "Databases"): search, filters and sort
- * kept in the URL (the parent validates them), a table and a grid. The list
- * read follows the cursor to a bound and says so when more exist. The health
- * of a row is the one the list carries with its source and age; the page
- * makes no request per row. A failed read is an error, never an empty list;
- * "no result" is said only about a list that was read.
+ * kept in the URL (the parent validates them), a table and a grid. The
+ * product and project filters are sent to the server, which lists only those
+ * targets; the other filters apply to the targets read. The sort and the view
+ * a person chose are remembered by this browser and apply when the address
+ * says nothing (the address always wins). The list read follows the cursor to
+ * a bound and says so when more exist. The health of a row is the one the list
+ * carries with its source and age; the page makes no request per row. A failed
+ * read is an error, never an empty list; "no result" is said only about a
+ * list that was read.
  */
 export function TargetsPage(props: {
   readonly search: TargetsSearch
   readonly onSearch: (next: TargetsSearch) => void
 }): ReactNode {
   const { client } = useApi()
-  const list = useQuery(targetListQuery(client))
+  const { search, onSearch } = props
+  const list = useQuery(
+    targetListQuery(client, { product: search.product, project: search.project }),
+  )
   const Link = useLinkComponent()
+  const serverFiltered = search.product !== undefined || search.project !== undefined
+  // What this browser remembered when the page opened, and after each choice.
+  const [defaults, setDefaults] = useState<Defaults>(() => defaultsOf(readTargetsPreferences()))
+  // A choice of sort or view is remembered; the address then names it only when it differs
+  // from what the browser now holds (read back, so a refused write is still named).
+  const change = (next: Partial<TargetsSearch>): void => {
+    let kept = defaults
+    if ('sort' in next || 'view' in next) {
+      kept = defaultsOf(
+        writeTargetsPreferences({
+          ...('sort' in next ? { sort: next.sort } : {}),
+          ...('view' in next ? { view: next.view } : {}),
+        }),
+      )
+      setDefaults(kept)
+    }
+    onSearch(withSearch(search, next, kept))
+  }
+  const sort = shownSort(search, defaults)
+  const view = shownView(search, defaults)
   return (
     <>
       <PageHeader size="large">
@@ -91,6 +132,9 @@ export function TargetsPage(props: {
       </PageHeader>
       <PageContainer size="large" className="flex flex-col gap-4 py-6">
         <InfrastructureEntries />
+        {/* The toolbar stays while the list is read again (a new product filter reads again), so
+            the control that was just used keeps keyboard focus. */}
+        <Toolbar search={search} sort={sort} view={view} change={change} />
         <ReadableView
           readable={toReadable(list, {
             missing: (value) =>
@@ -104,7 +148,8 @@ export function TargetsPage(props: {
           busy={list.isFetching}
           headingLevel={2}
           empty={{
-            isEmpty: (value) => value.items.length === 0,
+            // A list the server filtered by product or project is "no match", not "nothing registered".
+            isEmpty: (value) => value.items.length === 0 && !serverFiltered,
             content: (
               <EmptyState
                 title={t('targets.empty.title')}
@@ -118,7 +163,14 @@ export function TargetsPage(props: {
             ),
           }}
           ready={(value) => (
-            <TargetsView targets={value.items} search={props.search} onSearch={props.onSearch} />
+            <TargetsView
+              targets={value.items}
+              search={search}
+              sort={sort}
+              view={view}
+              change={change}
+              serverFiltered={serverFiltered}
+            />
           )}
         />
       </PageContainer>
@@ -127,14 +179,13 @@ export function TargetsPage(props: {
 }
 
 /**
- * The entry points for servers, clusters and node enrollment. Their forms
- * belong to the infrastructure screens; until those exist this page names
- * where they are and links to them.
+ * The entry points for servers, clusters and node enrollment: their forms are
+ * on the infrastructure pages (a plan each), so this page links to them.
  */
 function InfrastructureEntries(): ReactNode {
   const Link = useLinkComponent()
   return (
-    <nav aria-label={t('targets.entry.title')} className="flex flex-col gap-1 text-sm">
+    <nav aria-label={t('targets.entry.title')} className="text-sm">
       <ul className="flex flex-wrap items-center gap-x-4 gap-y-1">
         <li>
           <Link href="/infrastructure/servers" className="underline focus-ring">
@@ -152,7 +203,6 @@ function InfrastructureEntries(): ReactNode {
           </Link>
         </li>
       </ul>
-      <p className="text-xs text-foreground-light">{t('targets.entry.infrastructure')}</p>
     </nav>
   )
 }
@@ -184,14 +234,15 @@ const HEALTH_LABEL: Readonly<Record<string, MessageKey>> = {
 function TargetsView(props: {
   readonly targets: readonly TargetSummary[]
   readonly search: TargetsSearch
-  readonly onSearch: (next: TargetsSearch) => void
+  readonly sort: Sort
+  readonly view: 'table' | 'grid'
+  readonly change: (next: Partial<TargetsSearch>) => void
+  readonly serverFiltered: boolean
 }): ReactNode {
-  const { search, onSearch } = props
-  const shown = sortTargets(filterTargets(props.targets, search), search.sort)
-  const view: View = search.view ?? 'table'
+  const { search, change, view } = props
+  const shown = sortTargets(filterTargets(props.targets, search), props.sort)
   return (
     <div className="flex flex-col gap-4">
-      <Toolbar search={search} onSearch={onSearch} />
       <p className="text-xs text-foreground-light">{t('targets.healthNote')}</p>
       <p role="status" className="text-sm text-foreground-light">
         {t('targets.count', { shown: shown.length, total: props.targets.length })}
@@ -199,7 +250,11 @@ function TargetsView(props: {
       {shown.length === 0 ? (
         <EmptyState
           title={t('targets.noResults.title')}
-          description={t('targets.noResults.body', { total: props.targets.length })}
+          description={
+            props.targets.length === 0 && props.serverFiltered
+              ? t('targets.noResults.filtered')
+              : t('targets.noResults.body', { total: props.targets.length })
+          }
           headingLevel={2}
         >
           {isFiltered(search) ? (
@@ -208,14 +263,14 @@ function TargetsView(props: {
               size="small"
               variant="outline"
               onClick={() =>
-                onSearch(
-                  withSearch(search, {
-                    q: undefined,
-                    tier: undefined,
-                    state: undefined,
-                    health: undefined,
-                  }),
-                )
+                change({
+                  product: undefined,
+                  project: undefined,
+                  q: undefined,
+                  tier: undefined,
+                  state: undefined,
+                  health: undefined,
+                })
               }
             >
               {t('targets.filter.clear')}
@@ -233,40 +288,41 @@ function TargetsView(props: {
 
 function Toolbar(props: {
   readonly search: TargetsSearch
-  readonly onSearch: (next: TargetsSearch) => void
+  readonly sort: Sort
+  readonly view: 'table' | 'grid'
+  readonly change: (next: Partial<TargetsSearch>) => void
 }): ReactNode {
-  const { search, onSearch } = props
+  const { search, change } = props
   const ids = useId()
-  const change = (next: Partial<TargetsSearch>) => onSearch(withSearch(search, next))
   return (
-    <search className="flex flex-wrap items-end gap-3">
-      <div className="flex min-w-60 flex-1 flex-col gap-1">
-        <label htmlFor={`${ids}-q`} className="text-xs text-foreground-light">
+    <search className="flex flex-wrap items-start gap-2">
+      <div className="relative w-full sm:w-64">
+        <label htmlFor={`${ids}-q`} className="sr-only">
           {t('targets.search.label')}
         </label>
-        <div className="relative">
-          <Search
-            aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2 text-foreground-light"
-          />
-          <Input
-            id={`${ids}-q`}
-            type="search"
-            className="pl-8"
-            value={search.q ?? ''}
-            maxLength={SEARCH_MAX_LENGTH}
-            placeholder={t('targets.search.placeholder')}
-            autoComplete="off"
-            onChange={(event: ChangeEvent<HTMLInputElement>) =>
-              change({ q: event.target.value === '' ? undefined : event.target.value })
-            }
-          />
-        </div>
+        <Search
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-foreground-lighter"
+        />
+        <Input
+          id={`${ids}-q`}
+          type="search"
+          size="tiny"
+          className="pl-7"
+          value={search.q ?? ''}
+          maxLength={SEARCH_MAX_LENGTH}
+          placeholder={t('targets.search.placeholder')}
+          autoComplete="off"
+          onChange={(event: ChangeEvent<HTMLInputElement>) =>
+            change({ q: event.target.value === '' ? undefined : event.target.value })
+          }
+        />
       </div>
-      <Field id={`${ids}-tier`} label={t('targets.filter.tier')}>
+      <RegistryFilters search={search} change={change} />
+      <ToolbarField id={`${ids}-tier`} label={t('targets.filter.tier')}>
         <select
           id={`${ids}-tier`}
-          className={SELECT()}
+          className={TOOLBAR_CONTROL}
           value={search.tier ?? ''}
           onChange={(event) =>
             change({
@@ -278,11 +334,11 @@ function Toolbar(props: {
           <option value="prod">{t('targets.filter.tier.prod')}</option>
           <option value="nonprod">{t('targets.filter.tier.nonprod')}</option>
         </select>
-      </Field>
-      <Field id={`${ids}-state`} label={t('targets.filter.state')}>
+      </ToolbarField>
+      <ToolbarField id={`${ids}-state`} label={t('targets.filter.state')}>
         <select
           id={`${ids}-state`}
-          className={SELECT()}
+          className={TOOLBAR_CONTROL}
           value={search.state ?? ''}
           onChange={(event) =>
             change({ state: STATE_FILTERS.find((state) => state === event.target.value) })
@@ -295,11 +351,11 @@ function Toolbar(props: {
             </option>
           ))}
         </select>
-      </Field>
-      <Field id={`${ids}-health`} label={t('targets.filter.health')}>
+      </ToolbarField>
+      <ToolbarField id={`${ids}-health`} label={t('targets.filter.health')}>
         <select
           id={`${ids}-health`}
-          className={SELECT()}
+          className={TOOLBAR_CONTROL}
           value={search.health ?? ''}
           onChange={(event) => {
             const value = [...HEALTH_STATES, 'none' as const].find((h) => h === event.target.value)
@@ -313,13 +369,16 @@ function Toolbar(props: {
             </option>
           ))}
         </select>
-      </Field>
-      <Field id={`${ids}-sort`} label={t('targets.sort.label')}>
+      </ToolbarField>
+      <ToolbarField id={`${ids}-sort`} label={t('targets.sort.label')}>
         <select
           id={`${ids}-sort`}
-          className={SELECT()}
-          value={search.sort ?? 'path'}
-          onChange={(event) => change({ sort: SORTS.find((sort) => sort === event.target.value) })}
+          className={TOOLBAR_CONTROL}
+          value={props.sort}
+          onChange={(event) => {
+            const sort = SORTS.find((candidate) => candidate === event.target.value)
+            if (sort !== undefined) change({ sort })
+          }}
         >
           {SORTS.map((sort) => (
             <option key={sort} value={sort}>
@@ -327,37 +386,212 @@ function Toolbar(props: {
             </option>
           ))}
         </select>
-      </Field>
-      <fieldset className="m-0 flex min-w-0 gap-1 border-0 p-0">
+      </ToolbarField>
+      <fieldset className="m-0 ml-auto flex min-w-0 border-0 p-0">
         <legend className="sr-only">{t('targets.view.label')}</legend>
-        {(['table', 'grid'] as const).map((view) => (
-          <Button
-            key={view}
-            type="button"
-            size="small"
-            variant={(search.view ?? 'table') === view ? 'default' : 'outline'}
-            aria-pressed={(search.view ?? 'table') === view}
-            onClick={() => change({ view })}
-          >
-            {t(view === 'table' ? 'targets.view.table' : 'targets.view.grid')}
-          </Button>
-        ))}
+        {(['table', 'grid'] as const).map((view) => {
+          const Icon = view === 'table' ? List : LayoutGrid
+          const label = t(view === 'table' ? 'targets.view.table' : 'targets.view.grid')
+          return (
+            <Button
+              key={view}
+              type="button"
+              size="tiny"
+              variant={props.view === view ? 'default' : 'outline'}
+              aria-pressed={props.view === view}
+              aria-label={label}
+              onClick={() => change({ view })}
+              className={cn(
+                'px-1.5',
+                view === 'table' ? 'rounded-r-none' : '-ml-px rounded-l-none',
+                props.view === view ? 'bg-background-selection' : 'text-foreground-lighter',
+              )}
+              icon={<Icon aria-hidden="true" strokeWidth={1.5} />}
+            />
+          )
+        })}
       </fieldset>
     </search>
   )
 }
 
-function Field(props: {
+/**
+ * The product and project filters: the choices come from the registry reads,
+ * each read shown for what it is (loading, failed with its code and a retry,
+ * an earlier read, a list cut off, nothing registered after a successful read).
+ * A product or project the address names that the read does not list is still
+ * shown, marked as not in the list, so the filter never lies about the address.
+ */
+function RegistryFilters(props: {
+  readonly search: TargetsSearch
+  readonly change: (next: Partial<TargetsSearch>) => void
+}): ReactNode {
+  const { client } = useApi()
+  const { search, change } = props
+  const ids = useId()
+  const products = useQuery(productsQuery(client))
+  const projects = useQuery(projectsQuery(client))
+  const productRead = toReadable(products, {
+    missing: (value) =>
+      value.more
+        ? [t('targets.filter.more', { what: phrase('targets.filter.product.plural') })]
+        : undefined,
+  })
+  const projectRead = toReadable(projects, {
+    missing: (value) =>
+      value.more
+        ? [t('targets.filter.more', { what: phrase('targets.filter.project.plural') })]
+        : undefined,
+  })
+  const productOptions =
+    productRead.state === 'loading' || productRead.state === 'failed'
+      ? []
+      : productRead.value.items.map((product) => product.slug)
+  // A project belongs to the product its path starts with (`product/project`).
+  const projectOptions =
+    search.product === undefined ||
+    projectRead.state === 'loading' ||
+    projectRead.state === 'failed'
+      ? []
+      : projectRead.value.items.flatMap((project) => {
+          const [product, slug] = project.path.split('/')
+          return product === search.product && slug !== undefined ? [slug] : []
+        })
+  return (
+    <>
+      <RegistryFilter
+        id={`${ids}-product`}
+        label={t('targets.filter.product')}
+        allLabel={t('targets.filter.product.all')}
+        what="products"
+        value={search.product}
+        options={productOptions}
+        readable={productRead}
+        busy={products.isFetching}
+        onRetry={() => void products.refetch()}
+        onChange={(product) => change({ product })}
+      />
+      <RegistryFilter
+        id={`${ids}-project`}
+        label={t('targets.filter.project')}
+        allLabel={
+          search.product === undefined
+            ? t('targets.filter.project.choose')
+            : t('targets.filter.project.all')
+        }
+        what="projects"
+        value={search.project}
+        options={projectOptions}
+        readable={projectRead}
+        busy={projects.isFetching}
+        disabled={search.product === undefined}
+        onRetry={() => void projects.refetch()}
+        onChange={(project) => change({ project })}
+      />
+    </>
+  )
+}
+
+function RegistryFilter(props: {
   readonly id: string
   readonly label: string
-  readonly children: ReactNode
+  readonly allLabel: string
+  readonly what: 'products' | 'projects'
+  readonly value: string | undefined
+  readonly options: readonly string[]
+  readonly readable: ReturnType<typeof toReadable>
+  readonly busy: boolean
+  readonly disabled?: boolean
+  readonly onRetry: () => void
+  readonly onChange: (value: string | undefined) => void
 }): ReactNode {
+  const { readable } = props
+  const noun = phrase(
+    props.what === 'products' ? 'targets.filter.product.plural' : 'targets.filter.project.plural',
+  )
+  const unread = readable.state === 'loading' || readable.state === 'failed'
+  const listed = props.value !== undefined && props.options.includes(props.value)
+  const noteId = `${props.id}-note`
+  let note: ReactNode = null
+  if (readable.state === 'loading') {
+    note = <span>{t('targets.filter.loading', { what: noun })}</span>
+  } else if (readable.state === 'failed') {
+    note = (
+      <span className="flex flex-wrap items-center gap-1">
+        {t('targets.filter.failed', {
+          what: noun,
+          reason: `${readable.error.message} (${readable.error.code})`,
+        })}
+        <Button
+          type="button"
+          variant="text"
+          size="tiny"
+          loading={props.busy}
+          onClick={props.onRetry}
+        >
+          {t('state.retry')}
+        </Button>
+      </span>
+    )
+  } else if (readable.state === 'stale') {
+    note = (
+      <span className="flex flex-wrap items-center gap-1">
+        {t('targets.filter.stale', { what: noun })}
+        <Button
+          type="button"
+          variant="text"
+          size="tiny"
+          loading={props.busy}
+          onClick={props.onRetry}
+        >
+          {t('state.refresh')}
+        </Button>
+      </span>
+    )
+  } else if (readable.state === 'partial') {
+    note = <span>{readable.missing.join(' ')}</span>
+  } else if (props.options.length === 0 && props.disabled !== true) {
+    note = (
+      <span>
+        {t(
+          props.what === 'products'
+            ? 'targets.filter.none.products'
+            : 'targets.filter.none.projects',
+        )}
+      </span>
+    )
+  }
   return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={props.id} className="text-xs text-foreground-light">
-        {props.label}
-      </label>
-      {props.children}
+    <div className="flex flex-col gap-1" data-filter={props.what}>
+      <ToolbarField id={props.id} label={props.label}>
+        <select
+          id={props.id}
+          className={TOOLBAR_CONTROL}
+          value={props.value ?? ''}
+          disabled={props.disabled === true || readable.state === 'loading'}
+          aria-describedby={note === null ? undefined : noteId}
+          onChange={(event) =>
+            props.onChange(event.target.value === '' ? undefined : event.target.value)
+          }
+        >
+          <option value="">{props.allLabel}</option>
+          {props.value !== undefined && !listed ? (
+            <option value={props.value}>
+              {unread ? props.value : t('targets.filter.notListed', { slug: props.value })}
+            </option>
+          ) : null}
+          {props.options.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </ToolbarField>
+      {note === null ? null : (
+        <p id={noteId} className="m-0 max-w-60 text-xs text-foreground-light">
+          {note}
+        </p>
+      )}
     </div>
   )
 }
@@ -401,6 +635,33 @@ function PathLink({ target }: { readonly target: TargetSummary }): ReactNode {
   )
 }
 
+/** The per-row menu: copy the path or the id of the target (the text is copied as it is, shown nowhere new). */
+function RowActions({ target }: { readonly target: TargetSummary }): ReactNode {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="text"
+          size="tiny"
+          iconRight={<ChevronDown aria-hidden="true" className="size-3" />}
+          aria-label={t('targets.actions.label', { target: target.path })}
+        >
+          {t('targets.actions')}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => void copyText(t('configuration.copy.path'), target.path)}>
+          {t('targets.actions.copyPath')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void copyText(t('configuration.copy.id'), target.id)}>
+          {t('targets.actions.copyId')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 const STATE_TEXT: Readonly<Record<string, MessageKey>> = {
   registered: 'targets.state.registered',
   active: 'targets.state.active',
@@ -423,6 +684,9 @@ function TargetTable({ targets }: { readonly targets: readonly TargetSummary[] }
           <TableHead scope="col">{t('targets.column.tier')}</TableHead>
           <TableHead scope="col">{t('targets.column.state')}</TableHead>
           <TableHead scope="col">{t('targets.column.health')}</TableHead>
+          <TableHead scope="col">
+            <span className="sr-only">{t('targets.actions')}</span>
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -437,6 +701,9 @@ function TargetTable({ targets }: { readonly targets: readonly TargetSummary[] }
             <TableCell>{stateText(target.state)}</TableCell>
             <TableCell>
               <HealthCell health={target.health} />
+            </TableCell>
+            <TableCell>
+              <RowActions target={target} />
             </TableCell>
           </TableRow>
         ))}
@@ -458,6 +725,7 @@ function TargetGrid({ targets }: { readonly targets: readonly TargetSummary[] })
                 <span className="text-xs text-foreground-light">{stateText(target.state)}</span>
               </div>
               <HealthCell health={target.health} />
+              <RowActions target={target} />
             </CardContent>
           </Card>
         </li>

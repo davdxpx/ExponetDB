@@ -4,7 +4,13 @@ import userEvent from '@testing-library/user-event'
 import type { ComponentProps } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { type ApprovalBinding, ApprovalsBlock } from '../../src/plan/approvals-block.tsx'
+import {
+  AgentProposedNote,
+  type ApprovalBinding,
+  ApprovalDecisionList,
+  ApprovalsBlock,
+  SelfApprovalAcknowledgement,
+} from '../../src/plan/approvals-block.tsx'
 import { axeViolations } from '../support/axe.ts'
 import { HASH, OPERATION_ID, OTHER_HASH, PLAN_ID, RLO, renderPlan } from './support.tsx'
 
@@ -188,5 +194,45 @@ describe('ApprovalsBlock', () => {
     expect(
       screen.getByText('The plan hash is not known, so no decision is offered.'),
     ).toBeInTheDocument()
+  })
+})
+
+describe('the parts of the approvals block', () => {
+  it('holds the self-approval acknowledgement where the page keeps it', async () => {
+    const user = userEvent.setup()
+    const onCheckedChange = vi.fn()
+    const { rerender } = renderPlan(
+      <SelfApprovalAcknowledgement checked={false} onCheckedChange={onCheckedChange} />,
+    )
+    const box = screen.getByRole('checkbox', { name: /This is my own plan/ })
+    expect(box).not.toBeChecked()
+    await user.click(box)
+    expect(onCheckedChange).toHaveBeenCalledWith(true)
+    rerender(<SelfApprovalAcknowledgement checked onCheckedChange={onCheckedChange} />)
+    expect(screen.getByRole('checkbox', { name: /This is my own plan/ })).toBeChecked()
+  })
+
+  it('notes an agent-made plan and lists the decisions so far', () => {
+    renderPlan(
+      <>
+        <AgentProposedNote id={`agent-note-${OPERATION_ID}`} />
+        <ApprovalDecisionList
+          approvals={[
+            {
+              id: 'apr_1',
+              approverIdentityId: 'idn_01JABCDEFGHJKMNPQRSTVWXYZ0',
+              decision: 'approved',
+              selfApproval: true,
+              decidedAt: '2026-10-13T14:05:00.000Z',
+            },
+          ]}
+          now="2026-10-13T14:10:00.000Z"
+        />
+      </>,
+    )
+    expect(document.getElementById(`agent-note-${OPERATION_ID}`)).toHaveTextContent(
+      'An agent proposed this plan; it cannot approve it.',
+    )
+    expect(screen.getByRole('list', { name: 'Decisions' })).toHaveTextContent('Self-approval')
   })
 })

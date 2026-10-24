@@ -35,9 +35,30 @@ export const infrastructureMessages = {
   'infra.servers.column.location': 'Location',
   'infra.servers.column.facts': 'Reported facts',
   'infra.servers.provider.hetzner_cloud': 'Hetzner Cloud',
-  'infra.servers.provider.hetzner_robot': 'Hetzner Robot',
+  'infra.servers.provider.hetzner_robot': 'Hetzner Dedicated (Robot)',
+  'infra.servers.provider.aws': 'Amazon Web Services (AWS)',
+  'infra.servers.provider.google_cloud': 'Google Cloud',
+  'infra.servers.provider.azure': 'Microsoft Azure',
+  'infra.servers.provider.oracle_cloud': 'Oracle Cloud Infrastructure',
+  'infra.servers.provider.ibm_cloud': 'IBM Cloud',
+  'infra.servers.provider.alibaba_cloud': 'Alibaba Cloud',
+  'infra.servers.provider.digitalocean': 'DigitalOcean',
+  'infra.servers.provider.akamai_linode': 'Akamai Cloud (Linode)',
+  'infra.servers.provider.vultr': 'Vultr',
+  'infra.servers.provider.upcloud': 'UpCloud',
+  'infra.servers.provider.scaleway': 'Scaleway',
+  'infra.servers.provider.exoscale': 'Exoscale',
+  'infra.servers.provider.stackit': 'STACKIT',
+  'infra.servers.provider.ovhcloud': 'OVHcloud',
+  'infra.servers.provider.ionos': 'IONOS',
+  'infra.servers.provider.netcup': 'Netcup',
+  'infra.servers.provider.contabo': 'Contabo',
+  'infra.servers.provider.on_premises': 'On premises (own hardware)',
   'infra.servers.provider.other': 'Other',
   'infra.servers.provider.unknown': 'Not known',
+  'infra.servers.providerGroup.cloud': 'Cloud platforms',
+  'infra.servers.providerGroup.dedicated': 'Dedicated and hosting',
+  'infra.servers.providerGroup.other': 'Own hardware and other',
   'infra.servers.facts.none': 'Nothing reported yet',
   'infra.servers.facts.os': 'Operating system',
   'infra.servers.facts.kernel': 'Kernel',
@@ -106,7 +127,7 @@ export const infrastructureMessages = {
   'infra.clusters.caption': 'Clusters',
   'infra.clusters.empty.title': 'No clusters yet',
   'infra.clusters.empty.description':
-    'Clusters are registered with the CLI or REST API, or discovered by a node agent.',
+    'Register an external cluster below, or let a node agent report the clusters of its server.',
   'infra.clusters.column.mode': 'Management',
   'infra.clusters.column.state': 'State',
   'infra.clusters.column.version': 'PostgreSQL version',
@@ -178,6 +199,113 @@ export const infrastructureMessages = {
   'infra.cluster.credentials.description':
     "Enter the password of one of ExponetDB's own roles on this cluster on the credentials page. It is write-only.",
   'infra.cluster.credentials.link': 'Set the {role} password',
+
+  // Registering a cluster, adding and retiring endpoints, registering a database, rotating a password.
+  'infra.register.title': 'Register an external cluster',
+  'infra.register.description':
+    'An external cluster has no node agent: ExponetDB reaches it over the network with verified TLS. Registering it is a plan. Once the plan is applied the cluster is pending until you run its role bootstrap SQL, submit the role passwords and confirm it.',
+  'infra.register.notPermitted': 'Cluster registration',
+  'infra.register.name': 'Display name',
+  'infra.register.name.invalid': 'Enter 1 to 120 characters without control characters.',
+  'infra.register.ca': 'CA bundle (PEM)',
+  'infra.register.ca.hint':
+    'The CA certificates that signed the server certificate, as PEM. Certificates only: never paste a private key.',
+  'infra.register.ca.required': 'Paste at least one PEM certificate (-----BEGIN CERTIFICATE-----).',
+  'infra.register.ca.key':
+    'This looks like a private key. A CA bundle holds certificates only: remove the key.',
+  'infra.register.ca.long': 'A CA bundle is at most 65,536 characters.',
+  'infra.register.endpoints': 'Endpoints',
+  'infra.register.endpoints.hint':
+    'One to eight addresses ExponetDB and applications reach the cluster on. An endpoint is never edited later: a changed address is a new endpoint.',
+  'infra.register.endpoint.row': 'Endpoint {row}',
+  'infra.register.endpoint.add': 'Add another endpoint',
+  'infra.register.endpoint.remove': 'Remove endpoint {row}',
+  'infra.register.submit': 'Create cluster registration plan',
+  'infra.endpoint.kind': 'Kind',
+  'infra.endpoint.kind.private': 'Direct, private network',
+  'infra.endpoint.kind.public': 'Direct, public',
+  'infra.endpoint.kind.pooler': 'Pooler',
+  'infra.endpoint.kind.local_socket': 'Local socket (the host only)',
+  'infra.endpoint.poolerMode': 'Pooler mode',
+  'infra.endpoint.poolerMode.choose': 'Choose a mode',
+  'infra.endpoint.poolerMode.session': 'Session',
+  'infra.endpoint.poolerMode.transaction': 'Transaction',
+  'infra.endpoint.poolerMode.required': 'Choose the pooler mode.',
+  'infra.endpoint.label': 'Label',
+  'infra.endpoint.label.invalid': 'Enter 1 to 64 characters without control characters.',
+  'infra.endpoint.host': 'Host',
+  'infra.endpoint.host.hint': 'A DNS name or an IP address: never a URL or a connection string.',
+  'infra.endpoint.host.invalid':
+    'Use letters, digits, dots, colons and hyphens, up to 253 characters. A URL is not a host.',
+  'infra.endpoint.port': 'Port',
+  'infra.endpoint.port.invalid': 'Enter a port from 1 to 65535.',
+  'infra.endpoint.tls': 'TLS server name',
+  'infra.endpoint.tls.hint':
+    'The name the server certificate carries. For a DNS host it is the host itself and can stay empty; for an IP address it is required.',
+  'infra.endpoint.tls.required': 'An IP address needs the DNS name its server certificate carries.',
+  'infra.endpoint.tls.invalid':
+    'Use letters, digits, dots and hyphens, starting and ending with a letter or digit.',
+  'infra.endpoint.add.title': 'Add an endpoint',
+  'infra.endpoint.add.description':
+    'An endpoint is never edited: a changed address is a new endpoint, and the old one is retired afterwards. Adding one is a plan.',
+  'infra.endpoint.add.submit': 'Create endpoint plan',
+  'infra.endpoint.add.pending': 'This cluster is retired, so it takes no new endpoint.',
+  'infra.endpoint.manage.notPermitted':
+    'Adding or retiring an endpoint needs the permission registry.manage. Every change is a plan.',
+  'infra.endpoint.actions': 'Actions',
+  'infra.endpoint.retire': 'Retire',
+  'infra.endpoint.retire.label': 'Retire the endpoint {endpoint}',
+  'infra.endpoint.retire.title': 'Create the endpoint retirement plan?',
+  'infra.endpoint.retire.body':
+    'The plan retires this endpoint. Once it is applied, ExponetDB and applications can no longer use this address. The last direct endpoint of a cluster with live targets cannot be retired. Nothing changes until the plan is applied.',
+  'infra.endpoint.retire.action': 'Create retirement plan',
+  'infra.endpoint.retire.legend': 'Confirm each statement',
+  'infra.endpoint.retire.check.use':
+    'Nothing I know of connects through this address any more, or its replacement is added.',
+  'infra.endpoint.retire.check.final':
+    'A retired endpoint is not brought back: a new address is a new endpoint.',
+  'infra.database.register.title': 'Register a database',
+  'infra.database.register.description':
+    'Brings a database that already exists on this cluster under management. Registering it is a plan; ExponetDB reads the database through its observer role.',
+  'infra.database.register.external':
+    'After the plan is applied, run the role bootstrap SQL again: it lists every registered database.',
+  'infra.database.register.name': 'Database name',
+  'infra.database.register.name.hint': 'The name of a database that exists on the cluster.',
+  'infra.database.register.name.invalid': 'Enter 1 to 63 characters without control characters.',
+  'infra.database.register.submit': 'Create database registration plan',
+  'infra.database.register.unconfirmed':
+    'Confirm the cluster first: a database is registered on a confirmed cluster.',
+  'infra.database.register.retired': 'This cluster is retired, so no database is registered on it.',
+  'infra.database.register.notPermitted':
+    'Registering a database needs the permission registry.manage. Every change is a plan.',
+  'infra.bootstrap.title': 'Role bootstrap SQL',
+  'infra.bootstrap.description':
+    "A person runs this once on the external cluster with the provider's administrative tools. It creates ExponetDB's roles and contains no password.",
+  'infra.bootstrap.what': 'Role bootstrap SQL',
+  'infra.bootstrap.notPermitted': 'The role bootstrap SQL',
+  'infra.bootstrap.steps': 'In this order',
+  'infra.bootstrap.step.run': 'Run the script below on the cluster as an administrator.',
+  'infra.bootstrap.step.password':
+    'Set each login password yourself with psql \\password: psql sends a verifier, never the password.',
+  'infra.bootstrap.step.submit':
+    'Enter the same password once on the credentials page. It is write-only.',
+  'infra.bootstrap.step.confirm': 'Confirm the cluster. That pins its system identifier.',
+  'infra.bootstrap.roles': 'Roles it creates',
+  'infra.bootstrap.databases': 'Databases it covers',
+  'infra.bootstrap.databases.none':
+    'No database is registered yet. Register one, then run the script again: it lists every registered database.',
+  'infra.bootstrap.noPassword': 'The script contains no password.',
+  'infra.bootstrap.script': 'Bootstrap SQL script',
+  'infra.bootstrap.copy': 'Bootstrap SQL',
+  'infra.bootstrap.copy.label': 'Copy bootstrap SQL',
+  'infra.bootstrap.check':
+    'Read the script before you run it. Characters that are marked are not what they look like.',
+  'infra.credential.rotate': 'Rotate',
+  'infra.credential.rotate.label': 'Rotate the {role} password',
+  'infra.credential.rotate.title': 'Create the rotation plan?',
+  'infra.credential.rotate.body':
+    'The plan rotates the password of {role} on this cluster: the worker generates a new password, sets its verifier through the node agent and logs in with it. Nobody sees the password. Nothing changes until the plan is applied.',
+  'infra.credential.rotate.action': 'Create rotation plan',
 
   // Roles.
   'infra.roles.title': 'Roles',

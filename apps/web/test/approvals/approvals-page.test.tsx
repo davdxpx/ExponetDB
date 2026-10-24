@@ -94,10 +94,15 @@ describe('the approvals queue', () => {
     world.operations.set(OP, operationFor(OP))
     const { router } = mountApp(`/approvals#operation=${OP}`, world)
     await waitFor(() => expect(router.state.location.pathname).toBe(`/changes/plans/${PLAN}`))
+    // The review page's title says what the plan does.
     expect(
-      await screen.findByRole('heading', { level: 1, name: /Plan review/ }),
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Apply 1 migration to shop/platform/production',
+      }),
     ).toBeInTheDocument()
-    expect(await screen.findByText(`${PLAN}`)).toBeInTheDocument()
+    // The id is on the page (its breadcrumb names it too).
+    expect((await screen.findAllByText(`${PLAN}`)).length).toBeGreaterThan(0)
     // The queue named the plan: the operation itself was not needed for the redirect.
     expect(world.gets(`/api/v1/operations/${OP}`).length).toBeLessThanOrEqual(1)
   })

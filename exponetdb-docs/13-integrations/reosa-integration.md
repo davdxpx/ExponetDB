@@ -45,27 +45,43 @@ admin.reosa.de (REOSA Admin)          REOSA apps (app, auth, worker, …)
 
 ## 3. Wave 10: integration on the current databases
 
-The current databases are Supabase-hosted. Whether ExponetDB manages them before
-the move is [OD-7](../00-product/open-decisions.md#od-7-manage-reosas-current-hosted-databases-before-the-move).
-Recommendation: **yes, read-only first, then migrations on staging**, because
-the legacy import and the evidence chain are worth more done once on the real
-history than twice.
+**[OBSERVED]** (owner's Wave 9 order §6, 2026-10-21) The databases are no
+longer all hosted: REOSA **staging** already runs self-managed on
+`reos-db-01` (`reosa_staging`, PostgreSQL 17.11, no node agent, so an
+**external cluster** for ExponetDB), next to a self-hosted identity service
+whose role owns the `auth` schema; REOSA **production** still runs on the
+hosted provider. [OD-7](../00-product/open-decisions.md#od-7-manage-reosas-current-hosted-databases-before-the-move)
+is resolved by splitting it (2026-10-21): **OD-7a (staging): yes**, the
+owner registers staging and its scratch database after Part A of Wave 9,
+imports the history and lets sessions apply staging migrations through
+ExponetDB; **OD-7b (production): no applies before Wave 11**, at most
+read-only observation. The product capabilities this needs (the import of a
+real Supabase-origin history, per-environment execution roles,
+external-cluster onboarding) are brought forward into Part A of Wave 9; the
+REOSA-side deliverables below stay in Wave 10.
 
 | Step | What | Risk control |
 |---|---|---|
-| 10.1 | Register the hosted clusters as **external clusters** (no agent), with generated SQL for ExponetDB's roles (verifiers only) run by the owner | read-only roles first (`observer`, `reader`); `CAPABILITY_UNAVAILABLE` where hosting forbids grants |
+| 10.1 | Register the clusters as **external clusters** (no agent), with ExponetDB's idempotent bootstrap SQL (no password in it) run by the owner: `reos-db-01` for staging and its scratch database after Part A of Wave 9 (OD-7a, [`../12-operations/onboard-external-cluster.md`](../12-operations/onboard-external-cluster.md)); the hosted production database at most read-only (OD-7b) | read-only roles first (`observer`, `reader`) on production; `CAPABILITY_UNAVAILABLE` where hosting forbids grants |
 | 10.2 | Health, diagnostics, fingerprints, drift findings for staging and production | no writes |
-| 10.3 | **Legacy import** of the platform stream (8 steps in [`../04-migrations/legacy-import.md`](../04-migrations/legacy-import.md)): discover 454+ files and three ledgers, replay, compare by objects, classify, review items for every ambiguity (renamed files, merged entries, missing effects such as `0014`), baseline, verify, freeze | the baseline is a planned `high` operation per target; review items need owner decisions; nothing is re-executed |
+| 10.3 | **Legacy import** of the platform stream on staging (8 steps in [`../04-migrations/legacy-import.md`](../04-migrations/legacy-import.md)): discover about 530 files (2026-10-21) and the legacy ledgers (`supabase_migrations.schema_migrations`, 391 rows; `public.applied_migrations`, 187 rows), replay on the scratch target, compare by objects, classify, review items for every ambiguity (renamed files, merged entries, missing effects such as `0014`), baseline, verify, freeze; done by the owner after Part A of Wave 9 (OD-7a) | the baseline is a planned `high` operation per target; review items need owner decisions; nothing is re-executed |
 | 10.4 | Freeze REOSA's old paths: after the baseline, REOSA's rules route all migrations through ExponetDB; the Supabase MCP `apply_migration` path and `bun db:apply-all` against shared databases are retired (REOSA's decision and change, made in REOSA's repository) | a drift finding fires on any change applied outside ExponetDB |
 | 10.5 | New REOSA migrations as bundles: REOSA's repository gets `exponetdb.project.yaml` with bundle roots (global and per module, read in place); manifests declare compatibility class, which REOSA authors decide; CI runs `exponetdb migration lint` and `exponetdb migration graph` | REOSA's authors keep the classification decision; ExponetDB analysis flags mismatches |
-| 10.6 | Staging-first through ExponetDB: agents plan and apply on `reosa/platform/staging` via MCP with nonprod scopes; production plans reference the same bundles and require the staging evidence and human approval | approvals in the Web App only |
+| 10.6 | Staging-first through ExponetDB: agents plan and apply on `reosa/platform/staging` via MCP with nonprod scopes (from the owner's registration after Part A of Wave 9, OD-7a); production plans reference the same bundles and require the staging evidence and human approval, and are not applied before Wave 11 (OD-7b) | approvals in the Web App only |
 | 10.7 | Runtime schema contract in REOSA's health checks (`exponetdb.missing_migrations`) | replaces fail-soft detection; checked directly against the database |
 | 10.8 | REOSA Admin `/database` via the SDK (§5) | read-only |
 | 10.9 | ExponetDB as source of truth for database infrastructure; REOSA's infrastructure register links to ExponetDB ids instead of keeping its own copy of database facts | avoids a second register |
 
-Roles on hosted databases: whether a new migrator role can become a member of
-the provider-owned object owner is an assumption to verify in 10.1 before any
-migration runs there ([`../03-database-model/credentials-and-roles.md`](../03-database-model/credentials-and-roles.md)).
+Roles on the hosted production database: whether a new migrator role can
+become a member of the provider-owned object owner is an assumption to verify
+before any migration runs there, which is not before Wave 11
+([`../03-database-model/credentials-and-roles.md` §8](../03-database-model/credentials-and-roles.md#8-external-clusters-no-node-agent)).
+Roles on staging: **[OBSERVED]** each environment has its own role set on
+`reos-db-01` (`<env>_owner` with `BYPASSRLS` owning `public`, `<env>_auth`,
+`<env>_app`, `<env>_migrator`); ExponetDB binds the project's `owner` alias
+to `<env>_owner` per environment and needs a declared `BYPASSRLS` exception
+for it (ADR-0034,
+[`../03-database-model/credentials-and-roles.md` §3.3](../03-database-model/credentials-and-roles.md#33-the-reference-installations-role-set)).
 
 ## 4. Wave 11: moving REOSA from Supabase to ExponetDB-managed PostgreSQL
 
@@ -74,11 +90,11 @@ provides the database side and the evidence.
 
 | Step | ExponetDB's part |
 |---|---|
-| 11.1 Prepare `reos-db-01` | node enrolled; PostgreSQL 17 + pgvector; TLS `verify-full` with the private CA; `pg_hba` hostssl-only; role desired state for **all** REOSA roles (bootstrap roles, migration-created roles, login roles with verifiers, memberships, role settings such as the idle timeout), extensions in the **same schemas** as on the source |
+| 11.1 Prepare `reos-db-01` | **[OBSERVED]** (owner's Wave 9 order §6, 2026-10-21) the host already runs staging: PostgreSQL 17.11 from PGDG, TLS `verify-full` with its own name-constrained CA (name `reosdb01.exponet.cloud`), `pg_hba` with `hostssl` and SCRAM only, backups by the owner's pgBackRest setup, no node agent. Still to do before production moves: production's own role set on the same cluster (owner, identity service, application login, migrator) with the remaining REOSA roles (bootstrap roles, migration-created roles, login roles with verifiers, memberships, role settings such as the idle timeout), extensions in the **same schemas** as on the source; role desired state through the node only once the agent is enrolled (the G5 waiver's expiry condition, and [OD-54](../00-product/open-decisions.md#od-54-how-an-external-cluster-gains-the-node-agent) for a cluster registered external), otherwise by the owner's scripts and the bootstrap SQL |
 | 11.2 Rehearse | restore the source dumps into a scratch target on `reos-db-01` (separate restore units for `public` and `auth`, GoTrue version pinned); compare fingerprints with the source, including **table and column ACLs, default ACLs, function `EXECUTE` grants**, RLS/FORCE flags and policy counts; RLS invariants (`tables == tables with RLS`, isolation probe as a non-superuser); record the BYPASSRLS behavior of the new login role against the paths that depend on it; measure dump and restore duration |
 | 11.3 Cutover plan | a `critical` plan per target: writer freeze checklist from the dependents list (every app, worker, cron, edge function, GoTrue), final dump and restore, verification, placement move (target identity stamped on the new cluster, generation bumped), consumer switch (REOSA rebuilds apps whose database URL is baked at build time), acceptance checks; **rollback plan**: the old Supabase project stays untouched and writable-again until acceptance passes; rollback = switch consumers back, no data merged |
 | 11.4 Execute | human-only, approved, in a maintenance window; ExponetDB records timings and evidence |
-| 11.5 After | backups and PITR active on the new cluster before the window closes; first drill within 7 days; old project kept read-only for an agreed period, then retired by REOSA |
+| 11.5 After | backups and PITR active on the new cluster before the window closes (the owner's pgBackRest setup is adopted, then owned, in Wave 9 Part B, OD-52); first drill within 7 days; old project kept read-only for an agreed period, then retired by REOSA |
 
 Gate: every item in [`../14-roadmap/acceptance-gates.md` "Product gates before REOSA production moves"](../14-roadmap/acceptance-gates.md#product-gates-before-reosa-production-moves)
 must pass before 11.4.

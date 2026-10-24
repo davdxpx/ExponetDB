@@ -68,8 +68,9 @@ describe('the lock graph', () => {
   it('shows the source and age of the read', async () => {
     mountDiagnostics(PATH, world())
     await screen.findByRole('list', { name: 'Who blocks whom' })
-    expect(screen.getByText('Live')).toBeInTheDocument()
-    expect(screen.getByText(/^Observed/)).toBeInTheDocument()
+    // The lock graph's own line, and the page's control, which names the oldest read.
+    expect(screen.getAllByText('Live').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/^Observed/).length).toBeGreaterThanOrEqual(2)
   })
 
   it('names a process blocked by several others once, and says it', async () => {

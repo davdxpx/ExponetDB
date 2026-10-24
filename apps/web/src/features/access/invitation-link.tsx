@@ -14,6 +14,8 @@ import { deliveryText, type Invitation } from './people-model.ts'
  */
 export interface RevealedInvitation {
   readonly identityId: string
+  /** Who was invited, for naming them next to the link: their name, else their address. Untrusted text. */
+  readonly who: string
   readonly link: string
   readonly expiresAt: string
   readonly delivery: Invitation['invitation']['delivery']
@@ -22,6 +24,7 @@ export interface RevealedInvitation {
 export function revealedOf(invitation: Invitation): RevealedInvitation {
   return {
     identityId: invitation.identity.id,
+    who: invitation.identity.displayName ?? invitation.identity.email ?? invitation.identity.label,
     link: invitation.invitation.link,
     expiresAt: invitation.invitation.expiresAt,
     delivery: invitation.invitation.delivery,
@@ -31,9 +34,12 @@ export function revealedOf(invitation: Invitation): RevealedInvitation {
 export function InvitationLink({
   revealed,
   onHide,
+  onAssign,
 }: {
   readonly revealed: RevealedInvitation
   readonly onHide: () => void
+  /** Offers "Assign a role" for the invited person; the page opens the binding form. */
+  readonly onAssign?: (invitation: RevealedInvitation) => void
 }): ReactNode {
   const copy = async (): Promise<void> => {
     if (await copyToClipboard(revealed.link)) {
@@ -65,6 +71,11 @@ export function InvitationLink({
         <Button type="button" variant="default" size="small" onClick={() => void copy()}>
           {t('people.invite.link.copy')}
         </Button>
+        {onAssign === undefined ? null : (
+          <Button type="button" variant="default" size="small" onClick={() => onAssign(revealed)}>
+            {t('people.assign.open')}
+          </Button>
+        )}
         <Button type="button" variant="text" size="small" onClick={onHide}>
           {t('people.invite.link.hide')}
         </Button>

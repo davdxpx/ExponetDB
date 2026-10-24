@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | **[DECIDED]** 2026-10-13 by [ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md) (the owner's Wave 8 order); rows are added with each copy |
-| Applies to | every file copied from third-party source into `packages/tokens`, `packages/ui`, `packages/ui-patterns`, `packages/ui-data`, `apps/web` and `apps/design-system` |
+| Applies to | every file copied from third-party source into `packages/tokens`, `packages/ui`, `packages/ui-patterns`, `packages/ui-data`, `apps/web` and `apps/design-system`; and, under [Other sources](#other-sources), files copied from another third-party package (since 2026-10-21: the provider glyphs of `packages/icons`, [ADR-0033](../01-architecture/adr/0033-provider-glyphs-from-simple-icons.md)) |
 | Checked by | `tooling/checks/third-party.ts` (part of `bun run verify`) |
 | License texts | [`../../LICENSES/`](../../LICENSES/), [`../../THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md) |
 
@@ -136,7 +136,7 @@ serves this one `.txt` file and no other. The dependency license policy
 | `packages/ui/src/lib/constants.ts` | `packages/ui/src/lib/constants.ts` | `8b9af568` | Apache-2.0 / MIT (declared) | header; LICENSES/Apache-2.0.txt; LICENSES/MIT-supabase.txt | color lists, hidden placeholder and xlarge variants removed; ControlSize type | reviewed: no third-party notice, no brand content; no deps |
 | `packages/ui/src/lib/raised-control-surface.ts` | `packages/ui/src/lib/raised-control-surface.ts` | `8b9af568` | Apache-2.0 / MIT (declared) | header; LICENSES/Apache-2.0.txt; LICENSES/MIT-supabase.txt | none | reviewed: no third-party notice, no brand content; no deps |
 | `packages/ui/src/lib/get-explicit-tab-index.ts` | `packages/ui/src/lib/utils/getExplicitTabIndex.ts` | `8b9af568` | Apache-2.0 / MIT (declared) | header; LICENSES/Apache-2.0.txt; LICENSES/MIT-supabase.txt | none | reviewed: no third-party notice, no brand content; no deps |
-| `packages/ui/src/hooks/use-mobile.tsx` | `packages/ui/src/components/hooks/use-mobile.tsx` | `8b9af568` | Apache-2.0 / MIT (declared); MIT (shadcn/ui) | header; LICENSES/Apache-2.0.txt; LICENSES/MIT-supabase.txt; LICENSES/MIT-shadcn.txt | none beyond formatting | reviewed: identical to shadcn's sidebar hook, no other notice, no brand content; no deps |
+| `packages/ui/src/hooks/use-mobile.tsx` | `packages/ui/src/components/hooks/use-mobile.tsx` | `8b9af568` | Apache-2.0 / MIT (declared); MIT (shadcn/ui) | header; LICENSES/Apache-2.0.txt; LICENSES/MIT-supabase.txt; LICENSES/MIT-shadcn.txt | reads the viewport during render (`useSyncExternalStore`) instead of an effect, so phones get no desktop frame (2026-10-20) | reviewed: identical to shadcn's sidebar hook, no other notice, no brand content; no deps |
 | `packages/ui/src/hooks/use-horizontal-scroll.ts` | `packages/ui/src/components/hooks/use-horizontal-scroll.ts` | `8b9af568` | Apache-2.0 / MIT (declared) | header; LICENSES/Apache-2.0.txt; LICENSES/MIT-supabase.txt | none beyond formatting | reviewed: no third-party notice, no brand content; no deps |
 | `packages/ui/test/button.test.tsx` | `packages/ui/src/components/Button/Button.test.tsx` | `8b9af568` | Apache-2.0 / MIT (declared) | header; LICENSES/Apache-2.0.txt; LICENSES/MIT-supabase.txt | jest-dom import; variants/sizes aligned; added disabled, focusableWhenDisabled, loading, asChild, type and axe tests | reviewed: test authored by Supabase, no third-party notice or brand content; deps @testing-library MIT |
 | `packages/ui/test/toggle.test.tsx` | `packages/ui/src/components/shadcn/ui/toggle.test.tsx` | `8b9af568` | Apache-2.0 / MIT (declared) | header; LICENSES/Apache-2.0.txt; LICENSES/MIT-supabase.txt | jest-dom import; states, sizes, disabled and axe tests added | reviewed: Supabase-authored test (shadcn has none upstream), no third-party notice or brand content |
@@ -237,3 +237,28 @@ serves this one `.txt` file and no other. The dependency license policy
 | `packages/ui-patterns/test/command-menu/api/hooks/pages-hooks.test.tsx` | `packages/ui-patterns/src/CommandMenu/api/hooks/pagesHooks.test.tsx` | `8b9af568` | Apache-2.0 / MIT (declared) | header; LICENSES/Apache-2.0.txt; LICENSES/MIT-supabase.txt | same; new cases | reviewed: source file has no third-party header or notice; no brand text, fonts or images; deps `cmdk` and `radix-ui` are not copied |
 | `packages/ui-patterns/test/command-menu/internal/state/commands-states.test.ts` | `packages/ui-patterns/src/CommandMenu/internal/state/commandsStates.test.ts` | `8b9af568` | Apache-2.0 / MIT (declared) | header; LICENSES/Apache-2.0.txt; LICENSES/MIT-supabase.txt | `getState()` API; new cases | reviewed: source file has no third-party header or notice; no brand text, fonts or images; deps `cmdk` and `radix-ui` are not copied |
 | `packages/ui-patterns/test/command-menu/internal/state/pages-state.test.ts` | `packages/ui-patterns/src/CommandMenu/internal/state/pagesState.test.ts` | `8b9af568` | Apache-2.0 / MIT (declared) | header; LICENSES/Apache-2.0.txt; LICENSES/MIT-supabase.txt | `getState()` API; new cases | reviewed: source file has no third-party header or notice; no brand text, fonts or images; deps `cmdk` and `radix-ui` are not copied |
+
+## Other sources
+
+**[DECIDED]** 2026-10-21 by [ADR-0033](../01-architecture/adr/0033-provider-glyphs-from-simple-icons.md)
+(the owner's decision S11: real provider logos). Outside the Supabase copy
+of ADR-0030, copying a specific third-party file is an explicit exception
+with a file-specific license review (C-2, second paragraph). Such files are
+listed here, one row each, and kept by the same check
+(`tooling/checks/third-party.ts`, `OTHER_SOURCES`):
+
+1. Only an allowed package at its pinned version and license, into its
+   scope: `simple-icons` `16.35.0`, CC0-1.0, into `packages/icons/src/`.
+   A later version is a new copy with a new review; there is no sync and no
+   npm dependency (the package was fetched once with `npm pack` into a
+   scratch directory, outside the repository).
+2. The copied file starts with the header
+   `// Copied from <package>@<version> (npm). <SPDX license>. <notice>. Modified for ExponetDB.`
+   within its first five lines.
+3. The row names every upstream file the copy takes from; each is named in
+   the copied file as well (the check fails otherwise).
+4. The review column follows rule 4 above.
+
+| ExponetDB path | Package | Version | Upstream files | License basis | Notices applied | Changes | Review |
+|---|---|---|---|---|---|---|---|
+| `packages/icons/src/provider-glyphs.ts` | `simple-icons` | `16.35.0` | `icons/hetzner.svg`, `icons/googlecloud.svg`, `icons/alibabacloud.svg`, `icons/digitalocean.svg`, `icons/akamai.svg`, `icons/vultr.svg`, `icons/upcloud.svg`, `icons/scaleway.svg`, `icons/exoscale.svg`, `icons/ovh.svg`, `icons/ionos.svg`, `icons/netcup.svg`, `icons/contabo.svg`, `data/simple-icons.json` | CC0-1.0 | header; LICENSES/CC0-1.0-simple-icons.txt; THIRD_PARTY_NOTICES.md | Only the title, the hex color and the SVG path data of 13 brands, unchanged, with the upstream file and the brand's source address as comments; the TypeScript record, its types and the `mono` flag (the brand color reaches less than 3:1 on the light or the dark page background, so the glyph is drawn in the text color; recomputed by `packages/icons/test/brands.test.tsx`) are ExponetDB's. Nothing else of the package is copied (no build code, no other icon, no slug or alias data). | reviewed 2026-10-21: npm tarball `simple-icons-16.35.0.tgz` (shasum `78db83dd7f5ae0212b68d05c2ae7797e5d864921`); declared license CC0-1.0; `LICENSE.md` is CC0 1.0 Universal (copyright and related rights waived; §4.1 leaves trademark rights untouched); `DISCLAIMER.md` read: an icon may carry its own license where the data names one, and none of the 13 entries has a `license` member; brand guidelines are named for DigitalOcean, Vultr, UpCloud, Scaleway, Exoscale and netcup and were taken into account for this use (the unaltered glyph next to the provider's name, to identify it); the marks are trademarks of their owners, used only to name the provider a server runs on; no fonts, images, network references or dependencies; AWS, Microsoft Azure, Oracle, IBM and STACKIT have no glyph in this version and get a neutral Lucide glyph instead (none is taken from another source) |

@@ -41,6 +41,7 @@ export const REQUIRED_TITLES = [
   'Files derived from Supabase and shadcn/ui',
   'Apache License 2.0 (Supabase)',
   'MIT License (shadcn/ui)',
+  'CC0 1.0 Universal (Simple Icons)',
 ]
 export const URL_ALLOWLIST = [
   'http://www.w3.org/1999/xlink',
@@ -71,6 +72,10 @@ export const URL_ALLOWLIST = [
   // never fetched or linked. Exact literals only.
   'https://bit.ly/3cXEKWf',
   'http://fb.me/use-check-prop-types',
+  // date-fns (through react-day-picker, the date picker of the target overview's custom health
+  // history range, a lazy chunk): the documentation link inside the text of its error for an
+  // unescaped format token, never fetched or linked. Exact literal only.
+  'https://github.com/date-fns/date-fns/blob/master/docs/unicodeTokens.md',
 ]
 
 /**

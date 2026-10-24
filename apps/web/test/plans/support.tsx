@@ -66,6 +66,18 @@ export class World {
   credentialsTruncated = false
   /** The cursor the plan list answers with (a longer list than one read returns). */
   plansNextCursor: string | null = null
+  /** Pages of `GET /plans` by cursor (`''` is the first page); when empty, `plans` answers. */
+  readonly planPages = new Map<string, { items: PlanRead[]; nextCursor: string | null }>()
+  /** What `GET /operations` answers (the plan list's "Awaiting approval" view). */
+  listedOperations: OperationRead[] = []
+  /** Registry records the page reads for a title (`GET /servers/{id}`, `/clusters/{id}`, `/nodes/{id}`). */
+  readonly servers = new Map<string, unknown>()
+  readonly clusters = new Map<string, unknown>()
+  readonly nodes = new Map<string, unknown>()
+  /** Stored bundles by `<projectId>/<migrationId>`. */
+  readonly bundles = new Map<string, unknown>()
+  /** Stored files by `<projectId>/<migrationId>/<revision>/<file>`. */
+  readonly bundleFiles = new Map<string, unknown>()
   /** Answers that fail, by a substring of `METHOD path` (first match wins). */
   readonly failures = new Map<string, FailureSpec>()
   /** Mutations answer `REAUTH_REQUIRED` until a TOTP proof was given. */
@@ -180,13 +192,46 @@ export function answer(world: World, sent: Sent): Response {
   if (m !== null && method === 'POST') {
     return json(202, operationFor(OP, { state: 'queued' }))
   }
+  m = /^\/api\/v1\/plans\/([^/]+)\/withdraw$/.exec(p)
+  if (m !== null && method === 'POST') {
+    const id = decodeURIComponent(m[1] ?? '')
+    const plan = world.plans.get(id)
+    if (plan === undefined) return NOT_FOUND('PLAN_NOT_FOUND')
+    const withdrawn = { ...plan, state: 'withdrawn' } as PlanRead
+    world.plans.set(id, withdrawn)
+    return json(200, withdrawn)
+  }
   if (p === '/api/v1/plans' && method === 'GET') {
+    if (world.planPages.size > 0) {
+      const page = world.planPages.get(url.searchParams.get('cursor') ?? '')
+      return json(200, page ?? { items: [], nextCursor: null })
+    }
     return json(200, { items: [...world.plans.values()], nextCursor: world.plansNextCursor })
+  }
+  if (p === '/api/v1/operations' && method === 'GET') {
+    return json(200, { items: world.listedOperations, nextCursor: null })
+  }
+  m = /^\/api\/v1\/projects\/([^/]+)\/bundles\/([^/]+)$/.exec(p)
+  if (m !== null && method === 'GET') {
+    const stored = world.bundles.get(`${m[1]}/${m[2]}`)
+    return stored === undefined ? NOT_FOUND() : json(200, stored)
+  }
+  m = /^\/api\/v1\/projects\/([^/]+)\/bundles\/([^/]+)\/revisions\/([^/]+)\/files\/([^/]+)$/.exec(p)
+  if (m !== null && method === 'GET') {
+    const stored = world.bundleFiles.get(`${m[1]}/${m[2]}/${m[3]}/${m[4]}`)
+    return stored === undefined ? NOT_FOUND() : json(200, stored)
   }
   m = /^\/api\/v1\/operations\/([^/]+)$/.exec(p)
   if (m !== null && method === 'GET') {
     const operation = world.operations.get(decodeURIComponent(m[1] ?? ''))
     return operation === undefined ? NOT_FOUND('OPERATION_NOT_FOUND') : json(200, operation)
+  }
+  m = /^\/api\/v1\/(servers|clusters|nodes)\/([^/]+)$/.exec(p)
+  if (m !== null && method === 'GET') {
+    const table =
+      m[1] === 'servers' ? world.servers : m[1] === 'clusters' ? world.clusters : world.nodes
+    const record = table.get(decodeURIComponent(m[2] ?? ''))
+    return record === undefined ? NOT_FOUND() : json(200, record)
   }
   m = /^\/api\/v1\/operations\/([^/]+)\/retry-verification$/.exec(p)
   if (m !== null && method === 'POST') {
@@ -410,6 +455,50 @@ export function hostilePlan(over: Partial<PlanRead> = {}): PlanRead {
   } as unknown as PlanRead
 }
 
+export const SERVER = 'srv_01M4S9000000000000000000AK'
+export const TOKEN = 'ent_01M4S9000000000000000000AM'
+
+/**
+ * A node enrollment plan as the server makes it: no target and no tier (the
+ * page treats it as production), the server in its change, no client, no
+ * approval, and a plan read without policy rules.
+ */
+export function nodeEnrollPlan(over: Partial<PlanRead> = {}): PlanRead {
+  return {
+    id: PLAN,
+    kind: 'node.enroll',
+    kindVersion: 1,
+    class: 'high',
+    state: 'active',
+    planHash: HASH,
+    createdAt: '2026-10-13T08:00:00.000Z',
+    expiresAt: '2099-10-13T09:00:00.000Z',
+    actor: { identityId: IDENTITY, kind: 'human', via: 'web' },
+    clientId: null,
+    subject: { targetId: null, targetPath: null, clusterId: null, nodeId: null, tier: null },
+    contentChecksum: `sha256:${'cd'.repeat(32)}`,
+    decision: 'allow',
+    requirements: [],
+    overriddenRules: [],
+    approvals: { required: 0, given: 0 },
+    operationId: null,
+    change: { content: { serverId: SERVER, tokenId: TOKEN }, analysis: {} },
+    ...over,
+  } as unknown as PlanRead
+}
+
+/** The registry record of the plan's server (`GET /servers/{id}`); its name is untrusted. */
+export function serverRecord(displayName = 'tour host'): unknown {
+  return {
+    id: SERVER,
+    displayName,
+    derivedTier: null,
+    location: null,
+    observedFacts: null,
+    provider: 'hetzner_cloud',
+  }
+}
+
 export const UP_SQL = [
   `ALTER TABLE public.accounts ADD COLUMN notes${TAG} text;`,
   `-- approved by security <script>window.__pwned = 1</script><img src=x onerror=1> [Approve](https://evil.example) ${BIDI}gnp.exe`,
@@ -425,6 +514,56 @@ const source = (file: 'up.sql' | 'verify.sql', text: string) => ({
   bytes: text.length,
   truncated: false,
 })
+
+export const PROJECT = 'prj_01M4S9000000000000000000AF'
+export const BUNDLE_DIGEST = `sha256:c1:${'12'.repeat(32)}`
+
+/**
+ * Stores the hostile plan's bundle in the world's bundle store: revision 1 with the
+ * bundle digest `digest` (the plan binds `BUNDLE_DIGEST` when it names one) and the files given.
+ */
+export function storeBundle(
+  world: World,
+  files: Readonly<Record<string, string>> = { 'up.sql': UP_SQL, 'verify.sql': VERIFY_SQL },
+  digest = BUNDLE_DIGEST,
+): void {
+  world.bundles.set(`${PROJECT}/${MIGRATION}`, {
+    projectId: PROJECT,
+    migrationId: MIGRATION,
+    name: 'add-notes',
+    checksum: `sha256:c1:${'ef'.repeat(32)}`,
+    transactional: true,
+    dependsOn: [],
+    revisions: [
+      {
+        revision: 1,
+        bundleDigest: digest,
+        verifyDigest: null,
+        rollbackDigest: null,
+        sourceDigest: `sha256:${'34'.repeat(32)}`,
+        files: Object.fromEntries(
+          Object.entries(files).map(([file, text]) => [
+            file,
+            { bytes: text.length, digest: `sha256:${'56'.repeat(32)}` },
+          ]),
+        ),
+        source: null,
+        ingestedAt: '2026-10-13T07:00:00.000Z',
+      },
+    ],
+    superseded: [],
+  })
+  for (const [file, text] of Object.entries(files)) {
+    world.bundleFiles.set(`${PROJECT}/${MIGRATION}/1/${file}`, {
+      migrationId: MIGRATION,
+      revision: 1,
+      file,
+      text,
+      bytes: text.length,
+      digest: `sha256:${'56'.repeat(32)}`,
+    })
+  }
+}
 
 /** The queue item of the hostile plan: the review carries the plan, the client's name and the files. */
 export function hostileItem(over: Partial<ApprovalQueueItem> = {}): ApprovalQueueItem {

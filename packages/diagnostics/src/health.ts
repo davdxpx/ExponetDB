@@ -3,15 +3,19 @@ import type {
   HealthSummary,
   ProbeResult,
   TargetHealth,
+  TargetHealthView,
 } from '@exponetdb/contracts'
 import {
   type ControlStore,
   ControlStoreError,
   type Queryable,
   type Row,
+  type Tx,
 } from '@exponetdb/control-store'
 import { isJsonObject, type JsonObject, newId } from '@exponetdb/kernel'
 import {
+  type ExecutionRoleFacts,
+  executionRoleFacts,
   probeExtended,
   probeSimple,
   readActivity,
@@ -19,14 +23,24 @@ import {
   TargetError,
 } from '@exponetdb/postgres'
 import {
+  activeExceptions,
   brand,
   type Connector,
   type EndpointRecord,
+  type ExecutionRoleExceptionRecord,
   listEndpoints,
   RegistryError,
   type TargetRecord,
 } from '@exponetdb/registry'
-import { openFindings, recordFinding, resolveFinding } from './findings.ts'
+import {
+  EXCEPTION_FINDING_CODE,
+  EXCEPTION_FINDING_PREFIX,
+  exceptionDrift,
+  exceptionDriftDetails,
+  exceptionDriftSummary,
+  exceptionFindingKey,
+} from './execution-role-exceptions.ts'
+import { type FindingRecord, openFindings, recordFinding, resolveFinding } from './findings.ts'
 import { checkIdentity, mismatchField } from './identity.ts'
 import {
   DEFAULT_THRESHOLDS,
@@ -57,7 +71,10 @@ import {
  *   its daily partition;
  * - an identity mismatch opens a critical finding and plans the target's
  *   suspension through the Operations Engine (nothing is re-stamped);
- *   plaintext client connections open a security finding.
+ *   plaintext client connections open a security finding;
+ * - every active execution-role exception of the target's environment is
+ *   compared with the role on the target (ADR-0034 §4): a declaration that
+ *   no longer matches keeps one finding open; a failed read changes none.
  *
  * Pages and API reads never probe: they read the latest status
  * ({@link targetHealth}), which says how old it is.
@@ -142,7 +159,11 @@ interface DiagnosticReads {
   readonly identity: IdentitySample
   readonly settings: HealthSample['settings']
   readonly activity: HealthSample['activity']
+  /** The declared exceptions' roles, read only on a database whose identity matched. */
+  readonly exceptionRoles: RoleRead
 }
+
+type RoleRead = ReadSample<readonly ExecutionRoleFacts[]> | { readonly status: 'not_run' }
 
 async function read<T>(run: () => Promise<T>): Promise<ReadSample<T>> {
   try {
@@ -152,8 +173,12 @@ async function read<T>(run: () => Promise<T>): Promise<ReadSample<T>> {
   }
 }
 
-/** One separate diagnostic session (direct path) for identity, settings and activity. */
-async function diagnosticReads(deps: HealthDeps, target: TargetRecord): Promise<DiagnosticReads> {
+/** One separate diagnostic session (direct path) for identity, settings, activity and exception roles. */
+async function diagnosticReads(
+  deps: HealthDeps,
+  target: TargetRecord,
+  roles: readonly string[],
+): Promise<DiagnosticReads> {
   let opened: Awaited<ReturnType<Connector['forTarget']>>
   try {
     opened = await deps.connector.forTarget(target, 'observer', `health/diag/${target.targetId}`)
@@ -165,6 +190,7 @@ async function diagnosticReads(deps: HealthDeps, target: TargetRecord): Promise<
         identity: { status: 'mismatch', field: 'system_identifier' },
         settings: failed,
         activity: failed,
+        exceptionRoles: failed,
       }
     }
     if (error instanceof TargetError && error.code === 'TARGET_IDENTITY_MISMATCH') {
@@ -173,6 +199,7 @@ async function diagnosticReads(deps: HealthDeps, target: TargetRecord): Promise<
         identity: { status: 'mismatch', field: 'database' },
         settings: failed,
         activity: failed,
+        exceptionRoles: failed,
       }
     }
     return {
@@ -180,6 +207,7 @@ async function diagnosticReads(deps: HealthDeps, target: TargetRecord): Promise<
       identity: { status: 'failed', reason: errorClass(error) },
       settings: failed,
       activity: failed,
+      exceptionRoles: failed,
     }
   }
   try {
@@ -195,7 +223,22 @@ async function diagnosticReads(deps: HealthDeps, target: TargetRecord): Promise<
     const activity = opened.session.usable
       ? await read(() => readActivity(opened.session))
       : ({ status: 'failed', errorClass: 'session_closed' } as const)
-    return { diagnosticEndpointId: opened.endpoint.endpointId, identity, settings, activity }
+    // Another database's roles say nothing about this target's declarations.
+    const exceptionRoles: RoleRead =
+      roles.length === 0
+        ? { status: 'ok', value: [] }
+        : identity.status !== 'match'
+          ? { status: 'failed', errorClass: 'identity' }
+          : opened.session.usable
+            ? await read(() => opened.session.readOnly((rtx) => executionRoleFacts(rtx, roles)))
+            : { status: 'failed', errorClass: 'session_closed' }
+    return {
+      diagnosticEndpointId: opened.endpoint.endpointId,
+      identity,
+      settings,
+      activity,
+      exceptionRoles,
+    }
   } finally {
     await opened.session.close()
   }
@@ -206,19 +249,30 @@ export async function takeHealthSample(
   deps: HealthDeps,
   target: TargetRecord,
 ): Promise<HealthSample> {
+  return (await takeSample(deps, target, [])).sample
+}
+
+async function takeSample(
+  deps: HealthDeps,
+  target: TargetRecord,
+  roles: readonly string[],
+): Promise<{ readonly sample: HealthSample; readonly exceptionRoles: RoleRead }> {
   const observedAt = new Date().toISOString()
   const lifecycle = target.state
   const placement = target.placement
   if (placement === null) {
     return {
-      lifecycle,
-      unavailable: 'no_placement',
-      endpoints: [],
-      diagnosticEndpointId: null,
-      identity: { status: 'not_run' },
-      settings: { status: 'not_run' },
-      activity: { status: 'not_run' },
-      observedAt,
+      sample: {
+        lifecycle,
+        unavailable: 'no_placement',
+        endpoints: [],
+        diagnosticEndpointId: null,
+        identity: { status: 'not_run' },
+        settings: { status: 'not_run' },
+        activity: { status: 'not_run' },
+        observedAt,
+      },
+      exceptionRoles: { status: 'not_run' },
     }
   }
   const deadline = deps.probeDeadlineMs ?? 5000
@@ -228,32 +282,38 @@ export async function takeHealthSample(
   try {
     ;[samples, diagnostics] = await Promise.all([
       Promise.all(endpoints.map((e) => probeEndpoint(deps, target, e, deadline))),
-      diagnosticReads(deps, target),
+      diagnosticReads(deps, target, roles),
     ])
   } catch (error) {
     // ExponetDB itself cannot probe (no observer credential, no usable endpoint).
     if (error instanceof RegistryError) {
       return {
-        lifecycle,
-        unavailable: errorClass(error),
-        endpoints: [],
-        diagnosticEndpointId: null,
-        identity: { status: 'not_run' },
-        settings: { status: 'not_run' },
-        activity: { status: 'not_run' },
-        observedAt,
+        sample: {
+          lifecycle,
+          unavailable: errorClass(error),
+          endpoints: [],
+          diagnosticEndpointId: null,
+          identity: { status: 'not_run' },
+          settings: { status: 'not_run' },
+          activity: { status: 'not_run' },
+          observedAt,
+        },
+        exceptionRoles: { status: 'not_run' },
       }
     }
     throw error
   }
   return {
-    lifecycle,
-    endpoints: samples,
-    diagnosticEndpointId: diagnostics.diagnosticEndpointId,
-    identity: diagnostics.identity,
-    settings: diagnostics.settings,
-    activity: diagnostics.activity,
-    observedAt,
+    sample: {
+      lifecycle,
+      endpoints: samples,
+      diagnosticEndpointId: diagnostics.diagnosticEndpointId,
+      identity: diagnostics.identity,
+      settings: diagnostics.settings,
+      activity: diagnostics.activity,
+      observedAt,
+    },
+    exceptionRoles: diagnostics.exceptionRoles,
   }
 }
 
@@ -295,7 +355,10 @@ export async function sampleTarget(
   if (target.state !== 'active' && target.state !== 'suspended') {
     return undefined
   }
-  const sample = await takeHealthSample(deps, target)
+  const exceptions = await activeExceptions(deps.store, target.projectId, target.environmentId)
+  const { sample, exceptionRoles } = await takeSample(deps, target, [
+    ...new Set(exceptions.map((e) => e.role)),
+  ])
   const result = reduceHealth(sample, deps.thresholds ?? DEFAULT_THRESHOLDS)
   const mismatch = identityObserved(sample)
   const plaintext =
@@ -374,6 +437,9 @@ export async function sampleTarget(
       const f = openKey(PLAINTEXT_FINDING)
       if (f !== undefined) await resolveFinding(tx, f.findingId, 'cleared', null)
     }
+    if (exceptionRoles.status === 'ok') {
+      await keepExceptionFindings(tx, target, exceptions, exceptionRoles.value, open)
+    }
   })
   let suspensionRequested = false
   if (mismatch !== undefined && target.state === 'active') {
@@ -381,6 +447,42 @@ export async function sampleTarget(
     suspensionRequested = true
   }
   return { targetId: target.targetId, observedAt: sample.observedAt, result, suspensionRequested }
+}
+
+/**
+ * One open finding per active declaration that no longer matches its role;
+ * the finding of a declaration that matches again, was revoked or is gone
+ * is resolved `cleared`. Only called after the roles were read.
+ */
+async function keepExceptionFindings(
+  tx: Tx,
+  target: TargetRecord,
+  exceptions: readonly ExecutionRoleExceptionRecord[],
+  facts: readonly ExecutionRoleFacts[],
+  open: readonly FindingRecord[],
+): Promise<void> {
+  const byRole = new Map(facts.map((f) => [f.role, f]))
+  const kept = new Set<string>()
+  for (const e of exceptions) {
+    const drift = exceptionDrift(e, byRole.get(e.role))
+    if (drift === null) continue
+    const dedupKey = exceptionFindingKey(e.exceptionId)
+    kept.add(dedupKey)
+    await recordFinding(tx, {
+      targetId: target.targetId,
+      kind: 'health',
+      code: EXCEPTION_FINDING_CODE,
+      severity: drift.severity,
+      dedupKey,
+      summary: exceptionDriftSummary(drift),
+      details: exceptionDriftDetails(drift),
+    })
+  }
+  for (const f of open) {
+    if (f.dedupKey.startsWith(EXCEPTION_FINDING_PREFIX) && !kept.has(f.dedupKey)) {
+      await resolveFinding(tx, f.findingId, 'cleared', null)
+    }
+  }
 }
 
 /** Targets the sampler covers: active and suspended ones with a placement. */
@@ -420,6 +522,13 @@ export interface StatusRecord {
   readonly conditions: HealthCondition[]
   readonly probes: ProbeResult[]
   readonly unknownBecause: string | null
+  /**
+   * The connections the sample measured: client backends and usable slots,
+   * both from the same sample; `null` when it measured either of them not
+   * (a failed read, an unreachable target, a row written before the numbers
+   * were stored). Never zero as a stand-in.
+   */
+  readonly capacity: { readonly clientBackends: number; readonly usableSlots: number } | null
   readonly observedAt: string
   readonly ageMs: number
 }
@@ -433,10 +542,27 @@ const HEALTH_STATES: readonly TargetHealth['state'][] = [
   'suspended',
 ]
 
+/** A whole, non-negative number a successful read stored with its probe (see {@link StoredProbe}), or `null`. */
+function storedNumber(probes: readonly JsonObject[], probe: string, key: string): number | null {
+  const found = probes.find((p) => p['probe'] === probe && p['outcome'] === 'ok')
+  const values = found?.['values']
+  const value = isJsonObject(values) ? values[key] : undefined
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
+}
+
+/** The probe without what only the capacity reads: the public probe shape. */
+function publicProbe(probe: JsonObject): ProbeResult {
+  const { values: _values, ...rest } = probe
+  return rest as unknown as ProbeResult
+}
+
 function statusFrom(row: Row): StatusRecord {
   const state = row.text('state')
   const conditions = row.json('conditions')
-  const probes = row.json('probes')
+  const stored = row.json('probes')
+  const probes = Array.isArray(stored) ? stored.filter(isJsonObject) : []
+  const clientBackends = storedNumber(probes, 'activity', 'clientBackends')
+  const usableSlots = storedNumber(probes, 'settings', 'usableSlots')
   return {
     targetId: row.text('target_id'),
     state: (HEALTH_STATES as readonly string[]).includes(state)
@@ -445,8 +571,10 @@ function statusFrom(row: Row): StatusRecord {
     conditions: Array.isArray(conditions)
       ? (conditions.filter(isJsonObject) as unknown as HealthCondition[])
       : [],
-    probes: Array.isArray(probes) ? (probes.filter(isJsonObject) as unknown as ProbeResult[]) : [],
+    probes: probes.map(publicProbe),
     unknownBecause: row.textOrNull('unknown_because'),
+    capacity:
+      clientBackends === null || usableSlots === null ? null : { clientBackends, usableSlots },
     observedAt: row.text('observed_at'),
     ageMs: Math.max(0, Math.round(Number(row.text('age_ms')))),
   }
@@ -485,12 +613,17 @@ export function healthSummary(status: StatusRecord | undefined): HealthSummary |
   }
 }
 
-/** The health of a target as the latest sample shows it (health.md §1, §9). */
+/**
+ * The health of a target as the latest sample shows it (health.md §1, §9).
+ * The REST view adds `capacity` (the MCP tool's schema drops it): present
+ * only when the sample measured the connections, with that sample's source
+ * and time.
+ */
 export function targetHealthView(
   target: TargetRecord,
   status: StatusRecord | undefined,
   now: string = new Date().toISOString(),
-): TargetHealth {
+): TargetHealthView {
   const base = {
     targetId: brand('tgt', target.targetId),
     lifecycle: target.state,
@@ -509,13 +642,17 @@ export function targetHealthView(
     }
   }
   const lagging = status.ageMs > LAGGING_AFTER_MS
+  const source = status.ageMs > STALE_AFTER_MS ? 'cached' : 'sampled'
   return {
     ...base,
     state: lagging ? 'unknown' : status.state,
-    source: status.ageMs > STALE_AFTER_MS ? 'cached' : 'sampled',
+    source,
     observedAt: status.observedAt,
     conditions: status.conditions,
     unknownBecause: lagging ? 'sampler_lagging' : status.unknownBecause,
     probes: status.probes,
+    ...(status.capacity === null
+      ? {}
+      : { capacity: { ...status.capacity, source, observedAt: status.observedAt } }),
   }
 }

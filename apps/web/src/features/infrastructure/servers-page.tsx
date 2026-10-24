@@ -1,8 +1,16 @@
-import type { Server } from '@exponetdb/sdk/operations'
+import type { Server, ServerProvider } from '@exponetdb/sdk/operations'
 import {
   Button,
   Input,
   Label,
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
   Table,
   TableBody,
   TableCaption,
@@ -13,7 +21,7 @@ import {
 } from '@exponetdb/ui'
 import { ObservedTime, TierChip, UntrustedName } from '@exponetdb/ui-patterns'
 import { useQuery } from '@tanstack/react-query'
-import { type FormEvent, type ReactNode, useId, useRef, useState } from 'react'
+import { type FormEvent, Fragment, type ReactNode, useId, useRef, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { describeError, t } from '../../lib/i18n/i18n.ts'
 import { toReadable } from '../../lib/query/readable.ts'
@@ -22,6 +30,9 @@ import { usePlanRequest } from './actions.ts'
 import { serversQuery } from './keys.ts'
 import { serverPath } from './model.ts'
 import { InfraPage, InfraSection, ObjectLink } from './parts.tsx'
+import { isProvider, PROVIDER_GROUPS, ProviderName } from './provider.tsx'
+
+const DEFAULT_PROVIDER: ServerProvider = 'unknown'
 
 /**
  * `/infrastructure/servers` (information-architecture.md §2.1): the servers
@@ -115,7 +126,9 @@ function ServerTable({ servers }: { readonly servers: readonly Server[] }): Reac
                 label={t('infra.column.id')}
               />
             </TableCell>
-            <TableCell>{t(`infra.servers.provider.${server.provider}`)}</TableCell>
+            <TableCell>
+              <ProviderName provider={server.provider} />
+            </TableCell>
             <TableCell>
               {server.location === null ? (
                 t('infra.value.none')
@@ -140,11 +153,6 @@ function ServerTable({ servers }: { readonly servers: readonly Server[] }): Reac
   )
 }
 
-const PROVIDERS = ['hetzner_cloud', 'hetzner_robot', 'other', 'unknown'] as const
-type Provider = (typeof PROVIDERS)[number]
-const isProvider = (value: string): value is Provider =>
-  (PROVIDERS as readonly string[]).includes(value)
-
 /** Text a label of the registry accepts: 1 to `max` characters, no control characters. */
 function labelOk(value: string, max: number): boolean {
   return value.length > 0 && value.length <= max && !/\p{Cc}/u.test(value)
@@ -159,13 +167,14 @@ function RegisterServerForm(): ReactNode {
   const formRef = useRef<HTMLFormElement>(null)
   const [alert, setAlert] = useState('')
   const [busy, setBusy] = useState(false)
+  // The design system's Select is a button with a listbox, not a form field: the choice is state.
+  const [provider, setProvider] = useState<string>(DEFAULT_PROVIDER)
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
     if (busy) return
     const data = new FormData(event.currentTarget)
     const displayName = String(data.get('displayName') ?? '').trim()
-    const provider = String(data.get('provider') ?? '')
     const location = String(data.get('location') ?? '').trim()
     const providerRef = String(data.get('providerRef') ?? '').trim()
     if (!labelOk(displayName, 128)) {
@@ -196,7 +205,10 @@ function RegisterServerForm(): ReactNode {
       }),
     )
       .then(
-        () => formRef.current?.reset(),
+        () => {
+          formRef.current?.reset()
+          setProvider(DEFAULT_PROVIDER)
+        },
         (error: unknown) => setAlert(describeError(error)),
       )
       .finally(() => setBusy(false))
@@ -216,19 +228,26 @@ function RegisterServerForm(): ReactNode {
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={providerId}>{t('infra.servers.register.provider')}</Label>
-        <select
-          id={providerId}
-          name="provider"
-          defaultValue="unknown"
-          disabled={busy}
-          className="h-[34px] rounded-md border border-control bg-control px-2 text-sm text-foreground focus-ring"
-        >
-          {PROVIDERS.map((provider) => (
-            <option key={provider} value={provider}>
-              {t(`infra.servers.provider.${provider}`)}
-            </option>
-          ))}
-        </select>
+        <Select value={provider} onValueChange={setProvider} disabled={busy}>
+          <SelectTrigger id={providerId}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PROVIDER_GROUPS.map((group, index) => (
+              <Fragment key={group.id}>
+                {index > 0 && <SelectSeparator />}
+                <SelectGroup>
+                  <SelectLabel>{t(`infra.servers.providerGroup.${group.id}`)}</SelectLabel>
+                  {group.providers.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      <ProviderName provider={p} />
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </Fragment>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={locationId}>{t('infra.servers.register.location')}</Label>

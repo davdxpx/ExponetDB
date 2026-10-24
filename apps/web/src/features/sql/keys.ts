@@ -14,13 +14,20 @@ export const sqlKeys = {
     ['sql', 'classify', major ?? 'default', sql] as const,
   history: (path: string) => ['sql', 'history', path] as const,
   saved: (path: string) => ['sql', 'saved', path] as const,
-  completion: (path: string, kinds: readonly string[], q: string) =>
-    ['sql', 'completion', path, kinds, q] as const,
+  completion: (path: string, kinds: readonly string[], q: string, limit: number) =>
+    ['sql', 'completion', path, kinds, q, limit] as const,
+  completionObject: (path: string, kind: string, qualifiedName: string) =>
+    ['sql', 'completion-object', path, kind, qualifiedName] as const,
 }
 
 export const HISTORY_PAGE_LIMIT = 50
 export const SAVED_PAGE_LIMIT = 50
 export const COMPLETION_LIMIT = 50
+/**
+ * The page of an exact-name lookup (the relation behind an alias): the search
+ * matches substrings, so a short name needs a larger page to hold the exact one.
+ */
+export const RELATION_LOOKUP_LIMIT = 200
 /** The longest name search the server takes (`q` is 1 to 128 characters). */
 export const COMPLETION_MAX_Q = 128
 
@@ -90,13 +97,38 @@ export function completionQuery(
   path: string,
   kinds: readonly string[],
   q: string,
+  limit: number = COMPLETION_LIMIT,
 ) {
   return queryOptions({
-    queryKey: sqlKeys.completion(path, kinds, q),
+    queryKey: sqlKeys.completion(path, kinds, q, limit),
     queryFn: ({ signal }) =>
       client.operation('searchSchema', {
         params: { target: path },
-        query: { q, kinds, limit: COMPLETION_LIMIT },
+        query: { q, kinds, limit },
+        signal,
+      }),
+    staleTime: 60_000,
+    gcTime: 120_000,
+    retry: false,
+  })
+}
+
+/**
+ * One relation, read for the columns completion offers after `alias.`. Cached
+ * for a minute like the name search and shared by every keystroke that asks
+ * for the same relation, so a burst of typing is one read, not one per key.
+ */
+export function completionObjectQuery(
+  client: ApiClient,
+  path: string,
+  kind: string,
+  qualifiedName: string,
+) {
+  return queryOptions({
+    queryKey: sqlKeys.completionObject(path, kind, qualifiedName),
+    queryFn: ({ signal }) =>
+      client.operation('getSchemaObject', {
+        params: { target: path, kind, qualifiedName },
         signal,
       }),
     staleTime: 60_000,

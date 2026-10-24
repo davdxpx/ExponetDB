@@ -68,6 +68,20 @@ export const integrationConfig = defineConfig({
   },
 })
 
+// The integration suites against the target servers (the packages using
+// `@exponetdb/testkit`'s servers): a file and then each test holds the test
+// kit's shared lock on the verifier password, so the suite that rotates it
+// never runs while one logs in (packages/testkit/src/verifier-password.ts).
+// A hook may wait for a rotation behind the longest running file: 10 minutes.
+export const targetIntegrationConfig = defineConfig({
+  ...integrationConfig,
+  test: {
+    ...integrationConfig.test,
+    hookTimeout: 600_000,
+    setupFiles: [new URL('./vitest.target-setup.ts', import.meta.url).pathname],
+  },
+})
+
 // Browser end-to-end tests (`*.e2e.test.ts`): a real Chromium with a virtual
 // WebAuthn authenticator against the real program and PostgreSQL 17. Never
 // skipped: without the browser, the built Web App or the database they fail.

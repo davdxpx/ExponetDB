@@ -54,12 +54,17 @@ export interface SqlCompletionItem {
  * What the provider is asked. `word` is the identifier being typed, with its
  * dot-separated qualifiers (`public.us`); `before` is the text of the current
  * statement before the word (cut at the previous `;`, at most 2000
- * characters) so the provider can tell `FROM ` from `SELECT `. Both are what
- * the person typed: treat them as untrusted and sensitive; never log them.
+ * characters) so the provider can tell `FROM ` from `SELECT `; `after` is the
+ * text of the same statement after the word (cut at the next `;`, at most
+ * 2000 characters), so a provider can read the `FROM` clause that follows a
+ * column list. All three are what the person typed: treat them as untrusted
+ * and sensitive; never log them. A semicolon inside a string or a comment
+ * cuts them too: they are a completion aid, never a parse.
  */
 export interface SqlCompletionContext {
   readonly word: string
   readonly before: string
+  readonly after?: string
 }
 
 /**
@@ -72,6 +77,12 @@ export type SqlCompletionProvider = (
   context: SqlCompletionContext,
 ) => Promise<readonly SqlCompletionItem[]>
 
+/** A range of the text in UTF-16 code units, the unit of the server's statement offsets. */
+export interface EditorRange {
+  readonly from: number
+  readonly to: number
+}
+
 /** The imperative handle of the editor (`ref`). Lines and columns are 1-based. */
 export interface EditorHandle {
   focus(): void
@@ -79,6 +90,18 @@ export interface EditorHandle {
   setSelection(line: number, column: number): void
   /** The selected text, ranges joined with a line break; `''` when nothing is selected. */
   getSelectionText(): string
+  /** The offset of the cursor (the head of the main selection) in the text; 0 without an editor. */
+  getCursorOffset(): number
+  /** The non-empty selected ranges in text order; empty when nothing is selected. */
+  getSelectionRanges(): readonly EditorRange[]
+  /**
+   * Replaces the text of `from` to `to` with `insert`, as the person's own
+   * edit (it is reported by `onChange` and one Undo reverts it), but only
+   * while that range still holds `expected`; otherwise nothing changes and the
+   * answer is `false`. Only the part that differs is replaced, so the cursor
+   * and the undo history stay.
+   */
+  replaceRange(from: number, to: number, expected: string, insert: string): boolean
 }
 
 export interface SqlEditorProps {
@@ -94,6 +117,11 @@ export interface SqlEditorProps {
    * caller decides what "run" means (and asks for the plan or the permission).
    */
   onRun?: () => void
+  /**
+   * Called when the editor goes from no selection to a selection or back (not
+   * on every cursor move), with whether text is selected.
+   */
+  onSelectionChange?: (hasSelection: boolean) => void
   /** The accessible name of the text box (an ID reference cannot cross the shadow boundary). */
   label: string
   /** Height at least this many lines. Default 3. */

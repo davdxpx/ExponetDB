@@ -192,11 +192,14 @@ describe('every read state of the sessions', () => {
       message: 'diagnostics.read is missing.',
     })
     mountDiagnostics(PATH, w)
-    expect(
-      await screen.findByRole('heading', { level: 3, name: 'Could not read sessions' }),
-    ).toBeInTheDocument()
-    expect(screen.getByText('diagnostics.read is missing.')).toBeInTheDocument()
-    expect(screen.getByText('PERMISSION_DENIED')).toBeInTheDocument()
+    const heading = await screen.findByRole('heading', {
+      level: 3,
+      name: 'Could not read sessions',
+    })
+    // The failure is the sessions section's own; the strip's cards say it too, as their own failure.
+    const failed = heading.closest('[data-state="failed"]') as HTMLElement
+    expect(within(failed).getByText('diagnostics.read is missing.')).toBeInTheDocument()
+    expect(within(failed).getByText('PERMISSION_DENIED')).toBeInTheDocument()
     expect(screen.getByText('This does not mean there is no sessions.')).toBeInTheDocument()
     expect(screen.queryByText(/reported no sessions/)).toBeNull()
     expect(document.querySelector('table')).toBeNull()

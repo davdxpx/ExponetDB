@@ -91,6 +91,7 @@ export function listingFailure<T>(
       code: e.code,
       message: e.message ?? 'The server refused the request.',
       ...(e.remediation === undefined ? {} : { remediation: e.remediation }),
+      ...(e.details === undefined ? {} : { details: e.details }),
     },
     ...(e.requestId === null ? {} : { requestId: e.requestId }),
   }

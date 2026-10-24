@@ -78,6 +78,10 @@ function defNames(list: unknown): string[] {
   })
 }
 
+function isRecord(value: unknown): value is JsonNode {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 /** A fixed summary for a sensitive statement, or undefined. */
 function sensitiveSummary(type: string, node: JsonNode): string | undefined {
   switch (type) {
@@ -106,8 +110,11 @@ function sensitiveSummary(type: string, node: JsonNode): string | undefined {
     case 'AlterSystemStmt':
     case 'AlterRoleSetStmt':
     case 'AlterDatabaseSetStmt': {
-      const set = nodeType(node['setstmt'])
-      const name = set?.body['name']
+      // `setstmt` is a typed field: libpg_query writes the VariableSetStmt
+      // without its type wrapper (`{ kind, name, args }`); read both shapes.
+      const raw = node['setstmt']
+      const set = nodeType(raw)?.body ?? (isRecord(raw) ? raw : undefined)
+      const name = set?.['name']
       return typeof name === 'string' && SECRET_NAME.test(name)
         ? 'ALTER … SET <setting> <redacted>'
         : undefined

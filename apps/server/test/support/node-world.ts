@@ -47,6 +47,14 @@ import { expect } from 'vitest'
 
 export const ORIGIN = 'https://db.example.test'
 export const RP_ID = 'db.example.test'
+
+/** Where the Web App runs for a person: its origin and WebAuthn RP ID. */
+export interface Site {
+  readonly origin: string
+  readonly rpId: string
+}
+
+export const SITE: Site = { origin: ORIGIN, rpId: RP_ID }
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36'
 const PASSWORD = 'tangerine fjord radiator 42'
 
@@ -63,8 +71,10 @@ export interface BrowserResponse {
 export class Browser {
   readonly jar = new Map<string, string>()
   readonly request: Requester
-  constructor(request: Requester) {
+  readonly site: Site
+  constructor(request: Requester, site: Site = SITE) {
     this.request = request
+    this.site = site
   }
 
   async call(method: string, path: string, body?: unknown): Promise<BrowserResponse> {
@@ -73,12 +83,12 @@ export class Browser {
       headers['cookie'] = [...this.jar].map(([k, v]) => `${k}=${v}`).join('; ')
     }
     if (method !== 'GET') {
-      headers['origin'] = ORIGIN
+      headers['origin'] = this.site.origin
       const csrf = this.jar.get('__Host-exdb_csrf')
       if (csrf !== undefined) headers['x-csrf-token'] = csrf
     }
     if (body !== undefined) headers['content-type'] = 'application/json'
-    const response = await this.request(`${ORIGIN}${path}`, {
+    const response = await this.request(`${this.site.origin}${path}`, {
       method,
       headers,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -108,22 +118,30 @@ export interface Person {
 }
 
 /** The first owner, enrolled through the Web App with a passkey, a password and TOTP. */
-export async function enrollOwner(db: MigratedTestDatabase, request: Requester): Promise<Person> {
+export async function enrollOwner(
+  db: MigratedTestDatabase,
+  request: Requester,
+  site: Site = SITE,
+): Promise<Person> {
   const issued = await bootstrapOwner(
     {
       store: storeOf(db, 'exdb_serve'),
       clock: systemClock,
-      config: { publicOrigin: ORIGIN, rpId: RP_ID, rpName: 'ExponetDB' },
+      config: { publicOrigin: site.origin, rpId: site.rpId, rpName: 'ExponetDB' },
       channel: undefined,
     },
     { email: 'owner@example.test', reissue: false },
   )
-  return enrollFromLink(request, issued.link)
+  return enrollFromLink(request, issued.link, site)
 }
 
 /** A person enrolled from an enrollment or invitation link: passkey, password, TOTP. */
-export async function enrollFromLink(request: Requester, link: string): Promise<Person> {
-  const browser = new Browser(request)
+export async function enrollFromLink(
+  request: Requester,
+  link: string,
+  site: Site = SITE,
+): Promise<Person> {
+  const browser = new Browser(request, site)
   const token = new URL(link).hash.replace('#token=', '')
   expect((await browser.call('POST', '/auth/enrollment/redeem', { token })).status).toBe(200)
   const options = await browser.call('POST', '/auth/enrollment/passkey/options', {})
@@ -132,8 +150,8 @@ export async function enrollFromLink(request: Requester, link: string): Promise<
   )
   const credential = authenticator.register({
     challenge: options.body.challenge,
-    origin: ORIGIN,
-    rpId: RP_ID,
+    origin: site.origin,
+    rpId: site.rpId,
   })
   await browser.call('POST', '/auth/enrollment/passkey', { credential, label: 'Laptop' })
   await browser.call('POST', '/auth/enrollment/password', { password: PASSWORD })
@@ -148,7 +166,11 @@ export async function enrollFromLink(request: Requester, link: string): Promise<
     identityId: String(done.body.signedIn.identityId),
     async reauth() {
       const o = await browser.call('POST', '/auth/reauth/passkey/options', {})
-      const c = authenticator.assert({ challenge: o.body.challenge, origin: ORIGIN, rpId: RP_ID })
+      const c = authenticator.assert({
+        challenge: o.body.challenge,
+        origin: site.origin,
+        rpId: site.rpId,
+      })
       expect((await browser.call('POST', '/auth/reauth/passkey', { credential: c })).status).toBe(
         200,
       )

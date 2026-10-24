@@ -7,12 +7,15 @@ export {
   type ExpiryStatus,
   expiryStatus,
   formatRemaining,
+  hashKnown,
   NOT_KNOWN,
   type PlanStateName,
   planActionAvailability,
 } from './format.ts'
 export * from './plan-actions.tsx'
 export * from './plan-analysis-block.tsx'
+export * from './plan-checklist.tsx'
+export * from './plan-details-list.tsx'
 export * from './plan-evidence-block.tsx'
 export * from './plan-frame.tsx'
 export * from './plan-steps-block.tsx'

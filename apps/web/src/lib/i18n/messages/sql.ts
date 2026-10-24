@@ -13,6 +13,15 @@ export const sqlMessages = {
   'sql.mode.draftHint':
     'Draft mode never runs anything. The server classifies the text as you type; Create migration turns it into a bundle draft whose plan you review before anything is applied.',
   'sql.run.run': 'Run',
+  'sql.run.runSelected': 'Run selected',
+  'sql.run.rowLimit': 'Row limit',
+  'sql.run.rowLimitOption': '{count} rows',
+  'sql.run.multiHint':
+    'The text holds {count} statements. Run sends the statement under the cursor; select text to send only that.',
+  'sql.run.scopeSelection': 'Sent the selected text.',
+  'sql.run.scopeStatement': 'Sent statement {n} of {count}, which starts on line {line}.',
+  'sql.run.heldSelection': 'The selected text was not sent.',
+  'sql.run.heldStatement': 'Statement {n} of {count}, which starts on line {line}, was not sent.',
   'sql.run.explain': 'Explain',
   'sql.run.analyze': 'Include actual times (runs the query)',
   'sql.run.cancel': 'Cancel the query',
@@ -35,8 +44,8 @@ export const sqlMessages = {
   'sql.editor.labelDraft': 'SQL draft of a change',
   'sql.editor.placeholderQuery': 'Write one read-only statement, then press Run.',
   'sql.editor.placeholderDraft': 'Write the change as SQL. Nothing runs from here.',
-  'sql.editor.noFormatter':
-    'Formatting is not available: the Web App has no SQL formatter. Hidden and direction characters are shown as code points in the editor.',
+  'sql.editor.hiddenNote':
+    'Hidden and direction characters are shown as code points in the editor.',
   'sql.completion.detail': 'In {schema}: {kind}',
 
   // Where a tab's text came from.
@@ -53,6 +62,9 @@ export const sqlMessages = {
   'sql.history.openedTitle': 'Opened from your history, not run',
   'sql.history.openedBody':
     'This is the redacted statement the audit kept: constants are replaced and it is cut at 256 characters, so it may not run as it is.',
+  'sql.template.openedTitle': 'From a template, not run',
+  'sql.template.openedBody':
+    'This text is a starting point. Nothing was run. Change the names to match your schema and read all of it before you run or draft it.',
   'sql.saved.openedTitle': 'Opened from a saved query, not run',
   'sql.saved.openedBody':
     'Saved text is data like any other text. Read it before you run it; the server checks a read of it like any read.',
@@ -67,6 +79,9 @@ export const sqlMessages = {
   'sql.result.truncatedBytes':
     'The result was cut at the {cap} byte limit. The rows shown are not all the rows.',
   'sql.result.truncatedUnknown': 'The server cut the result. The rows shown are not all the rows.',
+  'sql.result.truncatedRaise': 'Choose a higher row limit to read more rows.',
+  'sql.result.truncatedLowered':
+    'You asked for at most {requested} rows; the server limits this read to {cap}.',
   'sql.result.masked':
     '{count} columns are masked by the target setting: their values are hidden, not NULL.',
   'sql.result.rls':
@@ -83,6 +98,14 @@ export const sqlMessages = {
   'sql.cancel.canceled': 'The server canceled the query.',
   'sql.cancel.finished': 'The query had already finished when the cancel arrived.',
   'sql.cancel.failed': 'Could not cancel the query: {message} ({code})',
+
+  // A failed run.
+  'sql.error.sqlstate': 'PostgreSQL error code (SQLSTATE): {sqlstate}',
+  'sql.error.copy': 'Copy error',
+  'sql.error.copied': 'Copied the error code and message.',
+  'sql.error.copyFailed': 'Could not copy. Select the text and copy it yourself.',
+  'sql.error.clipboard': '{code}: {message}',
+  'sql.error.clipboardSqlstate': '{code} (SQLSTATE {sqlstate}): {message}',
 
   // A write in Query mode.
   'sql.write.title': 'This text changes data or the schema',
@@ -224,6 +247,71 @@ export const sqlMessages = {
   'sql.saved.deleteBody':
     'The saved query is removed for everyone who can see it. Open tabs keep their text.',
   'sql.saved.deleteAction': 'Delete saved query',
+
+  // Saved query actions.
+  'sql.saved.menu': 'Actions',
+  'sql.tabs.savedMenu': 'Actions for the saved query in tab {n}',
+  'sql.saved.menuRename': 'Rename',
+  'sql.saved.menuVisibility': 'Who sees it',
+  'sql.saved.menuPersonal': 'Only me',
+  'sql.saved.menuShared': 'Shared in scope',
+  'sql.saved.menuCopy': 'Save as copy',
+  'sql.saved.copyName': '{name} (copy)',
+  'sql.saved.renamed': 'Renamed. The saved query is at revision {revision}.',
+  'sql.saved.nowPersonal': 'Only you can see this saved query now. Revision {revision}.',
+  'sql.saved.nowShared':
+    'Everyone who may read data in its scope can see this saved query now. Revision {revision}.',
+  'sql.saved.copySaved': 'Saved a copy as a new query.',
+  'sql.saved.changeFailedTitle': 'Could not change the saved query',
+  'sql.rename.title': 'Rename the saved query',
+  'sql.rename.description':
+    'Renaming changes the name only. The stored text stays as it is and the scope never changes.',
+  'sql.rename.submit': 'Rename saved query',
+  'sql.rename.cancel': 'Cancel',
+  'sql.save.copyTitle': 'Save a copy of the query',
+  'sql.save.copyDescription':
+    'The copy is a new saved query that you own. The original stays as it is. Saving never runs the text.',
+  'sql.save.copySubmit': 'Save copy',
+
+  // Templates.
+  'sql.templates.title': 'Templates',
+  'sql.templates.note':
+    'Starting points for common work. Opening one puts its text in a new tab and never runs it.',
+  'sql.templates.queryGroup': 'Queries',
+  'sql.templates.draftGroup': 'Changes to draft',
+  'sql.templates.open': 'Open in a new tab',
+  'sql.template.version.title': 'PostgreSQL version',
+  'sql.template.version.description': 'The version of PostgreSQL this target runs.',
+  'sql.template.sessions.title': 'Active sessions by state',
+  'sql.template.sessions.description':
+    'How many client sessions are active, idle or waiting, from pg_stat_activity.',
+  'sql.template.sizes.title': 'Table sizes',
+  'sql.template.sizes.description':
+    'The 50 largest tables and materialized views with their total size, indexes and TOAST included.',
+  'sql.template.indexUsage.title': 'Index usage',
+  'sql.template.indexUsage.description':
+    'The 50 least scanned indexes since the statistics were last reset, from pg_stat_user_indexes.',
+  'sql.template.extensions.title': 'Installed extensions',
+  'sql.template.extensions.description':
+    'The extensions created in this database and their versions.',
+  'sql.template.longTransactions.title': 'Long-running transactions',
+  'sql.template.longTransactions.description':
+    'Open transactions, oldest first. Long ones hold back cleanup and can block schema changes.',
+  'sql.template.createTable.title': 'Create a table',
+  'sql.template.createTable.description':
+    'A table with an identity key and a timestamp. Rename it and its columns first.',
+  'sql.template.addColumn.title': 'Add a column',
+  'sql.template.addColumn.description':
+    'A nullable column without a default, which PostgreSQL adds without rewriting the table.',
+  'sql.template.addIndex.title': 'Add an index concurrently',
+  'sql.template.addIndex.description':
+    'Builds the index without blocking writes. It cannot run in a transaction, so it needs a bundle of its own.',
+  'sql.template.addCheck.title': 'Add a check constraint, not validated',
+  'sql.template.addCheck.description':
+    'Adds the constraint for new writes only, with a short lock. Validate it in a later migration.',
+  'sql.template.validateCheck.title': 'Validate a check constraint',
+  'sql.template.validateCheck.description':
+    'Checks the existing rows against a constraint that was added as not valid, without blocking writes.',
 
   // Saving.
   'sql.save.open': 'Save query',

@@ -240,9 +240,94 @@ export function operationBlocks(o: Operation): Block[] {
       ]),
     })
   }
+  blocks.push(...verificationFailureBlocks(o.verifications ?? []))
   const notes = operationNotes(o)
   if (notes.length > 0)
     blocks.push({ kind: 'text', lines: notes, tone: o.state === 'succeeded' ? 'muted' : 'warn' })
+  return blocks
+}
+
+type Run = NonNullable<Operation['verifications']>[number]
+type RunFailure = NonNullable<Run['structural']['failures']>[number]
+
+/** How many failing expectations the human output lists per run (the JSON has up to 200). */
+const FAILURES_LISTED = 20
+
+/**
+ * What a verification run found failing (Part A follow-up 3, F2): one line
+ * per run that did not pass or excused something, then its failing
+ * expectations, the open ones first, excused ones marked.
+ */
+export function verificationFailureBlocks(
+  runs: readonly Pick<
+    Run,
+    'verificationId' | 'migrationId' | 'status' | 'structural' | 'runtime' | 'engine'
+  >[],
+): Block[] {
+  const blocks: Block[] = []
+  for (const v of runs) {
+    const layers = [v.structural, v.runtime, v.engine]
+    const failures: RunFailure[] = layers.flatMap((l) => l.failures ?? [])
+    const total = layers.reduce((n, l) => n + (l.failuresTotal ?? l.failures?.length ?? 0), 0)
+    const excused = v.structural.excused ?? 0
+    if (v.status === 'passed' && excused === 0) continue
+    const counts = [
+      `structural ${v.structural.failed} of ${v.structural.checks} failed`,
+      ...(excused > 0 ? [`${excused} excused by review decisions`] : []),
+      ...(v.engine.status === 'failed'
+        ? [`engine: ${v.engine.firstFailure?.name ?? 'failed'}`]
+        : []),
+      ...(v.runtime.failed > 0 ? [`runtime ${v.runtime.failed} failed`] : []),
+    ]
+    blocks.push({
+      kind: 'text',
+      lines: [
+        `Verification ${v.verificationId} of ${v.migrationId}: ${v.status} (${counts.join(', ')})`,
+      ],
+      tone: v.status === 'passed' ? 'muted' : 'warn',
+    })
+    if (failures.length === 0) {
+      const first = layers.find((l) => l.firstFailure !== null)?.firstFailure
+      if (v.status !== 'passed' && first !== undefined && first !== null) {
+        blocks.push({
+          kind: 'text',
+          lines: [
+            `First failure: ${first.name}${first.detail === null ? '' : ` (${first.detail})`}`,
+          ],
+          tone: 'warn',
+        })
+      }
+      continue
+    }
+    blocks.push({
+      kind: 'table',
+      columns: [
+        { title: 'FILE', flexible: true },
+        { title: 'STATEMENT', align: 'right' },
+        { title: 'EXPECTED', flexible: true },
+        { title: 'DIFFERS' },
+        { title: 'EXCUSED' },
+      ],
+      rows: failures
+        .slice(0, FAILURES_LISTED)
+        .map((f) => [
+          dash(f.file),
+          f.statement === null ? '-' : String(f.statement),
+          f.object,
+          f.failed.join(', '),
+          f.excused ? 'yes' : 'no',
+        ]),
+    })
+    if (total > FAILURES_LISTED) {
+      blocks.push({
+        kind: 'text',
+        lines: [
+          `${total - FAILURES_LISTED} more failing expectations; --json lists the first ${Math.min(total, 200)}.`,
+        ],
+        tone: 'muted',
+      })
+    }
+  }
   return blocks
 }
 

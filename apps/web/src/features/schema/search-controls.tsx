@@ -1,14 +1,26 @@
-import { Button, Input, Label } from '@exponetdb/ui'
-import { UntrustedName } from '@exponetdb/ui-patterns'
-import { type FormEvent, type ReactNode, useId, useState } from 'react'
+import {
+  Button,
+  ComboboxTrigger,
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  Input,
+  Label,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@exponetdb/ui'
+import { type FormEvent, type ReactNode, useEffect, useId, useMemo, useState } from 'react'
 import { t } from '../../lib/i18n/i18n.ts'
 import { SEARCH_MAX_LENGTH } from './keys.ts'
+import { PlainName } from './plain-name.tsx'
 
 /**
- * The name filter of the schema browser. The Control Plane lists schema
- * objects by name search only (`searchSchema` takes 1 to 128 characters), so
- * a list starts when a person applies a filter; the page says so and never
- * reads "nothing typed" as "no objects".
+ * The name filter of the schema browser: optional, 1 to 128 characters, sent
+ * as `q`. Without one the list shows every object of the kind.
  */
 export function SearchForm(props: {
   readonly applied: string
@@ -17,6 +29,8 @@ export function SearchForm(props: {
 }): ReactNode {
   const id = useId()
   const [draft, setDraft] = useState(props.applied)
+  // A link or the back button changes the applied filter: the field follows it.
+  useEffect(() => setDraft(props.applied), [props.applied])
   const submit = (event: FormEvent): void => {
     event.preventDefault()
     props.onApply(draft.trim().slice(0, SEARCH_MAX_LENGTH))
@@ -45,51 +59,125 @@ export function SearchForm(props: {
   )
 }
 
-/** Most schemas the selector lists as buttons; the rest are reached by the name filter. */
-export const SCHEMA_SELECTOR_LIMIT = 24
+/** Most schemas the list shows at once; the rest are reached by typing in the field. */
+export const SCHEMA_SELECTOR_LIMIT = 100
+
+export interface SchemaChoice {
+  readonly name: string
+  readonly managed: boolean
+}
+
+/** The schemas in the order the selector lists them: managed by ExponetDB first, each group by name. */
+export function orderSchemas(schemas: readonly SchemaChoice[]): readonly SchemaChoice[] {
+  return [...schemas].sort(
+    (a, b) =>
+      Number(b.managed) - Number(a.managed) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
+  )
+}
 
 /**
- * Chooses one schema, or all. Schema names are untrusted, so they are not the
- * text of a native `<select>` (a direction character would act there): each is
- * a toggle button with the name shown through `UntrustedName`.
+ * Chooses one schema, or all: a searchable list over the schemas of the
+ * overview. Schema names are untrusted, so they are not the text of a native
+ * `<select>` (a direction character would act there); each is shown through
+ * `PlainName`, with hidden characters by code point. Options are matched by
+ * their position in the list, never by their text, so a name with leading
+ * spaces or unusual characters is still chosen exactly.
  */
 export function SchemaSelector(props: {
-  readonly schemas: readonly string[]
+  readonly schemas: readonly SchemaChoice[]
   readonly value: string | null
   readonly onChange: (schema: string | null) => void
 }): ReactNode {
-  const shown = props.schemas.slice(0, SCHEMA_SELECTOR_LIMIT)
+  const labelId = useId()
+  const valueId = useId()
+  const [open, setOpen] = useState(false)
+  const [term, setTerm] = useState('')
+  const ordered = useMemo(() => orderSchemas(props.schemas), [props.schemas])
+  const needle = term.trim().toLowerCase()
+  const matches = useMemo(
+    () => ordered.filter((entry) => needle === '' || entry.name.toLowerCase().includes(needle)),
+    [ordered, needle],
+  )
+  const shown = matches.slice(0, SCHEMA_SELECTOR_LIMIT)
+  const managed = shown.filter((entry) => entry.managed)
+  const others = shown.filter((entry) => !entry.managed)
+  const choose = (schema: string | null): void => {
+    props.onChange(schema)
+    setOpen(false)
+    setTerm('')
+  }
+  const item = (entry: SchemaChoice): ReactNode => (
+    <CommandItem
+      key={entry.name}
+      value={`schema:${ordered.indexOf(entry)}`}
+      onSelect={() => choose(entry.name)}
+      data-current={props.value === entry.name ? 'true' : undefined}
+    >
+      <PlainName text={entry.name} mono max={80} />
+    </CommandItem>
+  )
   return (
-    <fieldset className="flex flex-col gap-1.5">
-      <legend className="text-sm font-medium">{t('schema.selector.label')}</legend>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          size="tiny"
-          variant={props.value === null ? 'default' : 'outline'}
-          aria-pressed={props.value === null}
-          onClick={() => props.onChange(null)}
-        >
-          {t('schema.selector.all')}
-        </Button>
-        {shown.map((schema) => (
-          <Button
-            key={schema}
-            type="button"
-            size="tiny"
-            variant={props.value === schema ? 'default' : 'outline'}
-            aria-pressed={props.value === schema}
-            onClick={() => props.onChange(schema)}
+    <div className="flex flex-col gap-1.5" data-slot="schema-selector">
+      <span id={labelId} className="text-sm font-medium">
+        {t('schema.selector.label')}
+      </span>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next)
+          if (!next) setTerm('')
+        }}
+      >
+        <PopoverTrigger asChild>
+          <ComboboxTrigger
+            className="w-72"
+            aria-labelledby={`${labelId} ${valueId}`}
+            aria-expanded={open}
           >
-            <UntrustedName name={schema} mono label={t('schema.selector.label')} />
-          </Button>
-        ))}
-      </div>
-      {props.schemas.length > shown.length ? (
-        <p className="text-xs text-foreground-light">
-          {t('schema.selector.more', { count: props.schemas.length - shown.length })}
-        </p>
-      ) : null}
-    </fieldset>
+            <span id={valueId}>
+              {props.value === null ? (
+                t('schema.selector.all')
+              ) : (
+                <PlainName text={props.value} mono max={40} />
+              )}
+            </span>
+          </ComboboxTrigger>
+        </PopoverTrigger>
+        <PopoverContent className="w-72 p-0" align="start">
+          <Command label={t('schema.selector.search')} shouldFilter={false}>
+            <CommandInput
+              value={term}
+              onValueChange={setTerm}
+              placeholder={t('schema.selector.search')}
+            />
+            <CommandList>
+              <CommandEmpty>{t('schema.selector.empty')}</CommandEmpty>
+              {needle === '' ? (
+                <CommandGroup>
+                  <CommandItem value="schema:all" onSelect={() => choose(null)}>
+                    {t('schema.selector.all')}
+                  </CommandItem>
+                </CommandGroup>
+              ) : null}
+              {managed.length === 0 ? null : (
+                <CommandGroup heading={t('schema.selector.managed')}>
+                  {managed.map(item)}
+                </CommandGroup>
+              )}
+              {others.length === 0 ? null : (
+                <CommandGroup heading={t('schema.selector.others')}>
+                  {others.map(item)}
+                </CommandGroup>
+              )}
+            </CommandList>
+          </Command>
+          {matches.length > shown.length ? (
+            <p className="border-t border-default px-3 py-2 text-xs text-foreground-light">
+              {t('schema.selector.shown', { shown: shown.length, total: matches.length })}
+            </p>
+          ) : null}
+        </PopoverContent>
+      </Popover>
+    </div>
   )
 }

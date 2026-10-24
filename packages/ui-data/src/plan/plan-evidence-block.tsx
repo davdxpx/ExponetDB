@@ -4,6 +4,7 @@ import { type HeadingLevel, type NowInput, useResolvedNow } from '@exponetdb/ui-
 import type { ReactNode } from 'react'
 
 import { knownText } from './format.ts'
+import type { PlanCheckState } from './plan-checklist.tsx'
 import { PlanBlock } from './plan-frame.tsx'
 import {
   type FactItem,
@@ -101,6 +102,26 @@ const EVIDENCE: Readonly<Record<string, EvidenceText>> = {
   },
 }
 
+/**
+ * Where a migration plan's evidence stands as a checklist state: present (or
+ * not required) passes; unreachable is a read that failed; missing,
+ * unverified and another verify digest block; anything else is not known.
+ */
+export function evidenceCheckState(status: string | null): PlanCheckState {
+  const known = knownText(status)
+  if (known === 'present' || known === 'not_required') return 'passed'
+  if (known === 'unreachable') return 'failed'
+  if (known === 'missing' || known === 'unverified' || known === 'other_verify_digest') {
+    return 'blocked'
+  }
+  return 'unknown'
+}
+
+/** The evidence state in words with its icon; "not known" for none. */
+export function EvidenceStatus({ status }: { readonly status: string | null }): ReactNode {
+  return <EvidenceValue status={status} />
+}
+
 function EvidenceValue({ status }: { readonly status: string | null }): ReactNode {
   const known = knownText(status)
   if (known === undefined) return <NotKnown />
@@ -126,7 +147,8 @@ function EvidenceValue({ status }: { readonly status: string | null }): ReactNod
   )
 }
 
-function BackupValue({
+/** The newest backup with its restore-test state; "not known" for `null` (until Wave 9). */
+export function NewestBackupValue({
   backup,
   now,
 }: {
@@ -145,6 +167,64 @@ function BackupValue({
             : '(not verified by a restore test)'}
       </span>
     </Words>
+  )
+}
+
+/** The note that a plan was made under a break-glass grant, with the rules it overrides. */
+export function BreakGlassNote({
+  breakGlass,
+}: {
+  readonly breakGlass: BreakGlassView | null | undefined
+}): ReactNode {
+  if (breakGlass === undefined || breakGlass === null) return null
+  return (
+    <Note tone="warning">
+      <Words>
+        <ShieldAlert aria-hidden="true" className={cn(INLINE_ICON, 'text-warning-600')} />
+        <strong className="font-medium">Made under break-glass.</strong>
+        <span>Grant</span>
+        <Marked text={breakGlass.grantId} mono />
+        <span>overrides</span>
+        {breakGlass.rules.length === 0 ? (
+          <span>
+            rules <NotKnown />
+          </span>
+        ) : (
+          keyedBy(breakGlass.rules, (rule) => rule).map(({ item: rule, key }, index) => (
+            <Marked key={key} text={index < breakGlass.rules.length - 1 ? `${rule},` : rule} mono />
+          ))
+        )}
+      </Words>
+    </Note>
+  )
+}
+
+/** The evidence per migration; nothing for none. */
+export function EvidenceItemList({
+  items,
+  now,
+}: {
+  readonly items: readonly EvidenceItemView[] | null | undefined
+  readonly now?: NowInput
+}): ReactNode {
+  const current = useResolvedNow(now)
+  if (items === undefined || items === null || items.length === 0) return null
+  return (
+    <ul aria-label="Evidence per migration" className="flex flex-col gap-1 text-sm">
+      {keyedBy(items, (item) => item.migrationId).map(({ item, key }) => (
+        <li key={key} data-evidence-item={item.migrationId} className="min-w-0">
+          <Words>
+            <Marked text={item.migrationId} mono />
+            <EvidenceValue status={item.status} />
+            {item.verifiedAt === null ? null : (
+              <span className="text-foreground-light">
+                verified <TimeText at={item.verifiedAt} now={current} />
+              </span>
+            )}
+          </Words>
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -196,54 +276,15 @@ export function PlanEvidenceBlock({
     {
       id: 'newest-backup',
       label: 'Newest backup',
-      value: <BackupValue backup={newestBackup} now={current} />,
+      value: <NewestBackupValue backup={newestBackup} now={current} />,
     },
   )
 
   return (
     <PlanBlock title="Evidence" headingLevel={headingLevel} data-plan-block="evidence">
-      {breakGlass === undefined || breakGlass === null ? null : (
-        <Note tone="warning">
-          <Words>
-            <ShieldAlert aria-hidden="true" className={cn(INLINE_ICON, 'text-warning-600')} />
-            <strong className="font-medium">Made under break-glass.</strong>
-            <span>Grant</span>
-            <Marked text={breakGlass.grantId} mono />
-            <span>overrides</span>
-            {breakGlass.rules.length === 0 ? (
-              <span>
-                rules <NotKnown />
-              </span>
-            ) : (
-              keyedBy(breakGlass.rules, (rule) => rule).map(({ item: rule, key }, index) => (
-                <Marked
-                  key={key}
-                  text={index < breakGlass.rules.length - 1 ? `${rule},` : rule}
-                  mono
-                />
-              ))
-            )}
-          </Words>
-        </Note>
-      )}
+      <BreakGlassNote breakGlass={breakGlass} />
       <Facts items={facts} />
-      {items === undefined || items === null || items.length === 0 ? null : (
-        <ul aria-label="Evidence per migration" className="flex flex-col gap-1 text-sm">
-          {keyedBy(items, (item) => item.migrationId).map(({ item, key }) => (
-            <li key={key} data-evidence-item={item.migrationId} className="min-w-0">
-              <Words>
-                <Marked text={item.migrationId} mono />
-                <EvidenceValue status={item.status} />
-                {item.verifiedAt === null ? null : (
-                  <span className="text-foreground-light">
-                    verified <TimeText at={item.verifiedAt} now={current} />
-                  </span>
-                )}
-              </Words>
-            </li>
-          ))}
-        </ul>
-      )}
+      <EvidenceItemList items={items} now={current} />
     </PlanBlock>
   )
 }

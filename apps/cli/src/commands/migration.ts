@@ -1,13 +1,18 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { newUlid } from '@exponetdb/kernel'
-import { type ValidatedBundle, validateBundle } from '@exponetdb/migrations/format'
+import {
+  scratchCopyCommands,
+  scratchResetSql,
+  type ValidatedBundle,
+  validateBundle,
+} from '@exponetdb/migrations/format'
 import { buildGraph } from '@exponetdb/migrations/graph'
 import { type LintFinding, lintBundles, type Tier } from '@exponetdb/migrations/lint'
-import type { ImportReport, MigrationStatus, PlanView } from '@exponetdb/sdk'
+import type { ImportReport, MigrationStatus, PlanView, ScratchCheck } from '@exponetdb/sdk'
 import { applyPlan, planResult } from '../cli/apply.ts'
 import { EXIT } from '../cli/exit.ts'
-import { checkedBody } from '../cli/planning.ts'
+import { bodyFromFile, checkedBody } from '../cli/planning.ts'
 import { arg, flag, showCommand, TARGET_FLAG } from '../cli/reads.ts'
 import { must } from '../cli/remote.ts'
 import type { CommandInput, CommandSpec, FlagSpec, RunContext } from '../cli/types.ts'
@@ -24,6 +29,7 @@ import {
 } from '../local/project.ts'
 import { ago, dash, header } from '../output/format.ts'
 import { type Block, type CommandResult, result } from '../output/model.ts'
+import { verificationFailureBlocks } from '../output/views.ts'
 
 /**
  * Migrations ([`04-migrations/`](../../../../exponetdb-docs/04-migrations/README.md)):
@@ -38,6 +44,36 @@ const READ = ['migrations.read']
 const PLAN = ['migrations.plan']
 
 const TARGET_REQUIRED: FlagSpec = { ...TARGET_FLAG, required: true }
+
+const SCRATCH_CHECK_FLAGS: FlagSpec[] = [
+  TARGET_REQUIRED,
+  {
+    name: 'scratch',
+    type: 'string',
+    placeholder: 'target',
+    description: 'The scratch target (path or tgt_ id).',
+    required: true,
+  },
+  {
+    name: 'role',
+    type: 'string',
+    placeholder: 'alias',
+    description: 'The execution role alias the replay runs as (the hints role; default owner).',
+  },
+  {
+    name: 'hints',
+    type: 'string',
+    placeholder: 'path',
+    description:
+      'The analysis hints file: its role and notApplicable apply here too (the replay skips those files).',
+  },
+  {
+    name: 'not-applicable',
+    type: 'list',
+    placeholder: 'files',
+    description: 'Legacy files the replay skips, so the check does not read them either.',
+  },
+]
 
 const workdir = (ctx: RunContext) => ctx.global.workdir ?? ctx.io.cwd
 
@@ -519,6 +555,51 @@ const PLAN_FLAGS: readonly FlagSpec[] = [
   },
 ]
 
+/** The import hints a `--hints` file may carry (the request contract checks their shapes). */
+const HINT_FIELDS = ['aliases', 'notApplicable', 'role', 'searchPath', 'ledgers'] as const
+
+/**
+ * `--baseline` and the project file's `legacy.baseline` name the baseline as
+ * `baseline:<slug>` (the dependency ref of the migration format) or as the
+ * bare slug; the REST request takes the slug. Anything else is left for the
+ * contract check to refuse.
+ */
+export function baselineSlug(value: string): string {
+  return value.startsWith('baseline:') ? value.slice('baseline:'.length) : value
+}
+
+/**
+ * The hints of a legacy import from a JSON or YAML file (data only, at most
+ * 256 KiB): an object with only the fields of {@link HINT_FIELDS}. A field
+ * given both in the file and as a flag is refused, never silently merged.
+ */
+export async function importHints(
+  ctx: RunContext,
+  path: string,
+  flags: Readonly<Record<string, unknown>>,
+): Promise<Record<string, unknown>> {
+  const value = await bodyFromFile(ctx, path)
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    throw new UsageError(`The hints file ${path} must hold one object.`)
+  const hints = value as Record<string, unknown>
+  const unknown = Object.keys(hints).filter((k) => !(HINT_FIELDS as readonly string[]).includes(k))
+  if (unknown.length > 0)
+    throw new UsageError(
+      `The hints file ${path} has fields the import does not know: ${unknown.slice(0, 5).join(', ')} (allowed: ${HINT_FIELDS.join(', ')}).`,
+    )
+  const twice = (
+    [
+      ['ledgers', 'ledger'],
+      ['notApplicable', 'not-applicable'],
+    ] as const
+  ).filter(([field, name]) => field in hints && flags[name] !== undefined)
+  if (twice.length > 0)
+    throw new UsageError(
+      `Give ${twice.map(([field, name]) => `${field} (--${name})`).join(' and ')} either in the hints file or as a flag, not both.`,
+    )
+  return hints
+}
+
 function reportBlocks(r: ImportReport): Block[] {
   return [
     {
@@ -543,11 +624,90 @@ function reportBlocks(r: ImportReport): Block[] {
         { title: 'LEGACY' },
         { title: 'NAME', flexible: true },
         { title: 'STATE' },
+        { title: 'FAILING', align: 'right' },
         { title: 'DECISION' },
       ],
-      rows: r.items.map((i) => [i.itemId, i.legacyId, i.name, i.state, i.decision?.state ?? '-']),
+      rows: r.items.map((i) => [
+        i.itemId,
+        i.legacyId,
+        i.name,
+        i.state,
+        i.failing === undefined || i.failing === null ? '-' : String(i.failing.total),
+        i.decision?.state ?? '-',
+      ]),
       empty: 'No items.',
     },
+  ]
+}
+
+/** Decisions that accept a file as applied (it becomes a ledger row of the baseline). */
+const ACCEPTING = new Set(['recorded_present', 'unrecorded_present'])
+
+/**
+ * What a decision on one item means for the baseline's verification
+ * (Part A follow-up 3, F1): accepting a file whose expectations did not
+ * hold excuses exactly those, and says so before anyone is surprised.
+ */
+function decisionBlocks(r: ImportReport, itemId: string): Block[] {
+  const item = r.items.find((i) => i.itemId === itemId)
+  const state = item?.decision?.state
+  if (item === undefined || state === undefined) return []
+  if (state === 'superseded') {
+    return [
+      {
+        kind: 'text',
+        lines: [
+          `Item ${itemId} is recorded as superseded: the baseline's verification does not check its expectations.`,
+        ],
+        tone: 'muted',
+      },
+    ]
+  }
+  const failing = item.failing
+  if (!ACCEPTING.has(state) || failing === undefined || failing === null) return []
+  if (failing.total === 0) {
+    return [
+      {
+        kind: 'text',
+        lines: [
+          `Accepting item ${itemId} as applied excuses nothing: every expectation it states must hold at the baseline's verification.`,
+        ],
+        tone: 'muted',
+      },
+    ]
+  }
+  return [
+    {
+      kind: 'text',
+      lines: [
+        `Accepting item ${itemId} as applied excuses its ${failing.total} failing expectation${failing.total === 1 ? '' : 's'} at the baseline's verification, as they fail now; any other failure still fails it.`,
+      ],
+      tone: 'warn',
+    },
+    {
+      kind: 'table',
+      columns: [
+        { title: 'STATEMENT', align: 'right' },
+        { title: 'EXPECTED', flexible: true },
+        { title: 'DIFFERS' },
+      ],
+      rows: failing.items.map((f) => [
+        f.statement === null ? '-' : String(f.statement),
+        f.object,
+        f.failed.join(', '),
+      ]),
+    },
+    ...(failing.items.some((f) => f.failed.includes('unreadable'))
+      ? [
+          {
+            kind: 'text' as const,
+            lines: [
+              'Some of these checks could not be read on the imported target, so nobody saw what they would find; the acceptance excuses that too. To check them, give the observer the reads it lacks and analyze again.',
+            ],
+            tone: 'warn' as const,
+          },
+        ]
+      : []),
   ]
 }
 
@@ -571,7 +731,13 @@ const remoteCommands: readonly CommandSpec[] = [
     path: ['migration', 'show'],
     summary: 'One migration on a target: state, events, verification runs.',
     group: 'migration',
-    args: [{ name: 'migration', description: 'The migration id (ULID).', required: true }],
+    args: [
+      {
+        name: 'migration',
+        description: 'The migration id (ULID), or a legacy import baseline (baseline:<slug>).',
+        required: true,
+      },
+    ],
     flags: [TARGET_REQUIRED],
     action: 'migration.get',
     scopes: READ,
@@ -626,6 +792,8 @@ const remoteCommands: readonly CommandSpec[] = [
         ]),
         empty: 'Not verified.',
       },
+      // What the newest run found failing (follow-up 3, F2).
+      ...verificationFailureBlocks(d.verifications.slice(-1)),
     ],
   }),
   showCommand({
@@ -729,8 +897,16 @@ const remoteCommands: readonly CommandSpec[] = [
   {
     path: ['migration', 'verify'],
     summary: 'Run a migration’s verification again on a target and wait for its result.',
+    description:
+      'With a baseline (baseline:<slug>), the verification of the legacy import it recorded runs again, with the review decisions that excused failing expectations; when it passes, its schema becomes the drift reference. The baseline operation keeps its outcome; the new run is in the target’s history (migration show baseline:<slug>).',
     group: 'migration',
-    args: [{ name: 'migration', description: 'The migration id.', required: true }],
+    args: [
+      {
+        name: 'migration',
+        description: 'The migration id, or a legacy import baseline (baseline:<slug>).',
+        required: true,
+      },
+    ],
     flags: [
       TARGET_REQUIRED,
       {
@@ -833,8 +1009,15 @@ const remoteCommands: readonly CommandSpec[] = [
       {
         name: 'baseline',
         type: 'string',
-        placeholder: 'baseline:…',
-        description: 'The baseline ref (default the project’s).',
+        placeholder: 'slug',
+        description: 'The baseline, as baseline:<slug> or <slug> (default the project’s).',
+      },
+      {
+        name: 'hints',
+        type: 'string',
+        placeholder: 'path',
+        description:
+          'Import hints as a JSON or YAML file: aliases, notApplicable, role, searchPath, ledgers (checked against the contract).',
       },
       {
         name: 'ledger',
@@ -861,14 +1044,13 @@ const remoteCommands: readonly CommandSpec[] = [
       const legacy = project.config.legacy
       if (legacy === undefined)
         throw new UsageError('The project has no legacy directory (layout legacy+bundles).')
-      const { readdir, readFile } = await import('node:fs/promises')
-      const dir = join(project.root, legacy.directory)
-      const names = (await readdir(dir)).filter((n) => n.endsWith('.sql')).sort()
-      const files = []
-      for (const name of names) files.push({ name, text: await readFile(join(dir, name), 'utf8') })
+      const files = await legacyFiles(project)
+      const hintsPath = flag(input, 'hints')
+      const hints = hintsPath === undefined ? {} : await importHints(ctx, hintsPath, input.flags)
       const body = checkedBody('planImportAnalysis', {
+        ...hints,
         scratchTarget: flag(input, 'scratch'),
-        baseline: flag(input, 'baseline') ?? legacy.baseline,
+        baseline: baselineSlug(flag(input, 'baseline') ?? legacy.baseline),
         files,
         ...(input.flags['ledger'] === undefined ? {} : { ledgers: input.flags['ledger'] }),
         ...(input.flags['not-applicable'] === undefined
@@ -885,6 +1067,137 @@ const remoteCommands: readonly CommandSpec[] = [
       if (input.flags['apply'] !== true || plan.decision === 'deny')
         return planResult('migration import analyze', remote, plan)
       return applyPlan(ctx, remote, 'migration import analyze', plan, input.flags)
+    },
+  },
+  {
+    path: ['migration', 'import', 'scratch-reset-sql'],
+    summary:
+      'Print the SQL that resets a used scratch target in place (run it with psql -v ON_ERROR_STOP=1 as a superuser on that database): it keeps the database and its identity marker and recreates the managed schemas with their grants and extensions.',
+    group: 'migration',
+    flags: [
+      {
+        name: 'scratch',
+        type: 'string',
+        placeholder: 'target',
+        description: 'The scratch target (path or tgt_ id); nonprod only.',
+        required: true,
+      },
+    ],
+    locality: 'remote',
+    effect: 'read',
+    action: 'target.get',
+    scopes: ['targets.read'],
+    output: 'ScratchResetSql',
+    async run(ctx, input) {
+      const remote = await ctx.remote()
+      const scratch = must(
+        await remote.sdk.call('getTarget', { params: { target: String(input.flags['scratch']) } }),
+      )
+      if (scratch.tier !== 'nonprod') {
+        throw new UsageError('A scratch target is nonprod; this one is not.')
+      }
+      const project = must(
+        await remote.sdk.call('getProject', { params: { projectId: scratch.projectId } }),
+      )
+      const installation = must(await remote.sdk.call('getInstallation', {} as never))
+      if (installation.installationId === undefined) {
+        throw new CliError('INTERNAL', 'The server does not name its installation.')
+      }
+      // A scope without a list of schemas is null in the project view: all but the excluded.
+      const scope = project.managedScope as {
+        readonly includeSchemas?: readonly string[] | null
+        readonly excludeSchemas?: readonly string[] | null
+      }
+      const text = scratchResetSql({
+        installationId: installation.installationId,
+        targetId: scratch.id,
+        targetPath: scratch.path,
+        generation: scratch.generation,
+        includeSchemas: scope.includeSchemas ?? null,
+        excludeSchemas: scope.excludeSchemas ?? null,
+      })
+      return result({
+        command: 'migration import scratch-reset-sql',
+        data: { targetId: scratch.id, sql: text },
+        blocks: [{ kind: 'text', lines: text.trimEnd().split('\n') }],
+        next: [
+          `exponetdb migration import scratch-check --target <imported target> --scratch ${scratch.id}`,
+        ],
+      })
+    },
+  },
+  {
+    path: ['migration', 'import', 'scratch-check'],
+    summary:
+      'Check, read only, whether a scratch target can take this target’s legacy replay: usable, its identity, empty, the same extensions, the objects outside the managed scope, the execution role; in a project with a legacy directory also what its files reference outside the scope.',
+    group: 'migration',
+    flags: SCRATCH_CHECK_FLAGS,
+    locality: 'remote',
+    effect: 'read',
+    action: 'migration.import.scratch_check',
+    scopes: ['migrations.import'],
+    output: 'ScratchCheck',
+    async run(ctx, input) {
+      const { remote, check: r } = await runScratchCheck(ctx, input)
+      return result({
+        command: 'migration import scratch-check',
+        data: r,
+        blocks: [header('scratch check', remote.context), ...scratchCheckView(r)],
+        next: r.ready
+          ? [
+              `exponetdb migration import analyze --target ${r.targetId} --scratch ${r.scratchTargetId ?? ''}`,
+            ]
+          : (r.copySchemas ?? []).length > 0
+            ? [
+                `exponetdb migration import scratch-copy-commands --target ${r.targetId} --scratch ${r.scratchTargetId ?? ''}`,
+              ]
+            : [],
+      })
+    },
+  },
+  {
+    path: ['migration', 'import', 'scratch-copy-commands'],
+    summary:
+      'Print the shell commands that copy, schema-only and without triggers, the schemas outside the managed scope the scratch target lacks objects of from the imported target (pg_dump and pg_restore; set IMPORTED_URL and SCRATCH_URL).',
+    group: 'migration',
+    flags: SCRATCH_CHECK_FLAGS,
+    locality: 'remote',
+    effect: 'read',
+    action: 'migration.import.scratch_check',
+    scopes: ['migrations.import'],
+    output: 'ScratchCopyCommands',
+    async run(ctx, input) {
+      const { remote, check: r } = await runScratchCheck(ctx, input)
+      const schemas = r.copySchemas ?? []
+      const target = must(
+        await remote.sdk.call('getTarget', { params: { target: String(input.flags['target']) } }),
+      )
+      const text =
+        schemas.length === 0
+          ? null
+          : scratchCopyCommands({
+              schemas,
+              targetPath: target.path,
+              scratchPath: String(input.flags['scratch']),
+            })
+      return result({
+        command: 'migration import scratch-copy-commands',
+        data: { targetId: r.targetId, scratchTargetId: r.scratchTargetId, schemas, commands: text },
+        blocks:
+          text === null
+            ? [
+                {
+                  kind: 'status',
+                  word: 'nothing to copy',
+                  tone: 'ok',
+                  text: 'The scratch target holds every object outside the managed scope the checks name.',
+                },
+              ]
+            : [{ kind: 'text', lines: text.trimEnd().split('\n') }],
+        next: [
+          `exponetdb migration import scratch-check --target ${r.targetId} --scratch ${r.scratchTargetId ?? ''}`,
+        ],
+      })
     },
   },
   showCommand({
@@ -961,7 +1274,11 @@ const remoteCommands: readonly CommandSpec[] = [
       return result({
         command: 'migration import resolve',
         data: r,
-        blocks: [header('import report', remote.context), ...reportBlocks(r)],
+        blocks: [
+          header('import report', remote.context),
+          ...decisionBlocks(r, arg(input, 'item')),
+          ...reportBlocks(r),
+        ],
       })
     },
   },
@@ -998,3 +1315,101 @@ const remoteCommands: readonly CommandSpec[] = [
 
 export const migrationCommands: readonly CommandSpec[] = [...localCommands, ...remoteCommands]
 export type { CommandResult }
+
+/** A project's legacy files in name order, with their exact text. */
+async function legacyFiles(
+  project: LocalProject,
+): Promise<{ readonly name: string; readonly text: string }[]> {
+  const legacy = project.config.legacy
+  if (legacy === undefined) return []
+  const { readdir, readFile } = await import('node:fs/promises')
+  const dir = join(project.root, legacy.directory)
+  let entries: string[]
+  try {
+    entries = await readdir(dir)
+  } catch (error) {
+    if ((error as { code?: unknown }).code !== 'ENOENT') throw error
+    throw new UsageError(
+      `The project's legacy directory ${legacy.directory} does not exist (exponetdb.project.yaml, legacy.directory).`,
+    )
+  }
+  const names = entries.filter((n) => n.endsWith('.sql')).sort()
+  const files = []
+  for (const name of names) files.push({ name, text: await readFile(join(dir, name), 'utf8') })
+  return files
+}
+
+/**
+ * The scratch preflight; in a project with a legacy directory it sends the
+ * files, so the check also covers what they reference outside the scope.
+ */
+async function runScratchCheck(
+  ctx: RunContext,
+  input: CommandInput,
+): Promise<{
+  readonly remote: Awaited<ReturnType<RunContext['remote']>>
+  readonly check: ScratchCheck
+}> {
+  let project: LocalProject | undefined
+  try {
+    project = await currentProject(workdir(ctx))
+  } catch (error) {
+    // Outside a project the check runs without the files.
+    if (!(error instanceof UsageError)) throw error
+  }
+  // A project whose legacy directory is missing says so (it is not read silently as none).
+  const files = project === undefined ? [] : await legacyFiles(project)
+  const hintsPath = flag(input, 'hints')
+  const hints = hintsPath === undefined ? {} : await importHints(ctx, hintsPath, input.flags)
+  const notApplicable = (input.flags['not-applicable'] ?? hints['notApplicable']) as
+    | readonly string[]
+    | undefined
+  const remote = await ctx.remote()
+  const params = { target: String(input.flags['target']) }
+  const scratchTarget = String(input.flags['scratch'])
+  const alias = flag(input, 'role') ?? hints['role']
+  const role = typeof alias === 'string' ? { role: alias } : {}
+  const check =
+    files.length === 0
+      ? must(
+          await remote.sdk.call('checkScratchTarget', {
+            params,
+            query: { scratchTarget, ...role },
+          } as never),
+        )
+      : must(
+          await remote.sdk.call('checkScratchTargetForFiles', {
+            params,
+            body: checkedBody('checkScratchTargetForFiles', {
+              scratchTarget,
+              ...role,
+              files,
+              ...(notApplicable === undefined ? {} : { notApplicable }),
+            }) as never,
+          }),
+        )
+  return { remote, check: check as ScratchCheck }
+}
+
+function scratchCheckView(r: ScratchCheck): Block[] {
+  return [
+    {
+      kind: 'status',
+      word: r.ready ? 'ready' : 'not ready',
+      tone: r.ready ? 'ok' : 'warn',
+      text: r.ready
+        ? 'An analysis can replay on this scratch target.'
+        : 'Prepare the scratch target first; the analysis would not complete.',
+    },
+    {
+      kind: 'table',
+      columns: [{ title: 'CHECK' }, { title: 'STATUS' }, { title: 'DETAIL', flexible: true }],
+      rows: r.checks.map((c) => [
+        c.check,
+        c.status,
+        [c.detail ?? '', ...c.items.slice(0, 5)].filter((x) => x !== '').join('; ') +
+          (c.items.length > 5 || c.truncated ? ' …' : ''),
+      ]),
+    },
+  ]
+}

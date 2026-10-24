@@ -29,10 +29,12 @@ export {
   planBaseline,
   planImportAnalysis,
 } from './legacy.ts'
+export { refuseOversizedLegacyFiles } from './legacy-files.ts'
 export { type MigrationPlanContext, planMigrationApply } from './planner.ts'
 export {
   bundleFile,
   bundleView,
+  layerFrom,
   lintProject,
   migrationDetail,
   migrationStatus,
@@ -52,6 +54,7 @@ export {
 } from './resume.ts'
 export { MigrationVerifyKind, planMigrationVerify } from './reverify.ts'
 export { MigrationRollbackKind, planMigrationRollback } from './rollback.ts'
+export { type ScratchCheckDeps, scratchCheck } from './scratch-check.ts'
 export {
   fileDigest,
   type IngestedItem,

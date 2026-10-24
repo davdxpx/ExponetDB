@@ -7,11 +7,23 @@ import {
 } from '@exponetdb/contracts'
 import { UsageError } from '../cli/args.ts'
 import { EXIT } from '../cli/exit.ts'
+import type { Profile } from '../cli/profiles.ts'
 import { resolveServer } from '../cli/remote.ts'
-import type { CommandSpec } from '../cli/spec.ts'
+import type { CommandInput, CommandSpec } from '../cli/spec.ts'
+import type { RunContext } from '../cli/types.ts'
 import { CliError } from '../errors.ts'
 import { DEFAULT_SCOPES, deviceLogin, discover, logout, loopbackLogin } from '../oauth.ts'
-import { result } from '../output/model.ts'
+import { type Block, result } from '../output/model.ts'
+import {
+  deviceRefused,
+  isCliScope,
+  isPreset,
+  PRESET_NAMES,
+  rememberable,
+  SCOPE_PRESETS,
+  scopeList,
+  scopeReport,
+} from '../presets.ts'
 
 /**
  * Sign-in ([`05-mcp/oauth.md` §5](../../../../exponetdb-docs/05-mcp/oauth.md)):
@@ -22,10 +34,7 @@ import { result } from '../output/model.ts'
  * verifier is never printed.
  */
 function scopesFrom(raw: unknown): readonly string[] {
-  if (raw === undefined) return DEFAULT_SCOPES
-  const scopes = String(raw)
-    .split(/[\s,]+/)
-    .filter((s) => s.length > 0)
+  const scopes = scopeList(String(raw))
   for (const s of scopes) {
     if (!isScope(s)) throw new UsageError(`${s} is not a scope.`, 'exponetdb auth scopes')
     if (!isScopeGrantableTo(s, 'cli')) {
@@ -33,7 +42,92 @@ function scopesFrom(raw: unknown): readonly string[] {
     }
   }
   if (scopes.length === 0) throw new UsageError('--scope names at least one scope.')
-  return [...new Set(scopes)]
+  return scopes
+}
+
+function presetFrom(raw: unknown): readonly string[] {
+  const name = String(raw)
+  if (!isPreset(name)) {
+    throw new UsageError(
+      `${name} is not a preset (${PRESET_NAMES.join(', ')}).`,
+      'exponetdb auth presets',
+    )
+  }
+  return SCOPE_PRESETS[name].scopes
+}
+
+/**
+ * What `login` asks for (15-cli §3): `--preset` and `--scope` (their union),
+ * else the scopes granted at the profile's last sign-in, else those of the
+ * sign-in the token store still holds, else the default.
+ */
+async function requestedScopes(
+  ctx: RunContext,
+  input: CommandInput,
+  origin: string,
+  profile: Profile | undefined,
+): Promise<{ readonly scopes: readonly string[]; readonly source: string }> {
+  const { scope, preset } = input.flags
+  if (scope !== undefined || preset !== undefined) {
+    const scopes = [
+      ...(preset === undefined ? [] : presetFrom(preset)),
+      ...(scope === undefined ? [] : scopesFrom(scope)),
+    ]
+    return { scopes: [...new Set(scopes)], source: 'flags' }
+  }
+  const remembered =
+    profile?.auth.method === 'oauth' && profile.auth.scopes !== undefined
+      ? { scopes: profile.auth.scopes, source: `remembered for profile ${profile.name}` }
+      : await ctx.tokens
+          .read(origin)
+          .then(
+            (c) => c && { scopes: scopeList(c.scope), source: `the current sign-in to ${origin}` },
+          )
+  if (remembered === undefined) return { scopes: DEFAULT_SCOPES, source: 'default' }
+  const known = remembered.scopes.filter(isCliScope)
+  const dropped = remembered.scopes.filter((s) => !isCliScope(s))
+  // JSON quoting: the file is the person's, but its text never reaches the terminal raw.
+  if (dropped.length > 0)
+    ctx.hint(`Not asked for (unknown to this CLI): ${JSON.stringify(dropped)}.`)
+  return known.length === 0
+    ? { scopes: DEFAULT_SCOPES, source: 'default' }
+    : { scopes: known, source: remembered.source }
+}
+
+/**
+ * Records the grant on the profile (non-secret) for the next `login`, unless
+ * the profile was removed, re-keyed or moved while the browser was open; the
+ * sign-in itself already succeeded, so a failure here is a hint, not an error.
+ */
+async function remember(
+  ctx: RunContext,
+  profile: Profile,
+  granted: readonly string[],
+  requested: readonly string[],
+): Promise<boolean> {
+  try {
+    const current = (await ctx.profiles.load()).profiles[profile.name]
+    if (
+      current === undefined ||
+      current.auth.method !== 'oauth' ||
+      current.server !== profile.server
+    ) {
+      return false
+    }
+    await ctx.profiles.put(
+      {
+        ...current,
+        auth: { method: 'oauth', scopes: rememberable(granted), requestedScopes: [...requested] },
+      },
+      false,
+    )
+    return true
+  } catch (error) {
+    ctx.hint(
+      `Signed in, but the profile could not be updated: ${error instanceof Error ? error.message : 'unknown'}`,
+    )
+    return false
+  }
 }
 
 const iso = (ms: number) => new Date(ms).toISOString()
@@ -44,14 +138,21 @@ export const authCommands: readonly CommandSpec[] = [
     aliases: [['auth', 'login']],
     summary: 'Sign in through the browser (or the device flow) and store the tokens privately.',
     description:
-      'Opens the authorization page of the server (loopback redirect, PKCE S256). With --device the CLI shows a code to enter on another device; the device flow never carries a production or administrative scope. Production and administrative scopes need explicit consent in the browser.',
+      'Opens the authorization page of the server (loopback redirect, PKCE S256). Without --scope or --preset it asks for the scopes granted at the last sign-in (remembered per profile), else targets.read. With --device the CLI shows a code to enter on another device; the device flow never carries a production or administrative scope. Production and administrative scopes need explicit consent in the browser.',
     group: 'auth',
     flags: [
       {
         name: 'scope',
         type: 'string',
         placeholder: 'scopes',
-        description: 'Scopes to ask for, space or comma separated (default targets.read).',
+        description:
+          'Scopes to ask for, space or comma separated (default: the last grant of the profile, else targets.read).',
+      },
+      {
+        name: 'preset',
+        type: 'enum',
+        values: PRESET_NAMES,
+        description: 'A named scope list (exponetdb auth presets); combines with --scope.',
       },
       {
         name: 'device',
@@ -69,21 +170,13 @@ export const authCommands: readonly CommandSpec[] = [
     output: 'SignIn',
     examples: [
       'exponetdb login --server https://db.example.com',
+      'exponetdb login --preset developer:nonprod',
+      'exponetdb login --preset admin --scope migrations.apply:prod',
       'exponetdb login --scope "targets.read migrations.plan migrations.apply:nonprod"',
-      'exponetdb login --device',
+      'exponetdb login --device --preset developer:nonprod',
     ],
     async run(ctx, input) {
-      const scopes = scopesFrom(input.flags['scope'])
       const device = input.flags['device'] === true
-      if (device) {
-        const refused = scopes.filter((s) => isScope(s) && !isDeviceFlowScope(s))
-        if (refused.length > 0) {
-          throw new UsageError(
-            `The device flow never carries ${refused.join(', ')}; sign in through the browser for it.`,
-            'exponetdb login --scope "…"',
-          )
-        }
-      }
       const { server: origin, profile } = await resolveServer(ctx)
       if (profile !== undefined && profile.auth.method !== 'oauth') {
         throw new CliError(
@@ -91,6 +184,17 @@ export const authCommands: readonly CommandSpec[] = [
           `The profile ${profile.name} signs in with a ${profile.auth.method} key; no browser sign-in is needed.`,
         )
       }
+      const { scopes, source } = await requestedScopes(ctx, input, origin, profile)
+      if (device) {
+        const refused = deviceRefused(scopes)
+        if (refused.length > 0) {
+          throw new UsageError(
+            `The device flow never carries ${refused.join(', ')}${source === 'flags' ? '' : ` (${source})`}; sign in through the browser for it.`,
+            'exponetdb login --device --preset developer:nonprod',
+          )
+        }
+      }
+      ctx.hint(`Asking for: ${scopes.join(' ')}${source === 'flags' ? '' : ` (${source})`}.`)
       const server = await discover(ctx.io.fetch, origin)
       const browser = input.flags['no-browser'] !== true && !ctx.global.noInput
       const credentials = device
@@ -110,15 +214,37 @@ export const authCommands: readonly CommandSpec[] = [
             },
           })
       await ctx.tokens.withLock(() => ctx.tokens.write(credentials))
+      const granted = scopeList(credentials.scope)
+      const notGranted = scopes.filter((s) => !granted.includes(s))
+      const remembered =
+        profile === undefined ? false : await remember(ctx, profile, granted, scopes)
       return result({
         command: 'login',
         data: {
           server: server.origin,
           scope: credentials.scope,
+          requested: scopes,
+          notGranted,
+          ...(remembered && profile !== undefined ? { rememberedFor: profile.name } : {}),
           accessExpiresAt: iso(credentials.accessExpiresAt),
         },
         blocks: [
-          { kind: 'text', lines: [`Signed in to ${server.origin} (scope: ${credentials.scope}).`] },
+          {
+            kind: 'text',
+            lines: [
+              `Signed in to ${server.origin} (scope: ${credentials.scope}).`,
+              ...(notGranted.length === 0
+                ? []
+                : [
+                    `Not granted: ${notGranted.join(' ')} (the account does not hold them, or they were not ticked on the consent page).`,
+                  ]),
+              profile === undefined
+                ? 'Not remembered: no profile is in use (exponetdb profile add <name> --server <url> --use).'
+                : remembered
+                  ? `Remembered for profile ${profile.name}; the next exponetdb login asks for the same${rememberable(granted).length < granted.length ? ' without the production scopes' : ''}.`
+                  : `Not remembered: the profile ${profile.name} changed during the sign-in.`,
+            ],
+          },
         ],
       })
     },
@@ -172,6 +298,10 @@ export const authCommands: readonly CommandSpec[] = [
       const remote = await ctx.remote()
       const method = remote.profile?.auth.method ?? 'oauth'
       const stored = method === 'oauth' ? await ctx.tokens.read(remote.server) : undefined
+      const requested =
+        remote.profile?.auth.method === 'oauth' ? remote.profile.auth.requestedScopes : undefined
+      const report =
+        stored === undefined ? undefined : scopeReport(scopeList(stored.scope), requested)
       const data = {
         server: remote.server,
         version: remote.installation.version,
@@ -181,6 +311,7 @@ export const authCommands: readonly CommandSpec[] = [
         ...(stored === undefined
           ? {}
           : { scope: stored.scope, accessExpiresAt: iso(stored.accessExpiresAt) }),
+        ...(report === undefined ? {} : { scopes: report }),
       }
       const rows: [string, string | null][] = [
         ['Server', remote.server],
@@ -196,7 +327,29 @@ export const authCommands: readonly CommandSpec[] = [
           ['Token', `valid until ${iso(stored.accessExpiresAt)} (refreshed as needed)`],
         )
       }
-      return result({ command: 'whoami', data, blocks: [{ kind: 'fields', rows }] })
+      if (report?.notGranted != null && report.notGranted.length > 0) {
+        rows.push(['Not granted', `${report.notGranted.join(' ')} (asked for at the last sign-in)`])
+      }
+      const blocks: Block[] = [{ kind: 'fields', rows }]
+      if (report !== undefined) {
+        blocks.push({
+          kind: 'table',
+          columns: [
+            { title: 'PRESET' },
+            { title: 'GRANTED' },
+            { title: 'MISSING', flexible: true },
+          ],
+          rows: report.presets.map((p) => [
+            p.preset,
+            p.covered ? 'yes' : 'no',
+            p.missing.join(' '),
+          ]),
+        })
+        ctx.hint(
+          'A sign-in replaces the grant; exponetdb doctor names one that keeps these scopes. The consent page shows what the account holds.',
+        )
+      }
+      return result({ command: 'whoami', data, blocks })
     },
   },
   {
@@ -240,6 +393,39 @@ export const authCommands: readonly CommandSpec[] = [
             ],
             rows: items.map((i) => [i.server, i.state, i.accessExpiresAt, i.scope]),
             empty: 'Not signed in anywhere. Run: exponetdb login --server <url>',
+          },
+        ],
+      })
+    },
+  },
+  {
+    path: ['auth', 'presets'],
+    summary: 'List the named scope presets of exponetdb login --preset (local).',
+    description:
+      'From this CLI version. A preset is shorthand for a scope list: the consent page still offers only what the account holds; only a preset named …:prod holds a production scope.',
+    group: 'auth',
+    locality: 'local',
+    effect: 'local',
+    output: 'ScopePresetList',
+    async run() {
+      const items = PRESET_NAMES.map((name) => ({
+        preset: name,
+        summary: SCOPE_PRESETS[name].summary,
+        scopes: SCOPE_PRESETS[name].scopes,
+        deviceFlow: deviceRefused(SCOPE_PRESETS[name].scopes).length === 0,
+      }))
+      return result({
+        command: 'auth presets',
+        items,
+        blocks: [
+          {
+            kind: 'table',
+            columns: [
+              { title: 'PRESET' },
+              { title: 'DEVICE FLOW' },
+              { title: 'SCOPES', flexible: true },
+            ],
+            rows: items.map((i) => [i.preset, i.deviceFlow ? 'yes' : 'no', i.scopes.join(' ')]),
           },
         ],
       })

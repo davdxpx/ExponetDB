@@ -2,8 +2,6 @@ import type { OperationRead } from '@exponetdb/sdk/operations'
 import {
   Button,
   cn,
-  Input,
-  inputVariants,
   Table,
   TableBody,
   TableCaption,
@@ -30,6 +28,7 @@ import { type ReactNode, useId, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { t } from '../../lib/i18n/i18n.ts'
 import { toReadable } from '../../lib/query/readable.ts'
+import { TOOLBAR_CONTROL, ToolbarField } from '../../lib/ui/toolbar.tsx'
 import { operationListQuery } from './keys.ts'
 import {
   APPLY_TEXT,
@@ -48,8 +47,6 @@ interface OperationList {
   readonly items: readonly OperationRead[]
   readonly nextCursor: string | null
 }
-
-const SELECT = cn(inputVariants({ size: 'small' }), 'w-auto')
 
 /**
  * The operations the person may read (`/changes/operations`), newest first:
@@ -176,29 +173,28 @@ function Toolbar(props: {
   const kindInvalid = kind !== '' && !isKindFilter(kind)
   const change = (next: Partial<OperationsSearch>) => onSearch({ ...search, ...next })
   return (
-    <search className="flex flex-wrap items-end gap-3">
+    <search className="flex flex-wrap items-start gap-2">
       <div className="flex flex-col gap-1">
-        <label htmlFor={`${ids}-state`} className="text-xs text-foreground-light">
-          {t('changes.filter.state')}
-        </label>
-        <select
-          id={`${ids}-state`}
-          className={SELECT}
-          value={search.state ?? ''}
-          onChange={(event) =>
-            change({ state: OPERATION_STATES.find((state) => state === event.target.value) })
-          }
-        >
-          <option value="">{t('changes.filter.state.all')}</option>
-          {OPERATION_STATES.map((state) => {
-            const key = STATE_TEXT[state]
-            return (
-              <option key={state} value={state}>
-                {key === undefined ? state : t(key)}
-              </option>
-            )
-          })}
-        </select>
+        <ToolbarField id={`${ids}-state`} label={t('changes.filter.state')}>
+          <select
+            id={`${ids}-state`}
+            className={TOOLBAR_CONTROL}
+            value={search.state ?? ''}
+            onChange={(event) =>
+              change({ state: OPERATION_STATES.find((state) => state === event.target.value) })
+            }
+          >
+            <option value="">{t('changes.filter.state.all')}</option>
+            {OPERATION_STATES.map((state) => {
+              const key = STATE_TEXT[state]
+              return (
+                <option key={state} value={state}>
+                  {key === undefined ? state : t(key)}
+                </option>
+              )
+            })}
+          </select>
+        </ToolbarField>
       </div>
       <form
         className="flex flex-col gap-1"
@@ -208,23 +204,22 @@ function Toolbar(props: {
           change({ kind: kind === '' ? undefined : kind })
         }}
       >
-        <label htmlFor={`${ids}-kind`} className="text-xs text-foreground-light">
-          {t('changes.filter.kind')}
-        </label>
-        <div className="flex items-center gap-2">
-          <Input
-            id={`${ids}-kind`}
-            className="w-56 font-mono"
-            value={kind}
-            maxLength={KIND_MAX_LENGTH}
-            placeholder="migration.apply"
-            autoComplete="off"
-            spellCheck={false}
-            aria-invalid={kindInvalid}
-            aria-describedby={kindInvalid ? `${ids}-kind-error` : undefined}
-            onChange={(event) => setKind(event.target.value)}
-          />
-          <Button type="submit" size="small" variant="outline" disabled={kindInvalid}>
+        <div className="flex items-center gap-1">
+          <ToolbarField id={`${ids}-kind`} label={t('changes.filter.kind')}>
+            <input
+              id={`${ids}-kind`}
+              className={cn(TOOLBAR_CONTROL, 'w-40 font-mono')}
+              value={kind}
+              maxLength={KIND_MAX_LENGTH}
+              placeholder="migration.apply"
+              autoComplete="off"
+              spellCheck={false}
+              aria-invalid={kindInvalid}
+              aria-describedby={kindInvalid ? `${ids}-kind-error` : undefined}
+              onChange={(event) => setKind(event.target.value)}
+            />
+          </ToolbarField>
+          <Button type="submit" size="tiny" variant="outline" disabled={kindInvalid}>
             {t('changes.filter.kind.apply')}
           </Button>
         </div>
@@ -235,20 +230,19 @@ function Toolbar(props: {
         ) : null}
       </form>
       <div className="flex flex-col gap-1">
-        <label htmlFor={`${ids}-actor`} className="text-xs text-foreground-light">
-          {t('changes.filter.actor')}
-        </label>
-        <select
-          id={`${ids}-actor`}
-          className={SELECT}
-          value={search.actor ?? 'any'}
-          onChange={(event) =>
-            change({ actor: event.target.value === 'self' ? 'self' : undefined })
-          }
-        >
-          <option value="any">{t('changes.filter.actor.any')}</option>
-          <option value="self">{t('changes.filter.actor.self')}</option>
-        </select>
+        <ToolbarField id={`${ids}-actor`} label={t('changes.filter.actor')}>
+          <select
+            id={`${ids}-actor`}
+            className={TOOLBAR_CONTROL}
+            value={search.actor ?? 'any'}
+            onChange={(event) =>
+              change({ actor: event.target.value === 'self' ? 'self' : undefined })
+            }
+          >
+            <option value="any">{t('changes.filter.actor.any')}</option>
+            <option value="self">{t('changes.filter.actor.self')}</option>
+          </select>
+        </ToolbarField>
       </div>
       {isFiltered(search) ? (
         <Button

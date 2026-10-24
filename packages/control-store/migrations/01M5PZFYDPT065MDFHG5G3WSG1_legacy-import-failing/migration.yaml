@@ -1,0 +1,23 @@
+schema: exponetdb.migration/v1
+id: 01M5PZFYDPT065MDFHG5G3WSG1
+name: legacy-import-failing
+description: |
+  A reviewed baseline can pass its verification (Wave 9 Part A, follow-up
+  3, F1; legacy-import.md §2 steps 5 and 7). migrations.import_items gains
+  the file's surviving expectations that did not hold on the imported
+  target when the analysis ran (failing: file, statement, kind, object and
+  the aspects that differ; names only). A person who accepts the item as
+  applied accepts exactly these, and the baseline's verification excuses
+  them and nothing else. The worker writes the column once, with the item;
+  nobody changes it afterwards. NULL for an item analyzed before this
+  bundle. Additive: no frozen bundle changes; a guard of its own watches
+  the new column.
+dependsOn:
+  - 01M5G6EQ7KP3PMPC7G3HJ7KH7R
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

@@ -1,5 +1,6 @@
 import type {
   Cluster,
+  ClusterBootstrapSql,
   DatabaseView,
   EndpointView,
   Node,
@@ -17,7 +18,7 @@ import { configure, render } from '@testing-library/react'
 import { vi } from 'vitest'
 import { AppProviders } from '../../src/app/providers.tsx'
 import { createReauthBridge } from '../../src/features/reauth/reauth.tsx'
-import { ApiClient } from '../../src/lib/api/client.ts'
+import { ApiClient, type ResponseOf } from '../../src/lib/api/client.ts'
 import { createQueryClient } from '../../src/lib/query/client.ts'
 import { routeTree } from '../../src/routeTree.gen.ts'
 
@@ -85,6 +86,39 @@ export function cluster(over: Partial<Cluster> = {}): Cluster {
     derivedTier: 'nonprod',
     declaredTier: 'nonprod',
     health: { state: 'healthy', source: 'live', observedAt: NOW },
+    ...over,
+  }
+}
+
+export const ENDPOINT = 'end_01M4S9000000000000000000E1'
+export const DATABASE = 'dbs_01M4S9000000000000000000D1'
+
+export function endpoint(over: Partial<EndpointView> = {}): EndpointView {
+  return {
+    id: ENDPOINT,
+    clusterId: CLUSTER,
+    kind: 'private',
+    poolerMode: null,
+    host: 'db.example.test',
+    port: 5432,
+    tlsServerName: 'db.example.test',
+    label: 'main',
+    state: 'active',
+    createdAt: NOW,
+    retiredAt: null,
+    ...over,
+  }
+}
+
+export function database(over: Partial<DatabaseView> = {}): DatabaseView {
+  return {
+    id: DATABASE,
+    clusterId: CLUSTER,
+    name: 'orders',
+    state: 'registered',
+    createdAt: NOW,
+    observed: null,
+    placement: null,
     ...over,
   }
 }
@@ -217,7 +251,30 @@ export interface FailureSpec {
   readonly message?: string
 }
 
+export type Permission = ResponseOf<'getMe'>['effectivePermissions'][number]['permission']
+
+export function bootstrapSql(over: Partial<ClusterBootstrapSql> = {}): ClusterBootstrapSql {
+  return {
+    clusterId: CLUSTER,
+    script: [
+      '-- ExponetDB bootstrap for an external cluster (run once as an administrator).',
+      '-- No password is in this script.',
+      'CREATE ROLE exponetdb_observer NOLOGIN;',
+    ].join('\n'),
+    roles: ['exponetdb_migrator', 'exponetdb_observer'],
+    databases: [],
+    pendingDatabases: [],
+    executionRoles: [],
+    legacyLedgers: [],
+    ...over,
+  }
+}
+
 export class World {
+  /** The permissions the signed-in person holds (at any scope): an administrator by default. */
+  permissions: Permission[] = ['registry.manage']
+  /** The role bootstrap SQL the cluster answers with. */
+  bootstrap: ClusterBootstrapSql = bootstrapSql()
   servers: Server[] = [server()]
   serversNextCursor: string | null = null
   clustersNextCursor: string | null = null
@@ -268,7 +325,7 @@ function json(status: number, body: unknown): Response {
 
 const problem = (status: number, code: string, message: string) => json(status, { code, message })
 
-function me() {
+function me(world: World) {
   return {
     identity: {
       id: IDENTITY,
@@ -280,7 +337,10 @@ function me() {
     },
     session: {},
     bindings: [],
-    effectivePermissions: [],
+    effectivePermissions: world.permissions.map((permission) => ({
+      permission,
+      scopes: [{ kind: 'global' }],
+    })),
   }
 }
 
@@ -299,7 +359,7 @@ export function answer(world: World, sent: Sent): Response | Promise<Response> {
       return problem(failure.status, failure.code, failure.message ?? `${failure.code} happened.`)
     }
   }
-  if (p === '/api/v1/me') return json(200, me())
+  if (p === '/api/v1/me') return json(200, me(world))
   if (p === '/auth/reauth/totp' && method === 'POST') {
     const code = (sent.body as { code?: string } | undefined)?.code ?? ''
     return world.proof(code)
@@ -327,6 +387,7 @@ function read(world: World, p: string, url: URL): Response {
     const found = world.clusters.find((c) => c.id === m?.[1])
     return found === undefined ? problem(404, 'NOT_FOUND', 'Not found.') : json(200, found)
   }
+  if (/^\/api\/v1\/clusters\/[^/]+\/bootstrap-sql$/.test(p)) return json(200, world.bootstrap)
   if (/^\/api\/v1\/clusters\/[^/]+\/databases$/.test(p)) {
     return json(200, { items: world.databases, truncated: world.databasesTruncated })
   }
@@ -357,6 +418,19 @@ function read(world: World, p: string, url: URL): Response {
 
 function change(world: World, p: string): Response {
   if (p === '/api/v1/servers') return json(201, planView('registry.server.create'))
+  if (p === '/api/v1/clusters') return json(201, planView('registry.cluster.register'))
+  if (/^\/api\/v1\/clusters\/[^/]+\/databases$/.test(p)) {
+    return json(201, planView('registry.database.register'))
+  }
+  if (/^\/api\/v1\/clusters\/[^/]+\/endpoints$/.test(p)) {
+    return json(201, planView('registry.endpoint.add'))
+  }
+  if (/^\/api\/v1\/clusters\/[^/]+\/endpoints\/[^/]+\/retire$/.test(p)) {
+    return json(201, planView('registry.endpoint.retire'))
+  }
+  if (/^\/api\/v1\/clusters\/[^/]+\/credentials\/[a-z]+\/rotate$/.test(p)) {
+    return json(201, planView('credential.rotate'))
+  }
   if (/^\/api\/v1\/servers\/[^/]+\/nodes\/enroll$/.test(p))
     return json(201, planView('node.enroll'))
   if (/^\/api\/v1\/clusters\/[^/]+\/declared-tier$/.test(p)) {

@@ -32,6 +32,8 @@ const BUILT_SECTIONS: readonly string[] = [
   'activity',
   'connections',
   'locks',
+  // Built by another change (`/t/…/compare`); its tests are in its own folder.
+  'compare',
 ]
 
 const pageNotFound = () => screen.findByRole('heading', { level: 1, name: 'Page not found' })
@@ -344,7 +346,7 @@ describe('pages that need the target to be reachable', () => {
 })
 
 describe('the production cue', () => {
-  it('frames a production target and says "Production" in the header and the page title', async () => {
+  it('says "Production" in the header and by the page title of a production target, without a frame', async () => {
     mountApp('/t/shop/platform/production/migrations', worldWithProject())
     await screen.findByRole('heading', { level: 1, name: 'Migrations' })
     await waitFor(() =>
@@ -353,9 +355,11 @@ describe('the production cue', () => {
         'production',
       ),
     )
-    const outlet = document.querySelector('[data-slot="target-outlet"]')
-    expect(outlet).toHaveAttribute('data-production-frame')
-    expect(outlet).toHaveClass('border-production')
+    // Since 2026-10-21 no frame surrounds the page: the header and the title say it once each.
+    expect(document.querySelector('[data-production-frame]')).toBeNull()
+    expect(document.querySelector('[data-slot="target-outlet"]')).not.toHaveClass(
+      'border-production',
+    )
     // The word is there, so the color is never the only signal: in the header and by the title.
     const bar = screen.getByRole('navigation', { name: 'Target' })
     expect(within(bar).getByText('Production')).toBeInTheDocument()
@@ -372,10 +376,7 @@ describe('the production cue', () => {
         'nonprod',
       ),
     )
-    expect(document.querySelector('[data-production-frame]')).toBeNull()
-    expect(document.querySelector('[data-slot="target-outlet"]')).not.toHaveClass(
-      'border-production',
-    )
+    expect(document.querySelector('[data-slot="page-header-production-cue"]')).toBeNull()
     expect(screen.queryByText('Production')).not.toBeInTheDocument()
     const bar = screen.getByRole('navigation', { name: 'Target' })
     expect(within(bar).getByText('Non-production')).toBeInTheDocument()
@@ -392,7 +393,7 @@ describe('the production cue', () => {
         'nonprod',
       ),
     )
-    expect(document.querySelector('[data-production-frame]')).toBeNull()
+    expect(document.querySelector('[data-slot="page-header-production-cue"]')).toBeNull()
     expect(screen.queryByText('Production')).not.toBeInTheDocument()
   })
 
@@ -407,7 +408,9 @@ describe('the production cue', () => {
         'production',
       ),
     )
-    expect(document.querySelector('[data-production-frame]')).not.toBeNull()
+    await waitFor(() =>
+      expect(document.querySelector('[data-slot="page-header-production-cue"]')).not.toBeNull(),
+    )
   })
 
   it('shows no cue while the tier is not known (a failed read), and says so in the header', async () => {
@@ -418,7 +421,7 @@ describe('the production cue', () => {
     })
     mountApp('/t/shop/platform/production/migrations', world)
     await screen.findByRole('heading', { level: 2, name: 'Could not read target' })
-    expect(document.querySelector('[data-production-frame]')).toBeNull()
+    expect(document.querySelector('[data-slot="page-header-production-cue"]')).toBeNull()
     expect(document.querySelector('[data-slot="target-layout"]')).not.toHaveAttribute('data-tier')
     // The list of environments still knows the tier of this one.
     const bar = screen.getByRole('navigation', { name: 'Target' })
@@ -446,7 +449,9 @@ describe('accessibility of the layout', () => {
 
     mountApp('/t/shop/platform/production/migrations', worldWithProject())
     await screen.findByRole('heading', { level: 2, name: 'Ledger' })
-    await waitFor(() => expect(document.querySelector('[data-production-frame]')).not.toBeNull())
+    await waitFor(() =>
+      expect(document.querySelector('[data-slot="page-header-production-cue"]')).not.toBeNull(),
+    )
     expect(await violations()).toEqual([])
   })
 

@@ -32,7 +32,7 @@ import { IdentitySection } from './identity-section.tsx'
 import { activityQuery, grantsQuery } from './keys.ts'
 import type { ProfileMe } from './profile-model.ts'
 import { ProfileSection } from './profile-section.tsx'
-import { SectionHeading } from './section.tsx'
+import { AccountCard, AccountSection, CardRow } from './section.tsx'
 import { ACCOUNT_STALE_MS } from './security-page.tsx'
 import { useAccountWriter } from './writer.ts'
 
@@ -121,64 +121,70 @@ export function PreferencesPage(): ReactNode {
   const lettersId = useId()
   const lettersHintId = useId()
   return (
-    <div className="flex flex-col gap-8">
-      <p className="text-sm text-foreground-light">{t('preferences.note')}</p>
-      <fieldset className="flex flex-col gap-2">
-        <legend className="mb-1 text-lg font-medium text-foreground">
-          {t('preferences.theme')}
-        </legend>
-        {THEMES.map((option) => (
-          <Choice
-            key={option.value}
-            name="theme"
-            value={option.value}
-            checked={theme === option.value}
-            label={option.label()}
-            onSelect={(value) =>
-              setThemePreference(parseThemePreference(value), document.documentElement)
-            }
-          />
-        ))}
-      </fieldset>
-      <fieldset className="flex flex-col gap-2">
-        <legend className="mb-1 text-lg font-medium text-foreground">
-          {t('preferences.sidebar')}
-        </legend>
-        {SIDEBAR_MODES.map((option) => (
-          <Choice
-            key={option.value}
-            name="sidebar"
-            value={option.value}
-            checked={sidebar === option.value}
-            label={option.label()}
-            onSelect={(value) => setSidebarMode(parseSidebarMode(value))}
-          />
-        ))}
-      </fieldset>
-      <section className="flex flex-col gap-2" aria-label={t('preferences.shortcuts')}>
-        <h2 className="text-lg font-medium text-foreground">{t('preferences.shortcuts')}</h2>
-        <div className="flex items-center gap-2">
-          <input
-            id={lettersId}
-            type="checkbox"
-            checked={letters}
-            aria-describedby={lettersHintId}
-            className="size-4 accent-[var(--brand-default)]"
-            onChange={(event) => setLetterShortcuts(event.target.checked)}
-          />
-          <Label htmlFor={lettersId} className="text-sm font-normal text-foreground">
-            {t('preferences.shortcuts.letters')}
-          </Label>
-        </div>
-        <p id={lettersHintId} className="text-xs text-foreground-lighter">
-          {t('preferences.shortcuts.letters.hint')}
-        </p>
-        <div>
-          <Button type="button" variant="default" size="small" onClick={() => openHelp?.()}>
-            {t('preferences.shortcuts.show')}
-          </Button>
-        </div>
-      </section>
+    <div className="flex flex-col gap-10">
+      <AccountSection title={t('preferences.appearance')} description={t('preferences.note')}>
+        <AccountCard>
+          <CardRow label={t('preferences.theme')}>
+            <fieldset className="flex flex-wrap gap-x-6 gap-y-2">
+              <legend className="sr-only">{t('preferences.theme')}</legend>
+              {THEMES.map((option) => (
+                <Choice
+                  key={option.value}
+                  name="theme"
+                  value={option.value}
+                  checked={theme === option.value}
+                  label={option.label()}
+                  onSelect={(value) =>
+                    setThemePreference(parseThemePreference(value), document.documentElement)
+                  }
+                />
+              ))}
+            </fieldset>
+          </CardRow>
+          <CardRow label={t('preferences.sidebar')}>
+            <fieldset className="flex flex-wrap gap-x-6 gap-y-2">
+              <legend className="sr-only">{t('preferences.sidebar')}</legend>
+              {SIDEBAR_MODES.map((option) => (
+                <Choice
+                  key={option.value}
+                  name="sidebar"
+                  value={option.value}
+                  checked={sidebar === option.value}
+                  label={option.label()}
+                  onSelect={(value) => setSidebarMode(parseSidebarMode(value))}
+                />
+              ))}
+            </fieldset>
+          </CardRow>
+        </AccountCard>
+      </AccountSection>
+      <AccountSection title={t('preferences.shortcuts')}>
+        <AccountCard
+          footer={
+            <Button type="button" variant="default" size="small" onClick={() => openHelp?.()}>
+              {t('preferences.shortcuts.show')}
+            </Button>
+          }
+        >
+          <CardRow
+            label={t('preferences.shortcuts.letters')}
+            htmlFor={lettersId}
+            description={t('preferences.shortcuts.letters.hint')}
+            descriptionId={lettersHintId}
+          >
+            <div className="flex items-center gap-2">
+              <input
+                id={lettersId}
+                type="checkbox"
+                checked={letters}
+                aria-describedby={lettersHintId}
+                className="size-4 accent-[var(--brand-default)]"
+                onChange={(event) => setLetterShortcuts(event.target.checked)}
+              />
+            </div>
+          </CardRow>
+        </AccountCard>
+      </AccountSection>
     </div>
   )
 }
@@ -206,7 +212,6 @@ const CLIENT = {
  */
 export function ActivityPage(): ReactNode {
   const { client } = useApi()
-  const headingId = useId()
   const query = useInfiniteQuery(activityQuery(client))
   const refused =
     query.data === undefined &&
@@ -214,9 +219,10 @@ export function ActivityPage(): ReactNode {
     classifyFailure(query.error).kind === 'not_permitted'
   const readable = toReadable(query, { staleAfterMs: ACCOUNT_STALE_MS })
   return (
-    <section aria-labelledby={headingId} className="flex flex-col gap-3">
-      <SectionHeading id={headingId}>{t('account.activity.heading')}</SectionHeading>
-      <p className="text-sm text-foreground-light">{t('account.activity.description')}</p>
+    <AccountSection
+      title={t('account.activity.heading')}
+      description={t('account.activity.description')}
+    >
       {refused ? (
         <NotPermittedState
           what={t('account.activity.what').toLowerCase()}
@@ -242,7 +248,7 @@ export function ActivityPage(): ReactNode {
             <div className="flex flex-col gap-3">
               <ul
                 id="activity-list"
-                className="flex flex-col divide-y divide-border rounded-lg border border-default"
+                className="flex flex-col divide-y divide-border overflow-hidden rounded-lg border border-default bg-surface-100 shadow-xs"
               >
                 {value.items.map((event) => (
                   <li
@@ -275,6 +281,6 @@ export function ActivityPage(): ReactNode {
           )}
         />
       )}
-    </section>
+    </AccountSection>
   )
 }

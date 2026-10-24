@@ -53,6 +53,10 @@ export interface MigrationFacts {
   readonly lineage: LineageFact
   readonly dependenciesVerified: boolean
   readonly legacyProject: boolean
+  /** Execution roles of the plan that run under a declared BYPASSRLS exception (ADR-0034; Wave 9). */
+  readonly executionRoleExceptions?: number
+  /** Production: the evidence environment's execution roles compared with production's (ADR-0034 §4). */
+  readonly executionRoleParity?: 'match' | 'mismatch' | 'unknown' | 'not_required'
 }
 
 const EVIDENCE = new Set([
@@ -540,6 +544,110 @@ export const migrationBaselineProduction: Rule = {
   },
 }
 
+/** The execution role facts a legacy replay plan binds (`content.executionRoleCheck`). */
+function replayRoleCheck(
+  content: JsonValue | undefined,
+): { readonly role: string; readonly problem: string | null } | undefined {
+  const check = isJsonObject(content) ? content['executionRoleCheck'] : undefined
+  if (!isJsonObject(check) || typeof check['role'] !== 'string') return undefined
+  const problem = check['problem']
+  if (problem !== null && typeof problem !== 'string') return undefined
+  return { role: check['role'], problem }
+}
+
+export const migrationImportExecutionRole: Rule = {
+  id: 'migration.import-execution-role',
+  version: 1,
+  description:
+    'A legacy replay runs as an execution role the migrator may SET ROLE into, checked like an apply (Wave 9 order A3); no override.',
+  appliesTo: ['migration.import.replay'],
+  severity: 'deny',
+  overridableByBreakGlass: false,
+  facts: [],
+  defaults: {},
+  requirements: () => [],
+  evaluate({ request }) {
+    const check = replayRoleCheck(request.content)
+    if (check === undefined) {
+      return { result: 'unknown', message: 'The plan carries no execution role check.' }
+    }
+    return check.problem === null || check.problem === 'declared_exception'
+      ? { result: 'pass', message: 'The execution role is usable on the scratch target.' }
+      : {
+          result: 'fail',
+          message: `The execution role is not usable on the scratch target: ${check.problem}.`,
+          facts: { role: check.role, problem: check.problem },
+          remediation:
+            'Map the alias to a NOLOGIN owner without privileged attributes and grant it to exponetdb_migrator WITH INHERIT FALSE, SET TRUE.',
+        }
+  },
+}
+
+/** Kinds that run SQL as an execution role (ADR-0034): the SQL kinds and the legacy replay. */
+const EXECUTION_ROLE_KINDS = [...SQL_KINDS, 'migration.import.replay'] as const
+
+export const migrationExecutionRoleException: Rule = {
+  id: 'migration.execution-role-exception',
+  version: 1,
+  description:
+    'A plan whose execution role carries BYPASSRLS under a declared exception (ADR-0034) shows it in every plan; it never blocks by itself.',
+  appliesTo: EXECUTION_ROLE_KINDS,
+  severity: 'warn',
+  overridableByBreakGlass: false,
+  facts: [],
+  defaults: {},
+  requirements: () => [],
+  evaluate({ request }) {
+    const content = request.content
+    const facts = isJsonObject(content) ? content['facts'] : undefined
+    const count = isJsonObject(facts) ? facts['executionRoleExceptions'] : undefined
+    const replay = replayRoleCheck(content)
+    const used =
+      (typeof count === 'number' && count > 0) || replay?.problem === 'declared_exception'
+    return used
+      ? {
+          result: 'fail',
+          message:
+            'The execution role runs with BYPASSRLS under a declared exception: row security does not apply to what the migration reads.',
+          facts: { roles: typeof count === 'number' ? count : 1 },
+          remediation:
+            'Move SECURITY DEFINER functions to a dedicated definer role so the execution role can drop BYPASSRLS, then revoke the exception.',
+        }
+      : { result: 'not_applicable', message: 'No declared exception is used.' }
+  },
+}
+
+export const migrationExecutionRoleParity: Rule = {
+  id: 'migration.execution-role-parity',
+  version: 1,
+  description:
+    "Production: the evidence environment's execution roles have the attributes and the exception status of production's (ADR-0034 §4); a warning otherwise.",
+  appliesTo: MIGRATION_KINDS,
+  severity: 'warn',
+  overridableByBreakGlass: false,
+  facts: [],
+  defaults: {},
+  requirements: () => [],
+  evaluate({ request }) {
+    return prodOnly(request.subject.tier, () => {
+      const content = request.content
+      const facts = isJsonObject(content) ? content['facts'] : undefined
+      const parity = isJsonObject(facts) ? facts['executionRoleParity'] : undefined
+      if (parity === 'match' || parity === 'not_required') {
+        return { result: 'pass', message: 'The evidence ran under equal execution roles.' }
+      }
+      return {
+        result: 'fail',
+        message:
+          parity === 'mismatch'
+            ? "The evidence environment's execution roles differ in attributes or exception status: its verification proves less about production."
+            : 'Whether the evidence ran under equal execution roles is not known.',
+        facts: { parity: typeof parity === 'string' ? parity : 'unknown' },
+      }
+    })
+  },
+}
+
 export const MIGRATION_RULES: readonly Rule[] = [
   migrationLintErrors,
   migrationPgVersion,
@@ -558,4 +666,7 @@ export const MIGRATION_RULES: readonly Rule[] = [
   migrationVerifyConsumerCode,
   migrationRollbackProduction,
   migrationBaselineProduction,
+  migrationImportExecutionRole,
+  migrationExecutionRoleException,
+  migrationExecutionRoleParity,
 ]

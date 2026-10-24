@@ -49,8 +49,8 @@ flowchart LR
 | 6 | Migrations planned, applied, verified, with staging evidence | none: OD-6, OD-14, OD-15, OD-16 resolved 2026-10-12 by the owner's Wave 6 order (OD-9 resolved 2026-10-05); G6 accepted 2026-10-12 ([gate record](./gates/6.md)) |
 | 7 | AI agents work through MCP with the same engine | none: OD-13 and OD-29 resolved 2026-10-12 by the owner's Wave 7 order; merged in `davdxpx/ExponetDB#16` (`4e99244`, 2026-10-13), deployed on `reos-01` on 2026-10-13 ([record](../12-operations/deployments/2026-10-13-reos-01-wave7.md)), G7 awaits the owner ([gate record](./gates/7.md)) |
 | 8 | Web App on the design system | none: authorized 2026-10-13 by the owner's Wave 8 order ([order](./orders/wave-8-order.md)), which resolved OD-1 and OD-11 (placeholder brand) and adopted Supabase UI source by copy ([ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md)); OD-38 (license basis) blocks release, not development; in progress, part 2 in `#27`, awaiting G8 ([gate record](./gates/8.md)) |
-| 9 | Backups proven by restores; diagnostics and advisors | OD-4, OD-8 (final legal retention setting) |
-| 10 | REOSA uses ExponetDB for its current databases | OD-7 |
+| 9 | Backups proven by restores; diagnostics and advisors; first the migration engine made fit for real imported schemas (Part A) | authorized 2026-10-21 by the owner's Wave 9 order ([order](./orders/wave-9-order.md)); OD-4 engine decided (storage open until B0), OD-8 open (blocks Part B, not Part A); in progress ([Part A record](./gates/9-part-a.md)) |
+| 10 | REOSA uses ExponetDB for its current databases | OD-7 resolved 2026-10-21 (OD-7a yes for staging, OD-7b no production applies before Wave 11); its product capabilities are pulled forward into Wave 9 Part A |
 | 11 | REOSA production runs on ExponetDB-managed PostgreSQL | OD-12 (HA stance), all product gates |
 
 ---
@@ -236,6 +236,7 @@ Ordering rules between 3A, 3B and later waves:
 | Tests | end-to-end backup, verify and restore against the chosen storage; PITR to random points; drill without the Control Plane; failure injection (archive blocked, storage unreachable) |
 | Docs requirement | RB-06, RB-07, RB-08 complete |
 | Abort criteria | the chosen engine fails the end-to-end test on the chosen storage: switch engine (OD-4 alternative) before any production data depends on it |
+| State | **[OBSERVED]** (2026-10-21) authorized by the owner's Wave 9 order ([order](./orders/wave-9-order.md), prepared on `main` `485619c`). Part A (order §7: the migration engine for real, Supabase-origin schemas, correcting Wave 6 defects and pulling forward Wave 10's product capabilities: import of a real history, per-environment execution roles, external-cluster onboarding) comes first as its own pull request ([Part A record](./gates/9-part-a.md)); Part B (this table's deliverables) waits for OD-8 and stops at the storage decision of B0. OD-7 split (OD-7a, OD-7b), OD-51 and OD-52 decided by the order's defaults ([open decisions](../00-product/open-decisions.md#decisions-of-the-wave-9-order-2026-10-21)) |
 
 ## Wave 10: REOSA integration
 
@@ -243,7 +244,7 @@ Ordering rules between 3A, 3B and later waves:
 |---|---|
 | Goal | REOSA's databases are observed, imported and migrated through ExponetDB; REOSA Admin reads ExponetDB |
 | Non-goals | moving REOSA off Supabase; changing REOSA's auth |
-| Dependencies | Waves 7, 8, 9; OD-7 |
+| Dependencies | Waves 7, 8, 9; OD-7 (resolved 2026-10-21: OD-7a, OD-7b) |
 | Architecture docs | [`../13-integrations/reosa-integration.md`](../13-integrations/reosa-integration.md), [`../13-integrations/reosa-current-state.md`](../13-integrations/reosa-current-state.md), [`../04-migrations/legacy-import.md`](../04-migrations/legacy-import.md), [`../13-integrations/sdk.md`](../13-integrations/sdk.md) |
 | Deliverables | REOSA registry entries; legacy import and baseline with resolved review items; REOSA bundle roots and CI checks (in REOSA's repository, by REOSA); staging-first migrations through ExponetDB; runtime schema contract in REOSA health; SDK in REOSA Admin `/database` |
 | Acceptance gate | G10 |

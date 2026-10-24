@@ -61,6 +61,14 @@ const REPORT_STATE_LABELS: Readonly<Record<ImportReport['state'], MessageKey>> =
   superseded: 'migrations.import.report.superseded',
 }
 
+const STRENGTH_LABELS: Readonly<Record<NonNullable<Item['evidenceStrength']>, MessageKey>> = {
+  strong: 'migrations.import.strength.strong',
+  medium: 'migrations.import.strength.medium',
+  low: 'migrations.import.strength.low',
+  curated: 'migrations.import.strength.curated',
+  weak: 'migrations.import.strength.weak',
+}
+
 function stateLabel(state: string): string | undefined {
   return Object.hasOwn(STATE_LABELS, state) ? t(STATE_LABELS[state as Item['state']]) : undefined
 }
@@ -200,6 +208,14 @@ function ReportBody({
           />
         </Admonition>
       )}
+      {report.driftTruncated === true ? (
+        <Admonition type="warning" title={t('migrations.import.truncated.title')}>
+          {t('migrations.import.truncated.body', {
+            held: report.items.filter((i) => i.legacyId.startsWith('drift:')).length,
+            total: report.driftTotal ?? 0,
+          })}
+        </Admonition>
+      ) : null}
       {report.items.length === 0 ? (
         <p className="m-0 text-sm text-foreground-light">{t('migrations.import.noItems')}</p>
       ) : (
@@ -248,6 +264,21 @@ function ItemsTable({
               <StateText state={item.state} />
             </TableCell>
             <TableCell className="text-xs">
+              {item.evidenceStrength === undefined ||
+              item.evidenceStrength === null ||
+              !Object.hasOwn(STRENGTH_LABELS, item.evidenceStrength) ? null : (
+                <div className="mb-1 text-foreground">
+                  {t('migrations.import.strength')}{' '}
+                  <strong>{t(STRENGTH_LABELS[item.evidenceStrength])}</strong>
+                </div>
+              )}
+              {item.failing === undefined ||
+              item.failing === null ||
+              item.failing.total === 0 ? null : (
+                <div className="mb-1 text-foreground" data-failing={item.failing.total}>
+                  {t('migrations.import.failing', { count: item.failing.total })}
+                </div>
+              )}
               {item.evidence === undefined || item.evidence.length === 0 ? (
                 <span className="text-foreground-light">{t('migrations.import.noEvidence')}</span>
               ) : (
@@ -399,8 +430,74 @@ function DecideItem({
               {t('migrations.import.decide.noteHint', { max: NOTE_MAX_LENGTH })}
             </p>
           </div>
+          <DecisionConsequence item={item} state={state} />
         </div>
       </ConfirmDialog>
+    </div>
+  )
+}
+
+/**
+ * What the chosen decision means for the baseline's verification (Part A
+ * follow-up 3, F1): accepting a file whose expectations did not hold
+ * excuses exactly those, said before anyone is surprised later.
+ */
+function DecisionConsequence({
+  item,
+  state,
+}: {
+  readonly item: Item
+  readonly state: DecisionState | ''
+}): ReactNode {
+  if (state === 'superseded') {
+    return (
+      <p role="note" className="m-0 text-sm text-foreground-light">
+        {t('migrations.import.decide.supersededUnchecked')}
+      </p>
+    )
+  }
+  const failing = item.failing
+  if (
+    (state !== 'recorded_present' && state !== 'unrecorded_present') ||
+    failing === undefined ||
+    failing === null
+  ) {
+    return null
+  }
+  if (failing.total === 0) {
+    // Nothing failed at the analysis: accepting excuses nothing, so all of it must hold.
+    return (
+      <p role="note" className="m-0 text-sm text-foreground-light" data-excuses={0}>
+        {t('migrations.import.decide.excusesNothing')}
+      </p>
+    )
+  }
+  return (
+    <div role="note" className="flex flex-col gap-1 text-sm" data-excuses={failing.total}>
+      <p className="m-0">{t('migrations.import.decide.excuses', { count: failing.total })}</p>
+      <ul className="m-0 flex list-none flex-col gap-0.5 p-0 text-xs">
+        {failing.items.map((f) => (
+          <li key={`${f.statement ?? ''}:${f.kind}:${f.object}:${f.failed.join(',')}`}>
+            <UntrustedName
+              name={`${f.object} (${f.failed.join(', ')})`}
+              maxCodePoints={120}
+              label={t('migrations.import.column.evidence')}
+            />
+          </li>
+        ))}
+      </ul>
+      {failing.total > failing.items.length ? (
+        <p className="m-0 text-xs text-foreground-light">
+          {t('migrations.import.decide.excusesMore', {
+            count: failing.total - failing.items.length,
+          })}
+        </p>
+      ) : null}
+      {failing.items.some((f) => f.failed.includes('unreadable')) ? (
+        <p className="m-0 text-xs" data-unreadable="true">
+          {t('migrations.import.decide.excusesUnread')}
+        </p>
+      ) : null}
     </div>
   )
 }

@@ -96,44 +96,161 @@ neither predefined (`pg_…`) nor ExponetDB's (`exponetdb_…`), and the roles
 reached through it, and nothing else; an inheriting or a non-`SET`
 membership, or one in a predefined or ExponetDB role, still fails it
 (`packages/registry/src/credentials.ts`). Whether such a role may serve as
-an execution role is decided when a plan names it (§3).
+an execution role is decided when a plan names it (§3). `pg_database_owner`
+is left out of the reach, by oid. The migrator reaches it through an
+execution role that owns the verified database, and it is that role's
+identity, not a privilege (§3, ADR-0034 §3.1).
 
 ## 3. Execution roles (who owns application objects)
 
 Migrations run as the project's **execution role**, the role that owns the
-application's objects (for example `reosa_owner`). It is a `NOLOGIN` role. The
+application's objects (for example `<env>_owner` on the reference
+installation, §3.3). It is a `NOLOGIN` role. The
 migrator switches into it with `SET LOCAL ROLE` inside the migration transaction.
 
-**[DECIDED]** ExponetDB requires each project to declare, per target:
+**[DECIDED]** ExponetDB requires each project to declare, per environment
+(the project's map is the default; an environment binding refines it, §3.1;
+before Wave 9 this paragraph said "per target" while the code resolved per
+project, ADR-0034 §5):
 
-| Declaration | Example (proposed for REOSA on `reos-db-01`) |
+| Declaration | Example (REOSA staging on `reos-db-01`, the reference installation, §3.3) |
 |---|---|
-| execution role(s) and their aliases | `owner → reosa_owner` |
-| application login roles and what they may do | `reosa_app` (LOGIN, member of `authenticated`, `service_role`, …), `website_renderer_login`, `consent_writer_login`, `sales_login` |
-| whether any login role relies on owning objects or on `BYPASSRLS` | REOSA today relies on its login role (`postgres` on the hosted provider) bypassing RLS for console and maintenance paths |
-| protected and foreign-owned schemas | `auth` (owned by the auth service role), excluded from migrations |
+| execution role(s) and their aliases | `owner → <env>_owner` (an environment binding per environment, §3.1) |
+| application login roles and what they may do | `<env>_app` (LOGIN, `BYPASSRLS`, member of `<env>_owner` with `INHERIT`); on the hosted production database still the provider's `postgres` and REOSA's restricted logins (`website_renderer_login`, `consent_writer_login`, `sales_login`) |
+| whether any login role relies on owning objects or on `BYPASSRLS` | yes: `<env>_app` inherits the owner's privileges and bypasses RLS; on the hosted provider REOSA relies on `postgres` bypassing RLS for console and maintenance paths |
+| protected and foreign-owned schemas | `auth` (owned by the identity service's role `<env>_auth`), excluded from the managed scope |
 
 **[DECIDED]** (Wave 6, `executionRoleProblem` in
-`packages/postgres/src/migration-facts.ts`) A role is usable as an
-execution role only when it exists, is `NOLOGIN`, has none of
-`SUPERUSER`, `CREATEROLE`, `CREATEDB`, `REPLICATION`, `BYPASSRLS`, is not a
-predefined (`pg_…`) or ExponetDB role, **reaches none of them** through its
-memberships (so consumer SQL never runs as the ledger owner or with a
-predefined role's powers), and the migrator is its direct member with
-`SET TRUE` and `INHERIT FALSE`. The planner reads these facts with the
-observer for the migrator; the executor reads them again under the lock.
-The alias → role map and the trusted extensions of a project are registry
-data (`registry.projects.execution_roles`, `trusted_extensions`), never a
+`packages/postgres/src/migration-facts.ts`; amended in Wave 9 by
+[ADR-0034](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md),
+OD-51) A role is usable as an execution role only when it exists, is
+`NOLOGIN`, has none of `SUPERUSER`, `CREATEROLE`, `CREATEDB`, `REPLICATION`,
+`BYPASSRLS`, is not a predefined (`pg_…`) or ExponetDB role, **reaches none
+of them**, nor a role with `SUPERUSER`, `CREATEROLE`, `CREATEDB`,
+`REPLICATION` or `BYPASSRLS`, through its memberships (so consumer SQL never
+runs as the ledger owner, with a predefined role's powers, or hands an object
+to a privileged role; the privileged-role part since Wave 9, found by the
+independent review of Part A), and the migrator is its direct
+member with `SET TRUE` and `INHERIT FALSE`. **`pg_database_owner` is not a
+protected reach** ([ADR-0034 §3.1](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md#31-pg_database_owner-is-not-a-protected-reach-2026-10-22),
+2026-10-22). PostgreSQL makes the owner of the current database its
+implicit member, and the role can neither have explicit members nor be a
+member of any role. So an execution role may own its database, as
+Supabase-origin installations do, and `public` is then its schema. The
+predicate is one SQL fragment (`REACHES_PROTECTED_ROLE`), shared by the
+planner, the executor, the replay, the scratch preflight, the health finding
+and the bootstrap SQL (§8), and it gives the same answer in every database. **The one exception:**
+`BYPASSRLS` is accepted for a role a person declared for that project and
+environment (§3.2); nothing else is ever excused. The planner reads these
+facts with the observer for the migrator; the executor reads them again
+under the lock, and so do the legacy replay and, since Wave 9, the
+rollback (which never checked them before; a Wave 6 defect found in Part A).
+The alias → role map, its environment bindings, the declared exceptions and
+the trusted extensions of a project are registry data
+(`registry.projects.execution_roles`, `registry.execution_role_bindings`,
+`registry.execution_role_exceptions`, `trusted_extensions`), never a
 client's claim.
 
-The declaration is checked continuously (drift kind E). **[OBSERVED]** REOSA's
-current self-hosting plan makes the application login role `reosa_app` the owner
-of the restored tables and does not give it `BYPASSRLS`; combined with 82
-`FORCE ROW LEVEL SECURITY` tables that are read through the "service connection",
-this would turn errors into empty results after the move (REOSA audits). ExponetDB
-cannot decide REOSA's role model, but it makes the dependency explicit and its
-cutover checks fail when the declared semantics are not reproduced
+### 3.1 Execution roles per environment
+
+**[DECIDED]** (Wave 9, ADR-0034 §5, the Wave 9 order D-A2) An environment
+of the project's product may bind an alias of the project's map to another
+role (`registry.execution_role_bindings`), so staging and production of one
+project on one cluster run under their own role sets. Per alias the
+environment's binding wins, else the project map; an environment never
+adds an alias. One resolver (`executionRolesFor` in
+`packages/migrations-engine/src/execution-roles.ts`) serves the planner,
+the apply kind, resume, rollback, re-verification, the reads and the
+legacy replay (which resolves for the **scratch** target's environment); a
+test fails when other engine code reads the map or the bindings. A plan
+binds the resolved names and apply resolves again: a change in between is
+`PLAN_STALE`. `c1` hashes only the alias, so a production plan consumes the
+staging evidence of the same checksum although staging ran as another
+role. Setting an environment's bindings is the registry operation
+`registry.execution_role_binding.set` (`registry.manage` at that
+environment's tier, re-authentication, human only; a tier-restricted grant
+changes no environment's roles, authorization.md §5). Nothing is deleted:
+a change ends the current row of an alias and inserts its successor, so the
+table keeps the history.
+
+**[OPEN: OD-53]** fp1 includes object owners, so two environments whose
+objects are owned by different roles never have equal fingerprints: for a
+project that is not an imported legacy project, every production plan then
+fails `migration.fingerprint-lineage` and needs an approval (fail closed;
+for an imported project it stays the legacy warning).
+
+### 3.2 Declared `BYPASSRLS` exceptions
+
+**[DECIDED]** (Wave 9, ADR-0034 §1 to §4, OD-51) Supabase-origin schemas
+keep `SECURITY DEFINER` functions owned by the schema owner that read
+`FORCE ROW LEVEL SECURITY` tables; their owner needs `BYPASSRLS`. A person
+declares, per project, environment and role, that this role may carry
+`BYPASSRLS` as an execution role (`registry.execution_role_exception.declare`,
+`registry.manage` at the environment's tier, re-authentication, human only;
+on production also an approval, `registry.execution-role-exception-production`).
+A declaration names the role, a reason (20 to 1000 characters) and an
+optional review date; its attributes are fixed to `{bypassrls}` by the
+Control Store, it is revoked once and never re-activated, and after its
+review date it excuses nothing. Every plan that relies on it binds
+`{exceptionId, revision}` and shows it (`migration.execution-role-exception`,
+a warning); a revoked, changed or expired declaration makes such a plan
+`PLAN_STALE`. An agent may apply nonprod migrations under a declaration;
+production stays as before (`migration.agent-production`). The health
+sampler keeps a finding open while the live role no longer matches the
+declaration (`execution_role_exception_drift`,
+[`health.md` §3](../10-observability/health.md)). The target state is a
+dedicated definer role, so the execution role can drop `BYPASSRLS` and the
+declaration can be revoked (ADR-0034 §7).
+
+The declaration is checked continuously (drift kind E). **[OBSERVED]** (REOSA
+audits, 2026-10-04) REOSA's self-hosting plan of that time made the application
+login role `reosa_app` the owner of the restored tables without `BYPASSRLS`;
+combined with the `FORCE ROW LEVEL SECURITY` tables read through the "service
+connection", this would have turned errors into empty results after the move.
+**[OBSERVED]** (owner's Wave 9 order §6, 2026-10-21) The role set REOSA staging
+runs with on `reos-db-01` resolves this differently: the owner and the
+application login both carry `BYPASSRLS` (§3.3). ExponetDB cannot decide
+REOSA's role model, but it makes the dependency explicit and its cutover checks
+fail when the declared semantics are not reproduced
 ([`../13-integrations/reosa-integration.md`](../13-integrations/reosa-integration.md)).
+
+### 3.3 The reference installation's role set
+
+**[OBSERVED]** (owner's Wave 9 order §6, 2026-10-21; measured by the owner on
+REOSA staging, `reos-db-01`; ExponetDB has not connected to it) Each
+environment has its own set of roles on the cluster; production will get its
+own set on the same cluster when it moves (Wave 11):
+
+| Role | Attributes and memberships | What it is |
+|---|---|---|
+| `<env>_owner` | `NOLOGIN`, **`BYPASSRLS`**; owns `public` | the object owner: 159 tables with `FORCE ROW LEVEL SECURITY`, 48 `SECURITY DEFINER` functions, 41 of them on `FORCE ROW LEVEL SECURITY` tables |
+| `<env>_auth` | owns `auth` | the self-hosted identity service's role |
+| `<env>_app` | `LOGIN`, `BYPASSRLS`; member of `<env>_owner` with `INHERIT` | the application login |
+| `<env>_migrator` | `NOLOGIN`; member of `<env>_owner` with `SET TRUE`, `INHERIT FALSE` | REOSA's own migration role (the same shape ExponetDB requires of `exponetdb_migrator`) |
+
+How ExponetDB maps it, with what Part A of Wave 9 delivers (**[PLANNED]**:
+the owner registers staging after Part A, OD-7a; nothing is registered yet):
+
+- the project's alias `owner` is bound per environment to that
+  environment's `<env>_owner` (§3.1), so staging and, later, production on
+  the same cluster run under their own owners;
+- `<env>_owner` has `BYPASSRLS`, which the execution-role check refuses
+  unless a person declares the exception for that environment and role
+  (§3.2, ADR-0034, OD-51); the definer functions on `FORCE ROW LEVEL
+  SECURITY` tables are the case the exception was made for. Every other
+  check still applies to it: `NOLOGIN`, no other privileged attribute, no
+  reach into a privileged, predefined or ExponetDB role;
+- `exponetdb_migrator` gets `SET TRUE`, `INHERIT FALSE` on `<env>_owner`
+  from the bootstrap SQL (§8.1), only if the role passes those checks;
+- `auth` is excluded from the project's managed scope; objects there that
+  managed objects depend on must exist as schema-only copies on the scratch
+  target ([legacy-import.md §2.5](../04-migrations/legacy-import.md#25-scratch-targets));
+- `<env>_app` and `<env>_auth` are consumer roles: ExponetDB neither uses
+  nor changes them (§4 applies once a cluster is agent-managed);
+- per-environment owners make fp1 fingerprints of staging and production
+  differ in owners: for an imported legacy project that is the lineage
+  warning only, otherwise an approval per production plan
+  ([OD-53](../00-product/open-decisions.md#od-53-fingerprint-lineage-when-environments-use-different-owner-roles)).
 
 ## 4. Consumer roles as cluster desired state
 
@@ -378,26 +495,147 @@ roles:
   [control-plane.md §9.6](../07-node-agent/control-plane.md#96-verification-by-kind));
 - `exponetdb_node` only via `local … peer map=exponetdb`.
 
-**[ASSUMPTION]** Containers on `reos-01` reach the private network through the
-host's private address (`10.8.2.2`, as-built per REOSA's infrastructure
-documents; not measured from a container), so `pg_hba` cannot distinguish
-ExponetDB's connections from REOSA's by source address; separation relies on
-roles and credentials. Checked when `pg_hba` is configured in Wave 5. Moving ExponetDB to its own
-host later (`exponet-01`) makes source restriction meaningful.
+**[OBSERVED]** (owner's Wave 9 order §6, 2026-10-21; measured by the owner)
+Containers on `reos-01` reach `reos-db-01` SNAT'ed from the host's private
+address `10.8.2.2`, so `pg_hba` cannot distinguish ExponetDB's connections
+from REOSA's by source address; separation relies on roles and credentials.
+Moving ExponetDB to its own host later (`exponet-01`) makes source
+restriction meaningful.
 
 ## 8. External clusters (no node agent)
 
-For clusters ExponetDB reaches only over the network (for example a hosted
-provider during a migration period):
+For clusters ExponetDB reaches only over the network: a self-managed
+cluster without the node agent, or a hosted provider during a migration
+period. The walkthrough from `server create` to an active target is
+[`onboard-external-cluster.md`](../12-operations/onboard-external-cluster.md).
 
-- ExponetDB's roles are created by a human with SQL that ExponetDB generates
-  (verifiers only). Some grants may be impossible on a hosted service
-  (`pg_read_all_data`, `pg_signal_backend` availability, `BYPASSRLS` restrictions).
+- ExponetDB's roles are created by a person with the bootstrap SQL that
+  ExponetDB generates (§8.1). Some statements may be impossible on a hosted
+  service (`BYPASSRLS` and `NOSUPERUSER` need a superuser; `pg_read_all_data`,
+  `pg_signal_backend` availability).
 - The registry records which paths are available; tools that need an unavailable
   path return `CAPABILITY_UNAVAILABLE` rather than degraded results.
-- No role desired-state, `pg_hba`, TLS or configuration management.
-- The ledger and migration engine work if the migrator can be a member of the
-  object owner role. **[ASSUMPTION]** On REOSA's hosted databases the owner is
-  the provider's `postgres` role, which a new role can be granted membership in;
-  to be verified in Wave 10 before any migration runs there through ExponetDB
-  ([OD-7](../00-product/open-decisions.md#od-7-manage-reosas-current-hosted-databases-before-the-move)).
+- No role desired state, `pg_hba`, TLS or configuration management (§8.2 is
+  guidance for the person who manages them).
+- The ledger and migration engine work if the migrator can `SET ROLE` into the
+  project's execution roles (§3); the bootstrap SQL grants that where the
+  roles are fit. REOSA staging is self-managed on `reos-db-01` with its own
+  owner role (§3.3). **[ASSUMPTION]** On REOSA's hosted production database
+  the owner is the provider's `postgres` role, which a new role can be
+  granted membership in; to be verified before any migration runs there
+  through ExponetDB, which is not before Wave 11
+  ([OD-7](../00-product/open-decisions.md#od-7-manage-reosas-current-hosted-databases-before-the-move), OD-7b).
+- **[OBSERVED]** `cluster register` always creates an **external** cluster
+  (`packages/registry/src/kinds.ts`, the cluster insert), and the
+  management mode of a cluster record never changes (a Control Store
+  trigger of the Wave 4 registry bundle); every node capability on an
+  external cluster is `CAPABILITY_UNAVAILABLE`
+  (`packages/nodes/src/mapping.ts`). How a cluster registered external
+  later gains the node agent is **[OPEN: OD-54]**
+  ([open-decisions.md](../00-product/open-decisions.md#od-54-how-an-external-cluster-gains-the-node-agent)).
+
+### 8.1 Bootstrap SQL
+
+**[DECIDED]** (Wave 4; idempotent and registry-driven since Wave 9 order A8)
+`GET /api/v1/clusters/{id}/bootstrap-sql`
+(`exponetdb cluster bootstrap-sql <cluster>`) returns a script for psql,
+generated by the server for this cluster
+(`packages/postgres/src/bootstrap.ts`, `packages/registry/src/bootstrap.ts`).
+It contains no password: after it ran, the person sets each login password
+with psql's `\password <role>` (psql sends a SCRAM verifier, never the
+password; `password_encryption = scram-sha-256`, the default) and submits the
+same password once through the write-only credential endpoint (§5). In
+order:
+
+1. **ExponetDB's roles** (§2): each one created when missing and altered to
+   the same attributes otherwise (`DO` blocks that check `pg_roles`; an
+   existing password stays), then their predefined-role memberships
+   `WITH INHERIT TRUE, SET FALSE`, their role settings, and the ledger owner
+   granted to the migrator `WITH INHERIT FALSE, SET TRUE`.
+2. **Execution roles** from the registry: every role the aliases of a
+   project resolve to (the project's map, refined per environment, §3.1)
+   for each environment with a target placed on this cluster, plus the
+   environments of a project named in the request (`project`, optionally
+   one `environment`: the script is run before that project's first target
+   is registered; the caller must also be allowed
+   `project.execution_roles.get` on it). Each is granted to the migrator
+   `WITH INHERIT FALSE, SET TRUE` only if it exists and passes the
+   planner's own checks, evaluated in the administrator's session when the
+   script runs: not `LOGIN`, none of `SUPERUSER`, `CREATEROLE`, `CREATEDB`,
+   `REPLICATION`, no `BYPASSRLS` unless a declared exception (§3.2) excuses
+   it in an environment on this cluster, and no reach into a privileged,
+   predefined or ExponetDB role. A missing role is skipped with a
+   `NOTICE`, an unfit one with a `WARNING`; neither is granted. Predefined
+   and ExponetDB names are refused when the script is built. The planner
+   checks the role again at plan and apply in any case (T36 in the
+   [threat model](../08-auth-and-security/threat-model.md)).
+3. **Each database**: the registered ones and the names given with
+   `database` (repeatable; the script can be generated **before** a
+   database is registered): `CONNECT` for every login role and `CREATE` for
+   the ledger owner, in a `DO` block that skips a database that does not
+   exist yet with a `NOTICE`.
+4. **Legacy ledger read** (only with `ledgers`): psql connects to each
+   database (`\connect -reuse-previous=on` with a conninfo holding only
+   `dbname`, single-quoted, so a name is never read as a host, a variable
+   or a backquote command) and grants the observer `USAGE` on the ledger's
+   schema and `SELECT` on the ledger table, where it exists:
+   `supabase_migrations.schema_migrations`, `drizzle.__drizzle_migrations`,
+   `public.applied_migrations` ([legacy-import.md §2](../04-migrations/legacy-import.md)).
+   Nothing else is readable to the observer. A database that does not exist
+   yet is skipped with a message (psql would stop at a failed `\connect`).
+   **[DECIDED]** (Wave 9 Part A, review round 1) Each grant block first
+   checks that psql reached the database it names (`current_database()`)
+   and raises otherwise; and because psql drops double quotes from a
+   `\connect` argument whatever the quoting **[OBSERVED]** (psql 16 and 17:
+   `'dbname=''q"w"e'''` reaches `qwe`), a database name holding `"` gets no
+   `\connect` at all, only an `\echo` telling the person to grant the ledger
+   reads there by hand.
+
+The script sets `search_path = pg_catalog, pg_temp` in its first session and
+again after each `\connect` (review round 2), so an operator or function a
+database's owner created never stands in for a built-in one while an
+administrator runs it; it resets the path at the end.
+
+Every statement is guarded or converges (a role grant run again converges
+to the stated options on PostgreSQL 16+), so the script is **run again**
+after a database is added, an execution role is created or mapped, or a
+legacy ledger is declared, and leaves the same state. It does not remove
+what a person granted by hand beyond it (an extra membership or
+attribute); the planner's checks refuse an execution role that gained one.
+**[OBSERVED]** `packages/registry/test/bootstrap.int.test.ts` runs the
+generated script with psql twice on PostgreSQL 16, 17 and 18: no error, the
+same roles, memberships, settings and privileges after the second run; the
+migrator holds `SET` without `INHERIT` on the fit roles only (a `LOGIN` role
+and one reaching `pg_read_all_data` get a warning, a missing one a notice,
+the `BYPASSRLS` role with a declared exception is granted); a role created
+later is granted on the next run; the observer reads the declared ledger.
+The test servers are shared, so the run uses the test kit's connection
+limit in place of the product's (the unit tests pin those).
+
+### 8.2 `pg_hba` and network for an external cluster
+
+**[DECIDED]** guidance (ExponetDB does not manage these on an external
+cluster; it reports TLS state per endpoint): the same rules as §7, set by
+the person who manages the cluster.
+
+- Only `hostssl` lines for ExponetDB's roles, with `scram-sha-256`; never
+  `host`, `trust`, `password` or `md5` for them. ExponetDB never sends a
+  password to a server that asks for it in cleartext or as MD5 (§6).
+- The source of those lines is the address or addresses the Control Plane
+  connects from: the worker and `serve`, the values of
+  `EXPONETDB_EGRESS_ADDRESSES` ([deployment.md](../12-operations/deployment.md)).
+  The databases are `postgres` (cluster identity and credential checks
+  before a database is registered connect there) and the managed
+  databases. Example for a Control Plane at `10.8.2.2`:
+
+  ```text
+  # ExponetDB: TLS and SCRAM only, from the Control Plane only
+  hostssl  postgres,app  exponetdb_observer,exponetdb_reader,exponetdb_verifier,exponetdb_operator,exponetdb_migrator  10.8.2.2/32  scram-sha-256
+  ```
+
+- The firewall of the host allows the PostgreSQL port from those addresses
+  only. The server certificate's name is the endpoint's TLS name, issued by
+  the CA bundle given at `cluster register` (§6); ExponetDB connects with
+  `verify-full` only.
+- `max_connections` leaves room for ExponetDB's budget (serve at most 3, the
+  worker at most 5 per cluster; the role connection limits of §2).

@@ -1,6 +1,6 @@
 import type { CommandShortcutId } from '@exponetdb/ui-patterns'
 import type { ResponseOf } from '../../lib/api/client.ts'
-import { t } from '../../lib/i18n/i18n.ts'
+import { type MessageKey, t } from '../../lib/i18n/i18n.ts'
 import { switchEnvironment, targetHref } from '../../shell/navigation.ts'
 import { splitTargetPath, type TargetRoute } from './params.ts'
 
@@ -13,6 +13,20 @@ import { splitTargetPath, type TargetRoute } from './params.ts'
  */
 export type Tier = 'prod' | 'nonprod'
 export type Lifecycle = 'registered' | 'active' | 'suspended' | 'decommissioned'
+
+/** The word a menu shows next to a target that is not active; `undefined` for an active one. */
+export function lifecycleLabelKey(state: Lifecycle): MessageKey | undefined {
+  switch (state) {
+    case 'registered':
+      return 'target.lifecycle.registered'
+    case 'active':
+      return undefined
+    case 'suspended':
+      return 'target.lifecycle.suspended'
+    case 'decommissioned':
+      return 'target.lifecycle.decommissioned'
+  }
+}
 
 export interface Environment {
   readonly id: string

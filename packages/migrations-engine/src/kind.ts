@@ -32,6 +32,7 @@ import {
 import { type MigrationKindDeps, projectRegistry } from './deps.ts'
 import { MigrationError } from './errors.ts'
 import { readEvidenceTarget } from './evidence.ts'
+import { boundExceptionsHold, executionRolesFor } from './execution-roles.ts'
 import {
   executionRolesChanged,
   type NontxResult,
@@ -147,12 +148,16 @@ export class MigrationApplyKind implements OperationKind {
     ) {
       changed.push({ binding: 'placement', actual: 'changed' })
     }
-    const project = await projectRegistry(this.#deps.store, content.projectId)
+    // The roles of the target's environment and the exceptions the plan relied on (ADR-0034).
+    const resolved = await executionRolesFor(this.#deps.store, target)
     for (const [alias, role] of Object.entries(content.expectedState.executionRoles)) {
-      if (project.executionRoles[alias] !== role) {
+      if (resolved.roles[alias] !== role) {
         changed.push({ binding: 'execution_roles', actual: 'changed' })
         break
       }
+    }
+    if (!boundExceptionsHold(content.expectedState.executionRoleExceptions, resolved.exceptions)) {
+      changed.push({ binding: 'execution_role_exception', actual: 'changed' })
     }
     // The ledger itself is bound by its state hash, compared live under the lock.
     return { target, changed }
@@ -330,9 +335,12 @@ export class MigrationApplyKind implements OperationKind {
         { statementTimeoutMs: 60_000 },
       )
       const changed = stateChanges(content, state)
-      if (await executionRolesChanged(session, content, project.executionRoles)) {
-        changed.push({ binding: 'execution_roles', actual: 'changed' })
-      }
+      const roleChange = await executionRolesChanged(
+        session,
+        content,
+        await executionRolesFor(this.#deps.store, target),
+      )
+      if (roleChange !== null) changed.push({ binding: roleChange, actual: 'changed' })
       if (changed.length === 0 && ctx.readmit !== undefined) {
         changed.push(
           ...(await this.#deps.store.transaction(
@@ -443,6 +451,25 @@ export class MigrationApplyKind implements OperationKind {
         )
         firstError = { code: 'GRANT_REVOKED', detail: { migrationId: item.migrationId } }
         break
+      }
+      if (position > 0) {
+        // A binding, a role or a declared exception changed (revoked, expired) while the plan
+        // runs: what ran stays applied; nothing further starts (ADR-0034 §3).
+        const roleChange = await executionRolesChanged(
+          session,
+          content,
+          await executionRolesFor(this.#deps.store, target),
+        )
+        if (roleChange !== null) {
+          await fenced(fence, 'migrations.kind.progress', (tx) =>
+            writeProgress(tx, ctx.operationId, {
+              ...initial(position, item),
+              errorCode: 'PLAN_STALE',
+            }),
+          )
+          firstError = { code: 'PLAN_STALE', detail: { changedBindings: [roleChange] } }
+          break
+        }
       }
       const revision = await readRevision(
         this.#deps.store,

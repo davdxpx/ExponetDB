@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, screen, within } from '@testing-library/react'
+import { cleanup, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { ApplyVerifyIndicators } from '../../src/plan/apply-verify-indicators.tsx'
@@ -94,28 +94,40 @@ function blockOf(title: string): HTMLElement {
 }
 
 describe('PlanFrame', () => {
-  it('frames a production plan and repeats the production cue on every block', async () => {
+  it('marks a production plan once: the frame and one sentence, no cue on any block', async () => {
     const { container } = renderPlan(<Page production />)
     const frame = container.querySelector('[data-plan-frame]')
     expect(frame).toHaveAttribute('data-tier', 'production')
-    expect(
-      within(frame as HTMLElement).getByText(/This plan changes a production target/),
-    ).toBeInTheDocument()
+    const notices = container.querySelectorAll('[data-production-notice]')
+    expect(notices).toHaveLength(1)
+    expect(notices[0]).toHaveTextContent('This plan changes production.')
     for (const title of BLOCK_TITLES) {
       const block = blockOf(title)
-      // The block's own cue, beside its heading (the summary's tier chip says it as well).
-      expect(block.querySelector(':scope > div [data-production-cue]')).not.toBeNull()
+      // The owner's decision of 2026-10-21: no block repeats the cue beside its heading.
+      expect(block.querySelector('[data-production-cue]'), title).toBeNull()
+      expect(block.className, title).not.toContain('border-production')
     }
     expect(await axeViolations()).toEqual([])
   })
 
-  it('adds no frame and no production cue to a non-production plan', async () => {
+  it('says the page’s own sentence at the head of the frame', () => {
+    const { container } = renderPlan(
+      <PlanFrame production notice="This plan has no target tier; it is treated as production.">
+        <p>Body</p>
+      </PlanFrame>,
+    )
+    expect(container.querySelector('[data-production-notice]')).toHaveTextContent(
+      'This plan has no target tier; it is treated as production.',
+    )
+    expect(container.querySelector('[data-production-cue]')).toBeNull()
+  })
+
+  it('adds no frame and no production sentence to a non-production plan', async () => {
     const { container } = renderPlan(<Page production={false} />)
     const frame = container.querySelector('[data-plan-frame]')
     expect(frame).toHaveAttribute('data-tier', 'nonprod')
-    expect(container.querySelector('[data-production-cue]')).toBeNull()
-    expect(screen.queryByText(/This plan changes a production target/)).toBeNull()
-    expect(screen.queryByText('Production')).toBeNull()
+    expect(container.querySelector('[data-production-notice]')).toBeNull()
+    expect(screen.queryByText(/This plan changes production/)).toBeNull()
     expect(await axeViolations()).toEqual([])
   })
 

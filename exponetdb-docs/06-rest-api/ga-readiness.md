@@ -37,7 +37,7 @@ way. Every statement is **[OBSERVED]** on the branch unless marked.
 | 8 | A changelog that carries notice of changes | `architecture.md` §9 promises "notice in the changelog"; the repository has no changelog | **not met** |
 | 9 | CI has run the matrix on the commit to be declared | no GitHub Actions runner has ever started for this repository | **not met** |
 | 10 | Deployed and observed off-host | G2 off-host deployment evidence is still outstanding (`gates/2.md`) | **not met** |
-| 11 | Open decisions that change the API | OD-22 implemented in Wave 8 part 2 (`declaredTier`, `POST /clusters/{id}/declared-tier`; tiered OAuth scope strings for `registry.manage` wait for the owner), OD-21 (notification channel; break-glass activation refused), OD-27 | open |
+| 11 | Open decisions that change the API | OD-22 implemented in Wave 8 part 2 (`declaredTier`, `POST /clusters/{id}/declared-tier`; tiered OAuth scope strings for `registry.manage` wait for the owner), OD-21 (notification channel; break-glass activation refused), OD-27, OD-49 (an open `ServerProvider`, §7) | open |
 
 ## 3. Changes Wave 7 made to existing answers
 
@@ -95,3 +95,41 @@ statements of §1 to §4 stay as they were on the Wave 7 branch.
   Criterion 7 stays **not met**, with one operation fewer to resolve.
 - `info.description` of the OpenAPI document says that an operation that is
   not served yet answers `404 NOT_FOUND`.
+
+## 6. Update 2026-10-20: Wave 8 completion (five additive changes)
+
+**[OBSERVED]** Five changes for the Web App, all additive and REST only (the
+MCP announcements, their digests and `toolVersion` did not move):
+
+- Two new reads under existing actions, so no new permission:
+  `GET /targets/{target}/schema/objects` (`listSchemaObjects`, action
+  `schema.search`: the objects of the snapshot without a search term) and
+  `GET /targets/{target}/drift-checks` (`listDriftChecks`, action
+  `target.finding.list`: the history of past drift checks).
+- Optional members and parameters on existing answers: `capacity` on the
+  target health, `lastUsedAt` and `activeGrantCount` on the OAuth client reads,
+  and the `identity` filter of `GET /audit-events`. The OpenAPI component
+  `TargetHealth` is unchanged; the route answers with `TargetHealthView`, which
+  is `TargetHealth` plus the optional `capacity`.
+- Counted on this branch: 159 documented operations, 154 served; the five that
+  are not served are the ones listed in §1, so criterion 7 is unchanged
+  (**not met**). The totals in §1 to §5 are those of the dates they carry.
+
+## 7. Update 2026-10-21: the server provider list
+
+**[OBSERVED]** The owner asked on 2026-10-21 for a long list of server
+providers ([`../01-architecture/domain-model.md` §3.2](../01-architecture/domain-model.md#32-physical-layer)).
+`provider` of `Server` and of `ServerCreateRequest` is now the named
+component `ServerProvider` (the SDK type of the same name) with eighteen
+values more than before; the four earlier values keep their meaning. The
+enum is closed, so a client that treats it as exhaustive sees values it did
+not know: under the pre-GA rule ([`architecture.md` §9](./architecture.md#9-versioning))
+that is a change with notice, and this section is the notice. No route,
+action or MCP tool changes (no tool announces a server; the digests and
+`toolVersion` did not move).
+
+**[OPEN: OD-49]** For the GA decision of §4: after GA, a further provider
+would need `/api/v2` unless `ServerProvider` is marked open
+(`x-extensible-enum`, [`../01-architecture/versioning.md` §2](../01-architecture/versioning.md#2-rules-for-additive-changes))
+before GA. Marking it open makes its SDK type `string`
+([OD-49](../00-product/open-decisions.md#od-49-the-server-provider-enum-and-apiv1-ga)).

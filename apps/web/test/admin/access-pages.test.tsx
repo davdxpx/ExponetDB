@@ -376,26 +376,92 @@ describe('the Connected applications page', () => {
 })
 
 describe('the OAuth clients page (OD-5)', () => {
-  it('states both registration rules and where the mode is set, without claiming the current mode', async () => {
+  function clientsWorld(): World {
     const world = new World()
     world.on('GET', '/api/v1/oauth-clients', { items: [], nextCursor: null })
-    const { container } = mountApp('/access/oauth-clients', world)
-    const modes = await waitFor(() => {
+    return world
+  }
+
+  async function modes(): Promise<HTMLElement> {
+    return waitFor(() => {
       const found = document.getElementById('registration-modes')
       if (found === null) throw new Error('no modes')
       return found
     })
-    expect(modes.textContent).toMatch(/^Open \(the default\)/)
-    expect(modes.textContent).toContain('approved automatically')
-    expect(modes.textContent).toContain('Every person still signs in and consents')
-    expect(modes.textContent).toContain(
+  }
+
+  it('states both registration rules, where the mode is set, and the mode this installation reports', async () => {
+    const world = clientsWorld()
+    world.on('GET', '/api/v1/installation', installation({ oauthClientRegistration: 'review' }))
+    const { container } = mountApp('/access/oauth-clients', world)
+    const found = await modes()
+    expect(found.textContent).toMatch(/^Open \(the default\)/)
+    expect(found.textContent).toContain('approved automatically')
+    expect(found.textContent).toContain('Every person still signs in and consents')
+    expect(found.textContent).toContain(
       'Review: a new client waits on this page until an administrator approves the exact client',
     )
-    expect(modes.textContent).toContain('EXPONETDB_OAUTH_CLIENT_REGISTRATION')
-    expect(modes.textContent).toContain(
-      'No read of this page tells which mode this installation uses',
+    expect(found.textContent).toContain('EXPONETDB_OAUTH_CLIENT_REGISTRATION')
+    await waitFor(() =>
+      expect(document.getElementById('registration-current')).toHaveTextContent(
+        'This installation uses review registration.',
+      ),
     )
-    expect(modes.textContent).not.toMatch(/this installation (uses|runs) (open|review)/i)
     expect(await axeViolations(container)).toEqual([])
   })
+
+  it('names open registration when the installation reports it', async () => {
+    const world = clientsWorld()
+    world.on('GET', '/api/v1/installation', installation({ oauthClientRegistration: 'open' }))
+    mountApp('/access/oauth-clients', world)
+    await modes()
+    await waitFor(() =>
+      expect(document.getElementById('registration-current')).toHaveTextContent(
+        'This installation uses open registration.',
+      ),
+    )
+  })
+
+  it('never claims a mode when the read fails or the server does not report one', async () => {
+    const failed = clientsWorld()
+    failed.on('GET', '/api/v1/installation', () =>
+      problem(500, 'INTERNAL', 'Something went wrong on the server.'),
+    )
+    mountApp('/access/oauth-clients', failed)
+    await modes()
+    await waitFor(() =>
+      expect(document.getElementById('registration-current')).toHaveTextContent(
+        /Could not read which mode this installation uses: .*INTERNAL.*This does not mean either mode\./,
+      ),
+    )
+    expect(document.getElementById('registration-modes')?.textContent).not.toMatch(
+      /this installation uses (open|review)/i,
+    )
+    cleanup()
+
+    const silent = clientsWorld()
+    silent.on('GET', '/api/v1/installation', installation({}))
+    mountApp('/access/oauth-clients', silent)
+    await modes()
+    await waitFor(() =>
+      expect(document.getElementById('registration-current')).toHaveTextContent(
+        'does not report its mode',
+      ),
+    )
+  })
 })
+
+function installation(extra: Record<string, unknown>): Record<string, unknown> {
+  return {
+    version: '0.8.0',
+    contracts: {
+      restApi: 'v1',
+      mcpCatalog: 'exponetdb.mcp/v1',
+      nodeProtocol: 'exponetdb.node/v1',
+      migrationManifest: 'exponetdb.migration/v1',
+      projectConfig: 'exponetdb.project/v1',
+    },
+    features: [],
+    ...extra,
+  }
+}

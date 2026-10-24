@@ -22,6 +22,7 @@ import { Route as AppApprovalsRouteImport } from './routes/_app/approvals'
 import { Route as AppAuditRouteImport } from './routes/_app/audit'
 import { Route as AppBackupsRouteImport } from './routes/_app/backups'
 import { Route as AppConnectRouteImport } from './routes/_app/connect'
+import { Route as AppFindingsRouteImport } from './routes/_app/findings'
 import { Route as SessionCredentialsRouteImport } from './routes/_session/credentials'
 import { Route as SessionStepUpRouteImport } from './routes/_session/step-up'
 import { Route as OauthErrorRouteImport } from './routes/oauth/error'
@@ -47,6 +48,7 @@ import { Route as AppSettingsInstallationRouteImport } from './routes/_app/setti
 import { Route as AppSettingsNotificationsRouteImport } from './routes/_app/settings/notifications'
 import { Route as AppSettingsPoliciesRouteImport } from './routes/_app/settings/policies'
 import { Route as AppSettingsProductsRouteImport } from './routes/_app/settings/products'
+import { Route as AppSettingsProjectsRouteImport } from './routes/_app/settings/projects'
 import { Route as AppTargetsIndexRouteImport } from './routes/_app/targets/index'
 import { Route as AppTargetsRegisterRouteImport } from './routes/_app/targets/register'
 import { Route as SessionOauthConsentRouteImport } from './routes/_session/oauth/consent'
@@ -66,6 +68,7 @@ import { Route as AppTProductProjectEnvironmentIndexRouteImport } from './routes
 import { Route as AppTProductProjectEnvironmentActivityRouteImport } from './routes/_app/t/$product/$project/$environment/activity'
 import { Route as AppTProductProjectEnvironmentAdvisorsRouteImport } from './routes/_app/t/$product/$project/$environment/advisors'
 import { Route as AppTProductProjectEnvironmentBackupsRouteImport } from './routes/_app/t/$product/$project/$environment/backups'
+import { Route as AppTProductProjectEnvironmentCompareRouteImport } from './routes/_app/t/$product/$project/$environment/compare'
 import { Route as AppTProductProjectEnvironmentConfigurationRouteImport } from './routes/_app/t/$product/$project/$environment/configuration'
 import { Route as AppTProductProjectEnvironmentConnectionsRouteImport } from './routes/_app/t/$product/$project/$environment/connections'
 import { Route as AppTProductProjectEnvironmentDriftRouteImport } from './routes/_app/t/$product/$project/$environment/drift'
@@ -138,6 +141,11 @@ const AppBackupsRoute = AppBackupsRouteImport.update({
 const AppConnectRoute = AppConnectRouteImport.update({
   id: '/connect',
   path: '/connect',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFindingsRoute = AppFindingsRouteImport.update({
+  id: '/findings',
+  path: '/findings',
   getParentRoute: () => AppRoute,
 } as any)
 const SessionCredentialsRoute = SessionCredentialsRouteImport.update({
@@ -268,6 +276,11 @@ const AppSettingsProductsRoute = AppSettingsProductsRouteImport.update({
   path: '/settings/products',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSettingsProjectsRoute = AppSettingsProjectsRouteImport.update({
+  id: '/settings/projects',
+  path: '/settings/projects',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppTargetsIndexRoute = AppTargetsIndexRouteImport.update({
   id: '/targets/',
   path: '/targets/',
@@ -376,6 +389,12 @@ const AppTProductProjectEnvironmentBackupsRoute =
     path: '/backups',
     getParentRoute: () => AppTProductProjectEnvironmentRoute,
   } as any)
+const AppTProductProjectEnvironmentCompareRoute =
+  AppTProductProjectEnvironmentCompareRouteImport.update({
+    id: '/compare',
+    path: '/compare',
+    getParentRoute: () => AppTProductProjectEnvironmentRoute,
+  } as any)
 const AppTProductProjectEnvironmentConfigurationRoute =
   AppTProductProjectEnvironmentConfigurationRouteImport.update({
     id: '/configuration',
@@ -449,6 +468,7 @@ export interface FileRoutesByFullPath {
   '/audit': typeof AppAuditRoute
   '/backups': typeof AppBackupsRoute
   '/connect': typeof AppConnectRoute
+  '/findings': typeof AppFindingsRoute
   '/credentials': typeof SessionCredentialsRoute
   '/step-up': typeof SessionStepUpRoute
   '/oauth/error': typeof OauthErrorRoute
@@ -471,6 +491,7 @@ export interface FileRoutesByFullPath {
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/policies': typeof AppSettingsPoliciesRoute
   '/settings/products': typeof AppSettingsProductsRoute
+  '/settings/projects': typeof AppSettingsProjectsRoute
   '/targets/register': typeof AppTargetsRegisterRoute
   '/oauth/consent': typeof SessionOauthConsentRoute
   '/oauth/device': typeof SessionOauthDeviceRoute
@@ -492,6 +513,7 @@ export interface FileRoutesByFullPath {
   '/t/$product/$project/$environment/activity': typeof AppTProductProjectEnvironmentActivityRoute
   '/t/$product/$project/$environment/advisors': typeof AppTProductProjectEnvironmentAdvisorsRoute
   '/t/$product/$project/$environment/backups': typeof AppTProductProjectEnvironmentBackupsRoute
+  '/t/$product/$project/$environment/compare': typeof AppTProductProjectEnvironmentCompareRoute
   '/t/$product/$project/$environment/configuration': typeof AppTProductProjectEnvironmentConfigurationRoute
   '/t/$product/$project/$environment/connections': typeof AppTProductProjectEnvironmentConnectionsRoute
   '/t/$product/$project/$environment/drift': typeof AppTProductProjectEnvironmentDriftRoute
@@ -515,6 +537,7 @@ export interface FileRoutesByTo {
   '/audit': typeof AppAuditRoute
   '/backups': typeof AppBackupsRoute
   '/connect': typeof AppConnectRoute
+  '/findings': typeof AppFindingsRoute
   '/credentials': typeof SessionCredentialsRoute
   '/step-up': typeof SessionStepUpRoute
   '/oauth/error': typeof OauthErrorRoute
@@ -537,6 +560,7 @@ export interface FileRoutesByTo {
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/policies': typeof AppSettingsPoliciesRoute
   '/settings/products': typeof AppSettingsProductsRoute
+  '/settings/projects': typeof AppSettingsProjectsRoute
   '/targets/register': typeof AppTargetsRegisterRoute
   '/oauth/consent': typeof SessionOauthConsentRoute
   '/oauth/device': typeof SessionOauthDeviceRoute
@@ -557,6 +581,7 @@ export interface FileRoutesByTo {
   '/t/$product/$project/$environment/activity': typeof AppTProductProjectEnvironmentActivityRoute
   '/t/$product/$project/$environment/advisors': typeof AppTProductProjectEnvironmentAdvisorsRoute
   '/t/$product/$project/$environment/backups': typeof AppTProductProjectEnvironmentBackupsRoute
+  '/t/$product/$project/$environment/compare': typeof AppTProductProjectEnvironmentCompareRoute
   '/t/$product/$project/$environment/configuration': typeof AppTProductProjectEnvironmentConfigurationRoute
   '/t/$product/$project/$environment/connections': typeof AppTProductProjectEnvironmentConnectionsRoute
   '/t/$product/$project/$environment/drift': typeof AppTProductProjectEnvironmentDriftRoute
@@ -583,6 +608,7 @@ export interface FileRoutesById {
   '/_app/audit': typeof AppAuditRoute
   '/_app/backups': typeof AppBackupsRoute
   '/_app/connect': typeof AppConnectRoute
+  '/_app/findings': typeof AppFindingsRoute
   '/_session/credentials': typeof SessionCredentialsRoute
   '/_session/step-up': typeof SessionStepUpRoute
   '/oauth/error': typeof OauthErrorRoute
@@ -606,6 +632,7 @@ export interface FileRoutesById {
   '/_app/settings/notifications': typeof AppSettingsNotificationsRoute
   '/_app/settings/policies': typeof AppSettingsPoliciesRoute
   '/_app/settings/products': typeof AppSettingsProductsRoute
+  '/_app/settings/projects': typeof AppSettingsProjectsRoute
   '/_app/targets/register': typeof AppTargetsRegisterRoute
   '/_session/oauth/consent': typeof SessionOauthConsentRoute
   '/_session/oauth/device': typeof SessionOauthDeviceRoute
@@ -627,6 +654,7 @@ export interface FileRoutesById {
   '/_app/t/$product/$project/$environment/activity': typeof AppTProductProjectEnvironmentActivityRoute
   '/_app/t/$product/$project/$environment/advisors': typeof AppTProductProjectEnvironmentAdvisorsRoute
   '/_app/t/$product/$project/$environment/backups': typeof AppTProductProjectEnvironmentBackupsRoute
+  '/_app/t/$product/$project/$environment/compare': typeof AppTProductProjectEnvironmentCompareRoute
   '/_app/t/$product/$project/$environment/configuration': typeof AppTProductProjectEnvironmentConfigurationRoute
   '/_app/t/$product/$project/$environment/connections': typeof AppTProductProjectEnvironmentConnectionsRoute
   '/_app/t/$product/$project/$environment/drift': typeof AppTProductProjectEnvironmentDriftRoute
@@ -653,6 +681,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/backups'
     | '/connect'
+    | '/findings'
     | '/credentials'
     | '/step-up'
     | '/oauth/error'
@@ -675,6 +704,7 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/settings/policies'
     | '/settings/products'
+    | '/settings/projects'
     | '/targets/register'
     | '/oauth/consent'
     | '/oauth/device'
@@ -696,6 +726,7 @@ export interface FileRouteTypes {
     | '/t/$product/$project/$environment/activity'
     | '/t/$product/$project/$environment/advisors'
     | '/t/$product/$project/$environment/backups'
+    | '/t/$product/$project/$environment/compare'
     | '/t/$product/$project/$environment/configuration'
     | '/t/$product/$project/$environment/connections'
     | '/t/$product/$project/$environment/drift'
@@ -719,6 +750,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/backups'
     | '/connect'
+    | '/findings'
     | '/credentials'
     | '/step-up'
     | '/oauth/error'
@@ -741,6 +773,7 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/settings/policies'
     | '/settings/products'
+    | '/settings/projects'
     | '/targets/register'
     | '/oauth/consent'
     | '/oauth/device'
@@ -761,6 +794,7 @@ export interface FileRouteTypes {
     | '/t/$product/$project/$environment/activity'
     | '/t/$product/$project/$environment/advisors'
     | '/t/$product/$project/$environment/backups'
+    | '/t/$product/$project/$environment/compare'
     | '/t/$product/$project/$environment/configuration'
     | '/t/$product/$project/$environment/connections'
     | '/t/$product/$project/$environment/drift'
@@ -786,6 +820,7 @@ export interface FileRouteTypes {
     | '/_app/audit'
     | '/_app/backups'
     | '/_app/connect'
+    | '/_app/findings'
     | '/_session/credentials'
     | '/_session/step-up'
     | '/oauth/error'
@@ -809,6 +844,7 @@ export interface FileRouteTypes {
     | '/_app/settings/notifications'
     | '/_app/settings/policies'
     | '/_app/settings/products'
+    | '/_app/settings/projects'
     | '/_app/targets/register'
     | '/_session/oauth/consent'
     | '/_session/oauth/device'
@@ -830,6 +866,7 @@ export interface FileRouteTypes {
     | '/_app/t/$product/$project/$environment/activity'
     | '/_app/t/$product/$project/$environment/advisors'
     | '/_app/t/$product/$project/$environment/backups'
+    | '/_app/t/$product/$project/$environment/compare'
     | '/_app/t/$product/$project/$environment/configuration'
     | '/_app/t/$product/$project/$environment/connections'
     | '/_app/t/$product/$project/$environment/drift'
@@ -944,6 +981,13 @@ declare module '@tanstack/react-router' {
       path: '/connect'
       fullPath: '/connect'
       preLoaderRoute: typeof AppConnectRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/findings': {
+      id: '/_app/findings'
+      path: '/findings'
+      fullPath: '/findings'
+      preLoaderRoute: typeof AppFindingsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_session/credentials': {
@@ -1121,6 +1165,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsProductsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/settings/projects': {
+      id: '/_app/settings/projects'
+      path: '/settings/projects'
+      fullPath: '/settings/projects'
+      preLoaderRoute: typeof AppSettingsProjectsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/targets/': {
       id: '/_app/targets/'
       path: '/targets'
@@ -1254,6 +1305,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTProductProjectEnvironmentBackupsRouteImport
       parentRoute: typeof AppTProductProjectEnvironmentRoute
     }
+    '/_app/t/$product/$project/$environment/compare': {
+      id: '/_app/t/$product/$project/$environment/compare'
+      path: '/compare'
+      fullPath: '/t/$product/$project/$environment/compare'
+      preLoaderRoute: typeof AppTProductProjectEnvironmentCompareRouteImport
+      parentRoute: typeof AppTProductProjectEnvironmentRoute
+    }
     '/_app/t/$product/$project/$environment/configuration': {
       id: '/_app/t/$product/$project/$environment/configuration'
       path: '/configuration'
@@ -1351,6 +1409,7 @@ interface AppTProductProjectEnvironmentRouteChildren {
   AppTProductProjectEnvironmentActivityRoute: typeof AppTProductProjectEnvironmentActivityRoute
   AppTProductProjectEnvironmentAdvisorsRoute: typeof AppTProductProjectEnvironmentAdvisorsRoute
   AppTProductProjectEnvironmentBackupsRoute: typeof AppTProductProjectEnvironmentBackupsRoute
+  AppTProductProjectEnvironmentCompareRoute: typeof AppTProductProjectEnvironmentCompareRoute
   AppTProductProjectEnvironmentConfigurationRoute: typeof AppTProductProjectEnvironmentConfigurationRoute
   AppTProductProjectEnvironmentConnectionsRoute: typeof AppTProductProjectEnvironmentConnectionsRoute
   AppTProductProjectEnvironmentDriftRoute: typeof AppTProductProjectEnvironmentDriftRoute
@@ -1372,6 +1431,8 @@ const AppTProductProjectEnvironmentRouteChildren: AppTProductProjectEnvironmentR
       AppTProductProjectEnvironmentAdvisorsRoute,
     AppTProductProjectEnvironmentBackupsRoute:
       AppTProductProjectEnvironmentBackupsRoute,
+    AppTProductProjectEnvironmentCompareRoute:
+      AppTProductProjectEnvironmentCompareRoute,
     AppTProductProjectEnvironmentConfigurationRoute:
       AppTProductProjectEnvironmentConfigurationRoute,
     AppTProductProjectEnvironmentConnectionsRoute:
@@ -1408,6 +1469,7 @@ interface AppRouteChildren {
   AppAuditRoute: typeof AppAuditRoute
   AppBackupsRoute: typeof AppBackupsRoute
   AppConnectRoute: typeof AppConnectRoute
+  AppFindingsRoute: typeof AppFindingsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppAccessConnectedAppsRoute: typeof AppAccessConnectedAppsRoute
   AppAccessOauthClientsRoute: typeof AppAccessOauthClientsRoute
@@ -1424,6 +1486,7 @@ interface AppRouteChildren {
   AppSettingsNotificationsRoute: typeof AppSettingsNotificationsRoute
   AppSettingsPoliciesRoute: typeof AppSettingsPoliciesRoute
   AppSettingsProductsRoute: typeof AppSettingsProductsRoute
+  AppSettingsProjectsRoute: typeof AppSettingsProjectsRoute
   AppTargetsRegisterRoute: typeof AppTargetsRegisterRoute
   AppChangesIndexRoute: typeof AppChangesIndexRoute
   AppInfrastructureIndexRoute: typeof AppInfrastructureIndexRoute
@@ -1448,6 +1511,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAuditRoute: AppAuditRoute,
   AppBackupsRoute: AppBackupsRoute,
   AppConnectRoute: AppConnectRoute,
+  AppFindingsRoute: AppFindingsRoute,
   AppIndexRoute: AppIndexRoute,
   AppAccessConnectedAppsRoute: AppAccessConnectedAppsRoute,
   AppAccessOauthClientsRoute: AppAccessOauthClientsRoute,
@@ -1464,6 +1528,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSettingsNotificationsRoute: AppSettingsNotificationsRoute,
   AppSettingsPoliciesRoute: AppSettingsPoliciesRoute,
   AppSettingsProductsRoute: AppSettingsProductsRoute,
+  AppSettingsProjectsRoute: AppSettingsProjectsRoute,
   AppTargetsRegisterRoute: AppTargetsRegisterRoute,
   AppChangesIndexRoute: AppChangesIndexRoute,
   AppInfrastructureIndexRoute: AppInfrastructureIndexRoute,

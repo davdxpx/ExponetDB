@@ -13,6 +13,7 @@ import type {
   MigrationStream,
   OperationView,
   PlanView,
+  ScratchCheck,
 } from '@exponetdb/contracts'
 import {
   bundleFile,
@@ -32,6 +33,8 @@ import {
   planMigrationRollback,
   planMigrationVerify,
   projectStream,
+  refuseOversizedLegacyFiles,
+  scratchCheck,
 } from '@exponetdb/migrations-engine'
 import {
   findTarget,
@@ -258,6 +261,39 @@ export class MigrationUseCases {
           ...request,
           scratchTarget: scratch.targetId,
         }),
+    )
+  }
+
+  /**
+   * `migration.import.scratch_check`: read only, whether a scratch target can take this
+   * target's legacy replay (legacy-import.md §2.5). The caller holds the action on both.
+   */
+  async scratchCheck(
+    caller: CallerLike,
+    ref: string,
+    scratchRef: string,
+    alias?: string,
+    files?: readonly { readonly name: string; readonly text: string }[],
+    notApplicable: readonly string[] = [],
+  ): Promise<ScratchCheck> {
+    const { observation } = this.#services()
+    const target = await this.#target('migration.import.scratch_check', caller, ref)
+    if (files !== undefined) refuseOversizedLegacyFiles(files)
+    const scratch = await findTarget(this.#h.store, scratchRef)
+    if (scratch !== undefined) {
+      await this.#h.authorize(this.#h.store, 'migration.import.scratch_check', caller, {
+        kind: 'target',
+        targetId: scratch.targetId,
+      })
+    }
+    return scratchCheck(
+      this.#h.store,
+      { connector: observation.connector, installationId: observation.installationId },
+      target,
+      scratch?.targetId ?? scratchRef,
+      alias,
+      // The replay skips what the hints call not applicable; so does the check.
+      files?.filter((f) => !notApplicable.includes(f.name.slice(0, -'.sql'.length))),
     )
   }
 

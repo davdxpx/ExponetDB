@@ -47,9 +47,9 @@ const SECRETS: readonly (readonly [string, 'literal' | 'summary'])[] = [
   ],
   [`SET app.api_token = '${SECRET}'`, 'summary'],
   [`SET app.secret TO ${SECRET}`, 'summary'],
-  // The redactor masks these literals without a summary; the remover removes the value.
-  [`ALTER SYSTEM SET my.password = '${SECRET}'`, 'literal'],
-  [`ALTER DATABASE d SET app.private_key = '${SECRET}'`, 'literal'],
+  // ALTER … SET of a secret-named setting is a sensitive command like SET: its summary.
+  [`ALTER SYSTEM SET my.password = '${SECRET}'`, 'summary'],
+  [`ALTER DATABASE d SET app.private_key = '${SECRET}'`, 'summary'],
   [`SELECT set_config('app.token', '${SECRET}', false)`, 'summary'],
   [`COPY t FROM PROGRAM 'curl -H "x: ${SECRET}" https://example.test'`, 'summary'],
   [`SELECT 1; ALTER ROLE app PASSWORD '${SECRET}'`, 'summary'],

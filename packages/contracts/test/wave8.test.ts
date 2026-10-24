@@ -12,6 +12,7 @@ import {
   buildOpenApi,
   contractJsonSchema,
   DriftAcceptRequestSchema,
+  DriftCheckSummarySchema,
   GRANT_USE_CLASS_VALUES,
   GrantViewSchema,
   InstallationHealthSchema,
@@ -22,6 +23,7 @@ import {
   MigrationStreamSchema,
   NodeCertificatesSchema,
   NodeJobSchema,
+  OAuthClientViewSchema,
   OperationReadSchema,
   OperationSchema,
   PlanReadSchema,
@@ -33,7 +35,10 @@ import {
   RoleVerifierSubmissionSchema,
   SavedQueryCreateRequestSchema,
   SavedQueryUpdateRequestSchema,
+  TargetCapacitySchema,
   TargetHealthHistorySchema,
+  TargetHealthSchema,
+  TargetHealthViewSchema,
 } from '../src/index.ts'
 
 const PRJ = 'prj_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z'
@@ -596,6 +601,106 @@ describe('Wave 8 response fields', () => {
     expect(AuditChainSchema.shape.verification.safeParse({ status: 'verified' }).success).toBe(
       false,
     )
+  })
+})
+
+describe('Wave 8 completion: the parity additions', () => {
+  const route = (operationId: string) => ROUTE_LIST.find((r) => r.operationId === operationId)
+  const inputNames = (tool: string) => {
+    const found = MCP_TOOL_LIST.find((t) => t.name === tool)
+    if (found === undefined) throw new Error(`no tool ${tool}`)
+    return [...propertyNames(contractJsonSchema(found.input, { io: 'input' }))].sort()
+  }
+
+  it('adds the schema list and the drift history as REST reads under the permissions of the closest reads', () => {
+    expect(
+      ['listSchemaObjects', 'listDriftChecks'].map((id) => [
+        id,
+        route(id)?.method,
+        route(id)?.path,
+        route(id)?.action,
+      ]),
+    ).toEqual([
+      ['listSchemaObjects', 'get', '/targets/{target}/schema/objects', 'schema.search'],
+      ['listDriftChecks', 'get', '/targets/{target}/drift-checks', 'target.finding.list'],
+    ])
+    // No new action: the permission is the closest read's, and neither is an MCP tool.
+    expect(ACTIONS['schema.search'].permission).toEqual({
+      kind: 'fixed',
+      permission: 'schema.read',
+    })
+    expect(ACTIONS['target.finding.list'].permission).toEqual({
+      kind: 'fixed',
+      permission: 'diagnostics.read',
+    })
+    expect(MCP_TOOL_LIST.some((t) => t.restOperationId === 'listSchemaObjects')).toBe(false)
+    expect(MCP_TOOL_LIST.some((t) => t.restOperationId === 'listDriftChecks')).toBe(false)
+    expect(route('listSchemaObjects')?.errors).toContain('SCHEMA_FINGERPRINT_MISMATCH')
+  })
+
+  it('serves the static list path beside the object detail path without a collision', () => {
+    const paths = ROUTE_LIST.filter((r) => r.path.startsWith('/targets/{target}/schema/objects'))
+    expect(paths.map((r) => r.path).sort()).toEqual([
+      '/targets/{target}/schema/objects',
+      '/targets/{target}/schema/objects/{kind}/{qualifiedName}',
+    ])
+  })
+
+  it('keeps every MCP announcement as it was: the new members are REST only', () => {
+    expect(MCP_TOOL_LIST.find((t) => t.name === 'target_health')?.output).toBe(TargetHealthSchema)
+    expect(names(TargetHealthSchema).has('capacity')).toBe(false)
+    expect(names(TargetHealthViewSchema).has('capacity')).toBe(true)
+    expect(inputNames('schema_search')).toEqual(['cursor', 'kinds', 'limit', 'q', 'target'])
+    expect(inputNames('audit_search')).not.toContain('identity')
+    expect(Object.keys(route('searchAuditEvents')?.query?.shape ?? {})).toContain('identity')
+    for (const tool of MCP_TOOL_LIST) {
+      const all = new Set([
+        ...names(tool.output),
+        ...propertyNames(contractJsonSchema(tool.input, { io: 'input' })),
+      ])
+      for (const added of ['capacity', 'activeGrantCount']) {
+        expect(all.has(added), `${tool.name}.${added}`).toBe(false)
+      }
+    }
+  })
+
+  it('adds capacity, the client use and the identity filter as optional members', () => {
+    expect(TargetCapacitySchema.safeParse({}).success).toBe(false)
+    const view = (capacity?: unknown) =>
+      TargetHealthViewSchema.safeParse({
+        targetId: 'tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z',
+        lifecycle: 'active',
+        state: 'healthy',
+        source: 'sampled',
+        observedAt: '2026-10-20T10:00:00.000Z',
+        conditions: [],
+        unknownBecause: null,
+        probes: [],
+        node: null,
+        backups: null,
+        ...(capacity === undefined ? {} : { capacity }),
+      })
+    expect(view().success).toBe(true)
+    expect(
+      view({
+        clientBackends: 0,
+        usableSlots: 0,
+        source: 'sampled',
+        observedAt: '2026-10-20T10:00:00.000Z',
+      }).success,
+    ).toBe(true)
+    // A capacity has both numbers, a source and a time; nothing is defaulted.
+    expect(view({ clientBackends: 3, source: 'sampled' }).success).toBe(false)
+    expect(OAuthClientViewSchema.shape.lastUsedAt.isOptional()).toBe(true)
+    expect(OAuthClientViewSchema.shape.activeGrantCount.isOptional()).toBe(true)
+  })
+
+  it('keeps the drift check history entry free of findings and invented counts', () => {
+    const props = names(DriftCheckSummarySchema)
+    expect(props.has('findings')).toBe(false)
+    expect(props.has('truncated')).toBe(false)
+    expect(props.has('counts')).toBe(true)
+    expect(props.has('requestedBy')).toBe(true)
   })
 })
 

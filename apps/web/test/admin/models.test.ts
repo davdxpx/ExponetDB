@@ -14,7 +14,7 @@ import {
 import { safeReturnTo } from '../../src/lib/navigation/links.ts'
 import { GLOBAL_NAV } from '../../src/shell/navigation.ts'
 import { dataReadRule, environment, event } from './fixtures.ts'
-import { CLIENT, T0, TARGET } from './support.tsx'
+import { CLIENT, OTHER, T0, TARGET } from './support.tsx'
 
 describe('audit search parameters', () => {
   it('keep exact shapes only', () => {
@@ -43,7 +43,32 @@ describe('audit search parameters', () => {
     expect(filterProblem('client', '')).toBeUndefined()
   })
 
+  it('keep a person only in the exact idn_ shape, dropped otherwise and never echoed', () => {
+    expect(auditSearch({ identity: OTHER })).toEqual({ identity: OTHER })
+    expect(auditSearch({ identity: ` ${OTHER}\n` })).toEqual({ identity: OTHER })
+    for (const bad of [
+      'idn_short',
+      CLIENT,
+      OTHER.toLowerCase(),
+      `${OTHER}x`,
+      `idn_${'I'.repeat(26)}`,
+      '../etc',
+      7,
+      ['idn'],
+      undefined,
+    ]) {
+      expect(auditSearch({ identity: bad })).toEqual({})
+    }
+    expect(filterProblem('identity', 'idn_nope')).toBe('shape')
+    expect(filterProblem('identity', OTHER)).toBeUndefined()
+    expect(filterProblem('identity', '')).toBeUndefined()
+  })
+
   it('build the address in a fixed order from checked values only', () => {
+    expect(auditHref({ identity: OTHER, actor: 'self', result: 'failed' })).toBe(
+      `/audit?actor=self&identity=${OTHER}&result=failed`,
+    )
+    expect(auditHref({ identity: 'idn_nope' })).toBe('/audit')
     expect(auditHref({ result: 'failed', actor: 'self' })).toBe('/audit?actor=self&result=failed')
     expect(auditHref({ client: 'https://evil.example' } as never)).toBe('/audit')
     expect(auditHref({})).toBe('/audit')

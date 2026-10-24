@@ -18,7 +18,7 @@ import type { Connector } from '@exponetdb/registry'
 import { serverFor, superuserClient } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { operationError } from '../../registry/test/harness.ts'
-import { MigrationError, readProgress } from '../src/index.ts'
+import { MigrationError, planMigrationVerify, readProgress } from '../src/index.ts'
 import { writeMirror } from '../src/records.ts'
 import { DEFAULTS, migrationWorld, type Target, type World } from './world.ts'
 
@@ -497,6 +497,78 @@ describe('verification (E2, E10)', () => {
       [op.operationId],
     )
     expect(retry.rows.map((r) => r.bool('started'))).toEqual([true])
+  })
+
+  it('E10: a re-verification whose verify.sql cannot get its lock is verified again on an operator request (follow-up 3 review P1-1)', async () => {
+    const v = await w.registerTarget('fail-d', 'nonprod')
+    await asSuperuser(v, (c) =>
+      c.query(`CREATE SCHEMA outside_scope;
+               CREATE TABLE outside_scope.busy (id int);
+               GRANT USAGE ON SCHEMA outside_scope TO exponetdb_verifier;
+               GRANT SELECT ON outside_scope.busy TO exponetdb_verifier`),
+    )
+    const id = w.ulid()
+    const applied = await w.apply(
+      await w.plan(v, {
+        bundles: [
+          w.bundle({
+            id,
+            name: 'reads-busy-again',
+            up: 'CREATE TABLE public.reads_busy_again (id int);\n',
+            verify:
+              '-- check: busy readable\nSELECT count(*) >= 0 AS ok FROM outside_scope.busy;\n',
+          }),
+        ],
+      }),
+    )
+    expect(applied).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
+    const p = await w.h.serve.transaction('test.failures.reverify', (tx) =>
+      planMigrationVerify(tx, w.ctx, w.a, v.record.targetId, id, {}),
+    )
+    const holder = await superuserClient(pg17, v.database)
+    let op: OperationRecord
+    try {
+      await holder.query('BEGIN')
+      await holder.query('LOCK TABLE outside_scope.busy IN ACCESS EXCLUSIVE MODE')
+      op = await w.apply(p)
+    } finally {
+      await holder.query('ROLLBACK').catch(() => undefined)
+      await holder.end()
+    }
+    // Before the review, nothing could release this target: the kind was not retryable.
+    expect(op).toMatchObject({
+      kind: 'migration.verify',
+      state: 'needs_attention',
+      applyOutcome: 'applied',
+      verificationOutcome: 'error',
+    })
+    const operator = newId('idn', Date.now())
+    await w.h.db.asSuperuser(async (c) => {
+      await c.query(
+        `INSERT INTO auth.identities (identity_id, kind, state, email, email_normalized, webauthn_user_handle)
+         VALUES ($1, 'human', 'invited', 'operator-d@example.test', 'operator-d@example.test', $2)`,
+        [operator, randomBytes(32)],
+      )
+    })
+    await w.h.serve.transaction('test.failures.retry', (tx) =>
+      requestVerificationRetry(tx, op.operationId, operator),
+    )
+    await w.drive()
+    expect(await w.operation(op.operationId)).toMatchObject({
+      state: 'succeeded',
+      verificationOutcome: 'passed',
+    })
+    expect((await readProgress(w.h.worker, op.operationId))[0]).toMatchObject({
+      verificationOutcome: 'passed',
+      errorCode: null,
+    })
+    expect((await verifications(v, id)).map((r) => r.status)).toEqual(['passed', 'error', 'passed'])
+    const released = await w.h.worker.query(
+      'test.failures.locks_after',
+      'SELECT count(*)::int AS n FROM operations.operation_locks WHERE operation_id = $1',
+      [op.operationId],
+    )
+    expect(released.rows[0]?.int('n')).toBe(0)
   })
 })
 

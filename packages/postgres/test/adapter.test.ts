@@ -19,6 +19,7 @@ import {
   passwordStatements,
   quoteIdent,
   quoteLiteral,
+  REACHES_PROTECTED_ROLE,
   SqlBuildError,
   scopeHeader,
   sql,
@@ -84,7 +85,12 @@ describe('bootstrap SQL', () => {
       'GRANT "exponetdb_ledger_owner" TO "exponetdb_migrator" WITH INHERIT FALSE, SET TRUE',
     )
     expect(script).toContain('GRANT CREATE ON DATABASE "app_db" TO "exponetdb_ledger_owner"')
-    for (const line of script.split('\n').filter((l) => l.startsWith('CREATE ROLE'))) {
+    // Six roles, each created when missing and altered to the same attributes otherwise.
+    const roleLines = script
+      .split('\n')
+      .filter((l) => /^\s*(CREATE|ALTER) ROLE "[a-z_]+" (NO)?LOGIN/.test(l))
+    expect(roleLines).toHaveLength(12)
+    for (const line of roleLines) {
       expect(line).toContain('NOSUPERUSER')
       expect(line).not.toMatch(/ SUPERUSER| CREATEROLE| REPLICATION/)
     }
@@ -94,6 +100,113 @@ describe('bootstrap SQL', () => {
     expect(passwordStatements({ reader: verifier })).toEqual([
       `ALTER ROLE "exponetdb_reader" PASSWORD E'${verifier}'`,
     ])
+  })
+
+  it('guards every statement that would fail on a second run', () => {
+    const script = bootstrapScript(['app_db'])
+    // No bare CREATE: each one sits in a DO block that checks the catalog first.
+    for (const line of script.split('\n').filter((l) => /^\s*CREATE /.test(l))) {
+      expect(line).toMatch(/^ {4}CREATE ROLE /)
+    }
+    expect(
+      script.match(/IF NOT EXISTS \(SELECT FROM pg_catalog\.pg_roles WHERE rolname = /g),
+    ).toHaveLength(6)
+    expect(script).toContain(
+      "IF EXISTS (SELECT FROM pg_catalog.pg_database WHERE datname = E'app_db') THEN",
+    )
+  })
+
+  it('grants execution roles from the registry only where they are fit, never a protected one', () => {
+    const script = bootstrapScript([], {
+      executionRoles: [
+        { name: 'app_owner', bypassRlsExcused: false },
+        { name: 'adopted_owner', bypassRlsExcused: true },
+        { name: 'app_owner', bypassRlsExcused: false },
+      ],
+    })
+    expect(
+      script.match(/GRANT "[a-z_]+" TO "exponetdb_migrator" WITH INHERIT FALSE, SET TRUE;/g),
+    ).toEqual([
+      'GRANT "exponetdb_ledger_owner" TO "exponetdb_migrator" WITH INHERIT FALSE, SET TRUE;',
+      'GRANT "adopted_owner" TO "exponetdb_migrator" WITH INHERIT FALSE, SET TRUE;',
+      'GRANT "app_owner" TO "exponetdb_migrator" WITH INHERIT FALSE, SET TRUE;',
+    ])
+    // BYPASSRLS refuses the grant unless a declared exception excuses it.
+    const blocks = script.split(/^DO /m)
+    const excused = blocks.find((b) => b.includes('"adopted_owner" TO'))
+    const plain = blocks.find((b) => b.includes('"app_owner" TO'))
+    expect(excused).not.toContain('r.rolbypassrls')
+    expect(plain).toContain('r.rolbypassrls')
+    for (const b of [excused, plain]) {
+      expect(b).toContain(
+        'r.rolcanlogin OR r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication',
+      )
+      expect(b).toContain(String.raw`x.rolname LIKE 'pg\_%' OR x.rolname LIKE 'exponetdb\_%'`)
+      // One definition of a protected reach: the planner's role facts and this check agree.
+      expect(b).toContain(REACHES_PROTECTED_ROLE.text)
+    }
+    for (const name of ['pg_read_all_data', 'exponetdb_ledger_owner']) {
+      expect(() =>
+        bootstrapScript([], { executionRoles: [{ name, bypassRlsExcused: false }] }),
+      ).toThrow()
+    }
+  })
+
+  it('connects psql to each database by name only for the legacy ledger read', () => {
+    const script = bootstrapScript([String.raw`we'ird\db host=evil`, 'app'], {
+      legacyLedgers: ['supabase', 'supabase', 'drizzle'],
+    })
+    // A conninfo string with only dbname, single-quoted for psql: never a host, a variable
+    // or a backquote command.
+    expect(script).toContain(
+      String.raw`\connect -reuse-previous=on 'dbname=''we\\''ird\\\\db host=evil'''`,
+    )
+    expect(script).toContain(String.raw`\connect -reuse-previous=on 'dbname=''app'''`)
+    expect(
+      script.match(
+        /GRANT SELECT ON "supabase_migrations"\."schema_migrations" TO "exponetdb_observer";/g,
+      ),
+    ).toHaveLength(2)
+    expect(
+      script.match(/GRANT SELECT ON "drizzle"\."__drizzle_migrations" TO "exponetdb_observer";/g),
+    ).toHaveLength(2)
+    expect(bootstrapScript(['app'])).not.toContain(String.raw`\connect`)
+    // Names resolve in the system catalog only, in the first session and after each \connect.
+    const path = 'SET search_path = pg_catalog, pg_temp;'
+    expect(script.split('\n').filter((l) => l === path)).toHaveLength(3)
+    expect(script.indexOf(path)).toBeLessThan(script.indexOf('DO $exdb$'))
+    expect(script.trimEnd().endsWith('RESET search_path;')).toBe(true)
+    for (const c of script.split(String.raw`\connect`).slice(1)) {
+      expect(c.split('\n')[1]).toBe(path)
+    }
+    // Each grant block checks that psql reached the database it names.
+    expect(script).toContain(
+      "IF pg_catalog.current_database() OPERATOR(pg_catalog.<>) E'app' THEN\n    RAISE EXCEPTION 'connected to database % instead of %",
+    )
+    // psql drops double quotes from a \connect argument: such a name gets no \connect at
+    // all (it would reach "qwe"), only a message for the person running the script.
+    const quoted = bootstrapScript(['q"w"e'], { legacyLedgers: ['supabase'] })
+    expect(quoted).not.toContain(String.raw`\connect`)
+    expect(quoted).not.toContain('GRANT SELECT ON "supabase_migrations"')
+    expect(quoted).toContain(String.raw`\echo 'database q"w"e: its name holds a double quote`)
+    expect(() => bootstrapScript(['a\nb'])).toThrow()
+    expect(() => bootstrapScript([''])).toThrow()
+  })
+
+  it('stays within the response limit at the largest registry state', () => {
+    // 1 000 registered and 32 requested databases of 63 bytes, three ledgers, 1 024 roles.
+    const names = Array.from(
+      { length: 1032 },
+      (_, i) => `${'d'.repeat(58)}${String(i).padStart(5, '0')}`,
+    )
+    const script = bootstrapScript(names, {
+      executionRoles: Array.from({ length: 1024 }, (_, i) => ({
+        name: `${'r'.repeat(58)}${String(i).padStart(5, '0')}`,
+        bypassRlsExcused: i % 2 === 0,
+      })),
+      legacyLedgers: ['supabase', 'drizzle', 'applied_migrations'],
+    })
+    expect(script.length).toBeLessThan(8_388_608)
   })
 
   it('refuses a plaintext password in place of a verifier', () => {
@@ -266,5 +379,14 @@ describe('fp1 canonical form', () => {
     const changed = JSON.parse(JSON.stringify(json))
     changed.entries[0].key = ['other']
     expect(documentFromJson(changed)).toBeUndefined()
+  })
+})
+
+describe('a protected reach', () => {
+  it('excludes only pg_database_owner, by its oid, and keeps every other predefined role', () => {
+    const text = REACHES_PROTECTED_ROLE.text
+    expect(text).toContain("x.oid <> 'pg_database_owner'::pg_catalog.regrole")
+    expect(text).not.toMatch(/rolname\s*(<>|!=|NOT LIKE)/)
+    expect(text).toContain(String.raw`x.rolname LIKE 'pg\_%'`)
   })
 })

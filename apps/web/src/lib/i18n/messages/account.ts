@@ -107,6 +107,9 @@ export const accountMessages = {
   'account.passkey.add': 'Add a passkey',
   'account.passkey.addedStatus': 'Passkey added.',
   'account.factors': 'Password, authenticator app and recovery codes',
+  'account.factors.password': 'Password',
+  'account.factors.totp': 'Authenticator app',
+  'account.factors.codes': 'Recovery codes',
   'account.password.change': 'Change password',
   'account.password.changed': 'Password changed.',
   'account.totp.replace': 'Replace authenticator app',
@@ -154,7 +157,6 @@ export const accountMessages = {
 
   'accountArea.nav': 'Account sections',
   'accountArea.profile': 'Profile',
-  'profile.heading': 'Profile',
   'profile.name.heading': 'Display name',
   'profile.name.hint':
     'The name you choose is shown instead of the name from your invitation. One line, at most 64 characters.',
@@ -168,7 +170,6 @@ export const accountMessages = {
   'profile.picture.heading': 'Profile picture',
   'profile.picture.hint':
     'A PNG, JPEG or WebP image of at most 256 KiB, 32 to 1024 pixels each way. The picture is stored by ExponetDB and is not animated.',
-  'profile.picture.choose': 'Choose a picture',
   'profile.picture.label': 'Picture file',
   'profile.picture.preview': 'Preview of the chosen picture',
   'profile.picture.upload': 'Upload picture',
@@ -181,6 +182,7 @@ export const accountMessages = {
   'profile.picture.removed': 'Profile picture removed.',
   'profile.picture.none': 'You have no profile picture. Your initials are shown.',
   'profile.picture.current': 'Your profile picture',
+  'profile.picture.shown': 'Shown now',
   'profile.picture.reason.unsupported_format':
     'This file is not a PNG, JPEG or WebP image. SVG and GIF files are not accepted.',
   'profile.picture.reason.type_mismatch':
@@ -195,8 +197,8 @@ export const accountMessages = {
   'profile.picture.reason.empty': 'The file is empty. Choose another file.',
   'profile.picture.reason.unknown': 'The server did not accept this picture. Choose another file.',
 
-  'preferences.heading': 'Preferences',
   'preferences.note': 'These choices are kept in this browser only.',
+  'preferences.appearance': 'Appearance',
   'preferences.theme': 'Theme',
   'preferences.sidebar': 'Sidebar',
   'preferences.shortcuts': 'Keyboard shortcuts',
@@ -205,15 +207,10 @@ export const accountMessages = {
     'Sequences such as G then T. Turn them off if they clash with assistive technology.',
   'preferences.shortcuts.show': 'Show keyboard shortcuts',
 
-  'security.heading': 'Security',
-
-  'applications.heading': 'Connected applications',
-
   'account.activity.heading': 'Your activity',
   'account.activity.description': 'Audit events with you as the actor, newest first.',
   'account.activity.what': 'Your activity',
   'account.activity.none': 'The audit has no event with you as the actor.',
-  'account.activity.time': 'When',
   'account.activity.action': 'Action',
   'account.activity.result': 'Result',
   'account.activity.client': 'Through',

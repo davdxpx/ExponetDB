@@ -214,11 +214,16 @@ describe('accept drift', () => {
     expect((await within(dialog).findAllByText(/REGISTRY_CONFLICT/)).length).toBeGreaterThan(0)
   })
 
-  it('wears the production frame on a production target', async () => {
+  it('says Production on a production target', async () => {
     const w = world([finding(1)], PROD_TARGET)
     mountOps(`/t/${PROD_TARGET}/drift`, w)
     await screen.findByRole('button', { name: 'Accept drift' })
-    expect(document.querySelector('[data-production-frame]')).not.toBeNull()
+    await waitFor(() =>
+      expect(document.querySelector('[data-slot="target-layout"]')).toHaveAttribute(
+        'data-tier',
+        'production',
+      ),
+    )
     expect(screen.getAllByText('Production').length).toBeGreaterThan(0)
   })
 })

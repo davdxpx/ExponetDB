@@ -384,14 +384,17 @@ describe('the migration matrix on the overview', () => {
 })
 
 describe('the production cue', () => {
-  it('frames a production target and shows its tier in the header', async () => {
+  it('shows the tier of a production target in the header, without a frame', async () => {
     const world = readyWorld()
     world.sample('shop/platform/production')
     mountApp('/t/shop/platform/production', world)
     await block('health')
-    const outlet = document.querySelector('[data-production-frame]')
-    expect(outlet).not.toBeNull()
-    expect(outlet).toHaveClass('border-production')
+    await waitFor(() =>
+      expect(document.querySelector('[data-slot="target-layout"]')).toHaveAttribute(
+        'data-tier',
+        'production',
+      ),
+    )
     expect(screen.getAllByText('Production').length).toBeGreaterThan(0)
   })
 })

@@ -48,7 +48,7 @@ exponetdb dev mcp-client --lab mcp
 ```
 
 You see `Registered ExponetDB lab client: exdb-dcr-… (active)` and the
-link `http://localhost:8480/admin/clients`. There is no approval step: the
+link `http://localhost:8480/access/oauth-clients`. There is no approval step: the
 lab runs with `EXPONETDB_OAUTH_CLIENT_REGISTRATION=open`, the client is
 approved automatically (owner decision 2026-10-13, OD-5 revised) and you
 consent at sign-in. To look at it, open the link and find the card with that

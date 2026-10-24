@@ -1,3 +1,3 @@
 module github.com/davdxpx/ExponetDB/agent/node
 
-go 1.26.9
+go 1.26.10

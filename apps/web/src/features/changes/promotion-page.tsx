@@ -18,6 +18,7 @@ import type { ReactNode } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { t } from '../../lib/i18n/i18n.ts'
 import { toReadable } from '../../lib/query/readable.ts'
+import { PromotePanel } from '../migrations/promote-panel.tsx'
 import { projectsQuery } from '../targets/keys.ts'
 import { migrationStreamQuery } from './keys.ts'
 import { type PromotionSearch, promotionPath, timelineOf } from './model.ts'
@@ -29,7 +30,11 @@ import { type PromotionSearch, promotionPath, timelineOf } from './model.ts'
  * mirror holds for the project's target there (`GET
  * /projects/{id}/migrations`, source `cached` with the time of each mirror).
  * A cell the mirror does not hold is `unknown`, never "not applied". The
- * project is picked from the projects the person may read.
+ * project is picked from the projects the person may read. Under the
+ * timeline, the bundles not applied on an environment are planned there by
+ * id ("Plan on <environment>", the plan review page opens), with their SQL
+ * and the evidence environment's state, and the environment is compared
+ * with its evidence environment on the compare page.
  */
 export function PromotionPage({ search }: { readonly search: PromotionSearch }): ReactNode {
   const { client } = useApi()
@@ -159,6 +164,7 @@ function ProjectStream({ projectId }: { readonly projectId: string }): ReactNode
         busy={stream.isFetching}
         headingLevel={3}
       />
+      {stream.data === undefined ? null : <PromotePanel stream={stream.data} />}
     </div>
   )
 }

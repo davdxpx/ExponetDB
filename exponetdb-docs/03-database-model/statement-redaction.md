@@ -38,6 +38,11 @@ the default everywhere is the redacted form.
    (options), `CREATE SERVER … OPTIONS`, `SET`/`set_config` of parameters whose
    name contains `password`, `secret`, `token`, `key`, `COPY … PROGRAM`.
    Example: `ALTER ROLE <name> PASSWORD <redacted>`.
+   **[OBSERVED]** (Wave 8 completion, 2026-10-20, `packages/postgres/src/parser/redact.ts`)
+   `ALTER SYSTEM`, `ALTER DATABASE … SET` and `ALTER ROLE … SET` of such a
+   parameter give `ALTER … SET <setting> <redacted>` as well; before, the
+   tree's untyped `setstmt` was missed, so their value was masked as a
+   literal but no summary was given (G8 record §8).
 3. **Lexer fallback.** If parsing fails (most often because PostgreSQL truncated
    the text at `track_activity_query_size`), a PostgreSQL-rules lexer replaces
    every literal token, including an unterminated trailing literal, with `$?`,
@@ -52,6 +57,13 @@ the default everywhere is the redacted form.
    path, which assumes the setting is on, falls back to this when the other
    reading finds a literal that the parse would print. Dollar-quote tags are
    matched without a length limit, as PostgreSQL does.
+   **[DECIDED]** (Wave 9 Part A, follow-up 2, the verification review P1-1)
+   A text of more than 200 000 tokens (`MAX_PARSE_TOKENS`) is never given
+   to the parser, on this path as on every other: the parser's WebAssembly
+   memory grows with the tokens and never shrinks, so one huge statement an
+   application sent could take `serve` past its memory. Such a text is
+   redacted by the lexer (`redaction: lexical`), every literal masked
+   (deployment.md §2a).
    **[DECIDED]** (G4 correction, 2026-10-07) A constant written as a bare or
    quoted word (`SET app.claims = hunter2`, `ALTER ROLE r SET x TO "v"`) is a
    value, not an identifier: the parse path hides every word the parse tree

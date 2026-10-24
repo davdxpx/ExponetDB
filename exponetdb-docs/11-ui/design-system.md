@@ -21,7 +21,7 @@
 | `packages/ui` | primitives on Radix + `cva`: Button, Input, Textarea, Select, Combobox, Checkbox, Switch, RadioGroup, Label, Dialog, AlertDialog, Sheet, Popover, Tooltip, DropdownMenu, Tabs, Table, Badge, Card, Toast, Skeleton, ScrollArea, Separator | data fetching, routing, app state |
 | `packages/ui-patterns` | composites: page layout family, dialogs (confirm, typed confirm, plan confirm), state components (loading, failed read, empty, stale, partial, not supported, not permitted), form layout and field arrays, filter bar, multi-select, command menu, charts, timestamp, info tooltip, admonition, status badges, key-value lists | the SQL editor, virtualized grids, framework imports (Next.js, router) |
 | `packages/ui-data` | data grid (TanStack Table + Virtual), SQL editor and diff (CodeMirror 6 in a shadow root, lazy-loaded; [OD-40](../00-product/open-decisions.md#od-40-the-sql-editor-component-under-the-web-apps-csp)), plan viewer, schema diff viewer, EXPLAIN plan viewer, schema tree, migration timeline | domain logic |
-| `packages/icons` | `lucide-react` re-export plus a small factory for database glyphs | brand logos |
+| `packages/icons` | `lucide-react` re-export plus a small factory for database glyphs; the brand glyphs of hosting providers copied from Simple Icons and `BrandGlyph` ([ADR-0033](../01-architecture/adr/0033-provider-glyphs-from-simple-icons.md)) | any other brand logo (ExponetDB's own mark comes from the brand inputs, OD-11) |
 | `apps/design-system` | guidance pages, live demos, accessibility notes; source of truth for humans and agents | product features |
 
 Framework seams defined once in `ui-patterns`: a link component contract, an
@@ -32,7 +32,10 @@ injected `navigate`, a color-scheme hook reading `data-theme`, and
 `packages/ui-patterns` start as copies of allowlisted Supabase files (see
 [§1.1](#11-provenance-of-copied-files)); `packages/icons` is **native** (a
 `lucide-react` re-export plus a few glyphs written here; the fork's icon
-packages are never copied); `packages/ui-data` is written natively (the data
+packages are never copied), except the provider glyphs, which are copied
+from Simple Icons (CC0-1.0) under
+[ADR-0033](../01-architecture/adr/0033-provider-glyphs-from-simple-icons.md)
+(**[DECIDED]** 2026-10-21, the owner's decision S11); `packages/ui-data` is written natively (the data
 grid, SQL editor and viewers are not copied from Studio); `apps/design-system`
 restates the guidance in ExponetDB's own words.
 
@@ -150,7 +153,7 @@ component with a demo page and states.
 | Forms | ui-patterns | one layout component for label, description, error, help; field arrays; dirty-state guard on navigation with an in-app dialog (never `window.confirm`) |
 | Dialogs and confirmation flows | ui-patterns | graduated: plain confirm (reversible), warning confirm with checklist, typed confirmation (target path or object name), plan confirm (shows plan hash, tier, class); confirm button disabled until the typed text matches; dismissal blocked while pending. **[OBSERVED]** (Wave 8, `packages/ui-patterns/src/confirmations/`): built on `AlertDialog`; the typed text matches exactly (case-sensitive, NFC on both sides, no trimming, an empty expected text never matches) and the expected text is shown with invisible and direction characters made visible; plan classes are the contract's `low`, `standard`, `high`, `critical`: `high` needs the typed target path, `critical` the path and the typed effect (order §8), an unknown class the path; a production tier (anything not exactly `nonprod`) frames the dialog with the reserved token and says "Production"; typed text and ticks reset when the expected text, plan hash or tier changes; one press runs the action once; `onConfirm` receives exactly the facts shown |
 | Destructive-action UX | ui-patterns | destructive variant only for actions that destroy; least-destructive alternative offered in the same dialog (cancel before terminate) |
-| Plan/apply UX | ui-data | plan review page blocks: summary, steps, analysis, evidence, policy decision, approvals, expiry; apply and verify as separate indicators |
+| Plan/apply UX | ui-data | plan review page blocks: summary, steps, analysis, evidence, policy decision, approvals, expiry; apply and verify as separate indicators. **[OBSERVED]** (2026-10-21, the owner's design of the plan page) `PlanChecklist` ("Before it can run": one row per check with a state of its own shape and words: passed, waiting, blocked, not known, could not be read, no verdict yet; `applyVerifyChecks` gives the apply and verification rows, never a passed row for an applied change) and `PlanDetailsList` (the technical details: a fact that does not apply to the plan's kind is left out, "not known" only where it applies) |
 | Diff views | ui-data | text diff (CodeMirror merge view), structured diff for settings and grants (before/after table), schema diff by object with classification badges |
 | Query and result views | ui-data | virtualized grid, column type rendering, truncation with on-demand full value, copy and export with caps, untrusted-content rendering (no HTML, escaped) |
 | Performance visualizations | ui-patterns (charts) | time series with explicit gaps (cause shown), stacked breakdowns, top-N tables with sparklines |
@@ -167,6 +170,11 @@ component with a demo page and states.
 - **Truthful states first**: every data component has explicit props for
   `failed`, `stale` and `partial`; there is no way to render a failed read as
   empty (type-level: the data prop is a `Readable<T>` union, not `T[]`).
+  **[DECIDED]** (2026-10-20) A value keeps its place when its banner comes or
+  goes: `ReadableView` renders `ready`, `stale` and `partial` in one shape, so a
+  read that turns old never mounts the content again and nothing typed,
+  focused or pressed in it is lost (before, a minute-old object read rebuilt
+  the row browser and swallowed a "Load more rows" press).
 - **Untrusted content** (object names, comments, statement text, row values,
   client names) is rendered as text, never as HTML or Markdown, and long values
   are truncated with an explicit control to expand. **[OBSERVED]** (Wave 8,
@@ -179,6 +187,18 @@ component with a demo page and states.
   these patterns or the same rule.
 - **Production cues** appear on every surface that can lead to a production
   change: chip in the header, frame on plan pages, path in typed confirmations.
+  **[DECIDED]** (owner, 2026-10-21) Production is marked **once, clearly**, not
+  on every block: on the plan review page and the operation page the one chip
+  sits beside the title (`PageHeaderTitle productionCue`), the reserved
+  `production` frame surrounds the review (`PlanFrame`), and one short sentence
+  heads it ("This plan changes production.", or for a plan or operation without
+  a tier, such as a server or node plan, "This plan has no target tier; it is
+  treated as production."). No block inside the frame repeats a chip beside its
+  heading (`PlanBlock` carries none, in the default border): a chip on every
+  block made a production page a wall of equally loud blocks. The typed
+  confirmations and the plan confirmation keep their own production frame and
+  words unchanged; they are the safety-critical moment. The test for production
+  still fails closed: a tier that is not exactly `nonprod` is production.
 - **Accessibility**: WCAG 2.2 AA; navigation uses navigation semantics (not
   `role="menu"`); sortable headers set `aria-sort`; focus is visible; dialogs
   trap focus and restore it; color is never the only signal (icons and text
@@ -200,6 +220,16 @@ ladder, plan/apply flow, truthful states, production cues, charts, copywriting.
 An agent-readable index (Markdown) lets coding agents look up the pattern
 before building a screen (the same role `.agents/skills` plays in the Supabase
 reference).
+
+**[OBSERVED]** (Wave 8 completion, 2026-10-20, `apps/design-system/vite.config.ts`,
+`src/content/markdown-export.ts`) Pages are MDX with GitHub-flavored tables
+(`remark-gfm`, a build-time dependency only; nothing is parsed in the
+browser). The build writes `llms.txt` and one Markdown file per page under
+`md/<area>/<slug>.md`: `import` and `export` statements are dropped, a live
+demo becomes a line naming it, links to other pages of the site
+(`/ui/table#states`) point at the exported file next to it
+(`../ui/table.md#states`), and fenced code blocks and inline code are copied
+untouched (an `import` line or a demo inside a fence is an example).
 
 ## 6. Quality gates for UI work
 

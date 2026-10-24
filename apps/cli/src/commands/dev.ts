@@ -497,7 +497,7 @@ export const devCommands: readonly CommandSpec[] = [
           clientId,
           state: 'active',
           mcpUrl: mcp,
-          clientsAt: `${server}/admin/clients`,
+          clientsAt: `${server}/access/oauth-clients`,
           redirectUris: [...LAB_MCP_CLIENT.redirectUris],
         },
         blocks: [
@@ -505,7 +505,7 @@ export const devCommands: readonly CommandSpec[] = [
             kind: 'text',
             lines: [
               `Registered ${LAB_MCP_CLIENT.name}: ${clientId} (approved automatically; you consent at sign-in).`,
-              `The lab’s clients are listed at ${server}/admin/clients (disable one there to end its grants).`,
+              `The lab’s clients are listed at ${server}/access/oauth-clients (disable one there to end its grants).`,
               `Then connect a client to ${mcp}, for example:`,
               `  claude mcp add --transport http --client-id ${clientId} --callback-port 8080 exponetdb-lab ${mcp}`,
             ],

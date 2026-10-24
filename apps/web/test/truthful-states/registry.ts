@@ -67,14 +67,18 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/access/list-view.tsx': {
     tests: ['access/oauth-clients.test.tsx', 'access/service-accounts.test.tsx', ADMIN],
   },
+  'src/features/access/api-keys-overview.tsx': { tests: ['access/api-keys-overview.test.tsx'] },
+  'src/features/access/choice-select.tsx': { tests: ['access/choice-select.test.tsx'] },
   'src/features/access/oauth-clients-page.tsx': {
-    tests: ['access/oauth-clients.test.tsx', ADMIN],
+    tests: ['access/oauth-clients.test.tsx', 'access/oauth-client-filters.test.tsx', ADMIN],
   },
   'src/features/access/service-accounts-page.tsx': {
-    tests: ['access/service-accounts.test.tsx', ADMIN],
+    tests: ['access/service-accounts.test.tsx', 'access/service-lifecycle.test.tsx', ADMIN],
   },
   'src/features/access/connected-apps-page.tsx': { tests: ['admin/access-pages.test.tsx'] },
-  'src/features/access/people-page.tsx': { tests: ['admin/access-pages.test.tsx'] },
+  'src/features/access/people-page.tsx': {
+    tests: ['admin/access-pages.test.tsx', 'admin/people-filters.test.tsx'],
+  },
   'src/features/access/roles-page.tsx': { tests: ['admin/access-pages.test.tsx'] },
   'src/features/account/factors-section.tsx': { tests: ACCOUNT },
   'src/features/account/grants-section.tsx': { tests: ACCOUNT },
@@ -103,20 +107,46 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/changes/operation-page.tsx': { tests: ['changes/operation-page.test.tsx'] },
   'src/features/changes/operations-page.tsx': { tests: ['changes/operations-page.test.tsx'] },
   'src/features/changes/promotion-page.tsx': { tests: ['changes/promotion-page.test.tsx'] },
+  'src/features/compare/compare-page.tsx': { tests: ['target-pages/compare.test.tsx'] },
   'src/features/configuration/configuration-page.tsx': {
     tests: ['target-pages/configuration.test.tsx'],
   },
+  'src/features/configuration/connect-section.tsx': {
+    tests: ['target-pages/configuration-connect.test.tsx'],
+  },
+  'src/features/connections/attention-strip.tsx': { tests: ['connections/attention.test.tsx'] },
   'src/features/connections/endpoints-view.tsx': { tests: ['connections/connections.test.tsx'] },
   'src/features/connections/live-read.tsx': {
     tests: ['connections/connections.test.tsx', 'connections/locks.test.tsx'],
   },
+  'src/features/connections/locks-view.tsx': {
+    tests: ['connections/locks.test.tsx', 'connections/locks-join.test.tsx'],
+  },
   'src/features/drift/drift-page.tsx': { tests: ['target-pages/drift.test.tsx', TARGET_PAGES] },
+  'src/features/drift/last-check.tsx': {
+    tests: ['target-pages/drift-last-check.test.tsx'],
+    exempt: {
+      partial:
+        'GET /targets/{target}/drift-checks answers the latest checks as one keyset page; the last check is its first row and is complete however many older ones exist, so the read cannot be partial (older ones are said in the history).',
+    },
+  },
   'src/features/findings/findings-page.tsx': {
     tests: ['target-pages/findings.test.tsx', TARGET_PAGES],
   },
+  'src/features/fleet/attention.tsx': { tests: ['fleet/attention.test.tsx'] },
   'src/features/fleet/fleet-page.tsx': { tests: ['fleet/fleet-page.test.tsx'] },
+  'src/features/global-findings/findings-page.tsx': {
+    tests: ['global-findings/findings-page.test.tsx'],
+  },
   'src/features/infrastructure/certificates-page.tsx': {
     tests: ['infrastructure/certificates.test.tsx'],
+  },
+  'src/features/infrastructure/bootstrap-sql.tsx': {
+    tests: ['infrastructure/registration.test.tsx'],
+    exempt: {
+      partial:
+        'GET /clusters/{id}/bootstrap-sql answers one script with its roles and databases and no cursor or truncation flag, so the read cannot be partial.',
+    },
   },
   'src/features/infrastructure/cluster-detail.tsx': { tests: CLUSTERS },
   'src/features/infrastructure/cluster-roles.tsx': { tests: CLUSTERS },
@@ -126,13 +156,25 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/infrastructure/nodes-page.tsx': { tests: NODES },
   'src/features/infrastructure/server-detail.tsx': { tests: SERVERS },
   'src/features/infrastructure/servers-page.tsx': { tests: SERVERS },
+  'src/features/migrations/bundle-sheet.tsx': {
+    tests: ['target-pages/migration-actions.test.tsx'],
+  },
   'src/features/migrations/drift-summary.tsx': { tests: MIGRATIONS },
   'src/features/migrations/ledger-section.tsx': { tests: MIGRATIONS },
   'src/features/migrations/legacy-import.tsx': { tests: MIGRATIONS },
   'src/features/migrations/plans-section.tsx': { tests: MIGRATIONS },
   'src/features/migrations/timeline-section.tsx': { tests: MIGRATIONS },
   'src/features/plans/plan-list.tsx': { tests: ['plans/plan-list.test.tsx'] },
+  'src/features/plans/plan-checks.tsx': { tests: ['plans/plan-page.test.tsx'] },
   'src/features/plans/plan-page.tsx': { tests: ['plans/plan-page.test.tsx'] },
+  'src/features/plans/stored-files.tsx': {
+    tests: ['plans/plan-actions.test.tsx'],
+    exempt: {
+      stale:
+        'useStoredFiles yields loading, failed, partial or ready only: a stored bundle revision never changes (bundles are append-only), so its files are read once and an earlier read is never out of date.',
+    },
+  },
+  'src/features/schema/browse-panel.tsx': { tests: ['schema/browse.test.tsx'] },
   'src/features/schema/object-detail.tsx': { tests: SCHEMA },
   'src/features/schema/object-list.tsx': { tests: SCHEMA },
   'src/features/schema/schema-page.tsx': { tests: SCHEMA },
@@ -154,6 +196,7 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/settings/products-page.tsx': {
     tests: ['settings/settings-pages.test.tsx', SETTINGS_STATES],
   },
+  'src/features/settings/projects-page.tsx': { tests: ['settings/projects.test.tsx'] },
   'src/features/sql/side-panel.tsx': { tests: ['sql/sql-page.test.tsx'] },
   'src/features/target-ops/read-section.tsx': {
     tests: [
@@ -164,12 +207,35 @@ export const COVERAGE: Record<string, Coverage> = {
     ],
   },
   'src/features/target-overview/activity-blocks.tsx': { tests: OVERVIEW },
+  'src/features/target-overview/capacity-row.tsx': {
+    tests: ['target-overview/capacity.test.tsx'],
+    exempt: {
+      partial:
+        'The connection slots are two numbers of one health sample (the capacity member): measured together or absent, so the row cannot hold some of them; absent is said as not reported.',
+    },
+  },
   'src/features/target-overview/health-block.tsx': { tests: OVERVIEW },
-  'src/features/target-overview/history-block.tsx': { tests: OVERVIEW },
+  'src/features/target-overview/history-block.tsx': {
+    tests: [...OVERVIEW, 'target-overview/history.test.tsx'],
+  },
+  'src/features/target-overview/host-row.tsx': {
+    tests: ['target-overview/host.test.tsx'],
+    exempt: {
+      partial:
+        'GET /nodes/{nodeId} answers one node object with no cursor or truncation flag, so the host read cannot be partial; a node that sent no host values is the "not reported" state, tested as empty.',
+    },
+  },
   'src/features/target-overview/migrations-block.tsx': { tests: OVERVIEW },
   'src/features/target/content-wrapper.tsx': { tests: TARGET_FRAME, exempt: ONE_OBJECT },
   'src/features/target/context-bar.tsx': { tests: ['target/context-bar.test.tsx'] },
+  'src/features/target/database-choices.tsx': {
+    tests: ['target/database-switcher.test.tsx', 'shell/switch-database-command.test.tsx'],
+  },
+  'src/features/target/health-chip.tsx': { tests: ['target/health-chip.test.tsx'] },
   'src/features/target/scope.tsx': { tests: TARGET_FRAME, exempt: ONE_OBJECT },
+  'src/features/target/target-nav.tsx': { tests: ['target/target-nav.test.tsx'] },
   'src/features/targets/register-page.tsx': { tests: ['targets/register-page.test.tsx'] },
-  'src/features/targets/targets-page.tsx': { tests: ['targets/targets-page.test.tsx'] },
+  'src/features/targets/targets-page.tsx': {
+    tests: ['targets/targets-page.test.tsx', 'targets/targets-filters.test.tsx'],
+  },
 }

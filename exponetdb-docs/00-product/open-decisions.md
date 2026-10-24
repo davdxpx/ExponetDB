@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); OD-50 added on 2026-10-21 with the CLI's scope presets; on 2026-10-21 the owner's Wave 9 order ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)) split OD-7 into OD-7a (staging: yes) and OD-7b (production: no applies before Wave 11), decided the engine part of OD-4 (pgBackRest; the storage stays open until the measured spike B0), and added OD-51 (a declared `BYPASSRLS` execution-role exception) and OD-52 (adopting a running pgBackRest setup), both decided by the order's defaults; OD-53 (fingerprint lineage across per-environment owner roles) added on 2026-10-21 by Part A (A5); OD-54 (how an external cluster gains the node agent) added on 2026-10-22 by Part A (A8); OD-55 (procedural code in a migration session can act as any role the migrator holds) added on 2026-10-22 by Part A's review round 3; OD-56 (an excused value outside the fingerprint that changes after the review) added on 2026-10-24 by the review of Part A follow-up 3; OD-8 stays open and blocks Part B of Wave 9 (see ["Decisions of the Wave 9 order"](#decisions-of-the-wave-9-order-2026-10-21)); all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -23,11 +23,11 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-1 | Web App language | **resolved 2026-10-13** | option (c): English UI strings behind typed message keys from day one; German later by adding a catalog | (was Wave 8) | decided |
 | OD-2 | Node agent implementation language | **resolved 2026-10-05** | Go | (was Wave 5 and the Go golden vectors of Wave 1) | decided |
 | OD-3 | Toolchain and runtime | **resolved 2026-10-05** | Bun workspaces + Turborepo + Vitest + Biome + TypeScript; Node.js 24 LTS for production server processes | (was Waves 1, 2) | decided |
-| OD-4 | Backup engine | open | pgBackRest (version chosen and pinned at deployment) on Hetzner Object Storage with object lock, plus `pg_dump` + restic off-provider | Wave 9 | yes |
+| OD-4 | Backup engine | **engine decided 2026-10-21** (Wave 9 order default D-B1); **storage open** until the measured spike B0 | pgBackRest for L1 (version chosen and pinned per [`backup-engines.md`](../09-backups-and-restore/backup-engines.md)); storage (Hetzner Object Storage with S3 Object Lock, Cloudflare R2 with bucket lock rules, or both) decided by the owner with the spike's measurements; `pg_dump` + restic off-provider (D-B4) | Wave 9 Part B (storage) | yes (storage) |
 | OD-5 | MCP client registration policy | **resolved 2026-10-06, revised 2026-10-13** | revised 2026-10-13 by the owner: new CIMD and DCR clients are approved automatically by default (`EXPONETDB_OAUTH_CLIENT_REGISTRATION=open`), a person still consents, an administrator can still disable a client; `review` keeps the 2026-10-06 rule. Option (a) of 2026-10-06: pre-registered first-party clients; third-party CIMD clients only after an admin approves the exact `client_id` URL, bound to a fingerprint of its security metadata; DCR as deprecated compatibility that creates a pending public client (`none`) until approved; service-account clients pre-registered with `private_key_jwt`; no client secrets; no third-party client trusted at bootstrap | (was Wave 3B) | decided |
 | OD-6 | Verified provenance for production migrations | **resolved 2026-10-12** | not in V1; add repository integration or signed artifacts after Wave 10 | Wave 6 (production policy), later | yes |
-| OD-7 | Manage REOSA's current hosted databases before the move | open | yes: read-only first, then import and staging migrations | Wave 10 | yes |
-| OD-8 | Audit retention and personal data | **open (legal)**; Wave 2 design settled 2026-10-05 | permanent audit with pseudonymous labels; erasure pseudonymizes identities; default `permanent`, never below 400 days | Wave 9 (final setting); no longer Wave 2 | yes (legal) |
+| OD-7 | Manage REOSA's current databases before the move | **resolved 2026-10-21** (split by the owner's Wave 9 order) | OD-7a (staging, already self-managed on `reos-db-01`): **yes**, registered, imported and migrated through ExponetDB after Part A of Wave 9; OD-7b (production, still on the hosted provider until Wave 11): **no applies before Wave 11**, at most read-only observation | (was Wave 10) | decided |
+| OD-8 | Audit retention and personal data | **open (legal)**; Wave 2 design settled 2026-10-05; still open at the start of Wave 9 (2026-10-21) | permanent audit with pseudonymous labels; erasure pseudonymizes identities; default `permanent`, never below 400 days (the Wave 9 order recommends option (a), D-B3) | Wave 9 Part B (a stop-and-ask point; Part A does not depend on it) | yes (legal) |
 | OD-9 | Approval model for a one-person organization | **resolved 2026-10-05** | option (a): agent proposes, a human approves in the Web App; human-initiated plans may be self-approved with fresh re-authentication; `critical` self-approvals add an explicit acknowledgement, a 10-minute cooling period and a fresh re-authentication at apply | (was Waves 3A, 6) | decided |
 | OD-10 | Future identity architecture | open | ExponetDB stays authorization server for its resources; federates login to the Exponet identity service later | later wave | yes |
 | OD-11 | Exponet brand input for the Web App | **resolved 2026-10-13** (placeholder) | option (b) until the owner supplies a brand: neutral placeholder tokens (an indigo-blue hue near 255, clearly not Supabase green), the wordmark is the text "ExponetDB" in the UI font, Inter and Source Code Pro (OFL, self-hosted); replaceable through the token inputs only | (was Wave 8); a real brand replaces the placeholder later | yes (brand values, when they exist) |
@@ -38,7 +38,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-16 | Shadow apply before production | **resolved 2026-10-12** | not in V1; staging is the shadow | Wave 6 (scope), later | yes |
 | OD-17 | CA strategy for PostgreSQL server certificates | **resolved 2026-10-07** | option (a): an ExponetDB-managed PostgreSQL server CA per installation; the server's TLS key is generated on the host and never leaves it | (was Wave 5) | decided |
 | OD-18 | Agent gateway exposure | **resolved 2026-10-07** | option (a): the node gateway listens on the private network only in V1 | (was Wave 5) | decided |
-| OD-19 | ExponetDB license | **resolved 2026-10-05** | proprietary, internal, all rights reserved | (was Wave 1) | decided |
+| OD-19 | ExponetDB license | **resolved 2026-10-05, amended 2026-10-23** | source-available: ExponetDB Source-Available License 1.0 (was: proprietary, all rights reserved) | (was Wave 1) | decided |
 | OD-20 | PostgreSQL configuration ownership strategy | **resolved 2026-10-07** | option (b): a dedicated ExponetDB-managed include for its own parameters; no `ALTER SYSTEM` as the normal writer; foreign `postgresql.auto.conf` values never removed automatically; a missing include is reported as a bootstrap need and added by the local administrator in Wave 5 | (was Wave 5) | decided |
 | OD-21 | Delivery channel for invitations and security notifications | open | an EU-hosted transactional e-mail provider over SMTP submission with TLS, configured per installation; links never in logs | production use of notifications (lockout, recovery); not Wave 4 | yes |
 | OD-22 | Authority needed to register a database whose intended tier is unknown | **resolved 2026-10-12, extended 2026-10-13, implemented 2026-10-13** (Wave 6 workflows; on 2026-10-13 the owner decided that both the declared-tier field on clusters and a tier-aware `registry.manage` are built in Wave 8; implemented in Wave 8 part 2, which closes [G6 record §10](../14-roadmap/gates/6.md#10-acceptance-2026-10-12) O7; the OAuth scope stays one `registry.manage` because the frozen scope catalog pins its tiered scopes, see the entry) | a declared intended tier per cluster (optionally per database), set with `registry.manage` of that tier; registering any database of a cluster declared `prod` needs `registry.manage:prod` whatever environment it is placed in | first production registrations by people with nonprod authority only; Wave 5 or 6 | yes |
@@ -60,6 +60,22 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-38 | License basis of copied Supabase UI files (Apache-2.0 repository vs MIT package declarations) | open | comply with the superset: Apache-2.0 text, retained copyright line, prominent change notice in every header, and the MIT notice text ([ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md) §4) | release of the Wave 8 Web App (not its development) | yes |
 | OD-39 | Hosting of the design-system app | open | (a) not deployed: built and checked locally and in CI only, until a reader outside the repository needs it | publishing `apps/design-system`; not G8 | yes |
 | OD-40 | The SQL editor component under the Web App's CSP | **resolved 2026-10-13** | option (a): CodeMirror 6 mounted in a shadow root behind the editor interface, built to work and look like Supabase's SQL editor (tabs, completion, formatting, results grid, shortcuts); the CSP stays strict; Monaco is not used | (was the SQL section and the diff viewers) | decided |
+| OD-41 | Connection details for people without `registry.manage` | open | (a) keep endpoint addresses to registry administrators; the Connect panel (secret-free) is built for them; revisit with option (c) (non-production only) when a consumer team asks | a Connect panel for other readers | yes |
+| OD-42 | How the read-only table browser reads rows | open | (a) one data-read path: the Web App sends a `SELECT` built from catalog identifiers (always quoted) and bind parameters through the existing query endpoint, which admits, masks, caps and audits it | nothing (built on (a)) | yes |
+| OD-43 | A read of a cluster's PostgreSQL roles and its permission | open | (b) `nodes.read`, the permission that already shows the cluster's desired roles; attributes, connection limits and memberships, never verifiers | the Roles page of the schema browser | yes |
+| OD-44 | Server-side DDL generated for display | open | (a) not in V1: definitions are shown as the catalog stores them; no generated `CREATE` text and no migration drafted from a schema diff | table definitions, ERD "copy as SQL", "draft from this diff" | yes |
+| OD-45 | A person's own activity without `audit.read` | open | (b) every person reads their own events (`actor=self`) with a reduced field set | the activity page for viewers and developers | yes |
+| OD-46 | Host metrics history and a PostgreSQL log tail | open | (a) neither in V1: host values stay latest-only; a log tail waits for a redaction and retention decision | Studio-like report charts and a log page | yes |
+| OD-47 | Changing a person's sign-in address | open | (a) as today: erase and invite again; an address change needs a verified delivery channel (OD-21) | an address change on the account page | yes |
+| OD-48 | A SQL formatter in the Web App, given its license closure | open | (c) no formatter until one without a Python-2.0 dependency exists or the owner allows it; (a) would allow `Python-2.0` for the formatter's `argparse` (used only by its command line) | "Format SQL" in the SQL editor | yes |
+| OD-49 | The server provider enum and `/api/v1` GA | open | (a) mark `ServerProvider` open (`x-extensible-enum`) before GA, so a provider added later is additive | the GA decision of `/api/v1` | yes |
+| OD-50 | What the CLI may learn about the scopes an account could hold | open | (b) a CLI read action returning the scopes the person could be granted, computed like the consent page | "could get" in `whoami` and `doctor` | yes |
+| OD-51 | An execution role with `BYPASSRLS` for adopted schemas | **resolved 2026-10-21** (Wave 9 order default D-A1; stands unless the owner overrules it) | a declared, audited, revocable exception per (project, environment, PostgreSQL role) that excuses exactly `BYPASSRLS` and nothing else; declared and revoked by people only (never MCP), production with an approval and a re-authentication; a warn rule in every plan that uses it; on production at least `high` and agent applies still need a human approval ([ADR-0034](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md)) | Wave 9 Part A (A4) | decided |
+| OD-52 | Adopting a running, hand-made pgBackRest setup | **resolved 2026-10-21** (Wave 9 order default D-B2; stands unless the owner overruled it) | adopt, then own: first observe the existing stanza, repositories and schedules without changing them, then take ownership of configuration and scheduling through a planned, verified hand-over that stays reversible until confirmed; an ADR in Wave 9 B0 | Wave 9 Part B (B0, B2) | decided |
+| OD-53 | Fingerprint lineage when environments use different owner roles | open | (a) keep it fail closed: a lineage mismatch caused by owner names needs an approval, as today; (b) compare the two stored documents with the execution roles mapped by alias (fp1 unchanged, a new lineage comparison); (c) treat a mismatch only in owners and grantees of execution roles as a warning | production plans of a non-legacy project whose environments are bound to different owner roles (ADR-0034 §5) | yes |
+| OD-54 | How an external cluster gains the node agent | open | (a) an additive, one-way operation `registry.cluster.adopt_agent` (human, production authority, re-authentication): an enrolled node on a server whose report carries the cluster's pinned `system_identifier`; the record gains the server and `management_mode = agent`, targets keep placement and generation; an additive bundle relaxes `EXG07` for exactly this transition; (b) register a second cluster record in agent mode and move each target (§3 of registry.md: new generation, marker re-stamped), then retire the external record; (c) external stays external in V1 | node capabilities (backups, roles, `pg_hba`, TLS) on a cluster first registered external, such as REOSA staging on `reos-db-01` (OD-7a) in Wave 9 Part B | yes |
+| OD-55 | Procedural code in a migration session can act as any role the migrator holds | open | (d) the executor compares the `exponetdb` schema's tables before and after each authored statement in the transaction and refuses a change it did not make, plus (c) a person approves every agent-initiated plan with procedural statements on every tier; (a) per-project migrator logins and (b) refusing role switches and dynamic `EXECUTE` in parsed PL/pgSQL bodies stay for later | agents applying bundles with `DO` blocks or routines without a person; the trust in a target's ledger and marker written in a migration's transaction | no (Part A closed its one path to superuser code) |
+| OD-56 | An excused value outside the fingerprint that changes after the review | open | (a) the checks return a keyed digest (HMAC under an installation key) of the observed value for open-domain kinds, recorded with the failure and compared at the verification; (b) drift of cluster-global state later | a baseline's verification that excuses a role setting, connection limit, comment or an object outside the managed scope | no |
 
 ---
 
@@ -140,6 +156,28 @@ History:
 - **Owner decision needed.** Yes (given on 2026-10-05).
 
 ## OD-4. Backup engine
+
+- **Status.** ENGINE DECIDED, STORAGE OPEN
+- **Decision date.** 2026-10-21 (engine)
+- **Decision.** The L1 engine (physical backups and WAL archive) is
+  **pgBackRest** (the Wave 9 order's default D-B1, which stands unless the
+  owner overrules it). Reasons: the owner already runs pgBackRest 2.59.3 on
+  `reos-db-01` with client-side encryption, scheduled full, differential and
+  monthly backups to S3-compatible storage and passed PITR drills (also on a
+  freshly built host); this document recommended pgBackRest as well. The
+  version is pinned per [`backup-engines.md` §3](../09-backups-and-restore/backup-engines.md),
+  after the 2026-10-04 advisory is checked against the project's release
+  notes in Wave 9 B0. The **storage** choice is not decided: it stays open
+  until the measured storage spike of Wave 9 B0 (disposable buckets only)
+  and is then put to the owner with the measurements (Cloudflare R2 with
+  bucket lock rules, Hetzner Object Storage with S3 Object Lock, or both in
+  different layers). The logical layer (`pg_dump` + restic to a second
+  provider) is part of Wave 9 (D-B4). An existing hand-made setup is adopted,
+  not replaced ([OD-52](#od-52-adopting-a-running-hand-made-pgbackrest-setup)).
+- **Source.** the owner's Wave 9 order, §3.2 D-B1, D-B4
+  ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)).
+
+History:
 
 - **Question.** Which engine takes physical backups and archives WAL, and where
   do repositories live?
@@ -266,6 +304,30 @@ History:
 
 ## OD-7. Manage REOSA's current hosted databases before the move
 
+- **Status.** RESOLVED (split into OD-7a and OD-7b)
+- **Decision date.** 2026-10-21
+- **Decision.** The question is overtaken by events: REOSA staging no
+  longer runs on the hosted provider. It is split:
+  - **OD-7a (staging): yes.** REOSA staging already runs on `reos-db-01`
+    (self-managed, an external cluster without a node agent). After Part A
+    of Wave 9 the owner registers it, imports its history and lets sessions
+    apply staging migrations through ExponetDB. This is the owner's explicit
+    authorization for exactly one real nonprod target set: REOSA staging and
+    its scratch database on `reos-db-01`. It does not close the G2 off-host
+    evidence and authorizes no production target.
+  - **OD-7b (production): no applies before Wave 11.** REOSA production
+    still runs on the hosted provider and moves only in Wave 11; until then
+    ExponetDB at most observes it read-only.
+  The REOSA-side deliverables of Wave 10 (bundle roots in REOSA's
+  repository, REOSA Admin `/database`, the runtime schema contract) stay in
+  Wave 10; the product capabilities Wave 10 needs (import of a real
+  Supabase-origin history, per-environment execution roles, external-cluster
+  onboarding) are brought forward into Part A of Wave 9.
+- **Source.** the owner's Wave 9 order, §3.1 items 2 and 4
+  ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)).
+
+History:
+
 - **Question.** Does ExponetDB register and manage REOSA's Supabase-hosted
   databases (as external clusters) before REOSA moves to `reos-db-01`, or only
   after?
@@ -319,6 +381,11 @@ History:
     removed.
   Text elsewhere that depends on the legal choice stays marked
   `[OPEN: OD-8]`.
+- **Status (2026-10-21, at the start of Wave 9).** Still **open**. The owner's
+  Wave 9 order recommends option (a) (D-B3) and makes the decision a
+  stop-and-ask point: Part B of Wave 9 (backups, restores, retention of the
+  new records) does not start before the owner decides it. Part A (the
+  migration engine for imported schemas) does not depend on it.
 
 ## OD-9. Approval model for a one-person organization
 
@@ -564,6 +631,16 @@ History:
 
 - **Status.** RESOLVED (accepted)
 - **Decision date.** 2026-10-05
+- **Amendment (2026-10-23).** The repository is public. The owner replaced the
+  proprietary notice with a custom source-available license, the ExponetDB
+  Source-Available License 1.0 (`LICENSE`): reading and public forks are
+  allowed; production use, commercial use, hosting and private copies need
+  the owner's written permission or a commercial license; contributions
+  come with a license-back so a commercial license stays possible. It is not
+  an open-source license, and no text may call it one. Third-party files keep
+  their own licenses (OD-38 still governs the Supabase-derived UI files). The
+  owner should have the license checked by a lawyer before relying on it
+  commercially. The text below is the original decision.
 - **Decision.** ExponetDB stays proprietary, internal, all rights reserved for
   now. No public open-source release in V1. The decision must not make a later
   opening architecturally impossible: no secrets in the repository, and direct
@@ -1212,6 +1289,410 @@ nothing is implemented. Line references are to commit `1966cf4`.
 - **Source.** the owner, in the Wave 8 session on 2026-10-13
   ([G8 record §3](../14-roadmap/gates/8.md#3-owner-decisions-of-the-wave-8-order)).
 
+## OD-41. Connection details for people without `registry.manage`
+
+- **Added.** 2026-10-20 (Wave 8 completion, Studio parity audit;
+  [`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)).
+- **Question.** May people who read a target (`targets.read`) but do not
+  administer the registry see how to reach its database: endpoint host,
+  port, database name and TLS server name (never a credential), as Studio's
+  Connect sheet shows them?
+- **Why it matters.** Applications connect to databases directly, never
+  through ExponetDB, so the people who configure them need the address; but
+  [`resources.md`](../06-rest-api/resources.md) shows endpoint addresses
+  only to `registry.manage`, and an address list of production databases
+  helps an attacker map the fleet. The Wave 8 completion builds a secret-free
+  Connect panel for registry administrators only (URI and `psql` line with a
+  password placeholder, `sslmode=verify-full`).
+- **Options.** (a) keep: registry administrators only; (b) a new read
+  `GET /targets/{id}/connection` for `targets.read` on every tier; (c) (b)
+  for non-production tiers only. Each option leaves the CA certificate that
+  `verify-full` needs ([OD-17](#od-17-ca-strategy-for-postgresql-server-certificates))
+  to the operator's channel.
+- **Recommendation.** (a) until a consumer team asks, then (c).
+- **Blocks.** A Connect panel for readers who are not registry administrators.
+- **Owner decision needed.** Yes.
+
+## OD-42. How the read-only table browser reads rows
+
+- **Added.** 2026-10-20 (Wave 8 completion, Studio parity audit).
+- **Question.** Studio's most used page is the table editor. ExponetDB has
+  no row editing, but a read-only browser of a table's rows is in reach: does
+  the Web App build the `SELECT` and send it through the existing data-read
+  query endpoint, or does a typed rows endpoint build it on the server?
+- **Why it matters.** Through the query endpoint there is one data-read
+  path: the server parses and admits the statement, masks sensitive
+  columns, caps rows and bytes and audits each read; the browser only quotes
+  catalog identifiers and passes filter values as bind parameters. A typed
+  endpoint would add a distinct audit action and server-side paging, at the
+  cost of a second data-read path to review and keep equal.
+- **Options.** (a) the query endpoint (as built); (b) a typed
+  `GET /targets/{id}/tables/{name}/rows`.
+- **Recommendation.** (a).
+- **Blocks.** Nothing; the browser is built on (a) and changes course if the
+  owner chooses (b).
+- **Owner decision needed.** Yes.
+
+## OD-43. A read of a cluster's PostgreSQL roles and its permission
+
+- **Added.** 2026-10-20 (Wave 8 completion, Studio parity audit).
+- **Question.** Studio lists a database's roles with their attributes and
+  connection limits. ExponetDB reads them only into the cluster fingerprint
+  and shows the desired roles of a cluster; should a read of the actual
+  roles (attributes, connection limit, memberships; never verifiers) exist,
+  and which permission covers it?
+- **Options.** (a) none (the schema browser's Roles page stays "not
+  supported"); (b) `nodes.read`, which already shows a cluster's desired
+  roles; (c) `schema.read` per target.
+- **Recommendation.** (b): roles are cluster-wide, like the desired state.
+- **Blocks.** The Roles page of the schema browser.
+- **Owner decision needed.** Yes.
+
+## OD-44. Server-side DDL generated for display
+
+- **Added.** 2026-10-20 (Wave 8 completion, Studio parity audit).
+- **Question.** Studio shows a table's `CREATE` statement, copies an ERD as
+  SQL and turns a branch diff into a migration. Should ExponetDB generate
+  DDL text on the server (a clean-room deparse; DDL generation is a
+  clean-room area under C-2) for display, and later as a migration draft?
+- **Options.** (a) not in V1; (b) display only (definition tab, "copy as
+  SQL"); (c) (b) plus "draft a migration from this diff", always a draft
+  that goes through lint, plan, approval and the evidence rule.
+- **Recommendation.** (a): drafts written by people stay the only source of
+  migrations until the migration engine has run in production.
+- **Blocks.** A definition tab for tables, ERD "copy as SQL", drafting from
+  the environment comparison.
+- **Owner decision needed.** Yes.
+
+## OD-45. A person's own activity without `audit.read`
+
+- **Added.** 2026-10-20 (Wave 8 completion, Studio parity audit).
+- **Question.** The account page's activity (`actor=self`) needs
+  `audit.read`, so viewers and developers see "not permitted" for their own
+  actions. Should every person read their own events?
+- **Options.** (a) keep `audit.read`; (b) `actor=self` for every person,
+  with the pseudonymized field set `audit.read` already gives.
+- **Recommendation.** (b).
+- **Blocks.** The activity page for people without `audit.read`.
+- **Owner decision needed.** Yes.
+
+## OD-46. Host metrics history and a PostgreSQL log tail
+
+- **Added.** 2026-10-20 (Wave 8 completion, Studio parity audit).
+- **Question.** Studio's reports chart CPU, memory, disk and connections over
+  time and show PostgreSQL logs. ExponetDB keeps the latest host values from
+  the node agent and health samples with their conditions; should it store
+  host metrics over time, and read redacted PostgreSQL log lines through the
+  node's log inspection?
+- **Options.** (a) neither in V1; (b) connection counts in the health
+  history only (no new store; the samples already measure them); (c) (b) plus
+  a metrics store and a redacted log tail.
+- **Recommendation.** (a) for host metrics and logs; (b) can follow without
+  a new store.
+- **Blocks.** Report charts beyond health states, a log page.
+- **Owner decision needed.** Yes.
+
+## OD-47. Changing a person's sign-in address
+
+- **Added.** 2026-10-20 (Wave 8 completion, Studio parity audit).
+- **Question.** Studio lets a person change their email address. In
+  ExponetDB the address anchors the invitation and sign-in; should a person
+  (or an administrator) be able to change it?
+- **Options.** (a) as today: erase the identity and invite again;
+  (b) an address change by plan, confirmed through the new address, which
+  needs a delivery channel ([OD-21](#od-21-delivery-channel-for-invitations-and-security-notifications)).
+- **Recommendation.** (a) until OD-21 is decided.
+- **Blocks.** An address change on the account page.
+- **Owner decision needed.** Yes.
+
+## OD-48. A SQL formatter in the Web App, given its license closure
+
+- **Added.** 2026-10-20 (Wave 8 completion, Studio parity; the SQL editor's
+  "Format SQL").
+- **Question.** Studio formats SQL with `sql-formatter` (MIT). Every release
+  of it since 3.1.0 depends on `argparse` 2.0.1, which is licensed
+  Python-2.0; the dependency license scan (`bun run licenses`, ADR-0030 §5)
+  allows Python-2.0 only for development tools, so the formatter cannot
+  ship in the browser bundle. May the Web App format SQL, and how?
+- **Options.** (a) allow `Python-2.0` in the shipped closure for this one
+  package (it is used only by the formatter's command line, never in the
+  browser); (b) another formatter (`@sqltools/formatter` is MIT without
+  dependencies but unmaintained since 2022 and has no PostgreSQL dialect);
+  (c) no formatter; (d) a native formatter written for ExponetDB.
+- **Recommendation.** (c) for now; (a) is defensible but changes the license
+  policy for a convenience.
+- **Blocks.** "Format SQL" in the SQL editor.
+- **Owner decision needed.** Yes.
+
+## OD-49. The server provider enum and `/api/v1` GA
+
+- **Added.** 2026-10-21 (the owner's long provider list, S11 below).
+- **Question.** `provider` of a server is the closed enum `ServerProvider`.
+  Before GA a new value is a change with notice
+  ([`../06-rest-api/ga-readiness.md` §7](../06-rest-api/ga-readiness.md#7-update-2026-10-21-the-server-provider-list));
+  after GA a new value of a closed enum needs `/api/v2`
+  ([`../01-architecture/versioning.md` §2](../01-architecture/versioning.md#2-rules-for-additive-changes)).
+  The list is expected to grow. Should it become an open enum before GA?
+- **Options.** (a) mark it open (`x-extensible-enum`): known values are
+  listed, clients accept others, the SDK type becomes `string` and the Web
+  App and the CLI show an unknown value by its id; (b) keep it closed and
+  add providers only with a new major version; (c) keep it closed and
+  replace it later by an additive open member.
+- **Recommendation.** (a), decided together with GA.
+- **Blocks.** The GA decision of `/api/v1` (G7).
+- **Owner decision needed.** Yes.
+
+## OD-50. What the CLI may learn about the scopes an account could hold
+
+- **Added.** 2026-10-21 (CLI scope presets,
+  [`../15-cli/README.md` §3](../15-cli/README.md#sign-in-scopes-and-presets)).
+- **Question.** `exponetdb whoami` and `doctor` show the granted scopes and
+  what each preset lacks, but not what the account could be granted: the
+  effective permissions are in `GET /me`, whose action `me.get` is a Web App
+  action (scope `api`, client kind `web`). Should the CLI read them?
+- **Options.** (a) as today: the consent page shows it, the CLI shows the
+  requested scopes that were not granted; (b) a new read action for the
+  `cli` client kind under `targets.read` (or no scope) that returns the
+  scopes the person could be granted now, as the consent page computes them;
+  (c) open `me.get` to the CLI (it returns bindings and the session too,
+  more than the question needs).
+- **Recommendation.** (b): additive, one read, the same computation as the
+  consent page, so the CLI never guesses from role names.
+- **Blocks.** "Could get" in `whoami` and `doctor`.
+- **Owner decision needed.** Yes.
+
+## OD-51. An execution role with `BYPASSRLS` for adopted schemas
+
+- **Status.** RESOLVED
+- **Decision date.** 2026-10-21
+- **Decision.** The Wave 9 order's default D-A1, which stands unless the
+  owner overrules it: a declared, audited, revocable **execution-role
+  exception** per (project, environment, PostgreSQL role) that excuses
+  exactly the `BYPASSRLS` attribute of an execution role and nothing else.
+  `SUPERUSER`, `CREATEROLE`, `CREATEDB`, `REPLICATION`, `LOGIN` and any reach
+  into `pg_*` or `exponetdb_*` roles are never excusable. People declare and
+  revoke it (`registry.manage` at the environment's tier, never through MCP);
+  production needs an approval and a re-authentication. Every plan that uses
+  it shows the warn rule `migration.execution-role-exception`; on production
+  the plan is at least `high` and an agent's apply still needs a human
+  approval (OD-13 unchanged). A plan binds the exception and its revision; a
+  revoked or changed exception makes the plan `PLAN_STALE`. Design, threat
+  analysis and the recommended target state for adopters (a dedicated
+  definer role, so the owner can drop `BYPASSRLS` later):
+  [ADR-0034](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md).
+- **Source.** the owner's Wave 9 order, §3.2 D-A1 and §7 A4
+  ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)).
+
+History:
+
+- **Question.** May an execution role carry `BYPASSRLS`?
+- **Why it matters.** Wave 6 refuses it (`privileged_attribute`). Supabase's
+  `postgres` role has `BYPASSRLS`, and Supabase-origin schemas use
+  `SECURITY DEFINER` functions owned by it on `FORCE ROW LEVEL SECURITY`
+  tables; removing the attribute silently turns their reads into empty
+  results and their writes into policy errors (measured on the first real
+  adopter on 2026-10-21: 159 `FORCE` tables, 48 definer functions, 41 of
+  them on `FORCE` tables). A product that can only manage greenfield
+  schemas cannot adopt real ones.
+- **Options.** (a) keep refusing it; adopters rewrite their role model
+  first; (b) a declared, audited, revocable exception for `BYPASSRLS` only;
+  (c) accept any attribute the project declares.
+- **Recommendation.** (b).
+- **Blocks.** Part A of Wave 9 (A4) and every Supabase-origin adopter.
+
+## OD-52. Adopting a running, hand-made pgBackRest setup
+
+- **Status.** RESOLVED
+- **Decision date.** 2026-10-21
+- **Decision.** The Wave 9 order's default D-B2, which stands unless the
+  owner overrules it: **adopt, then own.** ExponetDB first observes an
+  existing pgBackRest stanza (catalog, archive status, verify, drills)
+  without changing its configuration or schedules, then takes ownership of
+  configuration and scheduling through a planned, verified hand-over that
+  stays reversible until confirmed. The rule "repository configuration
+  written by the agent, never edited by hand"
+  ([`backup-engines.md`](../09-backups-and-restore/backup-engines.md)) applies
+  from the hand-over on. Foreign values are shown, never overwritten (OD-20).
+  The ADR is written in Wave 9 B0.
+- **Source.** the owner's Wave 9 order, §3.2 D-B2
+  ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)).
+
+History:
+
+- **Question.** How does ExponetDB take over a backup chain it did not
+  create?
+- **Why it matters.** The documents only knew an ExponetDB-owned setup,
+  which would force a destructive re-setup of a working, drilled chain.
+- **Options.** (a) re-create the setup under ExponetDB; (b) observe only,
+  never own; (c) adopt, then own through a planned hand-over.
+- **Recommendation.** (c).
+- **Blocks.** Wave 9 B0 and B2.
+
+## OD-53. Fingerprint lineage when environments use different owner roles
+
+- **Status.** OPEN (found in Wave 9 Part A, A5, 2026-10-21)
+- **Question.** Should a production plan count as following its evidence
+  environment when the only difference between the two schemas is which
+  execution role owns the objects?
+- **Why it matters.** Per-environment execution roles (ADR-0034 §5) let
+  staging and production of one project own their objects with different
+  roles on one cluster. fp1 includes object owners (and grantees), so the
+  two fingerprints are never equal, and `migration.fingerprint-lineage`
+  fails for every production plan of such a project: each needs an
+  approval. An imported legacy project only sees the lineage warning
+  (`migration.fingerprint-lineage-legacy`), so REOSA's import is not
+  blocked by this. fp1 is frozen and does not change in any option.
+  **[OBSERVED]** `packages/migrations-engine/test/execution-roles.int.test.ts`
+  (the production plan of the definer migration).
+- **Options.** (a) keep it fail closed: an approval per production plan,
+  as today; (b) a second lineage comparison over the two stored documents
+  with the execution roles mapped by alias (fp1 unchanged; needs both
+  documents stored and a reviewed mapping rule); (c) treat a mismatch only
+  in owners and grantees that are execution roles as a warning.
+- **Recommendation.** (a) until a project needs it, then (b); (c) hides a
+  real difference behind a role name.
+- **Blocks.** Nothing in Part A; production plans of a non-legacy project
+  with per-environment owner roles need an approval until it is decided.
+
+## OD-54. How an external cluster gains the node agent
+
+- **Status.** OPEN (found in Wave 9 Part A, A8, 2026-10-22)
+- **Question.** When a cluster that was registered as external (no agent)
+  later runs on a host with an enrolled node agent, how does its registry
+  record become agent-managed?
+- **Why it matters.** **[OBSERVED]** `cluster register` always creates an
+  external cluster (`packages/registry/src/kinds.ts`), and a cluster
+  record keeps its id, server, management mode and CA bundle for good
+  (Control Store guard `EXG07`, Wave 4 registry bundle, frozen). Every node
+  capability on an external cluster is `CAPABILITY_UNAVAILABLE`
+  (`packages/nodes/src/mapping.ts`), and no operation creates an
+  agent-managed cluster record (the agent-managed flow of registry.md §2.1
+  ends at the node's cluster report). REOSA staging on `reos-db-01` is to
+  be registered as an external cluster after Part A (OD-7a); Part B's node
+  capabilities (backups through pgBackRest, role and `pg_hba` desired
+  state) need that cluster to be agent-managed.
+- **Options.** (a) an additive, one-way operation
+  `registry.cluster.adopt_agent` (human only, production authority,
+  re-authentication, audited): the cluster's server record has an
+  enrolled, served node whose last report carries the cluster's pinned
+  `system_identifier` exactly once; the record gains that server and
+  `management_mode = agent`; targets keep their placement, generation and
+  marker; a new, additive Control Store bundle allows exactly this
+  transition (external with no server or the same server → agent) and
+  nothing else; (b) register a second cluster record in agent mode and
+  move every target to it (registry.md §3: a new generation, the marker
+  re-stamped, active plans stale), then retire the external record; (c)
+  external stays external in V1: an agent-managed cluster is only one
+  registered through the agent flow (which then has to be built).
+- **Recommendation.** (a): the cluster is the same physical cluster
+  (`system_identifier` pinned), so its identity, targets and history stay;
+  (b) costs a generation change and a marker re-stamp of every target for
+  no change in what is managed.
+- **Blocks.** Node capabilities on a cluster first registered external
+  (Part B's B2 on `reos-db-01` if staging is registered external first).
+  Nothing in Part A.
+
+## OD-55. Procedural code in a migration session can act as any role the migrator holds
+
+- **Status.** OPEN (found in Wave 9 Part A, review round 3, 2026-10-22;
+  the engine has worked this way since Wave 6)
+- **Question.** How is code a migration runs kept to the project's
+  execution role when that code is procedural?
+- **Why it matters.** **[OBSERVED]** (PostgreSQL 17, 2026-10-22) An
+  authored statement runs in the migrator's session under `SET LOCAL ROLE
+  <execution role>`. The parser refuses `SET ROLE`, `RESET ROLE` and
+  `set_config('role', …)` at the top level, and the executor compares
+  `current_user` before and after each statement. Procedural code is
+  opaque to both: a `DO` block, or a routine the migration creates and
+  calls, can run `EXECUTE 'SET ROLE exponetdb_ledger_owner'`, `RESET ROLE`
+  (the migrator itself) or `SET ROLE` to another project's execution role
+  on the same cluster, act, and switch back before it returns. Proven: a
+  block went from `app_owner` to the ledger owner, to the migrator, to
+  another project's owner, and back, unseen by the guard. As the ledger
+  owner it can write the target's ledger and identity marker inside the
+  migration's transaction; as another project's owner it can change that
+  project's objects in the same database. The ledger is written in the
+  same transaction as the change (C-19, `ledger.md`), so the migrator's
+  session must be able to become the ledger owner, and execution roles
+  are `NOLOGIN` by rule. That is why no session-level containment exists
+  in the current design. An agent can plan and apply such a bundle on
+  nonprod without a person; production needs a person's approval and the
+  evidence of another environment, which Control Store records hold (a
+  forged target ledger does not create verification runs, and a ledger
+  that diverges from the Control Store mirror is reported as drift and
+  blocks schema changes, C-19). Part A's legacy
+  replay runs adopted files the same way, on the scratch target only.
+  Part A closed the one path from there to superuser code: the reset
+  script now reads the scratch marker only once the catalog shows it as
+  ExponetDB made it (Part A record §6.4, threat T37).
+- **Options.** (a) per-project migrator logins that hold `SET` on one
+  project's execution roles only (more credentials per cluster; the ledger
+  owner is still reachable, so this addresses cross-project use, not the
+  ledger); (b) parse the PL/pgSQL bodies of `DO` blocks and of routines a
+  migration creates (the PL/pgSQL parser of `libpg_query` 18, as in A6) and
+  refuse role switches and dynamic `EXECUTE` (Supabase-origin histories use
+  `EXECUTE format(…)` widely, and SQL-language bodies need their own
+  check); (c) a person approves every agent-initiated plan whose
+  statements are procedural, on every tier (a new, stricter policy rule);
+  (d) the executor compares the `exponetdb` schema's tables (rows and
+  relation shapes) before and after each authored statement in the
+  transaction, and refuses and rolls back a change it did not make itself
+  (closes ledger and marker forging without changing the model).
+- **Recommendation.** (d) together with (c): both fail closed, need no new
+  role or credential and relax nothing; (a) and (b) stay for a later wave.
+  Cross-project use inside one shared database remains a residual risk
+  until (a); projects normally have their own database.
+- **Blocks.** Nothing in Part A. It should be decided before agents apply
+  bundles with procedural statements without a person on targets whose
+  ledger is trusted.
+
+## OD-56. An excused value outside the fingerprint that changes after the review
+
+- **Status.** OPEN (found in Wave 9 Part A, the independent review of
+  follow-up 3, 2026-10-24, finding P3-1)
+- **Question.** Must an excused failure of a baseline's verification also
+  prove that the failing value is still the one the person accepted?
+- **Why it matters.** **[OBSERVED]** (PostgreSQL 17, 2026-10-24) A review
+  decision excuses a failing expectation while it fails the same way (the
+  same file, statement, kind, object and aspects; [`legacy-import.md` Step
+  7](../04-migrations/legacy-import.md#step-7-verify)). Inside the managed
+  scope any later change also changes the fingerprint and fails the run.
+  Outside it (roles, objects in other schemas) the aspect alone is
+  compared: a history's `ALTER ROLE r CONNECTION LIMIT 5` that found 3 at
+  the analysis, accepted, still passed with 100 later (`value` in both). The
+  checks return no observed value, and a role setting can hold a secret, so
+  the value itself is never recorded.
+- **Options.** (a) the checks return a keyed digest (HMAC under an
+  installation key the worker holds) of the observed value for open-domain
+  kinds (role settings, connection limits, comments, function bodies and
+  definitions outside the scope), recorded with the failure at the analysis
+  and compared at the verification; (b) the drift check covers cluster-global
+  state and reports such a change after the baseline; (c) keep the rule, the
+  residual documented.
+- **Recommendation.** (a): it fails closed and records nothing a reader
+  could reverse; (b) is useful on its own and later.
+- **Blocks.** Nothing in Part A; the reviewed baseline on `reos-db-01` is
+  not affected beyond this residual.
+
+## Decisions of the Wave 9 order (2026-10-21)
+
+The owner's Wave 9 order ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md))
+lists four **[OWNER]** instructions and seven **[DEFAULT]** proposals that
+stand unless the owner overrules them. **[DECIDED]** 2026-10-21, source: the
+Wave 9 order ([Part A record §2](../14-roadmap/gates/9-part-a.md#2-decisions-of-the-wave-9-order)).
+OD-4 (D-B1), OD-7 (owner item 4), OD-51 (D-A1) and OD-52 (D-B2) are above.
+
+| # | Topic | Decision | Kind |
+|---|---|---|---|
+| O1 | Order of work | Part A (the migration engine for real, imported schemas) first, as its own pull request and record, then Part B (Wave 9 proper); Part A may be merged before Part B is finished | OWNER |
+| O2 | Scope pull-forward | Part A brings forward the product capabilities of Wave 10 (import of a real Supabase-origin history, per-environment execution roles, external-cluster onboarding), not its REOSA-side deliverables | OWNER |
+| O3 | Quality over speed | the professional design even when it costs more code: contracts first, additive bundles, ADRs where a DECIDED rule changes, real-PostgreSQL tests, independent review rounds, truthful records | OWNER |
+| O4 | OD-7 | split into OD-7a (yes) and OD-7b (no applies before Wave 11), see OD-7 | OWNER |
+| D-A2 | Execution roles per environment | the alias → role map is resolved per (project, environment), the project map as default; one resolver, no direct reader of the project map ([ADR-0034](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md)) | DEFAULT |
+| D-B3 | OD-8 | option (a) recommended; **not decided**: a stop-and-ask point before Part B | DEFAULT (recommendation only) |
+| D-B4 | L2 and L3 in Wave 9 | `pg_dump` (L2) and restic to a second provider (L3), engine-independent, are part of Wave 9; restic needs an allowlist addition | DEFAULT |
+| D-B5 | The G5 waiver | node capabilities are developed and proven only on disposable hosts; closing the waiver needs `node-pg` and `node-host-scenarios` on a disposable Ubuntu 24.04 VM; without one the items stay `NOT PROVEN` and the session asks the owner | DEFAULT |
+
 ## Decisions of the Wave 8 order (2026-10-13)
 
 The owner's Wave 8 order ([`../14-roadmap/orders/wave-8-order.md`](../14-roadmap/orders/wave-8-order.md))
@@ -1253,3 +1734,11 @@ the session. **[DECIDED]** 2026-10-13, source: the owner
 | S8 | Scope strings of a tiered `registry.manage` | asked by the part 2 session: the tier of `registry.manage` is enforced through role-binding coverage and grant tiers, but the frozen `oauth-delegation` bundle's `verify.sql` pins the stored OAuth scope catalog exactly, so the literal scopes `registry.manage:prod` and `registry.manage:nonprod` cannot be added without a new verification version. Decided: **keep as is**: one untiered `registry.manage` scope (human sessions only), the tier carried by bindings and grant tiers; recorded as a limit of G8 |
 | S9 | Accent color | after seeing screenshots of the Web App the owner chose a **turquoise accent** (the family of `#13A28E`) instead of the placeholder indigo, and no purple: the reserved `production` token moves off purple to a distinct non-error hue. The owner chose the color only because they like it; it is no reference to another product: no name, string, logo or font of any other product is used. This replaces the hue of the OD-11 placeholder and overrides, for this color only, the Wave 8 order's list of colors not to use; fonts, wordmark and the rest of OD-11 stay |
 | S10 | Account system | the owner asked for a fully built account area like Supabase's: an account menu in the header with an avatar (initials or an uploaded profile picture), name and email, a direct theme switch, and links to the account pages (profile with display name and profile picture, preferences, security: passkeys, authenticator, recovery codes and sessions, connected applications, the person's own activity), replacing the plain "Account" text button. This includes the server side the profile picture needs (stored same-origin, never a remote image), additive and contracts first |
+
+## Owner decisions after the Wave 8 session
+
+**[DECIDED]** with the date of each row, source: the owner.
+
+| # | Date | Topic | Decision |
+|---|---|---|---|
+| S11 | 2026-10-21 | Server providers with logos | "Real icons give an application a lot of quality; they are no dependency once copied into the project." The `provider` of a server becomes a long list of well-known providers, each shown with its logo to the left of its name. The selection of the providers and the source of the logos are the implementing session's choice: the list in [`../01-architecture/domain-model.md` §3.2](../01-architecture/domain-model.md#32-physical-layer) (additive; the four Wave 4 values keep their meaning; [OD-49](#od-49-the-server-provider-enum-and-apiv1-ga) for GA) |

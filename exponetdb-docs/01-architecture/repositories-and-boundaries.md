@@ -97,10 +97,11 @@ source at `8b9af568` are in [ADR-0030](./adr/0030-supabase-ui-source-adoption.md
 - These documents are not legal advice. Being internal does not remove license
   obligations. If a license question is unclear, the owner decides before the
   code is merged.
-- **[DECIDED]** ExponetDB's own license: proprietary, internal, all rights
-  reserved for now; no public open-source release in V1
-  ([OD-19](../00-product/open-decisions.md#od-19-exponetdb-license), resolved
-  2026-10-05). Being internal does not remove obligations that come with
+- **[DECIDED]** ExponetDB's own license: the ExponetDB Source-Available License
+  1.0 (`LICENSE`): readable and publicly forkable, no production or commercial
+  use without the owner's written permission or a commercial license; not open
+  source ([OD-19](../00-product/open-decisions.md#od-19-exponetdb-license),
+  amended 2026-10-23; first resolved 2026-10-05 as proprietary). Being internal does not remove obligations that come with
   third-party code or dependencies.
 
 ## 4. How REOSA knowledge may be used

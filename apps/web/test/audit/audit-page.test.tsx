@@ -246,7 +246,10 @@ describe('the audit search', () => {
     const empty = auditWorld()
     empty.on('GET', '/api/v1/audit-events', { items: [], nextCursor: null })
     mountApp('/audit?result=denied', empty)
-    expect(await screen.findByText('No audit events match these filters')).toBeInTheDocument()
+    // A filtered search that finds nothing is "No match" with a way back, not an empty log.
+    expect(await screen.findByText('No match')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reset filters' })).toBeInTheDocument()
+    expect(screen.queryByText('No audit events yet')).toBeNull()
   })
 
   it('reads older events through the server cursor', async () => {

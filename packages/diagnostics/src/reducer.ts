@@ -88,11 +88,24 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
   extendedSlowdown: 10,
 }
 
+/**
+ * A probe as the sampler stores it: the contract's {@link ProbeResult} and,
+ * for a settings or activity read that succeeded, the whole numbers it
+ * measured (`settings`: `usableSlots`; `activity`: `clientBackends`). They
+ * ride in the stored `probes` JSON so that the connection capacity of the
+ * latest sample can be read without a new column; every reader of the
+ * public probe shape drops them (`statusFrom`), so neither REST nor MCP
+ * carries a probe `values` member.
+ */
+export type StoredProbe = ProbeResult & {
+  readonly values?: Readonly<Record<string, number>>
+}
+
 export interface HealthResult {
   readonly state: TargetHealthState
   readonly conditions: HealthCondition[]
   readonly unknownBecause: string | null
-  readonly probes: ProbeResult[]
+  readonly probes: StoredProbe[]
 }
 
 /** What a condition does to the state (health.md §3). */
@@ -158,7 +171,8 @@ function readProbe(
   outcome: 'ok' | 'failed' | 'timeout',
   errorClassValue: string | null,
   observedAt: string,
-): ProbeResult | undefined {
+  values?: Readonly<Record<string, number>>,
+): StoredProbe | undefined {
   if (endpoint === undefined) return undefined
   return {
     probe,
@@ -173,6 +187,7 @@ function readProbe(
     errorClass: errorClassValue,
     tls: 'verified',
     observedAt,
+    ...(values === undefined ? {} : { values }),
   }
 }
 
@@ -209,7 +224,7 @@ export function reduceHealth(
     raise(e)
   }
 
-  const probes: ProbeResult[] = []
+  const probes: StoredProbe[] = []
   for (const e of sample.endpoints) {
     probes.push(probeResult('simple', e, e.simple, at))
     probes.push(probeResult('extended', e, e.extended, at))
@@ -301,7 +316,9 @@ export function reduceHealth(
     const p = readProbe('settings', diagnostic, 'failed', sample.settings.errorClass, at)
     if (p !== undefined) probes.push(p)
   } else if (sample.settings.status === 'ok') {
-    const p = readProbe('settings', diagnostic, 'ok', null, at)
+    const p = readProbe('settings', diagnostic, 'ok', null, at, {
+      usableSlots: sample.settings.value.usableSlots,
+    })
     if (p !== undefined) probes.push(p)
   }
   if (sample.activity.status === 'failed') {
@@ -311,7 +328,9 @@ export function reduceHealth(
     if (p !== undefined) probes.push(p)
   } else if (sample.activity.status === 'ok') {
     const a = sample.activity.value
-    const p = readProbe('activity', diagnostic, 'ok', null, at)
+    const p = readProbe('activity', diagnostic, 'ok', null, at, {
+      clientBackends: a.clientBackends,
+    })
     if (p !== undefined) probes.push(p)
     if (sample.settings.status === 'ok') {
       const usable = sample.settings.value.usableSlots

@@ -334,6 +334,24 @@ export function driftCheck(over: Record<string, unknown> = {}) {
   }
 }
 
+/** A recorded check as the history lists it (`listDriftChecks`): no findings, counts under `counts`. */
+export function driftSummary(n: number, over: Record<string, unknown> = {}) {
+  return {
+    id: `smp_${ulid(n)}`,
+    targetId: 'tgt_00000000000000000000000002',
+    generation: 1,
+    requestedBy: { kind: 'schedule' },
+    status: 'drifted',
+    baselineFingerprint: `fp1:17:${'a'.repeat(64)}`,
+    currentFingerprint: `fp1:17:${'b'.repeat(64)}`,
+    counts: { drifted: 2, matched: 40, unmanaged: 1, opened: 1, updated: 0, resolved: 0 },
+    errorCode: null,
+    startedAt: AGO(60_000 * n + 5_000),
+    finishedAt: AGO(60_000 * n),
+    ...over,
+  }
+}
+
 export function report(over: Record<string, unknown> = {}) {
   return {
     id: `imr_${ulid(1)}`,
@@ -411,6 +429,10 @@ export function withDefaults(world: OpsWorld, path = TARGET): OpsWorld {
   world.on('GET', new RegExp(`/api/v1/targets/${encoded}/migrations$`), ledgerStatus())
   world.on('GET', /\/api\/v1\/projects\/[^/]+\/migrations$/, stream())
   world.on('GET', /\/api\/v1\/plans\?/, { items: [plan(1)], nextCursor: null })
+  world.on('GET', new RegExp(`/api/v1/targets/${encoded}/drift-checks\\?`), {
+    items: [driftSummary(1)],
+    nextCursor: null,
+  })
   world.on('GET', new RegExp(`/api/v1/targets/${encoded}/findings`), {
     items: [],
     nextCursor: null,

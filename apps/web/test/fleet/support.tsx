@@ -15,7 +15,7 @@ import { configure, render } from '@testing-library/react'
 import { vi } from 'vitest'
 import { AppProviders } from '../../src/app/providers.tsx'
 import { createReauthBridge } from '../../src/features/reauth/reauth.tsx'
-import { ApiClient } from '../../src/lib/api/client.ts'
+import { ApiClient, type ResponseOf } from '../../src/lib/api/client.ts'
 import { createQueryClient } from '../../src/lib/query/client.ts'
 import { routeTree } from '../../src/routeTree.gen.ts'
 
@@ -146,7 +146,11 @@ export function healthFixture(over: Partial<InstallationHealth> = {}): Installat
   }
 }
 
+export type Permission = ResponseOf<'getMe'>['effectivePermissions'][number]['permission']
+
 export class World {
+  /** The permissions the signed-in person holds (at any scope); none by default. */
+  permissions: Permission[] = []
   fleet: Fleet = fleetFixture()
   findings: FleetFinding[] = []
   findingsNextCursor: string | null = null
@@ -165,7 +169,7 @@ export class World {
       path: 'shop/platform',
       revision: 1,
       evidenceOverride: {},
-      managedScope: { kind: 'all' } as unknown as Project['managedScope'],
+      managedScope: { includeSchemas: null, excludeSchemas: [] },
     },
   ]
   environments: Environment[] = [
@@ -229,6 +233,9 @@ export class World {
   readonly failures = new Map<string, FailureSpec>()
   /** Reads held back until the promise settles, by a substring of the path. */
   readonly delays = new Map<string, Promise<unknown>>()
+  /** The product and project lists name a next page on every page, so the page follows them to its bound. */
+  productsMore = false
+  projectsMore = false
   readonly sent: Sent[] = []
 
   firstCluster(): Cluster {
@@ -260,7 +267,7 @@ function json(status: number, body: unknown): Response {
 
 const NOT_FOUND = () => json(404, { code: 'NOT_FOUND', message: 'Not found.' })
 
-function me() {
+function me(world: World) {
   return {
     identity: {
       id: IDENTITY,
@@ -272,7 +279,10 @@ function me() {
     },
     session: {},
     bindings: [],
-    effectivePermissions: [],
+    effectivePermissions: world.permissions.map((permission) => ({
+      permission,
+      scopes: [{ kind: 'global' }],
+    })),
   }
 }
 
@@ -304,7 +314,7 @@ export function answer(world: World, sent: Sent): Response {
   }
   const url = new URL(path, 'http://localhost')
   const p = url.pathname
-  if (p === '/api/v1/me') return json(200, me())
+  if (p === '/api/v1/me') return json(200, me(world))
   if (method === 'GET' && p === '/api/v1/fleet') return json(200, world.fleet)
   if (method === 'GET' && p === '/api/v1/findings') {
     return json(200, { items: world.findings, nextCursor: world.findingsNextCursor })
@@ -313,16 +323,31 @@ export function answer(world: World, sent: Sent): Response {
   if (method === 'GET' && p === '/api/v1/targets') {
     const cursor = url.searchParams.get('cursor')
     const index = cursor === null ? 0 : Number(cursor.slice(1))
-    const items = world.targetPages[index] ?? []
+    // The server filters by product and project (the path starts with them).
+    const product = url.searchParams.get('product')
+    const project = url.searchParams.get('project')
+    const items = (world.targetPages[index] ?? []).filter((target) => {
+      const [p0, p1] = target.path.split('/')
+      return (product === null || p0 === product) && (project === null || p1 === project)
+    })
     const more = index + 1 < world.targetPages.length
     return json(200, { items, nextCursor: more ? `c${index + 1}` : null })
   }
   if (method === 'POST' && p === '/api/v1/targets') return json(201, planBody())
+  // With `more`, every page names a next one (the first holds the items): the list is cut off.
   if (method === 'GET' && p === '/api/v1/products') {
-    return json(200, { items: world.products, nextCursor: null })
+    const first = url.searchParams.get('cursor') === null
+    return json(200, {
+      items: first ? world.products : [],
+      nextCursor: world.productsMore ? 'more' : null,
+    })
   }
   if (method === 'GET' && p === '/api/v1/projects') {
-    return json(200, { items: world.projects, nextCursor: null })
+    const first = url.searchParams.get('cursor') === null
+    return json(200, {
+      items: first ? world.projects : [],
+      nextCursor: world.projectsMore ? 'more' : null,
+    })
   }
   let m = /^\/api\/v1\/products\/([^/]+)\/environments$/.exec(p)
   if (m !== null && method === 'GET') {

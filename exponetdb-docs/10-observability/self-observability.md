@@ -127,7 +127,9 @@ and the composition root of [`apps/server`](../../apps/server/README.md):
   allowlisted fields with validated values (ids must be well-formed ids,
   codes must be tokens; there is no free-text field); unknown or invalid
   fields are dropped and named. A second line of defense, a secret-shape
-  denylist, runs over every string. Errors become class, code (ExponetDB
+  denylist, runs over every string; **[OBSERVED]** (Wave 8 completion,
+  2026-10-20) its repetitions are bounded so that it runs in linear time on
+  long adversarial text (`redaction.test.ts`, "redaction stays linear"). Errors become class, code (ExponetDB
   code or SQLSTATE) and cause code; messages, PostgreSQL `DETAIL`/`WHERE`
   and stacks are never logged. The redaction corpus
   (`packages/observability/test/redaction.test.ts`) covers credential URLs,

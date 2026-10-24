@@ -12,7 +12,13 @@ import { prop } from '../store.ts'
  * key and an API key stay in files the person names (read when needed).
  */
 export type ProfileAuth =
-  | { readonly method: 'oauth' }
+  | {
+      readonly method: 'oauth'
+      /** Granted at the last sign-in; the next `login` asks for them again (15-cli §3). */
+      readonly scopes?: readonly string[]
+      /** Asked for at the last sign-in (to show what was not granted). */
+      readonly requestedScopes?: readonly string[]
+    }
   | { readonly method: 'api-key'; readonly keyFile: string }
   | {
       readonly method: 'service-account'
@@ -45,6 +51,9 @@ export function validProfileName(name: string): boolean {
   return NAME.test(name)
 }
 
+const strings = (value: unknown): string[] | undefined =>
+  Array.isArray(value) ? value.filter((s): s is string => typeof s === 'string') : undefined
+
 function profileOf(name: string, value: unknown): Profile | undefined {
   const server = prop(value, 'server')
   const installationId = prop(value, 'installationId')
@@ -58,8 +67,15 @@ function profileOf(name: string, value: unknown): Profile | undefined {
   }
   let parsedAuth: ProfileAuth | undefined
   const method = prop(auth, 'method')
-  if (method === 'oauth') parsedAuth = { method }
-  else if (method === 'api-key' && typeof prop(auth, 'keyFile') === 'string') {
+  if (method === 'oauth') {
+    const scopes = strings(prop(auth, 'scopes'))
+    const requestedScopes = strings(prop(auth, 'requestedScopes'))
+    parsedAuth = {
+      method,
+      ...(scopes === undefined ? {} : { scopes }),
+      ...(requestedScopes === undefined ? {} : { requestedScopes }),
+    }
+  } else if (method === 'api-key' && typeof prop(auth, 'keyFile') === 'string') {
     parsedAuth = { method, keyFile: String(prop(auth, 'keyFile')) }
   } else if (
     method === 'service-account' &&
@@ -67,13 +83,12 @@ function profileOf(name: string, value: unknown): Profile | undefined {
     typeof prop(auth, 'keyId') === 'string' &&
     typeof prop(auth, 'keyFile') === 'string'
   ) {
-    const scopes = prop(auth, 'scopes')
     parsedAuth = {
       method,
       clientId: String(prop(auth, 'clientId')),
       keyId: String(prop(auth, 'keyId')),
       keyFile: String(prop(auth, 'keyFile')),
-      scopes: Array.isArray(scopes) ? scopes.filter((s): s is string => typeof s === 'string') : [],
+      scopes: strings(prop(auth, 'scopes')) ?? [],
     }
   }
   if (parsedAuth === undefined) return undefined

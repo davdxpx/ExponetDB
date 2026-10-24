@@ -3,7 +3,10 @@ import { act, cleanup, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { ApplyVerifyIndicators } from '../../src/plan/apply-verify-indicators.tsx'
+import {
+  ApplyVerifyIndicators,
+  NeedsAttentionNote,
+} from '../../src/plan/apply-verify-indicators.tsx'
 import { axeViolations } from '../support/axe.ts'
 import { renderPlan } from './support.tsx'
 
@@ -199,5 +202,27 @@ describe('ApplyVerifyIndicators', () => {
     renderPlan(<ApplyVerifyIndicators applyOutcome="applied" verificationOutcome="passed" />)
     expect(screen.queryByText('Needs attention')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Verify again' })).toBeNull()
+  })
+})
+
+describe('NeedsAttentionNote', () => {
+  it('shows the page’s own "Verify again" only when the server says it is retryable', () => {
+    const { rerender } = renderPlan(
+      <NeedsAttentionNote
+        attention={{ nextAction: 'Inspect the target.', retryable: true }}
+        action={<button type="button">Verify again</button>}
+      />,
+    )
+    expect(screen.getByText('Needs attention')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Verify again' })).toBeVisible()
+    rerender(
+      <NeedsAttentionNote
+        attention={{ nextAction: null, retryable: false }}
+        action={<button type="button">Verify again</button>}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: 'Verify again' })).toBeNull()
+    expect(screen.getByText('Verification cannot be retried for this operation.')).toBeVisible()
+    expect(screen.getByText(/Inspect the operation before you do anything else/)).toBeVisible()
   })
 })

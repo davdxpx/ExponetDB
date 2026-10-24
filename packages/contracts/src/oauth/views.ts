@@ -121,6 +121,14 @@ export const OAuthClientViewSchema = OAuthClientSummarySchema.extend({
   ).nullable(),
   softwareId: untrustedText(128, 'software_id from the metadata; unverified.').nullable(),
   softwareVersion: untrustedText(64, 'software_version from the metadata; unverified.').nullable(),
+  lastUsedAt: TimestampSchema.nullable().optional().meta({
+    description:
+      'Wave 8 completion, additive, set by `GET /oauth-clients` and `GET /oauth-clients/{id}` (absent in the answers of the decisions, which do not read it): the latest minute any grant of this client authenticated a request, from the same record as `Grant.lastUsedAt` (`oauth.grant_last_use`, at most one write a minute), over all of the client’s grants, also revoked and expired ones. null: no use is recorded for any grant, which is not proof that the client was never used (the record began with its deployment and a background write can be lost). A data basis for "last used", never an input to a decision.',
+  }),
+  activeGrantCount: z.int().min(0).optional().meta({
+    description:
+      'Wave 8 completion, additive, set with `lastUsedAt`: how many grants of this client are active now (not revoked, not expired), counted at the time of the request.',
+  }),
 }).meta({ id: 'OAuthClient' })
 export type OAuthClientView = z.infer<typeof OAuthClientViewSchema>
 

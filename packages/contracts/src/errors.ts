@@ -611,6 +611,38 @@ export const ERRORS = {
         .array(z.strictObject({ itemId: z.string().regex(/^[A-Za-z0-9_:-]{1,128}$/) }))
         .min(1)
         .max(1000),
+      // Wave 9 (additive): how many items wait, when more than `items` lists.
+      total: z.int().min(1).optional(),
+    }),
+  },
+  LEGACY_IMPORT_TRUNCATED: {
+    group: 'migrations',
+    status: 409,
+    retryable: false,
+    title: 'Legacy import report incomplete',
+    message:
+      'The import report holds fewer global drift items than exist, so it cannot become a baseline.',
+    remediation:
+      'Narrow the managed schema scope or correct the import inputs so that the drift fits the report, then analyze again.',
+    details: z.strictObject({
+      // null: the report was analyzed before drift totals were kept; analyze again.
+      driftTotal: z.int().min(0).nullable(),
+      held: z.int().min(0),
+    }),
+  },
+  // Part A follow-up 3 review (additive): a report analyzed before failing expectations were
+  // recorded would excuse every failure of an accepted file at the baseline's verification.
+  LEGACY_IMPORT_ANALYSIS_OUTDATED: {
+    group: 'migrations',
+    status: 409,
+    retryable: false,
+    title: 'Legacy import analyzed before failures were recorded',
+    message:
+      'The import report was analyzed before the failing expectations of each file were recorded, so a review decision would not say what it accepts.',
+    remediation: 'Analyze the import again and record the decisions on the new report.',
+    details: z.strictObject({
+      // How many file items of the report have no recorded failures.
+      items: z.int().min(1),
     }),
   },
   // ----- Evidence and policy -----
@@ -1007,10 +1039,14 @@ export const ERRORS = {
             'target_state',
             'endpoint_retired',
             'database_not_found',
+            'database_retired',
+            'database_in_use',
             'no_active_endpoint',
             'observer_credential_missing',
             'system_identifier_taken',
             'credential_missing',
+            'exception_active',
+            'exception_not_active',
             'cluster_unmapped',
             'cluster_not_agent_managed',
             'postgres_ca_missing',

@@ -6,6 +6,6 @@
     "customConditions": ["@exponetdb/source"],
     "types": ["node"]
   },
-  "include": ["vitest.shared.ts", "tooling/**/*.ts"],
+  "include": ["vitest.shared.ts", "vitest.target-setup.ts", "tooling/**/*.ts"],
   "exclude": ["vitest.dom-setup.ts"]
 }

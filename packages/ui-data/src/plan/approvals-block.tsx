@@ -159,6 +159,69 @@ function ApprovalItem({
   )
 }
 
+/**
+ * The own-plan acknowledgement of a self-approval (OD-9): a check box the
+ * person ticks before approving their own plan. Controlled, so the page can
+ * keep it next to the approvals and pass it to actions elsewhere.
+ */
+export function SelfApprovalAcknowledgement({
+  checked,
+  onCheckedChange,
+}: {
+  readonly checked: boolean
+  readonly onCheckedChange: (checked: boolean) => void
+}): ReactNode {
+  const checkboxId = useId()
+  return (
+    <div data-self-approval="" className="flex items-start gap-2 text-sm">
+      <Checkbox
+        id={checkboxId}
+        checked={checked}
+        onCheckedChange={(value) => onCheckedChange(value === true)}
+        className="mt-0.5"
+      />
+      <label htmlFor={checkboxId}>
+        This is my own plan. I approve it myself and know this is recorded prominently.
+      </label>
+    </div>
+  )
+}
+
+/** The note that an agent proposed the plan and cannot approve it. */
+export function AgentProposedNote({ id }: { readonly id?: string }): ReactNode {
+  return (
+    <Note tone="warning" id={id} data-agent-note="">
+      <span className="flex items-start gap-2">
+        <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-600" />
+        <span>
+          <strong className="font-medium">
+            An agent proposed this plan; it cannot approve it.
+          </strong>{' '}
+          Decide on what this page shows. Nothing the agent said in its conversation counts.
+        </span>
+      </span>
+    </Note>
+  )
+}
+
+/** The decisions on the plan so far, oldest first, each with its approver and time. */
+export function ApprovalDecisionList({
+  approvals,
+  now,
+}: {
+  readonly approvals: readonly ApprovalEntry[]
+  readonly now?: NowInput
+}): ReactNode {
+  const current = useResolvedNow(now)
+  return (
+    <ul aria-label="Decisions" className="flex flex-col gap-2 text-sm">
+      {keyedBy(approvals, (approval) => approval.id).map(({ item: approval, key }) => (
+        <ApprovalItem key={key} approval={approval} now={current} />
+      ))}
+    </ul>
+  )
+}
+
 /** The approve and reject actions for an eligible person, with the self-approval acknowledgement. */
 function DecisionArea({
   planId,
@@ -173,7 +236,6 @@ function DecisionArea({
   readonly selfApproval: boolean
   readonly render: (binding: ApprovalBinding) => ReactNode
 }): ReactNode {
-  const checkboxId = useId()
   // The acknowledgement belongs to one plan hash and one operation: another starts unticked.
   const bindingKey = `${operationId}\n${planHash}`
   const [acknowledged, setAcknowledged] = useState<string | null>(null)
@@ -185,17 +247,10 @@ function DecisionArea({
         <FullCode text={planHash} data-full-hash="" />
       </span>
       {selfApproval ? (
-        <div className="flex items-start gap-2 text-sm">
-          <Checkbox
-            id={checkboxId}
-            checked={acknowledgedSelfApproval}
-            onCheckedChange={(checked) => setAcknowledged(checked === true ? bindingKey : null)}
-            className="mt-0.5"
-          />
-          <label htmlFor={checkboxId}>
-            This is my own plan. I approve it myself and know this is recorded prominently.
-          </label>
-        </div>
+        <SelfApprovalAcknowledgement
+          checked={acknowledgedSelfApproval}
+          onCheckedChange={(checked) => setAcknowledged(checked ? bindingKey : null)}
+        />
       ) : null}
       <div data-approval-actions="offered" className="flex flex-wrap items-center gap-2">
         {render({ planId, planHash, operationId, acknowledgedSelfApproval })}
@@ -305,19 +360,7 @@ export function ApprovalsBlock({
 
   return (
     <PlanBlock title="Approvals" headingLevel={headingLevel} data-plan-block="approvals">
-      {proposedByAgent ? (
-        <Note tone="warning" id={noteId} data-agent-note="">
-          <span className="flex items-start gap-2">
-            <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-600" />
-            <span>
-              <strong className="font-medium">
-                An agent proposed this plan; it cannot approve it.
-              </strong>{' '}
-              Decide on what this page shows. Nothing the agent said in its conversation counts.
-            </span>
-          </span>
-        </Note>
-      ) : null}
+      {proposedByAgent ? <AgentProposedNote id={noteId} /> : null}
       <p data-approvals-status="" className="text-sm">
         {status}
       </p>
@@ -326,11 +369,7 @@ export function ApprovalsBlock({
           The decisions so far are <NotKnown />.
         </p>
       ) : approvals.length === 0 ? null : (
-        <ul aria-label="Decisions" className="flex flex-col gap-2 text-sm">
-          {keyedBy(approvals, (approval) => approval.id).map(({ item: approval, key }) => (
-            <ApprovalItem key={key} approval={approval} now={current} />
-          ))}
-        </ul>
+        <ApprovalDecisionList approvals={approvals} now={current} />
       )}
       {decision}
     </PlanBlock>

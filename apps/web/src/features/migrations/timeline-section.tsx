@@ -1,14 +1,17 @@
 import type { MigrationStream } from '@exponetdb/sdk/operations'
 import { MigrationTimeline } from '@exponetdb/ui-data'
-import { NotPermittedState, UntrustedName } from '@exponetdb/ui-patterns'
+import { NotPermittedState, UntrustedName, useLinkComponent } from '@exponetdb/ui-patterns'
 import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { t } from '../../lib/i18n/i18n.ts'
 import { classifyFailure } from '../../lib/query/errors.ts'
 import { toReadable } from '../../lib/query/readable.ts'
+import { isSlug } from '../target/params.ts'
 import { nounPhrase } from '../target/phrases.ts'
 import { streamQuery } from '../target-ops/keys.ts'
+import { useTargetHref } from '../target-ops/links.ts'
+import { ReadSection } from '../target-ops/read-section.tsx'
 import { Section } from '../target-ops/section.tsx'
 import {
   type EnvironmentNote,
@@ -17,6 +20,7 @@ import {
   streamMissing,
   timelineDataOf,
 } from './model.ts'
+import { PromotePanel } from './promote-panel.tsx'
 
 /**
  * The promotion timeline of the project (`GET /projects/{id}/migrations`):
@@ -27,8 +31,17 @@ import {
  * applied". The notes under it name the environments whose cells say less
  * than they seem to.
  */
-export function TimelineSection({ projectId }: { readonly projectId: string }): ReactNode {
+export function TimelineSection({
+  projectId,
+  environment,
+}: {
+  readonly projectId: string
+  /** The validated slug of this page's environment: the compare link starts from it. */
+  readonly environment: string
+}): ReactNode {
   const { client } = useApi()
+  const Link = useLinkComponent()
+  const href = useTargetHref()
   const query = useQuery(streamQuery(client, projectId))
   const refetch = () => void query.refetch()
   const refused =
@@ -61,6 +74,50 @@ export function TimelineSection({ projectId }: { readonly projectId: string }): 
           {query.data === undefined ? null : <EnvironmentNotes stream={query.data} />}
         </>
       )}
+      <p className="m-0 text-sm">
+        <Link
+          href={href(`/compare${compareSuffix(query.data, environment)}`)}
+          className="text-primary underline focus-ring"
+        >
+          {t('migrations.timeline.compare')}
+        </Link>
+      </p>
+    </Section>
+  )
+}
+
+/** `?to=` the environment this one takes its evidence from, when the stream names one. */
+function compareSuffix(stream: MigrationStream | undefined, environment: string): string {
+  const from = stream?.environments.find((e) => e.slug === environment)?.evidenceFrom
+  return from === null || from === undefined || !isSlug(from) ? '' : `?to=${from}`
+}
+
+/**
+ * Promotion from the migrations page: the bundles of the project's stream
+ * that the mirror holds as not applied on an environment (by default the one
+ * that takes its evidence from this one), each with its SQL, planned there
+ * by id. The same read as the timeline (one cache entry); its failure is
+ * named here too, never an empty list.
+ */
+export function PromoteSection({
+  projectId,
+  environment,
+}: {
+  readonly projectId: string
+  /** The validated slug of this page's environment. */
+  readonly environment: string
+}): ReactNode {
+  const { client } = useApi()
+  const query = useQuery(streamQuery(client, projectId))
+  return (
+    <Section id="promote" title={t('promote.title')} description={t('promote.description')}>
+      <ReadSection
+        query={query}
+        what={nounPhrase('migrations.timeline.what')}
+        permission="migrations.read"
+        missing={streamMissing}
+        ready={(stream) => <PromotePanel stream={stream} current={environment} heading={false} />}
+      />
     </Section>
   )
 }

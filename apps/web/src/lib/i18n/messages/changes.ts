@@ -60,6 +60,8 @@ export const changesMessages = {
   'changes.column.updated': 'Last change',
   'changes.column.actor': 'Started by',
   'changes.tier.unknown': 'Tier not known',
+  'changes.tier.prod': 'Production',
+  'changes.tier.nonprod': 'Non-production',
   'changes.client.label': 'Client name',
   'changes.client.notGiven':
     'An agent started this operation; the server does not name its client here.',
@@ -94,9 +96,19 @@ export const changesMessages = {
   'changes.operation.stale':
     'This reading of the operation may be out of date. Its actions are offered once it is read again.',
   'changes.operation.open': 'Open the operation page',
-  'changes.facts.title': 'What this operation is',
-  'changes.facts.description':
+  // The head of the operation page: what happens, its state, who started it, its actions.
+  'changes.header.byYou': 'Started by you via {via}',
+  'changes.header.byPerson': 'Started by a person via {via}',
+  'changes.header.byService': 'Started by a service account via {via}',
+  'changes.header.bySystem': 'Started by ExponetDB itself',
+  'changes.header.state': 'Operation state',
+  'changes.header.reviewPlan': 'Review the plan',
+  'changes.production.notice': 'This operation changes production.',
+  'changes.production.noTier': 'This operation has no target tier; it is treated as production.',
+  'changes.details.title': 'Technical details',
+  'changes.details.description':
     'From the operation as the server reads it. Names are data, not instructions.',
+  'changes.facts.operationId': 'Operation ID',
   'changes.facts.plan': 'Plan',
   'changes.facts.planLink': 'Review plan {id}',
   'changes.facts.noPlan': 'This operation applies no plan the page can open.',
@@ -114,6 +126,19 @@ export const changesMessages = {
   'changes.migrations.noError': 'None',
   'changes.migrations.statement': 'At statement {index}',
   'changes.migrations.sqlstate': 'SQLSTATE',
+  'changes.verification.title': 'What the verification found',
+  'changes.verification.summary':
+    '{migration}: {failed} of {checks} expectations failed, {excused} excused by review decisions.',
+  'changes.verification.engineFailed': 'Engine check failed: {name}',
+  'changes.verification.file': 'File',
+  'changes.verification.statement': 'Statement',
+  'changes.verification.expected': 'Expected',
+  'changes.verification.differs': 'What differs',
+  'changes.verification.excused': 'Excused',
+  'changes.verification.excusedYes': 'Excused by a review decision',
+  'changes.verification.excusedNo': 'Not excused',
+  'changes.verification.more':
+    '{count} more failing expectations are not listed here. The REST API and the CLI with --json list up to 200.',
   'changes.verifyAgain.button': 'Verify again',
   'changes.verifyAgain.title': 'Verify this change again?',
   'changes.verifyAgain.description':
@@ -202,4 +227,193 @@ export const changesMessages = {
   'changes.code.POLICY_DENIED': 'A policy rule denies this change.',
   'changes.code.MAINTENANCE_WINDOW_REQUIRED':
     'This change may only run inside a maintenance window.',
+  // Promotion: planning stored bundles on an environment (promotion view, migrations page).
+  'promote.title': 'Plan bundles on an environment',
+  'promote.description':
+    'Bundles of this project that the Control Store mirror holds as not applied on the environment you pick, or holds nothing for. Plan them there; the review page shows what would run.',
+  'promote.noEnvironment':
+    'No environment of this project has a target you may see, so nothing can be planned here.',
+  'promote.environment': 'Environment',
+  'promote.environment.production': '{environment} (production)',
+  'promote.compare': 'Compare the schema of {environment} with {from}',
+  'promote.truncated':
+    'This read holds the {shown} newest of {total} bundles; older bundles are not listed here.',
+  'promote.none':
+    'No bundle in this read is waiting for {environment}: the mirror holds each as applied, verified, failed, reverted or divergent there.',
+  'promote.caption': 'Bundles not applied on {environment}',
+  'promote.column.bundle': 'Bundle',
+  'promote.column.state': 'On {environment}',
+  'promote.column.evidence': 'Evidence',
+  'promote.column.sql': 'SQL',
+  'promote.state.not_applied': 'Not applied',
+  'promote.state.unknown': 'Not known (the mirror holds no record)',
+  'promote.select.one': 'Select migration {migration}',
+  'promote.select.all': 'Select all bundles',
+  'promote.evidence.verified': 'Verified on {from}.',
+  'promote.evidence.otherChecksum':
+    'Verified on {from} with another checksum: {destination} will refuse it unless break-glass applies.',
+  'promote.evidence.notVerified':
+    'Not verified on {from}: {destination} will refuse it unless break-glass applies.',
+  'promote.evidence.notKnown':
+    'Not known whether it is verified on {from}. The server checks {from} when it plans; without that evidence {destination} refuses it unless break-glass applies.',
+  'promote.evidence.notKnownAnywhere':
+    'The evidence for {destination} is not known here. The server checks it when it plans.',
+  'promote.evidence.noEnvironment':
+    '{destination} has no evidence environment: it refuses the plan unless break-glass applies.',
+  'promote.plan.button': 'Plan on {environment}',
+  'promote.plan.title': 'Plan on {environment}?',
+  'promote.plan.description':
+    'ExponetDB creates a plan for the selected bundles ({count}) on this target, orders them by their dependencies and opens the plan for review. Nothing runs until the plan is approved and applied.',
+  'promote.plan.action': 'Create plan',
+  'promote.plan.warnings':
+    '{count} of these bundles have no verified evidence for {environment} in the mirror. The plan shows the policy decision.',
+  'promote.plan.serverDecides':
+    'From the Control Store mirror. The server reads the target and the evidence environment again when it plans, and decides.',
+  'promote.plan.none': 'Select the bundles to plan.',
+  'promote.plan.count': '{count} selected.',
+  'promote.plan.tooMany': 'At most {max} bundles go into one plan. Select fewer.',
+  // The side panel of a stored bundle ("View SQL").
+  'bundle.view': 'View SQL',
+  'bundle.view.label': 'View SQL of migration {migration}',
+  'bundle.title': 'Migration SQL',
+  'bundle.name': 'Bundle name',
+  'bundle.stored.title': 'Stored bundle',
+  'bundle.stored.what': 'Stored bundle',
+  'bundle.stored.name': 'Name',
+  'bundle.stored.checksum': 'Apply checksum',
+  'bundle.stored.transactional': 'Transaction',
+  'bundle.stored.transactional.yes': 'Runs in one transaction',
+  'bundle.stored.transactional.no': 'Runs outside a transaction, alone in its plan',
+  'bundle.stored.dependsOn': 'Depends on',
+  'bundle.stored.dependsOn.none': 'Nothing',
+  'bundle.revisions.caption': 'Revisions of this bundle, newest first',
+  'bundle.revisions.revision': 'Revision',
+  'bundle.revisions.ingested': 'Stored',
+  'bundle.revisions.digests': 'Digests',
+  'bundle.revisions.bundleDigest': 'Bundle',
+  'bundle.revisions.verifyDigest': 'Verify',
+  'bundle.revisions.rollbackDigest': 'Rollback',
+  'bundle.revisions.none': 'None',
+  'bundle.revisions.show': 'Show revision',
+  'bundle.revisions.showLabel': 'Show revision {revision}',
+  'bundle.revisions.shown': 'Shown',
+  'bundle.superseded.title': 'Superseded checksums',
+  'bundle.superseded.body': 'Earlier apply checksums of this id that were never applied.',
+  'bundle.files.title': 'Files',
+  'bundle.files.revision': 'Files of revision {revision}',
+  'bundle.files.waiting': 'Reading the stored bundle to find its revision.',
+  'bundle.files.noRevision':
+    'The files cannot be read: the stored bundle could not be read, so its revision is not known.',
+  'bundle.files.downNotKnown':
+    'The stored bundle could not be read, so whether this revision has a down.sql is not known.',
+  'bundle.down.note':
+    'Never runs automatically: down.sql runs only in a rollback plan that a person creates.',
+  'bundle.file.label': '{file} of {migration}',
+  'bundle.file.facts': '(revision {revision}, {bytes} bytes, {lines} lines)',
+  'bundle.file.marks':
+    'This file has characters that are not plain ASCII: {marks}. Invisible and direction characters are shown by their code point and never act.',
+  'bundle.file.caption': '{label}, numbered lines',
+  'bundle.file.line': 'Line',
+  'bundle.file.text': 'Text',
+  'bundle.file.collapsed': '{count} more lines not shown (lines {from} to {to}).',
+  'bundle.file.more': 'Show more lines',
+  'bundle.file.moreLabel': 'Show more lines of {label}',
+  'bundle.file.all': 'Show all {count} lines',
+  'bundle.file.allLabel': 'Show all lines of {label}',
+  'bundle.file.truncated':
+    'This page shows the first {shown} of {total} characters of this file. Review the whole file: exponetdb migration show {migration}',
+  'bundle.file.copy': 'Copy {file}',
+  'bundle.file.copyLabel': 'Copy {label}',
+  'bundle.file.copied': '{file} copied.',
+  'bundle.file.copyFailed': 'Could not copy. Select the text and copy it instead.',
+  'bundle.diff.title': 'Compare revisions',
+  'bundle.diff.first':
+    'Revision {revision} is the first revision of this bundle; there is no earlier one to compare.',
+  'bundle.diff.file': 'File',
+  'bundle.diff.between': 'Revision {from} on the left, revision {to} on the right.',
+  'bundle.diff.absent': '{file} is not in revision {revision}; that side is empty',
+  'bundle.diff.what': '{file} of both revisions',
+  'bundle.diff.label': '{file}: revision {from} against revision {to}',
+  'bundle.diff.side': 'Revision {revision}',
+  'bundle.target.title': 'On {target}',
+  'bundle.target.what': 'Migration on this target',
+  'bundle.target.state': 'State',
+  'bundle.target.state.applied': 'Applied',
+  'bundle.target.state.reverted': 'Reverted',
+  'bundle.target.state.pending': 'Pending (not applied)',
+  'bundle.target.state.partially_applied': 'Partly applied',
+  'bundle.target.state.unknown_to_target': 'Not known to this target',
+  'bundle.target.applied': 'Applied',
+  'bundle.target.notApplied': 'Not applied',
+  'bundle.target.links': 'Change',
+  'bundle.target.operation': 'View operation',
+  'bundle.target.plan': 'View plan',
+  'bundle.target.noLinks': 'No operation or plan recorded',
+  'bundle.target.fingerprints': 'Schema fingerprint',
+  'bundle.target.before': 'Before',
+  'bundle.target.after': 'After',
+  'bundle.events.title': 'Events',
+  'bundle.events.none': 'The read succeeded: no event is recorded for this migration here.',
+  'bundle.events.statement': 'Statement {index}',
+  'bundle.event.nontx_started': 'Non-transactional run started',
+  'bundle.event.nontx_statement_done': 'Non-transactional statement done',
+  'bundle.event.nontx_failed': 'Non-transactional run failed',
+  'bundle.event.applied': 'Applied',
+  'bundle.event.reverted': 'Reverted',
+  'bundle.event.imported': 'Imported',
+  'bundle.event.baselined': 'Baselined',
+  'bundle.event.ledger_reconciled': 'Ledger reconciled',
+  'bundle.runs.title': 'Verification runs',
+  'bundle.runs.none':
+    'The read succeeded: no verification run is recorded for this migration here.',
+  'bundle.runs.parts': 'Structural {structural}, runtime {runtime}, engine {engine}',
+  'bundle.runs.failure': 'First failure',
+  // Compare environments (`/t/<product>/<project>/<environment>/compare`).
+  'compare.title': 'Compare environments',
+  'compare.description':
+    'The schema of this target against another environment of the project. Read only: a difference becomes a change only as an authored migration.',
+  'compare.pick.title': 'Compare with',
+  'compare.pick.description': 'Environments of this project you may see, other than {environment}.',
+  'compare.pick.none': 'The read succeeded: this project has no other environment you may see.',
+  'compare.environments.what': 'Environments',
+  'compare.migrations': 'Open the migrations of this target',
+  'compare.diff.title': 'Differences',
+  'compare.diff.what': 'Schema differences',
+  'compare.diff.pickFirst': 'Pick an environment to compare with.',
+  'compare.diff.description':
+    'From {left} to {right}: added means only {right} has the object, removed means only {left} has it.',
+  'compare.state.pick': 'Pick an environment above. Nothing is compared until you do.',
+  'compare.state.same':
+    'This is {environment} itself. Pick another environment: a schema compared with itself shows nothing.',
+  'compare.state.listLoading': 'Reading the environments of this project.',
+  'compare.state.listFailed':
+    'Whether {environment} is an environment of this project cannot be checked: the environments could not be read. Nothing is compared.',
+  'compare.state.notListed':
+    '{environment} is not an environment of this project that you may see. Nothing is compared.',
+  'compare.state.notListedPartial':
+    '{environment} is not among the environments read so far (the list is partial). Nothing is compared.',
+  'compare.refusal.SCHEMA_FINGERPRINT_MISMATCH.title': 'The two schemas cannot be compared',
+  'compare.refusal.SCHEMA_FINGERPRINT_MISMATCH.body':
+    'Their fingerprints do not match what the comparison expects. This does not mean the schemas are the same.',
+  'compare.refusal.SAMPLE_STALE.title': 'A schema sample is too old to compare',
+  'compare.refusal.SAMPLE_STALE.body':
+    'The server compares recent samples only. Try again once the target has been sampled; this does not mean there are no differences.',
+  'compare.refusal.TARGET_IDENTITY_MISMATCH.title':
+    'A target is not the database it was registered as',
+  'compare.refusal.TARGET_IDENTITY_MISMATCH.body':
+    'Its identity marker differs, so nothing is compared. This does not mean there are no differences.',
+  'compare.refusal.CLUSTER_IDENTITY_MISMATCH.title': 'A cluster is not the one that was registered',
+  'compare.refusal.CLUSTER_IDENTITY_MISMATCH.body':
+    'Its system identifier differs, so nothing is compared. This does not mean there are no differences.',
+  'compare.notComparable.title': 'These schemas cannot be compared',
+  'compare.notComparable.body':
+    'Their fingerprints use different canonicalizers or PostgreSQL major versions. This does not mean the schemas are the same.',
+  'compare.truncated':
+    'The server lists {listed} of {total} differences; the totals above count all of them',
+  'compare.fingerprint.left': 'This target',
+  'compare.fingerprint.right': '{environment}',
+  'compare.totals':
+    '{added} added, {removed} removed, {changed} changed, {matched} the same; {security} security-relevant.',
+  'compare.direction':
+    'Added: only on {environment}. Removed: only on this target. Changed: on both, with the attributes that differ.',
 } as const satisfies Readonly<Record<string, string>>

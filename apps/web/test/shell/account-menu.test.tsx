@@ -25,13 +25,20 @@ function signedIn(over: Record<string, unknown> = {}): FakeServer {
     .answer('GET', '/api/v1/me/grants', 200, { items: [] })
 }
 
+/**
+ * A page that is in no rail section, so no section menu stands beside it: in jsdom (no layout) the
+ * resizable group of a section menu takes every pointer-down as the start of a drag, and a menu that
+ * opens on pointer-down never opens.
+ */
+const PAGE = '/account'
+
 async function trigger(): Promise<HTMLElement> {
   return screen.findByRole('button', { name: 'Account' })
 }
 
 describe('the account menu of the header', () => {
   it('is an avatar button named "Account", with initials from the display name', async () => {
-    mountApp('/', signedIn({ displayName: 'Grace Hopper' }))
+    mountApp(PAGE, signedIn({ displayName: 'Grace Hopper' }))
     const button = await trigger()
     expect(button.textContent).toBe('GH')
     expect(button.querySelector('img')).toBeNull()
@@ -49,7 +56,7 @@ describe('the account menu of the header', () => {
   })
 
   it('shows the uploaded picture from the same-origin address only, with an empty alt', async () => {
-    mountApp('/', signedIn({ avatar: { url: AVATAR_URL, sha256: SHA, width: 64, height: 64 } }))
+    mountApp(PAGE, signedIn({ avatar: { url: AVATAR_URL, sha256: SHA, width: 64, height: 64 } }))
     const button = await trigger()
     const img = button.querySelector('img')
     expect(img?.getAttribute('src')).toBe(AVATAR_URL)
@@ -69,7 +76,7 @@ describe('the account menu of the header', () => {
   })
 
   it('opens with the name, the e-mail, the account links, the theme switch and sign out', async () => {
-    mountApp('/', signedIn({ displayName: 'Grace Hopper' }))
+    mountApp(PAGE, signedIn({ displayName: 'Grace Hopper' }))
     const user = userEvent.setup()
     await user.click(await trigger())
     const menu = await screen.findByRole('menu')
@@ -93,7 +100,7 @@ describe('the account menu of the header', () => {
   })
 
   it('switches the theme in the menu', async () => {
-    mountApp('/', signedIn())
+    mountApp(PAGE, signedIn())
     const user = userEvent.setup()
     await user.click(await trigger())
     await user.click(await screen.findByRole('menuitemradio', { name: en['shell.theme.dark'] }))
@@ -109,7 +116,7 @@ describe('the account menu of the header', () => {
   })
 
   it('works with the keyboard: open, move, go to a page, close and return focus', async () => {
-    const { router } = mountApp('/', signedIn())
+    const { router } = mountApp(PAGE, signedIn())
     const user = userEvent.setup()
     const button = await trigger()
     button.focus()
@@ -134,7 +141,7 @@ describe('the account menu of the header', () => {
   })
 
   it('goes to the pages of the account area', async () => {
-    const { router } = mountApp('/', signedIn())
+    const { router } = mountApp(PAGE, signedIn())
     const user = userEvent.setup()
     await user.click(await trigger())
     await user.click(await screen.findByRole('menuitem', { name: en['accountMenu.activity'] }))
@@ -142,7 +149,7 @@ describe('the account menu of the header', () => {
   })
 
   it('shows a hostile display name with visible code points and nothing as markup', async () => {
-    mountApp('/', signedIn({ displayName: 'Eve ‮​<img src=x onerror=alert(1)>' }))
+    mountApp(PAGE, signedIn({ displayName: 'Eve ‮​<img src=x onerror=alert(1)>' }))
     const user = userEvent.setup()
     await user.click(await trigger())
     const menu = await screen.findByRole('menu')
@@ -155,7 +162,7 @@ describe('the account menu of the header', () => {
 
   it('signs out through the ceremony', async () => {
     const fake = signedIn().answer('POST', '/auth/logout', 200, {})
-    mountApp('/', fake)
+    mountApp(PAGE, fake)
     vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const user = userEvent.setup()
     await user.click(await trigger())
@@ -168,7 +175,7 @@ describe('the account menu of the header', () => {
     window.localStorage.setItem('exdb.sql.tabs.tgt_2', '{"tabs":[],"active":0}')
     window.localStorage.setItem('exdb.keep', 'yes')
     const fake = signedIn().answer('POST', '/auth/logout', 200, {})
-    mountApp('/', fake)
+    mountApp(PAGE, fake)
     vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const user = userEvent.setup()
     await user.click(await trigger())
@@ -181,13 +188,37 @@ describe('the account menu of the header', () => {
     )
     expect(window.localStorage.getItem('exdb.keep')).toBe('yes')
   })
+
+  it('removes the recent databases kept in this browser on sign-out, of anyone, and only them', async () => {
+    window.localStorage.setItem(`exdb.recent.targets.${ids.identity}`, '["shop/platform/staging"]')
+    window.localStorage.setItem('exdb.recent.targets.idn_other', '["billing/api/live"]')
+    window.localStorage.setItem('exdb.sidebar.mode', 'open')
+    const fake = signedIn().answer('POST', '/auth/logout', 200, {})
+    mountApp(PAGE, fake)
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const user = userEvent.setup()
+    await user.click(await trigger())
+    await user.click(await screen.findByRole('menuitem', { name: en['shell.signOut'] }))
+    await waitFor(() => expect(fake.to('POST', '/auth/logout')).toHaveLength(1))
+    await waitFor(() =>
+      expect(
+        Object.keys(window.localStorage).filter((k) => k.startsWith('exdb.recent.targets.')),
+      ).toEqual([]),
+    )
+    expect(window.localStorage.getItem('exdb.sidebar.mode')).toBe('open')
+  })
 })
 
 describe('the tabs of the account area', () => {
-  it('lists the tabs with the current one marked', async () => {
+  it('lists the pages in the account column with the current one marked, after the way back', async () => {
     mountApp('/account/preferences', signedIn())
     const nav = await screen.findByRole('navigation', { name: en['accountArea.nav'] })
-    expect(within(nav).getAllByRole('link')).toHaveLength(5)
+    expect(within(nav).getAllByRole('link')).toHaveLength(6)
+    expect(within(nav).getAllByRole('link')[0]).toHaveAccessibleName(en['shell.account.back'])
+    expect(within(nav).getByRole('link', { name: en['shell.account.back'] })).toHaveAttribute(
+      'href',
+      '/',
+    )
     expect(within(nav).getByRole('link', { name: en['accountMenu.preferences'] })).toHaveAttribute(
       'aria-current',
       'page',

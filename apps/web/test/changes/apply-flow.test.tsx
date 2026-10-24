@@ -50,10 +50,15 @@ describe('applying a plan from its review page', () => {
     await user.dblClick(action)
     await waitFor(() => expect(world.posts(`/plans/${PLAN}/apply`)).toHaveLength(1))
     expect(world.posts(`/plans/${PLAN}/apply`)[0]?.body).toEqual({})
-    // The page shows the operation's apply and verification apart and links its page.
+    // The checklist shows the operation's apply and verification apart and links its page.
     const outcome = await waitFor(() => {
-      const element = document.querySelector(`[data-operation-id="${OP}"]`)
-      if (!(element instanceof HTMLElement)) throw new Error('no operation yet')
+      const element = document.querySelector('[data-plan-checklist]')
+      if (
+        !(element instanceof HTMLElement) ||
+        element.querySelector('[data-check="apply"]') === null
+      ) {
+        throw new Error('no operation yet')
+      }
       return element
     })
     expect(outcome.querySelector('[data-indicator="apply"]')).toHaveAttribute(
@@ -93,8 +98,11 @@ describe('applying a plan from its review page', () => {
     world.operations.set(OP, operationFor(OP, { state: 'running' }))
     const { router } = mountChanges(`/approvals#operation=${OP}`, world)
     await waitFor(() => expect(router.state.location.pathname).toBe(`/changes/plans/${PLAN}`))
-    await waitFor(() =>
-      expect(screen.getByRole('heading', { level: 1, name: /Plan review/ })).toBeInTheDocument(),
-    )
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Apply 1 migration to shop/platform/production',
+      }),
+    ).toBeInTheDocument()
   })
 })

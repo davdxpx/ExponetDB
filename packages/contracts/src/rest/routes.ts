@@ -4,9 +4,11 @@ import {
   BreakGlassGrantIdSchema,
   ClusterIdSchema,
   CursorSchema,
+  DatabaseIdSchema,
   EndpointIdSchema,
   EnrollmentTokenIdSchema,
   EnvironmentIdSchema,
+  ExecutionRoleExceptionIdSchema,
   FindingIdSchema,
   GrantIdSchema,
   IdentityIdSchema,
@@ -33,6 +35,7 @@ import {
   TimestampSchema,
 } from '../common.ts'
 import type { ErrorCode } from '../errors.ts'
+import { DependencyRefSchema, ExecutionRoleAliasSchema } from '../manifest/migration.ts'
 import { CLIENT_STATES } from '../oauth/protocol.ts'
 import {
   ApiKeyCreatedSchema,
@@ -93,6 +96,7 @@ import {
   ImportAnalysisRequestSchema,
   ImportDecisionRequestSchema,
   ImportReportSchema,
+  LEGACY_BODY_LIMIT_BYTES,
   LedgerReconcileRequestSchema,
   MIGRATION_BODY_LIMIT_BYTES,
   MigrationDetailSchema,
@@ -100,6 +104,8 @@ import {
   MigrationResumeRequestSchema,
   MigrationRollbackRequestSchema,
   MigrationVerifyRequestSchema,
+  ScratchCheckRequestSchema,
+  ScratchCheckSchema,
   StepUpConfirmRequestSchema,
   StepUpRequestSchema,
   StepUpSchema,
@@ -117,6 +123,7 @@ import {
 } from './nodes.ts'
 import {
   AccessRoleSchema,
+  ClusterBootstrapSqlQuerySchema,
   ClusterBootstrapSqlSchema,
   ClusterConfirmRequestSchema,
   ClusterDeclaredTierRequestSchema,
@@ -124,6 +131,7 @@ import {
   CredentialSubmissionSchema,
   CredentialViewSchema,
   DatabaseRegisterRequestSchema,
+  DatabaseRetireRequestSchema,
   DatabaseViewSchema,
   DriftAcceptRequestSchema,
   EndpointRequestSchema,
@@ -131,9 +139,13 @@ import {
   EndpointViewSchema,
   EnvironmentChangeRequestSchema,
   EnvironmentCreateRequestSchema,
+  ExecutionRoleBindingsRequestSchema,
+  ExecutionRoleExceptionDeclareRequestSchema,
+  ExecutionRoleExceptionRevokeRequestSchema,
   ProductCreateRequestSchema,
   ProjectChangeRequestSchema,
   ProjectCreateRequestSchema,
+  ProjectExecutionRolesSchema,
   ServerCreateRequestSchema,
   TargetRegisterRequestSchema,
   TargetStateChangeRequestSchema,
@@ -148,6 +160,7 @@ import {
   BackupCatalogSchema,
   ClusterSchema,
   DriftCheckSchema,
+  DriftCheckSummarySchema,
   EnrollmentTokenRevealSchema,
   EnvironmentSchema,
   ExplainRequestSchema,
@@ -191,6 +204,8 @@ import {
   SchemaDiffSchema,
   SchemaFingerprintDocumentSchema,
   SchemaObjectKindSchema,
+  SchemaObjectListQuerySchema,
+  SchemaObjectListSchema,
   SchemaObjectRefSchema,
   SchemaObjectSchema,
   SchemaOverviewSchema,
@@ -201,7 +216,7 @@ import {
   TableStatsSchema,
   TargetHealthHistoryQuerySchema,
   TargetHealthHistorySchema,
-  TargetHealthSchema,
+  TargetHealthViewSchema,
   TargetSchema,
   TargetStateSchema,
   TargetSummarySchema,
@@ -435,7 +450,7 @@ export const ROUTES = [
       'Health with named conditions, probes, node and backup state, each with source and time.',
     action: 'target.health.get',
     pathParams: targetParams,
-    response: { status: 200, schema: TargetHealthSchema },
+    response: { status: 200, schema: TargetHealthViewSchema },
     errors: TARGET_ERRORS,
   },
   {
@@ -507,6 +522,18 @@ export const ROUTES = [
     errors: LIVE_TARGET_ERRORS,
   },
   {
+    operationId: 'listSchemaObjects',
+    method: 'get',
+    path: '/targets/{target}/schema/objects',
+    summary:
+      'Objects of the current schema snapshot without a search term (Wave 8 completion): filter by kind, schema, parent relation or name; ordered by schema, kind, name and signature; total, fingerprint, source and time.',
+    action: 'schema.search',
+    pathParams: targetParams,
+    query: SchemaObjectListQuerySchema,
+    response: { status: 200, schema: SchemaObjectListSchema },
+    errors: [...LIVE_TARGET_ERRORS, 'SCHEMA_FINGERPRINT_MISMATCH'],
+  },
+  {
     operationId: 'getSchemaFingerprint',
     method: 'get',
     path: '/targets/{target}/schema/fingerprint',
@@ -537,6 +564,18 @@ export const ROUTES = [
     body: z.strictObject({}),
     response: { status: 201, schema: DriftCheckSchema },
     errors: [...LIVE_TARGET_ERRORS, 'LEDGER_NOT_INITIALIZED'],
+  },
+  {
+    operationId: 'listDriftChecks',
+    method: 'get',
+    path: '/targets/{target}/drift-checks',
+    summary:
+      'Past drift checks of a target, scheduled and requested, newest first (Wave 8 completion); a read of the Control Store, no database is touched.',
+    action: 'target.finding.list',
+    pathParams: targetParams,
+    query: z.strictObject(page(200, 50)),
+    response: { status: 200, schema: pageSchema(DriftCheckSummarySchema) },
+    errors: TARGET_ERRORS,
   },
   {
     operationId: 'runQuery',
@@ -983,6 +1022,10 @@ export const ROUTES = [
         description: 'Events made through this client (runbook RB-11: list what a credential did).',
       }),
       grant: GrantIdSchema.optional().meta({ description: 'Events made through this grant.' }),
+      identity: IdentityIdSchema.optional().meta({
+        description:
+          'Wave 8 completion, additive (REST only; `audit_search` has no such input): only events whose actor is this identity. Combined with `actor=self` it keeps the caller’s own events only when this is the caller.',
+      }),
       ...page(500, 100),
     }),
     response: { status: 200, schema: pageSchema(AuditEventSchema) },
@@ -1688,6 +1731,57 @@ export const REGISTRY_ROUTES = [
     response: planned,
     errors: PLAN_ERRORS,
   },
+  // ----- Wave 9 Part A: execution roles for adopted schemas (ADR-0034) -----
+  {
+    operationId: 'getProjectExecutionRoles',
+    method: 'get',
+    path: '/projects/{projectId}/execution-roles',
+    summary:
+      "A project's execution roles: the default alias map, each environment's bindings and effective map, and the declared BYPASSRLS exceptions (ADR-0034).",
+    action: 'project.execution_roles.get',
+    pathParams: z.strictObject({ projectId: ProjectIdSchema }),
+    response: { status: 200, schema: ProjectExecutionRolesSchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'planExecutionRoleBindings',
+    method: 'post',
+    path: '/projects/{projectId}/environments/{environmentId}/execution-role-plans',
+    summary:
+      'Plan the execution roles of one environment of the project (aliases bound to other roles than the project map; an empty map removes the bindings).',
+    action: 'registry.execution_role_binding.set.plan',
+    pathParams: z.strictObject({ projectId: ProjectIdSchema, environmentId: EnvironmentIdSchema }),
+    body: ExecutionRoleBindingsRequestSchema,
+    response: planned,
+    errors: PLAN_ERRORS,
+  },
+  {
+    operationId: 'planExecutionRoleException',
+    method: 'post',
+    path: '/projects/{projectId}/environments/{environmentId}/execution-role-exceptions',
+    summary:
+      'Plan the declaration of a BYPASSRLS execution-role exception for one role in one environment of the project (ADR-0034, OD-51); human only, production with an approval.',
+    action: 'registry.execution_role_exception.declare.plan',
+    pathParams: z.strictObject({ projectId: ProjectIdSchema, environmentId: EnvironmentIdSchema }),
+    body: ExecutionRoleExceptionDeclareRequestSchema,
+    response: planned,
+    errors: PLAN_ERRORS,
+  },
+  {
+    operationId: 'planExecutionRoleExceptionRevocation',
+    method: 'post',
+    path: '/projects/{projectId}/execution-role-exceptions/{exceptionId}/revoke-plans',
+    summary:
+      'Plan the revocation of an execution-role exception; plans that bound it become stale (ADR-0034).',
+    action: 'registry.execution_role_exception.revoke.plan',
+    pathParams: z.strictObject({
+      projectId: ProjectIdSchema,
+      exceptionId: ExecutionRoleExceptionIdSchema,
+    }),
+    body: ExecutionRoleExceptionRevokeRequestSchema,
+    response: planned,
+    errors: PLAN_ERRORS,
+  },
   {
     operationId: 'planServer',
     method: 'post',
@@ -1745,11 +1839,13 @@ export const REGISTRY_ROUTES = [
     operationId: 'getClusterBootstrapSql',
     method: 'get',
     path: '/clusters/{clusterId}/bootstrap-sql',
-    summary: 'The role bootstrap SQL of an external cluster for a person to run (no password).',
+    summary:
+      'The role bootstrap SQL of an external cluster for a person to run with psql (no password; idempotent): registered and requested databases, the execution roles of the projects placed there or named, the legacy ledger read.',
     action: 'cluster.bootstrap_sql.get',
     pathParams: clusterParams,
+    query: ClusterBootstrapSqlQuerySchema,
     response: { status: 200, schema: ClusterBootstrapSqlSchema },
-    errors: ['NOT_FOUND'],
+    errors: ['NOT_FOUND', 'VALIDATION_FAILED'],
   },
   {
     operationId: 'listClusterEndpoints',
@@ -1815,6 +1911,18 @@ export const REGISTRY_ROUTES = [
       'TARGET_TLS_FAILED',
       'TARGET_CREDENTIAL_INVALID',
     ],
+  },
+  {
+    operationId: 'planDatabaseRetirement',
+    method: 'post',
+    path: '/clusters/{clusterId}/databases/{databaseId}/retire',
+    summary:
+      'Plan the retirement of a registered database that is no current placement (Wave 9): the record ends, its name can be registered again; nothing changes on the cluster.',
+    action: 'registry.database.retire.plan',
+    pathParams: z.strictObject({ clusterId: ClusterIdSchema, databaseId: DatabaseIdSchema }),
+    body: DatabaseRetireRequestSchema,
+    response: planned,
+    errors: PLAN_ERRORS,
   },
   {
     operationId: 'listClusterCredentials',
@@ -2083,6 +2191,11 @@ export const NODE_ROUTES = [
 ] as const satisfies readonly RouteContract[]
 
 const migrationParams = z.strictObject({ target: TargetRefSchema, migrationId: MigrationIdSchema })
+/** A migration or the baseline of a legacy import (`baseline:<slug>`; Part A follow-up 3). */
+const migrationRefParams = z.strictObject({
+  target: TargetRefSchema,
+  migrationId: DependencyRefSchema,
+})
 const projectParams = z.strictObject({ projectId: ProjectIdSchema })
 const MIGRATION_PLAN_ERRORS: readonly ErrorCode[] = [
   ...LIVE_TARGET_ERRORS,
@@ -2156,12 +2269,43 @@ export const MIGRATION_ROUTES = [
     errors: ['NOT_FOUND'],
   },
   {
+    operationId: 'checkScratchTarget',
+    method: 'get',
+    path: '/targets/{target}/migrations/scratch-check',
+    summary:
+      'Check, read only, whether a scratch target can take a legacy import replay of this target: usable, its identity, empty, the same extensions, the objects outside the managed scope the schema depends on, the execution role (Wave 9).',
+    action: 'migration.import.scratch_check',
+    pathParams: z.strictObject({ target: TargetRefSchema }),
+    query: z.strictObject({
+      scratchTarget: TargetRefSchema,
+      role: ExecutionRoleAliasSchema.optional().meta({
+        description:
+          'The execution role alias the replay runs as (the analysis hint role; default owner).',
+      }),
+    }),
+    response: { status: 200, schema: ScratchCheckSchema },
+    errors: ['VALIDATION_FAILED', ...TARGET_ERRORS],
+  },
+  {
+    operationId: 'checkScratchTargetForFiles',
+    method: 'post',
+    path: '/targets/{target}/migrations/scratch-check',
+    summary:
+      'The scratch preflight with the legacy files (read only): the same checks, and what the files reference in schemas outside the managed scope that the scratch target lacks (legacy_references).',
+    action: 'migration.import.scratch_check',
+    pathParams: z.strictObject({ target: TargetRefSchema }),
+    body: ScratchCheckRequestSchema,
+    response: { status: 200, schema: ScratchCheckSchema },
+    errors: ['VALIDATION_FAILED', 'CSRF_FAILED', ...TARGET_ERRORS],
+    maxBodyBytes: LEGACY_BODY_LIMIT_BYTES,
+  },
+  {
     operationId: 'getTargetMigration',
     method: 'get',
     path: '/targets/{target}/migrations/{migrationId}',
     summary: 'One migration on a target: ledger row, events and verification runs (live read).',
     action: 'migration.get',
-    pathParams: migrationParams,
+    pathParams: migrationRefParams,
     response: { status: 200, schema: MigrationDetailSchema },
     errors: [...LIVE_TARGET_ERRORS, 'LEDGER_NOT_INITIALIZED'],
   },
@@ -2183,9 +2327,9 @@ export const MIGRATION_ROUTES = [
     method: 'post',
     path: '/targets/{target}/migrations/{migrationId}/verifications',
     summary:
-      'Run the verification of an applied migration again (migration.verify): structural, runtime and engine layers; never runs up.sql.',
+      'Run the verification of an applied migration again (migration.verify): structural, runtime and engine layers; never runs up.sql. With a baseline ref (`baseline:<slug>`), the verification of the legacy import it recorded, with the review decisions that excuse failing expectations (Part A follow-up 3); when it passes, its schema becomes the drift reference.',
     action: 'migration.verify',
-    pathParams: migrationParams,
+    pathParams: migrationRefParams,
     body: MigrationVerifyRequestSchema,
     response: { status: 202, schema: OperationSchema },
     errors: [
@@ -2281,7 +2425,7 @@ export const MIGRATION_ROUTES = [
     body: ImportAnalysisRequestSchema,
     response: { status: 201, schema: PlanViewSchema },
     errors: [...LIVE_TARGET_ERRORS, 'CSRF_FAILED', 'IDEMPOTENCY_KEY_REUSED', 'PRECONDITION_FAILED'],
-    maxBodyBytes: MIGRATION_BODY_LIMIT_BYTES,
+    maxBodyBytes: LEGACY_BODY_LIMIT_BYTES,
   },
   {
     operationId: 'getImportReport',

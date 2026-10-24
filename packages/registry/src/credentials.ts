@@ -146,7 +146,12 @@ export async function submitCredential(
 
 // ----- verification (worker) -----
 
-/** The documented least privilege of each role (credentials-and-roles.md §2). */
+/**
+ * The documented least privilege of each role (credentials-and-roles.md §2).
+ * `pg_database_owner` is left out of the reach as in the execution-role
+ * check (ADR-0034 §3.1): the migrator, a member of an execution role that
+ * owns the database verified here, reaches it, and it leads nowhere further.
+ */
 const ROLE_FACTS = sql`SELECT r.rolname, r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolreplication,
        r.rolbypassrls, r.rolcanlogin,
        EXISTS (SELECT 1 FROM pg_catalog.pg_roles s
@@ -156,7 +161,8 @@ const ROLE_FACTS = sql`SELECT r.rolname, r.rolsuper, r.rolcreatedb, r.rolcreater
           FROM pg_catalog.pg_auth_members a JOIN pg_catalog.pg_roles m ON m.oid = a.roleid
          WHERE a.member = r.oid) AS memberships,
        (SELECT pg_catalog.json_agg(x.rolname ORDER BY x.rolname) FROM pg_catalog.pg_roles x
-         WHERE x.oid <> r.oid AND pg_catalog.pg_has_role(r.oid, x.oid, 'MEMBER')) AS reaches
+         WHERE x.oid <> r.oid AND x.oid <> 'pg_database_owner'::pg_catalog.regrole
+           AND pg_catalog.pg_has_role(r.oid, x.oid, 'MEMBER')) AS reaches
   FROM pg_catalog.pg_roles r WHERE r.rolname = session_user`
 
 /**

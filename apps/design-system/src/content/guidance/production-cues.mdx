@@ -32,8 +32,12 @@ nothing else.
   The app fills it from the target's tier. The heading text stays the page name.
 - **A frame around the page.** A production target's pages sit inside a frame in the
   `production` token. A non-production page has no frame.
-- **The plan review page.** The frame and the chip, with the tier in the facts the
-  page computed.
+- **The plan review page and the operation page.** Production is said **once**: the
+  chip beside the title, the frame around the review and one sentence at its head
+  ("This plan changes production.", or "This plan has no target tier; it is treated
+  as production." for a server or node plan). No block repeats a chip beside its
+  heading (**[DECIDED]** by the owner on 2026-10-21: a chip on every block made the
+  page a wall of equally loud blocks).
 - **Confirmation dialogs.** A dialog with a tier is framed with the token and starts
   its description with "Production. This changes a production target.", so a screen
   reader announces it even when focus starts in a field.

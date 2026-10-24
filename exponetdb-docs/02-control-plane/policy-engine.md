@@ -147,6 +147,9 @@ grant could override.
 | `migration.verify-consumer-code` | all tiers; `migration.apply` and `migration.verify` | require approval | `verify.sql` contains declared checks that call a consumer function or read a consumer view ([`../04-migrations/verification.md` §4.2](../04-migrations/verification.md#42-admission-plan-time)); the owner may relax it for nonprod |
 | `migration.rollback-production` | prod tier, `migration.rollback` | require approval + reauth (300 s) | an explicit rollback plan runs `down.sql` on production only after a human approval; `lossy`/`unsafe` rollbacks are `critical` and also meet `migration.destructive-backup` ([`../04-migrations/failure-and-recovery.md` §3](../04-migrations/failure-and-recovery.md#3-downsql)) |
 | `migration.baseline-production` | prod tier, `migration.baseline` | require approval + reauth (300 s) | recording reviewed legacy history as applied on production ([`../04-migrations/legacy-import.md` §2.2](../04-migrations/legacy-import.md#22-wave-6-implementation)) |
+| `migration.import-execution-role` | `migration.import.replay` (Wave 9 Part A) | deny, not overridable | the replay's execution role, read on the scratch target for the migrator at planning, is usable exactly as for an apply (a declared exception, ADR-0034, counts as usable); the replay checks it again under the scratch target's lock ([`../04-migrations/legacy-import.md` §2.2](../04-migrations/legacy-import.md#22-wave-6-implementation)) |
+| `migration.execution-role-exception` | the SQL kinds and `migration.import.replay` (Wave 9 Part A) | warn | a plan whose execution role carries `BYPASSRLS` under a declared exception ([ADR-0034](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md) §3) shows it in every plan (`facts.executionRoleExceptions`, or the replay's role check `declared_exception`); it never blocks by itself |
+| `migration.execution-role-parity` | prod tier, every migration kind (Wave 9 Part A) | warn | the evidence environment's execution roles have the attributes and the exception status of production's (`facts.executionRoleParity` `match`); `mismatch` or `unknown` is a warning (ADR-0034 §4) |
 
 **[DECIDED]** Wave 6 scope of the rules: `migration.lint-errors`,
 `migration.execution-role`, `migration.destructive-backup`,
@@ -236,6 +239,7 @@ is not in Wave 5. The other node rules of the table above are
 |---|---|---|
 | `target.register-prod-approval` | require approval + reauth | registering a prod-tier target (identity stamp and ledger initialization) |
 | `drift.accept-prod` | require approval + reauth | accepting drift on a prod-tier target (`drift.accept`); security-relevant drift classes also require a reason |
+| `registry.execution-role-exception-production` | require approval + reauth (300 s) | declaring or revoking an execution-role exception for a prod-tier environment (`registry.execution_role_exception.declare`, `.revoke`; Wave 9, ADR-0034 §2); `nonprod` is not applicable, an unknown tier requires the same |
 
 **[DECIDED]** (Wave 8, `packages/policy/src/catalog/registry.ts`)
 `drift.accept-prod` as implemented: severity `require`, not overridable,

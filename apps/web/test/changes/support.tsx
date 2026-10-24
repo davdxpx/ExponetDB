@@ -16,10 +16,13 @@ export {
   hostileItem,
   hostilePlan,
   IDENTITY,
+  nodeEnrollPlan,
   OP,
   operationFor,
   PLAN,
+  SERVER,
   SHY,
+  serverRecord,
   TAG,
   TARGET,
   World,
@@ -47,7 +50,11 @@ export class ChangesWorld extends World {
   readonly held = new Set<string>()
   cancelAnswer: (operationId: string) => OperationRead = (operationId) =>
     operationFor(operationId, { state: 'canceled' })
+  /** The plan `POST /targets/{t}/migrations/plans` answers with (the plan page opens). */
+  migrationPlanAnswer: (target: string) => unknown = () => ({ id: PLAN_ID })
 }
+
+const PLAN_ID = 'pln_01M4S9000000000000000000AA'
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -88,6 +95,10 @@ function changesAnswer(world: ChangesWorld, sent: Sent): Response | Promise<Resp
     return stream === undefined
       ? json(404, { code: 'PROJECT_NOT_FOUND', message: 'No such project.' })
       : json(200, stream)
+  }
+  m = /^\/api\/v1\/targets\/([^/]+)\/migrations\/plans$/.exec(p)
+  if (m !== null && method === 'POST' && !world.needsProof()) {
+    return json(201, world.migrationPlanAnswer(decodeURIComponent(m[1] ?? '')))
   }
   return answer(world, sent)
 }

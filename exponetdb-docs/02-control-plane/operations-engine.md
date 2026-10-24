@@ -349,7 +349,9 @@ serve records the request (it may not move a started operation, `EXO02`);
 the worker claims the operation, starts the request once and makes the
 `needs_attention` to `verifying` transition under its lease; the kind
 re-runs only its verification. Kinds: `migration.apply` and
-`migration.resume` ([`verification.md`](../04-migrations/verification.md#retrying-verification)).
+`migration.resume`, and since the follow-up 3 review (2026-10-24)
+`migration.baseline` and `migration.verify`, whose retry re-runs the whole
+read-only run ([`verification.md`](../04-migrations/verification.md#retrying-verification)).
 An operation whose outcome is unknown (reconciliation inconclusive) has no
 such path yet: `operation.force_release` remains planned.
 

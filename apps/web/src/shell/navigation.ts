@@ -1,12 +1,24 @@
 import {
+  Activity,
+  Cable,
   Database,
   DatabaseBackup,
+  FileDiff,
+  Gauge,
   GitCompareArrows,
+  House,
+  Layers,
   LayoutDashboard,
+  Lightbulb,
+  Lock,
   type LucideIcon,
   ScrollText,
   Server,
   Settings,
+  Settings2,
+  Siren,
+  SquareTerminal,
+  Table2,
   Users,
 } from '@exponetdb/icons'
 import type { CommandShortcutId } from '@exponetdb/ui-patterns'
@@ -62,7 +74,8 @@ export const NAV_SECTIONS: readonly NavSection[] = [
     id: 'overview',
     label: 'Overview',
     path: '/',
-    prefixes: [],
+    // The fleet overview is `/` alone; the findings across every database sit beside it.
+    prefixes: ['/findings'],
     icon: LayoutDashboard,
     shortcut: 'nav.overview',
     block: 1,
@@ -147,6 +160,10 @@ export interface NavItem {
 
 export const GLOBAL_NAV: readonly NavItem[] = [
   { id: 'overview', label: 'Overview', path: '/', section: 'overview', requires: [] },
+  // What needs a person across the fleet (`GET /findings`). It belongs to the overview, whose
+  // purpose is the same, and not to Databases: a section menu there would sit beside every
+  // target page.
+  { id: 'findings', label: 'Findings', path: '/findings', section: 'overview', requires: [] },
   { id: 'targets', label: 'Databases', path: '/targets', section: 'targets', requires: [] },
   { id: 'changes', label: 'All changes', path: '/changes', section: 'changes', requires: [] },
   {
@@ -261,6 +278,14 @@ export const GLOBAL_NAV: readonly NavItem[] = [
     section: 'settings',
     requires: [],
   },
+  // The page itself is built by another change; this is its entry in the section menu.
+  {
+    id: 'projects',
+    label: 'Projects',
+    path: '/settings/projects',
+    section: 'settings',
+    requires: [],
+  },
   {
     id: 'environments',
     label: 'Environments',
@@ -327,39 +352,112 @@ export interface TargetNavItem {
   readonly suffix: string
   readonly requires: readonly Requirement[]
   readonly wave?: '9'
+  /** The glyph of the section in the target's rail. */
+  readonly icon: LucideIcon
+  /**
+   * The rail's group, as Studio groups a project's rail: the target and its data (1), its
+   * changes (2), what runs on it (3), how it is kept (4); a separator divides the groups.
+   */
+  readonly group: 1 | 2 | 3 | 4
 }
 
-/** The target sections in the order of the owner brief (information-architecture.md §2.2). */
+/** The target sections, grouped as the target's rail shows them (information-architecture.md §2.2). */
 export const TARGET_NAV: readonly TargetNavItem[] = [
-  { id: 'overview', label: 'Overview', suffix: '', requires: [] },
+  { id: 'overview', label: 'Overview', suffix: '', requires: [], icon: House, group: 1 },
   {
     id: 'schema',
     label: 'Schema',
     suffix: '/schema',
     requires: ['target.reachable'],
+    icon: Table2,
+    group: 1,
   },
-  { id: 'migrations', label: 'Migrations', suffix: '/migrations', requires: [] },
-  { id: 'sql', label: 'SQL', suffix: '/sql', requires: ['target.reachable'] },
+  {
+    id: 'sql',
+    label: 'SQL',
+    suffix: '/sql',
+    requires: ['target.reachable'],
+    icon: SquareTerminal,
+    group: 1,
+  },
+  {
+    id: 'migrations',
+    label: 'Migrations',
+    suffix: '/migrations',
+    requires: [],
+    icon: Layers,
+    group: 2,
+  },
+  // The environments of the project side by side (`/t/<product>/<project>/<environment>/compare`).
+  {
+    id: 'compare',
+    label: 'Compare environments',
+    suffix: '/compare',
+    requires: [],
+    icon: GitCompareArrows,
+    group: 2,
+  },
+  { id: 'drift', label: 'Drift', suffix: '/drift', requires: [], icon: FileDiff, group: 2 },
+  {
+    id: 'connections',
+    label: 'Connections',
+    suffix: '/connections',
+    requires: ['target.reachable'],
+    icon: Cable,
+    group: 3,
+  },
+  {
+    id: 'locks',
+    label: 'Locks',
+    suffix: '/locks',
+    requires: ['target.reachable'],
+    icon: Lock,
+    group: 3,
+  },
   {
     id: 'performance',
     label: 'Performance',
     suffix: '/performance',
     requires: ['wave9'],
     wave: '9',
+    icon: Gauge,
+    group: 3,
   },
   {
-    id: 'connections',
-    label: 'Connections',
-    suffix: '/connections',
-    requires: ['target.reachable'],
+    id: 'activity',
+    label: 'Activity',
+    suffix: '/activity',
+    requires: [],
+    icon: Activity,
+    group: 3,
   },
-  { id: 'locks', label: 'Locks', suffix: '/locks', requires: ['target.reachable'] },
-  { id: 'backups', label: 'Backups', suffix: '/backups', requires: ['wave9'], wave: '9' },
-  { id: 'configuration', label: 'Configuration', suffix: '/configuration', requires: [] },
-  { id: 'findings', label: 'Findings', suffix: '/findings', requires: [] },
-  { id: 'drift', label: 'Drift', suffix: '/drift', requires: [] },
-  { id: 'advisors', label: 'Advisors', suffix: '/advisors', requires: ['wave9'], wave: '9' },
-  { id: 'activity', label: 'Activity', suffix: '/activity', requires: [] },
+  { id: 'findings', label: 'Findings', suffix: '/findings', requires: [], icon: Siren, group: 3 },
+  {
+    id: 'advisors',
+    label: 'Advisors',
+    suffix: '/advisors',
+    requires: ['wave9'],
+    wave: '9',
+    icon: Lightbulb,
+    group: 3,
+  },
+  {
+    id: 'backups',
+    label: 'Backups',
+    suffix: '/backups',
+    requires: ['wave9'],
+    wave: '9',
+    icon: DatabaseBackup,
+    group: 4,
+  },
+  {
+    id: 'configuration',
+    label: 'Configuration',
+    suffix: '/configuration',
+    requires: [],
+    icon: Settings2,
+    group: 4,
+  },
 ]
 
 export interface TargetPath {
@@ -373,16 +471,19 @@ export function targetHref(target: TargetPath, suffix = ''): string {
   return `/t/${encodeURIComponent(target.product)}/${encodeURIComponent(target.project)}/${encodeURIComponent(target.environment)}${suffix}`
 }
 
+/** `/t/<product>/<project>/<environment>`, then at most a section and one more segment. */
+const TARGET_PAGE = /^\/t\/([^/]+)\/([^/]+)\/[^/]+(\/[^/]+)?(\/[^/]+)?/
+
 /**
- * The same page on another environment of the same project ("switching
- * environment keeps the page", IA §3): only the section and a schema kind
- * survive the switch; anything deeper (an object name) is dropped, because
- * it may not exist there.
+ * What of a target page survives a switch to another target: the section
+ * (`/migrations`) and a schema kind (`/schema/tables`), nothing deeper (an
+ * object name may not exist there) and nothing for a path that names no
+ * section of the navigation. `undefined` when `pathname` is no target page.
  */
-export function switchEnvironment(pathname: string, environment: string): string | undefined {
-  const m = /^\/t\/([^/]+)\/([^/]+)\/[^/]+(\/[^/]+)?(\/[^/]+)?/.exec(pathname)
+function keptSuffix(pathname: string): string | undefined {
+  const m = TARGET_PAGE.exec(pathname)
   if (m === null) return undefined
-  const [, product = '', project = '', section, sub] = m
+  const [, , , section, sub] = m
   const sectionName = section?.slice(1)
   const keepSection = TARGET_NAV.some((s) => s.suffix !== '' && s.suffix === section)
   const keepSub =
@@ -390,5 +491,29 @@ export function switchEnvironment(pathname: string, environment: string): string
     sectionName === 'schema' &&
     sub !== undefined &&
     (SCHEMA_KINDS as readonly string[]).includes(sub.slice(1))
-  return `/t/${product}/${project}/${encodeURIComponent(environment)}${keepSection ? section : ''}${keepSub ? sub : ''}`
+  return `${keepSection ? section : ''}${keepSub ? sub : ''}`
+}
+
+/**
+ * The same page on another environment of the same project ("switching
+ * environment keeps the page", IA §3): only the section and a schema kind
+ * survive the switch; anything deeper (an object name) is dropped, because
+ * it may not exist there.
+ */
+export function switchEnvironment(pathname: string, environment: string): string | undefined {
+  const m = TARGET_PAGE.exec(pathname)
+  const kept = keptSuffix(pathname)
+  if (m === null || kept === undefined) return undefined
+  const [, product = '', project = ''] = m
+  return `/t/${product}/${project}/${encodeURIComponent(environment)}${kept}`
+}
+
+/**
+ * The same page on another database ("Switch database"): the section and a
+ * schema kind of the page the person is on carry over, as they do for an
+ * environment switch. From a page that is no target page, or whose section
+ * the navigation does not know, the way leads to the target's overview.
+ */
+export function switchTarget(pathname: string, target: TargetPath): string {
+  return targetHref(target, keptSuffix(pathname) ?? '')
 }

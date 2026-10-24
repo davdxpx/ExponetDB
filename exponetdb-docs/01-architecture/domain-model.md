@@ -37,7 +37,7 @@ credentials, and the cluster to its server and node for host capabilities
                                ▼
            database: reosa_production  on  cluster: postgres-main
                                               │            │
-                         endpoint: 10.8.1.2:5432 (private,  │
+                         endpoint: 10.8.1.1:5432 (private,  │
                          TLS verify-full)                   │ runs on
                                                             ▼
                                      server: reos-db-01 ── node: nod_… (exponetdb-node)
@@ -160,10 +160,33 @@ status database that only exists in production) must say so explicitly, see
 
 ### 3.2 Physical layer
 
-**Server** (`srv_`). A machine. Fields: `display_name`, `provider`
-(`hetzner_cloud`, `hetzner_robot`, `other`, `unknown`), `provider_ref`,
-`location`, `labels`, `observed_facts` (OS, kernel, CPU, memory, last reported by
-the node), `derived_tier`.
+**Server** (`srv_`). A machine. Fields: `display_name`, `provider` (where it
+runs; the list below), `provider_ref`, `location`, `labels`, `observed_facts`
+(OS, kernel, CPU, memory, last reported by the node), `derived_tier`.
+
+**[DECIDED]** (owner, 2026-10-21: "a long list of well-known providers, with
+the logo to the left of each") `provider` is one of a list that grows
+additively: a value never changes its meaning and is never removed. The
+Wave 4 values are `hetzner_cloud`, `hetzner_robot` (a Hetzner dedicated
+server, managed in Hetzner Robot), `other` and `unknown`. Added on
+2026-10-21; **the selection of these providers is the implementing
+session's choice** (well-known providers of servers that run PostgreSQL,
+weighted toward Europe), which the owner may change by adding values:
+`aws`, `google_cloud`, `azure`, `oracle_cloud`, `ibm_cloud`,
+`alibaba_cloud`, `digitalocean`, `akamai_linode` (Akamai Cloud, formerly
+Linode), `vultr`, `upcloud`, `scaleway`, `exoscale`, `stackit`,
+`ovhcloud`, `ionos`, `netcup`, `contabo` and `on_premises` (hardware of
+one's own). **[ASSUMPTION]** Equinix Metal is left out: Equinix announced
+the end of the service for 2026. The list is `SERVER_PROVIDERS` in `packages/contracts/src/rest/registry.ts` (the
+OpenAPI component `ServerProvider`); the Control Store's CHECK repeats it
+(bundle `01M5F4NHFTMQRYJA43P8GKP44M_server-providers`,
+[`../02-control-plane/control-database.md` §5](../02-control-plane/control-database.md#5-the-control-stores-own-migrations)),
+the registry and the CLI (`server create --provider`) read it from the
+contract, and the Web App's list is checked against the contract's type.
+The Web App shows each provider with its logo left of its name: a brand
+glyph copied from Simple Icons, or a neutral glyph for a provider without
+one (AWS, Microsoft Azure, Oracle, IBM and STACKIT have none in the pinned
+version; [ADR-0033](./adr/0033-provider-glyphs-from-simple-icons.md)).
 
 **Node** (`nod_`). An enrolled agent identity on exactly one server. Fields:
 `server_id`, `state` (`pending_enrollment`, `active`, `degraded`, `offline`,

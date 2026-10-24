@@ -99,4 +99,58 @@ describe('PageNav', () => {
       Element.prototype.getBoundingClientRect = original
     }
   })
+
+  describe('the badge', () => {
+    const withBadge = [
+      items[0],
+      items[1],
+      {
+        ...items[2],
+        badge: (
+          <>
+            <span aria-hidden="true">3</span>
+            <span className="sr-only">3 open findings</span>
+          </>
+        ),
+      },
+    ] as const
+
+    it('renders after the label, inside the link, and makes its words part of the link name', () => {
+      render(<PageNav label="Target sections" items={withBadge} />)
+
+      const link = screen.getByRole('link', { name: 'Locks 3 open findings' })
+      expect(link.querySelector('[data-slot="page-nav-badge"]')).toHaveTextContent(
+        '33 open findings',
+      )
+      expect(link.textContent?.startsWith('Locks')).toBe(true)
+      // Only the item that has a badge gets one.
+      expect(document.querySelectorAll('[data-slot="page-nav-badge"]')).toHaveLength(1)
+      expect(screen.getByRole('link', { name: 'Overview' })).toHaveAccessibleName('Overview')
+    })
+
+    it('renders nothing when there is no badge: the markup is the one of an item without the prop', () => {
+      const plain = render(<PageNav label="Target sections" items={items} />)
+      const before = plain.container.innerHTML
+      cleanup()
+      const absent = render(
+        <PageNav
+          label="Target sections"
+          items={items.map((item) => ({ ...item, badge: undefined }))}
+        />,
+      )
+      expect(absent.container.innerHTML).toBe(before)
+      cleanup()
+      const empty = render(
+        <PageNav label="Target sections" items={items.map((item) => ({ ...item, badge: null }))} />,
+      )
+      expect(empty.container.innerHTML).toBe(before)
+      expect(empty.container.querySelector('[data-slot="page-nav-badge"]')).toBeNull()
+    })
+
+    it('has no accessibility violations with a badge', async () => {
+      const { container } = render(<PageNav label="Target sections" items={withBadge} />)
+
+      expect(await axeViolations(container)).toEqual([])
+    })
+  })
 })

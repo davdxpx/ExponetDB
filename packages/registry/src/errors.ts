@@ -33,10 +33,14 @@ export type ConflictReason =
   | 'target_state'
   | 'endpoint_retired'
   | 'database_not_found'
+  | 'database_retired'
+  | 'database_in_use'
   | 'no_active_endpoint'
   | 'observer_credential_missing'
   | 'system_identifier_taken'
   | 'credential_missing'
+  | 'exception_active'
+  | 'exception_not_active'
 
 export function conflict(reason: ConflictReason): RegistryError {
   return new RegistryError('REGISTRY_CONFLICT', { reason })

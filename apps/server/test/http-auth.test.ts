@@ -41,7 +41,7 @@ describe('served routes', () => {
   })
 })
 
-describe('served routes (Wave 2 and 4 to 8)', () => {
+describe('served routes (Wave 2 and 4 to 9)', () => {
   it('serves every Wave 4 route of the contract and no route of a later wave', () => {
     const wave4 = ROUTE_LIST.filter(
       (r) => isActionId(r.action) && actionDefinition(r.action).wave === '4',
@@ -56,7 +56,7 @@ describe('served routes (Wave 2 and 4 to 8)', () => {
         .map(({ route }) => actionDefinition(route.action).wave),
     )
     for (const wave of servedWaves) {
-      expect(['2', '3A', '3B', '4', '5', '6', '7', '8'], `wave ${wave}`).toContain(wave)
+      expect(['2', '3A', '3B', '4', '5', '6', '7', '8', '9'], `wave ${wave}`).toContain(wave)
     }
   })
 
@@ -114,6 +114,25 @@ describe('served routes (Wave 2 and 4 to 8)', () => {
       'retryOperationVerification',
       'verifyMigration',
     ])
+  })
+
+  it('serves the Wave 9 routes built so far (Part A, ADR-0034, follow-up 2), each with a handler', () => {
+    const served = servedRoutes()
+      .filter(
+        ({ route }) => isActionId(route.action) && actionDefinition(route.action).wave === '9',
+      )
+      .map(({ route }) => route.operationId)
+      .sort()
+    expect(served).toEqual([
+      'checkScratchTarget',
+      'checkScratchTargetForFiles',
+      'getProjectExecutionRoles',
+      'planDatabaseRetirement',
+      'planExecutionRoleBindings',
+      'planExecutionRoleException',
+      'planExecutionRoleExceptionRevocation',
+    ])
+    for (const id of served) expect(HANDLERS[id], id).toBeDefined()
   })
 
   it('serves exactly the Wave 7 data-read routes (ADR-0028), each with a handler', () => {

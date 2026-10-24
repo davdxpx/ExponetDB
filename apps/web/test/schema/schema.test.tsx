@@ -229,11 +229,15 @@ describe('the schema page: fingerprint, drift and the way to a change', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows the production frame on a production target', async () => {
+  it('says Production on a production target', async () => {
     mountApp('/t/shop/platform/production/schema', readyWorld())
     await status()
-    const outlet = document.querySelector('[data-production-frame]')
-    expect(outlet).not.toBeNull()
+    await waitFor(() =>
+      expect(document.querySelector('[data-slot="target-layout"]')).toHaveAttribute(
+        'data-tier',
+        'production',
+      ),
+    )
     expect(screen.getAllByText('Production').length).toBeGreaterThan(0)
   })
 })
@@ -301,7 +305,7 @@ describe('the schema overview', () => {
     })
     mountApp(`${SCHEMA}/tables`, world)
     const user = await search('ord')
-    const table = await screen.findByRole('table', { name: 'Objects that match the filter' })
+    const table = await screen.findByRole('table', { name: 'Schema objects' })
     await user.click(within(table).getByRole('button', { name: 'orders' }))
     expect(await screen.findByText(/Showing an earlier read of object details/)).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Refresh' }).length).toBeGreaterThan(0)
@@ -316,62 +320,218 @@ describe('the schema overview', () => {
 })
 
 describe('the object lists', () => {
-  it('lists nothing and asks for nothing until a name filter is applied', async () => {
+  it('lists every object of the kind when the page opens, without a filter, 100 at a time', async () => {
     const world = readyWorld()
     mountApp(`${SCHEMA}/tables`, world)
-    expect(await screen.findByText(/Enter part of a name to list objects/)).toBeInTheDocument()
+    const table = await screen.findByRole('table', { name: 'Schema objects' })
+    expect(within(table).getByRole('button', { name: 'orders' })).toBeInTheDocument()
+    expect(within(table).getByRole('button', { name: 'users' })).toBeInTheDocument()
+    const request = world.requests.find((r) => r.includes('/schema/objects?')) ?? ''
+    expect(request).toContain('kinds=table')
+    expect(request).toContain('limit=100')
+    expect(request).not.toContain('q=')
+    expect(request).not.toContain('schema=')
     expect(world.requests.some((r) => r.includes('/schema/search'))).toBe(false)
-    expect(screen.queryByText(/found no object/)).toBeNull()
+    // The count, the source and the age of the read are on the page.
+    const count = document.querySelector('[data-slot="list-count"]') as HTMLElement
+    expect(count.textContent).toContain('Showing all 2 objects.')
+    expect(within(count).getByText('Live')).toBeInTheDocument()
+    expect(count.querySelector('time')).not.toBeNull()
   })
 
-  it('searches by the kinds of the page and lists the matches', async () => {
+  it('sends the name filter as q and lists the matches', async () => {
     const world = readyWorld()
     mountApp(`${SCHEMA}/tables`, world)
+    await screen.findByRole('table', { name: 'Schema objects' })
     await search('ord')
-    const table = await screen.findByRole('table', { name: 'Objects that match the filter' })
-    expect(within(table).getByRole('button', { name: 'orders' })).toBeInTheDocument()
-    expect(within(table).queryByText('users')).toBeNull()
-    const request = world.requests.find((r) => r.includes('/schema/search')) ?? ''
-    expect(request).toContain('q=ord')
+    await waitFor(() =>
+      expect(
+        world.requests.some((r) => r.includes('/schema/objects?') && r.includes('q=ord')),
+      ).toBe(true),
+    )
+    await waitFor(() => {
+      const table = screen.getByRole('table', { name: 'Schema objects' })
+      expect(within(table).queryByText('users')).toBeNull()
+      expect(within(table).getByRole('button', { name: 'orders' })).toBeInTheDocument()
+    })
+    const request = world.requests.filter((r) => r.includes('q=ord')).at(-1) ?? ''
     expect(request).toContain('kinds=table')
   })
 
-  it('says "found no object" only after a successful empty read', async () => {
-    mountApp(`${SCHEMA}/tables`, readyWorld())
+  it('says the list is empty only after a successful empty read, with or without a filter', async () => {
+    const world = readyWorld()
+    mountApp(`${SCHEMA}/tables`, world)
+    await screen.findByRole('table', { name: 'Schema objects' })
     await search('zzz')
     expect(
       await screen.findByText('The read succeeded and found no object with that name.'),
     ).toBeInTheDocument()
+    cleanup()
+    const none = readyWorld()
+    none.refs = []
+    mountApp(`${SCHEMA}/tables`, none)
+    expect(
+      await screen.findByText(
+        'The read succeeded and found no object of this kind in the schemas shown.',
+      ),
+    ).toBeInTheDocument()
   })
 
-  it('shows a failed search as failed, never as an empty list', async () => {
+  it('shows a failed list read as failed, never as an empty list', async () => {
     const world = readyWorld()
-    world.failures.set('/schema/search', {
+    world.failures.set('/schema/objects?', {
       status: 500,
       code: 'INTERNAL_ERROR',
-      message: 'Search is down.',
+      message: 'The list is down.',
     })
     mountApp(`${SCHEMA}/tables`, world)
-    await search('ord')
-    expect(await screen.findByText(/Search is down\./)).toBeInTheDocument()
+    expect(await screen.findByText(/The list is down\./)).toBeInTheDocument()
     expect(screen.queryByText(/found no object/)).toBeNull()
-    expect(screen.queryByRole('table', { name: 'Objects that match the filter' })).toBeNull()
+    expect(screen.queryByRole('table', { name: 'Schema objects' })).toBeNull()
   })
 
-  it('says more match than one page shows, and offers to load more', async () => {
+  it('pages by cursor: shows N of the total, loads more, and ends with all of them', async () => {
     const world = readyWorld()
-    world.searchNext = 'next'
+    world.objectsPageSize = 1
     mountApp(`${SCHEMA}/tables`, world)
-    await search('ord')
-    expect(await screen.findByText(/More objects match than one page shows/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Load more objects' })).toBeInTheDocument()
+    const user = userEvent.setup()
+    const count = async () =>
+      (
+        await waitFor(() => {
+          const el = document.querySelector('[data-slot="list-count"]')
+          if (el === null) throw new Error('no count yet')
+          return el
+        })
+      ).textContent ?? ''
+    expect(await count()).toContain('Showing 1 of 2 objects.')
+    const table = screen.getByRole('table', { name: 'Schema objects' })
+    expect(within(table).getAllByRole('button')).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: 'Load more objects' }))
+    await waitFor(() => expect(within(table).getAllByRole('button')).toHaveLength(2))
+    expect(await count()).toContain('Showing all 2 objects.')
+    expect(screen.queryByRole('button', { name: 'Load more objects' })).toBeNull()
+    const listed = world.requests.filter((r) => r.includes('/schema/objects?'))
+    expect(listed).toHaveLength(2)
+    expect(listed[0]).not.toContain('cursor=')
+    expect(listed[1]).toContain('cursor=')
+  })
+
+  it('starts again from the first page and says so when the schema changed between pages', async () => {
+    const world = readyWorld()
+    world.objectsPageSize = 1
+    mountApp(`${SCHEMA}/tables`, world)
+    const user = userEvent.setup()
+    await screen.findByRole('table', { name: 'Schema objects' })
+    // The cursor of the first page now belongs to an older snapshot.
+    world.objectsFingerprint = `fp1:17:${'cd'.repeat(32)}`
+    await user.click(await screen.findByRole('button', { name: 'Load more objects' }))
+    expect(
+      await screen.findByText(
+        /The schema changed while you were paging, so the list started again/,
+      ),
+    ).toBeInTheDocument()
+    const listed = world.requests.filter((r) => r.includes('/schema/objects?'))
+    // The refused page, then the first page again without a cursor.
+    expect(listed.filter((r) => r.includes('cursor=')).length).toBe(1)
+    expect(listed.at(-1)).not.toContain('cursor=')
+    const table = await screen.findByRole('table', { name: 'Schema objects' })
+    expect(within(table).getAllByRole('button')).toHaveLength(1)
+    expect(screen.queryByRole('alert')).toBeNull()
+    // Loading on from the new first page works under the new snapshot.
+    await user.click(screen.getByRole('button', { name: 'Load more objects' }))
+    await waitFor(() => expect(within(table).getAllByRole('button')).toHaveLength(2))
+    expect(screen.queryByText(/The schema changed while you were paging/)).toBeNull()
+  })
+
+  it('keeps the pages read and says so when a later page fails', async () => {
+    const world = readyWorld()
+    world.objectsPageSize = 1
+    world.failures.set('cursor=', {
+      status: 500,
+      code: 'INTERNAL_ERROR',
+      message: 'The next page is down.',
+    })
+    mountApp(`${SCHEMA}/tables`, world)
+    const user = userEvent.setup()
+    await screen.findByRole('table', { name: 'Schema objects' })
+    await user.click(await screen.findByRole('button', { name: 'Load more objects' }))
+    expect(
+      await screen.findByText(/Could not read the next objects: The next page is down\./),
+    ).toBeInTheDocument()
+    // The first page is still there, and the read is not shown as failed or empty.
+    const table = screen.getByRole('table', { name: 'Schema objects' })
+    expect(within(table).getAllByRole('button')).toHaveLength(1)
+    expect(screen.queryByText(/found no object/)).toBeNull()
+    // The same button reads the page again.
+    expect(screen.getByRole('button', { name: 'Load more objects' })).toBeEnabled()
+  })
+
+  it('names an incomplete snapshot as a partial list, not as the whole', async () => {
+    const world = readyWorld()
+    world.objectsComplete = false
+    mountApp(`${SCHEMA}/tables`, world)
+    expect(
+      (
+        await screen.findAllByText(
+          /Part of the schema could not be read, so this list may miss objects/,
+        )
+      ).length,
+    ).toBeGreaterThan(0)
+    expect(screen.getByText(/Showing part of tables/)).toBeInTheDocument()
+    expect(
+      within(await screen.findByRole('table', { name: 'Schema objects' })).getByRole('button', {
+        name: 'orders',
+      }),
+    ).toBeInTheDocument()
+    // An incomplete snapshot with nothing read is not "no object".
+    cleanup()
+    const none = readyWorld()
+    none.objectsComplete = false
+    none.refs = []
+    mountApp(`${SCHEMA}/tables`, none)
+    expect(
+      await screen.findByText(/No object was read, and the snapshot is incomplete/),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/found no object/)).toBeNull()
+  })
+
+  it('shows an old snapshot of the list as stale, with its age and a refresh', async () => {
+    const world = readyWorld()
+    world.objectsObservedAt = new Date(Date.now() - 10 * 60_000).toISOString()
+    mountApp(`${SCHEMA}/tables`, world)
+    expect(await screen.findByText(/Showing an earlier read of tables/)).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Refresh' }).length).toBeGreaterThan(0)
+    expect(
+      within(await screen.findByRole('table', { name: 'Schema objects' })).getAllByRole('button'),
+    ).toHaveLength(2)
+  })
+
+  it('reads an open list again every minute, like the overview, so it does not turn stale by waiting', async () => {
+    const world = readyWorld()
+    const { queryClient } = mountApp(`${SCHEMA}/tables`, world)
+    await screen.findByRole('table', { name: 'Schema objects' })
+    const lists = queryClient.getQueryCache().findAll({ queryKey: ['schema', 'objects'] })
+    expect(lists).toHaveLength(1)
+    expect(lists[0]?.observers[0]?.options.refetchInterval).toBe(60_000)
+  })
+
+  it('names the source of a read that is not live', async () => {
+    const world = readyWorld()
+    world.objectsSource = 'sampled'
+    mountApp(`${SCHEMA}/tables`, world)
+    const count = await waitFor(() => {
+      const el = document.querySelector('[data-slot="list-count"]')
+      if (el === null) throw new Error('no count yet')
+      return el as HTMLElement
+    })
+    expect(within(count).getByText('Sampled')).toBeInTheDocument()
   })
 
   it('shows the details of an object: structure, flags, size, grants', async () => {
     const world = readyWorld()
     mountApp(`${SCHEMA}/tables`, world)
     const user = await search('ord')
-    const table = await screen.findByRole('table', { name: 'Objects that match the filter' })
+    const table = await screen.findByRole('table', { name: 'Schema objects' })
     await user.click(within(table).getByRole('button', { name: 'orders' }))
     const panel = await waitFor(() => {
       const el = document.querySelector('[data-slot="object-detail"]')
@@ -400,7 +560,7 @@ describe('the object lists', () => {
     world.objects.clear()
     mountApp(`${SCHEMA}/tables`, world)
     const user = await search('ord')
-    const table = await screen.findByRole('table', { name: 'Objects that match the filter' })
+    const table = await screen.findByRole('table', { name: 'Schema objects' })
     await user.click(within(table).getByRole('button', { name: 'orders' }))
     expect(
       await screen.findByText(/This does not mean there is no object details/),
@@ -463,22 +623,74 @@ describe('the object lists', () => {
     expect(document.querySelector('[data-hint="security-definer"]')).toBeNull()
   })
 
-  it('filters the matches by schema', async () => {
+  it('asks the server for the chosen schema, so the list is that schema and nothing else', async () => {
     const world = readyWorld()
     world.refs = [
       ref({ name: 'orders', schema: 'public' }),
       ref({ name: 'orders_log', schema: 'exponetdb', key: ['exponetdb', 'orders_log'] }),
     ]
     mountApp(`${SCHEMA}/tables`, world)
-    const user = await search('ord')
-    await screen.findByRole('table', { name: 'Objects that match the filter' })
-    await user.click(screen.getByRole('button', { name: 'exponetdb' }))
-    const table = screen.getByRole('table', { name: 'Objects that match the filter' })
+    const user = userEvent.setup()
+    const first = await screen.findByRole('table', { name: 'Schema objects' })
+    expect(within(first).getAllByRole('button')).toHaveLength(2)
+    await user.click(screen.getByRole('combobox', { name: /Schema/ }))
+    await user.click(await screen.findByRole('option', { name: 'exponetdb' }))
+    await waitFor(() => {
+      const table = screen.getByRole('table', { name: 'Schema objects' })
+      expect(
+        within(table)
+          .getAllByRole('button')
+          .map((b) => b.textContent),
+      ).toEqual(['orders_log'])
+    })
+    const request = world.requests.filter((r) => r.includes('/schema/objects?')).at(-1) ?? ''
+    expect(request).toContain('schema=exponetdb')
+    expect(request).toContain('kinds=table')
+    expect(request).not.toContain('q=')
+  })
+
+  it('lists policies under the table they belong to, with the schema and the name as text', async () => {
+    const world = readyWorld()
+    const policy = (name: string, parent: string | null, schema = 'public') =>
+      ref({ kind: 'policy', name, parent, schema, key: [schema, String(parent), name] })
+    world.refs = [
+      policy('own_rows', 'orders'),
+      policy('admin_all', 'orders'),
+      policy('read_all', 'users'),
+      policy(`odd${BIDI}policy`, `t${BIDI}x`),
+    ]
+    mountApp(`${SCHEMA}/policies`, world)
+    const table = await screen.findByRole('table', { name: 'Schema objects' })
+    const groups = Array.from(table.querySelectorAll('tbody[data-group]'))
+    expect(groups).toHaveLength(3)
+    const titles = groups.map(
+      (group) => group.querySelector('th[scope="rowgroup"]')?.textContent ?? '',
+    )
+    expect(titles[0]).toContain('Table')
+    expect(titles[0]).toContain('public.orders')
+    expect(titles[0]).toContain('Policies read: 2')
+    expect(titles[1]).toContain('public.t⟨U+202E⟩')
+    expect(titles[2]).toContain('public.users')
+    expect(table.textContent).not.toContain(BIDI)
     expect(
-      within(table)
+      within(groups[0] as HTMLElement)
         .getAllByRole('button')
         .map((b) => b.textContent),
-    ).toEqual(['orders_log'])
+    ).toEqual(['admin_all', 'own_rows'])
+    // The request is the plain list of the kind: the grouping is the page's, not a filter.
+    const request = world.requests.find((r) => r.includes('/schema/objects?')) ?? ''
+    expect(request).toContain('kinds=policy')
+    expect(request).not.toContain('parent=')
+    expect(document.querySelector('[data-slot="list-group-note"]')?.textContent).toContain(
+      'Grouped by table',
+    )
+  })
+
+  it('does not group the other kinds', async () => {
+    mountApp(`${SCHEMA}/tables`, readyWorld())
+    const table = await screen.findByRole('table', { name: 'Schema objects' })
+    expect(table.querySelector('tbody[data-group]')).toBeNull()
+    expect(within(table).getByRole('columnheader', { name: 'Belongs to' })).toBeInTheDocument()
   })
 
   it('shows roles as a named state that is not supported, not as an empty list', async () => {
@@ -516,7 +728,7 @@ describe('hostile identifiers', () => {
     }
     mountApp(`${SCHEMA}/tables`, world)
     const user = await search('a')
-    const table = await screen.findByRole('table', { name: 'Objects that match the filter' })
+    const table = await screen.findByRole('table', { name: 'Schema objects' })
     const text = table.textContent ?? ''
     expect(text).toContain('⟨U+202E⟩')
     expect(text).toContain('⟨U+200B⟩')
@@ -548,17 +760,66 @@ describe('hostile identifiers', () => {
 })
 
 describe('the tree', () => {
-  it('lists the classes of a schema and says a class cannot list without a filter (not that it is empty)', async () => {
+  it('lists the objects of a class of a schema when it opens, without a filter', async () => {
     const user = userEvent.setup()
-    mountApp(SCHEMA, readyWorld())
+    const world = readyWorld()
+    world.refs = [
+      ref({ name: 'orders' }),
+      ref({ name: 'users' }),
+      ref({ name: 'orders_log', schema: 'exponetdb', key: ['exponetdb', 'orders_log'] }),
+    ]
+    mountApp(SCHEMA, world)
     const tree = await screen.findByRole('tree', { name: 'Schemas and their objects' })
     await user.click(within(tree).getByText('public'))
     const publicItem = within(tree).getByRole('treeitem', { name: /public/ })
     await user.click(within(publicItem).getByText('Tables'))
-    expect(
-      await within(tree).findByText(/Enter part of a name above and open this class again/),
-    ).toBeInTheDocument()
+    expect(await within(tree).findByText('orders')).toBeInTheDocument()
+    expect(within(tree).getByText('users')).toBeInTheDocument()
+    // The server narrowed it to the schema the class is under.
+    expect(within(tree).queryByText('orders_log')).toBeNull()
+    const request = world.requests.find((r) => r.includes('/schema/objects?')) ?? ''
+    expect(request).toContain('kinds=table')
+    expect(request).toContain('schema=public')
+    expect(request).toContain('limit=200')
+    expect(request).not.toContain('q=')
     expect(within(tree).queryByText(/found no/i)).toBeNull()
+  })
+
+  it('says a class with more objects than one read is partial, with the count and the way to the rest', async () => {
+    const user = userEvent.setup()
+    const world = readyWorld()
+    world.objectsPageSize = 1
+    mountApp(SCHEMA, world)
+    const tree = await screen.findByRole('tree', { name: 'Schemas and their objects' })
+    await user.click(within(tree).getByText('public'))
+    await user.click(
+      within(within(tree).getByRole('treeitem', { name: /public/ })).getByText('Tables'),
+    )
+    expect(
+      await within(tree).findByText(
+        /Showing the first 1 of 2 objects of this class\. Open the full list/,
+      ),
+    ).toBeInTheDocument()
+    expect(within(tree).getByText('orders')).toBeInTheDocument()
+    expect(within(tree).queryByText('users')).toBeNull()
+  })
+
+  it('names an incomplete snapshot in a class as partial', async () => {
+    const user = userEvent.setup()
+    const world = readyWorld()
+    world.objectsComplete = false
+    mountApp(SCHEMA, world)
+    const tree = await screen.findByRole('tree', { name: 'Schemas and their objects' })
+    await user.click(within(tree).getByText('public'))
+    await user.click(
+      within(within(tree).getByRole('treeitem', { name: /public/ })).getByText('Tables'),
+    )
+    expect(
+      await within(tree).findByText(
+        /Part of the schema could not be read, so this list may miss objects/,
+      ),
+    ).toBeInTheDocument()
+    expect(within(tree).getByText('orders')).toBeInTheDocument()
   })
 })
 
@@ -589,23 +850,25 @@ describe('the tree with a filter', () => {
     const tree = await openTables(user)
     expect(await within(tree).findByText('orders')).toBeInTheDocument()
     expect(within(tree).queryByText('orders_log')).toBeNull()
-    const request = world.requests.find((r) => r.includes('/schema/search')) ?? ''
+    const request = world.requests.find((r) => r.includes('/schema/objects?')) ?? ''
     expect(request).toContain('kinds=table')
     expect(request).toContain('limit=200')
+    expect(request).toContain('q=ord')
+    expect(request).toContain('schema=public')
   })
 
   it('shows a class that failed to load as failed, with a retry, not as empty', async () => {
     const user = userEvent.setup()
     const world = readyWorld()
-    world.failures.set('/schema/search', {
+    world.failures.set('/schema/objects?', {
       status: 500,
       code: 'INTERNAL_ERROR',
-      message: 'Search is down.',
+      message: 'The list is down.',
     })
     mountApp(SCHEMA, world)
     await applyFilter(user, 'ord')
     const tree = await openTables(user)
-    expect(await within(tree).findByText(/Search is down\./)).toBeInTheDocument()
+    expect(await within(tree).findByText(/The list is down\./)).toBeInTheDocument()
     expect(within(tree).getByRole('button', { name: 'Try again' })).toBeInTheDocument()
     expect(within(tree).queryByText(/found no/i)).toBeNull()
   })
@@ -616,8 +879,10 @@ describe('the diagram', () => {
     const world = readyWorld()
     mountApp(`${SCHEMA}/visualizer`, world)
     expect(
-      await screen.findByText(/Enter part of a table name to draw the matching tables/),
+      await screen.findByText(/Choose a schema or enter part of a table name to draw tables/),
     ).toBeInTheDocument()
+    // Nothing is listed or read for the details before one of them is chosen.
+    expect(world.requests.some((r) => r.includes('/schema/objects'))).toBe(false)
     await search('r')
     const erd = await screen.findByTestId('erd')
     await waitFor(() => expect(erd).toHaveAttribute('data-state', 'ready'))
@@ -634,12 +899,12 @@ describe('the diagram', () => {
     expect(await screen.findByText(/1 foreign keys are not drawn/)).toBeInTheDocument()
   })
 
-  it('hands a failed search to the diagram as a failure, never as an empty drawing', async () => {
+  it('hands a failed list read to the diagram as a failure, never as an empty drawing', async () => {
     const world = readyWorld()
-    world.failures.set('/schema/search', {
+    world.failures.set('/schema/objects?', {
       status: 500,
       code: 'INTERNAL_ERROR',
-      message: 'Search is down.',
+      message: 'The list is down.',
     })
     mountApp(`${SCHEMA}/visualizer`, world)
     await search('r')
@@ -658,11 +923,32 @@ describe('accessibility', () => {
   it('has no axe violations on a list with an open object', async () => {
     mountApp(`${SCHEMA}/tables`, readyWorld())
     const user = await search('ord')
-    const table = await screen.findByRole('table', { name: 'Objects that match the filter' })
+    const table = await screen.findByRole('table', { name: 'Schema objects' })
     await user.click(within(table).getByRole('button', { name: 'orders' }))
     await waitFor(() =>
       expect(document.querySelector('[data-slot="object-detail"]')).not.toBeNull(),
     )
+    expect(await axeViolations(document.body)).toEqual([])
+  })
+
+  it('has no axe violations on a paged list and on policies grouped by table', async () => {
+    const world = readyWorld()
+    world.objectsPageSize = 1
+    mountApp(`${SCHEMA}/tables`, world)
+    await screen.findByRole('button', { name: 'Load more objects' })
+    expect(await axeViolations(document.body)).toEqual([])
+    cleanup()
+    const policies = readyWorld()
+    policies.refs = [
+      ref({
+        kind: 'policy',
+        name: 'own_rows',
+        parent: 'orders',
+        key: ['public', 'orders', 'own_rows'],
+      }),
+    ]
+    mountApp(`${SCHEMA}/policies`, policies)
+    await screen.findByRole('table', { name: 'Schema objects' })
     expect(await axeViolations(document.body)).toEqual([])
   })
 

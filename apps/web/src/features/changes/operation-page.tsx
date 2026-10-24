@@ -1,5 +1,6 @@
 import type { MigrationProgress, OperationRead, PlanRead } from '@exponetdb/sdk/operations'
 import {
+  Button,
   Table,
   TableBody,
   TableCaption,
@@ -10,6 +11,7 @@ import {
 } from '@exponetdb/ui'
 import {
   ApplyVerifyIndicators,
+  NeedsAttentionNote,
   PlanBlock,
   PlanFrame,
   type PlanStep,
@@ -21,6 +23,7 @@ import {
   ObservedTime,
   PageContainer,
   PageHeader,
+  PageHeaderAside,
   PageHeaderDescription,
   PageHeaderMeta,
   PageHeaderSummary,
@@ -33,15 +36,24 @@ import {
   useLinkComponent,
 } from '@exponetdb/ui-patterns'
 import { useQuery } from '@tanstack/react-query'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useId, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { describeError, type MessageKey, t } from '../../lib/i18n/i18n.ts'
 import { classifyFailure } from '../../lib/query/errors.ts'
 import { toReadable } from '../../lib/query/readable.ts'
+import { useMe } from '../../lib/session/guard.tsx'
 import { NotFoundPage } from '../../shell/not-found.tsx'
 import type { PageMessage } from '../plans/decision-actions.tsx'
 import { approvalQueueQuery, planQuery } from '../plans/keys.ts'
+import {
+  ActorLine,
+  type ActorWords,
+  HeaderFacts,
+  KindTitle,
+  OperationStateBadge,
+} from '../plans/plan-heading.tsx'
 import { confirmFactsOf, isOperationId, isPlanId, planPath } from '../plans/plan-model.ts'
+import { migrationCountOf, serverIdOf } from '../plans/plan-title.ts'
 import { targetHrefOf } from '../targets/model.ts'
 import { operationDetailQuery } from './keys.ts'
 import {
@@ -57,15 +69,19 @@ import { CancelOperationAction, cancelOffered, VerifyAgainAction } from './opera
 /**
  * The operation page `/changes/operations/<id>` (information-architecture.md
  * §5 "Running" and "Outcome"; Studio's merge request and workflow logs as the
- * layout model): what the operation is (kind, state, target in the
- * production frame, who started it, the plan it applies with a link to the
- * plan review page), the apply outcome and the verification outcome as two
- * separate indicators, the steps in order, the error code with its catalog
- * text, and for an operation that needs attention the reconciliation
- * checklist and "Verify again" when the server says it is retryable. Cancel
- * is offered while the operation has not started. The page polls the
- * operation while it is at work (backoff, paused while the tab is hidden,
- * stopped once it is terminal); there is no event stream.
+ * layout model; the owner's design of 2026-10-21, as on the plan page): the
+ * header says what happens (the kind in words and its subject), the state and
+ * who started it, with the production chip beside the title and the actions
+ * on the right ("Verify again" when the server says it is retryable, cancel
+ * while the operation has not started, the plan it applies). In the
+ * production frame, said once: the apply outcome and the verification
+ * outcome as two separate indicators, the next action and the reconciliation
+ * checklist of an operation that needs attention, the error code with its
+ * catalog text, the steps in order and the migrations, then the technical
+ * details closed (target, plan and plan hash, who started it with the
+ * client's unverified name, times). The page polls the operation while it is
+ * at work (backoff, paused while the tab is hidden, stopped once it is
+ * terminal); there is no event stream.
  */
 export function OperationPage({ operationId }: { readonly operationId: string }): ReactNode {
   if (!isOperationId(operationId)) return <NotFoundPage />
@@ -132,7 +148,7 @@ function ValidOperationPage({ operationId }: { readonly operationId: string }): 
         : { ...operationReadable, value }
   }
   const value = readableValue(readable)
-  const production = value !== undefined && isProductionTier(value.operation.subject.tier)
+  const stale = readable.state === 'stale'
   const refetch = (): void => {
     void operationRead.refetch()
     if (isPlanId(planId)) void planRead.refetch()
@@ -140,18 +156,7 @@ function ValidOperationPage({ operationId }: { readonly operationId: string }): 
 
   return (
     <>
-      <PageHeader size="large">
-        <PageHeaderMeta>
-          <PageHeaderSummary>
-            <PageHeaderTitle productionCue={production ? <TierChip tier="prod" /> : undefined}>
-              {t('changes.operation.title')}
-            </PageHeaderTitle>
-            <PageHeaderDescription>
-              <code className="font-mono text-xs">{operationId}</code>
-            </PageHeaderDescription>
-          </PageHeaderSummary>
-        </PageHeaderMeta>
-      </PageHeader>
+      <OperationHeader operationId={operationId} data={value} stale={stale} onMessage={onMessage} />
       <PageContainer size="large" className="flex flex-col gap-4 py-6">
         {/* Live regions stay in the page while empty, so a new message is announced. */}
         <div className="flex flex-col">
@@ -169,9 +174,7 @@ function ValidOperationPage({ operationId }: { readonly operationId: string }): 
           onRefresh={refetch}
           busy={operationRead.isFetching}
           headingLevel={2}
-          ready={(data, meta) => (
-            <OperationView data={data} stale={meta.state === 'stale'} onMessage={onMessage} />
-          )}
+          ready={(data, meta) => <OperationView data={data} stale={meta.state === 'stale'} />}
         />
       </PageContainer>
     </>
@@ -218,7 +221,17 @@ export function StateText({ state }: { readonly state: string }): ReactNode {
 }
 
 /** The target of an operation: a link for a valid path, marked text otherwise, and the tier. */
-export function TargetText({ subject }: { readonly subject: OperationRead['subject'] }): ReactNode {
+export function TargetText({
+  subject,
+  tierAs = 'chip',
+}: {
+  readonly subject: OperationRead['subject']
+  /**
+   * The tier as a chip (a list) or in words (the operation page's details, where the header's
+   * chip already says production once).
+   */
+  readonly tierAs?: 'chip' | 'words'
+}): ReactNode {
   const Link = useLinkComponent()
   const path = subject.targetPath
   const href = path === null ? undefined : targetHrefOf(path)
@@ -246,6 +259,10 @@ export function TargetText({ subject }: { readonly subject: OperationRead['subje
       )}
       {subject.tier === null ? (
         <span className="text-xs text-foreground-light">{t('changes.tier.unknown')}</span>
+      ) : tierAs === 'words' ? (
+        <span data-operation-tier={subject.tier} className="text-xs text-foreground-light">
+          {t(subject.tier === 'nonprod' ? 'changes.tier.nonprod' : 'changes.tier.prod')}
+        </span>
       ) : (
         <TierChip tier={subject.tier} />
       )}
@@ -283,25 +300,144 @@ export function ActorText({
   )
 }
 
-function OperationView({
+/** The one sentence of the production frame: an operation without a tier says why it is production. */
+function productionNotice(tier: string | null): string {
+  return tier === null ? t('changes.production.noTier') : t('changes.production.notice')
+}
+
+const OPERATION_ACTOR_WORDS: ActorWords = {
+  you: 'changes.header.byYou',
+  person: 'changes.header.byPerson',
+  service: 'changes.header.byService',
+  system: 'changes.header.bySystem',
+}
+
+/**
+ * The head of the operation page: what happens (the kind in words and its
+ * subject), the state and who started it; the production chip beside the
+ * title; the actions on the right ("Verify again" when the server says the
+ * operation is retryable on a current reading, cancel before it started, and
+ * the plan it applies), wrapping below the title on phones.
+ */
+function OperationHeader({
+  operationId,
   data,
   stale,
   onMessage,
 }: {
-  readonly data: PageData
+  readonly operationId: string
+  readonly data: PageData | undefined
   readonly stale: boolean
   readonly onMessage: PageMessage
+}): ReactNode {
+  const me = useMe()
+  const Link = useLinkComponent()
+  const operation = data?.operation
+  const plan = data?.plan
+  // Production unless the tier is exactly `nonprod` (fails closed); said once, beside the title.
+  const production = operation !== undefined && isProductionTier(operation.subject.tier)
+  const attention =
+    operation !== undefined &&
+    (operation.state === 'needs_attention' || operation.state === 'needs_reconciliation')
+  const verifyAgain = attention && operation?.retryable === true && !stale
+  const cancel = operation !== undefined && cancelOffered(operation) && !stale
+  const planHref = operation === undefined ? undefined : planPath(operation.planId)
+  return (
+    <PageHeader size="large">
+      <PageHeaderMeta className="@xl:items-start">
+        <PageHeaderSummary className="min-w-0">
+          <PageHeaderTitle productionCue={production ? <TierChip tier="prod" /> : undefined}>
+            {operation === undefined ? (
+              t('changes.operation.title')
+            ) : (
+              <KindTitle
+                kind={operation.kind}
+                refs={{
+                  // The operation read may name its target by id only; the plan it applies has
+                  // the path of the same target.
+                  targetPath:
+                    operation.subject.targetPath ??
+                    (plan !== undefined && plan.subject.targetId === operation.subject.targetId
+                      ? plan.subject.targetPath
+                      : null),
+                  targetId: operation.subject.targetId,
+                  clusterId: operation.subject.clusterId,
+                  nodeId: operation.subject.nodeId,
+                  serverId: serverIdOf(plan?.change?.content),
+                }}
+                migrationCount={
+                  operation.kind !== 'migration.apply'
+                    ? null
+                    : (operation.migrations?.length ??
+                      (plan === undefined ? null : migrationCountOf(plan.change?.content)))
+                }
+              />
+            )}
+          </PageHeaderTitle>
+          <PageHeaderDescription>
+            {operation === undefined ? (
+              <code className="font-mono text-xs">{operationId}</code>
+            ) : (
+              <HeaderFacts>
+                <OperationStateBadge state={operation.state} />
+                <ActorLine
+                  actor={operation.actor}
+                  meId={me.identity.id}
+                  words={OPERATION_ACTOR_WORDS}
+                />
+              </HeaderFacts>
+            )}
+          </PageHeaderDescription>
+        </PageHeaderSummary>
+        {operation === undefined || (!verifyAgain && !cancel && planHref === undefined) ? null : (
+          <PageHeaderAside className="flex-wrap items-start">
+            <div data-operation-actions="" className="flex flex-wrap items-start gap-2">
+              {verifyAgain ? (
+                <VerifyAgainAction
+                  operation={operation}
+                  planFacts={plan === undefined ? undefined : confirmFactsOf(plan)}
+                  onMessage={onMessage}
+                />
+              ) : null}
+              {cancel ? (
+                <CancelOperationAction operation={operation} onMessage={onMessage} />
+              ) : null}
+              {planHref === undefined ? null : (
+                <Button asChild size="small" variant="default">
+                  <Link href={planHref} data-header-plan-link="">
+                    {t('changes.header.reviewPlan')}
+                  </Link>
+                </Button>
+              )}
+            </div>
+          </PageHeaderAside>
+        )}
+      </PageHeaderMeta>
+    </PageHeader>
+  )
+}
+
+function OperationView({
+  data,
+  stale,
+}: {
+  readonly data: PageData
+  readonly stale: boolean
 }): ReactNode {
   const { operation, plan, clientName } = data
   const production = isProductionTier(operation.subject.tier)
   const attention =
     operation.state === 'needs_attention' || operation.state === 'needs_reconciliation'
   const retryable = operation.retryable ?? null
+  const reconcileId = useId()
   return (
-    <PlanFrame production={production} data-operation={operation.id}>
-      <OperationFacts operation={operation} plan={plan} clientName={clientName} />
+    <PlanFrame
+      production={production}
+      notice={productionNotice(operation.subject.tier)}
+      data-operation={operation.id}
+    >
       {stale ? (
-        <p role="note" className="text-sm text-foreground-light" data-out-of-date="">
+        <p role="note" className="m-0 text-sm text-foreground-light" data-out-of-date="">
           {t('changes.operation.stale')}
         </p>
       ) : null}
@@ -310,30 +446,17 @@ function OperationView({
         applyOutcome={operation.applyOutcome}
         verificationOutcome={operation.verificationOutcome}
         operationState={operation.state}
-        needsAttention={
-          attention ? { nextAction: nextActionText(operation.nextAction), retryable } : null
-        }
       />
-      {attention && retryable === true && !stale ? (
-        <div className="flex flex-col items-start gap-1">
-          <VerifyAgainAction
-            operation={operation}
-            planFacts={plan === undefined ? undefined : confirmFactsOf(plan)}
-            onMessage={onMessage}
-          />
-          <p className="text-xs text-foreground-light">{t('changes.verifyAgain.hint')}</p>
-        </div>
-      ) : null}
-      {cancelOffered(operation) && !stale ? (
-        <div className="flex flex-col items-start gap-1">
-          <CancelOperationAction operation={operation} onMessage={onMessage} />
-          <p className="text-xs text-foreground-light">{t('changes.cancel.hint')}</p>
-        </div>
+      {attention ? (
+        <NeedsAttentionNote
+          attention={{ nextAction: nextActionText(operation.nextAction), retryable }}
+          action={<p className="m-0 text-foreground-light">{t('changes.verifyAgain.hint')}</p>}
+        />
       ) : null}
       <ErrorCodeBlock code={operation.errorCode} />
       {attention ? (
-        <section aria-labelledby="operation-reconcile" className="flex flex-col gap-1 text-sm">
-          <h2 id="operation-reconcile" className="font-medium">
+        <section aria-labelledby={reconcileId} className="flex flex-col gap-1 text-sm">
+          <h2 id={reconcileId} className="font-medium">
             {t('plans.reconcile.title')}
           </h2>
           <ol className="list-decimal pl-5">
@@ -347,6 +470,8 @@ function OperationView({
       {operation.migrations === undefined || operation.migrations.length === 0 ? null : (
         <MigrationProgressBlock migrations={operation.migrations} />
       )}
+      <VerificationFailuresBlock runs={operation.verifications ?? []} />
+      <OperationFacts operation={operation} plan={plan} clientName={clientName} />
     </PlanFrame>
   )
 }
@@ -395,76 +520,83 @@ function OperationFacts({
   const waitingHref =
     operation.waitingFor === null ? undefined : operationPath(operation.waitingFor.operationId)
   return (
-    <PlanBlock
-      title={t('changes.facts.title')}
-      headingLevel={2}
+    <details
       data-operation-block="facts"
-      description={t('changes.facts.description')}
+      className="details rounded-lg border border-default bg-surface-100"
     >
-      <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
-        <Fact term={t('changes.column.kind')}>
-          <UntrustedName name={operation.kind} mono label={t('changes.column.kind')} />
-          {plan === undefined ? null : (
-            <span className="ml-2 text-xs text-foreground-light">
-              {t('approvals.item.class', { class: plan.class })}
-            </span>
-          )}
-        </Fact>
-        <Fact term={t('changes.column.state')}>
-          <StateText state={operation.state} />
-        </Fact>
-        <Fact term={t('changes.column.target')}>
-          <TargetText subject={operation.subject} />
-        </Fact>
-        <Fact term={t('changes.facts.plan')}>
-          {planHref === undefined ? (
-            t('changes.facts.noPlan')
-          ) : (
-            <Link
-              href={planHref}
-              className="break-all text-primary underline focus-ring"
-              data-plan-link=""
-            >
-              {t('changes.facts.planLink', { id: operation.planId ?? '' })}
-            </Link>
-          )}
-        </Fact>
-        {plan === undefined ? null : (
-          <Fact term={t('changes.facts.planHash')}>
-            <code className="font-mono text-xs break-all">{plan.planHash}</code>
+      <summary className="cursor-pointer px-4 py-3 text-base font-medium focus-ring">
+        {t('changes.details.title')}
+      </summary>
+      <div className="flex min-w-0 flex-col gap-3 border-t border-default p-4">
+        <p className="m-0 text-sm text-foreground-light">{t('changes.details.description')}</p>
+        <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-[max-content_minmax(0,1fr)]">
+          <Fact term={t('changes.facts.operationId')}>
+            <code className="font-mono text-xs break-all">{operation.id}</code>
           </Fact>
-        )}
-        <Fact term={t('changes.column.actor')}>
-          <ActorText actor={operation.actor} clientName={clientName} />
-          {operation.actor.via === 'mcp' && clientName === null ? (
-            <span className="block text-xs text-foreground-light">
-              {t('changes.client.notGiven')}
-            </span>
-          ) : null}
-        </Fact>
-        <Fact term={t('changes.column.created')}>
-          <ObservedTime observedAt={operation.createdAt} withDate />
-        </Fact>
-        <Fact term={t('changes.column.updated')}>
-          <ObservedTime observedAt={operation.updatedAt} withDate />
-        </Fact>
-        {operation.waitingFor === null ? null : (
-          <Fact term={t('changes.facts.waitingFor')}>
-            {waitingHref === undefined ? (
-              <UntrustedName
-                name={operation.waitingFor.operationId}
-                mono
-                label={t('changes.facts.waitingFor')}
-              />
+          <Fact term={t('changes.column.kind')}>
+            <UntrustedName name={operation.kind} mono label={t('changes.column.kind')} />
+            {plan === undefined ? null : (
+              <span className="ml-2 text-xs text-foreground-light">
+                {t('approvals.item.class', { class: plan.class })}
+              </span>
+            )}
+          </Fact>
+          <Fact term={t('changes.column.state')}>
+            <StateText state={operation.state} />
+          </Fact>
+          <Fact term={t('changes.column.target')}>
+            <TargetText subject={operation.subject} tierAs="words" />
+          </Fact>
+          <Fact term={t('changes.facts.plan')}>
+            {planHref === undefined ? (
+              t('changes.facts.noPlan')
             ) : (
-              <Link href={waitingHref} className="text-primary underline focus-ring">
-                {operation.waitingFor.operationId}
+              <Link
+                href={planHref}
+                className="break-all text-primary underline focus-ring"
+                data-plan-link=""
+              >
+                {t('changes.facts.planLink', { id: operation.planId ?? '' })}
               </Link>
             )}
           </Fact>
-        )}
-      </dl>
-    </PlanBlock>
+          {plan === undefined ? null : (
+            <Fact term={t('changes.facts.planHash')}>
+              <code className="font-mono text-xs break-all">{plan.planHash}</code>
+            </Fact>
+          )}
+          <Fact term={t('changes.column.actor')}>
+            <ActorText actor={operation.actor} clientName={clientName} />
+            {operation.actor.via === 'mcp' && clientName === null ? (
+              <span className="block text-xs text-foreground-light">
+                {t('changes.client.notGiven')}
+              </span>
+            ) : null}
+          </Fact>
+          <Fact term={t('changes.column.created')}>
+            <ObservedTime observedAt={operation.createdAt} withDate />
+          </Fact>
+          <Fact term={t('changes.column.updated')}>
+            <ObservedTime observedAt={operation.updatedAt} withDate />
+          </Fact>
+          {operation.waitingFor === null ? null : (
+            <Fact term={t('changes.facts.waitingFor')}>
+              {waitingHref === undefined ? (
+                <UntrustedName
+                  name={operation.waitingFor.operationId}
+                  mono
+                  label={t('changes.facts.waitingFor')}
+                />
+              ) : (
+                <Link href={waitingHref} className="text-primary underline focus-ring">
+                  {operation.waitingFor.operationId}
+                </Link>
+              )}
+            </Fact>
+          )}
+        </dl>
+      </div>
+    </details>
   )
 }
 
@@ -571,6 +703,123 @@ function MigrationProgressBlock({
           ))}
         </TableBody>
       </Table>
+    </PlanBlock>
+  )
+}
+
+type VerificationRun = NonNullable<OperationRead['verifications']>[number]
+
+/** How many failing expectations the page lists per run. */
+const FAILURES_SHOWN = 50
+
+/**
+ * What a verification found failing (Part A follow-up 3, F2): per run that
+ * did not pass or excused something, the counts and the failing
+ * expectations, the open ones first. Names from the catalog and the files
+ * are shown as untrusted text.
+ */
+function VerificationFailuresBlock({
+  runs,
+}: {
+  readonly runs: readonly VerificationRun[]
+}): ReactNode {
+  const shown = runs.filter((r) => r.status !== 'passed' || (r.structural.excused ?? 0) > 0)
+  if (shown.length === 0) return null
+  return (
+    <PlanBlock
+      title={t('changes.verification.title')}
+      headingLevel={2}
+      data-operation-block="verification"
+    >
+      {shown.map((run) => {
+        const failures = (
+          [
+            ['structural', run.structural],
+            ['runtime', run.runtime],
+            ['engine', run.engine],
+          ] as const
+        ).flatMap(([layer, l]) => (l.failures ?? []).map((f) => ({ ...f, layer })))
+        const total = [run.structural, run.runtime, run.engine].reduce(
+          (n, l) => n + (l.failuresTotal ?? l.failures?.length ?? 0),
+          0,
+        )
+        return (
+          <div
+            key={run.verificationId}
+            className="flex flex-col gap-2"
+            data-verification={run.verificationId}
+          >
+            <p className="m-0 text-sm">
+              {t('changes.verification.summary', {
+                migration: run.migrationId,
+                failed: run.structural.failed,
+                checks: run.structural.checks,
+                excused: run.structural.excused ?? 0,
+              })}
+            </p>
+            {run.engine.status === 'failed' && run.engine.firstFailure !== null ? (
+              <p className="m-0 text-sm text-foreground-light">
+                {t('changes.verification.engineFailed', { name: run.engine.firstFailure.name })}
+              </p>
+            ) : null}
+            {failures.length === 0 ? null : (
+              <Table>
+                <TableCaption className="sr-only">{t('changes.verification.title')}</TableCaption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead scope="col">{t('changes.verification.file')}</TableHead>
+                    <TableHead scope="col">{t('changes.verification.statement')}</TableHead>
+                    <TableHead scope="col">{t('changes.verification.expected')}</TableHead>
+                    <TableHead scope="col">{t('changes.verification.differs')}</TableHead>
+                    <TableHead scope="col">{t('changes.verification.excused')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {failures.slice(0, FAILURES_SHOWN).map((f) => (
+                    <TableRow
+                      key={`${f.layer}:${f.file ?? ''}:${f.statement ?? ''}:${f.kind}:${f.object}:${f.failed.join(',')}`}
+                      data-failure-excused={f.excused ? 'true' : 'false'}
+                    >
+                      <TableCell>
+                        {f.file === null ? (
+                          <span className="text-foreground-light">-</span>
+                        ) : (
+                          <UntrustedName
+                            name={f.file}
+                            mono
+                            label={t('changes.verification.file')}
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell>{f.statement === null ? '-' : String(f.statement + 1)}</TableCell>
+                      <TableCell>
+                        <UntrustedName name={f.object} label={t('changes.verification.expected')} />
+                      </TableCell>
+                      <TableCell>
+                        <UntrustedName
+                          name={f.failed.join(', ')}
+                          mono
+                          label={t('changes.verification.differs')}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {f.excused
+                          ? t('changes.verification.excusedYes')
+                          : t('changes.verification.excusedNo')}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+            {total > FAILURES_SHOWN ? (
+              <p className="m-0 text-sm text-foreground-light">
+                {t('changes.verification.more', { count: total - FAILURES_SHOWN })}
+              </p>
+            ) : null}
+          </div>
+        )
+      })}
     </PlanBlock>
   )
 }

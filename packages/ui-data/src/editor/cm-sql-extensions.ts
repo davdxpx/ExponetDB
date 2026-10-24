@@ -36,6 +36,8 @@ export const externalChange = Annotation.define<boolean>()
 export interface EditorCallbacks {
   onChange(value: string): void
   onRun(): void
+  /** The editor went from no selection to a selection or back. */
+  onSelectionChange(hasSelection: boolean): void
   provider(): SqlCompletionProvider | undefined
 }
 
@@ -63,6 +65,8 @@ const PHRASES: Record<string, string> = {
 }
 
 export function staticExtensions(idBase: string, callbacks: EditorCallbacks): Extension {
+  // Per editor: whether the last update left text selected, so a cursor move is not reported.
+  let hadSelection = false
   return [
     exdbEditorTheme,
     exdbSyntaxHighlighting,
@@ -81,6 +85,13 @@ export function staticExtensions(idBase: string, callbacks: EditorCallbacks): Ex
     diagnosticsExtension(idBase),
     EditorState.phrases.of(PHRASES),
     EditorView.updateListener.of((update) => {
+      if (update.selectionSet || update.docChanged) {
+        const hasSelection = update.state.selection.ranges.some((range) => !range.empty)
+        if (hasSelection !== hadSelection) {
+          hadSelection = hasSelection
+          callbacks.onSelectionChange(hasSelection)
+        }
+      }
       if (!update.docChanged) return
       if (update.transactions.some((tr) => tr.annotation(externalChange) === true)) return
       callbacks.onChange(update.state.doc.toString())

@@ -149,7 +149,7 @@ a secret). **[DECIDED]** (owner decision 2026-10-13, OD-5 revised) `dev up`
 sets `EXPONETDB_OAUTH_CLIENT_REGISTRATION=open`, so the registration is
 approved automatically (no approver; the approval binds the fingerprint of
 its metadata) and there is no approval step in the lab. The command reports
-`state: active` and `clientsAt: <server>/admin/clients` (the JSON field
+`state: active` and `clientsAt: <server>/access/oauth-clients` (the JSON field
 `approveAt` was renamed `clientsAt`), and says that the client is approved
 automatically and that you consent at sign-in. An administrator can still
 disable the client on **Admin → Clients** (every grant ends at once). See

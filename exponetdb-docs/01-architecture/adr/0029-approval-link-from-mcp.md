@@ -79,6 +79,22 @@ self-approval by the person the agent works for stays allowed with an
 explicit confirmation") reads differently; the G7 record names it for the
 owner.
 
+**Amendment (2026-10-21, the owner's design of the plan review page).** The
+order of §3 is kept for the facts a person decides on: the page title says
+the kind and the target path (or the server's or cluster's name) with the
+tier chip, and the checklist "Before it can run" (policy decision with rule
+names and requirements, approvals with the agent note, staging evidence,
+expiry, the operation's apply and verification) and the per-migration
+analysis come before the raw text of the plan, which keeps its own heading
+and the sentence that it is data (§4). The identifying record moved after
+it, into a closed "Technical details" disclosure: the full plan hash with
+its copy button, who planned it with which client (the client name still
+marked unverified), the ids and the exact times. The hash a decision binds
+is shown in full in the plan confirmation the Approve and Apply actions open,
+which sends exactly the hash shown (§5 is unchanged). A node plan's title
+names its server; its stored change is data in a closed disclosure.
+Details: [`../../11-ui/information-architecture.md` §5](../../11-ui/information-architecture.md#5-plans-approvals-and-confirmations-in-the-ui).
+
 ## Consequences
 
 - No new route; the page stays in the Wave 3A Web App without a new

@@ -812,6 +812,8 @@ describe('OAuth over HTTP (Wave 3B)', () => {
     const installation = await bearer(tokens.access_token, '/api/v1/installation')
     expect(installation.status).toBe(200)
     expect(installation.body.contracts.restApi).toBe('v1')
+    // Wave 8: the OAuth clients page reads the registration mode instead of guessing it.
+    expect(installation.body.oauthClientRegistration).toBe('review')
     expect((await bearer(tokens.access_token, '/api/v1/identities')).status).toBe(200)
     // Own sessions and factors belong to the Web App session only.
     const me = await bearer(tokens.access_token, '/api/v1/me')

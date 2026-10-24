@@ -20,6 +20,11 @@ import {
   verifySkeleton,
 } from '../../src/features/sql/sql-model.ts'
 import { loadTabs, saveTabs, storageKey } from '../../src/features/sql/tab-storage.ts'
+import {
+  RECENT_TARGETS_PREFIX,
+  readRecentTargets,
+  rememberTarget,
+} from '../../src/features/target/recent-storage.ts'
 import { leaveForSignIn } from '../../src/lib/session/session.ts'
 import { forgetSqlTabs } from '../../src/lib/storage/sql-tabs.ts'
 import { BIDI, classifyText, TAG, ZWSP } from './support.tsx'
@@ -196,11 +201,16 @@ describe('tabs and storage', () => {
     saveTabs('idn_b', 'tgt_2', { tabs: [newTab('draft', 'SELECT 2')], active: '' })
     window.localStorage.setItem('exdb.sql.tabs.tgt_3', '{}')
     window.localStorage.setItem('exdb.theme', 'dark')
+    rememberTarget('idn_a', 'shop/platform/staging')
+    expect(readRecentTargets('idn_a')).toEqual(['shop/platform/staging'])
     const clearCache = vi.fn()
     leaveForSignIn({ location: { pathname: '/login', hash: '', assign: vi.fn() }, clearCache })
     expect(clearCache).toHaveBeenCalledTimes(1)
     const left = Object.keys(window.localStorage)
     expect(left.filter((key) => key.startsWith('exdb.sql.tabs.'))).toEqual([])
+    // The shell's recent targets of every person go with the session too.
+    expect(left.filter((key) => key.startsWith(RECENT_TARGETS_PREFIX))).toEqual([])
+    expect(readRecentTargets('idn_a')).toEqual([])
     expect(window.localStorage.getItem('exdb.theme')).toBe('dark')
     expect(loadTabs('idn_a', 'tgt_1')).toBeUndefined()
   })

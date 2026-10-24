@@ -27,7 +27,10 @@ import { clusterCredentialsQuery, policySettingsQuery } from '../target-ops/keys
 import { ReadSection } from '../target-ops/read-section.tsx'
 import { Section } from '../target-ops/section.tsx'
 import { TargetPage } from '../target-ops/target-page.tsx'
+import { CopyButton } from '../targets/copy.tsx'
+import { ConnectSection } from './connect-section.tsx'
 import { type DataReadModel, dataReadOf } from './data-read.ts'
+import { LifecycleSection } from './lifecycle-section.tsx'
 
 const MODE_LABELS: Readonly<Record<DataReadModel['mode'], MessageKey>> = {
   by_tier: 'configuration.dataRead.mode.by_tier',
@@ -48,10 +51,12 @@ const FROM_LABELS: Readonly<Record<DataReadModel['from'], MessageKey>> = {
 
 /**
  * `/t/<product>/<project>/<environment>/configuration`: how the target is
- * set up, read only. What the Control Store registry says about it, the
- * data-read policy that applies to it, the PostgreSQL settings (a named
- * state: the Control Plane has no read of them) and the roles of its
- * cluster. Settings change through plans on their own pages, never here.
+ * set up. What the Control Store registry says about it, where applications
+ * connect (for people who may see endpoint addresses), the data-read policy
+ * that applies to it, the PostgreSQL settings (a named state: the Control
+ * Plane has no read of them), the roles of its cluster and the target's
+ * lifecycle. Nothing changes here directly: the lifecycle actions and the
+ * settings on their own pages are plans that open for review.
  */
 export function ConfigurationPage(): ReactNode {
   return (
@@ -59,9 +64,11 @@ export function ConfigurationPage(): ReactNode {
       {(target) => (
         <>
           <TargetFacts target={target} />
+          <ConnectSection target={target} />
           <DataReadPolicy target={target} />
           <PostgresSettings />
           <ClusterRoles target={target} />
+          <LifecycleSection target={target} />
         </>
       )}
     </TargetPage>
@@ -82,7 +89,30 @@ function TargetFacts({ target }: { readonly target: Target }): ReactNode {
           {
             id: 'path',
             label: t('configuration.target.path'),
-            value: <UntrustedName name={target.path} mono label={t('configuration.target.path')} />,
+            value: (
+              <span className="inline-flex flex-wrap items-baseline gap-x-2">
+                <UntrustedName name={target.path} mono label={t('configuration.target.path')} />
+                <CopyButton
+                  what={t('configuration.copy.path')}
+                  label={t('configuration.copy.path.label')}
+                  text={target.path}
+                />
+              </span>
+            ),
+          },
+          {
+            id: 'id',
+            label: t('configuration.target.id'),
+            value: (
+              <span className="inline-flex flex-wrap items-baseline gap-x-2">
+                <UntrustedName name={target.id} mono label={t('configuration.target.id')} />
+                <CopyButton
+                  what={t('configuration.copy.id')}
+                  label={t('configuration.copy.id.label')}
+                  text={target.id}
+                />
+              </span>
+            ),
           },
           {
             id: 'tier',

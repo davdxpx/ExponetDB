@@ -61,6 +61,7 @@ export function SqlEditor({
   diagnostics,
   completion,
   onRun,
+  onSelectionChange,
   label,
   minLines = 3,
   maxLines,
@@ -86,14 +87,15 @@ export function SqlEditor({
   const optionsKey = JSON.stringify(options)
 
   // What the editor needs at the moment of an event or of its creation, kept current after every render.
-  const latest = useRef({ value, onChange, onRun, completion, options })
+  const latest = useRef({ value, onChange, onRun, onSelectionChange, completion, options })
   useEffect(() => {
-    latest.current = { value, onChange, onRun, completion, options }
+    latest.current = { value, onChange, onRun, onSelectionChange, completion, options }
   })
   const callbacks = useMemo<EditorCallbacks>(
     () => ({
       onChange: (text) => latest.current.onChange?.(text),
       onRun: () => latest.current.onRun?.(),
+      onSelectionChange: (hasSelection) => latest.current.onSelectionChange?.(hasSelection),
       provider: () => latest.current.completion,
     }),
     [],
@@ -178,6 +180,29 @@ export function SqlEditor({
           .filter((range) => !range.empty)
           .map((range) => view.state.sliceDoc(range.from, range.to))
           .join('\n')
+      },
+      getCursorOffset() {
+        return viewRef.current?.state.selection.main.head ?? 0
+      },
+      getSelectionRanges() {
+        const view = viewRef.current
+        if (view === null) return []
+        return view.state.selection.ranges
+          .filter((range) => !range.empty)
+          .map((range) => ({ from: range.from, to: range.to }))
+      },
+      replaceRange(from, to, expected, insert) {
+        const view = viewRef.current
+        if (view === null || from < 0 || to < from || to > view.state.doc.length) return false
+        if (view.state.sliceDoc(from, to) !== expected) return false
+        const change = minimalChange(expected, normalizeBreaks(insert))
+        if (change !== null) {
+          view.dispatch({
+            changes: { from: from + change.from, to: from + change.to, insert: change.insert },
+            userEvent: 'input.format',
+          })
+        }
+        return true
       },
     }),
     [],

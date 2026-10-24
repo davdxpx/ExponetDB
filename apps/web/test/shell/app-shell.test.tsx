@@ -157,8 +157,8 @@ describe('the icon rail and the section menu', () => {
   })
 
   it('shows no section menu for a section with one page', async () => {
-    mount('/')
-    await screen.findByRole('heading', { name: 'Overview' })
+    mount('/audit')
+    await screen.findByRole('heading', { level: 1, name: 'Audit' })
     expect(screen.queryByRole('navigation', { name: /pages$/ })).not.toBeInTheDocument()
   })
 
@@ -178,8 +178,9 @@ describe('the icon rail and the section menu', () => {
   it('keeps the chosen sidebar mode in the preferences of this browser', async () => {
     const user = userEvent.setup()
     window.localStorage.removeItem('exdb.sidebar.mode')
-    mount('/')
-    await screen.findByRole('heading', { name: 'Overview' })
+    // A page with no section menu: beside a section menu the resizable group takes pointer-down in jsdom.
+    mount('/audit')
+    await screen.findByRole('heading', { level: 1, name: 'Audit' })
     await user.click(screen.getByRole('button', { name: 'Sidebar' }))
     await user.click(await screen.findByRole('menuitemradio', { name: 'Always open' }))
     expect(window.localStorage.getItem('exdb.sidebar.mode')).toBe('open')
@@ -204,7 +205,8 @@ describe('the rail and the page beside it', () => {
     const rail = document.querySelector('[data-collapsible][data-state]')
     const main = screen.getByRole('main')
     if (rail === null) throw new Error('no rail')
-    // The rail's own box (the first child) is what the flex row lays out beside the page.
+    // The rail's own box (the first child) is what the flex row lays out beside the page; the
+    // page follows it (beside the section menu where the section has one).
     const gap = rail.firstElementChild
     return { rail, gap, main }
   }
@@ -219,7 +221,7 @@ describe('the rail and the page beside it', () => {
     expect(rail).toHaveAttribute('data-collapsible', 'icon')
     // The rail's box is out of the flow (absolute) and the page follows the 3rem slot.
     expect(gap).toHaveClass('absolute')
-    expect(rail.nextElementSibling).toBe(main)
+    expect(rail.nextElementSibling?.contains(main)).toBe(true)
 
     const link = within(rail as HTMLElement).getAllByRole('link')[2] as HTMLElement
     await user.hover(link)
@@ -239,7 +241,7 @@ describe('the rail and the page beside it', () => {
     // In the flow (relative) at the sidebar width: the page beside it is offset by the same width.
     expect(gap).toHaveClass('relative', 'w-(--sidebar-width)')
     expect(gap).not.toHaveClass('absolute')
-    expect(rail.nextElementSibling).toBe(main)
+    expect(rail.nextElementSibling?.contains(main)).toBe(true)
   })
 
   it('collapsed: the rail takes the icon width in the layout and never opens by itself', async () => {
@@ -248,7 +250,7 @@ describe('the rail and the page beside it', () => {
     expect(rail).toHaveAttribute('data-state', 'collapsed')
     expect(rail).toHaveAttribute('data-collapsible', 'icon')
     expect(gap).toHaveClass('relative', 'group-data-[collapsible=icon]:w-(--sidebar-width-icon)')
-    expect(rail.nextElementSibling).toBe(main)
+    expect(rail.nextElementSibling?.contains(main)).toBe(true)
     const link = within(rail as HTMLElement).getAllByRole('link')[2] as HTMLElement
     await user.hover(link)
     expect(rail).toHaveAttribute('data-state', 'collapsed')
