@@ -42,6 +42,7 @@ import {
   loginPassword,
   logsIn,
   provisionRoles,
+  rotatesVerifierPassword,
   type TestServer,
   testTargets,
   withRolesHeld,
@@ -80,6 +81,9 @@ import {
  * its role lock too, so no suite resets the role passwords meanwhile; the
  * password is put back after.
  */
+
+// Before the setup file's hooks run: this file never takes the shared lock it holds exclusively.
+rotatesVerifierPassword()
 
 const ROLE: AccessRole = 'verifier'
 const LOGIN = ROLE_NAMES[ROLE]
@@ -262,7 +266,7 @@ beforeAll(async () => {
     process: 'worker',
     installationId: db.installationId,
   })
-}, 180_000)
+}, 600_000)
 
 afterAll(async () => {
   await node?.stop()

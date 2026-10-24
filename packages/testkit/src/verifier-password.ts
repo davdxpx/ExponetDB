@@ -10,13 +10,15 @@ import { superuserClient, TEST_TARGETS_ENV, type TestServer, testTargets } from 
  * verifier login meanwhile failed (`password authentication failed`), so a
  * verification read as `error` in another package running at the same time.
  *
- * The suites against the target servers hold a shared advisory lock for
- * each test (`vitest.target-setup.ts`); the rotation holds it exclusively
- * for its file, so it starts once the running tests ended and the tests that
- * start meanwhile wait for it. The rotation takes this lock before the role
- * lock and a test takes it before any role lock it takes, so the two locks
- * are always taken in the same order. Logins in a `beforeAll` are not
- * covered; a session opened before the rotation lives on.
+ * The suites against the target servers hold a shared advisory lock
+ * (`vitest.target-setup.ts`) from before a file's own `beforeAll` (where
+ * its worlds log in as the verifier to check the credential) until its
+ * first test ended, and then for each test. The rotation holds it
+ * exclusively for its file, so it starts once those ended, and what starts
+ * meanwhile waits for it (the hook timeout of `targetIntegrationConfig`
+ * covers the wait). The rotation takes this lock before the role lock, and a
+ * file takes it before any role lock it takes, so the two locks are always
+ * taken in the same order. A session opened before the rotation lives on.
  */
 const VERIFIER_PASSWORD_LOCK = 0x45584442_0006 // 'EXDB', the verifier's test password
 
@@ -28,8 +30,20 @@ export const VERIFIER_ROTATION_MAJOR = 17
 const ROTATING = Symbol.for('exponetdb.testkit.verifierRotating')
 const flags = globalThis as { [ROTATING]?: boolean }
 
+/**
+ * Declares, when the test file is imported (before the setup file's hooks
+ * run), that this file rotates the verifier's password: it never takes the
+ * shared lock, which its own exclusive one would wait for.
+ */
+export function rotatesVerifierPassword(): void {
+  flags[ROTATING] = true
+}
+
 /** Runs `fn` while no test of another suite logs in as the verifier on `s`. */
 export async function withVerifierPasswordHeld<T>(s: TestServer, fn: () => Promise<T>): Promise<T> {
+  if (flags[ROTATING] !== true) {
+    throw new Error('call rotatesVerifierPassword() when the rotating test file is imported')
+  }
   if (s.major !== VERIFIER_ROTATION_MAJOR) {
     throw new Error(
       `only the PostgreSQL ${VERIFIER_ROTATION_MAJOR} test server rotates the verifier`,
@@ -38,11 +52,9 @@ export async function withVerifierPasswordHeld<T>(s: TestServer, fn: () => Promi
   const c = await superuserClient(s, 'postgres')
   try {
     await c.query('SELECT pg_advisory_lock($1::bigint)', [VERIFIER_PASSWORD_LOCK])
-    flags[ROTATING] = true
     try {
       return await fn()
     } finally {
-      flags[ROTATING] = false
       await c.query('SELECT pg_advisory_unlock($1::bigint)', [VERIFIER_PASSWORD_LOCK])
     }
   } finally {
@@ -50,7 +62,7 @@ export async function withVerifierPasswordHeld<T>(s: TestServer, fn: () => Promi
   }
 }
 
-/** One file's turn on the verifier password: shared, per test. */
+/** One file's turn on the verifier password: shared, from its `beforeAll` to its first test's end, then per test. */
 export interface VerifierLoginTurn {
   enter(): Promise<void>
   leave(): Promise<void>
@@ -102,6 +114,8 @@ export function verifierLoginTurn(): VerifierLoginTurn {
       const c = client === null ? null : await client.catch(() => null)
       client = null
       held = false
+      // A worker may run another file next: it declares itself again if it rotates.
+      flags[ROTATING] = false
       await c?.end().catch(() => undefined)
     },
   }

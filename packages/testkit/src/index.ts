@@ -64,6 +64,7 @@ export {
 } from './servers.ts'
 export { databaseFromFixture, ensureTemplate, type Fixture } from './templates.ts'
 export {
+  rotatesVerifierPassword,
   VERIFIER_ROTATION_MAJOR,
   type VerifierLoginTurn,
   verifierLoginTurn,

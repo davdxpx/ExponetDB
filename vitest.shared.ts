@@ -69,13 +69,15 @@ export const integrationConfig = defineConfig({
 })
 
 // The integration suites against the target servers (the packages using
-// `@exponetdb/testkit`'s servers): each test holds the test kit's shared lock
-// on the verifier password, so the suite that rotates it never runs during
-// one (packages/testkit/src/verifier-password.ts).
+// `@exponetdb/testkit`'s servers): a file and then each test holds the test
+// kit's shared lock on the verifier password, so the suite that rotates it
+// never runs while one logs in (packages/testkit/src/verifier-password.ts).
+// A hook may wait for a rotation behind the longest running file: 10 minutes.
 export const targetIntegrationConfig = defineConfig({
   ...integrationConfig,
   test: {
     ...integrationConfig.test,
+    hookTimeout: 600_000,
     setupFiles: [new URL('./vitest.target-setup.ts', import.meta.url).pathname],
   },
 })
