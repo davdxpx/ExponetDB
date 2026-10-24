@@ -493,6 +493,11 @@ function DecisionConsequence({
           })}
         </p>
       ) : null}
+      {failing.items.some((f) => f.failed.includes('unreadable')) ? (
+        <p className="m-0 text-xs" data-unreadable="true">
+          {t('migrations.import.decide.excusesUnread')}
+        </p>
+      ) : null}
     </div>
   )
 }

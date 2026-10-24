@@ -209,7 +209,16 @@ file whose expectations could not be read on the imported target (a check
 that raised, for example on a schema the observer may not use) carries that
 as one failure with the aspect `unreadable`: an acceptance excuses it
 explicitly, and the verification records it the same way instead of
-erroring. A file decided
+erroring. Such an acceptance excuses what nobody saw (the checks of that
+file never compared anything), and both interfaces say so at the decision.
+The recommended path is to give the observer the reads it lacks
+(`USAGE` on the schema) and analyze again. A baseline recorded with such an
+acceptance and later read by an observer that can see the schema compares
+the file's expectations for the first time: they may then fail, not
+excused, and a baseline cannot be recorded twice. Only a failure that
+cannot be read is `unreadable` (a privilege the observer lacks, a name the
+server refuses, a row the engine cannot decode); a timeout, a lock wait, a
+cancel or a lost connection errors the run, which can then be retried. A file decided
 `superseded` is not checked by the verification at all (its effects were
 replaced). **[OBSERVED]** The first real baseline (`reos-db-01`, 2026-10-23)
 needed 454 such decisions (column positions after `ADD COLUMN`, row security

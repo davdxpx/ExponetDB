@@ -1,5 +1,6 @@
-import type { ExpectationResult } from '@exponetdb/postgres'
+import { type ExpectationResult, TargetError } from '@exponetdb/postgres'
 import { describe, expect, it } from 'vitest'
+import { readsAsUnreadable } from '../src/legacy.ts'
 import { layerFrom } from '../src/reads.ts'
 import {
   clusterGlobalFailures,
@@ -116,5 +117,23 @@ describe('failures of a baseline verification', () => {
       firstFailure: { name: 'unparsed: 0007_x' },
     })
     expect(layerFrom({ fingerprint: 'mismatch' }, 'engine').status).toBe('failed')
+  })
+
+  it('calls a read unreadable only when it would fail the same way again (re-review)', () => {
+    const sqlError = (sqlstate: string) =>
+      new TargetError('TARGET_SQL_ERROR', 'server_error', { sqlstate })
+    expect(
+      readsAsUnreadable(
+        new TargetError('PERMISSION_DENIED', 'insufficient_privilege', { sqlstate: '42501' }),
+      ),
+    ).toBe(true)
+    expect(readsAsUnreadable(sqlError('0A000'))).toBe(true)
+    expect(readsAsUnreadable(new Error('a row the engine cannot decode'))).toBe(true)
+    // What may pass on its own errors the run, which a person can retry.
+    expect(readsAsUnreadable(new TargetError('QUERY_TIMEOUT', 'statement_timeout'))).toBe(false)
+    expect(readsAsUnreadable(new TargetError('TARGET_UNAVAILABLE', 'connection_lost'))).toBe(false)
+    for (const transient of ['57014', '55P03', '40001', '40P01', '53300', '08006']) {
+      expect(readsAsUnreadable(sqlError(transient))).toBe(false)
+    }
   })
 })

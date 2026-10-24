@@ -697,6 +697,17 @@ function decisionBlocks(r: ImportReport, itemId: string): Block[] {
         f.failed.join(', '),
       ]),
     },
+    ...(failing.items.some((f) => f.failed.includes('unreadable'))
+      ? [
+          {
+            kind: 'text' as const,
+            lines: [
+              'Some of these checks could not be read on the imported target, so nobody saw what they would find; the acceptance excuses that too. To check them, give the observer the reads it lacks and analyze again.',
+            ],
+            tone: 'warn' as const,
+          },
+        ]
+      : []),
   ]
 }
 

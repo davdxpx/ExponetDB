@@ -134,6 +134,8 @@ const migrationsMessages = {
   'migrations.import.decide.excuses':
     "Accepting this file as applied excuses its {count} failing expectations at the baseline's verification, as they fail now. Any other failure still fails the verification.",
   'migrations.import.decide.excusesMore': 'And {count} more.',
+  'migrations.import.decide.excusesUnread':
+    'Some of these checks could not be read on the imported target, so nobody saw what they would find. Accepting excuses that too. To check them, give the observer the reads it lacks and analyze again.',
   'migrations.import.decide.excusesNothing':
     "Accepting this file as applied excuses nothing: every expectation it states must hold at the baseline's verification.",
   'migrations.import.decide.supersededUnchecked':
