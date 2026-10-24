@@ -479,10 +479,12 @@ function worstCompatibility(classes: readonly CompatibilityClass[]): Compatibili
  * stands for the whole history before ExponetDB, so every later migration
  * builds on it, whether it names it or not.
  */
+type RunFact = Pick<VerificationRecord, 'migrationId' | 'status' | 'finishedAt'>
+
 export function dependenciesVerified(
   order: readonly StoredRevision[],
   ledger: readonly LedgerRecord[],
-  verifications: readonly VerificationRecord[],
+  verifications: readonly RunFact[],
 ): boolean {
   const planned = new Set(order.map((r) => r.migrationId))
   const deps = new Set(
@@ -498,6 +500,38 @@ export function dependenciesVerified(
   }
   const baseline = ledger.find((l) => l.origin === 'baseline' && l.revertedAt === null)
   return baseline === undefined || passed(baseline.migrationId)
+}
+
+/**
+ * The verification runs the production rule weighs, the baseline's taken
+ * from the Control Store's mirror instead of the target: a migration's
+ * procedural code can write the target's runs (OD-55), and one passed row
+ * for the baseline would vouch for the whole history (follow-up 4 review).
+ */
+async function withMirroredBaselineRuns(
+  tx: Tx,
+  target: { readonly targetId: string; readonly generation: number },
+  ledger: readonly LedgerRecord[],
+  verifications: readonly RunFact[],
+): Promise<RunFact[]> {
+  const baseline = ledger.find((l) => l.origin === 'baseline' && l.revertedAt === null)
+  if (baseline === undefined) return [...verifications]
+  const { rows } = await tx.query(
+    'migrations.plan.baseline_runs',
+    `SELECT status,
+            to_char(finished_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS finished_at
+       FROM migrations.verification_mirror
+      WHERE target_id = $1 AND generation = $2 AND migration_id = $3`,
+    [target.targetId, target.generation, baseline.migrationId],
+  )
+  return [
+    ...verifications.filter((v) => v.migrationId !== baseline.migrationId),
+    ...rows.map((r) => ({
+      migrationId: baseline.migrationId,
+      status: r.text('status') as RunFact['status'],
+      finishedAt: r.text('finished_at'),
+    })),
+  ]
 }
 
 export async function planMigrationApply(
@@ -743,7 +777,11 @@ export async function planMigrationApply(
     requirementsUnmet: [...requirementsUnmet].sort(),
     evidence: evidence.fact,
     lineage: evidence.lineage,
-    dependenciesVerified: dependenciesVerified(order, state.ledger, live.verifications),
+    dependenciesVerified: dependenciesVerified(
+      order,
+      state.ledger,
+      await withMirroredBaselineRuns(tx, target, state.ledger, live.verifications),
+    ),
     legacyProject: state.meta.baselineId !== null,
     executionRoleExceptions: exceptionsUsed.length,
     executionRoleParity: parity,
