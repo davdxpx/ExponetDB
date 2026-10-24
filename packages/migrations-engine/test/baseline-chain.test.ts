@@ -87,6 +87,29 @@ describe('the schema a baseline accepts', () => {
     ).toEqual({ kind: 'chain', migrations: 2, last: M2 })
   })
 
+  it('never takes the reviewed schema as a shortcut past later migrations (review P2-1)', () => {
+    // A later migration whose up.sql supersedes history checks, not verified, and a live
+    // schema that is the reviewed one again (a change outside the fingerprint, a data change).
+    const unverified = [row(M1, 9, { fingerprintBefore: REVIEWED, fingerprintAfter: REVIEWED })]
+    expect(
+      acceptBaselineSchema({
+        reviewed: REVIEWED,
+        live: REVIEWED,
+        later: unverified,
+        verifications: [run(M1, 'failed', '2026-10-24T10:01:00.000Z')],
+      }),
+    ).toMatchObject({ kind: 'failed', detail: 'its latest verification is failed' })
+    // Verified, the same data-only link passes as a chain.
+    expect(
+      acceptBaselineSchema({
+        reviewed: REVIEWED,
+        live: REVIEWED,
+        later: unverified,
+        verifications: [run(M1, 'passed', '2026-10-24T10:01:00.000Z')],
+      }),
+    ).toEqual({ kind: 'chain', migrations: 1, last: M1 })
+  })
+
   it('fails without later migrations, on one not verified, a gap, or a live schema after the chain', () => {
     expect(
       acceptBaselineSchema({ reviewed: REVIEWED, live: FIRST, later: [], verifications: [] }),
@@ -163,6 +186,8 @@ describe("the target's rows after the baseline against the Control Store's mirro
   })
   it('names a row the mirror does not hold, or holds otherwise', () => {
     expect(mirrorDiffers(later, mirrored.slice(0, 1))).toBe(M2)
+    // A mirrored row the target no longer holds (deleted there) (review P3-b).
+    expect(mirrorDiffers(later.slice(0, 1), mirrored)).toBe(M2)
     expect(
       mirrorDiffers(later, [
         { ...(mirrored[0] as (typeof mirrored)[number]), fingerprintAfter: SECOND },

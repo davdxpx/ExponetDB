@@ -217,11 +217,11 @@ operation that explains them is the one the new baseline names
 (`schema_baselines.operation_id`, shown with the check's
 `baselineFingerprint`); a finding's `explainedByOperationId` stays `null`
 (nothing sets it yet, here or for a verified migration). **[DECIDED]**
-(follow-up 4, 2026-10-24) Once migrations were applied on top of the
-baseline, the newest verified one already set the target's baseline; a
-baseline verification that passes afterwards (through the chain of those
-verified migrations) records nothing, so the reference never moves back to
-an older state.
+(follow-up 4, 2026-10-24) After migrations applied on top of the baseline,
+a baseline verification that passes (through the chain of those verified
+migrations) records the end of that chain, the newest verified schema, so
+the reference never moves back to an older state; it catches up a
+migration verified later through `migration.verify`, which records none.
 - Each drifted object is one finding (`object_added`, `object_removed`,
   `object_changed`), deduplicated by kind, code and object (`C:<code>:<class>:`
   SHA-256 of the canonical key): seen again it counts one more occurrence on

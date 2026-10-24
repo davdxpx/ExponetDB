@@ -313,14 +313,19 @@ with the reviewed fingerprint alone could never pass again (observed on
 `reos-db-01`: 0 of 13 349 failed, 234 excused, the engine layer failed on the
 fingerprint).
 
-- **Engine layer.** It accepts the live schema when it is the reviewed one,
-  or when every ledger row after the baseline is a migration of ExponetDB,
+- **Engine layer.** Without a migration after the baseline it accepts the
+  live schema when it is the reviewed one. With later migrations the chain
+  decides, also when the live schema is the reviewed one again (their
+  `up.sql` supersedes history checks, which only a verified chain may do; a
+  data-only migration links the reviewed schema to itself): every ledger row
+  after the baseline is a migration of ExponetDB,
   not reverted, whose latest verification passed, the first of them started
   at the reviewed schema (`fingerprint_before`), each next one where the one
   before ended, and the live schema is where the last one ended. The chain
   is the one the Control Store recorded: each target ledger row after the
   baseline must be the worker's mirrored row (checksum, operation, schema
-  before and after, revert state), and the verification runs that count are
+  before and after, revert state), every mirrored row after the baseline
+  must still be on the target, and the verification runs that count are
   the mirrored ones, because a migration's procedural code can write the
   target's ledger ([OD-55](../00-product/open-decisions.md)). A passed
   run says so (`engine.acceptedThrough`: how many migrations, the last one);
@@ -340,10 +345,11 @@ fingerprint).
   migration's own verification checked what it left and the engine layer
   requires it verified. Everything else of the history is still checked and
   excused as reviewed.
-- **Drift reference.** After later migrations the drift reference already is
-  the newest verified schema (the last migration's); a passed baseline run
-  then never moves it back to the baseline's state. Without later
-  migrations a passed run records it as before.
+- **Drift reference.** A passed run records the live schema as the drift
+  reference: the reviewed one, or the end of the verified chain, the newest
+  verified state either way, so it never moves the reference back. It also
+  catches it up when the last migration verified only later through
+  `migration.verify`, which records no reference itself.
 - **A bundle on an unverified baseline.** On nonprod a bundle may be planned
   and applied on top of a baseline whose verification failed **[DECIDED]**:
   the baseline's state is visible in its runs, staging is where the history
@@ -352,7 +358,8 @@ fingerprint).
   (version 2) counts the target's baseline as a dependency of every plan, so
   a production plan on a target whose baseline has no passing latest
   verification fails it (`MIGRATION_DEPENDENCY_UNVERIFIED`; break-glass
-  overridable like an unverified dependency).
+  overridable like an unverified dependency). The baseline's runs it weighs
+  are the Control Store's mirrored ones, not the target's.
 - **An imported row's verification** **[DECIDED]** (follow-up 4 addendum).
   An imported row (`legacy:<stem>`) never has a verification run of its
   own; the baseline's verification checks it. `migration status` (REST, the

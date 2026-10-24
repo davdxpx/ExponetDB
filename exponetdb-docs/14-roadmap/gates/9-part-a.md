@@ -1010,7 +1010,7 @@ migrated on top of it.
 |---|---|---|
 | Engine layer | Accepts the reviewed schema, or the end of a chain of migrations after the baseline that are all of ExponetDB, not reverted and verified (latest run passed), starting at the reviewed schema and ending at the live one, as the Control Store's mirror recorded them (a target row that differs from the mirrored one fails it; the runs are the mirrored ones, OD-55); a passed run names it (`engine.acceptedThrough`, additive), a failed one names where it broke | `baseline-chain.test.ts`, `legacy-baseline-verify.int.test.ts` (16, 17, 18; a target ledger row changed by hand fails it) |
 | Structural layer | The later migrations' `up.sql` follows the history in the supersede analysis: a history's expectation a later migration changed on purpose is not checked (that migration's verification checked its result); the rest is checked and excused as reviewed ([legacy-import.md Step 7](../../04-migrations/legacy-import.md#step-7-verify)) | the same: a bundle that adds a column to a table the history created; without the later bundles in the analysis the test fails |
-| Drift reference | A passed baseline run after later migrations records nothing; the reference stays the newest verified schema | the same (the recorded references do not change) |
+| Drift reference | A passed baseline run records the live schema, the end of the verified chain (the newest verified state), never an older one; it catches up a migration that verified only later through `migration.verify` | the same (the recorded reference is the newest bundle's schema) |
 | Bundles on an unverified baseline | Nonprod: allowed, by design. Production: refused, `migration.dependencies-verified` version 2 counts the target's baseline as a dependency of every plan (break-glass overridable) | `baseline-chain.test.ts` (the facts) |
 
 Tests on PostgreSQL 16, 17 and 18: a verified bundle on top of the baseline,
@@ -1045,3 +1045,35 @@ status. Tests: `baseline-chain.test.ts` (every case), and
 `legacy-baseline-verify.int.test.ts` on 16, 17 and 18 (a passed baseline: its
 rows passed, with their excusals, a superseded file says so; a failed
 re-verification: only the file with the open failure reads failed).
+
+**Independent review of follow-up 4 (2026-10-24).** **[OBSERVED]** Two P2,
+both proved on PostgreSQL 17 by the reviewer, and fixed here:
+
+| # | Finding | Fix |
+|---|---|---|
+| P2-1 | With later migrations, a live schema equal to the reviewed one passed without the chain, while the later `up.sql` still superseded history checks: an unverified bundle that changed a table comment (comments are outside fp1) dropped the history's comment check, and a comment changed by hand back passed | Without later migrations the reviewed schema decides; with them only the chain does (a data-only migration links the reviewed schema to itself) (`baseline-chain.test.ts`) |
+| P2-2 | A migration verified later through `migration.verify` records no drift reference, and a passed baseline run after later migrations recorded none either, so the reference stayed behind | Every passed baseline run records its schema, the end of the verified chain, which never moves the reference back (`legacy-baseline-verify.int.test.ts`) |
+| P3-a | The production rule read the baseline's runs from the target (OD-55) | The baseline's mirrored runs count |
+| P3-b | The mirror comparison looked one way: a mirrored row the target no longer holds dropped out of the chain | Both ways, by `applied_seq` after the baseline |
+| P3-d | Mirror times were parsed in JavaScript from `::text` (DateStyle dependent, millisecond ties) | `to_char` in UTC with microseconds, ordered |
+| P3-h | A later bundle's replay shared the map with the legacy files by stem | Keyed `migration:<id>` |
+| P3-j | "the last of 1 migrations" | Reworded |
+
+Residuals, **[OPEN]** and left as they are, each existing before this order
+or bounded by it:
+
+- The mirror copies the row the target shows after the apply; a migration's
+  own code that rewrites its row inside its transaction is mirrored too
+  (OD-55, as for every ledger row).
+- A chain counts the latest passed run of each migration, whatever its
+  verify digest (existing semantics of a re-verification).
+- A production plan made while the baseline passed can be applied after a
+  failed re-verification: the fact is not observed again at apply, as for
+  dependencies.
+- A bundle's `DO` block that changes a role supersedes the history's role
+  expectation in the supersede analysis; the bundle linter refuses role
+  management at the top level only (on `main` before).
+- An imported row whose file stated nothing checkable reads passed by the
+  baseline; rows read their own share while the baseline's engine layer
+  failed (the baseline row shows the run); the MCP tool shows a superseded
+  row with the run's status (it has no `superseded` field).

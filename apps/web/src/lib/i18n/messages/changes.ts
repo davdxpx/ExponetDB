@@ -131,7 +131,7 @@ export const changesMessages = {
     '{migration}: {failed} of {checks} expectations failed, {excused} excused by review decisions.',
   'changes.verification.engineFailed': 'Engine check failed: {name}',
   'changes.verification.acceptedThrough':
-    'The schema was accepted as the verified state of {last}, the last of {count} migrations applied after the baseline.',
+    'The schema was accepted as the verified state of {last} (migrations applied after the baseline: {count}).',
   'changes.verification.file': 'File',
   'changes.verification.statement': 'Statement',
   'changes.verification.expected': 'Expected',
