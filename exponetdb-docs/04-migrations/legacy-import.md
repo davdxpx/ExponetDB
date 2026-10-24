@@ -317,7 +317,12 @@ fingerprint).
   or when every ledger row after the baseline is a migration of ExponetDB,
   not reverted, whose latest verification passed, the first of them started
   at the reviewed schema (`fingerprint_before`), each next one where the one
-  before ended, and the live schema is where the last one ended. A passed
+  before ended, and the live schema is where the last one ended. The chain
+  is the one the Control Store recorded: each target ledger row after the
+  baseline must be the worker's mirrored row (checksum, operation, schema
+  before and after, revert state), and the verification runs that count are
+  the mirrored ones, because a migration's procedural code can write the
+  target's ledger ([OD-55](../00-product/open-decisions.md)). A passed
   run says so (`engine.acceptedThrough`: how many migrations, the last one);
   anything else fails it, named (`schema after the baseline: <migration>`:
   never verified, its latest verification failed, the chain breaks, it was

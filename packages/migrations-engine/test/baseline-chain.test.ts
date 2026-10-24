@@ -1,6 +1,6 @@
 import type { LedgerRecord, VerificationRecord } from '@exponetdb/postgres'
 import { describe, expect, it } from 'vitest'
-import { acceptBaselineSchema, rowsAfterBaseline } from '../src/baseline-chain.ts'
+import { acceptBaselineSchema, mirrorDiffers, rowsAfterBaseline } from '../src/baseline-chain.ts'
 import { dependenciesVerified } from '../src/planner.ts'
 import { importedVerification } from '../src/reads.ts'
 
@@ -146,6 +146,35 @@ describe('the schema a baseline accepts', () => {
         verifications: verified,
       }),
     ).toMatchObject({ kind: 'failed', detail: 'reverted after the baseline' })
+  })
+})
+
+describe("the target's rows after the baseline against the Control Store's mirror", () => {
+  const mirrored = later.map((r) => ({
+    migrationId: r.migrationId,
+    checksum: r.checksum,
+    operationId: r.operationId,
+    fingerprintBefore: r.fingerprintBefore,
+    fingerprintAfter: r.fingerprintAfter,
+    reverted: false,
+  }))
+  it('agrees when every row is the mirrored one', () => {
+    expect(mirrorDiffers(later, mirrored)).toBe(null)
+  })
+  it('names a row the mirror does not hold, or holds otherwise', () => {
+    expect(mirrorDiffers(later, mirrored.slice(0, 1))).toBe(M2)
+    expect(
+      mirrorDiffers(later, [
+        { ...(mirrored[0] as (typeof mirrored)[number]), fingerprintAfter: SECOND },
+        mirrored[1] as (typeof mirrored)[number],
+      ]),
+    ).toBe(M1)
+    expect(
+      mirrorDiffers(later, [
+        mirrored[0] as (typeof mirrored)[number],
+        { ...(mirrored[1] as (typeof mirrored)[number]), reverted: true },
+      ]),
+    ).toBe(M2)
   })
 })
 

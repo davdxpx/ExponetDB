@@ -26,7 +26,13 @@ import {
   registryKinds,
   type TargetRecord,
 } from '@exponetdb/registry'
-import { matrix, runAsSuperuser, type TestServer, withRolesHeld } from '@exponetdb/testkit'
+import {
+  matrix,
+  runAsSuperuser,
+  type TestServer,
+  withRolesHeld,
+  withSuperuser,
+} from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   actor,
@@ -689,6 +695,43 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         })
       } finally {
         await runAsSuperuser(server, w.importedDb, ['DROP TABLE public.acme_by_hand'])
+      }
+      expect(await apply(w, await reverify(w))).toMatchObject({ state: 'succeeded' })
+    })
+
+    it('fails on a target ledger row after the baseline that is not the one the Control Store recorded', async () => {
+      // A row written on the target by other means (OD-55: a migration's procedural code can
+      // reach the ledger owner): the chain counts only what the worker mirrored.
+      const before = await withSuperuser(server, w.importedDb, async (c) => {
+        const r = await c.query(
+          'SELECT fingerprint_before FROM exponetdb.schema_migrations WHERE migration_id = $1',
+          [second],
+        )
+        return String(r.rows[0]?.fingerprint_before)
+      })
+      const forge = (fingerprint: string) =>
+        withSuperuser(server, w.importedDb, async (c) => {
+          await c.query('BEGIN')
+          await c.query('SET LOCAL session_replication_role = replica')
+          await c.query(
+            'UPDATE exponetdb.schema_migrations SET fingerprint_before = $1 WHERE migration_id = $2',
+            [fingerprint, second],
+          )
+          await c.query('COMMIT')
+        })
+      await forge(`fp1:${server.major}:${'e'.repeat(64)}`)
+      try {
+        expect(await apply(w, await reverify(w))).toMatchObject({ state: 'verification_failed' })
+        expect((await latestRun(w)).engine).toMatchObject({
+          status: 'failed',
+          firstFailure: {
+            name: `schema after the baseline: ${second}`,
+            detail:
+              "its ledger row is not the one ExponetDB recorded in the Control Store's mirror",
+          },
+        })
+      } finally {
+        await forge(before)
       }
       expect(await apply(w, await reverify(w))).toMatchObject({ state: 'succeeded' })
     })

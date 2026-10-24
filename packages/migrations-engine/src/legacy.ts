@@ -29,7 +29,6 @@ import {
   pinSearchPath,
   readLedgerMeta,
   readLedgerRows,
-  readVerifications,
   snapshotWithin,
   sql,
   TargetError,
@@ -54,7 +53,7 @@ import {
   RegistryError,
   type TargetRecord,
 } from '@exponetdb/registry'
-import { acceptBaselineSchema, rowsAfterBaseline } from './baseline-chain.ts'
+import { acceptBaselineSchema, mirrorDiffers, rowsAfterBaseline } from './baseline-chain.ts'
 import type { PlanContent, PlanItem } from './content.ts'
 import { type MigrationKindDeps, projectRegistry } from './deps.ts'
 import { MigrationError } from './errors.ts'
@@ -2193,6 +2192,50 @@ export async function baselineToVerify(
   }
 }
 
+/** The mirror rows and verification runs of the migrations after a baseline (follow-up 4). */
+async function chainMirror(
+  q: Queryable,
+  targetId: string,
+  generation: number,
+  later: readonly { readonly migrationId: string }[],
+) {
+  if (later.length === 0) return { rows: [], verifications: [] }
+  const ids = JSON.stringify(later.map((r) => r.migrationId))
+  const rows = await q.query(
+    'migrations.baseline.chain_mirror',
+    `SELECT migration_id, checksum, operation_id, fingerprint_before, fingerprint_after,
+            reverted_at IS NOT NULL AS reverted
+       FROM migrations.ledger_mirror
+      WHERE target_id = $1 AND generation = $2
+        AND migration_id = ANY (ARRAY(SELECT jsonb_array_elements_text($3::jsonb)))`,
+    [targetId, generation, ids],
+  )
+  const runs = await q.query(
+    'migrations.baseline.chain_runs',
+    `SELECT migration_id, status, finished_at::text AS finished_at
+       FROM migrations.verification_mirror
+      WHERE target_id = $1 AND generation = $2
+        AND migration_id = ANY (ARRAY(SELECT jsonb_array_elements_text($3::jsonb)))`,
+    [targetId, generation, ids],
+  )
+  return {
+    rows: rows.rows.map((r) => ({
+      migrationId: r.text('migration_id'),
+      checksum: r.text('checksum'),
+      operationId: r.text('operation_id'),
+      fingerprintBefore: r.textOrNull('fingerprint_before'),
+      fingerprintAfter: r.textOrNull('fingerprint_after'),
+      reverted: r.bool('reverted'),
+    })),
+    verifications: runs.rows.map((r) => ({
+      migrationId: r.text('migration_id'),
+      status: r.text('status') as 'passed' | 'failed' | 'partial' | 'error',
+      // A comparable instant: the mirror's text form is not the target's.
+      finishedAt: new Date(r.text('finished_at')).toISOString(),
+    })),
+  }
+}
+
 /**
  * The imported rows (`legacy:<stem>`) of a baseline whose file the review
  * decided superseded (or the analysis classified so without a decision): the
@@ -2273,14 +2316,12 @@ export async function verifyBaseline(
   // The migrations applied after the baseline (follow-up 4): their verified states are a way
   // the schema may have moved on, and their up.sql supersedes what the history stated.
   let later: Awaited<ReturnType<typeof readLedgerRows>> = []
-  let verifications: Awaited<ReturnType<typeof readVerifications>> = []
   const unstored: string[] = []
   try {
     await loadParser(opened.session.facts.major)
-    ;({ later, verifications } = await opened.session.readOnly(async (rtx) => ({
-      later: rowsAfterBaseline(await readLedgerRows(rtx), c.baselineId),
-      verifications: await readVerifications(rtx),
-    })))
+    later = await opened.session.readOnly(async (rtx) =>
+      rowsAfterBaseline(await readLedgerRows(rtx), c.baselineId),
+    )
     const applicable = files.filter((f) => !c.notApplicable.includes(f.stem))
     const bundles: ImportFile[] = []
     for (const row of later) {
@@ -2368,22 +2409,31 @@ export async function verifyBaseline(
   } finally {
     await opened.session.close()
   }
+  // The chain as the Control Store recorded it: the target's rows must be the mirrored ones,
+  // and the runs that count are the mirrored ones (a migration's code can write the target's).
+  const mirror = await chainMirror(deps.store, target.targetId, c.target.generation, later)
+  const differs = mirrorDiffers(later, mirror.rows)
   const accepted = acceptBaselineSchema({
     reviewed: c.expectedState.schemaFingerprint,
     live: fingerprint,
     later,
-    verifications,
+    verifications: mirror.verifications,
   })
   const firstUnstored = unstored[0]
   const engineFailure =
-    firstUnstored !== undefined
+    differs !== null
       ? {
-          name: `schema after the baseline: ${firstUnstored}`.slice(0, 128),
-          detail: 'its bundle is not in the bundle store, so what it superseded is unknown',
+          name: `schema after the baseline: ${differs}`.slice(0, 128),
+          detail: "its ledger row is not the one ExponetDB recorded in the Control Store's mirror",
         }
-      : accepted.kind === 'failed'
-        ? { name: accepted.name, detail: accepted.detail }
-        : null
+      : firstUnstored !== undefined
+        ? {
+            name: `schema after the baseline: ${firstUnstored}`.slice(0, 128),
+            detail: 'its bundle is not in the bundle store, so what it superseded is unknown',
+          }
+        : accepted.kind === 'failed'
+          ? { name: accepted.name, detail: accepted.detail }
+          : null
   const matches = engineFailure === null
   if (!reviewed) {
     failures.unshift({
