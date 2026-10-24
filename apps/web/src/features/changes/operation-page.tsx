@@ -470,6 +470,7 @@ function OperationView({
       {operation.migrations === undefined || operation.migrations.length === 0 ? null : (
         <MigrationProgressBlock migrations={operation.migrations} />
       )}
+      <VerificationFailuresBlock runs={operation.verifications ?? []} />
       <OperationFacts operation={operation} plan={plan} clientName={clientName} />
     </PlanFrame>
   )
@@ -702,6 +703,123 @@ function MigrationProgressBlock({
           ))}
         </TableBody>
       </Table>
+    </PlanBlock>
+  )
+}
+
+type VerificationRun = NonNullable<OperationRead['verifications']>[number]
+
+/** How many failing expectations the page lists per run. */
+const FAILURES_SHOWN = 50
+
+/**
+ * What a verification found failing (Part A follow-up 3, F2): per run that
+ * did not pass or excused something, the counts and the failing
+ * expectations, the open ones first. Names from the catalog and the files
+ * are shown as untrusted text.
+ */
+function VerificationFailuresBlock({
+  runs,
+}: {
+  readonly runs: readonly VerificationRun[]
+}): ReactNode {
+  const shown = runs.filter((r) => r.status !== 'passed' || (r.structural.excused ?? 0) > 0)
+  if (shown.length === 0) return null
+  return (
+    <PlanBlock
+      title={t('changes.verification.title')}
+      headingLevel={2}
+      data-operation-block="verification"
+    >
+      {shown.map((run) => {
+        const failures = (
+          [
+            ['structural', run.structural],
+            ['runtime', run.runtime],
+            ['engine', run.engine],
+          ] as const
+        ).flatMap(([layer, l]) => (l.failures ?? []).map((f) => ({ ...f, layer })))
+        const total = [run.structural, run.runtime, run.engine].reduce(
+          (n, l) => n + (l.failuresTotal ?? l.failures?.length ?? 0),
+          0,
+        )
+        return (
+          <div
+            key={run.verificationId}
+            className="flex flex-col gap-2"
+            data-verification={run.verificationId}
+          >
+            <p className="m-0 text-sm">
+              {t('changes.verification.summary', {
+                migration: run.migrationId,
+                failed: run.structural.failed,
+                checks: run.structural.checks,
+                excused: run.structural.excused ?? 0,
+              })}
+            </p>
+            {run.engine.status === 'failed' && run.engine.firstFailure !== null ? (
+              <p className="m-0 text-sm text-foreground-light">
+                {t('changes.verification.engineFailed', { name: run.engine.firstFailure.name })}
+              </p>
+            ) : null}
+            {failures.length === 0 ? null : (
+              <Table>
+                <TableCaption className="sr-only">{t('changes.verification.title')}</TableCaption>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead scope="col">{t('changes.verification.file')}</TableHead>
+                    <TableHead scope="col">{t('changes.verification.statement')}</TableHead>
+                    <TableHead scope="col">{t('changes.verification.expected')}</TableHead>
+                    <TableHead scope="col">{t('changes.verification.differs')}</TableHead>
+                    <TableHead scope="col">{t('changes.verification.excused')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {failures.slice(0, FAILURES_SHOWN).map((f) => (
+                    <TableRow
+                      key={`${f.layer}:${f.file ?? ''}:${f.statement ?? ''}:${f.kind}:${f.object}:${f.failed.join(',')}`}
+                      data-failure-excused={f.excused ? 'true' : 'false'}
+                    >
+                      <TableCell>
+                        {f.file === null ? (
+                          <span className="text-foreground-light">-</span>
+                        ) : (
+                          <UntrustedName
+                            name={f.file}
+                            mono
+                            label={t('changes.verification.file')}
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell>{f.statement === null ? '-' : String(f.statement + 1)}</TableCell>
+                      <TableCell>
+                        <UntrustedName name={f.object} label={t('changes.verification.expected')} />
+                      </TableCell>
+                      <TableCell>
+                        <UntrustedName
+                          name={f.failed.join(', ')}
+                          mono
+                          label={t('changes.verification.differs')}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {f.excused
+                          ? t('changes.verification.excusedYes')
+                          : t('changes.verification.excusedNo')}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+            {total > FAILURES_SHOWN ? (
+              <p className="m-0 text-sm text-foreground-light">
+                {t('changes.verification.more', { count: total - FAILURES_SHOWN })}
+              </p>
+            ) : null}
+          </div>
+        )
+      })}
     </PlanBlock>
   )
 }

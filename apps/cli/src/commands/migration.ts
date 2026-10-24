@@ -29,6 +29,7 @@ import {
 } from '../local/project.ts'
 import { ago, dash, header } from '../output/format.ts'
 import { type Block, type CommandResult, result } from '../output/model.ts'
+import { verificationFailureBlocks } from '../output/views.ts'
 
 /**
  * Migrations ([`04-migrations/`](../../../../exponetdb-docs/04-migrations/README.md)):
@@ -623,10 +624,69 @@ function reportBlocks(r: ImportReport): Block[] {
         { title: 'LEGACY' },
         { title: 'NAME', flexible: true },
         { title: 'STATE' },
+        { title: 'FAILING', align: 'right' },
         { title: 'DECISION' },
       ],
-      rows: r.items.map((i) => [i.itemId, i.legacyId, i.name, i.state, i.decision?.state ?? '-']),
+      rows: r.items.map((i) => [
+        i.itemId,
+        i.legacyId,
+        i.name,
+        i.state,
+        i.failing === undefined || i.failing === null ? '-' : String(i.failing.total),
+        i.decision?.state ?? '-',
+      ]),
       empty: 'No items.',
+    },
+  ]
+}
+
+/** Decisions that accept a file as applied (it becomes a ledger row of the baseline). */
+const ACCEPTING = new Set(['recorded_present', 'unrecorded_present'])
+
+/**
+ * What a decision on one item means for the baseline's verification
+ * (Part A follow-up 3, F1): accepting a file whose expectations did not
+ * hold excuses exactly those, and says so before anyone is surprised.
+ */
+function decisionBlocks(r: ImportReport, itemId: string): Block[] {
+  const item = r.items.find((i) => i.itemId === itemId)
+  const state = item?.decision?.state
+  if (item === undefined || state === undefined) return []
+  if (state === 'superseded') {
+    return [
+      {
+        kind: 'text',
+        lines: [
+          `Item ${itemId} is recorded as superseded: the baseline's verification does not check its expectations.`,
+        ],
+        tone: 'muted',
+      },
+    ]
+  }
+  const failing = item.failing
+  if (!ACCEPTING.has(state) || failing === undefined || failing === null || failing.total === 0) {
+    return []
+  }
+  return [
+    {
+      kind: 'text',
+      lines: [
+        `Accepting item ${itemId} as applied excuses its ${failing.total} failing expectation${failing.total === 1 ? '' : 's'} at the baseline's verification, as they fail now; any other failure still fails it.`,
+      ],
+      tone: 'warn',
+    },
+    {
+      kind: 'table',
+      columns: [
+        { title: 'STATEMENT', align: 'right' },
+        { title: 'EXPECTED', flexible: true },
+        { title: 'DIFFERS' },
+      ],
+      rows: failing.items.map((f) => [
+        f.statement === null ? '-' : String(f.statement),
+        f.object,
+        f.failed.join(', '),
+      ]),
     },
   ]
 }
@@ -651,7 +711,13 @@ const remoteCommands: readonly CommandSpec[] = [
     path: ['migration', 'show'],
     summary: 'One migration on a target: state, events, verification runs.',
     group: 'migration',
-    args: [{ name: 'migration', description: 'The migration id (ULID).', required: true }],
+    args: [
+      {
+        name: 'migration',
+        description: 'The migration id (ULID), or a legacy import baseline (baseline:<slug>).',
+        required: true,
+      },
+    ],
     flags: [TARGET_REQUIRED],
     action: 'migration.get',
     scopes: READ,
@@ -706,6 +772,8 @@ const remoteCommands: readonly CommandSpec[] = [
         ]),
         empty: 'Not verified.',
       },
+      // What the newest run found failing (follow-up 3, F2).
+      ...verificationFailureBlocks(d.verifications.slice(-1)),
     ],
   }),
   showCommand({
@@ -809,8 +877,16 @@ const remoteCommands: readonly CommandSpec[] = [
   {
     path: ['migration', 'verify'],
     summary: 'Run a migration’s verification again on a target and wait for its result.',
+    description:
+      'With a baseline (baseline:<slug>), the verification of the legacy import it recorded runs again, with the review decisions that excused failing expectations; when it passes, its schema becomes the drift reference. The baseline operation keeps its outcome; the new run is in the target’s history (migration show baseline:<slug>).',
     group: 'migration',
-    args: [{ name: 'migration', description: 'The migration id.', required: true }],
+    args: [
+      {
+        name: 'migration',
+        description: 'The migration id, or a legacy import baseline (baseline:<slug>).',
+        required: true,
+      },
+    ],
     flags: [
       TARGET_REQUIRED,
       {
@@ -1178,7 +1254,11 @@ const remoteCommands: readonly CommandSpec[] = [
       return result({
         command: 'migration import resolve',
         data: r,
-        blocks: [header('import report', remote.context), ...reportBlocks(r)],
+        blocks: [
+          header('import report', remote.context),
+          ...decisionBlocks(r, arg(input, 'item')),
+          ...reportBlocks(r),
+        ],
       })
     },
   },
