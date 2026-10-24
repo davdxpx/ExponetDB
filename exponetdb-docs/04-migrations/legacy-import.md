@@ -306,6 +306,70 @@ read) instead of passing on the fingerprint alone.
   Before this change the baseline kind never did, so drift kept comparing
   with the registration snapshot.
 
+**[DECIDED]** (Wave 9 Part A, follow-up 4, 2026-10-24) **A baseline after
+later migrations.** Once a migration was applied on top of the baseline, the
+live schema is no longer the reviewed one, so a re-verification compared
+with the reviewed fingerprint alone could never pass again (observed on
+`reos-db-01`: 0 of 13 349 failed, 234 excused, the engine layer failed on the
+fingerprint).
+
+- **Engine layer.** It accepts the live schema when it is the reviewed one,
+  or when every ledger row after the baseline is a migration of ExponetDB,
+  not reverted, whose latest verification passed, the first of them started
+  at the reviewed schema (`fingerprint_before`), each next one where the one
+  before ended, and the live schema is where the last one ended. The chain
+  is the one the Control Store recorded: each target ledger row after the
+  baseline must be the worker's mirrored row (checksum, operation, schema
+  before and after, revert state), and the verification runs that count are
+  the mirrored ones, because a migration's procedural code can write the
+  target's ledger ([OD-55](../00-product/open-decisions.md)). A passed
+  run says so (`engine.acceptedThrough`: how many migrations, the last one);
+  anything else fails it, named (`schema after the baseline: <migration>`:
+  never verified, its latest verification failed, the chain breaks, it was
+  reverted, its bundle is not stored, or the live schema is not the one the
+  last verified migration left). A reverted migration after the baseline
+  ends the chain **[DECIDED]**: the baseline then verifies only again once
+  the history after it is straight (a limit, as rollbacks of migrations
+  on a baseline are rare).
+- **Structural layer: the later migration counts.** The history's files are
+  analyzed followed by the `up.sql` of every later migration (from the
+  bundle store, by its applied checksum), the same supersede analysis as
+  within the history: an expectation of a legacy file that a later
+  migration superseded on purpose (a bundle that alters a table the history
+  created, for example a column added) is not checked, because that
+  migration's own verification checked what it left and the engine layer
+  requires it verified. Everything else of the history is still checked and
+  excused as reviewed.
+- **Drift reference.** After later migrations the drift reference already is
+  the newest verified schema (the last migration's); a passed baseline run
+  then never moves it back to the baseline's state. Without later
+  migrations a passed run records it as before.
+- **A bundle on an unverified baseline.** On nonprod a bundle may be planned
+  and applied on top of a baseline whose verification failed **[DECIDED]**:
+  the baseline's state is visible in its runs, staging is where the history
+  is brought straight, and the baseline is verified again afterwards as
+  above. On production it is refused: rule `migration.dependencies-verified`
+  (version 2) counts the target's baseline as a dependency of every plan, so
+  a production plan on a target whose baseline has no passing latest
+  verification fails it (`MIGRATION_DEPENDENCY_UNVERIFIED`; break-glass
+  overridable like an unverified dependency).
+- **An imported row's verification** **[DECIDED]** (follow-up 4 addendum).
+  An imported row (`legacy:<stem>`) never has a verification run of its
+  own; the baseline's verification checks it. `migration status` (REST, the
+  CLI, the Web App's migrations page) therefore reads its verification from
+  the baseline's latest run, marked `via: baseline:<slug>`: `failed` when one
+  of its expectations is open there, `passed` when none is and the run kept
+  every failure (with `excused`, how many of its failures a decision
+  excused), the run's own status when the run did not keep every failure
+  (more than 200, or a run of the release before follow-up 3, which kept
+  two counts), `error` when the run could not read the history, and
+  `pending` only while the baseline has no run. A row whose file was decided
+  superseded is not checked and says so (`superseded`). **[OBSERVED]**
+  Before, all 555 imported rows on `reos-db-01` read *verification pending*
+  for good, also after a verified baseline (C-5). The MCP tool
+  `migration_status` returns the same status without the additive fields
+  (its definition and `toolVersion` stay pinned).
+
 ### Step 8: Freeze
 
 After baseline, the legacy directory is **frozen**:

@@ -472,7 +472,7 @@ function statusBlocks(s: MigrationStatus, now: number): Block[] {
           e.migrationId,
           e.name,
           e.reverted ? 'reverted' : 'applied',
-          e.verification.status,
+          verificationCell(e.verification),
           e.origin,
           ago(e.appliedAt, now),
         ]),
@@ -648,6 +648,17 @@ const ACCEPTING = new Set(['recorded_present', 'unrecorded_present'])
  * (Part A follow-up 3, F1): accepting a file whose expectations did not
  * hold excuses exactly those, and says so before anyone is surprised.
  */
+/**
+ * A ledger row's verification as one cell: an imported row's comes from its
+ * baseline's run ("passed via baseline:<slug>"), a superseded file's says it
+ * is not checked (follow-up 4 addendum).
+ */
+function verificationCell(v: MigrationStatus['applied'][number]['verification']): string {
+  if (v.superseded === true) return `superseded, not checked (${v.via ?? 'baseline'})`
+  if (v.via === undefined) return v.status
+  return `${v.status} via ${v.via}${v.excused === undefined ? '' : `, ${v.excused} excused`}`
+}
+
 function decisionBlocks(r: ImportReport, itemId: string): Block[] {
   const item = r.items.find((i) => i.itemId === itemId)
   const state = item?.decision?.state

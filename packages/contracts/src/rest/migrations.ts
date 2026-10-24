@@ -555,6 +555,13 @@ export const VerificationLayerSchema = z.object({
       'Part A follow-up 3, additive: the failing expectations, excused ones included, at most 200 (failuresTotal counts them all).',
   }),
   failuresTotal: z.int().min(0).optional(),
+  acceptedThrough: z
+    .object({ migrations: z.int().min(1), last: MigrationIdSchema })
+    .optional()
+    .meta({
+      description:
+        "Part A follow-up 4, additive: a baseline's engine layer accepted the live schema as the verified state of the last of this many migrations applied after the baseline, a chain that starts at the reviewed schema.",
+    }),
 })
 
 export const VerificationRunSchema = z

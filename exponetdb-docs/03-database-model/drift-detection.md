@@ -216,7 +216,12 @@ reviewed schema and those findings resolve `cleared`, by that check. The
 operation that explains them is the one the new baseline names
 (`schema_baselines.operation_id`, shown with the check's
 `baselineFingerprint`); a finding's `explainedByOperationId` stays `null`
-(nothing sets it yet, here or for a verified migration).
+(nothing sets it yet, here or for a verified migration). **[DECIDED]**
+(follow-up 4, 2026-10-24) Once migrations were applied on top of the
+baseline, the newest verified one already set the target's baseline; a
+baseline verification that passes afterwards (through the chain of those
+verified migrations) records nothing, so the reference never moves back to
+an older state.
 - Each drifted object is one finding (`object_added`, `object_removed`,
   `object_changed`), deduplicated by kind, code and object (`C:<code>:<class>:`
   SHA-256 of the canonical key): seen again it counts one more occurrence on

@@ -10,7 +10,14 @@ import {
   type VerificationLayer,
 } from '@exponetdb/contracts'
 import type { Queryable } from '@exponetdb/control-store'
-import { type EntityId, isId, isJsonArray, isJsonObject, type JsonValue } from '@exponetdb/kernel'
+import {
+  type EntityId,
+  isId,
+  isJsonArray,
+  isJsonObject,
+  type JsonValue,
+  type MigrationId,
+} from '@exponetdb/kernel'
 import { type Layer, layerFrom } from '@exponetdb/migrations-engine'
 import type { PlanRecord } from '@exponetdb/operations'
 
@@ -521,13 +528,22 @@ async function operationVerifications(
 }
 
 function contractLayer(layer: Layer): VerificationLayer {
-  const { failures, ...rest } = layer
+  const { failures, acceptedThrough, ...rest } = layer
   return {
     ...rest,
     firstFailure: layer.firstFailure === null ? null : { ...layer.firstFailure },
     ...(failures === undefined
       ? {}
       : { failures: failures.map((f) => ({ ...f, failed: [...f.failed] })) }),
+    ...(acceptedThrough === undefined
+      ? {}
+      : {
+          acceptedThrough: {
+            migrations: acceptedThrough.migrations,
+            // Written by the engine from a ledger row's migration id.
+            last: acceptedThrough.last as MigrationId,
+          },
+        }),
   }
 }
 

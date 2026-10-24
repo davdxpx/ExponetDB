@@ -53,6 +53,7 @@ import {
   RegistryError,
   type TargetRecord,
 } from '@exponetdb/registry'
+import { acceptBaselineSchema, mirrorDiffers, rowsAfterBaseline } from './baseline-chain.ts'
 import type { PlanContent, PlanItem } from './content.ts'
 import { type MigrationKindDeps, projectRegistry } from './deps.ts'
 import { MigrationError } from './errors.ts'
@@ -78,7 +79,7 @@ import { refuseOversizedLegacyFiles } from './legacy-files.ts'
 import { type FileReplay, fileReplay, survivingGlobals } from './legacy-replay.ts'
 import type { MigrationPlanContext } from './planner.ts'
 import { type Fence, fenced, LeaseLost, writeMirror, writeVerificationMirror } from './records.ts'
-import type { StoredRevision } from './store.ts'
+import { revisionsOf, type StoredRevision } from './store.ts'
 import { ledgerHashOf, type ManagedScope } from './target.ts'
 import { keptFailures, type Layer, type VerificationRun } from './verification.ts'
 import {
@@ -2191,6 +2192,69 @@ export async function baselineToVerify(
   }
 }
 
+/** The mirror rows and verification runs of the migrations after a baseline (follow-up 4). */
+async function chainMirror(
+  q: Queryable,
+  targetId: string,
+  generation: number,
+  later: readonly { readonly migrationId: string }[],
+) {
+  if (later.length === 0) return { rows: [], verifications: [] }
+  const ids = JSON.stringify(later.map((r) => r.migrationId))
+  const rows = await q.query(
+    'migrations.baseline.chain_mirror',
+    `SELECT migration_id, checksum, operation_id, fingerprint_before, fingerprint_after,
+            reverted_at IS NOT NULL AS reverted
+       FROM migrations.ledger_mirror
+      WHERE target_id = $1 AND generation = $2
+        AND migration_id = ANY (ARRAY(SELECT jsonb_array_elements_text($3::jsonb)))`,
+    [targetId, generation, ids],
+  )
+  const runs = await q.query(
+    'migrations.baseline.chain_runs',
+    `SELECT migration_id, status, finished_at::text AS finished_at
+       FROM migrations.verification_mirror
+      WHERE target_id = $1 AND generation = $2
+        AND migration_id = ANY (ARRAY(SELECT jsonb_array_elements_text($3::jsonb)))`,
+    [targetId, generation, ids],
+  )
+  return {
+    rows: rows.rows.map((r) => ({
+      migrationId: r.text('migration_id'),
+      checksum: r.text('checksum'),
+      operationId: r.text('operation_id'),
+      fingerprintBefore: r.textOrNull('fingerprint_before'),
+      fingerprintAfter: r.textOrNull('fingerprint_after'),
+      reverted: r.bool('reverted'),
+    })),
+    verifications: runs.rows.map((r) => ({
+      migrationId: r.text('migration_id'),
+      status: r.text('status') as 'passed' | 'failed' | 'partial' | 'error',
+      // A comparable instant: the mirror's text form is not the target's.
+      finishedAt: new Date(r.text('finished_at')).toISOString(),
+    })),
+  }
+}
+
+/**
+ * The imported rows (`legacy:<stem>`) of a baseline whose file the review
+ * decided superseded (or the analysis classified so without a decision): the
+ * baseline's verification does not check them (follow-up 4 addendum).
+ */
+export async function supersededImportedRows(
+  q: Queryable,
+  baselinePlanId: string,
+): Promise<Set<string>> {
+  const plan = await readPlan(q, baselinePlanId)
+  if (plan === undefined || plan.kind !== 'migration.baseline') return new Set()
+  const items = await readItems(q, baselineContentOf(plan).reportId)
+  return new Set(
+    items
+      .filter((i) => i.kind === 'file' && effective(i) === 'superseded')
+      .map((i) => `legacy:${i.name}`),
+  )
+}
+
 /** Runs a planned re-verification of a baseline (the `migration.verify` kind's baseline variant). */
 export async function verifyBaselineAgain(
   deps: MigrationKindDeps,
@@ -2249,17 +2313,53 @@ export async function verifyBaseline(
   let unparsed: string | null
   let checked = 0
   const failures: (ExpectationFailure & { excused: boolean })[] = []
+  // The migrations applied after the baseline (follow-up 4): their verified states are a way
+  // the schema may have moved on, and their up.sql supersedes what the history stated.
+  let later: Awaited<ReturnType<typeof readLedgerRows>> = []
+  const unstored: string[] = []
   try {
     await loadParser(opened.session.facts.major)
+    later = await opened.session.readOnly(async (rtx) =>
+      rowsAfterBaseline(await readLedgerRows(rtx), c.baselineId),
+    )
     const applicable = files.filter((f) => !c.notApplicable.includes(f.stem))
+    const bundles: ImportFile[] = []
+    for (const row of later) {
+      if (row.origin !== 'exponetdb') continue
+      const revision = (await revisionsOf(deps.store, c.projectId, row.migrationId)).find(
+        (r) => r.checksum === row.checksum,
+      )
+      if (revision === undefined) {
+        unstored.push(row.migrationId)
+        continue
+      }
+      bundles.push({
+        position: applicable.length + bundles.length,
+        stem: row.migrationId,
+        bytes: revision.files['up.sql'],
+        checksum: revision.checksum,
+        sourceDigest: revision.sourceDigest,
+        bytesDigest: revision.sourceDigest,
+      })
+    }
     const replays = await replaysOf(
       opened.session.facts.major,
       applicable,
       project.trustedExtensions,
     )
+    for (const [stem, replay] of await replaysOf(
+      opened.session.facts.major,
+      bundles,
+      project.trustedExtensions,
+    )) {
+      replays.set(stem, replay)
+    }
     ;({ fingerprint, unparsed } = await opened.session.readOnly(async (rtx) => {
       const snapshot = await snapshotWithin(rtx, scopeOf(project.scope))
-      const chain = analyzeChain(applicable, replays)
+      // The history, then what was migrated on top of it: a baseline expectation a later
+      // migration superseded on purpose is not checked (that migration's own verification
+      // checked what it left). Only the history's files are checked here.
+      const chain = analyzeChain([...applicable, ...bundles], replays)
       // A chain the imported target's major cannot parse checks nothing: never passed on the
       // fingerprint alone.
       if ('failedAt' in chain)
@@ -2309,7 +2409,32 @@ export async function verifyBaseline(
   } finally {
     await opened.session.close()
   }
-  const matches = fingerprint === c.expectedState.schemaFingerprint
+  // The chain as the Control Store recorded it: the target's rows must be the mirrored ones,
+  // and the runs that count are the mirrored ones (a migration's code can write the target's).
+  const mirror = await chainMirror(deps.store, target.targetId, c.target.generation, later)
+  const differs = mirrorDiffers(later, mirror.rows)
+  const accepted = acceptBaselineSchema({
+    reviewed: c.expectedState.schemaFingerprint,
+    live: fingerprint,
+    later,
+    verifications: mirror.verifications,
+  })
+  const firstUnstored = unstored[0]
+  const engineFailure =
+    differs !== null
+      ? {
+          name: `schema after the baseline: ${differs}`.slice(0, 128),
+          detail: "its ledger row is not the one ExponetDB recorded in the Control Store's mirror",
+        }
+      : firstUnstored !== undefined
+        ? {
+            name: `schema after the baseline: ${firstUnstored}`.slice(0, 128),
+            detail: 'its bundle is not in the bundle store, so what it superseded is unknown',
+          }
+        : accepted.kind === 'failed'
+          ? { name: accepted.name, detail: accepted.detail }
+          : null
+  const matches = engineFailure === null
   if (!reviewed) {
     failures.unshift({
       file: null,
@@ -2346,9 +2471,10 @@ export async function verifyBaseline(
     status: matches ? 'passed' : 'failed',
     checks: 1,
     failed: matches ? 0 : 1,
-    firstFailure: matches
-      ? null
-      : { name: 'schema fingerprint', detail: 'not the one the import report reviewed' },
+    firstFailure: engineFailure,
+    ...(matches && accepted.kind === 'chain'
+      ? { acceptedThrough: { migrations: accepted.migrations, last: accepted.last } }
+      : {}),
   }
   const runtime: Layer = { status: 'skipped', checks: 0, failed: 0, firstFailure: null }
   const status = unparsed === null && matches && open.length === 0 ? 'passed' : 'failed'
@@ -2385,7 +2511,9 @@ export async function verifyBaseline(
       run,
     ),
   )
-  if (status === 'passed') {
+  // After later migrations the drift reference is already the newest verified schema (the last
+  // one's): a passed baseline run never moves it back (follow-up 4).
+  if (status === 'passed' && later.length === 0) {
     try {
       // Only while this worker still holds the operation: a stale one never moves the reference.
       await fenced(fence, 'migrations.baseline.expected', async () => undefined)

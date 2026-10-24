@@ -270,13 +270,22 @@ export function verificationFailureBlocks(
     const failures: RunFailure[] = layers.flatMap((l) => l.failures ?? [])
     const total = layers.reduce((n, l) => n + (l.failuresTotal ?? l.failures?.length ?? 0), 0)
     const excused = v.structural.excused ?? 0
-    if (v.status === 'passed' && excused === 0) continue
+    const through = v.engine.acceptedThrough
+    if (v.status === 'passed' && excused === 0 && through === undefined) continue
+    const engineFailure = v.engine.firstFailure
     const counts = [
       `structural ${v.structural.failed} of ${v.structural.checks} failed`,
       ...(excused > 0 ? [`${excused} excused by review decisions`] : []),
       ...(v.engine.status === 'failed'
-        ? [`engine: ${v.engine.firstFailure?.name ?? 'failed'}`]
+        ? [
+            `engine: ${engineFailure?.name ?? 'failed'}${engineFailure?.detail == null ? '' : ` (${engineFailure.detail})`}`,
+          ]
         : []),
+      ...(through === undefined
+        ? []
+        : [
+            `schema accepted as the verified state of ${through.last} (${through.migrations} migration${through.migrations === 1 ? '' : 's'} after the baseline)`,
+          ]),
       ...(v.runtime.failed > 0 ? [`runtime ${v.runtime.failed} failed`] : []),
     ]
     blocks.push({

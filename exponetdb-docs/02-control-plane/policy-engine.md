@@ -129,7 +129,7 @@ grant could override.
 |---|---|---|---|
 | `migration.checksum-consistent` | all | deny, not overridable | id must not exist with another checksum in any ledger of the project or in the bundle store |
 | `migration.dependencies-satisfied` | all | deny, not overridable | all `dependsOn` applied (and verified, see next) on the target or included earlier in the same plan |
-| `migration.dependencies-verified` | prod tier | require (break-glass) | dependencies are verified, not only applied |
+| `migration.dependencies-verified` | prod tier | require (break-glass) | dependencies are verified, not only applied; since version 2 (Part A follow-up 4) also the target's baseline of an imported history, a dependency of every plan |
 | `migration.staging-evidence` | prod tier | deny (break-glass overridable) | identical checksum applied **and verified** on the evidence environment's target |
 | `migration.staging-verify-digest` | prod tier | require (break-glass) | staging verification used the same `verify.sql` digest the production run will use |
 | `migration.fingerprint-lineage` | prod tier | warn for imported legacy projects, require approval after reconciliation (**[DECIDED]** [OD-14](../00-product/open-decisions.md#od-14-strictness-of-fingerprint-lineage-for-production) (a), 2026-10-12) | production's current fingerprint equals staging's `fingerprint_before` for this migration |

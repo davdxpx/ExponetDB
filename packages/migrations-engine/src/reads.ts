@@ -14,6 +14,7 @@ import type { Connector, TargetRecord } from '@exponetdb/registry'
 import { ledgerDivergence } from './divergence.ts'
 import { MigrationError } from './errors.ts'
 import { projectAliases } from './execution-roles.ts'
+import { supersededImportedRows } from './legacy.ts'
 import { fileDigest, revisionsOf, storedStream, submissionInput } from './store.ts'
 import { readTargetState } from './target.ts'
 import type { Layer } from './verification.ts'
@@ -64,6 +65,53 @@ function latestOf(verifications: readonly VerificationRecord[], migrationId: str
 }
 
 const iso = (value: string) => new Date(value).toISOString()
+
+/**
+ * An imported row's verification (follow-up 4 addendum, C-5): the row never
+ * has a run of its own, the baseline's verification checks it. Its status is
+ * its share of the baseline's latest run: `failed` when one of its
+ * expectations is open, `passed` when none is and the run kept every failure
+ * (else the run's status, as the share is unknown), `error` when the run
+ * could not read the history; `pending` without a run. A row whose file was
+ * decided superseded is not checked: it says so, with the run's status.
+ */
+export function importedVerification(
+  stem: string,
+  baselineId: string,
+  run: VerificationRecord | undefined,
+  superseded: boolean,
+) {
+  const via = baselineId as `baseline:${string}`
+  if (run === undefined) {
+    return {
+      status: 'pending' as const,
+      verifiedAt: null,
+      verifyDigest: null,
+      via,
+      ...(superseded ? { superseded: true as const } : {}),
+    }
+  }
+  const verifiedAt = iso(run.finishedAt)
+  if (superseded) {
+    return { status: run.status, verifiedAt, verifyDigest: null, via, superseded: true as const }
+  }
+  const layer = layerFrom(run.structural, 'structural')
+  const mine = (layer.failures ?? []).filter((f) => f.file === stem)
+  const open = mine.filter((f) => !f.excused).length
+  const excused = mine.length - open
+  const complete =
+    (layer.failed === 0 && (layer.excused ?? 0) === 0) ||
+    (layer.failures !== undefined && (layer.failuresTotal ?? 0) <= layer.failures.length)
+  const status =
+    layer.status === 'error'
+      ? ('error' as const)
+      : open > 0
+        ? ('failed' as const)
+        : complete
+          ? ('passed' as const)
+          : run.status
+  return { status, verifiedAt, verifyDigest: null, via, ...(excused > 0 ? { excused } : {}) }
+}
 
 function entryOf(r: LedgerRecord, verifications: readonly VerificationRecord[]) {
   const latest = latestOf(verifications, r.migrationId)
@@ -118,6 +166,14 @@ export async function migrationStatus(deps: ReadDeps, target: TargetRecord) {
     await opened.session.close()
   }
   const { state } = live
+  // The rows a legacy import recorded are verified by their baseline (follow-up 4 addendum).
+  const baseline = state.ledger.find((r) => r.origin === 'baseline' && r.revertedAt === null)
+  const baselineRun =
+    baseline === undefined ? undefined : latestOf(live.verifications, baseline.migrationId)
+  const superseded =
+    baseline?.planId === null || baseline === undefined
+      ? new Set<string>()
+      : await supersededImportedRows(deps.store, baseline.planId)
   const applied = new Set(state.ledger.map((r) => r.migrationId))
   const stream = await storedStream(deps.store, target.projectId)
   const pending: { migrationId: string; name: string; checksum: string }[] = []
@@ -142,7 +198,19 @@ export async function migrationStatus(deps: ReadDeps, target: TargetRecord) {
     targetId: target.targetId,
     ledgerStateHash: state.ledgerStateHash,
     baselineId: state.meta.baselineId,
-    applied: state.ledger.map((r) => entryOf(r, live.verifications)),
+    applied: state.ledger.map((r) =>
+      r.origin === 'legacy_import' && baseline !== undefined
+        ? {
+            ...entryOf(r, live.verifications),
+            verification: importedVerification(
+              r.name,
+              baseline.migrationId,
+              baselineRun,
+              superseded.has(r.migrationId),
+            ),
+          }
+        : entryOf(r, live.verifications),
+    ),
     pending,
     mirror: {
       inSync:

@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
-import { newId, systemClock } from '@exponetdb/kernel'
+import type { MigrationPlanRequest } from '@exponetdb/contracts'
+import { newId, newUlid, systemClock } from '@exponetdb/kernel'
 import {
   acceptPlan,
   KindRegistry,
@@ -25,7 +26,13 @@ import {
   registryKinds,
   type TargetRecord,
 } from '@exponetdb/registry'
-import { matrix, runAsSuperuser, type TestServer, withRolesHeld } from '@exponetdb/testkit'
+import {
+  matrix,
+  runAsSuperuser,
+  type TestServer,
+  withRolesHeld,
+  withSuperuser,
+} from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   actor,
@@ -46,8 +53,10 @@ import {
   type MigrationPlanContext,
   migrationDetail,
   migrationKinds,
+  migrationStatus,
   planBaseline,
   planImportAnalysis,
+  planMigrationApply,
   planMigrationVerify,
 } from '../src/index.ts'
 
@@ -245,6 +254,9 @@ const files = (role: string) => [
     name: '0005_private.sql',
     text: 'CREATE SCHEMA acme_private;\nCREATE TABLE acme_private.things (id bigint);\n',
   },
+  // A table the history created and dropped again: the first file is superseded.
+  { name: '0006_scratch.sql', text: 'CREATE TABLE public.acme_scratch (id int);\n' },
+  { name: '0007_scratch_gone.sql', text: 'DROP TABLE public.acme_scratch;\n' },
 ]
 
 async function apply(w: World, p: PlanRecord): Promise<OperationRecord> {
@@ -299,6 +311,77 @@ async function latestRun(w: World) {
   return v
 }
 
+/** A bundle applied on top of the baseline (follow-up 4), as the project's owner. */
+function bundle(spec: {
+  readonly id: string
+  readonly name: string
+  readonly up: string
+  readonly verify?: string
+  readonly dependsOn: readonly string[]
+}) {
+  const yaml = [
+    'schema: exponetdb.migration/v1',
+    `id: ${spec.id}`,
+    `name: ${spec.name}`,
+    'description: "A change on top of the reviewed baseline."',
+    `dependsOn: ${JSON.stringify(spec.dependsOn)}`,
+    'execution:',
+    '  transactional: true',
+    'compatibility:',
+    '  declared: additive',
+    'verification:',
+    '  expectations: auto',
+    `  runtimeChecks: ${spec.verify === undefined ? 'none' : 'verify.sql'}`,
+    '',
+  ].join('\n')
+  return {
+    directory: `${spec.id}_${spec.name}`,
+    files: {
+      'migration.yaml': yaml,
+      'up.sql': spec.up,
+      ...(spec.verify === undefined ? {} : { 'verify.sql': spec.verify }),
+    },
+  }
+}
+
+const applyBundles = async (w: World, bundles: readonly ReturnType<typeof bundle>[]) =>
+  apply(
+    w,
+    await w.h.serve.transaction('test.bv.bundle', (tx) =>
+      planMigrationApply(tx, w.ctx, w.a, w.imported.targetId, {
+        defaults: {
+          lockTimeout: '2s',
+          statementTimeout: '15m',
+          role: 'owner',
+          searchPath: ['public'],
+        },
+        lintProfile: 'standard',
+        bundles,
+      } as MigrationPlanRequest),
+    ),
+  )
+
+/** The imported rows' verification as `migration status` reads it: name → status and excusals. */
+async function importedRows(w: World) {
+  const s = await migrationStatus(
+    { store: w.h.worker, connector: w.h.workerConnector, installationId: w.h.db.installationId },
+    w.imported,
+  )
+  return Object.fromEntries(
+    s.applied
+      .filter((e) => e.origin === 'legacy_import')
+      .map((e) => {
+        const v = e.verification as {
+          status: string
+          via?: string
+          excused?: number
+          superseded?: true
+        }
+        return [e.name, [v.superseded === true ? 'superseded' : v.status, v.via, v.excused ?? 0]]
+      }),
+  )
+}
+
 const reverify = (w: World) =>
   w.h.serve.transaction('test.bv.reverify', (tx) =>
     planMigrationVerify(tx, w.ctx, w.a, w.imported.targetId, `baseline:${BASELINE}`, {}),
@@ -349,6 +432,8 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         '0005_private': [
           ['expectations', 'structural expectations of 0005_private', ['unreadable']],
         ],
+        '0006_scratch': [],
+        '0007_scratch_gone': [],
       })
       // A person accepts the files as applied, and the drift the hand changes left as it is.
       for (const item of r.items.filter(
@@ -359,7 +444,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
             targetId: w.imported.targetId,
             reportId,
             itemId: Number(item.itemId),
-            state: 'unrecorded_present',
+            state: item.name === '0006_scratch' ? 'superseded' : 'unrecorded_present',
             note: 'reviewed: changed by hand on the target, the intended state',
             identityId: w.a.identityId,
           }),
@@ -424,6 +509,18 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       ])
       expect(v.engine.status).toBe('passed')
       expect(w.expected).toEqual([{ targetId: w.imported.targetId, fingerprint: v.fingerprint }])
+      // Each imported row is verified by the baseline, never "pending" (follow-up 4 addendum).
+      const via = `baseline:${BASELINE}`
+      expect(await importedRows(w)).toEqual({
+        '0001_items': ['passed', via, 0],
+        '0002_items_rls': ['passed', via, 1],
+        '0003_touch': ['passed', via, 1],
+        '0004_role': ['passed', via, 1],
+        '0005_private': ['passed', via, 1],
+        // Decided superseded: not checked by the baseline, and it says so.
+        '0006_scratch': ['superseded', via, 0],
+        '0007_scratch_gone': ['passed', via, 0],
+      })
     })
 
     it('fails a planned re-verification on a failure the review never saw, and passes once it is gone (F3)', async () => {
@@ -441,6 +538,10 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         ['role', false],
         ['role_attribute', true],
       ])
+      // Only the file with the open failure reads as failed; the others' share passed.
+      const rows = await importedRows(w)
+      expect(rows['0004_role']?.[0]).toBe('failed')
+      expect(rows['0001_items']?.[0]).toBe('passed')
       expect(w.expected).toHaveLength(1)
       await withRolesHeld(server, () =>
         runAsSuperuser(server, 'postgres', [`CREATE ROLE ${role} NOLOGIN`]),
@@ -508,6 +609,131 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         [op.operationId],
       )
       expect(held.rows[0]?.int('n')).toBe(0)
+    })
+
+    // Follow-up 4: the bundles applied on top of the baseline, in order.
+    const first = newUlid(Date.now())
+    const second = newUlid(Date.now() + 1)
+
+    it('accepts the schema a verified bundle on top of the baseline left, and keeps the drift reference (follow-up 4)', async () => {
+      // The bundle changes a table the history created: the history's column expectation of
+      // it is superseded by the bundle, whose own verification checked what it left.
+      const applied = await applyBundles(w, [
+        bundle({
+          id: first,
+          name: 'acme-notes',
+          up: 'ALTER TABLE public.acme_items ADD COLUMN note text;\nCREATE TABLE public.acme_more (id bigint PRIMARY KEY);\n',
+          dependsOn: [`baseline:${BASELINE}`],
+        }),
+      ])
+      expect(applied).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
+      const reference = w.expected.length
+      const passed = await apply(w, await reverify(w))
+      expect(passed).toMatchObject({
+        kind: 'migration.verify',
+        state: 'succeeded',
+        verificationOutcome: 'passed',
+      })
+      const v = await latestRun(w)
+      expect(v.engine).toMatchObject({
+        status: 'passed',
+        firstFailure: null,
+        acceptedThrough: { migrations: 1, last: first },
+      })
+      expect(v.structural).toMatchObject({ failed: 0, excused: 4 })
+      // The drift reference stays the bundle's (newest verified) schema.
+      expect(w.expected).toHaveLength(reference)
+      expect(w.expected.at(-1)?.fingerprint).toBe(v.fingerprint)
+    })
+
+    it('fails while a bundle after the baseline is not verified, and passes once it is', async () => {
+      const failed = await applyBundles(w, [
+        bundle({
+          id: second,
+          name: 'acme-flags',
+          up: 'CREATE TABLE public.acme_flags (id bigint);\n',
+          verify: '-- check: a flag exists\nSELECT count(*) > 0 AS ok FROM public.acme_flags;\n',
+          dependsOn: [first],
+        }),
+      ])
+      expect(failed).toMatchObject({ state: 'verification_failed', applyOutcome: 'applied' })
+      expect(await apply(w, await reverify(w))).toMatchObject({ state: 'verification_failed' })
+      expect((await latestRun(w)).engine).toMatchObject({
+        status: 'failed',
+        firstFailure: {
+          name: `schema after the baseline: ${second}`,
+          detail: 'its latest verification is failed',
+        },
+      })
+      // Its data fixed, the bundle verifies, and so does the baseline again.
+      await runAsSuperuser(server, w.importedDb, ['INSERT INTO public.acme_flags VALUES (1)'])
+      const verified = await apply(
+        w,
+        await w.h.serve.transaction('test.bv.verify', (tx) =>
+          planMigrationVerify(tx, w.ctx, w.a, w.imported.targetId, second, {}),
+        ),
+      )
+      expect(verified).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
+      const reference = w.expected.length
+      expect(await apply(w, await reverify(w))).toMatchObject({ state: 'succeeded' })
+      expect((await latestRun(w)).engine).toMatchObject({
+        acceptedThrough: { migrations: 2, last: second },
+      })
+      expect(w.expected).toHaveLength(reference)
+    })
+
+    it('fails on a change by hand after the last verified bundle', async () => {
+      await runAsSuperuser(server, w.importedDb, ['CREATE TABLE public.acme_by_hand (id int)'])
+      try {
+        expect(await apply(w, await reverify(w))).toMatchObject({ state: 'verification_failed' })
+        expect((await latestRun(w)).engine).toMatchObject({
+          status: 'failed',
+          firstFailure: {
+            name: `schema after the baseline: ${second}`,
+            detail: 'the live schema is not the one the last verified migration left',
+          },
+        })
+      } finally {
+        await runAsSuperuser(server, w.importedDb, ['DROP TABLE public.acme_by_hand'])
+      }
+      expect(await apply(w, await reverify(w))).toMatchObject({ state: 'succeeded' })
+    })
+
+    it('fails on a target ledger row after the baseline that is not the one the Control Store recorded', async () => {
+      // A row written on the target by other means (OD-55: a migration's procedural code can
+      // reach the ledger owner): the chain counts only what the worker mirrored.
+      const before = await withSuperuser(server, w.importedDb, async (c) => {
+        const r = await c.query(
+          'SELECT fingerprint_before FROM exponetdb.schema_migrations WHERE migration_id = $1',
+          [second],
+        )
+        return String(r.rows[0]?.fingerprint_before)
+      })
+      const forge = (fingerprint: string) =>
+        withSuperuser(server, w.importedDb, async (c) => {
+          await c.query('BEGIN')
+          await c.query('SET LOCAL session_replication_role = replica')
+          await c.query(
+            'UPDATE exponetdb.schema_migrations SET fingerprint_before = $1 WHERE migration_id = $2',
+            [fingerprint, second],
+          )
+          await c.query('COMMIT')
+        })
+      await forge(`fp1:${server.major}:${'e'.repeat(64)}`)
+      try {
+        expect(await apply(w, await reverify(w))).toMatchObject({ state: 'verification_failed' })
+        expect((await latestRun(w)).engine).toMatchObject({
+          status: 'failed',
+          firstFailure: {
+            name: `schema after the baseline: ${second}`,
+            detail:
+              "its ledger row is not the one ExponetDB recorded in the Control Store's mirror",
+          },
+        })
+      } finally {
+        await forge(before)
+      }
+      expect(await apply(w, await reverify(w))).toMatchObject({ state: 'succeeded' })
     })
 
     it('refuses to re-verify a baseline the target does not hold', async () => {

@@ -991,3 +991,57 @@ P1 that are on `main` and are not fixed here: a single-quoted `DO` body
 passes the parser's token bound, memory adds up across the files of a large
 history, and the `search_path` check of the guard strictness is a
 quadratic regular expression. They wait for the owner's go-ahead.
+
+## 10. Follow-up 4: re-verifying a baseline after later verified migrations (2026-10-24)
+
+**[OBSERVED]** After the deploy of `8b0aa6cf` on `reos-01` follow-up 3 worked
+on the real target. One case was not in its order: on `reosa/platform/staging`
+the first bundle (`01M5PZ4X8AFWAS024R4BG22KM3_mail-imports`, a new table
+and a new column, depending on the baseline) was applied and verified on
+2026-10-24 (`op_01M5PZ7WDWNZ1FFTH03NYWA2A8`); its schema became the drift
+reference (drift `clean`). The re-verification of the baseline
+(`op_01M5QCEACMPXPHRDQ4Z0VVV8G2`, run `vfy_01M5QCEX15PS46G0GCRVBA8HG1`)
+then found 0 of 13 349 structural expectations failing and 234 excused, and
+failed on the engine layer: the live schema was the bundle's verified one,
+not the reviewed one. A baseline could never pass again once anything was
+migrated on top of it.
+
+| Point | Decision | Evidence |
+|---|---|---|
+| Engine layer | Accepts the reviewed schema, or the end of a chain of migrations after the baseline that are all of ExponetDB, not reverted and verified (latest run passed), starting at the reviewed schema and ending at the live one, as the Control Store's mirror recorded them (a target row that differs from the mirrored one fails it; the runs are the mirrored ones, OD-55); a passed run names it (`engine.acceptedThrough`, additive), a failed one names where it broke | `baseline-chain.test.ts`, `legacy-baseline-verify.int.test.ts` (16, 17, 18; a target ledger row changed by hand fails it) |
+| Structural layer | The later migrations' `up.sql` follows the history in the supersede analysis: a history's expectation a later migration changed on purpose is not checked (that migration's verification checked its result); the rest is checked and excused as reviewed ([legacy-import.md Step 7](../../04-migrations/legacy-import.md#step-7-verify)) | the same: a bundle that adds a column to a table the history created; without the later bundles in the analysis the test fails |
+| Drift reference | A passed baseline run after later migrations records nothing; the reference stays the newest verified schema | the same (the recorded references do not change) |
+| Bundles on an unverified baseline | Nonprod: allowed, by design. Production: refused, `migration.dependencies-verified` version 2 counts the target's baseline as a dependency of every plan (break-glass overridable) | `baseline-chain.test.ts` (the facts) |
+
+Tests on PostgreSQL 16, 17 and 18: a verified bundle on top of the baseline,
+then the re-verification passes with the bundle's schema accepted and the
+drift reference unchanged; a second bundle whose verification failed makes
+it fail (named), and once that bundle verifies it passes again; a change by
+hand after the last verified bundle fails it.
+
+**Owner action after this is deployed:** `exponetdb migration verify
+baseline:reosa-platform-2026-10 --target reosa/platform/staging`; it accepts
+the mail-imports bundle's verified schema when the bundle's latest
+verification passed and nothing changed by hand since.
+
+**Limit:** a reverted migration after the baseline ends the chain, so the
+baseline verifies only again once the history after it is straight.
+
+**Addendum (2026-10-24): imported rows read as "verification pending" for
+good.** **[OBSERVED]** The Web App's migrations page and `migration status`
+showed all 555 imported rows of `reosa/platform/staging` as pending: the read
+took the latest run under the row's own id, and the baseline's verification
+checks an imported row under the baseline's id. **[DECIDED]** An imported
+row's verification is its share of the baseline's latest run, marked `via:
+baseline:<slug>` (additive on `LedgerEntry.verification`, with `excused` and
+`superseded`): failed with an open failure of its own, passed when none is
+open and the run kept every failure, the run's status when it did not (the
+owner's run of 2026-10-23 kept two counts only, so its rows read failed until
+the re-verification), `error` when the history could not be read, pending
+only without a run; a file decided superseded says so. The CLI shows
+`passed via baseline:<slug>, 1 excused`, the Web App "Verified (via the
+baseline)". The MCP tool keeps its pinned definition and returns the same
+status. Tests: `baseline-chain.test.ts` (every case), and
+`legacy-baseline-verify.int.test.ts` on 16, 17 and 18 (a passed baseline: its
+rows passed, with their excusals, a superseded file says so; a failed
+re-verification: only the file with the open failure reads failed).

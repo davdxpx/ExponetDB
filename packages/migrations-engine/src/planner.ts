@@ -473,8 +473,13 @@ function worstCompatibility(classes: readonly CompatibilityClass[]): Compatibili
   return worst
 }
 
-/** Dependencies already applied on this target have a passing latest verification. */
-function dependenciesVerified(
+/**
+ * Dependencies already applied on this target have a passing latest
+ * verification, and so has the target's baseline (Part A follow-up 4): it
+ * stands for the whole history before ExponetDB, so every later migration
+ * builds on it, whether it names it or not.
+ */
+export function dependenciesVerified(
   order: readonly StoredRevision[],
   ledger: readonly LedgerRecord[],
   verifications: readonly VerificationRecord[],
@@ -483,14 +488,16 @@ function dependenciesVerified(
   const deps = new Set(
     order.flatMap((r) => r.dependsOn).filter((d) => !planned.has(d) && !isBaselineRef(d)),
   )
+  const passed = (migrationId: string) =>
+    verifications
+      .filter((v) => v.migrationId === migrationId)
+      .sort((a, b) => (a.finishedAt < b.finishedAt ? 1 : -1))[0]?.status === 'passed'
   for (const d of deps) {
     if (ledger.find((l) => l.migrationId === d && l.origin === 'exponetdb') === undefined) continue
-    const latest = verifications
-      .filter((v) => v.migrationId === d)
-      .sort((a, b) => (a.finishedAt < b.finishedAt ? 1 : -1))[0]
-    if (latest?.status !== 'passed') return false
+    if (!passed(d)) return false
   }
-  return true
+  const baseline = ledger.find((l) => l.origin === 'baseline' && l.revertedAt === null)
+  return baseline === undefined || passed(baseline.migrationId)
 }
 
 export async function planMigrationApply(
