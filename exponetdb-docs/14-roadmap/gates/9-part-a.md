@@ -958,6 +958,22 @@ this pull request does with them:
 | P3-7 | The docs said the CLI shows what an acceptance excuses before it is recorded; statement numbers differ between the interfaces | The docs say what each interface shows. Statement numbers are 0-based in the contract and the CLI and 1-based in the Web App, as everywhere else in each |
 | P3-8 | An acceptance that excuses nothing said nothing | The Web App's dialog and the CLI's `resolve` say that every expectation must hold. A file the hints call not applicable and a person decides present stays unchecked (as before this change); the re-verification reads the project's current trusted extensions and scope (a change there is a project change, planned and audited) |
 
+**[OBSERVED]** **Re-review of these fixes (2026-10-24).** The same reviewer
+confirmed P1-1 and P3-2 to P3-6. With its own test (RVB-4), it showed that
+the owner's re-verification passes: a baseline was recorded with the code of
+`d36ba29` (items without `failing`, the run `verification_failed` as on
+`reos-db-01`), and the re-verification at this pull request's code passes
+with the decided files excused, while a file without a decision still has
+to hold. Its further findings:
+
+| # | Finding | Fix |
+|---|---|---|
+| P2 | Worlds log in as the verifier in their `beforeAll` (the credential check), outside the per-test lock | A file holds the shared lock from before its own `beforeAll` until its first test ended, then each test does; the rotating file declares itself when it is imported (`rotatesVerifierPassword()`), so it never waits for its own lock; `targetIntegrationConfig` gives a hook 10 minutes |
+| P3 | Every error of a read became `unreadable`, also a timeout, a lock wait or a cancel, which then failed the run for good instead of erroring it | Only a read that would fail the same way again is `unreadable` (a privilege, a name the server refuses, a row the engine cannot decode); a transient failure (SQLSTATE classes 08, 40, 53, 55, 57, 58, a timeout, the target unreachable) errors the run, which can be retried (`verification-failures.test.ts`) |
+| P3 | An acceptance of an unreadable file excuses what nobody saw; an observer that can read the schema later compares it for the first time | The Web App's dialog and the CLI's `resolve` say so; `legacy-import.md` recommends giving the observer the reads and analyzing again |
+| P3 | A non-human principal with `migrations.apply:prod` can retry a production `migration.verify` a person approved once (the retry runs its `verify.sql` again without a new approval); MCP has no retry tool | **[OPEN]** Not changed: the same as `migration.apply` retries since Wave 6. Proposal: refuse a retry by a non-human principal when the plan needed an approval because an agent proposed it |
+| P3 | The run in the target's own history is written before the lease fence (a stale worker can add one row there) | **[OPEN]** Not changed: the same in the bundle paths since Wave 6; the mirror and the drift reference are fenced |
+
 **[OBSERVED]** **CI: the PostgreSQL integration job.** It failed twice on this
 branch (`failures.int` E2 read `needs_attention`/`error`, and the three E27
 cases then found the worker busy) and passed on `main`. Cause:
