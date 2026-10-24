@@ -664,8 +664,17 @@ function decisionBlocks(r: ImportReport, itemId: string): Block[] {
     ]
   }
   const failing = item.failing
-  if (!ACCEPTING.has(state) || failing === undefined || failing === null || failing.total === 0) {
-    return []
+  if (!ACCEPTING.has(state) || failing === undefined || failing === null) return []
+  if (failing.total === 0) {
+    return [
+      {
+        kind: 'text',
+        lines: [
+          `Accepting item ${itemId} as applied excuses nothing: every expectation it states must hold at the baseline's verification.`,
+        ],
+        tone: 'muted',
+      },
+    ]
   }
   return [
     {

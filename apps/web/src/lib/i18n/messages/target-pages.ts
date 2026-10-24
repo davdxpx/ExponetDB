@@ -134,6 +134,8 @@ const migrationsMessages = {
   'migrations.import.decide.excuses':
     "Accepting this file as applied excuses its {count} failing expectations at the baseline's verification, as they fail now. Any other failure still fails the verification.",
   'migrations.import.decide.excusesMore': 'And {count} more.',
+  'migrations.import.decide.excusesNothing':
+    "Accepting this file as applied excuses nothing: every expectation it states must hold at the baseline's verification.",
   'migrations.import.decide.supersededUnchecked':
     "The baseline's verification does not check a file recorded as superseded.",
   'migrations.import.decide.stateMissing': 'Choose a decision first.',

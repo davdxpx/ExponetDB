@@ -460,10 +460,17 @@ function DecisionConsequence({
   if (
     (state !== 'recorded_present' && state !== 'unrecorded_present') ||
     failing === undefined ||
-    failing === null ||
-    failing.total === 0
+    failing === null
   ) {
     return null
+  }
+  if (failing.total === 0) {
+    // Nothing failed at the analysis: accepting excuses nothing, so all of it must hold.
+    return (
+      <p role="note" className="m-0 text-sm text-foreground-light" data-excuses={0}>
+        {t('migrations.import.decide.excusesNothing')}
+      </p>
+    )
   }
   return (
     <div role="note" className="flex flex-col gap-1 text-sm" data-excuses={failing.total}>
