@@ -1,6 +1,7 @@
 import type { Tx } from '@exponetdb/control-store'
 import type { JsonObject } from '@exponetdb/kernel'
 import { normalizeSqlSource } from '@exponetdb/migrations/format'
+import { isBaselineRef } from '@exponetdb/migrations/graph'
 import {
   type ChangedBinding,
   createPlan,
@@ -18,12 +19,14 @@ import {
   findTarget,
   operationActor,
   type RegistryActor,
+  RegistryError,
   type TargetRecord,
 } from '@exponetdb/registry'
 import type { PlanItem } from './content.ts'
 import type { MigrationKindDeps } from './deps.ts'
 import { MigrationError } from './errors.ts'
 import { executionRolesFor } from './execution-roles.ts'
+import { type BaselineVerifyContent, baselineToVerify, verifyBaselineAgain } from './legacy.ts'
 import type { MigrationPlanContext } from './planner.ts'
 import {
   type Fence,
@@ -56,6 +59,21 @@ interface VerifyContent {
   readonly verifyDigest: string | null
   readonly item: PlanItem
   readonly facts: MigrationFacts
+}
+
+/** The content of a re-verification of a baseline ref (follow-up 3, F3), or `undefined`. */
+function baselineVariantOf(plan: Pick<PlanRecord, 'body'>): BaselineVerifyContent | undefined {
+  const c = plan.body['content'] as unknown as BaselineVerifyContent | undefined
+  if (c?.baseline !== true) return undefined
+  if (
+    typeof c.targetId !== 'string' ||
+    typeof c.migrationId !== 'string' ||
+    typeof c.baselinePlanId !== 'string' ||
+    typeof c.generation !== 'number'
+  ) {
+    throw new MigrationError('PLAN_STALE')
+  }
+  return c
 }
 
 function contentOf(plan: Pick<PlanRecord, 'body'>): VerifyContent {
@@ -98,6 +116,16 @@ export async function planMigrationVerify(
   const target = await findTarget(tx, targetRef)
   if (target === undefined) throw new MigrationError('TARGET_NOT_FOUND')
   if (target.placement === null) throw new MigrationError('TARGET_UNAVAILABLE')
+  if (isBaselineRef(migrationId)) {
+    if (request.revision !== undefined) {
+      throw new RegistryError('VALIDATION_FAILED', {
+        errors: [
+          { path: '/revision', code: 'not_a_bundle', message: 'A baseline has no revisions.' },
+        ],
+      })
+    }
+    return planBaselineReverify(tx, ctx, actor, target, migrationId)
+  }
   const { row, major } = await ledgerRowOf(ctx.connector, target, migrationId)
   if (row === undefined || row.origin !== 'exponetdb') {
     throw new MigrationError('NOT_FOUND')
@@ -244,6 +272,82 @@ export async function planMigrationVerify(
   )
 }
 
+/**
+ * The plan of a re-verification of a recorded baseline (legacy-import.md §2
+ * step 7, follow-up 3 F3): the same check the baseline's own verification
+ * ran, with the review decisions that excuse failing expectations. A
+ * baseline whose verification failed (an engine that read it wrongly) gets
+ * a new run this way; when it passes, its schema becomes the drift
+ * reference. The baseline operation keeps its outcome (operations never
+ * change after they end); the target's verification history and the
+ * mirror carry the new run.
+ */
+async function planBaselineReverify(
+  tx: Tx,
+  ctx: MigrationPlanContext,
+  actor: RegistryActor,
+  target: TargetRecord,
+  migrationId: string,
+): Promise<PlanRecord> {
+  const found = await baselineToVerify(tx, ctx.connector, target, migrationId)
+  const content: BaselineVerifyContent = {
+    baseline: true,
+    projectId: target.projectId,
+    targetId: target.targetId,
+    path: target.path,
+    tier: target.tier,
+    generation: target.generation,
+    ...found,
+  }
+  const facts: MigrationFacts = {
+    compatibility: 'additive',
+    lockSeverity: 'none',
+    nontransactional: false,
+    blockingFindings: 0,
+    consumerCode: 0,
+    requirementsUnmet: [],
+    evidence: 'not_required',
+    lineage: 'not_required',
+    dependenciesVerified: true,
+    legacyProject: true,
+  }
+  const subject = {
+    productId: target.productId,
+    projectId: target.projectId,
+    environmentId: target.environmentId,
+    targetId: target.targetId,
+    tier: target.tier,
+  }
+  const policy = await evaluateRegistryPolicy(tx, ctx.policy, {
+    kind: 'migration.verify',
+    actor,
+    subject,
+    content: { ...content, facts } as unknown as JsonObject,
+  })
+  return createPlan(
+    tx,
+    {
+      kind: 'migration.verify',
+      kindVersion: 1,
+      actionClass: 'low',
+      actor: operationActor(actor),
+      subject: {
+        targetId: target.targetId,
+        targetPath: target.path,
+        tier: target.tier,
+        generation: target.generation,
+        productId: target.productId,
+        projectId: target.projectId,
+        environmentId: target.environmentId,
+      },
+      content: { ...content, facts } as unknown as JsonObject,
+      analysis: { migrationId, baselinePlanId: found.baselinePlanId, reportId: found.reportId },
+      policy,
+    },
+    { clock: ctx.policy.clock },
+  )
+}
+
 export class MigrationVerifyKind implements OperationKind {
   readonly kind = 'migration.verify'
   readonly version = 1
@@ -257,13 +361,20 @@ export class MigrationVerifyKind implements OperationKind {
 
   exclusivity(plan: PlanRecord): readonly string[] {
     try {
-      return [`target:${contentOf(plan).targetId}:schema`]
+      return [`target:${(baselineVariantOf(plan) ?? contentOf(plan)).targetId}:schema`]
     } catch {
       return []
     }
   }
 
   async checkBindings(plan: PlanRecord): Promise<readonly ChangedBinding[]> {
+    let baseline: BaselineVerifyContent | undefined
+    try {
+      baseline = baselineVariantOf(plan)
+    } catch {
+      return [{ binding: 'content', actual: 'invalid' }]
+    }
+    if (baseline !== undefined) return this.#baselineBindings(baseline)
     let c: VerifyContent
     try {
       c = contentOf(plan)
@@ -277,6 +388,23 @@ export class MigrationVerifyKind implements OperationKind {
     try {
       const { row } = await ledgerRowOf(this.#deps.connector, target, c.migrationId)
       if (row === undefined || row.checksum !== c.checksum || row.revertedAt !== null) {
+        return [{ binding: 'ledger', actual: 'changed' }]
+      }
+    } catch {
+      return [{ binding: 'target', actual: 'unreachable' }]
+    }
+    return []
+  }
+
+  /** The baseline's ledger row still stands, written by the plan the content names. */
+  async #baselineBindings(c: BaselineVerifyContent): Promise<readonly ChangedBinding[]> {
+    const target = await findTarget(this.#deps.store, c.targetId)
+    if (target === undefined || target.generation !== c.generation) {
+      return [{ binding: 'target', actual: target === undefined ? 'missing' : 'generation' }]
+    }
+    try {
+      const { row } = await ledgerRowOf(this.#deps.connector, target, c.migrationId)
+      if (row === undefined || row.planId !== c.baselinePlanId || row.revertedAt !== null) {
         return [{ binding: 'ledger', actual: 'changed' }]
       }
     } catch {
@@ -376,6 +504,9 @@ export class MigrationVerifyKind implements OperationKind {
 
   /** The request is carried out by recording a verification run; its result is the verification outcome. */
   async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
+    // A baseline's run is recorded in the verify step only (the per-migration progress names
+    // bundle migrations, never a baseline).
+    if (baselineVariantOf(ctx.plan) !== undefined) return 'applied'
     const c = contentOf(ctx.plan)
     await fenced(
       { store: this.#deps.store, operationId: ctx.operationId, leaseOwner: ctx.leaseOwner },
@@ -397,6 +528,13 @@ export class MigrationVerifyKind implements OperationKind {
   }
 
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
+    try {
+      const baseline = baselineVariantOf(ctx.plan)
+      if (baseline !== undefined)
+        return await verifyBaselineAgain(this.#deps, baseline, ctx.operationId)
+    } catch {
+      return 'error'
+    }
     const progress = await readProgress(this.#deps.store, ctx.operationId)
     const done = progress[0]
     if (

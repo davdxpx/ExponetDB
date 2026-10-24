@@ -49,6 +49,7 @@ import {
   DatabaseIdSchema,
   DatabaseRegisterRequestSchema,
   DEFAULT_BODY_LIMIT_BYTES,
+  DependencyRefSchema,
   DeviceDecisionRequestSchema,
   DisableIdentityRequestSchema,
   DriftAcceptRequestSchema,
@@ -1377,7 +1378,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       await app.migrations.detail(
         caller(call),
         target(call),
-        MigrationIdSchema.parse(field(call.params, 'migrationId')),
+        DependencyRefSchema.parse(field(call.params, 'migrationId')),
       ),
     ),
   verifyMigration: async (app, call) =>
@@ -1385,7 +1386,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       await app.migrations.verify(
         caller(call),
         target(call),
-        MigrationIdSchema.parse(field(call.params, 'migrationId')),
+        DependencyRefSchema.parse(field(call.params, 'migrationId')),
         MigrationVerifyRequestSchema.parse(call.body ?? {}),
         idempotency(call),
       ),

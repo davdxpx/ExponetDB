@@ -10,6 +10,7 @@ import {
   leaseHeld,
   type OperationKind,
   type PlanRecord,
+  readPlan,
 } from '@exponetdb/operations'
 import {
   type CanonicalDocument,
@@ -76,9 +77,17 @@ import {
 import { refuseOversizedLegacyFiles } from './legacy-files.ts'
 import { type FileReplay, fileReplay, survivingGlobals } from './legacy-replay.ts'
 import type { MigrationPlanContext } from './planner.ts'
-import { type Fence, fenced, LeaseLost, writeMirror } from './records.ts'
+import { type Fence, fenced, LeaseLost, writeMirror, writeVerificationMirror } from './records.ts'
 import type { StoredRevision } from './store.ts'
 import { ledgerHashOf, type ManagedScope } from './target.ts'
+import { keptFailures, type Layer, type VerificationRun } from './verification.ts'
+import {
+  clusterGlobalFailures,
+  type ExpectationFailure,
+  excusedBy,
+  failuresOf,
+  structuralFailures,
+} from './verification-failures.ts'
 
 /**
  * Legacy history import ([legacy-import.md](../../../exponetdb-docs/04-migrations/legacy-import.md),
@@ -219,6 +228,8 @@ interface ReportRecord {
   readonly hints: Hints
   readonly driftTotal: number | null
   readonly driftTruncated: boolean
+  /** The operation that recorded the report as the baseline (state `baselined`). */
+  readonly baselineOperationId: string | null
 }
 
 async function readReport(q: Queryable, reportId: string): Promise<ReportRecord | undefined> {
@@ -226,6 +237,7 @@ async function readReport(q: Queryable, reportId: string): Promise<ReportRecord 
     'migrations.import.report',
     `SELECT report_id, target_id, project_id, scratch_target_id, baseline_id, state, fingerprint,
             replay_fingerprint, incomplete_reason, hints, drift_total, drift_truncated,
+            baseline_operation_id,
             to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS created_at
        FROM migrations.import_reports WHERE report_id = $1`,
     [reportId],
@@ -246,6 +258,7 @@ async function readReport(q: Queryable, reportId: string): Promise<ReportRecord 
     hints: hintsFrom(r.json('hints')),
     driftTotal: r.intOrNull('drift_total'),
     driftTruncated: r.bool('drift_truncated'),
+    baselineOperationId: r.textOrNull('baseline_operation_id'),
   }
 }
 
@@ -284,6 +297,12 @@ interface ItemRecord {
   readonly appliedAt: string | null
   readonly evidence: readonly string[]
   readonly strength: EvidenceStrength | null
+  /**
+   * The file's surviving expectations that did not hold at the analysis
+   * (follow-up 3, F1): what accepting it as applied excuses. `null`: not
+   * recorded (an item analyzed before it was, or not a file).
+   */
+  readonly failing: readonly ExpectationFailure[] | null
   readonly decision: {
     readonly state: Exclude<ImportItemState, 'ambiguous'>
     readonly note: string
@@ -297,7 +316,7 @@ async function readItems(q: Queryable, reportId: string): Promise<ItemRecord[]> 
     'migrations.import.items',
     `SELECT item_id, kind, legacy_id, name, state, content_digest, checksum_provenance,
             to_char(applied_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS applied_at,
-            evidence, evidence_strength, decision_state, decision_note, decided_by,
+            evidence, evidence_strength, failing, decision_state, decision_note, decided_by,
             to_char(decided_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS decided_at
        FROM migrations.import_items WHERE report_id = $1 ORDER BY item_id`,
     [reportId],
@@ -316,6 +335,7 @@ async function readItems(q: Queryable, reportId: string): Promise<ItemRecord[]> 
       appliedAt: r.textOrNull('applied_at'),
       evidence: Array.isArray(evidence) ? evidence.map(String) : [],
       strength: r.textOrNull('evidence_strength') as EvidenceStrength | null,
+      failing: failuresOf(r.json('failing')),
       decision:
         decision === null
           ? null
@@ -374,6 +394,13 @@ export async function importReportView(q: Queryable, targetId: string, reportId:
         i.decision === null
           ? null
           : { state: i.decision.state, note: i.decision.note, decidedAt: i.decision.decidedAt },
+      failing:
+        i.failing === null
+          ? null
+          : {
+              total: i.failing.length,
+              items: i.failing.slice(0, FAILING_SHOWN).map((f) => ({ ...f })),
+            },
     })),
     unresolved,
     driftTotal: report.driftTotal,
@@ -900,7 +927,12 @@ interface Classified {
   readonly appliedAt: string | null
   readonly evidence: readonly string[]
   readonly strength: EvidenceStrength | null
+  /** The surviving expectations that did not hold (files; `null` for other items). */
+  readonly failing: readonly ExpectationFailure[] | null
 }
+
+/** How many of an item's failing expectations the report shows (all are kept). */
+const FAILING_SHOWN = 20
 
 /** At most this many evidence entries per item; a longer list says so in its last entry. */
 const MAX_EVIDENCE = 16
@@ -1148,6 +1180,7 @@ async function classify(
         appliedAt: null,
         evidence: ['hint:not_applicable'],
         strength: null,
+        failing: null,
       })
       continue
     }
@@ -1169,6 +1202,7 @@ async function classify(
     // Effects: the file's surviving expectations on the imported target, structural and
     // cluster-global (legacy-import.md §2.4).
     let state: ImportItemState
+    const failing: ExpectationFailure[] = []
     if (a.noStatements) {
       evidence.push('no_statements')
       state = recorded ? 'recorded_present' : 'unrecorded_present'
@@ -1193,6 +1227,7 @@ async function classify(
         } else {
           const ok = results.filter((r) => r.ok).length
           evidence.push(`expectations_held:${ok}/${results.length}`)
+          failing.push(...structuralFailures(stem, results))
           held += ok
           total += results.length
         }
@@ -1213,6 +1248,7 @@ async function classify(
           if (unmet > 0) evidence.push(`cluster_global_guard_unmet:${unmet}`)
           const ok = applied.filter((r) => r.ok).length
           if (applied.length > 0) evidence.push(`cluster_global_held:${ok}/${applied.length}`)
+          failing.push(...clusterGlobalFailures(stem, results))
           globalsHold = ok === applied.length
           held += ok
           total += applied.length
@@ -1274,6 +1310,7 @@ async function classify(
       appliedAt: recorded ? appliedAt : null,
       evidence: cappedEvidence(evidence),
       strength,
+      failing,
     })
   }
   for (const e of ledger) {
@@ -1290,6 +1327,7 @@ async function classify(
       appliedAt: e.appliedAt,
       evidence: ['ledger_entry_without_file'],
       strength: null,
+      failing: null,
     })
   }
   return out
@@ -1320,6 +1358,7 @@ function driftItems(
       appliedAt: null,
       evidence: ['only_in_target'],
       strength: null,
+      failing: null,
     })
   }
   for (const e of diff.removed) {
@@ -1333,6 +1372,7 @@ function driftItems(
       appliedAt: null,
       evidence: ['only_in_replay'],
       strength: null,
+      failing: null,
     })
   }
   for (const c of diff.changed) {
@@ -1346,6 +1386,7 @@ function driftItems(
       appliedAt: null,
       evidence: cappedEvidence(['differs', ...c.attributes.map((a) => `attribute:${a}`)]),
       strength: null,
+      failing: null,
     })
   }
   return { items: out.slice(0, MAX_DRIFT_ITEMS), total: out.length }
@@ -1448,8 +1489,8 @@ export class ImportReplayKind implements OperationKind {
           'migrations.import.item',
           `INSERT INTO migrations.import_items
              (report_id, item_id, kind, legacy_id, name, state, content_digest, checksum_provenance,
-              applied_at, evidence, evidence_strength)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10, $11)`,
+              applied_at, evidence, evidence_strength, failing)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10, $11, $12::jsonb)`,
           [
             reportId,
             i + 1,
@@ -1462,6 +1503,7 @@ export class ImportReplayKind implements OperationKind {
             item.appliedAt,
             JSON.stringify(item.evidence),
             item.strength,
+            item.failing === null ? null : JSON.stringify(item.failing),
           ],
         )
       }
@@ -1698,6 +1740,7 @@ export class ImportReplayKind implements OperationKind {
                     appliedAt: null,
                     evidence: ['hint:not_applicable'],
                     strength: null,
+                    failing: null,
                   },
               )
               items.push(...classified.filter((i) => i.kind !== 'file'))
@@ -1879,6 +1922,9 @@ function reportDigest(files: readonly ImportFile[], items: readonly ItemRecord[]
       legacyId: i.legacyId,
       state: i.state,
       decision: i.decision === null ? null : { state: i.decision.state, note: i.decision.note },
+      // What an accepting decision excuses is part of what was reviewed (follow-up 3, F1). An
+      // item analyzed before it was recorded keeps the digest it had.
+      ...(i.failing === null ? {} : { failing: i.failing.map((f) => ({ ...f })) }),
     })),
   })
   return bytes.ok ? `sha256:${sha256Hex(bytes.value)}` : 'sha256:unreadable'
@@ -2033,6 +2079,252 @@ async function liveState(
     ledgerStateHash: ledgerHashOf(rows, meta?.baselineId ?? null),
     baselineId: meta?.baselineId ?? null,
   }
+}
+
+/**
+ * The content of a re-verification of a recorded baseline (`migration.verify`
+ * with a baseline ref; follow-up 3, F3): the baseline's own plan, by id,
+ * whose content (the reviewed report, the rows, the expected fingerprint)
+ * the run checks again.
+ */
+export interface BaselineVerifyContent {
+  readonly baseline: true
+  readonly projectId: string
+  readonly targetId: string
+  readonly path: string
+  readonly tier: 'prod' | 'nonprod'
+  readonly generation: number
+  readonly migrationId: string
+  readonly baselinePlanId: string
+  readonly baselineOperationId: string
+  readonly reportId: string
+}
+
+/**
+ * The baseline a recorded `baseline:<slug>` ledger row stands for, read for
+ * a re-verification: the row (not reverted), the baseline plan that wrote it
+ * and its report, baselined by that operation. Anything else is NOT_FOUND.
+ */
+export async function baselineToVerify(
+  tx: Tx,
+  connector: MigrationPlanContext['connector'],
+  target: TargetRecord,
+  migrationId: string,
+): Promise<
+  Omit<
+    BaselineVerifyContent,
+    'baseline' | 'projectId' | 'targetId' | 'path' | 'tier' | 'generation'
+  >
+> {
+  const opened = await connector.forTarget(target, 'observer', `verify-plan/${target.targetId}`)
+  let row: Awaited<ReturnType<typeof readLedgerRows>>[number] | undefined
+  try {
+    row = (await opened.session.readOnly((rtx) => readLedgerRows(rtx))).find(
+      (r) => r.migrationId === migrationId,
+    )
+  } finally {
+    await opened.session.close()
+  }
+  if (row === undefined || row.origin !== 'baseline' || row.planId === null) {
+    throw new MigrationError('NOT_FOUND')
+  }
+  if (row.revertedAt !== null) throw new MigrationError('MIGRATION_REVERTED', { migrationId })
+  const plan = await readPlan(tx, row.planId)
+  if (plan === undefined || plan.kind !== 'migration.baseline')
+    throw new MigrationError('NOT_FOUND')
+  const c = baselineContentOf(plan)
+  const report = await readReport(tx, c.reportId)
+  if (
+    c.baselineId !== migrationId ||
+    c.target.targetId !== target.targetId ||
+    report === undefined ||
+    report.state !== 'baselined' ||
+    report.baselineOperationId !== row.operationId
+  ) {
+    throw new MigrationError('NOT_FOUND')
+  }
+  return {
+    migrationId,
+    baselinePlanId: plan.planId,
+    baselineOperationId: row.operationId,
+    reportId: c.reportId,
+  }
+}
+
+/** Runs a planned re-verification of a baseline (the `migration.verify` kind's baseline variant). */
+export async function verifyBaselineAgain(
+  deps: MigrationKindDeps,
+  c: BaselineVerifyContent,
+  operationId: string,
+): Promise<VerificationRun['status']> {
+  const plan = await readPlan(deps.store, c.baselinePlanId)
+  if (plan === undefined) throw new MigrationError('NOT_FOUND')
+  const content = baselineContentOf(plan)
+  // The target may have been re-registered since: verify what is there now, as this plan saw it.
+  return (
+    await verifyBaseline(
+      deps,
+      { ...content, target: { ...content.target, generation: c.generation } },
+      operationId,
+    )
+  ).status
+}
+
+/**
+ * The verification of a recorded baseline (legacy-import.md §2 step 7):
+ * the baseline's own run on the target and in the mirror, also when it is
+ * run again later (`migration.verify` of a baseline ref, follow-up 3 F3).
+ *
+ * - L3: the managed scope's fingerprint is the reviewed one.
+ * - L1: every accepted file's surviving structural and cluster-global
+ *   expectations hold, except those a person's decision excused: a
+ *   decision that accepts a file as applied excuses exactly the failures
+ *   the analysis recorded for it, failing the same way (the same aspects);
+ *   one that fails another way, or anything the analysis did not show,
+ *   fails the run. A report analyzed before failures were recorded excuses
+ *   every failure of a file a person accepted, bound by the fingerprint.
+ *   A file decided `superseded` states nothing any more and is not checked.
+ * - Every failure is kept with the run (the first 200, and how many).
+ * - A passed run makes the schema the target's expected state for drift.
+ */
+export async function verifyBaseline(
+  deps: MigrationKindDeps,
+  c: BaselineContent,
+  operationId: string,
+): Promise<VerificationRun> {
+  const target = await findTarget(deps.store, c.target.targetId)
+  if (target === undefined) throw new MigrationError('TARGET_NOT_FOUND')
+  const project = await projectRegistry(deps.store, c.projectId)
+  const files = await readFiles(deps.store, c.reportId)
+  const items = await readItems(deps.store, c.reportId)
+  const byStem = new Map(items.filter((i) => i.kind === 'file').map((i) => [i.name, i]))
+  const imported = new Set(c.rows.map((r) => r.name))
+  const startedAt = new Date().toISOString()
+  const opened = await deps.connector.forTarget(target, 'observer', `verify/${operationId}`)
+  let fingerprint: string
+  let unparsed: string | null
+  let checked = 0
+  const failures: (ExpectationFailure & { excused: boolean })[] = []
+  try {
+    await loadParser(opened.session.facts.major)
+    const applicable = files.filter((f) => !c.notApplicable.includes(f.stem))
+    const replays = await replaysOf(
+      opened.session.facts.major,
+      applicable,
+      project.trustedExtensions,
+    )
+    ;({ fingerprint, unparsed } = await opened.session.readOnly(async (rtx) => {
+      const snapshot = await snapshotWithin(rtx, scopeOf(project.scope))
+      const chain = analyzeChain(applicable, replays)
+      // A chain the imported target's major cannot parse checks nothing: never passed on the
+      // fingerprint alone.
+      if ('failedAt' in chain)
+        return { fingerprint: snapshot.fingerprint, unparsed: chain.failedAt }
+      await pinSearchPath(rtx, c.searchPath)
+      for (const a of chain) {
+        const item = byStem.get(a.file.stem)
+        if (!imported.has(a.file.stem) || item === undefined) continue
+        if (effective(item) === 'superseded') continue
+        const structural = a.surviving.length === 0 ? [] : await checkExpectations(rtx, a.surviving)
+        const globals = (await checkClusterGlobalExpectations(rtx, a.survivingGlobals)).filter(
+          (r) => r.applies,
+        )
+        checked += structural.length + globals.length
+        const found = [
+          ...structuralFailures(a.file.stem, structural),
+          ...clusterGlobalFailures(a.file.stem, globals),
+        ]
+        const decision = {
+          accepted: item.decision !== null && APPLIED.has(item.decision.state),
+          recorded: item.failing,
+        }
+        for (const f of found) failures.push({ ...f, excused: excusedBy(decision, f) })
+      }
+      return { fingerprint: snapshot.fingerprint, unparsed: null }
+    }))
+  } finally {
+    await opened.session.close()
+  }
+  const matches = fingerprint === c.expectedState.schemaFingerprint
+  const open = failures.filter((f) => !f.excused)
+  const excused = failures.length - open.length
+  const first = open[0]
+  const structural: Layer =
+    unparsed !== null
+      ? {
+          status: 'error',
+          checks: 0,
+          failed: 0,
+          firstFailure: { name: `unparsed: ${unparsed}`.slice(0, 128), detail: null },
+        }
+      : {
+          status: checked === 0 ? 'skipped' : open.length === 0 ? 'passed' : 'failed',
+          checks: checked,
+          failed: open.length,
+          firstFailure:
+            first === undefined
+              ? null
+              : { name: first.object.slice(0, 128), detail: first.failed.join(', ').slice(0, 200) },
+          excused,
+          ...keptFailures(failures),
+        }
+  const engine: Layer = {
+    status: matches ? 'passed' : 'failed',
+    checks: 1,
+    failed: matches ? 0 : 1,
+    firstFailure: matches
+      ? null
+      : { name: 'schema fingerprint', detail: 'not the one the import report reviewed' },
+  }
+  const runtime: Layer = { status: 'skipped', checks: 0, failed: 0, firstFailure: null }
+  const status = unparsed === null && matches && open.length === 0 ? 'passed' : 'failed'
+  const run: VerificationRun = {
+    verificationId: newId('vfy', Date.now()),
+    migrationId: c.baselineId,
+    verifyDigest: null,
+    status,
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    structural,
+    runtime,
+    engine,
+    fingerprint,
+  }
+  const writer = await deps.connector.forTarget(target, 'migrator', operationId)
+  try {
+    await writer.session.transaction(() =>
+      insertVerification(writer.session, {
+        ...run,
+        operationId,
+        structural: run.structural as unknown as JsonObject,
+        runtime: null,
+        engine: run.engine as unknown as JsonObject,
+      }),
+    )
+  } finally {
+    await writer.session.close()
+  }
+  await deps.store.transaction('migrations.baseline.verified', (tx) =>
+    writeVerificationMirror(
+      tx,
+      { targetId: target.targetId, generation: c.target.generation, operationId },
+      run,
+    ),
+  )
+  if (status === 'passed') {
+    try {
+      // Best effort, as after a verified migration: the next drift check says what it left.
+      await deps.expected?.record({
+        targetId: target.targetId,
+        generation: c.target.generation,
+        operationId,
+        fingerprint,
+      })
+    } catch {
+      // The drift check reports what the baseline does not explain.
+    }
+  }
+  return run
 }
 
 const SET_BASELINE = sql`UPDATE exponetdb.ledger_meta SET baseline_id = $1 WHERE baseline_id IS NULL`
@@ -2265,90 +2557,15 @@ export class MigrationBaselineKind implements OperationKind {
     }
   }
 
-  /** L3: the fingerprint is the reviewed one; L1: the accepted files' surviving expectations hold. */
+  /**
+   * L3: the fingerprint is the reviewed one; L1: the accepted files'
+   * surviving expectations hold, except what a person's recorded decision
+   * excused (follow-up 3, F1). The run says what failed (F2); a passed run
+   * makes the schema the drift reference (F4).
+   */
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
-    const c = baselineContentOf(ctx.plan)
-    const target = await findTarget(this.#deps.store, c.target.targetId)
-    if (target === undefined) return 'error'
-    const project = await projectRegistry(this.#deps.store, c.projectId)
-    const files = await readFiles(this.#deps.store, c.reportId)
-    const accepted = new Set(c.rows.filter((r) => r.surviving).map((r) => r.name))
-    const startedAt = new Date().toISOString()
     try {
-      const opened = await this.#deps.connector.forTarget(
-        target,
-        'observer',
-        `verify/${ctx.operationId}`,
-      )
-      let run: { fingerprint: string; held: number; checked: number; unparsed: string | null }
-      try {
-        await loadParser(opened.session.facts.major)
-        const applicable = files.filter((f) => !c.notApplicable.includes(f.stem))
-        const replays = await replaysOf(
-          opened.session.facts.major,
-          applicable,
-          project.trustedExtensions,
-        )
-        run = await opened.session.readOnly(async (rtx) => {
-          const snapshot = await snapshotWithin(rtx, scopeOf(project.scope))
-          const chain = analyzeChain(applicable, replays)
-          let held = 0
-          let checked = 0
-          // A chain the imported target's major cannot parse checks nothing: never passed on
-          // the fingerprint alone.
-          const unparsed = 'failedAt' in chain ? chain.failedAt : null
-          if (!('failedAt' in chain)) {
-            await pinSearchPath(rtx, c.searchPath)
-            for (const a of chain) {
-              if (!accepted.has(a.file.stem)) continue
-              const results = [
-                ...(a.surviving.length === 0 ? [] : await checkExpectations(rtx, a.surviving)),
-                ...(await checkClusterGlobalExpectations(rtx, a.survivingGlobals)).filter(
-                  (r) => r.applies,
-                ),
-              ]
-              checked += results.length
-              held += results.filter((r) => r.ok).length
-            }
-          }
-          return { fingerprint: snapshot.fingerprint, held, checked, unparsed }
-        })
-      } finally {
-        await opened.session.close()
-      }
-      const passed =
-        run.unparsed === null &&
-        run.fingerprint === c.expectedState.schemaFingerprint &&
-        run.held === run.checked
-      const status = passed ? 'passed' : 'failed'
-      const writer = await this.#deps.connector.forTarget(target, 'migrator', ctx.operationId)
-      try {
-        await writer.session.transaction(() =>
-          insertVerification(writer.session, {
-            verificationId: newId('vfy', Date.now()),
-            migrationId: c.baselineId,
-            operationId: ctx.operationId,
-            verifyDigest: null,
-            startedAt,
-            finishedAt: new Date().toISOString(),
-            status,
-            structural: {
-              checked: run.checked,
-              held: run.held,
-              ...(run.unparsed === null ? {} : { unparsed: run.unparsed }),
-            } as JsonObject,
-            runtime: null,
-            engine: {
-              fingerprint:
-                run.fingerprint === c.expectedState.schemaFingerprint ? 'match' : 'mismatch',
-            } as JsonObject,
-            fingerprint: run.fingerprint,
-          }),
-        )
-      } finally {
-        await writer.session.close()
-      }
-      return status
+      return (await verifyBaseline(this.#deps, baselineContentOf(ctx.plan), ctx.operationId)).status
     } catch {
       return 'error'
     }

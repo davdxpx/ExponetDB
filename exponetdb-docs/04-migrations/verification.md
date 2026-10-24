@@ -391,6 +391,21 @@ not in `verify.sql`.
   `passed` rows.
 - The latest row determines the current verification status. Earlier rows are
   never changed.
+- **[DECIDED]** (Wave 9 Part A, follow-up 3, F2, 2026-10-23) A run says what
+  failed: each layer keeps its failing items, at most 200 (`failures`: the
+  file or migration, the statement, the kind, the object by name, the aspects
+  that differ as fixed codes such as `missing`, `type`, `not_null`, `order`,
+  `body`, `enabled`; never a value read from the catalog or a row), and how
+  many there are (`failuresTotal`). A structural expectation names the aspects
+  its check compared (a column's type, typmod, nullability and default; an
+  index's validity, table, uniqueness, method, partiality and keys; a
+  function's security, search path, language and body; …); a `verify.sql`
+  check is `failed` or `error`, with its redacted `firstFailure` detail as
+  before. A baseline's run also counts what review decisions `excused`
+  ([`legacy-import.md` Step 7](./legacy-import.md#step-7-verify)). The
+  operation read (`Operation.verifications`, REST and Web App) carries the
+  operation's runs from the mirror; `migration show <id>` lists the newest
+  run's failures. A run written before this change has counts only.
 
 ### Retrying verification
 
@@ -421,6 +436,19 @@ migration recorded, because later migrations legitimately changed the schema
 since. A reverted migration is refused with `MIGRATION_REVERTED`. The run is
 appended to `migration_verifications` and to the mirror; the ledger row and
 its events stay untouched.
+
+**[DECIDED]** (Wave 9 Part A, follow-up 3, F3, 2026-10-23) `migration.verify`
+also takes the baseline of a legacy import (`baseline:<slug>`; the same
+route, action and kind, a `revision` is refused): it runs the baseline's
+verification again ([`legacy-import.md` Step
+7](./legacy-import.md#step-7-verify)) with the baseline plan's report and
+review decisions, and binds the target generation and the ledger's baseline
+row (the plan that wrote it, not reverted). It records no per-migration
+progress (that table names bundle migrations only); its result is the run in
+the target's history and the mirror, and the operation's verification
+outcome. A passed run makes the schema the drift reference. This is how a
+baseline whose verification failed is verified again: `verification_failed`
+is a final state, and `retry-verification` stays for `needs_attention`.
 
 **[OBSERVED]** (2026-10-13, Wave 7; `packages/policy/src/catalog/migrations.ts`,
 `apps/server/test/mcp-plans.int.test.ts`; G7 not yet accepted) On

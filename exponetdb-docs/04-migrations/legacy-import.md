@@ -190,6 +190,26 @@ databases) are resolved the same way: accept into the baseline as
 
 The import cannot be applied while unresolved review items exist.
 
+**[DECIDED]** (Wave 9 Part A, follow-up 3, F1, 2026-10-23) **What an
+acceptance excuses.** The analysis records, per file, the surviving
+expectations that did not hold on the imported target (`ImportReport.items[]
+.failing`: file, statement, kind, the object by name and the aspects that
+differ, such as `enabled`, `body`, `order`, `missing`; never a value read from
+the catalog; the first 20 and how many). A decision that accepts the file as
+applied (`recorded_present`, `unrecorded_present`) accepts exactly these: the
+baseline's verification excuses them while they fail **the same way** and
+nothing else (Step 7). The failing list is bound into the report digest, so a
+baseline plan binds it. The CLI (`migration import resolve`) and the Web App's
+decision dialog say so before the decision is recorded: how many failing
+expectations the acceptance excuses, and the first ones. A file decided
+`superseded` is not checked by the verification at all (its effects were
+replaced). **[OBSERVED]** The first real baseline (`reos-db-01`, 2026-10-23)
+needed 454 such decisions (column positions after `ADD COLUMN`, row security
+enabled later by an event trigger, function bodies changed outside the
+history, default privileges, constraint names of an older generator) and
+could never pass, because Step 7 required every surviving expectation of
+every accepted file to hold.
+
 ### Step 6: Baseline (writes)
 
 `migration.baseline` plan → approval (prod tier) → apply:
@@ -221,6 +241,53 @@ baseline is `passed` only then. **[DECIDED]** (Wave 9 Part A, review round 1)
 A chain the imported target's major cannot parse checks no expectation, so
 the verification fails (`structural.unparsed`, the first file it could not
 read) instead of passing on the fingerprint alone.
+
+**[DECIDED]** (Wave 9 Part A, follow-up 3, 2026-10-23)
+
+- **Excused, not ignored (F1).** The verification checks what the review did
+  **not** excuse: a failing expectation of a file a person accepted as
+  applied is `excused` when the analysis recorded it failing in the same way
+  (the same file, statement, kind, object and aspects). One that now fails
+  another way, or one the analysis did not show (it held then, or the file
+  was accepted without a decision), fails the run. It passes when the
+  fingerprint is the reviewed one, nothing is unparsed and every
+  non-excused expectation holds. A file decided `superseded` is not checked.
+  A report analyzed before failures were recorded (`failing` null on its
+  items) excuses every failure of a file a person accepted, bound by the
+  fingerprint of the managed scope; expectations outside that scope (roles,
+  objects in other schemas) of such a file are then excused unverified, a
+  residual of the reports made before this change.
+- **What failed is kept (F2).** The run stores, per layer, the failing
+  expectations (file, statement, kind, object, the aspects that differ,
+  `excused`; the first 200 and `failuresTotal`), `failed` (the non-excused
+  ones) and `excused`. It is written to the target's history and to the
+  Control Store's mirror, like every migration verification. `operation show`
+  (`Operation.verifications`, REST), `migration show baseline:<slug>` and the
+  Web App's operation page list them. The same holds for every kind that
+  verifies: a migration's structural layer, its `verify.sql` checks and its
+  engine checks keep their failures too. The MCP tools return the operation
+  without its verification runs (the tool list's token budget; their
+  `toolVersion` is unchanged); an agent reads the failures through the REST
+  API.
+- **A planned re-verification (F3).** `exponetdb migration verify
+  baseline:<slug> --target …` (`POST
+  /targets/{target}/migrations/baseline:<slug>/verifications`, the
+  `migration.verify` kind and action) runs the same check again as a new,
+  audited operation, with the baseline plan's report and decisions. A
+  baseline's operation keeps its outcome (an operation never changes once it
+  ended; `verification_failed` is final), so a baseline whose verification
+  failed, because an engine read it wrongly or because something outside the
+  managed scope was missing, gets a new run this way after the fix. It is
+  refused for a baseline the target's ledger does not hold (`NOT_FOUND`), a
+  reverted one (`MIGRATION_REVERTED`) and a `revision`. A run without a
+  change fails the same way again; one on a target whose managed schema
+  changed since the baseline fails on the fingerprint.
+- **Drift reference (F4).** A passed run (the baseline's own or a planned
+  re-verification) records the target's schema as its expected state for
+  drift, as a verified migration does ([`drift-detection.md`
+  §7](../03-database-model/drift-detection.md#7-wave-4-implementation-kind-c)).
+  Before this change the baseline kind never did, so drift kept comparing
+  with the registration snapshot.
 
 ### Step 8: Freeze
 
