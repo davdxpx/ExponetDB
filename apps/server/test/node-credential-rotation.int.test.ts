@@ -46,6 +46,7 @@ import {
   testTargets,
   withRolesHeld,
   withSuperuser,
+  withVerifierPasswordHeld,
 } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -73,9 +74,11 @@ import {
  * registry's metadata; the plan is bound to the active credential at
  * acceptance, at dispatch and, locked, where the password is prepared.
  *
- * Only `exponetdb_verifier` is rotated (no other suite logs in with it), and
- * the role lock of the test kit is held for the whole file, so no suite
- * resets the role passwords meanwhile; the password is put back after.
+ * Only `exponetdb_verifier` is rotated. The test kit's verifier password
+ * lock is held for the whole file, so no test of another suite logs in as
+ * the verifier meanwhile (each verification with a verify.sql does), and
+ * its role lock too, so no suite resets the role passwords meanwhile; the
+ * password is put back after.
  */
 
 const ROLE: AccessRole = 'verifier'
@@ -159,14 +162,18 @@ beforeAll(async () => {
     cluster: (v) => clusterBootstrapStatements(v),
     passwords: (v) => passwordStatements(v),
   })
-  // Held until afterAll: no suite resets the roles' passwords meanwhile.
+  // Held until afterAll: no other test logs in as the verifier and no suite
+  // resets the roles' passwords meanwhile (the verifier lock first, as a test
+  // that takes the role lock already holds the verifier lock).
   await new Promise<void>((acquired) => {
-    rolesHeld = withRolesHeld(server, async () => {
-      acquired()
-      await new Promise<void>((r) => {
-        releaseRoles = r
-      })
-    })
+    rolesHeld = withVerifierPasswordHeld(server, () =>
+      withRolesHeld(server, async () => {
+        acquired()
+        await new Promise<void>((r) => {
+          releaseRoles = r
+        })
+      }),
+    )
   })
   db = await migratedTestDatabase('exdb_it_credential_rotation')
   const parsed = parseKeyring(generateKeyringText('test-key'))

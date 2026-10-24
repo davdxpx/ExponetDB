@@ -68,6 +68,18 @@ export const integrationConfig = defineConfig({
   },
 })
 
+// The integration suites against the target servers (the packages using
+// `@exponetdb/testkit`'s servers): each test holds the test kit's shared lock
+// on the verifier password, so the suite that rotates it never runs during
+// one (packages/testkit/src/verifier-password.ts).
+export const targetIntegrationConfig = defineConfig({
+  ...integrationConfig,
+  test: {
+    ...integrationConfig.test,
+    setupFiles: [new URL('./vitest.target-setup.ts', import.meta.url).pathname],
+  },
+})
+
 // Browser end-to-end tests (`*.e2e.test.ts`): a real Chromium with a virtual
 // WebAuthn authenticator against the real program and PostgreSQL 17. Never
 // skipped: without the browser, the built Web App or the database they fail.

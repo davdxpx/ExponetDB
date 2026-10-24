@@ -63,3 +63,9 @@ export {
   withSuperuser,
 } from './servers.ts'
 export { databaseFromFixture, ensureTemplate, type Fixture } from './templates.ts'
+export {
+  VERIFIER_ROTATION_MAJOR,
+  type VerifierLoginTurn,
+  verifierLoginTurn,
+  withVerifierPasswordHeld,
+} from './verifier-password.ts'
