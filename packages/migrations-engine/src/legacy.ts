@@ -87,6 +87,7 @@ import {
   excusedBy,
   failuresOf,
   structuralFailures,
+  unreadableFailure,
 } from './verification-failures.ts'
 
 /**
@@ -1223,6 +1224,7 @@ async function classify(
         })
         if (results === undefined) {
           evidence.push('expectations_unreadable')
+          failing.push(unreadableFailure(stem, 'structural'))
           unreadable = true
         } else {
           const ok = results.filter((r) => r.ok).length
@@ -1239,6 +1241,7 @@ async function classify(
         )
         if (results === undefined) {
           evidence.push('cluster_global_unreadable')
+          failing.push(unreadableFailure(stem, 'cluster_global'))
           unreadable = true
           globalsHold = false
         } else {
@@ -1957,6 +1960,14 @@ export async function planBaseline(
       held: items.filter((i) => i.kind === 'drift').length,
     })
   }
+  // A file analyzed before failures were recorded: its acceptance would excuse whatever fails
+  // (the legacy rule of Step 7); only a baseline recorded before keeps that rule.
+  const unrecorded = items.filter(
+    (i) => i.kind === 'file' && i.failing === null && i.state !== 'not_applicable',
+  ).length
+  if (unrecorded > 0) {
+    throw new MigrationError('LEGACY_IMPORT_ANALYSIS_OUTDATED', { items: unrecorded })
+  }
   const unresolved = unresolvedOf(items)
   if (unresolved.length > 0) {
     throw new MigrationError('LEGACY_IMPORT_AMBIGUOUS', {
@@ -2155,7 +2166,7 @@ export async function baselineToVerify(
 export async function verifyBaselineAgain(
   deps: MigrationKindDeps,
   c: BaselineVerifyContent,
-  operationId: string,
+  fence: Fence,
 ): Promise<VerificationRun['status']> {
   const plan = await readPlan(deps.store, c.baselinePlanId)
   if (plan === undefined) throw new MigrationError('NOT_FOUND')
@@ -2165,7 +2176,7 @@ export async function verifyBaselineAgain(
     await verifyBaseline(
       deps,
       { ...content, target: { ...content.target, generation: c.generation } },
-      operationId,
+      fence,
     )
   ).status
 }
@@ -2190,13 +2201,17 @@ export async function verifyBaselineAgain(
 export async function verifyBaseline(
   deps: MigrationKindDeps,
   c: BaselineContent,
-  operationId: string,
+  fence: Fence,
 ): Promise<VerificationRun> {
+  const { operationId } = fence
   const target = await findTarget(deps.store, c.target.targetId)
   if (target === undefined) throw new MigrationError('TARGET_NOT_FOUND')
   const project = await projectRegistry(deps.store, c.projectId)
   const files = await readFiles(deps.store, c.reportId)
   const items = await readItems(deps.store, c.reportId)
+  // The decisions the plan bound, unchanged since: a decision recorded after the plan (the
+  // report is baselined only when the mirror is written) would change what is excused.
+  const reviewed = reportDigest(files, items) === c.reportDigest
   const byStem = new Map(items.filter((i) => i.kind === 'file').map((i) => [i.name, i]))
   const imported = new Set(c.rows.map((r) => r.name))
   const startedAt = new Date().toISOString()
@@ -2225,15 +2240,35 @@ export async function verifyBaseline(
         const item = byStem.get(a.file.stem)
         if (!imported.has(a.file.stem) || item === undefined) continue
         if (effective(item) === 'superseded') continue
-        const structural = a.surviving.length === 0 ? [] : await checkExpectations(rtx, a.surviving)
-        const globals = (await checkClusterGlobalExpectations(rtx, a.survivingGlobals)).filter(
-          (r) => r.applies,
-        )
-        checked += structural.length + globals.length
-        const found = [
-          ...structuralFailures(a.file.stem, structural),
-          ...clusterGlobalFailures(a.file.stem, globals),
-        ]
+        // Each file's checks on their own, as in the analysis: a check that raises (a schema
+        // the observer may not use) is that file's failure, never the run's error.
+        const found: ExpectationFailure[] = []
+        if (a.surviving.length > 0) {
+          const structural = await guarded(rtx, async () => {
+            await pinSearchPath(rtx, c.searchPath)
+            return checkExpectations(rtx, a.surviving)
+          })
+          if (structural === undefined) {
+            checked += 1
+            found.push(unreadableFailure(a.file.stem, 'structural'))
+          } else {
+            checked += structural.length
+            found.push(...structuralFailures(a.file.stem, structural))
+          }
+        }
+        if (a.survivingGlobals.length > 0) {
+          const globals = await guarded(rtx, () =>
+            checkClusterGlobalExpectations(rtx, a.survivingGlobals),
+          )
+          if (globals === undefined) {
+            checked += 1
+            found.push(unreadableFailure(a.file.stem, 'cluster_global'))
+          } else {
+            const applied = globals.filter((r) => r.applies)
+            checked += applied.length
+            found.push(...clusterGlobalFailures(a.file.stem, applied))
+          }
+        }
         const decision = {
           accepted: item.decision !== null && APPLIED.has(item.decision.state),
           recorded: item.failing,
@@ -2246,6 +2281,16 @@ export async function verifyBaseline(
     await opened.session.close()
   }
   const matches = fingerprint === c.expectedState.schemaFingerprint
+  if (!reviewed) {
+    failures.unshift({
+      file: null,
+      statement: null,
+      kind: 'import_report',
+      object: 'the decisions of the reviewed import report',
+      failed: ['changed'],
+      excused: false,
+    })
+  }
   const open = failures.filter((f) => !f.excused)
   const excused = failures.length - open.length
   const first = open[0]
@@ -2304,7 +2349,7 @@ export async function verifyBaseline(
   } finally {
     await writer.session.close()
   }
-  await deps.store.transaction('migrations.baseline.verified', (tx) =>
+  await fenced(fence, 'migrations.baseline.verified', (tx) =>
     writeVerificationMirror(
       tx,
       { targetId: target.targetId, generation: c.target.generation, operationId },
@@ -2313,6 +2358,8 @@ export async function verifyBaseline(
   )
   if (status === 'passed') {
     try {
+      // Only while this worker still holds the operation: a stale one never moves the reference.
+      await fenced(fence, 'migrations.baseline.expected', async () => undefined)
       // Best effort, as after a verified migration: the next drift check says what it left.
       await deps.expected?.record({
         targetId: target.targetId,
@@ -2565,7 +2612,12 @@ export class MigrationBaselineKind implements OperationKind {
    */
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
     try {
-      return (await verifyBaseline(this.#deps, baselineContentOf(ctx.plan), ctx.operationId)).status
+      const fence = {
+        store: this.#deps.store,
+        operationId: ctx.operationId,
+        leaseOwner: ctx.leaseOwner,
+      }
+      return (await verifyBaseline(this.#deps, baselineContentOf(ctx.plan), fence)).status
     } catch {
       return 'error'
     }

@@ -168,14 +168,21 @@ export function layerFrom(value: unknown, layer: 'structural' | 'runtime' | 'eng
   if (typeof v['status'] === 'string') return v as unknown as Layer
   if (layer === 'structural' && typeof v['checked'] === 'number' && typeof v['held'] === 'number') {
     const failed = Math.max(0, v['checked'] - v['held'])
+    const unparsed = typeof v['unparsed'] === 'string'
     return {
-      status: v['checked'] === 0 ? 'skipped' : failed === 0 ? 'passed' : 'failed',
+      // An unparsed chain checked nothing and failed the run: an error, as runs write it now.
+      status: unparsed
+        ? 'error'
+        : v['checked'] === 0
+          ? 'skipped'
+          : failed === 0
+            ? 'passed'
+            : 'failed',
       checks: v['checked'],
       failed,
-      firstFailure:
-        typeof v['unparsed'] === 'string'
-          ? { name: `unparsed: ${v['unparsed']}`.slice(0, 128), detail: null }
-          : null,
+      firstFailure: unparsed
+        ? { name: `unparsed: ${String(v['unparsed'])}`.slice(0, 128), detail: null }
+        : null,
     }
   }
   if (layer === 'engine' && (v['fingerprint'] === 'match' || v['fingerprint'] === 'mismatch')) {

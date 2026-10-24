@@ -199,9 +199,17 @@ the catalog; the first 20 and how many). A decision that accepts the file as
 applied (`recorded_present`, `unrecorded_present`) accepts exactly these: the
 baseline's verification excuses them while they fail **the same way** and
 nothing else (Step 7). The failing list is bound into the report digest, so a
-baseline plan binds it. The CLI (`migration import resolve`) and the Web App's
-decision dialog say so before the decision is recorded: how many failing
-expectations the acceptance excuses, and the first ones. A file decided
+baseline plan binds it. The Web App's decision dialog says so before the
+decision is recorded: how many failing expectations the acceptance excuses
+and the first ones, or that it excuses nothing. The CLI lists each item's
+failing count in `migration import show` (FAILING) and answers `migration
+import resolve` with the same statement for the decision it recorded (a
+decision is changed by recording another one while the report is open). A
+file whose expectations could not be read on the imported target (a check
+that raised, for example on a schema the observer may not use) carries that
+as one failure with the aspect `unreadable`: an acceptance excuses it
+explicitly, and the verification records it the same way instead of
+erroring. A file decided
 `superseded` is not checked by the verification at all (its effects were
 replaced). **[OBSERVED]** The first real baseline (`reos-db-01`, 2026-10-23)
 needed 454 such decisions (column positions after `ADD COLUMN`, row security

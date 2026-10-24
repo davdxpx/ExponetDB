@@ -102,6 +102,29 @@ export function clusterGlobalFailures(
     })
 }
 
+/**
+ * A file whose expectations could not be read on the target (a check that
+ * raised, for example `permission denied for schema` on a schema the
+ * observer may not use): the analysis records it with the file, so a
+ * person who accepts the file sees and excuses it, and the verification
+ * records it instead of erroring (P1-1 of the follow-up 3 review).
+ */
+export function unreadableFailure(
+  file: string,
+  layer: 'structural' | 'cluster_global',
+): ExpectationFailure {
+  return {
+    file,
+    statement: null,
+    kind: layer === 'structural' ? 'expectations' : 'cluster_global_expectations',
+    object: cut(
+      `${layer === 'structural' ? 'structural' : 'cluster-global'} expectations of ${file}`,
+      300,
+    ),
+    failed: ['unreadable'],
+  }
+}
+
 /** Reads a stored list of failures; anything else is `null` (not recorded). */
 export function failuresOf(value: unknown): ExpectationFailure[] | null {
   if (!Array.isArray(value)) return null

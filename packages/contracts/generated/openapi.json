@@ -6558,7 +6558,7 @@
                           "items": {
                             "properties": {
                               "failed": {
-                                "description": "The aspects that differ (missing, present, type, not_null, order, body, …).",
+                                "description": "The aspects that differ (missing, present, type, not_null, order, body, value, …); unreadable when the check could not be read on the target, changed when the reviewed decisions changed.",
                                 "items": {
                                   "maxLength": 32,
                                   "type": "string"
@@ -6608,7 +6608,8 @@
                               "object",
                               "failed"
                             ],
-                            "type": "object"
+                            "type": "object",
+                            "x-untrusted": true
                           },
                           "maxItems": 20,
                           "type": "array"
@@ -14135,6 +14136,7 @@
               "LEDGER_NOT_INITIALIZED",
               "LEGACY_IMPORT_AMBIGUOUS",
               "LEGACY_IMPORT_TRUNCATED",
+              "LEGACY_IMPORT_ANALYSIS_OUTDATED",
               "STAGING_EVIDENCE_MISSING",
               "STAGING_VERIFICATION_FAILED",
               "STAGING_EVIDENCE_UNREACHABLE",
@@ -19157,7 +19159,7 @@
             "type": "boolean"
           },
           "failed": {
-            "description": "The aspects that differ (missing, present, type, not_null, order, body, …).",
+            "description": "The aspects that differ (missing, present, type, not_null, order, body, value, …); unreadable when the check could not be read on the target, changed when the reviewed decisions changed.",
             "items": {
               "maxLength": 32,
               "type": "string"

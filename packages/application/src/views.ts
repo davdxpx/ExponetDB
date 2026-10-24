@@ -186,11 +186,16 @@ function policyRulesOf(policy: JsonValue | undefined): PolicyRuleResult[] {
 
 /**
  * Kinds whose verification an operator may run again: their verify step
- * re-runs the rows that errored or never ran (operations-engine.md §4.1).
+ * re-runs the rows that errored or never ran (operations-engine.md §4.1),
+ * or, for a baseline and a re-verification, the whole read-only run (a
+ * verification that errored there otherwise kept the target's schema
+ * domain for good; follow-up 3 review P1-1).
  */
 export const VERIFICATION_RETRY_KINDS: ReadonlySet<string> = new Set([
   'migration.apply',
   'migration.resume',
+  'migration.baseline',
+  'migration.verify',
 ])
 
 /**

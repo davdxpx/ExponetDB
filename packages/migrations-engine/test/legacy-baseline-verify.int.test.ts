@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { newId, systemClock } from '@exponetdb/kernel'
 import {
   acceptPlan,
@@ -6,11 +7,13 @@ import {
   type PlanRecord,
   processNextOperation,
   readOperation,
+  requestVerificationRetry,
   WORKER_ACTOR,
 } from '@exponetdb/operations'
 import { MIGRATION_RULES, REGISTRY_RULES, RuleRegistry } from '@exponetdb/policy'
-import { ROLE_NAMES } from '@exponetdb/postgres'
+import { ROLE_NAMES, TargetError } from '@exponetdb/postgres'
 import {
+  type Connector,
   findTarget,
   planEnvironmentCreate,
   planProductCreate,
@@ -73,6 +76,26 @@ interface World {
   readonly role: string
   /** Each schema the worker recorded as a target's expected state for drift. */
   readonly expected: { readonly targetId: string; readonly fingerprint: string }[]
+  /** While set, the worker cannot open the observer session a verification reads with. */
+  readonly faults: { verifyUnreachable: boolean }
+}
+
+/** The worker's connector, with the observer session of a verification failing on request. */
+function faulty(real: Connector, faults: World['faults']): Connector {
+  return new Proxy(real, {
+    get(target, prop) {
+      const value = Reflect.get(target, prop, target)
+      if (prop !== 'forTarget' || typeof value !== 'function') {
+        return typeof value === 'function' ? value.bind(target) : value
+      }
+      return async (...args: Parameters<Connector['forTarget']>) => {
+        if (faults.verifyUnreachable && args[1] === 'observer' && args[2].startsWith('verify/')) {
+          throw new TargetError('TARGET_UNAVAILABLE', 'connection_lost')
+        }
+        return target.forTarget(...args)
+      }
+    },
+  })
 }
 
 async function world(server: TestServer, role: string): Promise<World> {
@@ -104,6 +127,7 @@ async function world(server: TestServer, role: string): Promise<World> {
     connector: h.serveConnector,
   }
   const expected: { targetId: string; fingerprint: string }[] = []
+  const faults = { verifyUnreachable: false }
   const kinds = new KindRegistry([
     ...registryKinds({
       store: h.worker,
@@ -116,7 +140,7 @@ async function world(server: TestServer, role: string): Promise<World> {
     ...migrationKinds({
       store: h.worker,
       clock: systemClock,
-      connector: h.workerConnector,
+      connector: faulty(h.workerConnector, faults),
       installationId: h.db.installationId,
       engineVersion: '0.1.0+test',
       expected: {
@@ -155,6 +179,8 @@ async function world(server: TestServer, role: string): Promise<World> {
     const environmentId = String((await planContent(h, env.plan.planId))['environmentId'])
     const name = await targetDatabase(server, `bv_${envSlug}`, [
       `GRANT CREATE, USAGE ON SCHEMA public TO ${OWNER}`,
+      // The history creates a schema of its own.
+      `DO $$ BEGIN EXECUTE format('GRANT CREATE ON DATABASE %I TO ${OWNER}', current_database()); END $$`,
       ...extra,
     ])
     databases[envSlug] = name
@@ -180,6 +206,11 @@ async function world(server: TestServer, role: string): Promise<World> {
     `ALTER TABLE public.acme_items OWNER TO ${OWNER}`,
     'CREATE FUNCTION public.acme_touch() RETURNS int LANGUAGE plpgsql AS $f$BEGIN RETURN 2; END$f$',
     `ALTER FUNCTION public.acme_touch() OWNER TO ${OWNER}`,
+    // A schema outside the managed scope the observer may not use: its checks raise
+    // `permission denied for schema` (review P1-1; a Supabase history touches auth, storage).
+    `CREATE SCHEMA acme_private AUTHORIZATION ${OWNER}`,
+    'CREATE TABLE acme_private.things (id bigint)',
+    `ALTER TABLE acme_private.things OWNER TO ${OWNER}`,
   ])
   const scratch = await register('scratch', [])
   return {
@@ -192,6 +223,7 @@ async function world(server: TestServer, role: string): Promise<World> {
     importedDb: databases['imported'] ?? '',
     role,
     expected,
+    faults,
   }
 }
 
@@ -209,6 +241,10 @@ const files = (role: string) => [
     text: 'CREATE FUNCTION public.acme_touch() RETURNS int LANGUAGE plpgsql AS $f$BEGIN RETURN 1; END$f$;\n',
   },
   { name: '0004_role.sql', text: `CREATE ROLE ${role} LOGIN;\n` },
+  {
+    name: '0005_private.sql',
+    text: 'CREATE SCHEMA acme_private;\nCREATE TABLE acme_private.things (id bigint);\n',
+  },
 ]
 
 async function apply(w: World, p: PlanRecord): Promise<OperationRecord> {
@@ -233,6 +269,10 @@ async function apply(w: World, p: PlanRecord): Promise<OperationRecord> {
     ),
   )
   if (result.status !== 'accepted') throw result.error
+  return drive(w, result.operation.operationId)
+}
+
+async function drive(w: World, operationId: string): Promise<OperationRecord> {
   const workerId = newId('prc', Date.now())
   for (let i = 0; i < 50; i++) {
     const r = await processNextOperation(w.h.worker, {
@@ -242,7 +282,7 @@ async function apply(w: World, p: PlanRecord): Promise<OperationRecord> {
     })
     if (r.status === 'idle') break
   }
-  const op = await readOperation(w.h.worker, result.operation.operationId)
+  const op = await readOperation(w.h.worker, operationId)
   if (op === undefined) throw new Error('operation vanished')
   return op
 }
@@ -305,6 +345,10 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         '0002_items_rls': [['row_security', 'row security of "public"."acme_items"', ['enabled']]],
         '0003_touch': [['function', 'function "public"."acme_touch"()', ['body']]],
         '0004_role': [['role_attribute', `login on for role ${role}`, ['value']]],
+        // Unreadable, not an error: recorded, so an acceptance excuses it explicitly.
+        '0005_private': [
+          ['expectations', 'structural expectations of 0005_private', ['unreadable']],
+        ],
       })
       // A person accepts the files as applied, and the drift the hand changes left as it is.
       for (const item of r.items.filter(
@@ -323,6 +367,38 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       }
     })
 
+    it('refuses a baseline of a report analyzed before failures were recorded (review P3-3)', async () => {
+      // A report of the release before (failing null): its decisions would excuse anything.
+      const item = '0002_items_rls'
+      const kept = await w.h.db.asSuperuser(async (c) => {
+        const r = await c.query(
+          'SELECT failing::text AS failing FROM migrations.import_items WHERE report_id = $1 AND name = $2',
+          [reportId, item],
+        )
+        await c.query(
+          `BEGIN; SET LOCAL session_replication_role = replica;
+           UPDATE migrations.import_items SET failing = NULL WHERE report_id = '${reportId}' AND name = '${item}';
+           COMMIT`,
+        )
+        return String(r.rows[0]?.failing)
+      })
+      try {
+        await expect(
+          w.h.serve.transaction('test.bv.baseline', (tx) =>
+            planBaseline(tx, w.ctx, w.a, w.imported.targetId, reportId),
+          ),
+        ).rejects.toMatchObject({ code: 'LEGACY_IMPORT_ANALYSIS_OUTDATED', details: { items: 1 } })
+      } finally {
+        await w.h.db.asSuperuser((c) =>
+          c.query(
+            `BEGIN; SET LOCAL session_replication_role = replica;
+             UPDATE migrations.import_items SET failing = '${kept}'::jsonb WHERE report_id = '${reportId}' AND name = '${item}';
+             COMMIT`,
+          ),
+        )
+      }
+    })
+
     it('baselines and verifies, the reviewed failures excused and named, and adopts the schema for drift (F1, F2, F4)', async () => {
       const p = await w.h.serve.transaction('test.bv.baseline', (tx) =>
         planBaseline(tx, w.ctx, w.a, w.imported.targetId, reportId),
@@ -337,13 +413,14 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       expect(v.structural).toMatchObject({
         status: 'passed',
         failed: 0,
-        excused: 3,
-        failuresTotal: 3,
+        excused: 4,
+        failuresTotal: 4,
       })
       expect(v.structural.failures?.map((f) => [f.file, f.failed, f.excused])).toEqual([
         ['0002_items_rls', ['enabled'], true],
         ['0003_touch', ['body'], true],
         ['0004_role', ['value'], true],
+        ['0005_private', ['unreadable'], true],
       ])
       expect(v.engine.status).toBe('passed')
       expect(w.expected).toEqual([{ targetId: w.imported.targetId, fingerprint: v.fingerprint }])
@@ -374,7 +451,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         state: 'succeeded',
         verificationOutcome: 'passed',
       })
-      expect((await latestRun(w)).structural).toMatchObject({ failed: 0, excused: 3 })
+      expect((await latestRun(w)).structural).toMatchObject({ failed: 0, excused: 4 })
       expect(w.expected).toHaveLength(2)
     })
 
@@ -391,6 +468,46 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       } finally {
         await runAsSuperuser(server, w.importedDb, ['DROP TABLE public.acme_extra'])
       }
+    })
+
+    it('verifies a re-verification that errored again on an operator request, and releases the target (review P1-1)', async () => {
+      w.faults.verifyUnreachable = true
+      let op: OperationRecord
+      try {
+        op = await apply(w, await reverify(w))
+      } finally {
+        w.faults.verifyUnreachable = false
+      }
+      // Before the review this held the target's schema domain with no way to release it.
+      expect(op).toMatchObject({
+        kind: 'migration.verify',
+        state: 'needs_attention',
+        applyOutcome: 'applied',
+        verificationOutcome: 'error',
+      })
+      const operator = newId('idn', Date.now())
+      await w.h.db.asSuperuser((c) =>
+        c.query(
+          `INSERT INTO auth.identities (identity_id, kind, state, email, email_normalized, webauthn_user_handle)
+           VALUES ($1, 'human', 'invited', $2, $2, $3)`,
+          [operator, `operator-${server.major}@example.test`, randomBytes(32)],
+        ),
+      )
+      await w.h.serve.transaction('test.bv.retry', (tx) =>
+        requestVerificationRetry(tx, op.operationId, operator),
+      )
+      expect(await drive(w, op.operationId)).toMatchObject({
+        state: 'succeeded',
+        verificationOutcome: 'passed',
+      })
+      expect((await latestRun(w)).structural).toMatchObject({ failed: 0, excused: 4 })
+      expect(w.expected).toHaveLength(3)
+      const held = await w.h.worker.query(
+        'test.bv.locks',
+        'SELECT count(*)::int AS n FROM operations.operation_locks WHERE operation_id = $1',
+        [op.operationId],
+      )
+      expect(held.rows[0]?.int('n')).toBe(0)
     })
 
     it('refuses to re-verify a baseline the target does not hold', async () => {

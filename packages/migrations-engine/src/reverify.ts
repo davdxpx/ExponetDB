@@ -531,9 +531,32 @@ export class MigrationVerifyKind implements OperationKind {
     try {
       const baseline = baselineVariantOf(ctx.plan)
       if (baseline !== undefined)
-        return await verifyBaselineAgain(this.#deps, baseline, ctx.operationId)
+        return await verifyBaselineAgain(this.#deps, baseline, {
+          store: this.#deps.store,
+          operationId: ctx.operationId,
+          leaseOwner: ctx.leaseOwner,
+        })
     } catch {
       return 'error'
+    }
+    const fence: Fence = {
+      store: this.#deps.store,
+      operationId: ctx.operationId,
+      leaseOwner: ctx.leaseOwner,
+    }
+    if (ctx.verificationRetry === true) {
+      // An operator asked to verify again: a run that errored is pending again, so a takeover
+      // continues it (read-only; nothing ran on the target in execute).
+      await fenced(fence, 'migrations.verify.retry', async (tx) => {
+        const [p] = await readProgress(tx, ctx.operationId)
+        if (p !== undefined && p.verificationOutcome === 'error') {
+          await writeProgress(tx, ctx.operationId, {
+            ...p,
+            verificationOutcome: 'pending',
+            errorCode: null,
+          })
+        }
+      })
     }
     const progress = await readProgress(this.#deps.store, ctx.operationId)
     const done = progress[0]

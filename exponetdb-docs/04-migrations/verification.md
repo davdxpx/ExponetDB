@@ -481,6 +481,18 @@ applied qualify (`OPERATION_NOT_RETRYABLE` otherwise). Proven by
 `packages/migrations-engine/test/failures.int.test.ts` (E10) and
 `apps/server/test/http-migrations.int.test.ts`.
 
+**[DECIDED]** (Wave 9 Part A, follow-up 3 review P1-1, 2026-10-24)
+`migration.baseline` and `migration.verify` qualify too: a baseline or a
+re-verification whose verification errored (the target unreachable, the
+mirror not written) needed attention and kept the target's schema domain
+with no way to release it. Their retry runs the whole read-only verification
+again (a re-verification's errored run is set back to `pending` first). A
+check that raises on one file of a baseline (a schema the observer may not
+use) no longer errors the run: that file's expectations are a failure with
+the aspect `unreadable`, which the analysis records for the file as well, so
+a person who accepts it excuses it explicitly ([`legacy-import.md` Step
+7](./legacy-import.md#step-7-verify)).
+
 ### Failure after commit
 
 | Situation | State | Next steps |

@@ -630,6 +630,21 @@ export const ERRORS = {
       held: z.int().min(0),
     }),
   },
+  // Part A follow-up 3 review (additive): a report analyzed before failing expectations were
+  // recorded would excuse every failure of an accepted file at the baseline's verification.
+  LEGACY_IMPORT_ANALYSIS_OUTDATED: {
+    group: 'migrations',
+    status: 409,
+    retryable: false,
+    title: 'Legacy import analyzed before failures were recorded',
+    message:
+      'The import report was analyzed before the failing expectations of each file were recorded, so a review decision would not say what it accepts.',
+    remediation: 'Analyze the import again and record the decisions on the new report.',
+    details: z.strictObject({
+      // How many file items of the report have no recorded failures.
+      items: z.int().min(1),
+    }),
+  },
   // ----- Evidence and policy -----
   STAGING_EVIDENCE_MISSING: {
     group: 'evidence_and_policy',

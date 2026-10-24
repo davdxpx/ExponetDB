@@ -528,7 +528,8 @@ export const VerificationFailureSchema = z
     kind: z.string().max(64),
     object: z.string().max(300).meta({ description: 'What was expected, by object name.' }),
     failed: z.array(z.string().max(32)).max(16).meta({
-      description: 'The aspects that differ (missing, present, type, not_null, order, body, …).',
+      description:
+        'The aspects that differ (missing, present, type, not_null, order, body, value, …); unreadable when the check could not be read on the target, changed when the reviewed decisions changed.',
     }),
     excused: z.boolean().meta({
       description:
@@ -882,7 +883,9 @@ export const ImportReportSchema = z
         failing: z
           .object({
             total: z.int().min(0),
-            items: z.array(VerificationFailureSchema.omit({ excused: true })).max(20),
+            items: z
+              .array(VerificationFailureSchema.omit({ excused: true }).meta({ untrusted: true }))
+              .max(20),
           })
           .nullable()
           .optional()
