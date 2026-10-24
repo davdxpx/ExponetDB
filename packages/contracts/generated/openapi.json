@@ -7139,8 +7139,19 @@
           },
           "verification": {
             "properties": {
+              "excused": {
+                "description": "Part A follow-up 4, additive: this imported row's failing expectations a review decision excused in that run.",
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
               "status": {
                 "$ref": "#/components/schemas/VerificationStatus"
+              },
+              "superseded": {
+                "const": true,
+                "description": "Part A follow-up 4, additive: the row's file was decided superseded; the baseline's verification does not check it, and status is the baseline run's.",
+                "type": "boolean"
               },
               "verifiedAt": {
                 "anyOf": [
@@ -7166,6 +7177,12 @@
                     "type": "null"
                   }
                 ]
+              },
+              "via": {
+                "description": "Part A follow-up 4, additive: an imported row is verified by its baseline's verification; status is this row's share of the baseline's latest run (passed when none of its expectations is open), verifiedAt that run's end.",
+                "maxLength": 73,
+                "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+                "type": "string"
               }
             },
             "required": [

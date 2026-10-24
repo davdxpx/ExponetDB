@@ -348,6 +348,22 @@ fingerprint).
   a production plan on a target whose baseline has no passing latest
   verification fails it (`MIGRATION_DEPENDENCY_UNVERIFIED`; break-glass
   overridable like an unverified dependency).
+- **An imported row's verification** **[DECIDED]** (follow-up 4 addendum).
+  An imported row (`legacy:<stem>`) never has a verification run of its
+  own; the baseline's verification checks it. `migration status` (REST, the
+  CLI, the Web App's migrations page) therefore reads its verification from
+  the baseline's latest run, marked `via: baseline:<slug>`: `failed` when one
+  of its expectations is open there, `passed` when none is and the run kept
+  every failure (with `excused`, how many of its failures a decision
+  excused), the run's own status when the run did not keep every failure
+  (more than 200, or a run of the release before follow-up 3, which kept
+  two counts), `error` when the run could not read the history, and
+  `pending` only while the baseline has no run. A row whose file was decided
+  superseded is not checked and says so (`superseded`). **[OBSERVED]**
+  Before, all 555 imported rows on `reos-db-01` read *verification pending*
+  for good, also after a verified baseline (C-5). The MCP tool
+  `migration_status` returns the same status without the additive fields
+  (its definition and `toolVersion` stay pinned).
 
 ### Step 8: Freeze
 

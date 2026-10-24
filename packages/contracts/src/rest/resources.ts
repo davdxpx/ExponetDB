@@ -1034,26 +1034,72 @@ export const VerificationStatusSchema = z
   .enum(['pending', 'passed', 'failed', 'partial', 'error'])
   .meta({ id: 'VerificationStatus' })
 
-export const LedgerEntrySchema = z
-  .object({
-    migrationId: z.union([
-      MigrationIdSchema,
-      BaselineRefSchema,
-      z.string().regex(/^legacy:[^\s]{1,200}$/),
-    ]),
-    origin: z.enum(['exponetdb', 'legacy_import', 'baseline']),
-    name: name(200, 'Migration name.'),
-    checksum: z.string().regex(/^sha256:[a-z0-9:]{64,80}$/),
-    appliedAt: TimestampSchema,
-    reverted: z.boolean(),
-    operationId: OperationIdSchema.nullable(),
-    verification: z.object({
-      status: VerificationStatusSchema,
-      verifiedAt: TimestampSchema.nullable(),
-      verifyDigest: ApplyChecksumSchema.nullable(),
+const LedgerVerificationCoreSchema = z.object({
+  status: VerificationStatusSchema,
+  verifiedAt: TimestampSchema.nullable(),
+  verifyDigest: ApplyChecksumSchema.nullable(),
+})
+
+const LedgerEntryCoreSchema = z.object({
+  migrationId: z.union([
+    MigrationIdSchema,
+    BaselineRefSchema,
+    z.string().regex(/^legacy:[^\s]{1,200}$/),
+  ]),
+  origin: z.enum(['exponetdb', 'legacy_import', 'baseline']),
+  name: name(200, 'Migration name.'),
+  checksum: z.string().regex(/^sha256:[a-z0-9:]{64,80}$/),
+  appliedAt: TimestampSchema,
+  reverted: z.boolean(),
+  operationId: OperationIdSchema.nullable(),
+  verification: LedgerVerificationCoreSchema,
+})
+
+export const LedgerEntrySchema = LedgerEntryCoreSchema.extend({
+  verification: LedgerVerificationCoreSchema.extend({
+    via: BaselineRefSchema.optional().meta({
+      description:
+        "Part A follow-up 4, additive: an imported row is verified by its baseline's verification; status is this row's share of the baseline's latest run (passed when none of its expectations is open), verifiedAt that run's end.",
     }),
-  })
-  .meta({ id: 'LedgerEntry' })
+    excused: z.int().min(0).optional().meta({
+      description:
+        "Part A follow-up 4, additive: this imported row's failing expectations a review decision excused in that run.",
+    }),
+    superseded: z.literal(true).optional().meta({
+      description:
+        "Part A follow-up 4, additive: the row's file was decided superseded; the baseline's verification does not check it, and status is the baseline run's.",
+    }),
+  }),
+}).meta({ id: 'LedgerEntry' })
+
+const MigrationStatusCoreSchema = z.object({
+  targetId: TargetIdSchema,
+  ledgerStateHash: LedgerStateHashSchema.nullable(),
+  baselineId: BaselineRefSchema.nullable(),
+  applied: z.array(LedgerEntryCoreSchema),
+  pending: z.array(
+    z.object({
+      migrationId: MigrationIdSchema,
+      name: name(64, 'Migration name.'),
+      checksum: ApplyChecksumSchema,
+    }),
+  ),
+  mirror: z.object({ inSync: z.boolean(), checkedAt: TimestampSchema }),
+  incompleteNontransactional: z.array(MigrationIdSchema).optional().meta({
+    description:
+      'Non-transactional migrations that started and were neither completed nor cleaned up (Wave 6): they block schema plans until resume or cleanup.',
+  }),
+  source: ObservationSourceSchema,
+  observedAt: TimestampSchema,
+})
+
+/**
+ * The migration status as the MCP tool `migration_status` returns it: the
+ * ledger entries without the additive fields of follow-up 4 (`via`,
+ * `excused`, `superseded`), so its definition and `toolVersion` stay pinned;
+ * an imported row's `status` is the same as over REST.
+ */
+export const McpMigrationStatusSchema = MigrationStatusCoreSchema
 
 export const MigrationStatusSchema = z
   .object({

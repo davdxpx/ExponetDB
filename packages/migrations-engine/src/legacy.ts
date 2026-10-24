@@ -2193,6 +2193,25 @@ export async function baselineToVerify(
   }
 }
 
+/**
+ * The imported rows (`legacy:<stem>`) of a baseline whose file the review
+ * decided superseded (or the analysis classified so without a decision): the
+ * baseline's verification does not check them (follow-up 4 addendum).
+ */
+export async function supersededImportedRows(
+  q: Queryable,
+  baselinePlanId: string,
+): Promise<Set<string>> {
+  const plan = await readPlan(q, baselinePlanId)
+  if (plan === undefined || plan.kind !== 'migration.baseline') return new Set()
+  const items = await readItems(q, baselineContentOf(plan).reportId)
+  return new Set(
+    items
+      .filter((i) => i.kind === 'file' && effective(i) === 'superseded')
+      .map((i) => `legacy:${i.name}`),
+  )
+}
+
 /** Runs a planned re-verification of a baseline (the `migration.verify` kind's baseline variant). */
 export async function verifyBaselineAgain(
   deps: MigrationKindDeps,

@@ -1061,9 +1061,12 @@ export type LedgerEntry = {
   readonly origin: "exponetdb" | "legacy_import" | "baseline"
   readonly reverted: boolean
   readonly verification: {
+    readonly excused?: number
     readonly status: VerificationStatus
+    readonly superseded?: true
     readonly verifiedAt: string | null
     readonly verifyDigest: string | null
+    readonly via?: string
   }
 }
 

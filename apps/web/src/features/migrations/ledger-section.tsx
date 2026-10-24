@@ -247,7 +247,11 @@ function LedgerTable({
 
 /** "Verified 3 min ago", "Verification pending": a word for each status, never a color alone. */
 function Verification({ entry }: { readonly entry: LedgerEntry }): ReactNode {
-  const { status, verifiedAt } = entry.verification
+  const { status, verifiedAt, via, excused, superseded } = entry.verification
+  if (superseded === true) {
+    // An imported file decided superseded: its baseline's verification does not check it.
+    return <span data-verification-via="baseline">{t('migrations.verification.superseded')}</span>
+  }
   const label = ((): string | undefined => {
     switch (status) {
       case 'passed':
@@ -265,9 +269,17 @@ function Verification({ entry }: { readonly entry: LedgerEntry }): ReactNode {
     }
   })()
   return (
-    <span>
+    <span {...(via === undefined ? {} : { 'data-verification-via': 'baseline' })}>
       {label ?? (
         <UntrustedName name={String(status)} label={t('migrations.ledger.column.verification')} />
+      )}
+      {via === undefined ? null : (
+        <>
+          {' '}
+          {excused === undefined
+            ? t('migrations.verification.viaBaseline')
+            : t('migrations.verification.viaBaselineExcused', { count: excused })}
+        </>
       )}
       {verifiedAt === null ? null : (
         <>

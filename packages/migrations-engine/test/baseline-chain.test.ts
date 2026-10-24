@@ -2,6 +2,7 @@ import type { LedgerRecord, VerificationRecord } from '@exponetdb/postgres'
 import { describe, expect, it } from 'vitest'
 import { acceptBaselineSchema, rowsAfterBaseline } from '../src/baseline-chain.ts'
 import { dependenciesVerified } from '../src/planner.ts'
+import { importedVerification } from '../src/reads.ts'
 
 /**
  * The schema a baseline's re-verification accepts after migrations applied
@@ -172,5 +173,98 @@ describe('the baseline as a dependency of a production plan', () => {
         verified,
       ),
     ).toBe(true)
+  })
+})
+
+describe("an imported row's verification, from its baseline's run (follow-up 4 addendum)", () => {
+  const failure = (file: string, excused: boolean) => ({
+    file,
+    statement: 0,
+    kind: 'row_security',
+    object: `row security of ${file}`,
+    failed: ['enabled'],
+    excused,
+  })
+  const baselineRun = (
+    status: VerificationRecord['status'],
+    structural: Record<string, unknown>,
+  ): VerificationRecord => ({
+    ...run(BASELINE, status, '2026-10-24T12:00:00.000Z'),
+    structural: structural as never,
+  })
+
+  it('is pending without a run, and says it comes from the baseline', () => {
+    expect(importedVerification('0001_items', BASELINE, undefined, false)).toEqual({
+      status: 'pending',
+      verifiedAt: null,
+      verifyDigest: null,
+      via: BASELINE,
+    })
+  })
+
+  it("is the row's share of the run: passed with its excusals, failed with an open failure", () => {
+    const passed = baselineRun('passed', {
+      status: 'passed',
+      checks: 10,
+      failed: 0,
+      firstFailure: null,
+      excused: 1,
+      failures: [failure('0002_rls', true)],
+      failuresTotal: 1,
+    })
+    expect(importedVerification('0002_rls', BASELINE, passed, false)).toMatchObject({
+      status: 'passed',
+      verifiedAt: '2026-10-24T12:00:00.000Z',
+      via: BASELINE,
+      excused: 1,
+    })
+    expect(importedVerification('0001_items', BASELINE, passed, false)).not.toHaveProperty(
+      'excused',
+    )
+    const failed = baselineRun('failed', {
+      status: 'failed',
+      checks: 10,
+      failed: 1,
+      firstFailure: { name: 'x', detail: null },
+      excused: 1,
+      failures: [failure('0004_role', false), failure('0002_rls', true)],
+      failuresTotal: 2,
+    })
+    expect(importedVerification('0004_role', BASELINE, failed, false).status).toBe('failed')
+    // Every failure of the run is known: a row with none of them open passed.
+    expect(importedVerification('0001_items', BASELINE, failed, false).status).toBe('passed')
+  })
+
+  it("takes the run's status when the run did not keep every failure, or could not read the history", () => {
+    const cut = baselineRun('failed', {
+      status: 'failed',
+      checks: 900,
+      failed: 400,
+      firstFailure: { name: 'x', detail: null },
+      failures: [failure('0004_role', false)],
+      failuresTotal: 400,
+    })
+    expect(importedVerification('0001_items', BASELINE, cut, false).status).toBe('failed')
+    // A run of the release before kept two counts only.
+    const counts = baselineRun('failed', { checked: 13507, held: 13115 })
+    expect(importedVerification('0001_items', BASELINE, counts, false).status).toBe('failed')
+    const unparsed = baselineRun('failed', { checked: 0, held: 0, unparsed: '0007_x' })
+    expect(importedVerification('0001_items', BASELINE, unparsed, false).status).toBe('error')
+  })
+
+  it('says so for a superseded file instead of a share', () => {
+    const passed = baselineRun('passed', {
+      status: 'passed',
+      checks: 1,
+      failed: 0,
+      firstFailure: null,
+    })
+    expect(importedVerification('0003_old', BASELINE, passed, true)).toEqual({
+      status: 'passed',
+      verifiedAt: '2026-10-24T12:00:00.000Z',
+      verifyDigest: null,
+      via: BASELINE,
+      superseded: true,
+    })
   })
 })

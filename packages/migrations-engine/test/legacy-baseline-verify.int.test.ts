@@ -47,6 +47,7 @@ import {
   type MigrationPlanContext,
   migrationDetail,
   migrationKinds,
+  migrationStatus,
   planBaseline,
   planImportAnalysis,
   planMigrationApply,
@@ -247,6 +248,9 @@ const files = (role: string) => [
     name: '0005_private.sql',
     text: 'CREATE SCHEMA acme_private;\nCREATE TABLE acme_private.things (id bigint);\n',
   },
+  // A table the history created and dropped again: the first file is superseded.
+  { name: '0006_scratch.sql', text: 'CREATE TABLE public.acme_scratch (id int);\n' },
+  { name: '0007_scratch_gone.sql', text: 'DROP TABLE public.acme_scratch;\n' },
 ]
 
 async function apply(w: World, p: PlanRecord): Promise<OperationRecord> {
@@ -351,6 +355,27 @@ const applyBundles = async (w: World, bundles: readonly ReturnType<typeof bundle
     ),
   )
 
+/** The imported rows' verification as `migration status` reads it: name → status and excusals. */
+async function importedRows(w: World) {
+  const s = await migrationStatus(
+    { store: w.h.worker, connector: w.h.workerConnector, installationId: w.h.db.installationId },
+    w.imported,
+  )
+  return Object.fromEntries(
+    s.applied
+      .filter((e) => e.origin === 'legacy_import')
+      .map((e) => {
+        const v = e.verification as {
+          status: string
+          via?: string
+          excused?: number
+          superseded?: true
+        }
+        return [e.name, [v.superseded === true ? 'superseded' : v.status, v.via, v.excused ?? 0]]
+      }),
+  )
+}
+
 const reverify = (w: World) =>
   w.h.serve.transaction('test.bv.reverify', (tx) =>
     planMigrationVerify(tx, w.ctx, w.a, w.imported.targetId, `baseline:${BASELINE}`, {}),
@@ -401,6 +426,8 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         '0005_private': [
           ['expectations', 'structural expectations of 0005_private', ['unreadable']],
         ],
+        '0006_scratch': [],
+        '0007_scratch_gone': [],
       })
       // A person accepts the files as applied, and the drift the hand changes left as it is.
       for (const item of r.items.filter(
@@ -411,7 +438,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
             targetId: w.imported.targetId,
             reportId,
             itemId: Number(item.itemId),
-            state: 'unrecorded_present',
+            state: item.name === '0006_scratch' ? 'superseded' : 'unrecorded_present',
             note: 'reviewed: changed by hand on the target, the intended state',
             identityId: w.a.identityId,
           }),
@@ -476,6 +503,18 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       ])
       expect(v.engine.status).toBe('passed')
       expect(w.expected).toEqual([{ targetId: w.imported.targetId, fingerprint: v.fingerprint }])
+      // Each imported row is verified by the baseline, never "pending" (follow-up 4 addendum).
+      const via = `baseline:${BASELINE}`
+      expect(await importedRows(w)).toEqual({
+        '0001_items': ['passed', via, 0],
+        '0002_items_rls': ['passed', via, 1],
+        '0003_touch': ['passed', via, 1],
+        '0004_role': ['passed', via, 1],
+        '0005_private': ['passed', via, 1],
+        // Decided superseded: not checked by the baseline, and it says so.
+        '0006_scratch': ['superseded', via, 0],
+        '0007_scratch_gone': ['passed', via, 0],
+      })
     })
 
     it('fails a planned re-verification on a failure the review never saw, and passes once it is gone (F3)', async () => {
@@ -493,6 +532,10 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         ['role', false],
         ['role_attribute', true],
       ])
+      // Only the file with the open failure reads as failed; the others' share passed.
+      const rows = await importedRows(w)
+      expect(rows['0004_role']?.[0]).toBe('failed')
+      expect(rows['0001_items']?.[0]).toBe('passed')
       expect(w.expected).toHaveLength(1)
       await withRolesHeld(server, () =>
         runAsSuperuser(server, 'postgres', [`CREATE ROLE ${role} NOLOGIN`]),

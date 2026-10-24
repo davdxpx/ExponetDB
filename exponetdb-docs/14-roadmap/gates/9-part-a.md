@@ -1026,3 +1026,22 @@ verification passed and nothing changed by hand since.
 
 **Limit:** a reverted migration after the baseline ends the chain, so the
 baseline verifies only again once the history after it is straight.
+
+**Addendum (2026-10-24): imported rows read as "verification pending" for
+good.** **[OBSERVED]** The Web App's migrations page and `migration status`
+showed all 555 imported rows of `reosa/platform/staging` as pending: the read
+took the latest run under the row's own id, and the baseline's verification
+checks an imported row under the baseline's id. **[DECIDED]** An imported
+row's verification is its share of the baseline's latest run, marked `via:
+baseline:<slug>` (additive on `LedgerEntry.verification`, with `excused` and
+`superseded`): failed with an open failure of its own, passed when none is
+open and the run kept every failure, the run's status when it did not (the
+owner's run of 2026-10-23 kept two counts only, so its rows read failed until
+the re-verification), `error` when the history could not be read, pending
+only without a run; a file decided superseded says so. The CLI shows
+`passed via baseline:<slug>, 1 excused`, the Web App "Verified (via the
+baseline)". The MCP tool keeps its pinned definition and returns the same
+status. Tests: `baseline-chain.test.ts` (every case), and
+`legacy-baseline-verify.int.test.ts` on 16, 17 and 18 (a passed baseline: its
+rows passed, with their excusals, a superseded file says so; a failed
+re-verification: only the file with the open failure reads failed).
