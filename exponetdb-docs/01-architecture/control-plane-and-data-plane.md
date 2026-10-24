@@ -54,7 +54,7 @@ ExponetDB has not connected to the host) `reos-db-01` runs:
 | Item | Value |
 |---|---|
 | Host | Hetzner Cloud, Falkenstein; PostgreSQL **17.11** from PGDG packages; private address **`10.8.1.1`** |
-| TLS | server name `reosdb01.exponet.cloud` (resolves to the private address inside the private network); its own CA with name constraints (`DNS:exponet.cloud`, `IP:10.8.0.0/16`); `hostssl` with SCRAM only; clients connect with `verify-full`. Bun's TLS (BoringSSL) rejects a name-constrained CA, Node (OpenSSL) and Go accept it; ExponetDB's image runs on Node 24 (`Dockerfile`, `node:24.21.0`) and its node agent is Go |
+| TLS | server name `reosdb01.exponet.cloud` (resolves to the private address inside the private network); its own CA with name constraints (`DNS:exponet.cloud`, `IP:10.8.0.0/16`); `hostssl` with SCRAM only; clients connect with `verify-full`. Bun's TLS (BoringSSL) rejects a name-constrained CA, Node (OpenSSL) and Go accept it; ExponetDB's image runs on Node 24 (`Dockerfile`, `node:24.22.1`) and its node agent is Go |
 | Clients | containers on `reos-01` reach it SNAT'ed from `10.8.2.2`: the source address ExponetDB's worker will have, and REOSA's applications' too |
 | Management | external: no node agent; configuration and backups by shell scripts and systemd timers |
 | Databases | `reosa_staging`; REOSA production still runs on the hosted provider (**[PLANNED]** to move here in Wave 11, OD-7b) |

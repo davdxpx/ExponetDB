@@ -1,6 +1,8 @@
 # Third-party notices
 
-ExponetDB is proprietary (see [`LICENSE`](./LICENSE)). Some files of its Web App
+ExponetDB is source-available under the ExponetDB Source-Available License 1.0 (see
+[`LICENSE`](./LICENSE)); that license covers only the author's own work and
+never the third-party files described here. Some files of its Web App
 user interface are derived from third-party source under the rules of
 [ADR-0030](./exponetdb-docs/01-architecture/adr/0030-supabase-ui-source-adoption.md)
 and, for the provider glyphs, [ADR-0033](./exponetdb-docs/01-architecture/adr/0033-provider-glyphs-from-simple-icons.md).
