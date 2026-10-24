@@ -16,6 +16,7 @@ import { MigrationError } from './errors.ts'
 import { projectAliases } from './execution-roles.ts'
 import { fileDigest, revisionsOf, storedStream, submissionInput } from './store.ts'
 import { readTargetState } from './target.ts'
+import type { Layer } from './verification.ts'
 
 /**
  * The engine's reads for the interfaces: a target's migrations live from
@@ -156,6 +157,46 @@ export async function migrationStatus(deps: ReadDeps, target: TargetRecord) {
   }
 }
 
+/**
+ * A stored layer of a verification run as the contract shows it. A
+ * baseline's run before Part A follow-up 3 stored counts only (`{checked,
+ * held}`, `{fingerprint: match|mismatch}`): read as a layer that says how
+ * many failed, without naming them. A missing layer did not run.
+ */
+export function layerFrom(value: unknown, layer: 'structural' | 'runtime' | 'engine'): Layer {
+  const v = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>
+  if (typeof v['status'] === 'string') return v as unknown as Layer
+  if (layer === 'structural' && typeof v['checked'] === 'number' && typeof v['held'] === 'number') {
+    const failed = Math.max(0, v['checked'] - v['held'])
+    const unparsed = typeof v['unparsed'] === 'string'
+    return {
+      // An unparsed chain checked nothing and failed the run: an error, as runs write it now.
+      status: unparsed
+        ? 'error'
+        : v['checked'] === 0
+          ? 'skipped'
+          : failed === 0
+            ? 'passed'
+            : 'failed',
+      checks: v['checked'],
+      failed,
+      firstFailure: unparsed
+        ? { name: `unparsed: ${String(v['unparsed'])}`.slice(0, 128), detail: null }
+        : null,
+    }
+  }
+  if (layer === 'engine' && (v['fingerprint'] === 'match' || v['fingerprint'] === 'mismatch')) {
+    const match = v['fingerprint'] === 'match'
+    return {
+      status: match ? 'passed' : 'failed',
+      checks: 1,
+      failed: match ? 0 : 1,
+      firstFailure: match ? null : { name: 'schema fingerprint', detail: null },
+    }
+  }
+  return { status: 'skipped', checks: 0, failed: 0, firstFailure: null }
+}
+
 /** `migration.get`: one migration's ledger row, events and verification runs (live). */
 export async function migrationDetail(deps: ReadDeps, target: TargetRecord, migrationId: string) {
   const scope = await scopeOf(deps.store, target.projectId)
@@ -217,9 +258,9 @@ export async function migrationDetail(deps: ReadDeps, target: TargetRecord, migr
             status: v.status,
             startedAt: iso(v.startedAt),
             finishedAt: iso(v.finishedAt),
-            structural: v.structural,
-            runtime: v.runtime ?? { status: 'skipped', checks: 0, failed: 0, firstFailure: null },
-            engine: v.engine,
+            structural: layerFrom(v.structural, 'structural'),
+            runtime: layerFrom(v.runtime, 'runtime'),
+            engine: layerFrom(v.engine, 'engine'),
             fingerprint: v.fingerprint,
           })),
           source: 'live' as const,

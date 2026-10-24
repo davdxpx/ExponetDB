@@ -200,6 +200,23 @@ never depends on it. Proven by `apps/server/test/http-migrations.int.test.ts`
 (clean after the migration, one drifted object after an out-of-band
 column, clean again once it is undone; the assertion fails without the
 baseline).
+
+**[DECIDED]** (Wave 9 Part A, follow-up 3, F4, 2026-10-23) The baseline of a
+legacy import is recorded the same way once its verification passes, in the
+baseline operation itself or in a planned re-verification of
+`baseline:<slug>` ([`legacy-import.md` Step
+7](../04-migrations/legacy-import.md#step-7-verify)): the snapshot the
+verification saw becomes the target's baseline (reason `migration`, the
+operation that verified it). **[OBSERVED]** Before this change the baseline
+kind never recorded one, so every migration applied between the
+registration and the import analysis stayed a drift finding although the
+import reviewed it (348 open findings, 17 critical, on `reos-db-01`). Once a
+baseline's verification passes, the next drift check compares with the
+reviewed schema and those findings resolve `cleared`, by that check. The
+operation that explains them is the one the new baseline names
+(`schema_baselines.operation_id`, shown with the check's
+`baselineFingerprint`); a finding's `explainedByOperationId` stays `null`
+(nothing sets it yet, here or for a verified migration).
 - Each drifted object is one finding (`object_added`, `object_removed`,
   `object_changed`), deduplicated by kind, code and object (`C:<code>:<class>:`
   SHA-256 of the canonical key): seen again it counts one more occurrence on

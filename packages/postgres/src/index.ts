@@ -36,6 +36,7 @@ export {
 export {
   checkExpectation,
   checkExpectations,
+  type ExpectationAspect,
   type ExpectationResult,
   expectedTypmod,
   type IndexState,

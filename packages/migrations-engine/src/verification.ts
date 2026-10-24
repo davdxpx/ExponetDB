@@ -25,6 +25,11 @@ import type { PlanItem } from './content.ts'
 import type { StoredRevision } from './store.ts'
 import type { ManagedScope } from './target.ts'
 
+import {
+  type ExpectationFailure,
+  MAX_KEPT_FAILURES,
+  structuralFailures,
+} from './verification-failures.ts'
 /**
  * Verification after commit ([verification.md §2](../../../exponetdb-docs/04-migrations/verification.md#2-the-layers-l0-to-l4)):
  *
@@ -48,6 +53,23 @@ export interface Layer {
   readonly checks: number
   readonly failed: number
   readonly firstFailure: { readonly name: string; readonly detail: string | null } | null
+  /** Failing expectations a recorded review decision excused (a baseline's run); not in `failed`. */
+  readonly excused?: number
+  /**
+   * The failing checks, at most {@link MAX_KEPT_FAILURES} (Part A follow-up
+   * 3, F2): a failed run says what failed. `failuresTotal` counts them all.
+   */
+  readonly failures?: readonly (ExpectationFailure & { readonly excused: boolean })[]
+  readonly failuresTotal?: number
+}
+
+/** The failures a layer keeps: what fails first, then what was excused; all of them counted. */
+export function keptFailures(
+  failures: readonly (ExpectationFailure & { readonly excused: boolean })[],
+): Pick<Layer, 'failures' | 'failuresTotal'> {
+  if (failures.length === 0) return {}
+  const ordered = [...failures.filter((f) => !f.excused), ...failures.filter((f) => f.excused)]
+  return { failures: ordered.slice(0, MAX_KEPT_FAILURES), failuresTotal: failures.length }
 }
 
 export interface VerificationRun {
@@ -65,7 +87,18 @@ export interface VerificationRun {
 
 const SKIPPED: Layer = { status: 'skipped', checks: 0, failed: 0, firstFailure: null }
 
-function layerOf(results: readonly { ok: boolean; name: string; detail?: string | null }[]): Layer {
+function layerOf(
+  results: readonly { ok: boolean; name: string; detail?: string | null }[],
+  failures: readonly ExpectationFailure[] = results
+    .filter((r) => !r.ok)
+    .map((r) => ({
+      file: null,
+      statement: null,
+      kind: 'engine',
+      object: r.name.slice(0, 300),
+      failed: ['failed'],
+    })),
+): Layer {
   const failed = results.filter((r) => !r.ok)
   const first = failed[0]
   return {
@@ -74,6 +107,7 @@ function layerOf(results: readonly { ok: boolean; name: string; detail?: string 
     failed: failed.length,
     firstFailure:
       first === undefined ? null : { name: first.name.slice(0, 128), detail: first.detail ?? null },
+    ...keptFailures(failures.map((f) => ({ ...f, excused: false }))),
   }
 }
 
@@ -87,7 +121,10 @@ function errorLayer(name: string, checks = 0): Layer {
 }
 
 export function structuralLayer(results: readonly ExpectationResult[]): Layer {
-  return layerOf(results.map((r) => ({ ok: r.ok, name: r.description })))
+  return layerOf(
+    results.map((r) => ({ ok: r.ok, name: r.description })),
+    structuralFailures(null, results),
+  )
 }
 
 /** The expectations of a migration's up.sql that must hold after it (verification.md §3). */
@@ -214,6 +251,16 @@ function runtimeFrom(outcomes: readonly { name: string; outcome: CheckOutcome }[
                   ? `${first.outcome.reason}${first.outcome.sqlstate === null ? '' : ` ${first.outcome.sqlstate}`}`
                   : null,
           },
+    ...keptFailures(
+      failed.map((o) => ({
+        file: null,
+        statement: null,
+        kind: 'verify_check',
+        object: o.name.slice(0, 300),
+        failed: [o.outcome.status === 'error' ? 'error' : 'failed'],
+        excused: false,
+      })),
+    ),
   }
 }
 

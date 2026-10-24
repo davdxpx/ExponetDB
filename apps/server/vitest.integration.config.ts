@@ -1,3 +1,3 @@
-import { integrationConfig } from '../../vitest.shared.ts'
+import { targetIntegrationConfig } from '../../vitest.shared.ts'
 
-export default integrationConfig
+export default targetIntegrationConfig

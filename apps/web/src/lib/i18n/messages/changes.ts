@@ -126,6 +126,19 @@ export const changesMessages = {
   'changes.migrations.noError': 'None',
   'changes.migrations.statement': 'At statement {index}',
   'changes.migrations.sqlstate': 'SQLSTATE',
+  'changes.verification.title': 'What the verification found',
+  'changes.verification.summary':
+    '{migration}: {failed} of {checks} expectations failed, {excused} excused by review decisions.',
+  'changes.verification.engineFailed': 'Engine check failed: {name}',
+  'changes.verification.file': 'File',
+  'changes.verification.statement': 'Statement',
+  'changes.verification.expected': 'Expected',
+  'changes.verification.differs': 'What differs',
+  'changes.verification.excused': 'Excused',
+  'changes.verification.excusedYes': 'Excused by a review decision',
+  'changes.verification.excusedNo': 'Not excused',
+  'changes.verification.more':
+    '{count} more failing expectations are not listed here. The REST API and the CLI with --json list up to 200.',
   'changes.verifyAgain.button': 'Verify again',
   'changes.verifyAgain.title': 'Verify this change again?',
   'changes.verifyAgain.description':

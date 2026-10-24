@@ -7,9 +7,11 @@ import {
   type PlanRead,
   type PlanView,
   type PolicyRuleResult,
+  type VerificationLayer,
 } from '@exponetdb/contracts'
 import type { Queryable } from '@exponetdb/control-store'
 import { type EntityId, isId, isJsonArray, isJsonObject, type JsonValue } from '@exponetdb/kernel'
+import { type Layer, layerFrom } from '@exponetdb/migrations-engine'
 import type { PlanRecord } from '@exponetdb/operations'
 
 /**
@@ -184,11 +186,16 @@ function policyRulesOf(policy: JsonValue | undefined): PolicyRuleResult[] {
 
 /**
  * Kinds whose verification an operator may run again: their verify step
- * re-runs the rows that errored or never ran (operations-engine.md §4.1).
+ * re-runs the rows that errored or never ran (operations-engine.md §4.1),
+ * or, for a baseline and a re-verification, the whole read-only run (a
+ * verification that errored there otherwise kept the target's schema
+ * domain for good; follow-up 3 review P1-1).
  */
 export const VERIFICATION_RETRY_KINDS: ReadonlySet<string> = new Set([
   'migration.apply',
   'migration.resume',
+  'migration.baseline',
+  'migration.verify',
 ])
 
 /**
@@ -312,6 +319,7 @@ export async function operationView(
     throw new ViewError('operation')
   }
   const migrations = kind.startsWith('migration.') ? await migrationProgress(q, id) : undefined
+  const runs = kind.startsWith('migration.') ? await operationVerifications(q, id) : []
   const progress = await operationProgress(q, id)
   return {
     id,
@@ -339,6 +347,7 @@ export async function operationView(
     errorCode: errorCode !== null && /^[A-Z][A-Z0-9_]{1,63}$/.test(errorCode) ? errorCode : null,
     steps: progress.steps,
     ...(migrations === undefined ? {} : { migrations }),
+    ...(runs.length === 0 ? {} : { verifications: runs }),
     observedAt: progress.observedAt,
     lastEventId: progress.lastEventId,
     nextAction: nextActionOf(operationState, applyOutcome, verificationOutcome, errorCode),
@@ -459,6 +468,68 @@ export function nextActionOf(
 const MIGRATION_ID = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/
 const APPLY = ['not_started', 'applied', 'not_applied', 'partially_applied', 'unknown'] as const
 const VERIFICATION = ['not_applicable', 'pending', 'passed', 'failed', 'partial', 'error'] as const
+
+const RUN_MIGRATION_ID = /^([0-7][0-9A-HJKMNP-TV-Z]{25}|baseline:[a-z0-9]+(-[a-z0-9]+)*)$/
+
+/**
+ * The verification runs a migration operation recorded (the Control Store's
+ * mirror of the target's history; Part A follow-up 3, F2): each with its
+ * layers and failing expectations, so a failed verification says what
+ * failed. At most the newest 50, oldest first.
+ */
+async function operationVerifications(
+  q: Queryable,
+  operationId: string,
+): Promise<NonNullable<OperationView['verifications']>> {
+  const { rows } = await q.query(
+    'application.operation.verifications',
+    `SELECT * FROM (
+       SELECT verification_id, migration_id, operation_id, status, structural, runtime, engine, fingerprint,
+              to_char(started_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS started_at,
+              to_char(finished_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS finished_at,
+              finished_at AS finished
+         FROM migrations.verification_mirror WHERE operation_id = $1
+        ORDER BY finished_at DESC LIMIT 50) v
+     ORDER BY finished`,
+    [operationId],
+  )
+  return rows.flatMap((r) => {
+    const status = r.text('status')
+    const migrationId = r.text('migration_id')
+    if (
+      (status !== 'passed' && status !== 'failed' && status !== 'partial' && status !== 'error') ||
+      !RUN_MIGRATION_ID.test(migrationId) ||
+      !isId('vfy', r.text('verification_id'))
+    ) {
+      throw new ViewError('operation')
+    }
+    return [
+      {
+        verificationId: r.text('verification_id') as never,
+        migrationId: migrationId as never,
+        operationId: operationId as never,
+        status,
+        startedAt: r.text('started_at'),
+        finishedAt: r.text('finished_at'),
+        structural: contractLayer(layerFrom(r.json('structural'), 'structural')),
+        runtime: contractLayer(layerFrom(r.json('runtime'), 'runtime')),
+        engine: contractLayer(layerFrom(r.json('engine'), 'engine')),
+        fingerprint: r.text('fingerprint') as never,
+      },
+    ]
+  })
+}
+
+function contractLayer(layer: Layer): VerificationLayer {
+  const { failures, ...rest } = layer
+  return {
+    ...rest,
+    firstFailure: layer.firstFailure === null ? null : { ...layer.firstFailure },
+    ...(failures === undefined
+      ? {}
+      : { failures: failures.map((f) => ({ ...f, failed: [...f.failed] })) }),
+  }
+}
 
 /** The per-migration progress of a migration operation (Wave 6; the engine's own rows). */
 async function migrationProgress(q: Queryable, operationId: string) {

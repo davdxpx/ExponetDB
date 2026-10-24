@@ -189,6 +189,7 @@ later without changes).
 | `LEDGER_NOT_INITIALIZED` | 409 | no | Target has no `exponetdb` schema / baseline yet. |
 | `LEGACY_IMPORT_AMBIGUOUS` | 409 | no | Import cannot proceed without human resolution of `details.items[]`. |
 | `LEGACY_IMPORT_TRUNCATED` | 409 | no | The import report holds fewer global drift items than exist (`details.driftTotal`, `details.held`); it never becomes a baseline. Narrow the scope or fix the inputs and analyze again (Wave 9 Part A). |
+| `LEGACY_IMPORT_ANALYSIS_OUTDATED` | 409 | no | The import report was analyzed before the failing expectations of each file were recorded (`details.items`: the file items without them); its decisions would excuse every failure of an accepted file, so it never becomes a baseline. Analyze again (Wave 9 Part A, follow-up 3 review). A baseline already recorded from such a report keeps the legacy rule of [`legacy-import.md` Step 7](../04-migrations/legacy-import.md#step-7-verify). |
 
 ### Evidence and policy
 

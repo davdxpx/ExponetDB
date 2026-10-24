@@ -883,3 +883,111 @@ each with a regression test on the reviewer's own input.
 | V-P3-5 | P3 (older) | The reset re-created `earthdistance` before `cube` once `cube` was updated after it, and failed | extensions re-created after the ones they require (`pg_depend`) |
 | V-P3-6 | P3 | 3 000 nested IFs overflowed the stack | blocks deeper than 64 are mixed; trees deeper than 1 000 levels are not followed |
 | V-P3-7 | P3 | With the slot gone, slow targets let requests holding 16 MiB bodies add up | at most two requests that carry a history at once, `429 RATE_LIMITED` with `Retry-After: 5` |
+
+## 9. Follow-up 3: a reviewed baseline can never pass its verification (2026-10-23)
+
+**[OBSERVED]** The import itself worked end to end after follow-up 2 on
+`reos-db-01` (PostgreSQL 17.11, release `d36ba29b`): report
+`imr_01M5MM4KHX4TN0XE4PVY8ZR03B` with 454 review decisions, state `resolved`,
+baseline plan `pln_01M5MQMNS15RMAJ8R5P9CXRCF0`, operation
+`op_01M5MQMZS58HKVQ0M2ZQ4FSQAV`. The apply recorded 555 `legacy_import` rows
+and the baseline; the verification failed (`structural {held: 13115,
+checked: 13507}`, `engine {fingerprint: match}`) and said nothing more; drift
+kept comparing with the registration snapshot (348 findings, 17 critical).
+The owner's request: fix in ExponetDB (contracts, tests on PostgreSQL 16, 17
+and 18, docs), no consumer-side workaround; staging schema changes stay
+frozen until the baseline verifies.
+
+| # | Observed | Decision | Evidence |
+|---|---|---|---|
+| F1 | Step 5 lets a person accept a file whose expectations partly hold; Step 7 required every surviving expectation of every accepted file to hold, so a real history could never verify | The analysis records each file's failing expectations (`ImportReport.items[].failing`, bundle `01M5PZFYDPT065MDFHG5G3WSG1_legacy-import-failing`, bound into the report digest); an accepting decision excuses exactly those while they fail the same way; anything else fails the run; the Web App says what an acceptance excuses before it is recorded, the CLI lists each item's failing count and answers `resolve` with what the recorded decision excuses ([legacy-import.md Steps 5 and 7](../../04-migrations/legacy-import.md#step-5-review)) | `legacy-baseline-verify.int.test.ts` (16, 17, 18), `verification-failures.test.ts` |
+| F2 | A failed verification kept two counts | Every verification layer keeps its failing expectations (the first 200 and how many; names and aspect codes, never catalog values); `Operation.verifications` (REST), `operation show`, `migration show baseline:<slug>` and the Web App's operation page list them; for every verifying kind ([verification.md §5](../../04-migrations/verification.md#5-verification-runs-and-history)) | the same, the CLI suite, `http-migrations.int.test.ts` |
+| F3 | `verification_failed` is final (a trigger of the frozen operations bundle) and a second baseline is refused, so a failed baseline had no way back | `migration.verify` takes `baseline:<slug>`: a planned, audited re-verification with the baseline plan's report and decisions; the baseline operation keeps its outcome, the target's history and the mirror carry the new run ([verification.md §5](../../04-migrations/verification.md#retrying-verification)) | `legacy-baseline-verify.int.test.ts`: fails on a failure the review never saw and on a schema change, passes once the cause is gone |
+| F4 | The baseline kind never adopted the schema for drift, also after a passed verification | A passed baseline verification (own or planned) records the schema as the drift reference; the open findings then resolve `cleared` with the next drift check; `explainedByOperationId` stays `null` (nothing sets it yet) ([drift-detection.md §7](../../03-database-model/drift-detection.md#7-wave-4-implementation-kind-c)) | `legacy-baseline-verify.int.test.ts` (the reference is recorded once per passed run, never for a failed one) |
+
+**Found on the way.** The baseline's verification also checked the files a
+person decided `superseded` (their effects replaced later): it read the
+plan's rows, which only knew the analysis state. Such a file is no longer
+checked. This explains part of the difference the owner saw between the
+report's evidence (226 failed of 5 610) and the verification (392 of 13 507);
+the verification also checked every accepted file, also those no decision
+needed, and a report's evidence list is capped at 16 entries. The next run
+names each failure, so the rest is visible.
+
+**The report on `reos-db-01` was analyzed before failures were recorded**
+(`failing` is null on its items). For such a report a decision that accepts a
+file excuses every failure of that file, bound by the fingerprint of the
+managed scope **[DECIDED]**; a file accepted without a decision, and a file
+decided superseded, are handled as above. Expectations outside the managed
+scope of such a file (role attributes, memberships) are then excused
+unverified; a report analyzed after this change records them and excuses
+only those.
+
+**Owner actions after this is deployed** (nothing here is done from this
+session):
+
+1. Re-verify the baseline: `exponetdb migration verify
+   baseline:reosa-platform-2026-10 --target reosa/platform/staging`. It
+   waits for the result; exit 0 only when it passed.
+2. If it fails, `exponetdb operation show <op>` lists what failed (file,
+   statement, expected object, what differs, excused or not); `--json`
+   gives the first 200.
+3. Once it passed, `exponetdb drift check --target reosa/platform/staging`
+   compares with the reviewed schema; the 348 findings resolve `cleared`.
+4. Then the first bundles can be planned on staging.
+
+### 9.1 Independent review of follow-up 3 (2026-10-24)
+
+**[OBSERVED]** An independent review of `d36ba29..40654f8` (with its own
+adversarial tests on PostgreSQL 17) confirmed the excusal matching, the
+digest binding, the immutability of `failing`, the fingerprint cases, the
+owner's case, the target and generation bindings of the re-verification, that
+no catalog value reaches a failure, the contracts (the MCP tool digests are
+unchanged) and the authorization of a baseline ref. Its findings and what
+this pull request does with them:
+
+| # | Finding | Fix |
+|---|---|---|
+| P1-1 | A check that raised in the baseline's verification (`to_regclass` on a schema the observer may not use: `permission denied for schema`, as on `auth` or `storage` of a Supabase history) made the run `error`; the operation then needed attention, recorded no run and kept the target's schema domain, and neither `migration.baseline` nor `migration.verify` could be retried | Each file's checks run under their own savepoint, as in the analysis; a file that cannot be read is one failure with the aspect `unreadable`, recorded at the analysis too, so an acceptance excuses it explicitly. `migration.baseline` and `migration.verify` are retryable (`retry-verification`); a re-verification's errored run is pending again on a retry. Tests: `legacy-baseline-verify.int` (a schema the observer may not use; a re-verification that errors, retried, releases the target) on 16, 17 and 18; `failures.int` (a re-verification whose `verify.sql` cannot get its lock, retried) |
+| P3-1 | A cluster-global failure of a value (`role_setting`, `role_connection_limit`, `role_comment`: aspect `value`) stays excused whatever the value becomes, as roles are outside the fingerprint | **[OPEN: OD-56]** Not fixed here: the checks return no observed value, and a stored digest of one needs a key the engine does not hold (a setting can hold a secret). Proposal: the checks return a keyed digest (HMAC with an installation key) of the observed value for open-domain kinds, recorded with the failure and compared ([open-decisions.md OD-56](../../00-product/open-decisions.md#od-56-an-excused-value-outside-the-fingerprint-that-changes-after-the-review)) |
+| P3-2 | A decision recorded after the plan's last binding check and before the report is baselined changed what the verification excuses | The verification compares the report's digest with the one the plan bound; a change fails the run (`import_report`, aspect `changed`) |
+| P3-3 | The rule for reports analyzed before failures were recorded (an acceptance excuses everything) was reachable for open reports too | A baseline plan of such a report is refused (`LEGACY_IMPORT_ANALYSIS_OUTDATED`, additive): analyze again. Only a baseline recorded before keeps the rule (the owner's report) |
+| P3-4 | The baseline's mirror write and drift reference were not fenced by the lease | Both run only while the worker holds the operation |
+| P3-5 | The import report's failing items lost the `untrusted` marker (an `omit` drops the meta) | Marked again |
+| P3-6 | An old run with an unparsed chain read as `skipped` | Read as `error`, as runs write it now (`verification-failures.test.ts`) |
+| P3-7 | The docs said the CLI shows what an acceptance excuses before it is recorded; statement numbers differ between the interfaces | The docs say what each interface shows. Statement numbers are 0-based in the contract and the CLI and 1-based in the Web App, as everywhere else in each |
+| P3-8 | An acceptance that excuses nothing said nothing | The Web App's dialog and the CLI's `resolve` say that every expectation must hold. A file the hints call not applicable and a person decides present stays unchecked (as before this change); the re-verification reads the project's current trusted extensions and scope (a change there is a project change, planned and audited) |
+
+**[OBSERVED]** **Re-review of these fixes (2026-10-24).** The same reviewer
+confirmed P1-1 and P3-2 to P3-6. With its own test (RVB-4), it showed that
+the owner's re-verification passes: a baseline was recorded with the code of
+`d36ba29` (items without `failing`, the run `verification_failed` as on
+`reos-db-01`), and the re-verification at this pull request's code passes
+with the decided files excused, while a file without a decision still has
+to hold. Its further findings:
+
+| # | Finding | Fix |
+|---|---|---|
+| P2 | Worlds log in as the verifier in their `beforeAll` (the credential check), outside the per-test lock | A file holds the shared lock from before its own `beforeAll` until its first test ended, then each test does; the rotating file declares itself when it is imported (`rotatesVerifierPassword()`), so it never waits for its own lock; `targetIntegrationConfig` gives a hook 10 minutes |
+| P3 | Every error of a read became `unreadable`, also a timeout, a lock wait or a cancel, which then failed the run for good instead of erroring it | Only a read that would fail the same way again is `unreadable` (a privilege, a name the server refuses, a row the engine cannot decode); a transient failure (SQLSTATE classes 08, 40, 53, 55, 57, 58, a timeout, the target unreachable) errors the run, which can be retried (`verification-failures.test.ts`) |
+| P3 | An acceptance of an unreadable file excuses what nobody saw; an observer that can read the schema later compares it for the first time | The Web App's dialog and the CLI's `resolve` say so; `legacy-import.md` recommends giving the observer the reads and analyzing again |
+| P3 | A non-human principal with `migrations.apply:prod` can retry a production `migration.verify` a person approved once (the retry runs its `verify.sql` again without a new approval); MCP has no retry tool | **[OPEN]** Not changed: the same as `migration.apply` retries since Wave 6. Proposal: refuse a retry by a non-human principal when the plan needed an approval because an agent proposed it |
+| P3 | The run in the target's own history is written before the lease fence (a stale worker can add one row there) | **[OPEN]** Not changed: the same in the bundle paths since Wave 6; the mirror and the drift reference are fenced |
+
+**[OBSERVED]** **CI: the PostgreSQL integration job.** It failed twice on this
+branch (`failures.int` E2 read `needs_attention`/`error`, and the three E27
+cases then found the worker busy) and passed on `main`. Cause:
+`node-credential-rotation.int` rotates the verifier's password on the
+shared PostgreSQL 17 test server for its whole file, and every verification
+with a `verify.sql` in another package running at the same time met the
+rotated password. A probe of 150 verifier logins during a rotation failed 44
+times before and 0 times after the fix: the suites against the target servers
+hold a shared advisory lock for each test, and the rotation holds it
+exclusively (`packages/testkit/src/verifier-password.ts`).
+
+**Open after this change:** the second verification review of follow-up 2
+(reported to the owner on 2026-10-22, not part of this order) found three
+P1 that are on `main` and are not fixed here: a single-quoted `DO` body
+passes the parser's token bound, memory adds up across the files of a large
+history, and the `search_path` check of the guard strictness is a
+quadratic regular expression. They wait for the owner's go-ahead.

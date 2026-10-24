@@ -187,6 +187,7 @@ beforeAll(async () => {
     'migrations.read',
     'migrations.plan',
     'migrations.import',
+    'migrations.apply:nonprod',
     'registry.manage',
   ] as const
   const tokens = await w.apiTokens(scope, ['nonprod', 'prod'])
@@ -361,6 +362,12 @@ describe('the CLI for an external cluster and a legacy import', () => {
         '',
       ].join('\n'),
     )
+    // A change made after the registration and before the analysis (as on the first real
+    // target): drift reports it against the registration snapshot until the baseline verifies.
+    await runAsSuperuser(pg17, importedDb, ['CREATE TABLE public.acme_after_registration (id int)'])
+    const driftBefore = await cli(['drift', 'check', paths.imported, '--json'])
+    expect(driftBefore.code, driftBefore.stdout + driftBefore.stderr).toBe(0)
+    expect(json(driftBefore).data).toMatchObject({ status: 'drifted' })
     const analyzed = await cli([
       'migration',
       'import',
@@ -468,8 +475,43 @@ describe('the CLI for an external cluster and a legacy import', () => {
     expect(ledger.get('legacy:0100_accounts')).toBe('legacy_applied_statements')
     expect(ledger.get('legacy:0107_settings')).toBe('legacy_file_at_import')
     expect(ledger.get(`baseline:${BASELINE}`)).toBeDefined()
+
+    // Follow-up 3: the verified baseline is the drift reference (F4); its run is shown (F2) and
+    // can be run again as a planned operation (F3).
+    const driftAfter = await cli(['drift', 'check', paths.imported, '--json'])
+    expect(driftAfter.code, driftAfter.stdout + driftAfter.stderr).toBe(0)
+    const after = json(driftAfter).data
+    expect(after.status).toBe('clean')
+    expect(after.counts.resolved).toBeGreaterThan(0)
+    expect(after.baselineFingerprint).toBe(after.currentFingerprint)
+    const shown = await cli([
+      'migration',
+      'show',
+      `baseline:${BASELINE}`,
+      '--target',
+      paths.imported,
+      '--json',
+    ])
+    expect(shown.code, shown.stdout + shown.stderr).toBe(0)
+    expect(json(shown).data.verifications.at(-1)).toMatchObject({
+      migrationId: `baseline:${BASELINE}`,
+      status: 'passed',
+      structural: { status: 'passed', failed: 0 },
+      engine: { status: 'passed' },
+    })
+    const reverified = await cli(
+      ['migration', 'verify', `baseline:${BASELINE}`, '--target', paths.imported, '--json'],
+      { drive: true },
+    )
+    expect(reverified.code, reverified.stdout + reverified.stderr).toBe(0)
+    expect(json(reverified).data).toMatchObject({
+      kind: 'migration.verify',
+      state: 'succeeded',
+      verificationOutcome: 'passed',
+      verifications: [{ migrationId: `baseline:${BASELINE}`, status: 'passed' }],
+    })
     // Nothing of a token in any output.
-    for (const r of [analyzed, replayed, reported, baselined]) {
+    for (const r of [analyzed, replayed, reported, baselined, shown, reverified]) {
       expect(r.stdout + r.stderr).not.toMatch(/ex(at|rt)_/)
     }
   }, 300_000)

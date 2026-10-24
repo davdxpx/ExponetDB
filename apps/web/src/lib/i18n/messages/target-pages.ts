@@ -129,6 +129,17 @@ const migrationsMessages = {
   'migrations.import.decide.choose': 'Choose a decision',
   'migrations.import.decide.note': 'Note',
   'migrations.import.decide.noteHint': 'Required, at most {max} characters.',
+  'migrations.import.failing':
+    '{count} of its expectations did not hold on the target when the analysis ran.',
+  'migrations.import.decide.excuses':
+    "Accepting this file as applied excuses its {count} failing expectations at the baseline's verification, as they fail now. Any other failure still fails the verification.",
+  'migrations.import.decide.excusesMore': 'And {count} more.',
+  'migrations.import.decide.excusesUnread':
+    'Some of these checks could not be read on the imported target, so nobody saw what they would find. Accepting excuses that too. To check them, give the observer the reads it lacks and analyze again.',
+  'migrations.import.decide.excusesNothing':
+    "Accepting this file as applied excuses nothing: every expectation it states must hold at the baseline's verification.",
+  'migrations.import.decide.supersededUnchecked':
+    "The baseline's verification does not check a file recorded as superseded.",
   'migrations.import.decide.stateMissing': 'Choose a decision first.',
   'migrations.import.decide.noteMissing': 'Write a note first.',
   'migrations.import.baseline.ready': 'Every review item has a decision.',

@@ -1734,7 +1734,7 @@ Runs: against the server; effect: read; action: `migration.get`; scopes: `migrat
 
 | Argument or flag | Meaning |
 |---|---|
-| `migration` (required) | The migration id (ULID). |
+| `migration` (required) | The migration id (ULID), or a legacy import baseline (baseline:<slug>). |
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
 
 ### migration evidence
@@ -1805,6 +1805,8 @@ exponetdb migration apply --target demo/platform/staging
 
 Run a migration’s verification again on a target and wait for its result.
 
+With a baseline (baseline:<slug>), the verification of the legacy import it recorded runs again, with the review decisions that excused failing expectations; when it passes, its schema becomes the drift reference. The baseline operation keeps its outcome; the new run is in the target’s history (migration show baseline:<slug>).
+
 ```text
 exponetdb migration verify <migration> [flags]
 ```
@@ -1813,7 +1815,7 @@ Runs: against the server; effect: mutation; action: `migration.verify`; scopes: 
 
 | Argument or flag | Meaning |
 |---|---|
-| `migration` (required) | The migration id. |
+| `migration` (required) | The migration id, or a legacy import baseline (baseline:<slug>). |
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
 | `--revision <number>` | The bundle revision whose verify.sql runs. |
 | `--wait` | Wait until applied and verified (the default). |

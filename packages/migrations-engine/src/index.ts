@@ -34,6 +34,7 @@ export { type MigrationPlanContext, planMigrationApply } from './planner.ts'
 export {
   bundleFile,
   bundleView,
+  layerFrom,
   lintProject,
   migrationDetail,
   migrationStatus,

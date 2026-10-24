@@ -141,7 +141,12 @@ async function state(s: TestServer, databases: readonly string[]) {
          FROM pg_catalog.pg_auth_members a
          JOIN pg_catalog.pg_roles g ON g.oid = a.roleid
          JOIN pg_catalog.pg_roles m ON m.oid = a.member
-        WHERE m.rolname LIKE 'exponetdb\\_%' OR g.rolname = ANY ($1)
+        -- The memberships the script grants: ExponetDB's roles in ExponetDB's and the
+        -- predefined roles, and this file's roles. A suite running at the same time grants
+        -- its own test roles to the migrator (credential-db-owner.int), never one of these.
+        WHERE (m.rolname LIKE 'exponetdb\\_%'
+               AND (g.rolname LIKE 'exponetdb\\_%' OR g.rolname LIKE 'pg\\_%'))
+           OR g.rolname = ANY ($1)
         ORDER BY 1, 2`,
       [ROLES],
     )

@@ -9140,6 +9140,33 @@
       "type": "https://db.exponet.cloud/errors/legacy-import-truncated"
     },
     {
+      "code": "LEGACY_IMPORT_ANALYSIS_OUTDATED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/LEGACY_IMPORT_ANALYSIS_OUTDATED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "group": "migrations",
+      "message": "The import report was analyzed before the failing expectations of each file were recorded, so a review decision would not say what it accepts.",
+      "remediation": "Analyze the import again and record the decisions on the new report.",
+      "retryable": false,
+      "status": 409,
+      "title": "Legacy import analyzed before failures were recorded",
+      "type": "https://db.exponet.cloud/errors/legacy-import-analysis-outdated"
+    },
+    {
       "code": "STAGING_EVIDENCE_MISSING",
       "details": null,
       "group": "evidence_and_policy",

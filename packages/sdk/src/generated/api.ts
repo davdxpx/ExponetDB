@@ -967,6 +967,16 @@ export type ImportReport = {
     }) | null
     readonly evidence?: readonly string[]
     readonly evidenceStrength?: "strong" | "medium" | "low" | "curated" | "weak" | null
+    readonly failing?: ({
+      readonly items: ReadonlyArray<{
+        readonly failed: readonly string[]
+        readonly file: string | null
+        readonly kind: string
+        readonly object: string
+        readonly statement: number | null
+      }>
+      readonly total: number
+    }) | null
     readonly itemId: string
     readonly legacyId: string
     readonly name: string
@@ -1373,7 +1383,10 @@ export type MigrationStreamCell = {
 export type MigrationVerificationRun = {
   readonly engine: {
     readonly checks: number
+    readonly excused?: number
     readonly failed: number
+    readonly failures?: readonly VerificationFailure[]
+    readonly failuresTotal?: number
     readonly firstFailure: ({
       readonly detail: string | null
       readonly name: string
@@ -1386,7 +1399,10 @@ export type MigrationVerificationRun = {
   readonly operationId: string
   readonly runtime: {
     readonly checks: number
+    readonly excused?: number
     readonly failed: number
+    readonly failures?: readonly VerificationFailure[]
+    readonly failuresTotal?: number
     readonly firstFailure: ({
       readonly detail: string | null
       readonly name: string
@@ -1397,7 +1413,10 @@ export type MigrationVerificationRun = {
   readonly status: "passed" | "failed" | "partial" | "error"
   readonly structural: {
     readonly checks: number
+    readonly excused?: number
     readonly failed: number
+    readonly failures?: readonly VerificationFailure[]
+    readonly failuresTotal?: number
     readonly firstFailure: ({
       readonly detail: string | null
       readonly name: string
@@ -1680,6 +1699,51 @@ export type Operation = {
   readonly subject: SubjectRef
   readonly updatedAt: string
   readonly verificationOutcome: VerificationOutcome
+  readonly verifications?: ReadonlyArray<{
+    readonly engine: {
+      readonly checks: number
+      readonly excused?: number
+      readonly failed: number
+      readonly failures?: readonly VerificationFailure[]
+      readonly failuresTotal?: number
+      readonly firstFailure: ({
+        readonly detail: string | null
+        readonly name: string
+      }) | null
+      readonly status: "passed" | "failed" | "partial" | "error" | "skipped"
+    }
+    readonly fingerprint: string
+    readonly finishedAt: string
+    readonly migrationId: string
+    readonly operationId: string
+    readonly runtime: {
+      readonly checks: number
+      readonly excused?: number
+      readonly failed: number
+      readonly failures?: readonly VerificationFailure[]
+      readonly failuresTotal?: number
+      readonly firstFailure: ({
+        readonly detail: string | null
+        readonly name: string
+      }) | null
+      readonly status: "passed" | "failed" | "partial" | "error" | "skipped"
+    }
+    readonly startedAt: string
+    readonly status: "passed" | "failed" | "partial" | "error"
+    readonly structural: {
+      readonly checks: number
+      readonly excused?: number
+      readonly failed: number
+      readonly failures?: readonly VerificationFailure[]
+      readonly failuresTotal?: number
+      readonly firstFailure: ({
+        readonly detail: string | null
+        readonly name: string
+      }) | null
+      readonly status: "passed" | "failed" | "partial" | "error" | "skipped"
+    }
+    readonly verificationId: string
+  }>
   readonly waitingFor: ({
     readonly operationId: string
   }) | null
@@ -1712,6 +1776,51 @@ export type OperationRead = {
   readonly subject: SubjectRef
   readonly updatedAt: string
   readonly verificationOutcome: VerificationOutcome
+  readonly verifications?: ReadonlyArray<{
+    readonly engine: {
+      readonly checks: number
+      readonly excused?: number
+      readonly failed: number
+      readonly failures?: readonly VerificationFailure[]
+      readonly failuresTotal?: number
+      readonly firstFailure: ({
+        readonly detail: string | null
+        readonly name: string
+      }) | null
+      readonly status: "passed" | "failed" | "partial" | "error" | "skipped"
+    }
+    readonly fingerprint: string
+    readonly finishedAt: string
+    readonly migrationId: string
+    readonly operationId: string
+    readonly runtime: {
+      readonly checks: number
+      readonly excused?: number
+      readonly failed: number
+      readonly failures?: readonly VerificationFailure[]
+      readonly failuresTotal?: number
+      readonly firstFailure: ({
+        readonly detail: string | null
+        readonly name: string
+      }) | null
+      readonly status: "passed" | "failed" | "partial" | "error" | "skipped"
+    }
+    readonly startedAt: string
+    readonly status: "passed" | "failed" | "partial" | "error"
+    readonly structural: {
+      readonly checks: number
+      readonly excused?: number
+      readonly failed: number
+      readonly failures?: readonly VerificationFailure[]
+      readonly failuresTotal?: number
+      readonly firstFailure: ({
+        readonly detail: string | null
+        readonly name: string
+      }) | null
+      readonly status: "passed" | "failed" | "partial" | "error" | "skipped"
+    }
+    readonly verificationId: string
+  }>
   readonly waitingFor: ({
     readonly operationId: string
   }) | null
@@ -2640,6 +2749,15 @@ export type TargetSummary = {
   readonly projectId: string
   readonly state: TargetState
   readonly tier: "prod" | "nonprod"
+}
+
+export type VerificationFailure = {
+  readonly excused: boolean
+  readonly failed: readonly string[]
+  readonly file: string | null
+  readonly kind: string
+  readonly object: string
+  readonly statement: number | null
 }
 
 export type VerificationOutcome = "not_applicable" | "pending" | "passed" | "failed" | "partial" | "error"
