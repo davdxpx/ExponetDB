@@ -383,3 +383,89 @@ reviews are not acceptance and not a proof of absence (U11 still applies).
 8. **What the removal preflight names**: keep listing node, job, token and
    operation ids to a `registry.manage` holder, or strip them without
    `nodes.read` / the operations read (U13, LOW-6).
+
+## Wave 9 Part B – Parallel Session
+
+Branch `ccr-4bf70a3d-5p1q3c` (the platform's branch rule wins over
+`feat/…`), based on `main` at `cad5ac1` (`#42` merged before this session's
+first commit, so this section runs after the UI/UX section, not beside an
+open branch). The owner's order of 2026-10-26 is recorded in
+[`orders/wave-9-part-b-order.md`](./orders/wave-9-part-b-order.md). No
+deployment, no real database, bucket or host, no enrollment, no change in
+the REOSA repository, no production apply. **Nothing here accepts G9 or any
+other gate.** The gap matrix on `cad5ac1` is
+[`gates/9-part-b-gap-matrix.md`](./gates/9-part-b-gap-matrix.md); the gate
+record is [`gates/9.md`](./gates/9.md).
+
+Labels as above (IMPLEMENTED, STATIC CHECKED, TESTED LOCALLY, CI OBSERVED,
+NOT EXECUTED, NOT PROVEN), plus **BLOCKED** (cannot proceed without an
+owner decision or infrastructure) and **OWNER REVIEW REQUIRED**.
+
+### W9-00. Decision registry
+
+| Decision | State | What it means for Wave 9 | Recorded in |
+|---|---|---|---|
+| OD-8 technical default | **DECIDED 2026-10-26** (option (a)) | retention of new records follows `data-retention.md`; audit permanent and pseudonymous | [open-decisions OD-8](../00-product/open-decisions.md#od-8-audit-retention-and-personal-data) |
+| OD-8 legal review | **EXTERNAL LEGAL REVIEW, NOT PROVEN** | blocks productive use with personal data, not development; nothing claims "permanent is always lawful" | same |
+| OD-53 | **DECIDED** (a), fail closed | an approval per production plan with an owner-name lineage mismatch | OD-53 |
+| OD-54 | **DECIDED** (a), `registry.cluster.adopt_agent` | the only path from `external` to `agent`; B4 | OD-54 |
+| OD-55 | **DECIDED** (c) + (d) | approval on every tier for procedural agent plans; ledger/marker before/after guard; cross-project reach a residual | OD-55 |
+| OD-56 | **DECIDED** (a), HMAC | changed excused values fail closed | OD-56 |
+| **OD-4-storage** | **OPEN — BLOCKS G9 FULL ACCEPTANCE** | provider-neutral model built; no repository activated productively; choice after W9-03 | OD-4, [ADR-0036](../01-architecture/adr/0036-backup-repositories-and-providers.md) |
+| OD-21 | open | break-glass activation stays refused; no notification shortcut | OD-21 |
+| OD-10, OD-12, OD-27, OD-29, OD-41 to OD-50 | open, unchanged | OD-29 (c): no MCP node planning, no MCP restore apply | open-decisions |
+| ADR-0036, ADR-0037, ADR-0038 | **proposed for the owner** (accepted for development) | repositories and providers; long-running node runs; restore plans, drills, runbook | ADR index |
+| `#42` U14 item 2 (retirement before Wave 9) | owner decision open | the Wave 9 provider answers instead of `not_installed` once wired (W9-07) | U14 |
+
+### W9-03. Storage choice spike
+
+**Nothing below is measured.** It is the comparison and the experiment plan
+the owner needs for `OD-4-storage`; every cell marked "spike" is unknown
+until the experiment ran on disposable buckets.
+
+| Question | Hetzner Object Storage (S3 Object Lock) | Cloudflare R2 (bucket lock rules) | Split (Hetzner L1, R2 L3) |
+|---|---|---|---|
+| Lock contract | per object version, `GOVERNANCE`/`COMPLIANCE`, default retention; must be enabled at bucket creation **[OBSERVED, docs 2026-10-26]** | per prefix rule; prevents delete **and overwrite**; age, date or indefinite **[OBSERVED, docs]** | both, per layer |
+| pgBackRest metadata rewrites (`archive.info`, `backup.info`, `backup.manifest`) | expected to succeed as new versions (spike: confirm versioning/delete-marker behavior) | **blocked** if a rule covers them; rules must cover only WAL segment and backup-set prefixes (spike: prove a backup and an expire run with such rules) | per layer |
+| Expiry vs lock | delete creates a marker, locked versions stay until retention (spike) | expiry of a locked object fails; retention ≥ lock duration required (spike) | — |
+| Can the host's writer change or remove the lock? | `COMPLIANCE`: no one can shorten; `GOVERNANCE`: anyone with the bypass permission (spike: writer credential without it) | any token with bucket-configuration edit rights (spike: writer token without them) | separate credentials per provider |
+| Failure domains | Hetzner account and region (same provider as the database host) | Cloudflare account (other provider) | survives the loss of either provider |
+| Existing chain | none | **the owner's live pgBackRest repository**: adopt read-only, never migrate | R2 stays L1 of the existing chain until a planned hand-over |
+| Costs | spike (no measured values recorded) | spike | spike |
+| Recommendation (provisional, **not a decision**) | L1 candidate for new installations | L3 candidate; existing installation adopted read-only | the shape ADR-0036 is built for |
+
+Experiment plan (owner, disposable buckets, writer-shaped credentials only;
+expected results in W9-02 T-S3-1 to T-S3-8):
+
+1. Create a disposable bucket per provider (Hetzner with `--with-lock`,
+   default retention `COMPLIANCE 1d`; R2 with a rule on `archive/` and
+   `backup/<stanza>/2*` prefixes, 1 day).
+2. pgBackRest `stanza-create`, full backup, WAL archive for 30 minutes,
+   differential, `expire` with retention shorter than the lock: record
+   which calls succeed.
+3. With the writer credential: `DELETE` and `PUT` (overwrite) a WAL segment
+   and a backup file → both must be refused; `PUT` `backup.info` → must
+   succeed (R2: only if outside the rules).
+4. With the writer credential: try to change or remove the lock
+   configuration → must be refused.
+5. Restore and PITR from each bucket to a disposable cluster.
+6. Record costs observed per GiB-month and per request class, if the owner
+   wants them.
+
+### W9-07. UI/UX handoff (this side)
+
+The UI/UX section's U9 named two integration points; this branch fills
+them only as U9 describes (see the commits listed in W9-09):
+
+| U9 point | This branch |
+|---|---|
+| `features/fleet/protection-slot.tsx` renders `FleetBackupHealth` from `features/wave9/fleet-backup-health.tsx` | pending (B5) |
+| `BackupBindingsPort` provided by Wave 9 | pending (B1) |
+| ADR numbering | this branch uses ADR-0036 to ADR-0038; ADR-0035 stays the UI/UX one |
+| Bundle `dependsOn` | this branch's first bundle depends on `01M5WT5NV9ZC8TYB9BMP3D0EZZ` (`registry-retirement`) |
+
+### W9-09. Review history (append-only)
+
+| Date | Commit | Change |
+|---|---|---|
+| 2026-10-26 | (Phase 0) | section opened: decisions recorded, gap matrix, ADR-0036 to ADR-0038 proposed, storage comparison and experiment plan |
