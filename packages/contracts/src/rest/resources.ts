@@ -1665,6 +1665,11 @@ export const ServerSchema = z
         reportedAt: TimestampSchema,
       })
       .nullable(),
+    state: z.enum(['active', 'retired']).meta({
+      description:
+        'retired: the record left the registry by an operation (final, registry.md §4.4); the machine itself was not touched.',
+    }),
+    retiredAt: TimestampSchema.nullable(),
   })
   .meta({ id: 'Server' })
 
@@ -1691,6 +1696,10 @@ export const ClusterSchema = z
         'The intended tier a person declared with production authority (OD-22); null while undeclared, which counts as prod for registry authority.',
     }),
     health: HealthSummarySchema.nullable(),
+    retiredAt: TimestampSchema.nullable().optional().meta({
+      description:
+        'When the record was retired by an operation (registry.md §4.4); null while it is not. The PostgreSQL cluster itself is not touched.',
+    }),
   })
   .meta({ id: 'Cluster' })
 

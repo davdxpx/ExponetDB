@@ -150,6 +150,9 @@ export class NodeEnrollKind extends NodeKind {
     if (!server.exists) {
       return [{ binding: 'server', expected: 'exists', actual: 'missing' }]
     }
+    if (server.retired) {
+      return [{ binding: 'server', expected: 'active', actual: 'retired' }]
+    }
     return server.liveNode ? [{ binding: 'node', expected: 'none', actual: 'enrolled' }] : []
   }
 

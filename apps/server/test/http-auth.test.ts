@@ -126,11 +126,15 @@ describe('served routes (Wave 2 and 4 to 9)', () => {
     expect(served).toEqual([
       'checkScratchTarget',
       'checkScratchTargetForFiles',
+      'getClusterRetirement',
       'getProjectExecutionRoles',
+      'getServerRetirement',
+      'planClusterRetirement',
       'planDatabaseRetirement',
       'planExecutionRoleBindings',
       'planExecutionRoleException',
       'planExecutionRoleExceptionRevocation',
+      'planServerRetirement',
     ])
     for (const id of served) expect(HANDLERS[id], id).toBeDefined()
   })

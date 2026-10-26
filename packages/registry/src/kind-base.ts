@@ -13,6 +13,7 @@ import { TargetError } from '@exponetdb/postgres'
 import type { Connector } from './connect.ts'
 import { Body, ContentInvalid } from './content.ts'
 import { RegistryError } from './errors.ts'
+import type { BackupBindingsPort } from './retirement.ts'
 
 /**
  * Registry operation kinds ([operations-engine.md §2](../../../exponetdb-docs/02-control-plane/operations-engine.md#2-operation-kinds)),
@@ -35,6 +36,11 @@ export interface RegistryKindDeps {
   readonly controlStoreSystemIdentifier: () => Promise<string>
   /** Takes and stores the registration snapshot (diagnostics); see `register.ts`. */
   readonly snapshots: RegistrationSnapshots
+  /**
+   * The backup engine's bindings of a server or cluster, for retirement (registry.md §4.4).
+   * Wave 9 Part B provides it; without one no backup record exists (`not_installed`).
+   */
+  readonly backupBindings?: BackupBindingsPort
 }
 
 /**

@@ -153,6 +153,9 @@ describe('Wave 4 registry contracts', () => {
       'endpoint.list',
       'registry.cluster.confirm',
       'registry.cluster.confirm.plan',
+      'registry.cluster.retire',
+      'registry.cluster.retire.plan',
+      'registry.cluster.retirement.get',
       'registry.credential.submit',
       'registry.database.register',
       'registry.database.register.plan',
@@ -208,6 +211,9 @@ describe('Wave 4 registry contracts', () => {
       'registry.project.update.plan',
       'registry.server.create',
       'registry.server.create.plan',
+      'registry.server.retire',
+      'registry.server.retire.plan',
+      'registry.server.retirement.get',
     ])
     expect(Object.keys(expected)).toHaveLength(
       by('placement').length +

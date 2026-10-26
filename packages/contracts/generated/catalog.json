@@ -1153,6 +1153,68 @@
       "wave": "4"
     },
     {
+      "basis": "registry.md §4.4",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.cluster.retirement.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "cluster_registry",
+      "title": "What a retirement of the cluster would meet (blockers, what goes with it, what stays)",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "registry.md §4.4",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.server.retirement.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "server",
+      "tierSemantics": "production",
+      "title": "What a retirement of the server would meet (blockers and what stays)",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
       "basis": "resources.md, tool-catalog.md",
       "class": {
         "class": "read",
@@ -4870,6 +4932,68 @@
       "wave": "4"
     },
     {
+      "basis": "The owner's UI/UX order of 2026-10-26 §8A: remove a server from ExponetDB bottom-up, never by cascade (registry.md §4.4)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.server.retire.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "server",
+      "tierSemantics": "production",
+      "title": "Plan the retirement of a server record with no live cluster, node, token or job",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "The owner's UI/UX order of 2026-10-26 §8A: remove a cluster from ExponetDB bottom-up, never by cascade (registry.md §4.4)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.cluster.retire.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "cluster_registry",
+      "title": "Plan the retirement of a cluster record with no registered database",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
       "basis": "resources.md (Registry): registry changes create a plan",
       "class": {
         "class": "read",
@@ -5342,6 +5466,70 @@
       "title": "Create a server record",
       "verification": "required",
       "wave": "4"
+    },
+    {
+      "basis": "The owner's UI/UX order of 2026-10-26 §8A",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.server.retire",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "server",
+      "tierSemantics": "production",
+      "title": "Retire a server record (final; the machine and its data are not touched)",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "The owner's UI/UX order of 2026-10-26 §8A",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.cluster.retire",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "cluster_registry",
+      "title": "Retire a cluster record with its endpoints and credentials (final; nothing changes on the cluster)",
+      "verification": "required",
+      "wave": "9"
     },
     {
       "basis": "registry.md, resources.md (Registry) (Wave 4)",
@@ -9908,6 +10096,9 @@
               "database_not_found",
               "database_retired",
               "database_in_use",
+              "cluster_in_use",
+              "server_retired",
+              "server_in_use",
               "no_active_endpoint",
               "observer_credential_missing",
               "system_identifier_taken",

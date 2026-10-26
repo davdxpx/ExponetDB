@@ -653,6 +653,23 @@ export const ACTIONS = {
   'server.get': read('Get server', 'server', 'nodes.read'),
   'cluster.list': read('List clusters', 'cluster', 'nodes.read'),
   'cluster.get': read('Get cluster', 'cluster', 'nodes.read'),
+  'registry.cluster.retirement.get': registryRead(
+    'What a retirement of the cluster would meet (blockers, what goes with it, what stays)',
+    { wave: '9', basis: 'registry.md §4.4' },
+  ),
+  'registry.server.retirement.get': read(
+    'What a retirement of the server would meet (blockers and what stays)',
+    'server',
+    'registry.manage',
+    {
+      clientKinds: HUMAN,
+      humanOnly: true,
+      scope: REGISTRY_SCOPE,
+      tierSemantics: 'production',
+      wave: '9',
+      basis: 'registry.md §4.4',
+    },
+  ),
   'node.list': read('List nodes', 'node', 'nodes.read', { wave: '5' }),
   'node.get': read('Get node status', 'node', 'nodes.read', { wave: '5' }),
   'backup.list': read('List backups of a cluster', 'cluster', 'backups.read', { wave: '9' }),
@@ -1485,6 +1502,24 @@ export const ACTIONS = {
   'registry.project.create.plan': registryPlan('Plan a project', 'project'),
   'registry.project.update.plan': registryPlan('Plan a project change', 'project'),
   'registry.server.create.plan': registryPlan('Plan a server record', 'server'),
+  'registry.server.retire.plan': registryPlan(
+    'Plan the retirement of a server record with no live cluster, node, token or job',
+    'server',
+    {
+      wave: '9',
+      basis:
+        "The owner's UI/UX order of 2026-10-26 §8A: remove a server from ExponetDB bottom-up, never by cascade (registry.md §4.4)",
+    },
+  ),
+  'registry.cluster.retire.plan': registryPlan(
+    'Plan the retirement of a cluster record with no registered database',
+    'cluster',
+    {
+      wave: '9',
+      basis:
+        "The owner's UI/UX order of 2026-10-26 §8A: remove a cluster from ExponetDB bottom-up, never by cascade (registry.md §4.4)",
+    },
+  ),
   // A cluster being registered has no declared tier yet: production authority (fail closed).
   'registry.cluster.register.plan': registryPlan(
     'Plan the registration of an external cluster',
@@ -1533,6 +1568,18 @@ export const ACTIONS = {
     'project',
   ),
   'registry.server.create': registryKind('Create a server record', fixed('standard'), 'server'),
+  'registry.server.retire': registryKind(
+    'Retire a server record (final; the machine and its data are not touched)',
+    fixed('high'),
+    'server',
+    { ...REAUTH, wave: '9', basis: "The owner's UI/UX order of 2026-10-26 §8A" },
+  ),
+  'registry.cluster.retire': registryKind(
+    'Retire a cluster record with its endpoints and credentials (final; nothing changes on the cluster)',
+    fixed('high'),
+    'cluster',
+    { ...REAUTH, wave: '9', basis: "The owner's UI/UX order of 2026-10-26 §8A" },
+  ),
   'registry.cluster.register': registryKind(
     'Register an external cluster (pending, CA bundle and endpoints)',
     fixed('standard'),

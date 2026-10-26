@@ -295,6 +295,112 @@ export const DatabaseRetireRequestSchema = z
   .strictObject({ reason: ReasonSchema.optional() })
   .meta({ id: 'DatabaseRetireRequest' })
 
+export const ClusterRetireRequestSchema = z
+  .strictObject({ reason: ReasonSchema.optional() })
+  .meta({ id: 'ClusterRetireRequest' })
+
+export const ServerRetireRequestSchema = z
+  .strictObject({ reason: ReasonSchema.optional() })
+  .meta({ id: 'ServerRetireRequest' })
+
+// ----- retirement: what blocks it, what goes with it, what stays (registry.md §4.4) -----
+
+export const RetirementDependencyKindSchema = z
+  .enum([
+    'cluster',
+    'node',
+    'enrollment_token',
+    'node_job',
+    'database',
+    'endpoint',
+    'credential',
+    'operation',
+  ])
+  .meta({
+    id: 'RetirementDependencyKind',
+    description:
+      'A record that depends on the subject: a cluster on a server, a node of a server and its enrollment tokens and jobs, a registered database, an endpoint or a credential of a cluster, an open operation that names the subject.',
+  })
+
+export const RetirementDependencySchema = z
+  .object({
+    kind: RetirementDependencyKindSchema,
+    id: z
+      .string()
+      .regex(/^(cls|nod|ent|job|dbs|end|crd|op)_[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
+      .meta({ description: 'The id of the dependent record.' }),
+    state: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{0,63}$/)
+      .meta({ description: 'Its lifecycle state (an open set: the state of its own table).' }),
+    label: untrustedText(
+      128,
+      'A name the record carries (a cluster or database name, a role, an operation kind); null when it has none.',
+    ).nullable(),
+    targetId: TargetIdSchema.nullable().meta({
+      description:
+        'For a registered database: the target it is the current placement of; null when it is placed nowhere.',
+    }),
+  })
+  .meta({ id: 'RetirementDependency' })
+
+export const RetirementGroupSchema = z
+  .object({
+    kind: RetirementDependencyKindSchema,
+    total: z
+      .int()
+      .min(0)
+      .meta({ description: 'How many there are; `items` holds at most 50 of them.' }),
+    items: z.array(RetirementDependencySchema).max(50),
+  })
+  .meta({ id: 'RetirementGroup' })
+
+export const RetirementPreflightSchema = z
+  .object({
+    subject: z.object({
+      kind: z.enum(['server', 'cluster']),
+      id: z.string().regex(/^(srv|cls)_[0-7][0-9A-HJKMNP-TV-Z]{25}$/),
+      state: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
+    }),
+    verdict: z.enum(['can_plan', 'blocked', 'retired']).meta({
+      description:
+        'can_plan: nothing blocks the retirement now (the plan and its apply check again); blocked: `blockers` lists what must be retired, decommissioned or finished first, bottom-up; retired: the subject is already retired (final).',
+    }),
+    blockers: z.array(RetirementGroupSchema).meta({
+      description:
+        'Only groups with at least one record. Nothing here is removed by the retirement.',
+    }),
+    retiredWith: z.array(RetirementGroupSchema).meta({
+      description:
+        "Records the retirement retires in the same operation because they only describe how to reach the subject (a cluster's active endpoints and active credentials); their secrets stay in the secrets store.",
+    }),
+    kept: z
+      .object({
+        retiredChildren: z.int().min(0).meta({
+          description: 'Retired or decommissioned children that stay as history and do not block.',
+        }),
+      })
+      .meta({
+        description: 'History that stays: nothing is deleted, the audit and operations stay whole.',
+      }),
+    providers: z.array(
+      z.object({
+        provider: z.literal('backups'),
+        state: z.enum(['not_installed', 'none', 'blocking', 'unknown']).meta({
+          description:
+            'not_installed: no backup engine records anything yet (Wave 9), so no backup binding can exist; none: the engine holds no binding; blocking: it does (listed by the engine); unknown: it could not tell, which blocks.',
+        }),
+      }),
+    ),
+    source: z.literal('live'),
+    observedAt: TimestampSchema,
+  })
+  .meta({
+    id: 'RetirementPreflight',
+    description:
+      'What a retirement of a server or cluster would meet now, read live from the Control Store. A comfort view: the plan and its apply check again under the row lock, so a change after this read makes the plan stale or refused.',
+  })
+
 const DatabaseNameSchema = z
   .string()
   .min(1)
@@ -616,6 +722,11 @@ export type ClusterConfirmRequest = z.infer<typeof ClusterConfirmRequestSchema>
 export type ClusterDeclaredTierRequest = z.infer<typeof ClusterDeclaredTierRequestSchema>
 export type DatabaseRegisterRequest = z.infer<typeof DatabaseRegisterRequestSchema>
 export type DatabaseRetireRequest = z.infer<typeof DatabaseRetireRequestSchema>
+export type ClusterRetireRequest = z.infer<typeof ClusterRetireRequestSchema>
+export type ServerRetireRequest = z.infer<typeof ServerRetireRequestSchema>
+export type RetirementPreflight = z.infer<typeof RetirementPreflightSchema>
+export type RetirementGroup = z.infer<typeof RetirementGroupSchema>
+export type RetirementDependency = z.infer<typeof RetirementDependencySchema>
 export type TargetRegisterRequest = z.infer<typeof TargetRegisterRequestSchema>
 export type TargetStateChangeRequest = z.infer<typeof TargetStateChangeRequestSchema>
 export type DriftAcceptRequest = z.infer<typeof DriftAcceptRequestSchema>

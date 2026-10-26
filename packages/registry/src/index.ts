@@ -79,6 +79,7 @@ export {
   ClusterConfirmKind,
   ClusterDeclareTierKind,
   ClusterRegisterKind,
+  ClusterRetireKind,
   DatabaseRegisterKind,
   DatabaseRetireKind,
   EndpointAddKind,
@@ -90,6 +91,7 @@ export {
   ProjectUpdateKind,
   registryKinds,
   ServerCreateKind,
+  ServerRetireKind,
   TargetStateKind,
 } from './kinds.ts'
 export {
@@ -97,6 +99,7 @@ export {
   planClusterConfirm,
   planClusterDeclareTier,
   planClusterRegister,
+  planClusterRetire,
   planDatabaseRegister,
   planDatabaseRetire,
   planEndpointAdd,
@@ -107,6 +110,7 @@ export {
   planProjectCreate,
   planProjectUpdate,
   planServerCreate,
+  planServerRetire,
   planSystemSuspension,
   planTargetRegister,
   planTargetStateChange,
@@ -170,6 +174,19 @@ export type {
   Tier,
 } from './records.ts'
 export { TargetRegisterKind } from './register.ts'
+export {
+  type BackupBindings,
+  type BackupBindingsPort,
+  clusterRetirement,
+  type Dependency,
+  type DependencyGroup,
+  type DependencyKind,
+  GROUP_LIMIT,
+  noBackupEngine,
+  type Retirement,
+  retirementClear,
+  serverRetirement,
+} from './retirement.ts'
 export { type RegistryChain, type RegistryChains, registryChains } from './subjects.ts'
 export {
   brand,

@@ -62,6 +62,8 @@ export function server(over: Partial<Server> = {}): Server {
     provider: 'hetzner_cloud',
     location: 'fsn1',
     derivedTier: 'nonprod',
+    state: 'active',
+    retiredAt: null,
     observedFacts: {
       os: 'Debian 13',
       kernel: '6.12.0',

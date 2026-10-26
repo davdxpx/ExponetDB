@@ -44,6 +44,7 @@ import {
   ClusterDeclaredTierRequestSchema,
   ClusterIdSchema,
   ClusterRegisterRequestSchema,
+  ClusterRetireRequestSchema,
   ConsentDecisionRequestSchema,
   CredentialSubmissionSchema,
   DatabaseIdSchema,
@@ -122,6 +123,7 @@ import {
   ScratchCheckRequestSchema,
   ServerCreateRequestSchema,
   ServerIdSchema,
+  ServerRetireRequestSchema,
   ServiceAccountCreateRequestSchema,
   ServiceClientKeysRequestSchema,
   SessionIdSchema,
@@ -1248,6 +1250,33 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         caller(call),
         clusterId(call),
         EndpointRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  getServerRetirement: async (app, call) =>
+    value(
+      await app.registry.serverRetirement(
+        caller(call),
+        ServerIdSchema.parse(field(call.params, 'serverId')),
+      ),
+    ),
+  planServerRetirement: async (app, call) =>
+    value(
+      await app.registry.planServerRetirement(
+        caller(call),
+        ServerIdSchema.parse(field(call.params, 'serverId')),
+        ServerRetireRequestSchema.parse(call.body ?? {}),
+        idempotency(call),
+      ),
+    ),
+  getClusterRetirement: async (app, call) =>
+    value(await app.registry.clusterRetirement(caller(call), clusterId(call))),
+  planClusterRetirement: async (app, call) =>
+    value(
+      await app.registry.planClusterRetirement(
+        caller(call),
+        clusterId(call),
+        ClusterRetireRequestSchema.parse(call.body ?? {}),
         idempotency(call),
       ),
     ),

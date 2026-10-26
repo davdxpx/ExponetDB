@@ -31,6 +31,12 @@ import {
   productBySlug,
 } from './reads.ts'
 import { TargetRegisterKind } from './register.ts'
+import {
+  clusterRetirement,
+  type Retirement,
+  retirementClear,
+  serverRetirement,
+} from './retirement.ts'
 
 /**
  * Registry operation kinds ([operations-engine.md §2](../../../exponetdb-docs/02-control-plane/operations-engine.md#2-operation-kinds)):
@@ -838,6 +844,188 @@ export class DatabaseRetireKind extends RegistryKind {
   }
 }
 
+/**
+ * `registry.server.retire` (registry.md §4.4): the server record is retired, final. The worker
+ * locks the row first (an insert of a cluster, node or enrollment token locks it FOR SHARE, so
+ * the two serialize), asks again what blocks, and only then writes; the guard (EXG06) refuses
+ * again inside the same statement. Nothing outside the Control Store is touched.
+ */
+export class ServerRetireKind extends RegistryKind {
+  readonly kind = 'registry.server.retire'
+  readonly actionClass = 'high'
+
+  async bindings(plan: PlanRecord, c: Body) {
+    return retirementBindings(
+      'serverState',
+      'active',
+      await serverRetirement(this.deps.store, c.text('serverId'), this.retirementOptions(plan)),
+    )
+  }
+
+  async run(ctx: ExecutionContext, c: Body) {
+    const serverId = c.id('srv', 'serverId')
+    return this.effect(async (tx) => {
+      const { rows } = await tx.query(
+        'registry.kind.server.retire.lock',
+        'SELECT state FROM registry.servers WHERE server_id = $1 FOR UPDATE',
+        [serverId],
+      )
+      if (rows[0]?.text('state') !== 'active') return false
+      const now = await serverRetirement(tx, serverId, this.retirementOptions(ctx.plan))
+      if (now === undefined || !retirementClear(now)) return false
+      const { rowCount } = await tx.query(
+        'registry.kind.server.retire',
+        `UPDATE registry.servers SET state = 'retired', retired_by_operation_id = $2
+          WHERE server_id = $1 AND state = 'active'`,
+        [serverId, ctx.operationId],
+      )
+      if (rowCount !== 1) return false
+      await this.audit(
+        tx,
+        ctx,
+        { serverId, reason: c.textOrNull('reason'), retiredChildren: now.retiredChildren },
+        { serverId },
+      )
+      return true
+    })
+  }
+
+  check(ctx: ExecutionContext, c: Body) {
+    return this.exists(
+      'registry.kind.server_retire.verify',
+      `SELECT 1 FROM registry.servers
+        WHERE server_id = $1 AND state = 'retired' AND retired_by_operation_id = $2`,
+      [c.text('serverId'), ctx.operationId],
+    )
+  }
+
+  applied(ctx: ExecutionContext, c: Body) {
+    return this.check(ctx, c)
+  }
+
+  private retirementOptions(plan: PlanRecord) {
+    return {
+      exceptPlanId: plan.planId,
+      ...(this.deps.backupBindings === undefined ? {} : { backups: this.deps.backupBindings }),
+    }
+  }
+}
+
+/**
+ * `registry.cluster.retire` (registry.md §4.4): the cluster record is retired, final, with its
+ * active endpoint and credential records (they only say how to reach it). The worker locks the
+ * row first (an insert of a database, endpoint or credential locks it FOR SHARE), asks again what
+ * blocks, retires the endpoints and credentials, then the cluster; the guard (EXG07) refuses the
+ * last statement while any registered database, active endpoint or pending or active credential
+ * is left, and the whole transaction is undone. Nothing changes on the PostgreSQL cluster.
+ */
+export class ClusterRetireKind extends RegistryKind {
+  readonly kind = 'registry.cluster.retire'
+  readonly actionClass = 'high'
+
+  async bindings(plan: PlanRecord, c: Body, expected: Body) {
+    const retirement = await clusterRetirement(
+      this.deps.store,
+      c.text('clusterId'),
+      this.retirementOptions(plan),
+    )
+    return retirementBindings('clusterState', expected.text('clusterState'), retirement)
+  }
+
+  async run(ctx: ExecutionContext, c: Body) {
+    const clusterId = c.id('cls', 'clusterId')
+    return this.effect(async (tx) => {
+      const { rows } = await tx.query(
+        'registry.kind.cluster.retire.lock',
+        'SELECT state FROM registry.clusters WHERE cluster_id = $1 FOR UPDATE',
+        [clusterId],
+      )
+      const state = rows[0]?.text('state')
+      if (state === undefined || state === 'retired') return false
+      const now = await clusterRetirement(tx, clusterId, this.retirementOptions(ctx.plan))
+      if (now === undefined || !retirementClear(now)) return false
+      const endpoints = await tx.query(
+        'registry.kind.cluster.retire.endpoints',
+        `UPDATE registry.endpoints SET state = 'retired', retired_by_operation_id = $2
+          WHERE cluster_id = $1 AND state = 'active'`,
+        [clusterId, ctx.operationId],
+      )
+      const credentials = await tx.query(
+        'registry.kind.cluster.retire.credentials',
+        `UPDATE registry.credentials SET state = 'retired' WHERE cluster_id = $1 AND state = 'active'`,
+        [clusterId],
+      )
+      const { rowCount } = await tx.query(
+        'registry.kind.cluster.retire',
+        `UPDATE registry.clusters SET state = 'retired', retired_by_operation_id = $2
+          WHERE cluster_id = $1 AND state IN ('pending', 'active')`,
+        [clusterId, ctx.operationId],
+      )
+      if (rowCount !== 1) throw new RegistryError('INTERNAL')
+      await this.audit(
+        tx,
+        ctx,
+        {
+          clusterId,
+          reason: c.textOrNull('reason'),
+          endpointsRetired: endpoints.rowCount ?? 0,
+          credentialsRetired: credentials.rowCount ?? 0,
+        },
+        { clusterId },
+      )
+      return true
+    })
+  }
+
+  check(ctx: ExecutionContext, c: Body) {
+    return this.exists(
+      'registry.kind.cluster_retire.verify',
+      `SELECT 1 FROM registry.clusters c
+        WHERE c.cluster_id = $1 AND c.state = 'retired' AND c.retired_by_operation_id = $2
+          AND NOT EXISTS (SELECT FROM registry.endpoints e WHERE e.cluster_id = c.cluster_id AND e.state = 'active')
+          AND NOT EXISTS (SELECT FROM registry.credentials k
+                           WHERE k.cluster_id = c.cluster_id AND k.state IN ('pending', 'active'))`,
+      [c.text('clusterId'), ctx.operationId],
+    )
+  }
+
+  applied(ctx: ExecutionContext, c: Body) {
+    return this.exists(
+      'registry.kind.cluster_retire.applied',
+      `SELECT 1 FROM registry.clusters WHERE cluster_id = $1 AND retired_by_operation_id = $2`,
+      [c.text('clusterId'), ctx.operationId],
+    )
+  }
+
+  private retirementOptions(plan: PlanRecord) {
+    return {
+      exceptPlanId: plan.planId,
+      ...(this.deps.backupBindings === undefined ? {} : { backups: this.deps.backupBindings }),
+    }
+  }
+}
+
+/** The changed bindings of a retirement: the subject's state, then anything that blocks now. */
+function retirementBindings(
+  binding: string,
+  expectedState: string,
+  retirement: Retirement | undefined,
+): ChangedBinding[] {
+  if (retirement === undefined || retirement.subjectState !== expectedState) {
+    return [{ binding, expected: expectedState, actual: retirement?.subjectState ?? null }]
+  }
+  if (!retirementClear(retirement)) {
+    return [
+      {
+        binding: 'blockers',
+        expected: 0,
+        actual: retirement.blockers.reduce((sum, g) => sum + g.total, 0),
+      },
+    ]
+  }
+  return []
+}
+
 export class DatabaseRegisterKind extends RegistryKind {
   readonly kind = 'registry.database.register'
   readonly actionClass = 'standard'
@@ -1067,6 +1255,8 @@ export function registryKinds(deps: RegistryKindDeps): readonly OperationKind[] 
     new EndpointAddKind(deps),
     new EndpointRetireKind(deps),
     new DatabaseRetireKind(deps),
+    new ClusterRetireKind(deps),
+    new ServerRetireKind(deps),
     new DatabaseRegisterKind(deps),
     new TargetRegisterKind(deps),
     new TargetStateKind(deps, 'target.suspend'),

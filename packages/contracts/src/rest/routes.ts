@@ -128,6 +128,7 @@ import {
   ClusterConfirmRequestSchema,
   ClusterDeclaredTierRequestSchema,
   ClusterRegisterRequestSchema,
+  ClusterRetireRequestSchema,
   CredentialSubmissionSchema,
   CredentialViewSchema,
   DatabaseRegisterRequestSchema,
@@ -146,7 +147,9 @@ import {
   ProjectChangeRequestSchema,
   ProjectCreateRequestSchema,
   ProjectExecutionRolesSchema,
+  RetirementPreflightSchema,
   ServerCreateRequestSchema,
+  ServerRetireRequestSchema,
   TargetRegisterRequestSchema,
   TargetStateChangeRequestSchema,
 } from './registry.ts'
@@ -1794,6 +1797,29 @@ export const REGISTRY_ROUTES = [
     errors: PLAN_ERRORS,
   },
   {
+    operationId: 'getServerRetirement',
+    method: 'get',
+    path: '/servers/{serverId}/retirement',
+    summary:
+      'What a retirement of the server would meet now (registry.md §4.4): the clusters, nodes, enrollment tokens, node jobs and open operations that block it, bottom-up, and what stays as history. Read live; the plan and its apply check again.',
+    action: 'registry.server.retirement.get',
+    pathParams: z.strictObject({ serverId: ServerIdSchema }),
+    response: { status: 200, schema: RetirementPreflightSchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'planServerRetirement',
+    method: 'post',
+    path: '/servers/{serverId}/retire',
+    summary:
+      'Plan the retirement of a server record (registry.md §4.4): only when no cluster on it is unretired, no node is live or revoked, no enrollment token can be redeemed and no node job or operation on it is open. The record stays, retired and final; the machine is not touched.',
+    action: 'registry.server.retire.plan',
+    pathParams: z.strictObject({ serverId: ServerIdSchema }),
+    body: ServerRetireRequestSchema,
+    response: planned,
+    errors: PLAN_ERRORS,
+  },
+  {
     operationId: 'planClusterRegistration',
     method: 'post',
     path: '/clusters',
@@ -1911,6 +1937,29 @@ export const REGISTRY_ROUTES = [
       'TARGET_TLS_FAILED',
       'TARGET_CREDENTIAL_INVALID',
     ],
+  },
+  {
+    operationId: 'getClusterRetirement',
+    method: 'get',
+    path: '/clusters/{clusterId}/retirement',
+    summary:
+      'What a retirement of the cluster would meet now (registry.md §4.4): registered databases, pending credentials, open node jobs and operations that block it, the active endpoints and credentials the retirement retires with it, and what stays. Read live; the plan and its apply check again.',
+    action: 'registry.cluster.retirement.get',
+    pathParams: z.strictObject({ clusterId: ClusterIdSchema }),
+    response: { status: 200, schema: RetirementPreflightSchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'planClusterRetirement',
+    method: 'post',
+    path: '/clusters/{clusterId}/retire',
+    summary:
+      'Plan the retirement of a cluster record (registry.md §4.4): only when it has no registered database, no pending credential and no open node job or operation; its active endpoints and credentials are retired with it. Final; nothing changes on the PostgreSQL cluster.',
+    action: 'registry.cluster.retire.plan',
+    pathParams: z.strictObject({ clusterId: ClusterIdSchema }),
+    body: ClusterRetireRequestSchema,
+    response: planned,
+    errors: PLAN_ERRORS,
   },
   {
     operationId: 'planDatabaseRetirement',

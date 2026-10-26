@@ -574,6 +574,8 @@
               "server.get",
               "cluster.list",
               "cluster.get",
+              "registry.cluster.retirement.get",
+              "registry.server.retirement.get",
               "node.list",
               "node.get",
               "backup.list",
@@ -690,6 +692,8 @@
               "registry.project.create.plan",
               "registry.project.update.plan",
               "registry.server.create.plan",
+              "registry.server.retire.plan",
+              "registry.cluster.retire.plan",
               "registry.cluster.register.plan",
               "registry.cluster.confirm.plan",
               "registry.endpoint.add.plan",
@@ -705,6 +709,8 @@
               "registry.project.create",
               "registry.project.update",
               "registry.server.create",
+              "registry.server.retire",
+              "registry.cluster.retire",
               "registry.cluster.register",
               "registry.cluster.confirm",
               "registry.endpoint.add",
@@ -3260,6 +3266,20 @@
               }
             ]
           },
+          "retiredAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the record was retired by an operation (registry.md §4.4); null while it is not. The PostgreSQL cluster itself is not touched."
+          },
           "serverId": {
             "anyOf": [
               {
@@ -3459,6 +3479,17 @@
           "caBundle",
           "endpoints"
         ],
+        "type": "object"
+      },
+      "ClusterRetireRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "description": "Short machine-readable reason, stored on the target and in the audit.",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "ControlPlaneHealthState": {
@@ -11516,6 +11547,8 @@
               "server.get",
               "cluster.list",
               "cluster.get",
+              "registry.cluster.retirement.get",
+              "registry.server.retirement.get",
               "node.list",
               "node.get",
               "backup.list",
@@ -11632,6 +11665,8 @@
               "registry.project.create.plan",
               "registry.project.update.plan",
               "registry.server.create.plan",
+              "registry.server.retire.plan",
+              "registry.cluster.retire.plan",
               "registry.cluster.register.plan",
               "registry.cluster.confirm.plan",
               "registry.endpoint.add.plan",
@@ -11647,6 +11682,8 @@
               "registry.project.create",
               "registry.project.update",
               "registry.server.create",
+              "registry.server.retire",
+              "registry.cluster.retire",
               "registry.cluster.register",
               "registry.cluster.confirm",
               "registry.endpoint.add",
@@ -12337,6 +12374,8 @@
               "server.get",
               "cluster.list",
               "cluster.get",
+              "registry.cluster.retirement.get",
+              "registry.server.retirement.get",
               "node.list",
               "node.get",
               "backup.list",
@@ -12453,6 +12492,8 @@
               "registry.project.create.plan",
               "registry.project.update.plan",
               "registry.server.create.plan",
+              "registry.server.retire.plan",
+              "registry.cluster.retire.plan",
               "registry.cluster.register.plan",
               "registry.cluster.confirm.plan",
               "registry.endpoint.add.plan",
@@ -12468,6 +12509,8 @@
               "registry.project.create",
               "registry.project.update",
               "registry.server.create",
+              "registry.server.retire",
+              "registry.cluster.retire",
               "registry.cluster.register",
               "registry.cluster.confirm",
               "registry.endpoint.add",
@@ -13214,6 +13257,8 @@
               "server.get",
               "cluster.list",
               "cluster.get",
+              "registry.cluster.retirement.get",
+              "registry.server.retirement.get",
               "node.list",
               "node.get",
               "backup.list",
@@ -13330,6 +13375,8 @@
               "registry.project.create.plan",
               "registry.project.update.plan",
               "registry.server.create.plan",
+              "registry.server.retire.plan",
+              "registry.cluster.retire.plan",
               "registry.cluster.register.plan",
               "registry.cluster.confirm.plan",
               "registry.endpoint.add.plan",
@@ -13345,6 +13392,8 @@
               "registry.project.create",
               "registry.project.update",
               "registry.server.create",
+              "registry.server.retire",
+              "registry.cluster.retire",
               "registry.cluster.register",
               "registry.cluster.confirm",
               "registry.endpoint.add",
@@ -13626,6 +13675,8 @@
               "server.get",
               "cluster.list",
               "cluster.get",
+              "registry.cluster.retirement.get",
+              "registry.server.retirement.get",
               "node.list",
               "node.get",
               "backup.list",
@@ -13742,6 +13793,8 @@
               "registry.project.create.plan",
               "registry.project.update.plan",
               "registry.server.create.plan",
+              "registry.server.retire.plan",
+              "registry.cluster.retire.plan",
               "registry.cluster.register.plan",
               "registry.cluster.confirm.plan",
               "registry.endpoint.add.plan",
@@ -13757,6 +13810,8 @@
               "registry.project.create",
               "registry.project.update",
               "registry.server.create",
+              "registry.server.retire",
+              "registry.cluster.retire",
               "registry.cluster.register",
               "registry.cluster.confirm",
               "registry.endpoint.add",
@@ -15716,6 +15771,212 @@
         ],
         "type": "object"
       },
+      "RetirementDependency": {
+        "properties": {
+          "id": {
+            "description": "The id of the dependent record.",
+            "pattern": "^(cls|nod|ent|job|dbs|end|crd|op)_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/RetirementDependencyKind"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "description": "A name the record carries (a cluster or database name, a role, an operation kind); null when it has none.",
+                "maxLength": 128,
+                "type": "string",
+                "x-untrusted": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "description": "Its lifecycle state (an open set: the state of its own table).",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "targetId": {
+            "anyOf": [
+              {
+                "description": "Entity id `^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^tgt_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a registered database: the target it is the current placement of; null when it is placed nowhere."
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "state",
+          "label",
+          "targetId"
+        ],
+        "type": "object"
+      },
+      "RetirementDependencyKind": {
+        "description": "A record that depends on the subject: a cluster on a server, a node of a server and its enrollment tokens and jobs, a registered database, an endpoint or a credential of a cluster, an open operation that names the subject.",
+        "enum": [
+          "cluster",
+          "node",
+          "enrollment_token",
+          "node_job",
+          "database",
+          "endpoint",
+          "credential",
+          "operation"
+        ],
+        "type": "string"
+      },
+      "RetirementGroup": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RetirementDependency"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/RetirementDependencyKind"
+          },
+          "total": {
+            "description": "How many there are; `items` holds at most 50 of them.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "total",
+          "items"
+        ],
+        "type": "object"
+      },
+      "RetirementPreflight": {
+        "description": "What a retirement of a server or cluster would meet now, read live from the Control Store. A comfort view: the plan and its apply check again under the row lock, so a change after this read makes the plan stale or refused.",
+        "properties": {
+          "blockers": {
+            "description": "Only groups with at least one record. Nothing here is removed by the retirement.",
+            "items": {
+              "$ref": "#/components/schemas/RetirementGroup"
+            },
+            "type": "array"
+          },
+          "kept": {
+            "description": "History that stays: nothing is deleted, the audit and operations stay whole.",
+            "properties": {
+              "retiredChildren": {
+                "description": "Retired or decommissioned children that stay as history and do not block.",
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "retiredChildren"
+            ],
+            "type": "object"
+          },
+          "observedAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "providers": {
+            "items": {
+              "properties": {
+                "provider": {
+                  "const": "backups",
+                  "type": "string"
+                },
+                "state": {
+                  "description": "not_installed: no backup engine records anything yet (Wave 9), so no backup binding can exist; none: the engine holds no binding; blocking: it does (listed by the engine); unknown: it could not tell, which blocks.",
+                  "enum": [
+                    "not_installed",
+                    "none",
+                    "blocking",
+                    "unknown"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "provider",
+                "state"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "retiredWith": {
+            "description": "Records the retirement retires in the same operation because they only describe how to reach the subject (a cluster's active endpoints and active credentials); their secrets stay in the secrets store.",
+            "items": {
+              "$ref": "#/components/schemas/RetirementGroup"
+            },
+            "type": "array"
+          },
+          "source": {
+            "const": "live",
+            "type": "string"
+          },
+          "subject": {
+            "properties": {
+              "id": {
+                "pattern": "^(srv|cls)_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "server",
+                  "cluster"
+                ],
+                "type": "string"
+              },
+              "state": {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "id",
+              "state"
+            ],
+            "type": "object"
+          },
+          "verdict": {
+            "description": "can_plan: nothing blocks the retirement now (the plan and its apply check again); blocked: `blockers` lists what must be retired, decommissioned or finished first, bottom-up; retired: the subject is already retired (final).",
+            "enum": [
+              "can_plan",
+              "blocked",
+              "retired"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "verdict",
+          "blockers",
+          "retiredWith",
+          "kept",
+          "providers",
+          "source",
+          "observedAt"
+        ],
+        "type": "object"
+      },
       "ReviewSource": {
         "properties": {
           "bytes": {
@@ -17420,6 +17681,27 @@
           },
           "provider": {
             "$ref": "#/components/schemas/ServerProvider"
+          },
+          "retiredAt": {
+            "anyOf": [
+              {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "description": "retired: the record left the registry by an operation (final, registry.md §4.4); the machine itself was not touched.",
+            "enum": [
+              "active",
+              "retired"
+            ],
+            "type": "string"
           }
         },
         "required": [
@@ -17428,7 +17710,9 @@
           "provider",
           "location",
           "derivedTier",
-          "observedFacts"
+          "observedFacts",
+          "state",
+          "retiredAt"
         ],
         "type": "object"
       },
@@ -17492,6 +17776,17 @@
           "on_premises"
         ],
         "type": "string"
+      },
+      "ServerRetireRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "description": "Short machine-readable reason, stored on the target and in the audit.",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          }
+        },
+        "type": "object"
       },
       "ServiceAccount": {
         "properties": {
@@ -22637,6 +22932,195 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "4"
+      }
+    },
+    "/clusters/{clusterId}/retire": {
+      "post": {
+        "operationId": "planClusterRetirement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClusterRetireRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan the retirement of a cluster record (registry.md §4.4): only when it has no registered database, no pending credential and no open node job or operation; its active endpoints and credentials are retired with it. Final; nothing changes on the PostgreSQL cluster.",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "registry.cluster.retire.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
+      }
+    },
+    "/clusters/{clusterId}/retirement": {
+      "get": {
+        "operationId": "getClusterRetirement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetirementPreflight"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "What a retirement of the cluster would meet now (registry.md §4.4): registered databases, pending credentials, open node jobs and operations that block it, the active endpoints and credentials the retirement retires with it, and what stays. Read live; the plan and its apply check again.",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "registry.cluster.retirement.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
       }
     },
     "/clusters/{clusterId}/role-verifiers": {
@@ -31593,6 +32077,195 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "5"
+      }
+    },
+    "/servers/{serverId}/retire": {
+      "post": {
+        "operationId": "planServerRetirement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServerRetireRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan the retirement of a server record (registry.md §4.4): only when no cluster on it is unretired, no node is live or revoked, no enrollment token can be redeemed and no node job or operation on it is open. The record stays, retired and final; the machine is not touched.",
+        "tags": [
+          "servers"
+        ],
+        "x-exponetdb-action": "registry.server.retire.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
+      }
+    },
+    "/servers/{serverId}/retirement": {
+      "get": {
+        "operationId": "getServerRetirement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "serverId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^srv_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetirementPreflight"
+                }
+              }
+            },
+            "description": "OK."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "What a retirement of the server would meet now (registry.md §4.4): the clusters, nodes, enrollment tokens, node jobs and open operations that block it, bottom-up, and what stays as history. Read live; the plan and its apply check again.",
+        "tags": [
+          "servers"
+        ],
+        "x-exponetdb-action": "registry.server.retirement.get",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "GRANT_REVOKED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
       }
     },
     "/service-accounts": {

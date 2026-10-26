@@ -59,20 +59,28 @@ async function store(
   )
 }
 
-/** Whether a server exists and whether it has a node that is not terminal (I-6). */
+/**
+ * Whether a server exists, whether it is retired (registry.md §4.4: a retired server gets no
+ * node) and whether it has a node that is not terminal (I-6).
+ */
 export async function serverEnrollment(
   q: Queryable,
   serverId: string,
-): Promise<{ readonly exists: boolean; readonly liveNode: boolean }> {
+): Promise<{ readonly exists: boolean; readonly retired: boolean; readonly liveNode: boolean }> {
   const { rows } = await q.query(
     'nodes.plan.server',
-    `SELECT EXISTS (SELECT 1 FROM nodes.nodes n
+    `SELECT s.state = 'retired' AS retired,
+            EXISTS (SELECT 1 FROM nodes.nodes n
                      WHERE n.server_id = s.server_id AND n.state IN ('pending_binding', 'active', 'degraded')) AS live
        FROM registry.servers s WHERE s.server_id = $1`,
     [serverId],
   )
   const row = rows[0]
-  return { exists: row !== undefined, liveNode: row?.bool('live') ?? false }
+  return {
+    exists: row !== undefined,
+    retired: row?.bool('retired') ?? false,
+    liveNode: row?.bool('live') ?? false,
+  }
 }
 
 /** `node.enroll` for a server without a live node. */
@@ -85,6 +93,9 @@ export async function planNodeEnroll(
   const server = await serverEnrollment(tx, serverId)
   if (!server.exists) {
     throw new NodeError('NOT_FOUND')
+  }
+  if (server.retired) {
+    throw new NodeError('CONFLICT', { reason: 'server_retired' })
   }
   if (server.liveNode) {
     throw new NodeError('NODE_ALREADY_ENROLLED')

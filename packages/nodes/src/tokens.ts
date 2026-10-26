@@ -31,6 +31,16 @@ export interface NewToken {
  * while the server has a node that is not terminal (I-6).
  */
 export async function createEnrollmentToken(tx: Tx, clock: Clock, token: NewToken): Promise<void> {
+  // FOR SHARE on the server: a retirement (FOR UPDATE on the row, registry.md §4.4) waits for
+  // this token and then sees it, or this waits for the retirement and then sees it retired.
+  const server = await tx.query(
+    'nodes.token.server',
+    'SELECT state FROM registry.servers WHERE server_id = $1 FOR SHARE',
+    [token.serverId],
+  )
+  if (server.rows[0]?.text('state') !== 'active') {
+    throw new NodeError('CONFLICT', { reason: 'server_retired' })
+  }
   const live = await tx.query(
     'nodes.token.live_node',
     `SELECT 1 FROM nodes.nodes WHERE server_id = $1 AND state IN ('pending_binding', 'active', 'degraded')`,

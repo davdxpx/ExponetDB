@@ -84,6 +84,8 @@ export function serverView(s: ServerRecord): Server {
     derivedTier: s.derivedTier,
     // External servers have no node agent before Wave 5: nothing is reported.
     observedFacts: null,
+    state: s.state,
+    retiredAt: s.retiredAt,
   }
 }
 
@@ -106,6 +108,7 @@ export function clusterView(c: ClusterRecord, health: HealthSummary | null = nul
     derivedTier: c.derivedTier,
     declaredTier: c.declaredTier,
     health,
+    retiredAt: c.retiredAt,
   }
 }
 
