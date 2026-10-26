@@ -104,6 +104,7 @@ describe('the icon rail and the section menu', () => {
         .map((link) => link.textContent),
     ).toEqual([
       'Overview',
+      'Projects',
       'Databases',
       'Changes',
       'Infrastructure',

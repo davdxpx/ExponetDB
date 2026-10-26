@@ -10,11 +10,13 @@ import { accessAdminMessages } from './messages/access-admin.ts'
 import { accountMessages } from './messages/account.ts'
 import { auditMessages } from './messages/audit.ts'
 import { changesMessages } from './messages/changes.ts'
+import { connectSheetMessages } from './messages/connect-sheet.ts'
 import { connectionsMessages } from './messages/connections.ts'
 import { fleetMessages } from './messages/fleet.ts'
 import { infrastructureMessages } from './messages/infrastructure.ts'
 import { oauthMessages } from './messages/oauth.ts'
 import { plansMessages } from './messages/plans.ts'
+import { projectsMessages } from './messages/projects.ts'
 import { schemaMessages } from './messages/schema.ts'
 import { settingsMessages } from './messages/settings.ts'
 import { sqlMessages } from './messages/sql.ts'
@@ -112,12 +114,14 @@ export const CATALOG_PARTS = {
   access: accessMessages,
   plans: plansMessages,
   fleet: fleetMessages,
+  projects: projectsMessages,
   targetOverview: targetOverviewMessages,
   schema: schemaMessages,
   changes: changesMessages,
   targetPages: targetPageMessages,
   sql: sqlMessages,
   connections: connectionsMessages,
+  connectSheet: connectSheetMessages,
   wave9: wave9Messages,
   infrastructure: infrastructureMessages,
   accessAdmin: accessAdminMessages,
@@ -133,12 +137,14 @@ export const en = {
   ...accessMessages,
   ...plansMessages,
   ...fleetMessages,
+  ...projectsMessages,
   ...targetOverviewMessages,
   ...schemaMessages,
   ...changesMessages,
   ...targetPageMessages,
   ...sqlMessages,
   ...connectionsMessages,
+  ...connectSheetMessages,
   ...wave9Messages,
   ...infrastructureMessages,
   ...accessAdminMessages,

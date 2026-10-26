@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown } from '@exponetdb/icons'
+import { Check, ChevronsUpDown, FolderKanban } from '@exponetdb/icons'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -9,6 +9,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   Skeleton,
 } from '@exponetdb/ui'
@@ -24,6 +25,7 @@ import { useMatch, useRouterState } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { t } from '../../lib/i18n/i18n.ts'
 import { useMe } from '../../lib/session/guard.tsx'
+import { projectHref } from '../../shell/navigation.ts'
 import { PathSeparator } from '../../shell/path-separator.tsx'
 import { DatabaseSwitcher } from './database-switcher.tsx'
 import {
@@ -162,6 +164,8 @@ function EnvironmentSwitcher(props: {
           <span className="sr-only">{t('target.bar.label')}: </span>
           {target.product} / {target.project}
         </DropdownMenuLabel>
+        <ProjectHomeItem target={target} />
+        <DropdownMenuSeparator />
         <EnvironmentMenu
           readable={environments}
           target={target}
@@ -170,6 +174,21 @@ function EnvironmentSwitcher(props: {
         />
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+/** The project's home (`/p/<product>/<project>`), above its environments. */
+function ProjectHomeItem({ target }: { readonly target: TargetRoute }): ReactNode {
+  const Link = useLinkComponent()
+  return (
+    <DropdownMenuItem asChild>
+      <Link href={projectHref(target.product, target.project)}>
+        <span className="flex w-full min-w-0 items-center gap-2">
+          <FolderKanban aria-hidden className="size-3.5 shrink-0" />
+          <span className="truncate">{t('target.switcher.projectHome')}</span>
+        </span>
+      </Link>
+    </DropdownMenuItem>
   )
 }
 

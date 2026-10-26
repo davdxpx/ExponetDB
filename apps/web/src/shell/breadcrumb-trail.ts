@@ -1,5 +1,5 @@
 import type { PageBreadcrumbItem } from '@exponetdb/ui-patterns'
-import { isSchemaKind, parseTargetParams } from '../features/target/params.ts'
+import { isSchemaKind, isSlug, parseTargetParams } from '../features/target/params.ts'
 import { ULID } from '../lib/navigation/links.ts'
 import { GLOBAL_NAV, NAV_SECTIONS, TARGET_NAV, targetHref } from './navigation.ts'
 
@@ -68,6 +68,7 @@ const ID_TRAILS: ReadonlyMap<string, IdTrail> = new Map<string, IdTrail>(
 )
 
 const TARGET_KIND_ROUTE = '/_app/t/$product/$project/$environment/schema/$kind'
+const PROJECT_ROUTE = '/_app/p/$product/$project'
 
 function idOf(prefix: string, value: unknown): string | undefined {
   return typeof value === 'string' && new RegExp(`^${prefix}_${ULID}$`).test(value)
@@ -99,6 +100,15 @@ export function breadcrumbTrail(
     const id = idOf(idTrail.prefix, params[idTrail.param])
     if (id === undefined) return undefined
     return withoutRepeatedLinks([idTrail.section, idTrail.list, { label: id }])
+  }
+  if (routeId === PROJECT_ROUTE) {
+    const product = params['product']
+    const project = params['project']
+    if (!isSlug(product) || !isSlug(project)) return undefined
+    return [
+      { label: sectionLabel('projects'), href: '/projects' },
+      { label: `${product}/${project}` },
+    ]
   }
   if (routeId === TARGET_KIND_ROUTE) {
     const target = parseTargetParams({

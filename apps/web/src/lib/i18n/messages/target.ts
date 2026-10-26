@@ -17,6 +17,7 @@ export const targetMessages = {
   'target.switcher.partial': 'Showing part of the environments. {missing}',
   'target.switcher.missing.more': 'More environments exist than one read returns.',
   'target.switcher.missing.unreadable': 'Some environments have a path the page cannot show.',
+  'target.switcher.projectHome': 'Project overview',
   'target.switcher.current': 'Current environment',
   // The database switcher of the context bar and the "Switch database" command page.
   'target.switch.trigger': 'Switch database',

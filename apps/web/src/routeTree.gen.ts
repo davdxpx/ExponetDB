@@ -23,6 +23,7 @@ import { Route as AppAuditRouteImport } from './routes/_app/audit'
 import { Route as AppBackupsRouteImport } from './routes/_app/backups'
 import { Route as AppConnectRouteImport } from './routes/_app/connect'
 import { Route as AppFindingsRouteImport } from './routes/_app/findings'
+import { Route as AppProjectsRouteImport } from './routes/_app/projects'
 import { Route as SessionCredentialsRouteImport } from './routes/_session/credentials'
 import { Route as SessionStepUpRouteImport } from './routes/_session/step-up'
 import { Route as OauthErrorRouteImport } from './routes/oauth/error'
@@ -63,6 +64,7 @@ import { Route as AppInfrastructureNodesIndexRouteImport } from './routes/_app/i
 import { Route as AppInfrastructureNodesNodeIdRouteImport } from './routes/_app/infrastructure/nodes/$nodeId'
 import { Route as AppInfrastructureServersIndexRouteImport } from './routes/_app/infrastructure/servers/index'
 import { Route as AppInfrastructureServersServerIdRouteImport } from './routes/_app/infrastructure/servers/$serverId'
+import { Route as AppPProductProjectRouteImport } from './routes/_app/p/$product/$project'
 import { Route as AppTProductProjectEnvironmentRouteImport } from './routes/_app/t/$product/$project/$environment'
 import { Route as AppTProductProjectEnvironmentIndexRouteImport } from './routes/_app/t/$product/$project/$environment/index'
 import { Route as AppTProductProjectEnvironmentActivityRouteImport } from './routes/_app/t/$product/$project/$environment/activity'
@@ -146,6 +148,11 @@ const AppConnectRoute = AppConnectRouteImport.update({
 const AppFindingsRoute = AppFindingsRouteImport.update({
   id: '/findings',
   path: '/findings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProjectsRoute = AppProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
   getParentRoute: () => AppRoute,
 } as any)
 const SessionCredentialsRoute = SessionCredentialsRouteImport.update({
@@ -359,6 +366,11 @@ const AppInfrastructureServersServerIdRoute =
     path: '/infrastructure/servers/$serverId',
     getParentRoute: () => AppRoute,
   } as any)
+const AppPProductProjectRoute = AppPProductProjectRouteImport.update({
+  id: '/p/$product/$project',
+  path: '/p/$product/$project',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppTProductProjectEnvironmentRoute =
   AppTProductProjectEnvironmentRouteImport.update({
     id: '/t/$product/$project/$environment',
@@ -469,6 +481,7 @@ export interface FileRoutesByFullPath {
   '/backups': typeof AppBackupsRoute
   '/connect': typeof AppConnectRoute
   '/findings': typeof AppFindingsRoute
+  '/projects': typeof AppProjectsRoute
   '/credentials': typeof SessionCredentialsRoute
   '/step-up': typeof SessionStepUpRoute
   '/oauth/error': typeof OauthErrorRoute
@@ -504,6 +517,7 @@ export interface FileRoutesByFullPath {
   '/infrastructure/clusters/$clusterId': typeof AppInfrastructureClustersClusterIdRoute
   '/infrastructure/nodes/$nodeId': typeof AppInfrastructureNodesNodeIdRoute
   '/infrastructure/servers/$serverId': typeof AppInfrastructureServersServerIdRoute
+  '/p/$product/$project': typeof AppPProductProjectRoute
   '/changes/operations/': typeof AppChangesOperationsIndexRoute
   '/changes/plans/': typeof AppChangesPlansIndexRoute
   '/infrastructure/clusters/': typeof AppInfrastructureClustersIndexRoute
@@ -538,6 +552,7 @@ export interface FileRoutesByTo {
   '/backups': typeof AppBackupsRoute
   '/connect': typeof AppConnectRoute
   '/findings': typeof AppFindingsRoute
+  '/projects': typeof AppProjectsRoute
   '/credentials': typeof SessionCredentialsRoute
   '/step-up': typeof SessionStepUpRoute
   '/oauth/error': typeof OauthErrorRoute
@@ -573,6 +588,7 @@ export interface FileRoutesByTo {
   '/infrastructure/clusters/$clusterId': typeof AppInfrastructureClustersClusterIdRoute
   '/infrastructure/nodes/$nodeId': typeof AppInfrastructureNodesNodeIdRoute
   '/infrastructure/servers/$serverId': typeof AppInfrastructureServersServerIdRoute
+  '/p/$product/$project': typeof AppPProductProjectRoute
   '/changes/operations': typeof AppChangesOperationsIndexRoute
   '/changes/plans': typeof AppChangesPlansIndexRoute
   '/infrastructure/clusters': typeof AppInfrastructureClustersIndexRoute
@@ -609,6 +625,7 @@ export interface FileRoutesById {
   '/_app/backups': typeof AppBackupsRoute
   '/_app/connect': typeof AppConnectRoute
   '/_app/findings': typeof AppFindingsRoute
+  '/_app/projects': typeof AppProjectsRoute
   '/_session/credentials': typeof SessionCredentialsRoute
   '/_session/step-up': typeof SessionStepUpRoute
   '/oauth/error': typeof OauthErrorRoute
@@ -645,6 +662,7 @@ export interface FileRoutesById {
   '/_app/infrastructure/clusters/$clusterId': typeof AppInfrastructureClustersClusterIdRoute
   '/_app/infrastructure/nodes/$nodeId': typeof AppInfrastructureNodesNodeIdRoute
   '/_app/infrastructure/servers/$serverId': typeof AppInfrastructureServersServerIdRoute
+  '/_app/p/$product/$project': typeof AppPProductProjectRoute
   '/_app/changes/operations/': typeof AppChangesOperationsIndexRoute
   '/_app/changes/plans/': typeof AppChangesPlansIndexRoute
   '/_app/infrastructure/clusters/': typeof AppInfrastructureClustersIndexRoute
@@ -682,6 +700,7 @@ export interface FileRouteTypes {
     | '/backups'
     | '/connect'
     | '/findings'
+    | '/projects'
     | '/credentials'
     | '/step-up'
     | '/oauth/error'
@@ -717,6 +736,7 @@ export interface FileRouteTypes {
     | '/infrastructure/clusters/$clusterId'
     | '/infrastructure/nodes/$nodeId'
     | '/infrastructure/servers/$serverId'
+    | '/p/$product/$project'
     | '/changes/operations/'
     | '/changes/plans/'
     | '/infrastructure/clusters/'
@@ -751,6 +771,7 @@ export interface FileRouteTypes {
     | '/backups'
     | '/connect'
     | '/findings'
+    | '/projects'
     | '/credentials'
     | '/step-up'
     | '/oauth/error'
@@ -786,6 +807,7 @@ export interface FileRouteTypes {
     | '/infrastructure/clusters/$clusterId'
     | '/infrastructure/nodes/$nodeId'
     | '/infrastructure/servers/$serverId'
+    | '/p/$product/$project'
     | '/changes/operations'
     | '/changes/plans'
     | '/infrastructure/clusters'
@@ -821,6 +843,7 @@ export interface FileRouteTypes {
     | '/_app/backups'
     | '/_app/connect'
     | '/_app/findings'
+    | '/_app/projects'
     | '/_session/credentials'
     | '/_session/step-up'
     | '/oauth/error'
@@ -857,6 +880,7 @@ export interface FileRouteTypes {
     | '/_app/infrastructure/clusters/$clusterId'
     | '/_app/infrastructure/nodes/$nodeId'
     | '/_app/infrastructure/servers/$serverId'
+    | '/_app/p/$product/$project'
     | '/_app/changes/operations/'
     | '/_app/changes/plans/'
     | '/_app/infrastructure/clusters/'
@@ -988,6 +1012,13 @@ declare module '@tanstack/react-router' {
       path: '/findings'
       fullPath: '/findings'
       preLoaderRoute: typeof AppFindingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/projects': {
+      id: '/_app/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof AppProjectsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_session/credentials': {
@@ -1270,6 +1301,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppInfrastructureServersServerIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/p/$product/$project': {
+      id: '/_app/p/$product/$project'
+      path: '/p/$product/$project'
+      fullPath: '/p/$product/$project'
+      preLoaderRoute: typeof AppPProductProjectRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/t/$product/$project/$environment': {
       id: '/_app/t/$product/$project/$environment'
       path: '/t/$product/$project/$environment'
@@ -1470,6 +1508,7 @@ interface AppRouteChildren {
   AppBackupsRoute: typeof AppBackupsRoute
   AppConnectRoute: typeof AppConnectRoute
   AppFindingsRoute: typeof AppFindingsRoute
+  AppProjectsRoute: typeof AppProjectsRoute
   AppIndexRoute: typeof AppIndexRoute
   AppAccessConnectedAppsRoute: typeof AppAccessConnectedAppsRoute
   AppAccessOauthClientsRoute: typeof AppAccessOauthClientsRoute
@@ -1496,6 +1535,7 @@ interface AppRouteChildren {
   AppInfrastructureClustersClusterIdRoute: typeof AppInfrastructureClustersClusterIdRoute
   AppInfrastructureNodesNodeIdRoute: typeof AppInfrastructureNodesNodeIdRoute
   AppInfrastructureServersServerIdRoute: typeof AppInfrastructureServersServerIdRoute
+  AppPProductProjectRoute: typeof AppPProductProjectRoute
   AppChangesOperationsIndexRoute: typeof AppChangesOperationsIndexRoute
   AppChangesPlansIndexRoute: typeof AppChangesPlansIndexRoute
   AppInfrastructureClustersIndexRoute: typeof AppInfrastructureClustersIndexRoute
@@ -1512,6 +1552,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppBackupsRoute: AppBackupsRoute,
   AppConnectRoute: AppConnectRoute,
   AppFindingsRoute: AppFindingsRoute,
+  AppProjectsRoute: AppProjectsRoute,
   AppIndexRoute: AppIndexRoute,
   AppAccessConnectedAppsRoute: AppAccessConnectedAppsRoute,
   AppAccessOauthClientsRoute: AppAccessOauthClientsRoute,
@@ -1539,6 +1580,7 @@ const AppRouteChildren: AppRouteChildren = {
     AppInfrastructureClustersClusterIdRoute,
   AppInfrastructureNodesNodeIdRoute: AppInfrastructureNodesNodeIdRoute,
   AppInfrastructureServersServerIdRoute: AppInfrastructureServersServerIdRoute,
+  AppPProductProjectRoute: AppPProductProjectRoute,
   AppChangesOperationsIndexRoute: AppChangesOperationsIndexRoute,
   AppChangesPlansIndexRoute: AppChangesPlansIndexRoute,
   AppInfrastructureClustersIndexRoute: AppInfrastructureClustersIndexRoute,

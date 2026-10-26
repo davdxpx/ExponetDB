@@ -134,10 +134,24 @@ export const COVERAGE: Record<string, Coverage> = {
     tests: ['target-pages/findings.test.tsx', TARGET_PAGES],
   },
   'src/features/fleet/attention.tsx': { tests: ['fleet/attention.test.tsx'] },
+  'src/features/connect/target-connect-sheet.tsx': {
+    tests: ['connect/target-connect-sheet.test.tsx'],
+    exempt: {
+      stale:
+        'the sheet reads nothing of its own that ages apart: the target and environment reads are the cache entries of the target layout and the project page, whose tests cover their stale state',
+      partial:
+        'a target read is one object and the project environment list is read whole; the endpoint read and its partial state are the configuration panel, tested with it',
+    },
+  },
   'src/features/fleet/control-plane.tsx': { tests: ['fleet/fleet-page.test.tsx'] },
   'src/features/fleet/findings-triage.tsx': { tests: ['fleet/fleet-page.test.tsx'] },
   'src/features/fleet/fleet-page.tsx': { tests: ['fleet/fleet-page.test.tsx'] },
   'src/features/fleet/work-queue.tsx': { tests: ['fleet/fleet-page.test.tsx'] },
+  'src/features/projects/project-environments.tsx': { tests: ['projects/projects.test.tsx'] },
+  'src/features/projects/project-infrastructure.tsx': { tests: ['projects/projects.test.tsx'] },
+  'src/features/projects/project-page.tsx': { tests: ['projects/projects.test.tsx'] },
+  'src/features/projects/project-stream.tsx': { tests: ['projects/projects.test.tsx'] },
+  'src/features/projects/projects-page.tsx': { tests: ['projects/projects.test.tsx'] },
   'src/features/global-findings/findings-page.tsx': {
     tests: ['global-findings/findings-page.test.tsx'],
   },

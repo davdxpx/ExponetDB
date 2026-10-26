@@ -1,13 +1,13 @@
-import { Database, Plug } from '@exponetdb/icons'
-import { Button, cn, SidebarTrigger, Tooltip, TooltipContent, TooltipTrigger } from '@exponetdb/ui'
+import { Database } from '@exponetdb/icons'
+import { cn, SidebarTrigger, Tooltip, TooltipContent, TooltipTrigger } from '@exponetdb/ui'
 import { CommandMenuTriggerInput, useLinkComponent } from '@exponetdb/ui-patterns'
 import type { ReactNode } from 'react'
+import { TargetConnectButton } from '../features/connect/target-connect-sheet.tsx'
 import { TargetContextBar } from '../features/target/context-bar.tsx'
 import { type TargetRoute, targetOfPathname } from '../features/target/params.ts'
 import { useTarget } from '../features/target/queries.ts'
 import { t } from '../lib/i18n/i18n.ts'
 import type { ShellLevel } from './levels.ts'
-import { targetHref } from './navigation.ts'
 import { PathSeparator } from './path-separator.tsx'
 
 /**
@@ -80,26 +80,19 @@ export function AppHeader({
 }
 
 /**
- * The target's Connect, as Studio's: it opens the target's connection details
- * (Configuration, `#connect`). A target the server does not know shows none.
+ * The target's Connect, as Studio's: it opens the target's Connect sheet (`?connect=<mode>`,
+ * ADR-0034 §4). A target the server does not know shows none.
  */
 function ConnectButton({ target }: { readonly target: TargetRoute }): ReactNode {
-  const Link = useLinkComponent()
   // The same read the layout and the context bar make (one query, one request).
   const read = useTarget(target.path)
   if (read.notFound) return null
   return (
-    <Button
-      asChild
-      variant="default"
-      size="tiny"
-      className="rounded-full max-md:px-1.5"
-      icon={<Plug aria-hidden="true" className="rotate-90" strokeWidth={1.5} />}
-    >
-      <Link href={`${targetHref(target, '/configuration')}#connect`}>
-        <span className="max-md:sr-only">{t('shell.connect')}</span>
-      </Link>
-    </Button>
+    <TargetConnectButton
+      product={target.product}
+      project={target.project}
+      environment={target.environment}
+    />
   )
 }
 

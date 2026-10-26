@@ -34,49 +34,61 @@ import {
  * page makes no request for them.
  */
 export function ConnectSection({ target }: { readonly target: Target }): ReactNode {
-  const me = useMe()
-  const clusterId = target.placement?.clusterId
   return (
     <Section
       id="connect"
       title={t('configuration.connect.title')}
       description={t('configuration.connect.description')}
     >
-      {!holds(me, 'registry.manage') ? (
-        <StateMessage
-          data-state="not-permitted"
-          icon={<Lock aria-hidden className="size-5 text-foreground-light" />}
-          title={t('configuration.connect.notPermitted.title')}
-          headingLevel={3}
-        >
-          <p>{t('configuration.connect.notPermitted.body')}</p>
-        </StateMessage>
-      ) : clusterId === undefined ? (
-        <p className="m-0 text-sm text-foreground-light">
-          {t('configuration.connect.noPlacement')}
-        </p>
-      ) : (
-        <ConnectPanel target={target} clusterId={clusterId} />
-      )}
+      <ConnectDetails target={target} />
     </Section>
   )
 }
 
-interface Joined {
+/**
+ * The connection details of a target without a frame: the named state for a person without
+ * `registry.manage` (no request is made), the note for a target without a placement, else the
+ * endpoints with their lines and checks. The configuration page and the Connect sheet show it.
+ */
+export function ConnectDetails({ target }: { readonly target: Target }): ReactNode {
+  const me = useMe()
+  const clusterId = target.placement?.clusterId
+  if (!holds(me, 'registry.manage')) return <ConnectNotPermitted />
+  if (clusterId === undefined) {
+    return (
+      <p className="m-0 text-sm text-foreground-light">{t('configuration.connect.noPlacement')}</p>
+    )
+  }
+  return <ConnectPanel target={target} clusterId={clusterId} />
+}
+
+/** Endpoint addresses are for `registry.manage` only (OD-41); the server decides again. */
+export function ConnectNotPermitted(): ReactNode {
+  return (
+    <StateMessage
+      data-state="not-permitted"
+      icon={<Lock aria-hidden className="size-5 text-foreground-light" />}
+      title={t('configuration.connect.notPermitted.title')}
+      headingLevel={3}
+    >
+      <p>{t('configuration.connect.notPermitted.body')}</p>
+    </StateMessage>
+  )
+}
+
+export interface Joined {
   readonly model: ConnectModel
 }
 
-function ConnectPanel({
-  target,
-  clusterId,
-}: {
-  readonly target: Target
-  readonly clusterId: string
-}): ReactNode {
+/**
+ * The read behind the connection details: the cluster's endpoints and, for the database name,
+ * its databases, joined into one model. If only the databases failed it still holds the
+ * endpoints and says what is missing (a partial read).
+ */
+export function useConnectQuery(target: Target, clusterId: string): SectionQuery<Joined> {
   const { client } = useApi()
   const endpoints = useQuery(clusterEndpointsQuery(client, clusterId))
   const databases = useQuery(clusterDatabasesQuery(client, clusterId))
-  const health = useQuery(targetHealthQuery(client, target.path, true))
 
   // The panel needs the endpoints and, for the database name, the databases of
   // the cluster. It waits for both to settle; if only the databases failed it
@@ -107,6 +119,19 @@ function ConnectPanel({
       void databases.refetch()
     },
   }
+  return combined
+}
+
+function ConnectPanel({
+  target,
+  clusterId,
+}: {
+  readonly target: Target
+  readonly clusterId: string
+}): ReactNode {
+  const { client } = useApi()
+  const combined = useConnectQuery(target, clusterId)
+  const health = useQuery(targetHealthQuery(client, target.path, true))
   return (
     <ReadSection
       query={combined}
@@ -305,7 +330,7 @@ function Check({
 }
 
 /** A line to copy, as text with a copy button (the text carries placeholders, never a secret). */
-function Snippet({
+export function Snippet({
   label,
   copyLabel,
   text,

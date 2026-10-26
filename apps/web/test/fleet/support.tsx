@@ -156,6 +156,30 @@ export function operationFixture(over: Record<string, unknown> = {}): Record<str
   }
 }
 
+/** A target detail (`GET /targets/{path}`) for a summary, placed on `CLUSTER` unless told otherwise. */
+export function targetDetailFixture(
+  summary: TargetSummary,
+  over: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const environment = summary.path.split('/')[2] ?? 'staging'
+  return {
+    ...summary,
+    environment: { slug: environment, tier: summary.tier },
+    placement: {
+      clusterId: CLUSTER,
+      generation: 1,
+      since: iso(86_400_000),
+      serverName: 'db-host-1',
+      clusterName: 'Main cluster',
+      managementMode: 'external',
+      postgresVersion: '17.2',
+    },
+    ledger: null,
+    openFindingCount: 0,
+    ...over,
+  }
+}
+
 export function healthFixture(over: Partial<InstallationHealth> = {}): InstallationHealth {
   return {
     state: 'operational',
@@ -181,6 +205,12 @@ export class World {
   findings: FleetFinding[] = []
   findingsNextCursor: string | null = null
   controlPlane: InstallationHealth = healthFixture()
+  /** Target details by path (`GET /targets/{path}`); a path not here is 404. */
+  readonly targetDetails = new Map<string, unknown>()
+  /** Migration streams by project id (`GET /projects/{id}/migrations`). */
+  readonly streams = new Map<string, unknown>()
+  /** Endpoints and databases by cluster id, for the connect panel. */
+  readonly endpoints = new Map<string, unknown[]>()
   /** The operations that need attention (`GET /operations?state=needs_attention`). */
   operations: unknown[] = []
   operationsNextCursor: string | null = null
@@ -397,6 +427,25 @@ export function answer(world: World, sent: Sent): Response {
       items: world.databases.filter((d) => d.clusterId === decodeURIComponent(m?.[1] ?? '')),
       truncated: false,
     })
+  }
+  m = /^\/api\/v1\/projects\/([^/]+)\/migrations$/.exec(p)
+  if (m !== null && method === 'GET') {
+    const stream = world.streams.get(decodeURIComponent(m[1] ?? ''))
+    return stream === undefined ? NOT_FOUND() : json(200, stream)
+  }
+  m = /^\/api\/v1\/clusters\/([^/]+)\/endpoints$/.exec(p)
+  if (m !== null && method === 'GET') {
+    return json(200, {
+      items: world.endpoints.get(decodeURIComponent(m[1] ?? '')) ?? [],
+      truncated: false,
+    })
+  }
+  m = /^\/api\/v1\/targets\/([^/]+)\/health$/.exec(p)
+  if (m !== null && method === 'GET') return NOT_FOUND()
+  m = /^\/api\/v1\/targets\/([^/]+)$/.exec(p)
+  if (m !== null && method === 'GET') {
+    const detail = world.targetDetails.get(decodeURIComponent(m[1] ?? ''))
+    return detail === undefined ? NOT_FOUND() : json(200, detail)
   }
   m = /^\/api\/v1\/plans\/([^/]+)$/.exec(p)
   if (m !== null && method === 'GET') return NOT_FOUND()

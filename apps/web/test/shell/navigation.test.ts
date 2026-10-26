@@ -17,6 +17,7 @@ describe('the navigation model', () => {
   it('lists every global section of the information architecture, each a safe return target', () => {
     for (const path of [
       '/',
+      '/projects',
       '/targets',
       '/changes',
       '/infrastructure/servers',
@@ -80,6 +81,7 @@ describe('the navigation model', () => {
   it('gives every rail section an icon, a shortcut and a page of its own', () => {
     expect(NAV_SECTIONS.map((s) => s.id)).toEqual([
       'overview',
+      'projects',
       'targets',
       'changes',
       'infrastructure',
