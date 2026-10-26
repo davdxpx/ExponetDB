@@ -1,5 +1,6 @@
 import type { LedgerEntry, MigrationStatus } from '@exponetdb/sdk/operations'
 import { PAGE_SIZES } from '@exponetdb/ui-patterns'
+import { searchTextOf } from '../targets/model.ts'
 
 /**
  * The migration centre's URL contract and the history's filters as pure functions (unit-tested).
@@ -63,7 +64,7 @@ function oneOf<T extends string>(values: readonly T[], value: unknown): T | unde
  * validated search, so a key left out here would arrive unchecked.
  */
 export function migrationsSearch(search: Readonly<Record<string, unknown>>): MigrationsSearch {
-  const q = typeof search['q'] === 'string' ? search['q'].slice(0, HISTORY_SEARCH_MAX_LENGTH) : ''
+  const q = searchTextOf(search['q'], HISTORY_SEARCH_MAX_LENGTH)
   const page = Number(search['page'])
   const size = Number(search['size'])
   const report = search['report']
@@ -71,7 +72,7 @@ export function migrationsSearch(search: Readonly<Record<string, unknown>>): Mig
   return {
     report: typeof report === 'string' && REPORT.test(report) ? report : undefined,
     view: oneOf(MIGRATION_VIEWS, search['view']),
-    q: q.trim() === '' ? undefined : q,
+    q,
     origin: oneOf(ORIGINS, search['origin']),
     verification: oneOf(VERIFICATION_FILTERS, search['verification']),
     sort: oneOf(SORTS, search['sort']),

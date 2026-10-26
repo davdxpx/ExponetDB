@@ -144,6 +144,30 @@ describe('the Connect sheet of a target', () => {
     expect(screen.getByRole('button', { name: 'Connect' })).toHaveFocus()
   })
 
+  it('closes with Escape after the button opened it, and never goes back past the page later', async () => {
+    const user = userEvent.setup()
+    const { router } = mountApp('/t/shop/platform/staging', targetWorld())
+    const button = await screen.findByRole('button', { name: 'Connect' })
+    await user.click(button)
+    await screen.findByRole('dialog')
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(router.state.location.pathname).toBe('/t/shop/platform/staging')
+    expect(router.state.location.search).not.toHaveProperty('connect')
+    // Opened by the button, closed with Back; later opened by a link from another page:
+    // Escape then closes it in place instead of going back to that other page.
+    await user.click(screen.getByRole('button', { name: 'Connect' }))
+    await screen.findByRole('dialog')
+    router.history.back()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    router.history.push('/t/shop/platform/staging/migrations')
+    router.history.push('/t/shop/platform/staging?connect=mcp')
+    await screen.findByRole('dialog')
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(router.state.location.pathname).toBe('/t/shop/platform/staging')
+  })
+
   it('ignores a mode outside the allowlist', async () => {
     mountApp('/t/shop/platform/staging?connect=__proto__', targetWorld())
     await screen.findByRole('button', { name: 'Connect' })

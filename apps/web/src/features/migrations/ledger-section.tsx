@@ -216,6 +216,62 @@ function LedgerBody({
 }
 
 /**
+ * When `?migration=` names an entry that is not on the page shown, say where it is instead of
+ * opening nothing: on another page (a button goes there), filtered out, or not in this ledger.
+ */
+function OpenedElsewhere(props: {
+  readonly migration: string | undefined
+  readonly entries: readonly LedgerEntry[]
+  readonly rows: readonly LedgerEntry[]
+  readonly shown: readonly LedgerEntry[]
+  readonly size: number
+  readonly change: (next: Partial<MigrationsSearch>) => void
+}): ReactNode {
+  const { migration, change } = props
+  if (migration === undefined || props.shown.some((e) => e.migrationId === migration)) return null
+  const index = props.rows.findIndex((e) => e.migrationId === migration)
+  const listed = props.entries.some((e) => e.migrationId === migration)
+  return (
+    <div
+      role="status"
+      data-migration-elsewhere
+      className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed p-3 text-sm"
+    >
+      <span className="text-foreground-light">
+        {index >= 0
+          ? t('migrations.history.elsewhere.page')
+          : listed
+            ? t('migrations.history.elsewhere.filtered')
+            : t('migrations.history.elsewhere.missing')}
+      </span>
+      {index >= 0 ? (
+        <Button
+          type="button"
+          size="tiny"
+          variant="default"
+          onClick={() => change({ page: Math.floor(index / props.size) + 1 })}
+        >
+          {t('migrations.history.elsewhere.go', {
+            page: formatCount(Math.floor(index / props.size) + 1),
+          })}
+        </Button>
+      ) : listed ? (
+        <Button
+          type="button"
+          size="tiny"
+          variant="default"
+          onClick={() =>
+            change({ q: undefined, origin: undefined, verification: undefined, page: undefined })
+          }
+        >
+          {t('migrations.history.reset')}
+        </Button>
+      ) : null}
+    </div>
+  )
+}
+
+/**
  * The applied entries as a history to work through: a search over name and id, filters for
  * origin and verification and the sort, then one page of rows and the pager, every value in the
  * address. Only the page's rows are in the document, however long the ledger; the pager says
@@ -245,6 +301,14 @@ function History({
           total: formatCount(entries.length),
         })}
       </p>
+      <OpenedElsewhere
+        migration={search.migration}
+        entries={entries}
+        rows={rows}
+        shown={page.items}
+        size={size}
+        change={change}
+      />
       {rows.length === 0 ? (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed p-4">
           <p className="m-0 text-sm text-foreground-light">{t('migrations.history.noMatch')}</p>

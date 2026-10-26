@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { t } from '../../lib/i18n/i18n.ts'
 import { toReadable } from '../../lib/query/readable.ts'
+import { inlineName } from '../consent/inline-name.ts'
 import { HealthChip } from './health.tsx'
 import { controlPlaneQuery } from './keys.ts'
 
@@ -30,7 +31,11 @@ export function ControlPlane({ className }: { readonly className?: string }): Re
             (value.unobserved ?? []).length === 0
               ? undefined
               : (value.unobserved ?? []).map((u) =>
-                  t('fleet.cp.unobserved.row', { component: u.component, reason: u.reason }),
+                  // Plain text: hidden and direction characters are shown by their code points.
+                  t('fleet.cp.unobserved.row', {
+                    component: inlineName(u.component, 64) ?? '',
+                    reason: inlineName(u.reason, 120) ?? '',
+                  }),
                 ),
         })}
         what={t('fleet.cp.what')}
@@ -91,7 +96,7 @@ function ControlPlaneBody({ health }: { readonly health: InstallationHealth }): 
       )}
       {unobserved.length === 0 ? null : (
         <div data-unobserved className="flex flex-col gap-1 border-t border-strong px-4 py-3">
-          <h4 className="m-0 text-sm font-medium">{t('fleet.cp.unobserved.title')}</h4>
+          <h3 className="m-0 text-sm font-medium">{t('fleet.cp.unobserved.title')}</h3>
           <p className="m-0 text-xs text-foreground-light">{t('fleet.cp.unobserved.body')}</p>
           <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
             {unobserved.map((u) => (

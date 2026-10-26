@@ -74,6 +74,8 @@ export function UntrustedName({
           rendered.nodes
         )}
         {shown.truncated && <span aria-hidden="true">…</span>}
+        {/* Without the button, a screen reader is still told the name is not whole. */}
+        {shown.truncated && !expandable && <span className="sr-only"> (shortened)</span>}
       </span>
       {expanded && shown.truncated && (
         <span className="text-xs text-foreground-lighter">

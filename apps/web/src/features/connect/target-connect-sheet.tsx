@@ -36,7 +36,7 @@ import {
 } from '@exponetdb/ui-patterns'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter, useRouterState } from '@tanstack/react-router'
-import { type ReactNode, useId, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { type MessageKey, t } from '../../lib/i18n/i18n.ts'
 import { stringifySearch } from '../../lib/navigation/search.ts'
@@ -118,6 +118,11 @@ export function TargetConnectButton({
   const pushed = useRef(false)
   const raw = location.search[CONNECT_PARAM]
   const mode = isConnectMode(raw) ? raw : undefined
+  // Closed some other way (Back, a link, another page): a later sheet opened by a link must not
+  // go back past the page when it closes.
+  useEffect(() => {
+    if (mode === undefined) pushed.current = false
+  }, [mode])
   const chosen = location.search[CONNECT_ENVIRONMENT_PARAM]
   const sheetEnvironment = environment ?? (isSlug(chosen) ? chosen : undefined)
   const hrefWith = (next: Record<string, unknown>) =>

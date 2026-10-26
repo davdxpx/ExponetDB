@@ -21,10 +21,8 @@ export const fleetMessages = {
   'fleet.kpi.stale': 'Out of date: counted',
   'fleet.health.bar': 'Targets by health: {summary}',
   'fleet.health.bar.none': 'No target is counted yet',
-  'fleet.health.openCount': 'Show the {count} {state} targets',
   'fleet.findings.title': 'Findings',
   'fleet.findings.openCaption': 'Open across the databases you may read',
-  'fleet.findings.legend.open': 'Show the {count} {severity} findings',
   'fleet.findings.grouping':
     'Grouping findings by database or cause needs a summary read the server does not offer yet, so the newest critical findings are listed instead.',
   'fleet.work.title': 'Operations that need a person',

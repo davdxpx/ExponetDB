@@ -18,6 +18,7 @@ import { SeverityBadge } from '../target-ops/paged.tsx'
 import { targetHrefOf } from '../targets/model.ts'
 import { criticalFindingsQuery, fleetQuery } from './keys.ts'
 import { FINDINGS_PATH } from './links.ts'
+import { unavailableKind } from './model.ts'
 
 const SEVERITIES = ['critical', 'warning', 'info'] as const
 type Severity = (typeof SEVERITIES)[number]
@@ -71,7 +72,16 @@ export function FindingsTriage({ className }: { readonly className?: string }): 
 
 function SeverityMeter({ findings }: { readonly findings: Fleet['findings'] }): ReactNode {
   const Link = useLinkComponent()
-  if (!findings.available) return null
+  if (!findings.available) {
+    // Said, never left out: a severity bar that is missing must not read as no findings.
+    return (
+      <p className="m-0 text-sm text-foreground-light" data-severity-meter="unavailable">
+        {unavailableKind(findings.reason) === 'permission_denied'
+          ? t('fleet.part.unavailable.permission_denied')
+          : t('fleet.part.unavailable.unknown')}
+      </p>
+    )
+  }
   const counts = SEVERITIES.map((severity) => ({ severity, count: findings.bySeverity[severity] }))
   const at = (count: number): string =>
     findings.lowerBound
@@ -110,10 +120,6 @@ function SeverityMeter({ findings }: { readonly findings: Fleet['findings'] }): 
           <li key={entry.severity}>
             <Link
               href={`${FINDINGS_PATH}?severity=${entry.severity}`}
-              aria-label={t('fleet.findings.legend.open', {
-                count: at(entry.count),
-                severity: t(LEGEND[entry.severity]).toLowerCase(),
-              })}
               className="inline-flex items-center gap-1.5 rounded-sm text-foreground-light hover:text-foreground focus-ring"
             >
               <span

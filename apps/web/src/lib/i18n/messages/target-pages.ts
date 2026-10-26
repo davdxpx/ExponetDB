@@ -83,6 +83,11 @@ const migrationsMessages = {
   'migrations.history.sort.oldest': 'Oldest first',
   'migrations.history.noMatch': 'No entry of the ledger matches these filters.',
   'migrations.history.reset': 'Reset the filters',
+  'migrations.history.elsewhere.page': 'The migration in the address is on another page.',
+  'migrations.history.elsewhere.go': 'Go to page {page}',
+  'migrations.history.elsewhere.filtered':
+    'The migration in the address is hidden by these filters.',
+  'migrations.history.elsewhere.missing': 'The migration in the address is not in this ledger.',
   'migrations.history.pager': 'History pages',
   'migrations.history.note':
     '{shown} of {total} entries match; all come from one live read of the ledger, which the server does not page yet.',

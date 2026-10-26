@@ -81,6 +81,18 @@ function slugOf(value: unknown): string | undefined {
 }
 
 /**
+ * A free-text search value from the address: a number the router parsed is read back as text;
+ * text with a control or format character (bidirectional overrides included), longer than `max`
+ * or only blank is dropped, never shortened.
+ */
+export function searchTextOf(raw: unknown, max: number): string | undefined {
+  const text = typeof raw === 'number' ? String(raw) : raw
+  return typeof text === 'string' && text.trim() !== '' && text.length <= max && !CONTROL.test(text)
+    ? text
+    : undefined
+}
+
+/**
  * `validateSearch` of `/targets`. The router parses a numeric value such as
  * `?q=2024` as a number; it is read back as text. Text with a control or
  * format character (bidirectional overrides included), or longer than the
@@ -89,15 +101,7 @@ function slugOf(value: unknown): string | undefined {
  * let a raw value through.
  */
 export function targetsSearch(search: Readonly<Record<string, unknown>>): TargetsSearch {
-  const raw = search['q']
-  const text = typeof raw === 'number' ? String(raw) : raw
-  const q =
-    typeof text === 'string' &&
-    text.length > 0 &&
-    text.length <= SEARCH_MAX_LENGTH &&
-    !CONTROL.test(text)
-      ? text
-      : undefined
+  const q = searchTextOf(search['q'], SEARCH_MAX_LENGTH)
   const product = slugOf(search['product'])
   return {
     product,

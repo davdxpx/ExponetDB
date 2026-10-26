@@ -118,7 +118,10 @@ describe('the projects model', () => {
       view: undefined,
       page: undefined,
     })
-    expect(projectsSearch({ q: 'x'.repeat(500) }).q).toHaveLength(100)
+    // Dropped, never shortened, like the targets search; so is a direction override.
+    expect(projectsSearch({ q: 'x'.repeat(500) }).q).toBeUndefined()
+    expect(projectsSearch({ q: 'shop\u202e' }).q).toBeUndefined()
+    expect(projectsSearch({ q: 2024 }).q).toBe('2024')
   })
 
   it('joins projects with their product and the environments read, without a read per project', () => {
@@ -181,6 +184,11 @@ describe('the projects portfolio', () => {
     await waitFor(() => expect(router.state.location.search).toMatchObject({ q: 'nothing' }))
     expect(await screen.findByText('No project matches this search.')).toBeVisible()
     expect(screen.getByText('0 of 1 projects match')).toHaveAttribute('role', 'status')
+    cleanup()
+    // A product the read has no project of is shown as the filter in force, not as "All".
+    mountApp('/projects?product=billing', worldWithProject())
+    await screen.findByText('No project matches this search.')
+    expect((screen.getByLabelText('Product') as HTMLSelectElement).value).toBe('billing')
     await user.click(screen.getByRole('button', { name: 'Reset the search' }))
     expect(await screen.findByRole('list', { name: 'Projects' })).toBeVisible()
   })

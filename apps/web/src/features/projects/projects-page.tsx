@@ -226,7 +226,12 @@ function Toolbar(props: {
 }): ReactNode {
   const { search, change } = props
   const ids = useId()
-  const choices = productChoices(props.rows)
+  const listed = productChoices(props.rows)
+  // A product from the address that no project read has stays visible as the active filter.
+  const choices =
+    search.product === undefined || listed.some((choice) => choice.slug === search.product)
+      ? listed
+      : [...listed, { slug: search.product, name: null }]
   return (
     <search className="flex flex-wrap items-start gap-2">
       <div className="relative w-full sm:w-64">

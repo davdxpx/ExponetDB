@@ -126,6 +126,8 @@ describe('UntrustedName inside a link', () => {
       </a>,
     )
     expect(screen.queryByRole('button')).toBeNull()
-    expect(screen.getByRole('link').textContent).toBe(`${'a'.repeat(10)}…`)
+    // Shortened, and said to be: the ellipsis is hidden from a screen reader, the words are not.
+    expect(screen.getByRole('link').textContent).toBe(`${'a'.repeat(10)}… (shortened)`)
+    expect(screen.getByText('(shortened)')).toHaveClass('sr-only')
   })
 })

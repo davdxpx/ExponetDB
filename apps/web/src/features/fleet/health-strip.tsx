@@ -70,10 +70,6 @@ export function HealthStrip({ targets }: { readonly targets: FleetModel['targets
           <li key={entry.state} data-health-row={entry.state}>
             <Link
               href={`/targets?health=${entry.state}`}
-              aria-label={t('fleet.health.openCount', {
-                count: shown(entry.count),
-                state: t(WORD[entry.state]).toLowerCase(),
-              })}
               className={cn(
                 'inline-flex items-center gap-2 rounded-md border border-default bg-surface-100 py-1 pr-2.5 pl-1.5 text-sm',
                 'transition-colors hover:border-strong hover:bg-surface-200 focus-ring motion-reduce:transition-none',

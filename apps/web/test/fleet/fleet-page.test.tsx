@@ -126,9 +126,13 @@ describe('the fleet overview', () => {
     expect(findings).toHaveAttribute('data-part', 'unavailable')
     expect(within(findings).queryByText('0')).toBeNull()
     expect(within(kpiItem('critical')).queryByRole('link')).toBeNull()
-    // The other parts are still counted, and the severity meter is not drawn from nothing.
+    // The other parts are still counted, and the severity meter is not drawn from nothing:
+    // its place says why.
     expect(kpi('Running').textContent).toContain('2')
-    expect(document.querySelector('[data-severity-meter]')).toBeNull()
+    expect(document.querySelector('[role="img"][aria-label*="critical"]')).toBeNull()
+    expect(document.querySelector('[data-severity-meter="unavailable"]')).toHaveTextContent(
+      'You do not have permission to see this part. It is not zero.',
+    )
   })
 
   it('renders an unavailable operations part with its reason, never as zero', async () => {
@@ -183,7 +187,8 @@ describe('the fleet overview', () => {
     expect(unknown.querySelector('[data-health="unknown"]')).not.toBeNull()
     expect(unknown.querySelector('[data-health="healthy"]')).toBeNull()
     expect(
-      within(unknown).getByRole('link', { name: 'Show the 2 unknown targets' }),
+      // Named as it reads (the state, then the count), WCAG 2.5.3.
+      within(unknown).getByRole('link', { name: /^Unknown\s*2$/ }),
     ).toHaveAttribute('href', '/targets?health=unknown')
     // The bar is as wide per state as its share; unknown is its own segment.
     const bar = screen.getByRole('img', { name: /^Targets by health:/ })
@@ -238,7 +243,7 @@ describe('the open findings by severity', () => {
     mountApp('/', world)
     const meter = await screen.findByRole('img', { name: '2 critical, 3 warning, 4 info' })
     expect(meter.querySelectorAll('[data-severity-segment]')).toHaveLength(3)
-    expect(screen.getByRole('link', { name: 'Show the 3 warning findings' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /^Warning\s*3$/ })).toHaveAttribute(
       'href',
       '/findings?severity=warning',
     )

@@ -232,6 +232,17 @@ describe('the migration centre: counters, views and history', () => {
         .getByRole('list', { name: 'Ledger counters' })
         .querySelector('[data-counter="applied"]'),
     ).toHaveTextContent('500 imported from a legacy ledger')
+    cleanup()
+    // A link to a migration on another page says where it is and goes there.
+    const deep = mountOps(`${PAGE}?migration=${ulid(120)}`, w)
+    const notice = await screen.findByText('The migration in the address is on another page.')
+    await user.click(
+      within(notice.parentElement as HTMLElement).getByRole('button', { name: /^Go to page/ }),
+    )
+    await waitFor(() =>
+      expect(deep.router.state.location.search).toMatchObject({ page: expect.any(Number) }),
+    )
+    expect(document.querySelector('[data-migration-elsewhere]')).toBeNull()
   })
 
   it('filters by text, origin and verification from the address, and says when none match', async () => {

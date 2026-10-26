@@ -1,6 +1,6 @@
 import type { Product, Project, TargetSummary } from '@exponetdb/sdk/operations'
 import { splitTargetPath } from '../target/params.ts'
-import { HEALTH_RANK, type HealthFilter, healthOf } from '../targets/model.ts'
+import { HEALTH_RANK, type HealthFilter, healthOf, searchTextOf } from '../targets/model.ts'
 
 /**
  * The projects portfolio (`/projects`) and a project's home (`/p/<product>/<project>`) as pure
@@ -33,12 +33,12 @@ const SLUG = /^[a-z][a-z0-9-]{0,38}$/
  * search, so a key left out here would arrive unchecked.
  */
 export function projectsSearch(search: Readonly<Record<string, unknown>>): ProjectsSearch {
-  const q = typeof search['q'] === 'string' ? search['q'].slice(0, PROJECT_SEARCH_MAX_LENGTH) : ''
+  const q = searchTextOf(search['q'], PROJECT_SEARCH_MAX_LENGTH)
   const product = search['product']
   const view = search['view']
   const page = Number(search['page'])
   return {
-    q: q.trim() === '' ? undefined : q,
+    q,
     product: typeof product === 'string' && SLUG.test(product) ? product : undefined,
     view: view === 'table' || view === 'grid' ? view : undefined,
     page: Number.isInteger(page) && page > 1 && page < 100_000 ? page : undefined,

@@ -7,12 +7,12 @@ import {
   lastSeenOf,
   triage,
 } from '../../src/features/drift/drift-model.ts'
+import { migrationsSearch } from '../../src/features/migrations/history-model.ts'
 import {
   environmentNotes,
   isDecisionState,
   mapReadable,
   needsDecision,
-  reportSearch,
   streamMissing,
   timelineDataOf,
 } from '../../src/features/migrations/model.ts'
@@ -114,10 +114,10 @@ describe('the legacy import helpers', () => {
   })
 
   it('accepts only an import report id in the address', () => {
-    expect(reportSearch({ report: `imr_${ulid(1)}` })).toEqual({ report: `imr_${ulid(1)}` })
-    expect(reportSearch({ report: 'imr_../../x' })).toEqual({ report: undefined })
-    expect(reportSearch({ report: ['imr_1'] })).toEqual({ report: undefined })
-    expect(reportSearch({})).toEqual({ report: undefined })
+    expect(migrationsSearch({ report: `imr_${ulid(1)}` }).report).toBe(`imr_${ulid(1)}`)
+    expect(migrationsSearch({ report: 'imr_../../x' }).report).toBeUndefined()
+    expect(migrationsSearch({ report: ['imr_1'] }).report).toBeUndefined()
+    expect(migrationsSearch({}).report).toBeUndefined()
   })
 })
 

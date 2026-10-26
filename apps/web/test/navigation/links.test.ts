@@ -29,6 +29,22 @@ describe('returnTo (no open redirect): the Wave 3A cases', () => {
     expect(safeReturnTo(`/approvals#operation=${OP}`)).toBe(`/approvals#operation=${OP}`)
   })
 
+  it('accepts the projects portfolio and a project home with two slugs, nothing looser', () => {
+    expect(safeReturnTo('/projects')).toBe('/projects')
+    expect(safeReturnTo('/p/shop/platform')).toBe('/p/shop/platform')
+    for (const other of [
+      '/p/Shop/platform',
+      '/p/shop/platform/x',
+      '/p//platform',
+      '/p/shop',
+      '/projects/x',
+      '/p/shop/plat%2Fform',
+      '/p/shop/platform/',
+    ]) {
+      expect(safeReturnTo(other), other).toBe(DEFAULT_RETURN)
+    }
+  })
+
   it('accepts exactly the tabs of the account area', () => {
     for (const tab of ['preferences', 'security', 'applications', 'activity']) {
       expect(safeReturnTo(`/account/${tab}`)).toBe(`/account/${tab}`)
