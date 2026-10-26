@@ -130,6 +130,32 @@ export function findingFixture(path: string, over: Partial<FleetFinding> = {}): 
   }
 }
 
+export function operationFixture(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'op_01M4S9000000000000000000Q1',
+    kind: 'migration.apply',
+    planId: null,
+    state: 'needs_attention',
+    applyOutcome: 'unknown',
+    verificationOutcome: 'pending',
+    subject: {
+      targetId: 'tgt_01M4S9000000000000000000AC',
+      targetPath: 'shop/platform/production',
+      clusterId: null,
+      nodeId: null,
+      tier: 'prod',
+    },
+    actor: { identityId: IDENTITY, kind: 'human', via: 'web' },
+    createdAt: iso(600_000),
+    updatedAt: iso(60_000),
+    waitingFor: null,
+    approvalUrl: null,
+    errorCode: 'APPLY_INTERRUPTED',
+    steps: [],
+    ...over,
+  }
+}
+
 export function healthFixture(over: Partial<InstallationHealth> = {}): InstallationHealth {
   return {
     state: 'operational',
@@ -155,6 +181,9 @@ export class World {
   findings: FleetFinding[] = []
   findingsNextCursor: string | null = null
   controlPlane: InstallationHealth = healthFixture()
+  /** The operations that need attention (`GET /operations?state=needs_attention`). */
+  operations: unknown[] = []
+  operationsNextCursor: string | null = null
   /** Pages of the target list; the cursor of page n is `c<n+1>`. */
   targetPages: TargetSummary[][] = [[]]
   products: Product[] = [
@@ -320,6 +349,9 @@ export function answer(world: World, sent: Sent): Response {
     return json(200, { items: world.findings, nextCursor: world.findingsNextCursor })
   }
   if (method === 'GET' && p === '/api/v1/installation/health') return json(200, world.controlPlane)
+  if (method === 'GET' && p === '/api/v1/operations') {
+    return json(200, { items: world.operations, nextCursor: world.operationsNextCursor })
+  }
   if (method === 'GET' && p === '/api/v1/targets') {
     const cursor = url.searchParams.get('cursor')
     const index = cursor === null ? 0 : Number(cursor.slice(1))

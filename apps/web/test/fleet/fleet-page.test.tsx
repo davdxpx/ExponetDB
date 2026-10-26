@@ -9,46 +9,78 @@ import {
   healthFixture,
   iso,
   mountApp,
+  operationFixture,
   World,
 } from './support.tsx'
 
 afterEach(cleanup)
 
-const card = (name: string): HTMLElement => screen.getByRole('group', { name })
+/** A key-number card: a link while it is counted, named by its label first. */
+const kpiList = (): HTMLElement => screen.getByRole('list', { name: 'Key numbers' })
+const kpi = (label: string): HTMLElement =>
+  within(kpiList()).getByRole('link', { name: new RegExp(`^${label}`) })
+const findKpi = async (label: string): Promise<HTMLElement> =>
+  within(await screen.findByRole('list', { name: 'Key numbers' })).getByRole('link', {
+    name: new RegExp(`^${label}`),
+  })
+const kpiItem = (id: string): HTMLElement =>
+  document.querySelector(`[data-kpi="${id}"]`) as HTMLElement
 
 describe('the fleet overview', () => {
-  it('shows each count with its source and age, and links the lists that explain them', async () => {
+  it('shows each key number as one card that is a link to the list that explains it', async () => {
     const world = new World()
     mountApp('/', world)
-    const targets = await screen.findByRole('group', { name: 'Targets' })
-    expect(within(targets).getByText('7')).toBeInTheDocument()
-    expect(targets.textContent).toContain('3 production, 4 non-production')
-    expect(targets.textContent).toContain('2 decommissioned, counted apart')
-    expect(targets.textContent).toContain('Health read from 4 sampled, 1 cached, 2 inferred')
-    expect(targets.textContent).toContain('Source:')
-    expect(targets.textContent).toContain('sampled')
-    expect(within(targets).getByRole('link', { name: 'Databases' })).toHaveAttribute(
+    const databases = await findKpi('Databases')
+    expect(databases).toHaveAttribute('href', '/targets')
+    expect(databases.textContent).toContain('7')
+    expect(databases.textContent).toContain('3 production · 4 non-production')
+    expect(kpi('Critical findings')).toHaveAttribute('href', '/findings?severity=critical')
+    expect(kpi('Critical findings').textContent).toContain('Of 9 open findings')
+    expect(kpi('Needs attention')).toHaveAttribute(
       'href',
-      '/targets',
+      '/changes/operations?state=needs_attention',
     )
-    expect(card('Open findings').textContent).toContain('2 critical, 3 warning, 4 info')
-    expect(
-      within(card('Awaiting approval')).getByRole('link', { name: 'Open the approvals queue' }),
-    ).toHaveAttribute('href', '/approvals')
-    expect(
-      within(card('Running')).getByRole('link', { name: 'Show running operations' }),
-    ).toHaveAttribute('href', '/changes/operations?state=running')
-    expect(
-      within(card('Needs attention')).getByRole('link', {
-        name: 'Show operations that need attention',
-      }),
-    ).toHaveAttribute('href', '/changes/operations?state=needs_attention')
+    expect(kpi('Awaiting approval')).toHaveAttribute('href', '/approvals')
+    expect(kpi('Running')).toHaveAttribute('href', '/changes/operations?state=running')
+    // A card is one link with nothing interactive inside, so it is reached once and opens in a
+    // new tab like any link; there is no separate underlined word at its foot.
+    for (const id of ['targets', 'critical', 'attention', 'approval', 'running']) {
+      const item = kpiItem(id)
+      expect(within(item).getAllByRole('link')).toHaveLength(1)
+      expect(item.querySelector('a a, a button')).toBeNull()
+    }
+    // Where the counts came from is said once, not on every card.
+    expect(document.querySelector('[data-fleet-as-of]')?.textContent).toContain(
+      'Counted by the server from sampled data',
+    )
     // One request each, however many targets there are: no read per target. The worst targets
     // come from one list read (the one the Databases page shares), never from a read per row.
     expect(world.gets('/api/v1/fleet')).toHaveLength(1)
     expect(world.apiRequests.every((r) => !/\/targets\/[^?]/.test(r.path))).toBe(true)
     await screen.findByText('Targets that need attention')
     expect(world.gets('/api/v1/targets')).toHaveLength(1)
+  })
+
+  it('makes a non-zero count of work for a person loud and leaves zero quiet', async () => {
+    const world = new World()
+    world.fleet = fleetFixture({
+      operations: {
+        available: true,
+        awaiting_approval: 0,
+        running: 2,
+        needs_attention: 3,
+        lowerBound: false,
+        lowerBoundReason: null,
+        observedAt: iso(),
+        source: 'live',
+      },
+    })
+    mountApp('/', world)
+    await findKpi('Databases')
+    expect(kpi('Critical findings')).toHaveAttribute('data-tone', 'critical')
+    expect(kpi('Needs attention')).toHaveAttribute('data-tone', 'critical')
+    expect(kpi('Awaiting approval')).toHaveAttribute('data-tone', 'neutral')
+    expect(kpi('Running')).toHaveAttribute('data-tone', 'info')
   })
 
   it('says "at least N" when the server marks a count as a lower bound, with its reason', async () => {
@@ -73,31 +105,30 @@ describe('the fleet overview', () => {
       },
     })
     mountApp('/', world)
-    expect(await screen.findByText('At least 1000')).toBeInTheDocument()
+    expect((await findKpi('Databases')).textContent).toContain('At least 1,000')
     expect(screen.getByText('The list is bounded at 1000 targets.')).toBeInTheDocument()
-    expect(within(card('Running')).getByText('At least 50')).toBeInTheDocument()
+    expect(kpi('Running').textContent).toContain('At least 50')
     expect(screen.getAllByText('Only the newest 50 operations were counted.')).toHaveLength(3)
     // The health counts of a bounded fleet are floors too.
-    expect(
-      within(screen.getByRole('table', { name: 'Targets by health state' })).getAllByText(
-        /^At least/,
-      ),
-    ).not.toHaveLength(0)
+    const health = screen.getByRole('list', { name: 'Targets by health state' })
+    expect(within(health).getAllByText(/^At least/)).not.toHaveLength(0)
   })
 
-  it('renders an unavailable findings part with its reason, never as zero', async () => {
+  it('renders an unavailable findings part with its reason as a plain card, never as zero or a link', async () => {
     const world = new World()
     world.fleet = fleetFixture({ findings: { available: false, reason: 'permission_denied' } })
     mountApp('/', world)
-    const findings = await screen.findByRole('group', { name: 'Open findings' })
+    const findings = await screen.findByRole('group', { name: 'Critical findings' })
     expect(findings.textContent).toContain(
       'You do not have permission to see this part. It is not zero.',
     )
     expect(findings.textContent).toContain('permission_denied')
     expect(findings).toHaveAttribute('data-part', 'unavailable')
     expect(within(findings).queryByText('0')).toBeNull()
-    // The other parts are still counted.
-    expect(within(card('Running')).getByText('2')).toBeInTheDocument()
+    expect(within(kpiItem('critical')).queryByRole('link')).toBeNull()
+    // The other parts are still counted, and the severity meter is not drawn from nothing.
+    expect(kpi('Running').textContent).toContain('2')
+    expect(document.querySelector('[data-severity-meter]')).toBeNull()
   })
 
   it('renders an unavailable operations part with its reason, never as zero', async () => {
@@ -106,21 +137,25 @@ describe('the fleet overview', () => {
     mountApp('/', world)
     await screen.findByRole('group', { name: 'Awaiting approval' })
     for (const name of ['Awaiting approval', 'Running', 'Needs attention']) {
-      expect(card(name)).toHaveAttribute('data-part', 'unavailable')
-      expect(card(name).textContent).toContain(
-        'The server could not count this part. It is not zero.',
-      )
-      expect(within(card(name)).queryByText('0')).toBeNull()
+      const card = screen.getByRole('group', { name })
+      expect(card).toHaveAttribute('data-part', 'unavailable')
+      expect(card.textContent).toContain('The server could not count this part. It is not zero.')
+      expect(within(card).queryByText('0')).toBeNull()
+      expect(within(card).queryByRole('link')).toBeNull()
     }
   })
 
-  it('names backups at risk as a Wave 9 state, with no number', async () => {
+  it('names backup health as not observed yet in its own small slot, with no number', async () => {
     mountApp('/', new World())
-    expect(await screen.findByText('Backups at risk is not available yet')).toBeInTheDocument()
-    expect(screen.getByText(/Backup health arrives with Wave 9/)).toBeInTheDocument()
+    const slot = (await screen.findByRole('heading', { name: 'Backups' })).closest(
+      '[data-slot="fleet-backups"]',
+    ) as HTMLElement
+    expect(within(slot).getByText('Backup health is not observed yet')).toBeInTheDocument()
+    expect(slot.textContent).toMatch(/Backup health arrives with Wave 9/)
+    expect(slot.textContent).not.toMatch(/[0-9]+ (backups?|at risk)/)
   })
 
-  it('shows a part counted long ago as stale', async () => {
+  it('shows a part counted long ago as stale, on that card only', async () => {
     const world = new World()
     world.fleet = fleetFixture({
       operations: {
@@ -135,22 +170,28 @@ describe('the fleet overview', () => {
       },
     })
     mountApp('/', world)
-    await screen.findByRole('group', { name: 'Awaiting approval' })
-    expect(within(card('Awaiting approval')).getByRole('status')).toHaveTextContent(/Stale/)
-    expect(within(card('Targets')).queryByRole('status')).toBeNull()
+    await findKpi('Awaiting approval')
+    expect(kpi('Awaiting approval').querySelector('[data-stale]')).toHaveTextContent(/Out of date/)
+    expect(kpi('Databases').querySelector('[data-stale]')).toBeNull()
   })
 
   it('never shows unknown targets as healthy, and links each state to the filtered list', async () => {
     mountApp('/', new World())
-    const table = await screen.findByRole('table', { name: 'Targets by health state' })
-    const unknown = table.querySelector('[data-health-row="unknown"]') as HTMLElement
+    const states = await screen.findByRole('list', { name: 'Targets by health state' })
+    const unknown = states.querySelector('[data-health-row="unknown"]') as HTMLElement
     expect(within(unknown).getByText('Unknown')).toBeInTheDocument()
     expect(unknown.querySelector('[data-health="unknown"]')).not.toBeNull()
     expect(unknown.querySelector('[data-health="healthy"]')).toBeNull()
-    expect(within(unknown).getByRole('link', { name: 'Show unknown targets' })).toHaveAttribute(
-      'href',
-      '/targets?health=unknown',
+    expect(
+      within(unknown).getByRole('link', { name: 'Show the 2 unknown targets' }),
+    ).toHaveAttribute('href', '/targets?health=unknown')
+    // The bar is as wide per state as its share; unknown is its own segment.
+    const bar = screen.getByRole('img', { name: /^Targets by health:/ })
+    expect(bar.getAttribute('aria-label')).toBe(
+      'Targets by health: 1 unhealthy, 1 degraded, 2 unknown, 3 healthy',
     )
+    expect(bar.querySelector('[data-health-segment="unknown"]')).not.toBeNull()
+    expect(bar.querySelector('[data-health-segment="unreachable"]')).toBeNull()
     expect(screen.getByText(/Unknown means no recent sample/)).toBeInTheDocument()
   })
 
@@ -164,8 +205,8 @@ describe('the fleet overview', () => {
     mountApp('/', world)
     expect(await screen.findByText(/Could not read Fleet overview/)).toBeInTheDocument()
     expect(screen.getByText(/This does not mean there is no Fleet overview/)).toBeInTheDocument()
-    expect(screen.queryByRole('group', { name: 'Targets' })).toBeNull()
-    expect(screen.queryByRole('table', { name: 'Targets by health state' })).toBeNull()
+    expect(screen.queryByRole('list', { name: 'Key numbers' })).toBeNull()
+    expect(screen.queryByRole('list', { name: 'Targets by health state' })).toBeNull()
   })
 
   it('shows the loading state while the fleet is being read', async () => {
@@ -174,9 +215,38 @@ describe('the fleet overview', () => {
     world.delays.set('/api/v1/fleet', new Promise<void>((resolve) => (release = resolve)))
     mountApp('/', world)
     expect(await screen.findAllByText(/Loading/)).not.toHaveLength(0)
-    expect(screen.queryByRole('group', { name: 'Targets' })).toBeNull()
+    expect(screen.queryByRole('list', { name: 'Key numbers' })).toBeNull()
     release()
-    expect(await screen.findByRole('group', { name: 'Targets' })).toBeInTheDocument()
+    expect(await findKpi('Databases')).toBeInTheDocument()
+  })
+
+  it('reads every part again on Refresh', async () => {
+    const world = new World()
+    mountApp('/', world)
+    await findKpi('Databases')
+    await screen.findByText('Targets that need attention')
+    const before = world.gets('/api/v1/fleet').length
+    screen.getByRole('button', { name: 'Refresh' }).click()
+    await findKpi('Databases')
+    await expect.poll(() => world.gets('/api/v1/fleet').length).toBeGreaterThan(before)
+  })
+})
+
+describe('the open findings by severity', () => {
+  it('splits the open findings by severity from the counts, each severity a link to its list', async () => {
+    const world = new World()
+    mountApp('/', world)
+    const meter = await screen.findByRole('img', { name: '2 critical, 3 warning, 4 info' })
+    expect(meter.querySelectorAll('[data-severity-segment]')).toHaveLength(3)
+    expect(screen.getByRole('link', { name: 'Show the 3 warning findings' })).toHaveAttribute(
+      'href',
+      '/findings?severity=warning',
+    )
+    // Counting costs the fleet read only: the page never lists findings to aggregate them.
+    expect(world.gets('/api/v1/findings').every((r) => r.path.includes('limit=5'))).toBe(true)
+    expect(
+      screen.getByText(/needs a summary read the server does not offer yet/),
+    ).toBeInTheDocument()
   })
 })
 
@@ -189,6 +259,9 @@ describe('the newest critical findings', () => {
       name: 'Open the findings of shop/platform/production',
     })
     expect(link).toHaveAttribute('href', '/t/shop/platform/production/findings')
+    // The whole row is the link; a long summary is cut without a button inside it.
+    expect(link.querySelector('a, button')).toBeNull()
+    expect(link).toHaveAccessibleDescription('The schema differs from the baseline.')
     const request = world.gets('/api/v1/findings')[0]?.path ?? ''
     expect(request).toContain('severity=critical')
     expect(request).toContain('state=open')
@@ -203,12 +276,12 @@ describe('the newest critical findings', () => {
       }),
     ]
     mountApp('/', world)
-    const table = await screen.findByRole('table', { name: 'Newest open critical findings' })
-    expect(within(table).queryByRole('link')).toBeNull()
-    expect(table.textContent).toContain('⟨U+202E⟩')
-    expect(table.textContent).not.toContain(BIDI)
-    expect(table.querySelector('script')).toBeNull()
-    expect(table.textContent).toContain('<script>window.__x = 1</script>')
+    const list = await screen.findByRole('list', { name: 'Newest open critical findings' })
+    expect(within(list).queryByRole('link')).toBeNull()
+    expect(list.textContent).toContain('⟨U+202E⟩')
+    expect(list.textContent).not.toContain(BIDI)
+    expect(list.querySelector('script')).toBeNull()
+    expect(list.textContent).toContain('<script>window.__x = 1</script>')
   })
 
   it('says that no critical finding is open only after a successful read', async () => {
@@ -229,7 +302,7 @@ describe('the newest critical findings', () => {
     expect(await screen.findByText('You may not read findings.')).toBeInTheDocument()
     expect(screen.queryByText('The read succeeded and no critical finding is open.')).toBeNull()
     // The counts above are unaffected.
-    expect(await screen.findByRole('group', { name: 'Targets' })).toBeInTheDocument()
+    expect(await findKpi('Databases')).toBeInTheDocument()
   })
 
   it('names what is missing when more findings exist than the list shows', async () => {
@@ -246,9 +319,9 @@ describe('the newest critical findings', () => {
 describe('the Control Plane health', () => {
   it('lists the components with state, source and age', async () => {
     mountApp('/', new World())
-    const table = await screen.findByRole('table', { name: 'Control Plane components' })
-    expect(within(table).getByText('control-store')).toBeInTheDocument()
-    expect(within(table).getByText('live')).toBeInTheDocument()
+    const list = await screen.findByRole('list', { name: 'Control Plane components' })
+    expect(within(list).getByText('control-store')).toBeInTheDocument()
+    expect(within(list).getByText('live')).toBeInTheDocument()
     expect(screen.getByText('Overall: Operational')).toBeInTheDocument()
   })
 
@@ -280,7 +353,7 @@ describe('the Control Plane health', () => {
     })
     mountApp('/', world)
     expect(await screen.findByText('Health is unavailable.')).toBeInTheDocument()
-    expect(screen.queryByRole('table', { name: 'Control Plane components' })).toBeNull()
+    expect(screen.queryByRole('list', { name: 'Control Plane components' })).toBeNull()
   })
 })
 
@@ -290,8 +363,9 @@ describe('accessibility', () => {
     world.findings = [findingFixture('shop/platform/production')]
     world.controlPlane = healthFixture({ unobserved: [{ component: 'worker', reason: 'None.' }] })
     mountApp('/', world)
-    await screen.findByRole('table', { name: 'Control Plane components' })
-    await screen.findByRole('table', { name: 'Newest open critical findings' })
+    world.operations = [operationFixture()]
+    await screen.findByRole('list', { name: 'Control Plane components' })
+    await screen.findByRole('list', { name: 'Newest open critical findings' })
     expect(await axeViolations(document.body)).toEqual([])
   })
 
@@ -302,7 +376,54 @@ describe('accessibility', () => {
       operations: { available: false, reason: 'permission_denied' },
     })
     mountApp('/', world)
-    await screen.findByRole('group', { name: 'Open findings' })
+    await screen.findByRole('group', { name: 'Critical findings' })
     expect(await axeViolations(document.body)).toEqual([])
+  })
+})
+
+describe('the operations that need a person', () => {
+  it('lists them newest first, each row a link to its operation page', async () => {
+    const world = new World()
+    world.operations = [operationFixture()]
+    mountApp('/', world)
+    const link = await screen.findByRole('link', {
+      name: 'Open operation op_01M4S9000000000000000000Q1',
+    })
+    expect(link).toHaveAttribute('href', '/changes/operations/op_01M4S9000000000000000000Q1')
+    expect(link.textContent).toContain('migration.apply')
+    expect(link.textContent).toContain('shop/platform/production')
+    expect(link.querySelector('a, button')).toBeNull()
+    const request = world.gets('/api/v1/operations')[0]?.path ?? ''
+    expect(request).toContain('state=needs_attention')
+    expect(request).toContain('limit=5')
+  })
+
+  it('says none needs attention only after a successful read (empty)', async () => {
+    mountApp('/', new World())
+    expect(
+      await screen.findByText('The read succeeded and no operation needs attention.'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows a failed read as failed, never as no operation', async () => {
+    const world = new World()
+    world.failures.set('GET /api/v1/operations', {
+      status: 500,
+      code: 'INTERNAL',
+      message: 'Operations could not be listed.',
+    })
+    mountApp('/', world)
+    expect(await screen.findByText('Operations could not be listed.')).toBeInTheDocument()
+    expect(screen.queryByText('The read succeeded and no operation needs attention.')).toBeNull()
+  })
+
+  it('names what is missing when more operations need attention than the list shows', async () => {
+    const world = new World()
+    world.operations = [operationFixture()]
+    world.operationsNextCursor = 'next'
+    mountApp('/', world)
+    expect(
+      await screen.findByText(/More operations need attention than this list shows/),
+    ).toBeInTheDocument()
   })
 })

@@ -18,6 +18,12 @@ export interface UntrustedNameProps extends Omit<HTMLAttributes<HTMLSpanElement>
   maxCodePoints?: number
   /** Names the value for the "Show all" button of a screen reader ("client name"). */
   label?: string
+  /**
+   * Default true. False inside a link or another control (a whole-card link): a long value is cut
+   * with an ellipsis and offers no "Show all" button, because a button inside a link is invalid and
+   * unreachable; the full value is on the page the link opens.
+   */
+  expandable?: boolean
 }
 
 /**
@@ -34,6 +40,7 @@ export function UntrustedName({
   mono = false,
   maxCodePoints = DEFAULT_MAX_NAME_CODE_POINTS,
   label,
+  expandable = true,
   className,
   ...rest
 }: UntrustedNameProps): ReactNode {
@@ -73,7 +80,7 @@ export function UntrustedName({
           {`Showing the first ${formatCount(EXPANDED_CODE_POINT_LIMIT)} of ${count} characters.`}
         </span>
       )}
-      {collapsed.truncated && (
+      {collapsed.truncated && expandable && (
         <Button
           type="button"
           variant="link"

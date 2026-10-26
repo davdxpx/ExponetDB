@@ -10,6 +10,7 @@ export const fleetKeys = {
   fleet: ['fleet', 'counts'] as const,
   critical: ['fleet', 'critical-findings'] as const,
   controlPlane: ['fleet', 'control-plane'] as const,
+  work: ['fleet', 'needs-attention'] as const,
 }
 
 /** How often the overview asks again. */

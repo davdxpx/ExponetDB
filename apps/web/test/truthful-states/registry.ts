@@ -134,7 +134,10 @@ export const COVERAGE: Record<string, Coverage> = {
     tests: ['target-pages/findings.test.tsx', TARGET_PAGES],
   },
   'src/features/fleet/attention.tsx': { tests: ['fleet/attention.test.tsx'] },
+  'src/features/fleet/control-plane.tsx': { tests: ['fleet/fleet-page.test.tsx'] },
+  'src/features/fleet/findings-triage.tsx': { tests: ['fleet/fleet-page.test.tsx'] },
   'src/features/fleet/fleet-page.tsx': { tests: ['fleet/fleet-page.test.tsx'] },
+  'src/features/fleet/work-queue.tsx': { tests: ['fleet/fleet-page.test.tsx'] },
   'src/features/global-findings/findings-page.tsx': {
     tests: ['global-findings/findings-page.test.tsx'],
   },

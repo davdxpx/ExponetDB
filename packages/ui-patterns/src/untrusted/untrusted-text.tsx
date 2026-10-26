@@ -20,6 +20,12 @@ export interface UntrustedTextProps extends Omit<HTMLAttributes<HTMLDivElement>,
   maxLines?: number
   /** Names the content for the "Show all" button of a screen reader ("SQL text", "comment"). */
   label?: string
+  /**
+   * Default true. False inside a link or another control (a whole-card link): a long text is cut
+   * with an ellipsis and offers no "Show all" button, because a button inside a link is invalid and
+   * unreachable; the full text is on the page the link opens.
+   */
+  expandable?: boolean
 }
 
 /**
@@ -41,6 +47,7 @@ export function UntrustedText({
   maxCodePoints = DEFAULT_MAX_CODE_POINTS,
   maxLines = DEFAULT_MAX_LINES,
   label,
+  expandable = true,
   className,
   ...rest
 }: UntrustedTextProps): ReactNode {
@@ -111,7 +118,7 @@ export function UntrustedText({
           {`Showing the first ${formatCount(EXPANDED_CODE_POINT_LIMIT)} of ${count} characters.`}
         </p>
       )}
-      {collapsed.truncated && (
+      {collapsed.truncated && expandable && (
         <Button
           type="button"
           variant="link"

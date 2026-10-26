@@ -30,8 +30,8 @@ async function section(): Promise<HTMLElement> {
 }
 
 async function rowsOf(root: HTMLElement): Promise<string[]> {
-  const table = await within(root).findByRole('table', { name: 'Targets with the worst health' })
-  return within(table)
+  const list = await within(root).findByRole('list', { name: 'Targets with the worst health' })
+  return within(list)
     .getAllByRole('link')
     .map((link) => link.getAttribute('aria-label') ?? '')
 }
@@ -134,9 +134,11 @@ describe('the overview section "Targets that need attention"', () => {
     expect(production.querySelector('[data-health="unreachable"]')).not.toBeNull()
     expect(production.textContent).toContain('sampled')
     expect(production.textContent).toMatch(/sampled, [0-9]+ min ago/)
-    expect(
-      within(root).getByRole('link', { name: 'Open shop/platform/production' }),
-    ).toHaveAttribute('href', '/t/shop/platform/production')
+    const link = within(root).getByRole('link', { name: 'Open shop/platform/production' })
+    expect(link).toHaveAttribute('href', '/t/shop/platform/production')
+    // The whole row is the link, with nothing interactive inside it.
+    expect(link.querySelector('a, button')).toBeNull()
+    expect(link).toHaveAttribute('data-tone', 'production')
     const none = root.querySelector('[data-health="none"]')
     expect(none?.textContent).toContain('No health sample')
     expect(within(root).queryByRole('link', { name: 'Open shop/billing/staging' })).toBeNull()
@@ -228,7 +230,7 @@ describe('the overview section "Targets that need attention"', () => {
       ),
     ).toBeVisible()
     expect(within(root).queryByText(/every target you may see is healthy/)).toBeNull()
-    expect(within(root).queryByRole('table')).toBeNull()
+    expect(within(root).queryByRole('list', { name: 'Targets with the worst health' })).toBeNull()
   })
 
   it('says no target needs attention only after a successful read of a complete list', async () => {
@@ -245,7 +247,7 @@ describe('the overview section "Targets that need attention"', () => {
         /no target needs attention: every target you may see is healthy or suspended/,
       ),
     ).toBeVisible()
-    expect(within(root).queryByRole('table')).toBeNull()
+    expect(within(root).queryByRole('list', { name: 'Targets with the worst health' })).toBeNull()
     expect(within(root).queryByRole('link', { name: /^Show all/ })).toBeNull()
   })
 
@@ -261,9 +263,9 @@ describe('the overview section "Targets that need attention"', () => {
     expect(await within(root).findByText('The registry did not answer.')).toBeVisible()
     expect(within(root).getByText(/Could not read Target list/)).toBeVisible()
     expect(within(root).queryByText(/no target needs attention/)).toBeNull()
-    expect(within(root).queryByRole('table')).toBeNull()
+    expect(within(root).queryByRole('list', { name: 'Targets with the worst health' })).toBeNull()
     // The rest of the overview is read on its own.
-    expect(await screen.findByRole('group', { name: 'Targets' })).toBeVisible()
+    expect(await screen.findByRole('list', { name: 'Key numbers' })).toBeVisible()
   })
 
   it('shows an earlier read of the list as stale, with its age and a refresh, keeping the rows', async () => {
@@ -292,11 +294,11 @@ describe('the overview section "Targets that need attention"', () => {
     )
     mountApp('/', world)
     const root = await section()
-    const table = await within(root).findByRole('table', { name: 'Targets with the worst health' })
-    expect(within(table).getAllByRole('link')).toHaveLength(1)
-    expect(table.textContent).toContain('⟨U+202E⟩')
-    expect(table.textContent).not.toContain(BIDI)
-    expect(table.querySelector('script')).toBeNull()
+    const list = await within(root).findByRole('list', { name: 'Targets with the worst health' })
+    expect(within(list).getAllByRole('link')).toHaveLength(1)
+    expect(list.textContent).toContain('⟨U+202E⟩')
+    expect(list.textContent).not.toContain(BIDI)
+    expect(list.querySelector('script')).toBeNull()
   })
 
   it('has no accessibility violations', async () => {
