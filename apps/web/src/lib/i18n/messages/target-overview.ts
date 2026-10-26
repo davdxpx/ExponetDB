@@ -4,6 +4,20 @@
  * environments, recent operations and open findings.
  */
 export const targetOverviewMessages = {
+  'overview.hero.eyebrow': 'Database',
+  'overview.hero.version': 'PostgreSQL',
+  'overview.hero.migrations': 'Migrations',
+  'overview.hero.applied': '{count} applied',
+  'overview.hero.last': 'Last',
+  'overview.hero.findings': 'Findings',
+  'overview.hero.open': '{count} open',
+  'overview.hero.backups': 'Backups',
+  'overview.hero.backups.state': 'Not observed yet',
+  'overview.hero.topology': 'Where it runs',
+  'overview.hero.noServer': 'No server recorded',
+  'overview.hero.database': 'Database',
+  'overview.hero.thisDatabase': 'This target',
+  'overview.hero.since': 'Placed since',
   // Health, in incident order.
   'overview.health.title': 'Health',
   'overview.health.what': 'Target health',

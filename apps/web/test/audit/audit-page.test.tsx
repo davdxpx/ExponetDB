@@ -252,6 +252,25 @@ describe('the audit search', () => {
     expect(screen.queryByText('No audit events yet')).toBeNull()
   })
 
+  it('never calls a first page without items but with a cursor an empty log, and offers the older events', async () => {
+    const user = userEvent.setup()
+    const world = auditWorld()
+    world.on('GET', '/api/v1/audit-events', (request) =>
+      request.search.get('cursor') === 'older'
+        ? { json: { items: [event({ id: 'aud_01JZ0000000000000000000003' })], nextCursor: null } }
+        : { json: { items: [], nextCursor: 'older' } },
+    )
+    mountApp('/audit', world)
+    expect(await screen.findByText(/None of the newest events read so far matches/)).toBeVisible()
+    expect(screen.queryByText('No audit events yet')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Show older events' }))
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-event="aud_01JZ0000000000000000000003"]'),
+      ).not.toBeNull(),
+    )
+  })
+
   it('reads older events through the server cursor', async () => {
     const user = userEvent.setup()
     const world = auditWorld()

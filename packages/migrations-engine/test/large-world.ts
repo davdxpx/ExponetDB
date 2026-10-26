@@ -13,6 +13,7 @@ import { MIGRATION_RULES, REGISTRY_RULES, RuleRegistry } from '@exponetdb/policy
 import { ROLE_NAMES } from '@exponetdb/postgres'
 import {
   findTarget,
+  noBackupEngine,
   planEnvironmentCreate,
   planProductCreate,
   planProjectCreate,
@@ -193,6 +194,7 @@ export async function largeWorld(): Promise<LargeWorld> {
       installationId: h.db.installationId,
       controlStoreSystemIdentifier: async () => h.controlStoreSystemIdentifier,
       snapshots: h.snapshots,
+      backupBindings: noBackupEngine,
     }),
     ...migrationKinds({
       store: h.worker,

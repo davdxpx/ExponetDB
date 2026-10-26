@@ -116,3 +116,18 @@ describe('UntrustedName', () => {
     expect(await axeViolations(container)).toEqual([])
   })
 })
+
+describe('UntrustedName inside a link', () => {
+  it('cuts a long name with an ellipsis and offers no button when it is not expandable', () => {
+    const long = 'a'.repeat(200)
+    render(
+      <a href="/t/acme/platform/staging">
+        <UntrustedName name={long} expandable={false} maxCodePoints={10} />
+      </a>,
+    )
+    expect(screen.queryByRole('button')).toBeNull()
+    // Shortened, and said to be: the ellipsis is hidden from a screen reader, the words are not.
+    expect(screen.getByRole('link').textContent).toBe(`${'a'.repeat(10)}… (shortened)`)
+    expect(screen.getByText('(shortened)')).toHaveClass('sr-only')
+  })
+})

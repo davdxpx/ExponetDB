@@ -1,0 +1,36 @@
+schema: exponetdb.migration/v1
+id: 01M5WT5NV9ZC8TYB9BMP3D0EZZ
+name: registry-retirement
+description: |
+  Servers and clusters leave the registry by operation, bottom-up and never
+  by cascade (the owner's UI/UX order of 2026-10-26, §8A; registry.md §4.4).
+  registry.servers gains a state (active, retired) with the time and the
+  operation that retired it; registry.clusters gains the time and operation
+  of its retirement (its state already allows retired), and its rule
+  "pending exactly when no system identifier" now holds for clusters that
+  are not retired, so a never-confirmed registration can be retired. The frozen
+  server_guard is replaced: a server record still never changes except the
+  one move active → retired by an operation, and only while no cluster on it
+  is unretired, no node on it is live or revoked, no enrollment token for it
+  can still be redeemed (or ran out less than five minutes ago, a margin
+  over the frozen `nodes.enroll`'s own clock read) and no node job on it is
+  open. A new guard holds a
+  cluster's retirement to the same rule for its children: no registered
+  database, no active endpoint, no active or pending credential. Inserts of
+  a cluster's children and of clusters lock their parent row FOR SHARE and
+  require it live, and a server's guard takes the row's update lock (which
+  waits for a concurrent insert's foreign-key lock), so a retirement and a
+  new child serialize on the parent row and the side that runs second sees
+  the other's commit; an enrollment token checks its server in node.enroll
+  (the nodes schema's triggers stay as its frozen bundle pins them). Nothing
+  is deleted; retired rows and their history stay. Additive: frozen bundles
+  are unchanged.
+dependsOn:
+  - 01M5PZFYDPT065MDFHG5G3WSG1
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

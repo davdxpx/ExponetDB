@@ -1,4 +1,4 @@
-import { Card, CardContent } from '@exponetdb/ui'
+import { Button, Card, CardContent } from '@exponetdb/ui'
 import {
   PageContainer,
   PageHeader,
@@ -72,12 +72,14 @@ export function ChangesPage(): ReactNode {
                 <CardContent className="flex h-full flex-col gap-2 p-card">
                   <h2 className="text-base font-medium">{t(entry.title)}</h2>
                   <p className="text-sm text-foreground-light">{t(entry.body)}</p>
-                  <ul className="mt-auto flex flex-col gap-1 text-sm">
-                    {entry.links.map((link) => (
+                  {/* Each destination is a real button-sized link, the first one primary: a card
+                      with several actions is not one link, and no action is a tiny word. */}
+                  <ul className="mt-auto flex flex-wrap gap-2 pt-2">
+                    {entry.links.map((link, index) => (
                       <li key={link.href}>
-                        <Link href={link.href} className="text-primary underline focus-ring">
-                          {t(link.label)}
-                        </Link>
+                        <Button asChild size="tiny" variant={index === 0 ? 'primary' : 'default'}>
+                          <Link href={link.href}>{t(link.label)}</Link>
+                        </Button>
                       </li>
                     ))}
                   </ul>

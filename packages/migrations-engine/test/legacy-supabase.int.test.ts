@@ -12,6 +12,7 @@ import { MIGRATION_RULES, REGISTRY_RULES, RuleRegistry } from '@exponetdb/policy
 import { ROLE_NAMES, readLedgerRows } from '@exponetdb/postgres'
 import {
   findTarget,
+  noBackupEngine,
   planEnvironmentCreate,
   planExecutionRoleExceptionDeclare,
   planExecutionRoleExceptionRevoke,
@@ -173,6 +174,7 @@ beforeAll(async () => {
       installationId: h.db.installationId,
       controlStoreSystemIdentifier: async () => h.controlStoreSystemIdentifier,
       snapshots: h.snapshots,
+      backupBindings: noBackupEngine,
     }),
     ...migrationKinds({
       store: h.worker,

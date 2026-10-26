@@ -10,6 +10,13 @@ vi.mock('../../src/shell/app-shell.tsx', async () => ({
 
 afterEach(cleanup)
 
+/** The menu's environment items: every item but the link to the project's home above them. */
+function envItems(menu: HTMLElement): HTMLElement[] {
+  return within(menu)
+    .queryAllByRole('menuitem')
+    .filter((item) => item.textContent !== 'Project overview')
+}
+
 const bar = () => screen.findByRole('navigation', { name: 'Target' })
 
 /** The environment button of the context bar (its name starts with the word "Environment"). */
@@ -89,8 +96,8 @@ describe('the context bar', () => {
     world.add('shop/other/elsewhere', { tier: 'prod' })
     mountApp('/t/shop/platform/staging', world)
     const menu = await openSwitcher(user)
-    await waitFor(() => expect(within(menu).getAllByRole('menuitem')).toHaveLength(3))
-    const items = within(menu).getAllByRole('menuitem')
+    await waitFor(() => expect(envItems(menu)).toHaveLength(3))
+    const items = envItems(menu)
     const byName = (slug: string) => items.find((item) => item.textContent?.startsWith(slug))
     expect(byName('prod')).toHaveTextContent('Non-production')
     expect(byName('prod')).not.toHaveTextContent(/^prodProduction/)
@@ -153,6 +160,20 @@ function menuIsClosed(): boolean {
   return screen.queryByRole('menu') === null
 }
 
+describe('the project home in the environment menu', () => {
+  it('links the project overview above the environments', async () => {
+    const user = userEvent.setup()
+    const world = new World()
+    world.add('shop/platform/staging')
+    mountApp('/t/shop/platform/staging', world)
+    const menu = await openSwitcher(user)
+    expect(within(menu).getByRole('menuitem', { name: 'Project overview' })).toHaveAttribute(
+      'href',
+      '/p/shop/platform',
+    )
+  })
+})
+
 describe('the environment list is a truthful read', () => {
   it('shows a failed read as a failure with a retry, never as an empty menu', async () => {
     const user = userEvent.setup()
@@ -175,15 +196,11 @@ describe('the environment list is a truthful read', () => {
     expect(menu).toHaveTextContent(
       'Could not read the environments of this project: The control store did not answer. (INTERNAL_ERROR) This does not mean there are no other environments.',
     )
-    expect(
-      within(menu)
-        .queryAllByRole('menuitem')
-        .map((i) => i.textContent),
-    ).toEqual(['Try again'])
+    expect(envItems(menu).map((i) => i.textContent)).toEqual(['Try again'])
 
     world.failures.clear()
     await user.click(within(menu).getByRole('menuitem', { name: 'Try again' }))
-    await waitFor(() => expect(within(menu).getAllByRole('menuitem')).toHaveLength(3))
+    await waitFor(() => expect(envItems(menu)).toHaveLength(3))
     expect(menu).not.toHaveTextContent('Could not read')
   })
 
@@ -201,11 +218,11 @@ describe('the environment list is a truthful read', () => {
     mountApp('/t/shop/platform/staging', world)
     const menu = await openSwitcher(user)
     expect(menu).toHaveTextContent('Loading environments')
-    expect(within(menu).queryAllByRole('menuitem')).toHaveLength(0)
+    expect(envItems(menu)).toHaveLength(0)
     // The tier of this environment comes from its own read in the meantime.
     expect(await switcher()).toHaveTextContent('staging')
     release()
-    await waitFor(() => expect(within(menu).getAllByRole('menuitem')).toHaveLength(3))
+    await waitFor(() => expect(envItems(menu)).toHaveLength(3))
     expect(menu).not.toHaveTextContent('Loading environments')
   })
 
@@ -216,7 +233,7 @@ describe('the environment list is a truthful read', () => {
     world.nextCursor = 'cur_next'
     mountApp('/t/shop/platform/staging', world)
     const menu = await openSwitcher(user)
-    await waitFor(() => expect(within(menu).getAllByRole('menuitem')).toHaveLength(3))
+    await waitFor(() => expect(envItems(menu)).toHaveLength(3))
     expect(menu).toHaveTextContent(
       'Showing part of the environments. More environments exist than one read returns.',
     )
@@ -241,7 +258,7 @@ describe('the environment list is a truthful read', () => {
     const menu = await openSwitcher(user)
     await waitFor(() => expect(menu).toHaveTextContent('Showing part of the environments'))
     expect(menu).toHaveTextContent('Some environments have a path the page cannot show.')
-    expect(within(menu).getAllByRole('menuitem')).toHaveLength(1)
+    expect(envItems(menu)).toHaveLength(1)
     expect(menu.innerHTML).not.toContain('<b>')
   })
 
@@ -471,7 +488,7 @@ describe('accessibility of the context bar', () => {
     await waitFor(() => expect(within(nav).getByText('Production')).toBeInTheDocument())
     expect(await axeViolations(nav)).toEqual([])
     const menu = await openSwitcher(user)
-    await waitFor(() => expect(within(menu).getAllByRole('menuitem')).toHaveLength(3))
+    await waitFor(() => expect(envItems(menu)).toHaveLength(3))
     expect(await axeViolations(menu)).toEqual([])
   })
 

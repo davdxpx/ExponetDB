@@ -33,6 +33,7 @@ import {
 } from '@exponetdb/testkit'
 import {
   Connector,
+  noBackupEngine,
   planClusterConfirm,
   planClusterRegister,
   planDatabaseRegister,
@@ -162,6 +163,7 @@ export async function harness(
       installationId: db.installationId,
       controlStoreSystemIdentifier: controlStoreIdentifier,
       snapshots,
+      backupBindings: noBackupEngine,
     }),
   )
   return {

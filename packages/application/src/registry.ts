@@ -13,6 +13,7 @@ import type {
   ClusterConfirmRequest,
   ClusterDeclaredTierRequest,
   ClusterRegisterRequest,
+  ClusterRetireRequest,
   CredentialView,
   DatabaseRegisterRequest,
   DatabaseView,
@@ -39,6 +40,7 @@ import type {
   ProjectChangeRequest,
   ProjectCreateRequest,
   ProjectExecutionRoles,
+  RetirementPreflight,
   SchemaDiff,
   SchemaFingerprintResult,
   SchemaObject,
@@ -47,6 +49,7 @@ import type {
   SchemaOverview,
   Server,
   ServerCreateRequest,
+  ServerRetireRequest,
   SessionList,
   Target,
   TargetHealthHistory,
@@ -98,11 +101,13 @@ import {
 import type { IdentityId } from '@exponetdb/kernel'
 import type { PlanRecord } from '@exponetdb/operations'
 import {
+  type BackupBindingsPort,
   type BootstrapRequest,
   brand,
   type ClusterRecord,
   CREDENTIAL_LIST_LIMIT,
   clusterBootstrapSql,
+  clusterRetirement,
   clusterView,
   credentialView,
   DATABASE_LIST_LIMIT,
@@ -133,6 +138,7 @@ import {
   planClusterConfirm,
   planClusterDeclareTier,
   planClusterRegister,
+  planClusterRetire,
   planDatabaseRegister,
   planDatabaseRetire,
   planEndpointAdd,
@@ -146,6 +152,7 @@ import {
   planProjectCreate,
   planProjectUpdate,
   planServerCreate,
+  planServerRetire,
   planTargetRegister,
   planTargetStateChange,
   productView,
@@ -154,6 +161,9 @@ import {
   type RegistryActor,
   RegistryError,
   type RegistryPlanContext,
+  type Retirement,
+  retirementClear,
+  serverRetirement,
   serverView,
   submitCredential,
   type TargetFilter,
@@ -178,6 +188,11 @@ export interface RegistryServices {
   readonly plans: RegistryPlanContext
   /** Schema, health, drift and session reads as `serve` (its Control Store login and observer connector). */
   readonly observation: SnapshotDeps
+  /**
+   * The backup engine's bindings of a server or cluster (registry.md §4.4): the one instance the
+   * retirement preflight, the planners and the registry kinds share (`noBackupEngine` before Wave 9).
+   */
+  readonly backups: BackupBindingsPort
 }
 
 /** What the use cases need from the application around them. */
@@ -926,6 +941,89 @@ export class RegistryUseCases {
       idem,
       { kind: 'cluster', clusterId },
       (tx, c, a) => planEndpointAdd(tx, c, a, clusterId, body),
+    )
+  }
+
+  /** What a retirement of the server would meet now (registry.md §4.4), read live; `registry.manage`. */
+  async serverRetirement(caller: CallerLike, serverId: string): Promise<RetirementPreflight> {
+    await this.#h.authorize(this.#h.store, 'registry.server.retirement.get', caller, {
+      kind: 'server',
+      serverId,
+    })
+    const retirement = await serverRetirement(this.#h.store, serverId, {
+      backups: this.#services().backups,
+    })
+    if (retirement === undefined) throw new RegistryError('NOT_FOUND')
+    return this.#preflight('server', serverId, retirement)
+  }
+
+  /** What a retirement of the cluster would meet now (registry.md §4.4), read live; `registry.manage`. */
+  async clusterRetirement(caller: CallerLike, clusterId: string): Promise<RetirementPreflight> {
+    await this.#cluster('registry.cluster.retirement.get', caller, clusterId)
+    const retirement = await clusterRetirement(this.#h.store, clusterId, {
+      backups: this.#services().backups,
+    })
+    if (retirement === undefined) throw new RegistryError('NOT_FOUND')
+    return this.#preflight('cluster', clusterId, retirement)
+  }
+
+  #preflight(kind: 'server' | 'cluster', id: string, retirement: Retirement): RetirementPreflight {
+    const groups = (list: Retirement['blockers']) =>
+      list.map((group) => ({
+        kind: group.kind,
+        total: group.total,
+        items: group.items.map((item) => ({
+          kind: item.kind,
+          id: item.id,
+          state: item.state,
+          label: item.label,
+          targetId: item.targetId === null ? null : brand('tgt', item.targetId),
+        })),
+      }))
+    return {
+      subject: { kind, id, state: retirement.subjectState },
+      verdict:
+        retirement.subjectState === 'retired'
+          ? 'retired'
+          : retirementClear(retirement)
+            ? 'can_plan'
+            : 'blocked',
+      blockers: groups(retirement.blockers),
+      retiredWith: groups(retirement.retiredWith),
+      kept: { retiredChildren: retirement.retiredChildren },
+      providers: [{ provider: 'backups', state: retirement.backups }],
+      source: 'live',
+      observedAt: new Date(this.#h.clock.nowMs()).toISOString(),
+    } as RetirementPreflight
+  }
+
+  planServerRetirement(
+    caller: CallerLike,
+    serverId: string,
+    body: ServerRetireRequest,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.server.retire.plan',
+      idem,
+      { kind: 'server', serverId },
+      (tx, c, a) => planServerRetire(tx, c, a, serverId, body.reason, this.#services().backups),
+    )
+  }
+
+  planClusterRetirement(
+    caller: CallerLike,
+    clusterId: string,
+    body: ClusterRetireRequest,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.cluster.retire.plan',
+      idem,
+      { kind: 'cluster', clusterId },
+      (tx, c, a) => planClusterRetire(tx, c, a, clusterId, body.reason, this.#services().backups),
     )
   }
 

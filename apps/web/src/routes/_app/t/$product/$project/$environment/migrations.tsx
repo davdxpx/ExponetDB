@@ -1,14 +1,23 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { migrationsSearch } from '../../../../../../features/migrations/history-model.ts'
 import { MigrationsPage } from '../../../../../../features/migrations/migrations-page.tsx'
-import { reportSearch } from '../../../../../../features/migrations/model.ts'
 
-/** `/t/<product>/<project>/<environment>/migrations[?report=imr_…]`: the ledger, timeline, plans, drift and legacy import. */
+/**
+ * `/t/<product>/<project>/<environment>/migrations[?view=…&q=…&origin=…&verification=…&sort=…&page=…&size=…&migration=…&report=imr_…]`:
+ * the migration centre; every value is validated, anything else is dropped.
+ */
 export const Route = createFileRoute('/_app/t/$product/$project/$environment/migrations')({
-  validateSearch: reportSearch,
+  validateSearch: migrationsSearch,
   component: MigrationsRoute,
 })
 
 function MigrationsRoute() {
-  const { report } = Route.useSearch()
-  return <MigrationsPage report={report} />
+  const search = Route.useSearch()
+  const navigate = Route.useNavigate()
+  return (
+    <MigrationsPage
+      search={search}
+      onSearch={(next) => void navigate({ search: next, replace: true })}
+    />
+  )
 }

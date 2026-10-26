@@ -258,7 +258,8 @@ export async function getProjectByPath(
 
 // ----- servers and clusters -----
 
-const SERVER_COLUMNS = `s.server_id, s.display_name, s.provider, s.location, st.derived_tier`
+const SERVER_COLUMNS = `s.server_id, s.display_name, s.provider, s.location, st.derived_tier, s.state,
+  ${ts('s.retired_at')}`
 const SERVER_FROM = `registry.servers s JOIN registry.server_tiers st ON st.server_id = s.server_id`
 
 export async function listServers(q: Queryable, request: PageRequest): Promise<Page<ServerRecord>> {
@@ -283,7 +284,8 @@ export async function getServer(q: Queryable, serverId: string): Promise<ServerR
 }
 
 const CLUSTER_COLUMNS = `c.cluster_id, c.server_id, c.management_mode, c.display_name, c.state, c.system_identifier,
-  c.server_version_num, c.ca_bundle, ${ts('c.confirmed_at')}, ct.derived_tier, c.declared_tier`
+  c.server_version_num, c.ca_bundle, ${ts('c.confirmed_at')}, ct.derived_tier, c.declared_tier,
+  ${ts('c.retired_at')}`
 const CLUSTER_FROM = `registry.clusters c JOIN registry.cluster_tiers ct ON ct.cluster_id = c.cluster_id`
 
 export async function listClusters(

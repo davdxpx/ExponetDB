@@ -130,6 +130,56 @@ export function findingFixture(path: string, over: Partial<FleetFinding> = {}): 
   }
 }
 
+export function operationFixture(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'op_01M4S9000000000000000000Q1',
+    kind: 'migration.apply',
+    planId: null,
+    state: 'needs_attention',
+    applyOutcome: 'unknown',
+    verificationOutcome: 'pending',
+    subject: {
+      targetId: 'tgt_01M4S9000000000000000000AC',
+      targetPath: 'shop/platform/production',
+      clusterId: null,
+      nodeId: null,
+      tier: 'prod',
+    },
+    actor: { identityId: IDENTITY, kind: 'human', via: 'web' },
+    createdAt: iso(600_000),
+    updatedAt: iso(60_000),
+    waitingFor: null,
+    approvalUrl: null,
+    errorCode: 'APPLY_INTERRUPTED',
+    steps: [],
+    ...over,
+  }
+}
+
+/** A target detail (`GET /targets/{path}`) for a summary, placed on `CLUSTER` unless told otherwise. */
+export function targetDetailFixture(
+  summary: TargetSummary,
+  over: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const environment = summary.path.split('/')[2] ?? 'staging'
+  return {
+    ...summary,
+    environment: { slug: environment, tier: summary.tier },
+    placement: {
+      clusterId: CLUSTER,
+      generation: 1,
+      since: iso(86_400_000),
+      serverName: 'db-host-1',
+      clusterName: 'Main cluster',
+      managementMode: 'external',
+      postgresVersion: '17.2',
+    },
+    ledger: null,
+    openFindingCount: 0,
+    ...over,
+  }
+}
+
 export function healthFixture(over: Partial<InstallationHealth> = {}): InstallationHealth {
   return {
     state: 'operational',
@@ -155,6 +205,15 @@ export class World {
   findings: FleetFinding[] = []
   findingsNextCursor: string | null = null
   controlPlane: InstallationHealth = healthFixture()
+  /** Target details by path (`GET /targets/{path}`); a path not here is 404. */
+  readonly targetDetails = new Map<string, unknown>()
+  /** Migration streams by project id (`GET /projects/{id}/migrations`). */
+  readonly streams = new Map<string, unknown>()
+  /** Endpoints and databases by cluster id, for the connect panel. */
+  readonly endpoints = new Map<string, unknown[]>()
+  /** The operations that need attention (`GET /operations?state=needs_attention`). */
+  operations: unknown[] = []
+  operationsNextCursor: string | null = null
   /** Pages of the target list; the cursor of page n is `c<n+1>`. */
   targetPages: TargetSummary[][] = [[]]
   products: Product[] = [
@@ -320,6 +379,9 @@ export function answer(world: World, sent: Sent): Response {
     return json(200, { items: world.findings, nextCursor: world.findingsNextCursor })
   }
   if (method === 'GET' && p === '/api/v1/installation/health') return json(200, world.controlPlane)
+  if (method === 'GET' && p === '/api/v1/operations') {
+    return json(200, { items: world.operations, nextCursor: world.operationsNextCursor })
+  }
   if (method === 'GET' && p === '/api/v1/targets') {
     const cursor = url.searchParams.get('cursor')
     const index = cursor === null ? 0 : Number(cursor.slice(1))
@@ -365,6 +427,25 @@ export function answer(world: World, sent: Sent): Response {
       items: world.databases.filter((d) => d.clusterId === decodeURIComponent(m?.[1] ?? '')),
       truncated: false,
     })
+  }
+  m = /^\/api\/v1\/projects\/([^/]+)\/migrations$/.exec(p)
+  if (m !== null && method === 'GET') {
+    const stream = world.streams.get(decodeURIComponent(m[1] ?? ''))
+    return stream === undefined ? NOT_FOUND() : json(200, stream)
+  }
+  m = /^\/api\/v1\/clusters\/([^/]+)\/endpoints$/.exec(p)
+  if (m !== null && method === 'GET') {
+    return json(200, {
+      items: world.endpoints.get(decodeURIComponent(m[1] ?? '')) ?? [],
+      truncated: false,
+    })
+  }
+  m = /^\/api\/v1\/targets\/([^/]+)\/health$/.exec(p)
+  if (m !== null && method === 'GET') return NOT_FOUND()
+  m = /^\/api\/v1\/targets\/([^/]+)$/.exec(p)
+  if (m !== null && method === 'GET') {
+    const detail = world.targetDetails.get(decodeURIComponent(m[1] ?? ''))
+    return detail === undefined ? NOT_FOUND() : json(200, detail)
   }
   m = /^\/api\/v1\/plans\/([^/]+)$/.exec(p)
   if (m !== null && method === 'GET') return NOT_FOUND()

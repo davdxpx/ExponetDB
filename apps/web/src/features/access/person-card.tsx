@@ -40,6 +40,8 @@ export interface PersonCardProps {
   readonly identity: Identity
   /** The person's active bindings, or undefined when the binding read failed or is loading. */
   readonly bindings: readonly RoleBinding[] | undefined
+  /** The binding read was cut at its bound (more bindings exist than were read). */
+  readonly bindingsPartial?: boolean
   readonly line: StatusLine
   readonly canManage: boolean
   /** The card is the signed-in person's own. */
@@ -50,6 +52,7 @@ export interface PersonCardProps {
 export function PersonCard({
   identity,
   bindings,
+  bindingsPartial = false,
   line,
   canManage,
   isYou,
@@ -120,7 +123,12 @@ export function PersonCard({
 
       <section className="flex flex-col gap-2">
         <h3 className="text-sm font-medium text-foreground">{t('people.bindings.title')}</h3>
-        <Bindings bindings={bindings} line={line} canManage={canManage && live} />
+        <Bindings
+          bindings={bindings}
+          line={line}
+          canManage={canManage && live}
+          partial={bindingsPartial}
+        />
         {canManage && (identity.state === 'active' || identity.state === 'invited') ? (
           <BindingForm identityId={identity.id} line={line} />
         ) : null}
@@ -137,13 +145,19 @@ function Bindings({
   bindings,
   line,
   canManage,
+  partial,
 }: {
   readonly bindings: readonly RoleBinding[] | undefined
   readonly line: StatusLine
   readonly canManage: boolean
+  /** The binding read stopped at its bound: a person with none read may still hold a role. */
+  readonly partial: boolean
 }): ReactNode {
   if (bindings === undefined) {
     return <p className="text-sm text-foreground-lighter">{t('people.bindings.unknown')}</p>
+  }
+  if (bindings.length === 0 && partial) {
+    return <p className="text-sm text-foreground-lighter">{t('people.bindings.notAllRead')}</p>
   }
   if (bindings.length === 0) {
     return <p className="text-sm text-foreground-lighter">{t('people.bindings.none')}</p>

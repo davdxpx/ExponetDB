@@ -112,6 +112,7 @@ export function RolesPage(): ReactNode {
                       bindings={readableValue(bindingRead)?.items.filter(
                         (binding) => binding.roleId === role.id && binding.state === 'active',
                       )}
+                      bindingsPartial={readableValue(bindingRead)?.nextCursor != null}
                       index={index}
                       line={line}
                       canManage={canManage}
@@ -130,12 +131,15 @@ export function RolesPage(): ReactNode {
 function RoleCard({
   role,
   bindings,
+  bindingsPartial,
   index,
   line,
   canManage,
 }: {
   readonly role: Role
   readonly bindings: readonly RoleBinding[] | undefined
+  /** The binding read was cut: a role with no holder read may still have one. */
+  readonly bindingsPartial: boolean
   readonly index: ReadonlyMap<string, Identity>
   readonly line: StatusLine
   readonly canManage: boolean
@@ -164,6 +168,8 @@ function RoleCard({
         <h3 className="text-sm font-medium text-foreground">{t('roles.holders')}</h3>
         {bindings === undefined ? (
           <p className="text-sm text-foreground-lighter">{t('roles.holders.unknown')}</p>
+        ) : bindings.length === 0 && bindingsPartial ? (
+          <p className="text-sm text-foreground-lighter">{t('roles.holders.notAllRead')}</p>
         ) : bindings.length === 0 ? (
           <p className="text-sm text-foreground-lighter">{t('roles.holders.none')}</p>
         ) : (

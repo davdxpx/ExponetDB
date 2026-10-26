@@ -281,6 +281,59 @@ describe('the policies page', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe(`/changes/plans/${PLAN}`))
   })
 
+  it('says the target list is cut (partial) and plans for a target beyond it by its typed ID', async () => {
+    const user = userEvent.setup()
+    const world = settingsWorld()
+    const OTHER = 'tgt_01JZ0000000000000000000009'
+    world.on('GET', '/api/v1/targets', {
+      items: [{ id: TARGET, path: 'shop/app/production', tier: 'prod' }],
+      nextCursor: 'c2',
+    })
+    world.on('POST', '/api/v1/policy-settings/plans', (request) => {
+      expect(request.body).toEqual({
+        ruleId: 'data.read',
+        scopeKind: 'target',
+        scopeId: OTHER,
+        params: { mode: 'humans_only', sensitiveColumns: [] },
+      })
+      return { status: 201, json: plan() }
+    })
+    const { router } = mountApp('/settings/policies', world)
+    const form = await waitFor(() => {
+      const found = document.getElementById('data-read-form')
+      if (found === null) throw new Error('no form')
+      return found
+    })
+    expect(
+      await within(form).findByText(/Only the first 200 targets are listed/),
+    ).toBeInTheDocument()
+    const typed = within(form).getByLabelText('Or a target by its ID')
+    fireEvent.change(typed, { target: { value: 'tgt_nope' } })
+    // Checked when the field is left, not while typing.
+    expect(within(form).queryByText(/Enter a target ID such as tgt_/)).toBeNull()
+    fireEvent.blur(typed)
+    expect(within(form).getByText(/Enter a target ID such as tgt_/)).toBeInTheDocument()
+    expect((within(form).getByLabelText('Applies to') as HTMLSelectElement).value).toBe(
+      'installation',
+    )
+    fireEvent.change(typed, { target: { value: OTHER } })
+    expect((within(form).getByLabelText('Applies to') as HTMLSelectElement).value).toBe(OTHER)
+    // Editing the ID into something invalid leaves no plan for the old one.
+    fireEvent.change(typed, { target: { value: `${OTHER}x` } })
+    expect((within(form).getByLabelText('Applies to') as HTMLSelectElement).value).toBe(
+      'installation',
+    )
+    await user.click(within(form).getByRole('button', { name: 'Create plan to change setting' }))
+    expect(within(form).getByText(/Enter a target ID such as tgt_/)).toBeInTheDocument()
+    expect(world.changes).toEqual([])
+    fireEvent.change(typed, { target: { value: OTHER } })
+    // An unlisted target's tier is not known here, and the page does not guess non-production.
+    expect(within(form).getByText(/tier of this target is not known here/)).toBeInTheDocument()
+    await user.selectOptions(within(form).getByLabelText('Who reads rows'), 'humans_only')
+    await user.click(within(form).getByRole('button', { name: 'Create plan to change setting' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/changes/plans/${PLAN}`))
+  })
+
   it('shows every rule but the data-read rule as a closed row that names its state', async () => {
     const world = settingsWorld()
     world.on('GET', '/api/v1/policy-settings', {

@@ -1,8 +1,14 @@
 import type { MigrationStream } from '@exponetdb/sdk/operations'
+import { Button } from '@exponetdb/ui'
 import { MigrationTimeline } from '@exponetdb/ui-data'
-import { NotPermittedState, UntrustedName, useLinkComponent } from '@exponetdb/ui-patterns'
+import {
+  formatCount,
+  NotPermittedState,
+  UntrustedName,
+  useLinkComponent,
+} from '@exponetdb/ui-patterns'
 import { useQuery } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { type ReactNode, useRef, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { t } from '../../lib/i18n/i18n.ts'
 import { classifyFailure } from '../../lib/query/errors.ts'
@@ -21,6 +27,10 @@ import {
   timelineDataOf,
 } from './model.ts'
 import { PromotePanel } from './promote-panel.tsx'
+
+/** Bundles the timeline shows at first (the newest in dependency order), and how many more a press adds. */
+export const TIMELINE_WINDOW = 25
+export const TIMELINE_STEP = 100
 
 /**
  * The promotion timeline of the project (`GET /projects/{id}/migrations`):
@@ -49,6 +59,11 @@ export function TimelineSection({
     query.isError &&
     classifyFailure(query.error).kind === 'not_permitted'
   const stream = toReadable(query, { missing: streamMissing })
+  // The newest bundles first: a window of rows, widened on request, never 1,000 rows at once.
+  const [shown, setShown] = useState(TIMELINE_WINDOW)
+  const listed = query.data?.bundles.length ?? 0
+  // The line stays when the last press removes the button, so the focus lands on it, not the body.
+  const statusRef = useRef<HTMLParagraphElement>(null)
   return (
     <Section
       id="timeline"
@@ -65,12 +80,44 @@ export function TimelineSection({
         <>
           <MigrationTimeline
             readable={mapReadable(stream, timelineDataOf)}
+            maxBundles={shown}
             what={nounPhrase('migrations.timeline.what')}
             onRetry={refetch}
             onRefresh={refetch}
             busy={query.isFetching}
             headingLevel={3}
           />
+          {listed > TIMELINE_WINDOW ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <p
+                ref={statusRef}
+                tabIndex={-1}
+                role="status"
+                className="m-0 rounded-sm text-xs text-foreground-light focus-ring"
+              >
+                {t('migrations.timeline.shown', {
+                  shown: formatCount(Math.min(shown, listed)),
+                  total: formatCount(listed),
+                })}
+              </p>
+              {listed > shown ? (
+                <Button
+                  type="button"
+                  size="tiny"
+                  variant="default"
+                  onClick={() => {
+                    const next = shown + TIMELINE_STEP
+                    setShown(next)
+                    if (next >= listed) statusRef.current?.focus()
+                  }}
+                >
+                  {t('migrations.timeline.more', {
+                    count: formatCount(Math.min(TIMELINE_STEP, listed - shown)),
+                  })}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
           {query.data === undefined ? null : <EnvironmentNotes stream={query.data} />}
         </>
       )}

@@ -141,7 +141,9 @@ State values: **built** (merged in the Wave 8 completion with its tests),
 | Suspend, resume and decommission a target (plans; decommission with the typed path) | UI gap | built |
 | Projects page: list, create and change by plan | UI gap | built (display name and managed scope; evidence override, execution roles and trusted extensions are shown, not edited: open) |
 | Register a cluster (with its bootstrap SQL), a database, add and retire endpoints, rotate an agent-managed credential | UI gap | built |
-| Connect panel without secrets | UI gap | built for registry administrators; others owner ([OD-41](../00-product/open-decisions.md#od-41-connection-details-for-people-without-registrymanage)) |
+| Connect panel without secrets | UI gap | built for registry administrators; others owner ([OD-41](../00-product/open-decisions.md#od-41-connection-details-for-people-without-registrymanage)); built on `feat/studio-ux-overhaul` (2026-10-26, not merged; awaits the owner's review): a Connect sheet from the target header and a project's home with direct, application, CLI, MCP and API modes ([ADR-0035](../01-architecture/adr/0035-studio-information-architecture.md), proposed) |
+| A project home (Studio's project home in ExponetDB's model) | UI gap | built on `feat/studio-ux-overhaul` (2026-10-26, not merged): `/projects` and `/p/<product>/<project>` (ADR-0035, proposed) |
+| Remove a server or a cluster from the registry | API gap, UI gap | built on `feat/studio-ux-overhaul` (2026-10-26, not merged): retirement bottom-up with a dependency read ([`registry.md` §4.4](../02-control-plane/registry.md#44-retiring-a-server-or-a-cluster)) |
 | Product and project filters, copy path and id, remembered view | UI gap | built |
 | "Needs attention" on the fleet overview | UI gap | built (reads the target list, up to five pages of 200; a server-side "worst first" read would be cheaper: open) |
 | Cluster, PostgreSQL version and findings in the targets list | API gap | open (fields on the target summary) |

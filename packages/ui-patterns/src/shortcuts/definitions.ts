@@ -62,6 +62,11 @@ export const SHORTCUT_DEFINITIONS = {
     label: 'Go to overview',
     group: 'Go to',
   },
+  'nav.projects': {
+    binding: { type: 'sequence', keys: ['g', 'r'] },
+    label: 'Go to projects',
+    group: 'Go to',
+  },
   'nav.targets': {
     binding: { type: 'sequence', keys: ['g', 't'] },
     label: 'Go to databases',

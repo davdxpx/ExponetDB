@@ -254,7 +254,7 @@ export function TargetText({
         <UntrustedName name={path} mono label={t('changes.column.target')} />
       ) : (
         <Link href={href} className="underline focus-ring">
-          <UntrustedName name={path} mono label={t('changes.column.target')} />
+          <UntrustedName name={path} mono expandable={false} label={t('changes.column.target')} />
         </Link>
       )}
       {subject.tier === null ? (

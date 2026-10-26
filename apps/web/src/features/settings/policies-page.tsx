@@ -1,6 +1,7 @@
 import {
   Badge,
   Button,
+  Input,
   Table,
   TableBody,
   TableCaption,
@@ -21,7 +22,14 @@ import { useMe } from '../../lib/session/guard.tsx'
 import { Field, holds, NativeSelect } from '../access/fields.tsx'
 import { ListView } from '../access/list-view.tsx'
 import { type StatusLine, StatusLines, useStatusLine } from '../access/status.tsx'
-import { type PolicyRule, policiesQuery, type TargetItem, targetsQuery } from './keys.ts'
+import { isTargetId } from '../target-ops/ids.ts'
+import {
+  type PolicyRule,
+  policiesQuery,
+  SETTINGS_PAGE_LIMIT,
+  type TargetItem,
+  targetsQuery,
+} from './keys.ts'
 import {
   columnsOf,
   DATA_READ_MODES,
@@ -237,8 +245,15 @@ function DataReadForm({
   const id = useId()
   const targets = useQuery(targetsQuery(client))
   const targetList: readonly TargetItem[] = readableValue(toReadable(targets))?.items ?? []
+  // The list holds the first page only; a target beyond it (or any target, when the read fails) is typed.
+  const cut = targets.data !== undefined && targets.data.nextCursor !== null
   const initial = installationParams(rule)
   const [scope, setScope] = useState('installation')
+  const [typed, setTyped] = useState('')
+  // A typed ID is checked when the field is left or the form is sent, not on every key.
+  const [typedChecked, setTypedChecked] = useState(false)
+  const typedInvalid = typed.trim() !== '' && !isTargetId(typed.trim())
+  const typedError = typedChecked && typedInvalid
   const [mode, setMode] = useState<DataReadMode>(modeOf(initial) ?? 'by_tier')
   const [columns, setColumns] = useState(columnsOf(initial['sensitiveColumns']).join('\n'))
   const [error, setError] = useState<string | undefined>()
@@ -254,6 +269,10 @@ function DataReadForm({
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
+    if (typedInvalid) {
+      setTypedChecked(true)
+      return
+    }
     const parsed = parseColumns(columns)
     if (!parsed.ok) {
       setError(t('settings.policies.dataRead.columns.invalid', { line: parsed.line }))
@@ -283,7 +302,16 @@ function DataReadForm({
     }
   }
 
+  const typeTarget = (value: string): void => {
+    setTyped(value)
+    const next = value.trim()
+    if (isTargetId(next)) choose(next)
+    // A plan is never made for an ID the field no longer shows.
+    else if (scope === typed.trim()) choose('installation')
+  }
+
   const chosenTarget = targetList.find((target) => target.id === scope)
+  const unlisted = scope !== 'installation' && chosenTarget === undefined
   return (
     <form id="data-read-form" className="flex flex-col gap-3" noValidate onSubmit={submit}>
       <h3 className="text-sm font-medium text-foreground">
@@ -296,7 +324,9 @@ function DataReadForm({
           description={
             targets.isError
               ? t('settings.policies.scope.targetsFailed', { reason: describeError(targets.error) })
-              : t('settings.policies.scope.hint')
+              : cut
+                ? t('settings.policies.scope.cut', { count: SETTINGS_PAGE_LIMIT })
+                : t('settings.policies.scope.hint')
           }
         >
           <NativeSelect
@@ -313,8 +343,14 @@ function DataReadForm({
                     target.tier === 'prod' ? t('settings.tier.prod') : t('settings.tier.nonprod'),
                 }),
               })),
+              ...(unlisted
+                ? [{ value: scope, label: t('settings.policies.scope.typedOption', { id: scope }) }]
+                : []),
             ]}
-            onChange={(event) => choose(event.target.value)}
+            onChange={(event) => {
+              setTyped('')
+              choose(event.target.value)
+            }}
           />
         </Field>
         <Field
@@ -333,9 +369,36 @@ function DataReadForm({
           />
         </Field>
       </div>
+      <Field
+        id={`${id}-typed`}
+        label={t('settings.policies.scope.typed')}
+        description={t('settings.policies.scope.typed.hint')}
+        error={typedError ? t('settings.policies.scope.typed.invalid') : undefined}
+      >
+        <Input
+          id={`${id}-typed`}
+          autoComplete="off"
+          spellCheck={false}
+          maxLength={40}
+          className="max-w-sm font-mono"
+          placeholder="tgt_…"
+          value={typed}
+          aria-invalid={typedError}
+          aria-describedby={`${id}-typed-description${typedError ? ` ${id}-typed-error` : ''}`}
+          onChange={(event) => {
+            setTypedChecked(false)
+            typeTarget(event.target.value)
+          }}
+          onBlur={() => setTypedChecked(true)}
+        />
+      </Field>
       {chosenTarget?.tier === 'prod' ? (
         <p className="flex items-center gap-2 text-sm text-foreground-light">
           <TierChip tier="prod" /> {t('settings.policies.dataRead.prodTarget')}
+        </p>
+      ) : unlisted ? (
+        <p className="text-sm text-foreground-light">
+          {t('settings.policies.dataRead.unknownTier')}
         </p>
       ) : null}
       <Field

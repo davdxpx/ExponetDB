@@ -60,6 +60,7 @@ exit codes are in [`README.md`](./README.md).
 | [`target decommission`](#target-decommission) | remote | plan | Plan to decommission a target (with a reason). |
 | [`server list`](#server-list) | remote | read | List servers. |
 | [`server show`](#server-show) | remote | read | Show a server and the facts its node reported. |
+| [`server retire`](#server-retire) | remote | plan | Plan retiring a server record (registry.md §4.4): only when every cluster on it is retired, every node decommissioned and no job or token is open; the machine is not touched. |
 | [`server create`](#server-create) | remote | plan | Plan a server record. |
 | [`cluster list`](#cluster-list) | remote | read | List clusters. |
 | [`cluster show`](#cluster-show) | remote | read | Show a cluster. |
@@ -72,6 +73,7 @@ exit codes are in [`README.md`](./README.md).
 | [`cluster endpoint add`](#cluster-endpoint-add) | remote | plan | Plan a new endpoint of a cluster. |
 | [`cluster endpoint retire`](#cluster-endpoint-retire) | remote | plan | Plan retiring an endpoint. |
 | [`cluster database retire`](#cluster-database-retire) | remote | plan | Plan retiring a registered database record that is no current placement (decommission its target first); the database itself is not touched. |
+| [`cluster retire`](#cluster-retire) | remote | plan | Plan retiring a cluster record with its endpoint and credential records (registry.md §4.4): only when no database is registered on it; nothing changes on the PostgreSQL cluster. |
 | [`cluster declare-tier`](#cluster-declare-tier) | remote | plan | Plan declaring the tier a cluster is meant for (OD-22): prod makes every database registered on it need production authority; nonprod leaves it to the environment. |
 | [`cluster database register`](#cluster-database-register) | remote | plan | Plan registering a database of a cluster. |
 | [`cluster credential submit`](#cluster-credential-submit) | remote | read | Open the Web App’s write-only form for a role’s password, then wait until the worker verified it. |
@@ -991,6 +993,25 @@ Runs: against the server; effect: read; action: `server.get`; scopes: `nodes.rea
 |---|---|
 | `server` (required) | A server id (srv_…). |
 
+### server retire
+
+Plan retiring a server record (registry.md §4.4): only when every cluster on it is retired, every node decommissioned and no job or token is open; the machine is not touched.
+
+```text
+exponetdb server retire <server> [flags]
+```
+
+Runs: against the server; effect: plan; action: `registry.server.retire.plan`; scopes: `registry.manage`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `server` (required) | A server id (srv_…). |
+| `--reason <text>` | Why. |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
 ### server create
 
 Plan a server record.
@@ -1203,6 +1224,25 @@ Runs: against the server; effect: plan; action: `registry.database.retire.plan`;
 |---|---|
 | `cluster` (required) | A cluster id. |
 | `database` (required) | A database id (dbs_…). |
+| `--reason <text>` | Why. |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### cluster retire
+
+Plan retiring a cluster record with its endpoint and credential records (registry.md §4.4): only when no database is registered on it; nothing changes on the PostgreSQL cluster.
+
+```text
+exponetdb cluster retire <cluster> [flags]
+```
+
+Runs: against the server; effect: plan; action: `registry.cluster.retire.plan`; scopes: `registry.manage`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id. |
 | `--reason <text>` | Why. |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
 | `--wait` | Wait until applied and verified (the default). |

@@ -133,6 +133,9 @@ export interface ServerRecord {
   readonly provider: Provider
   readonly location: string | null
   readonly derivedTier: Tier | null
+  /** `retired`: the record left the registry by an operation (final, registry.md §4.4). */
+  readonly state: 'active' | 'retired'
+  readonly retiredAt: string | null
 }
 
 export function serverFrom(row: Row): ServerRecord {
@@ -142,6 +145,8 @@ export function serverFrom(row: Row): ServerRecord {
     provider: oneOf(SERVER_PROVIDERS, row.text('provider')),
     location: row.textOrNull('location'),
     derivedTier: tierOf(row.textOrNull('derived_tier')),
+    state: oneOf(['active', 'retired'] as const, row.text('state')),
+    retiredAt: row.textOrNull('retired_at'),
   }
 }
 
@@ -161,6 +166,8 @@ export interface ClusterRecord {
   readonly derivedTier: Tier | null
   /** The intended tier a person declared (OD-22); null while undeclared, which counts as prod for registry authority. */
   readonly declaredTier: Tier | null
+  /** When an operation retired the record (registry.md §4.4); null while it is not retired. */
+  readonly retiredAt: string | null
 }
 
 export function clusterFrom(row: Row): ClusterRecord {
@@ -176,6 +183,7 @@ export function clusterFrom(row: Row): ClusterRecord {
     confirmedAt: row.textOrNull('confirmed_at'),
     derivedTier: tierOf(row.textOrNull('derived_tier')),
     declaredTier: tierOf(row.textOrNull('declared_tier')),
+    retiredAt: row.textOrNull('retired_at'),
   }
 }
 

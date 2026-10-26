@@ -65,6 +65,7 @@ natively (Studio's shell is not on the ADR-0030 allowlist):
 | Section | Route | Purpose |
 |---|---|---|
 | **Overview** | `/` | fleet health grid (targets × state), open critical findings, operations running and awaiting approval, backups at risk, Control Plane health |
+| **Projects** | `/projects`, `/p/<product>/<project>` | the portfolio of projects and each project's home ([ADR-0035](../01-architecture/adr/0035-studio-information-architecture.md)); administration of projects stays at `/settings/projects` |
 | **Databases** | `/targets` | all targets, filterable by product, project, environment, tier, cluster, state; register target |
 | **Changes** | `/changes` | plans (awaiting approval, approved, expired), operations (running, failed, needs attention), migration streams per project with environment promotion view (staging ahead of production) |
 | **Infrastructure** | `/infrastructure/servers`, `/clusters`, `/nodes`, `/certificates` | servers, PostgreSQL clusters with placements, node agents (version, capabilities, heartbeat, clock skew), certificates (agent, PostgreSQL server, gateway) with expiry |
@@ -135,6 +136,7 @@ distinct states (§6); a failed read is never an empty list.
 
 | Route | Source | What the screen is |
 |---|---|---|
+| `/projects`, `/p/<product>/<project>` | `features/projects/` | Projects portfolio and a project's home (§2.5, ADR-0035, proposed) |
 | `/` | `features/fleet/` | Fleet overview from one `GET /fleet`: counts across every target the person may see, each with its source, age and a "at least" mark when it is a floor; a part the server could not count says why and is never zero; what needs a person (approvals, findings) and the Control Plane's own health |
 | `/targets` | `features/targets/` | Databases: search, filters and sort kept in the URL (validated), table and grid, cursor followed to a bound with a note when more exist; health per row is the one the list carries |
 | `/targets/register` | `features/targets/register-page.tsx` | Register a target: product, project, environment, cluster and database; shows the cluster's declared tier; creates a registration plan (`POST /targets`) and opens it for review |
@@ -309,6 +311,50 @@ else on this page still holds.
   the profile picture, "Assign a role" after an invitation. OAuth clients: a
   state filter with the pending count, and each client's last use and active
   grants (`lastUsedAt`, `activeGrantCount`).
+
+### 2.5 UI/UX overhaul (2026-10-26, proposed)
+
+**[PLANNED]** (the owner's UI/UX order of 2026-10-26, [ADR-0035](../01-architecture/adr/0035-studio-information-architecture.md), proposed; built for the review before Wave 11, [`PRE-WAVE-11-REVIEW.md`](../14-roadmap/PRE-WAVE-11-REVIEW.md))
+
+- **Overview** (`/`): the key numbers (databases, critical findings,
+  operations that need a person, plans awaiting approval, running operations)
+  are cards that are links, all of them, to the list filtered the same way; a
+  part the server did not count is a plain card with its reason. Below,
+  worst first: the open findings split by severity from the fleet counts
+  (nothing is listed to aggregate) with the newest critical ones as row
+  links, the targets with the worst health as row links, the operations that
+  stopped (`GET /operations?state=needs_attention&limit=5`), fleet health as a
+  proportional bar with a link per state, the Control Plane, and backups as a
+  small "not observed yet" slot. Where the counts came from is said once.
+- **Projects** (`/projects`): cards or a table, search over name and path,
+  product filter, pages of 24 cards or 50 rows, everything in the address;
+  three bounded reads (projects, products, targets), none per project.
+  **Project home** (`/p/<product>/<project>`): environments as links to their
+  targets (production marked on the card's edge), the migration stream per
+  environment (verified, applied without a verification, not applied, failed
+  or divergent, unknown: an unmirrored cell is never "not applied"), and the
+  clusters the environments are placed on (from at most twelve cached target
+  reads). The environment menu of a target links its project's home.
+- **Target overview** opens with the target's path, tier and lifecycle, the
+  first facts (PostgreSQL version, migrations applied and the last one, open
+  findings, backups not observed yet) and a card drawing the recorded
+  placement (server, cluster with its management mode, this database) that
+  is a link to the cluster.
+- **Connect** (`?connect=<mode>` on target pages, `&environment=` on a
+  project's home): a wide right sheet with five modes (direct connection,
+  application templates for `.env`, node-postgres, psycopg and pgx, the
+  ExponetDB CLI, MCP, the management API); addresses and templates for
+  `registry.manage` only (OD-41); no secret.
+- **Migrations** (`?view=history|pending|timeline|promote|plans|drift|import`):
+  the ledger's counters as links, one view at a time, a paged and filtered
+  history (`q`, `origin`, `verification`, `sort`, `page`, `size`, the open SQL
+  panel `migration`), the timeline's newest 25 bundles widened by 100 on
+  request, the import report summarized and paged with undecided items first.
+- **Servers and clusters** end with "Remove from ExponetDB"
+  ([`registry.md` §4.4](../02-control-plane/registry.md#44-retiring-a-server-or-a-cluster)):
+  what removal does and never does, what blocks it now bottom-up with links,
+  and the plan once nothing blocks; a retired record says so. A registered
+  database that is no current placement can be retired from the cluster page.
 
 ## 3. Context bar and switching
 

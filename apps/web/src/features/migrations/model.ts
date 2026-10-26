@@ -128,16 +128,3 @@ export function isDecisionState(value: unknown): value is DecisionState {
 
 /** The longest note a decision carries (the contract's limit). */
 export const NOTE_MAX_LENGTH = 1000
-
-/** The report id the page was asked to open (`?report=`), else `undefined`. */
-export function reportSearch(search: Readonly<Record<string, unknown>>): {
-  readonly report?: string
-} {
-  const report = search['report']
-  return {
-    report:
-      typeof report === 'string' && /^imr_[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(report)
-        ? report
-        : undefined,
-  }
-}

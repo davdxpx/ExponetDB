@@ -15,6 +15,8 @@ import {
   Admonition,
   ConfirmDialog,
   ObservedTime,
+  Pager,
+  pageSlice,
   UntrustedName,
   useNavigate,
 } from '@exponetdb/ui-patterns'
@@ -24,6 +26,7 @@ import { useApi } from '../../lib/api/context.tsx'
 import { ApiError } from '../../lib/api/errors.ts'
 import { withReauth } from '../../lib/api/reauth.ts'
 import { type MessageKey, t } from '../../lib/i18n/i18n.ts'
+import { pagerText } from '../../lib/ui/pager-text.ts'
 import { actionError } from '../plans/failure.ts'
 import { planPath } from '../plans/plan-model.ts'
 import { nounPhrase } from '../target/phrases.ts'
@@ -219,7 +222,7 @@ function ReportBody({
       {report.items.length === 0 ? (
         <p className="m-0 text-sm text-foreground-light">{t('migrations.import.noItems')}</p>
       ) : (
-        <ItemsTable report={report} editable={open} />
+        <ReportItems report={report} editable={open} />
       )}
       {report.state === 'resolved' ? <BaselineAction report={report} tier={tier} /> : null}
       {open ? (
@@ -229,11 +232,96 @@ function ReportBody({
   )
 }
 
-function ItemsTable({
+/** Review items per page: a report of 500 decisions is a summary and pages, not a 500-row dump. */
+export const IMPORT_PAGE_SIZE = 50
+
+type ItemFilter = 'all' | 'undecided' | Item['state']
+
+/**
+ * The review items: first how many there are of each classification and how many wait for a
+ * decision (each a filter), then one page of the matching items. Undecided items come first, so
+ * the work is on the first page.
+ */
+function ReportItems({
   report,
   editable,
 }: {
   readonly report: ImportReport
+  readonly editable: boolean
+}): ReactNode {
+  const [filter, setFilter] = useState<ItemFilter>('all')
+  const [page, setPage] = useState(1)
+  const open = (item: Item) => needsDecision(item) && item.decision === null
+  // The undecided set as it was when the filter was chosen: a decision does not move or remove
+  // its row (and the focus returning to it) until the filter is chosen again.
+  const [waiting, setWaiting] = useState<ReadonlySet<string>>(
+    () => new Set(report.items.filter(open).map((item) => item.itemId)),
+  )
+  const undecided = report.items.filter(open)
+  const byState = new Map<Item['state'], number>()
+  for (const item of report.items) byState.set(item.state, (byState.get(item.state) ?? 0) + 1)
+  const matching = report.items
+    .filter((item) =>
+      filter === 'all'
+        ? true
+        : filter === 'undecided'
+          ? waiting.has(item.itemId)
+          : item.state === filter,
+    )
+    .sort((a, b) => Number(waiting.has(b.itemId)) - Number(waiting.has(a.itemId)))
+  const slice = pageSlice(matching, page, IMPORT_PAGE_SIZE)
+  const choose = (next: ItemFilter) => {
+    setFilter(next)
+    setPage(1)
+    setWaiting(new Set(undecided.map((item) => item.itemId)))
+  }
+  const chip = (value: ItemFilter, label: string, count: number) => (
+    <Button
+      key={value}
+      type="button"
+      size="tiny"
+      variant={filter === value ? 'default' : 'outline'}
+      aria-pressed={filter === value}
+      onClick={() => choose(value)}
+      className={filter === value ? 'bg-background-selection' : undefined}
+    >
+      {label} <span className="tabular-nums text-foreground-light">{count}</span>
+    </Button>
+  )
+  return (
+    <div className="flex flex-col gap-3">
+      <fieldset className="m-0 flex flex-wrap gap-2 border-0 p-0">
+        <legend className="sr-only">{t('migrations.import.filter')}</legend>
+        {chip('all', t('migrations.import.filter.all'), report.items.length)}
+        {chip('undecided', t('migrations.import.filter.undecided'), undecided.length)}
+        {[...byState].map(([state, count]) => chip(state, stateLabel(state) ?? state, count))}
+      </fieldset>
+      {matching.length === 0 ? (
+        <p className="m-0 text-sm text-foreground-light">{t('migrations.import.filter.none')}</p>
+      ) : (
+        <ItemsTable report={report} items={slice.items} editable={editable} />
+      )}
+      {matching.length > IMPORT_PAGE_SIZE ? (
+        <Pager
+          label={t('migrations.import.pager')}
+          page={slice.page}
+          pageSize={IMPORT_PAGE_SIZE}
+          total={matching.length}
+          onPage={setPage}
+          text={pagerText()}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function ItemsTable({
+  report,
+  items,
+  editable,
+}: {
+  readonly report: ImportReport
+  readonly items: readonly Item[]
   readonly editable: boolean
 }): ReactNode {
   return (
@@ -248,7 +336,7 @@ function ItemsTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {report.items.map((item) => (
+        {items.map((item) => (
           <TableRow key={item.itemId} data-item={item.itemId}>
             <TableCell>
               <UntrustedName name={item.name} label={t('migrations.import.column.file')} />

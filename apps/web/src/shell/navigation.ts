@@ -4,6 +4,7 @@ import {
   Database,
   DatabaseBackup,
   FileDiff,
+  FolderKanban,
   Gauge,
   GitCompareArrows,
   House,
@@ -46,6 +47,7 @@ export type Requirement =
 
 export type SectionId =
   | 'overview'
+  | 'projects'
   | 'targets'
   | 'changes'
   | 'infrastructure'
@@ -78,6 +80,17 @@ export const NAV_SECTIONS: readonly NavSection[] = [
     prefixes: ['/findings'],
     icon: LayoutDashboard,
     shortcut: 'nav.overview',
+    block: 1,
+  },
+  {
+    // The portfolio of projects and each project's home (`/p/<product>/<project>`): the level
+    // between the fleet and one target (ADR-0035).
+    id: 'projects',
+    label: 'Projects',
+    path: '/projects',
+    prefixes: ['/projects', '/p'],
+    icon: FolderKanban,
+    shortcut: 'nav.projects',
     block: 1,
   },
   {
@@ -164,6 +177,7 @@ export const GLOBAL_NAV: readonly NavItem[] = [
   // purpose is the same, and not to Databases: a section menu there would sit beside every
   // target page.
   { id: 'findings', label: 'Findings', path: '/findings', section: 'overview', requires: [] },
+  { id: 'project-list', label: 'Projects', path: '/projects', section: 'projects', requires: [] },
   { id: 'targets', label: 'Databases', path: '/targets', section: 'targets', requires: [] },
   { id: 'changes', label: 'All changes', path: '/changes', section: 'changes', requires: [] },
   {
@@ -469,6 +483,11 @@ export interface TargetPath {
 /** `/t/<product>/<project>/<environment><suffix>`, each segment percent-encoded. */
 export function targetHref(target: TargetPath, suffix = ''): string {
   return `/t/${encodeURIComponent(target.product)}/${encodeURIComponent(target.project)}/${encodeURIComponent(target.environment)}${suffix}`
+}
+
+/** `/p/<product>/<project>`, each segment percent-encoded: a project's home (ADR-0035). */
+export function projectHref(product: string, project: string): string {
+  return `/p/${encodeURIComponent(product)}/${encodeURIComponent(project)}`
 }
 
 /** `/t/<product>/<project>/<environment>`, then at most a section and one more segment. */

@@ -159,8 +159,18 @@ export const settingsMessages = {
   'settings.policies.scope.hint': 'The installation, or one target (its own setting wins there).',
   'settings.policies.scope.installation': 'The whole installation',
   'settings.policies.scope.target': '{path} ({tier})',
+  'settings.policies.scope.cut':
+    'Only the first {count} targets are listed; type the ID of another target below.',
+  'settings.policies.scope.typed': 'Or a target by its ID',
+  'settings.policies.scope.typed.hint':
+    'The target’s ID from its page or from exponetdb target list (tgt_…). The server checks it when the plan is made.',
+  'settings.policies.scope.typed.invalid':
+    'Enter a target ID such as tgt_01J… (26 characters after tgt_).',
+  'settings.policies.scope.typedOption': 'Target {id} (typed)',
+  'settings.policies.dataRead.unknownTier':
+    'The tier of this target is not known here. If it is production, the rules for production apply to it.',
   'settings.policies.scope.targetsFailed':
-    'The targets could not be read ({reason}); only the installation can be chosen now.',
+    'The targets could not be read ({reason}); choose the installation, or type a target’s ID below.',
   'settings.policies.dataRead.title': 'Data reads by tier',
   'settings.policies.dataRead.description':
     'Who may read rows of a target (OD-13). An agent is every caller that is not a person in the Web App or the first-party CLI: an MCP client, a service account, an API key, CI. No scope lifts this rule.',

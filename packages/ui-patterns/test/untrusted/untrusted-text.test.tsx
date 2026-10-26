@@ -220,3 +220,15 @@ describe('UntrustedText', () => {
     expect(await axeViolations(container)).toEqual([])
   })
 })
+
+describe('UntrustedText inside a link', () => {
+  it('cuts a long text with an ellipsis and offers no button when it is not expandable', () => {
+    render(
+      <a href="/findings">
+        <UntrustedText text={'b'.repeat(2_000)} expandable={false} maxCodePoints={20} />
+      </a>,
+    )
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.getByRole('link').textContent).toContain(`${'b'.repeat(20)}…`)
+  })
+})

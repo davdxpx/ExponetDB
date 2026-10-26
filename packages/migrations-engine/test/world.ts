@@ -15,6 +15,7 @@ import { MIGRATION_RULES, REGISTRY_RULES, RuleRegistry } from '@exponetdb/policy
 import {
   type Connector,
   findTarget,
+  noBackupEngine,
   planEnvironmentCreate,
   planProductCreate,
   planProjectCreate,
@@ -130,6 +131,7 @@ export async function migrationWorld(label: string, server: TestServer): Promise
         installationId: h.db.installationId,
         controlStoreSystemIdentifier: async () => h.controlStoreSystemIdentifier,
         snapshots: h.snapshots,
+        backupBindings: noBackupEngine,
       }),
       ...migrationKinds({
         store: h.worker,

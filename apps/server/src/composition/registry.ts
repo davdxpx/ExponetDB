@@ -15,8 +15,10 @@ import { KindRegistry, type OperationKind, WORKER_ACTOR } from '@exponetdb/opera
 import { RuleRegistry } from '@exponetdb/policy'
 import { CircuitBreaker, ConnectionBudget } from '@exponetdb/postgres'
 import {
+  type BackupBindingsPort,
   Connector,
   findTarget,
+  noBackupEngine,
   type RegistryAcceptContext,
   type RegistryPolicyContext,
   registryKinds,
@@ -94,6 +96,13 @@ export function connectorFor(
   })
 }
 
+/**
+ * The backup engine's bindings of a server or cluster for retirements (registry.md §4.4): the one
+ * instance every process gives the retirement preflight, the planners and the registry kinds. No
+ * backup engine exists before Wave 9 Part B, which replaces this value.
+ */
+export const BACKUP_BINDINGS: BackupBindingsPort = noBackupEngine
+
 /** The registry kinds of a process (serve: acceptance checks only; the worker executes). */
 export function registryKindsFor(
   rt: RegistryRuntime,
@@ -110,6 +119,7 @@ export function registryKindsFor(
       connector,
       installationId: rt.installationId,
     }),
+    backupBindings: BACKUP_BINDINGS,
   })
 }
 

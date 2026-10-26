@@ -781,6 +781,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M5G6EQ7KP3PMPC7G3HJ7KH7R',
         // Wave 9 Part A, follow-up 3 (F1): the failing expectations of an import item.
         '01M5PZFYDPT065MDFHG5G3WSG1',
+        // The UI/UX order of 2026-10-26 (§8A): servers and clusters retired bottom-up.
+        '01M5WT5NV9ZC8TYB9BMP3D0EZZ',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

@@ -91,6 +91,8 @@ export const KIND_TITLES: Readonly<Record<string, KindTitle>> = {
     'plans.title.registry.execution_role_exception.revoke',
   ),
   'registry.server.create': none('plans.title.registry.server.create'),
+  'registry.server.retire': { key: 'plans.title.registry.server.retire', subject: 'server' },
+  'registry.cluster.retire': cluster('plans.title.registry.cluster.retire'),
   'registry.cluster.register': none('plans.title.registry.cluster.register'),
 }
 

@@ -53,6 +53,13 @@ import {
   registeredDatabaseNamed,
 } from './reads.ts'
 import type { EnvironmentRecord, TargetRecord } from './records.ts'
+import {
+  type BackupBindingsPort,
+  clusterRetirement,
+  retiredWithBinding,
+  retirementClear,
+  serverRetirement,
+} from './retirement.ts'
 import { invalid, managedScope, parseCaBundle, tlsServerNameFor } from './validate.ts'
 
 /**
@@ -475,6 +482,43 @@ export async function planServerCreate(
   })
 }
 
+/**
+ * `registry.server.retire.plan` (registry.md §4.4): a server record leaves the registry for good,
+ * bottom-up: only when no cluster on it is unretired, no node on it is live or revoked, no
+ * enrollment token for it can still be redeemed and no node job or operation on it is open. The
+ * record stays, retired; the machine, its files and its databases are not touched. Production
+ * authority (an undeclared server is production, registry.md §4.1).
+ */
+export async function planServerRetire(
+  tx: Tx,
+  context: RegistryPlanContext,
+  actor: RegistryActor,
+  serverId: string,
+  reason: string | undefined,
+  backups: BackupBindingsPort,
+): Promise<PlanRecord> {
+  const server = await getServer(tx, serverId)
+  if (server === undefined) throw new RegistryError('NOT_FOUND')
+  if (server.state !== 'active') throw conflict('server_retired')
+  const retirement = await serverRetirement(tx, serverId, { backups })
+  if (retirement === undefined) throw new RegistryError('NOT_FOUND')
+  if (!retirementClear(retirement)) throw conflict('server_in_use')
+  return store(tx, context, actor, {
+    kind: 'registry.server.retire',
+    actionClass: 'high',
+    subject: { serverId },
+    content: { serverId, reason: reason ?? null },
+    expectedState: { serverState: 'active', blockers: 0 },
+    analysis: {
+      displayName: server.displayName,
+      retiredChildren: retirement.retiredChildren,
+      backups: retirement.backups,
+      effect:
+        'The server record is retired (final) and stays as history; the machine, its files and its databases are not touched.',
+    },
+  })
+}
+
 // ----- clusters and endpoints -----
 
 interface EndpointContent extends JsonObject {
@@ -517,8 +561,11 @@ export async function planClusterRegister(
   actor: RegistryActor,
   input: ClusterRegisterRequest,
 ): Promise<PlanRecord> {
-  if (input.serverId !== undefined && (await getServer(tx, input.serverId)) === undefined) {
-    throw new RegistryError('NOT_FOUND')
+  if (input.serverId !== undefined) {
+    const server = await getServer(tx, input.serverId)
+    if (server === undefined) throw new RegistryError('NOT_FOUND')
+    // A retired server gets no cluster (registry.md §4.4); the guard would refuse it at apply.
+    if (server.state !== 'active') throw conflict('server_retired')
   }
   const certificates = parseCaBundle(input.caBundle)
   const endpoints: EndpointContent[] = []
@@ -781,6 +828,54 @@ export async function planDatabaseRetire(
       name: database.name,
       observedOid: database.observedOid,
       effect: 'The registry record ends; the database on the cluster is not touched.',
+    },
+  })
+}
+
+/**
+ * `registry.cluster.retire.plan` (registry.md §4.4): a cluster record leaves the registry for
+ * good, bottom-up: only when it has no registered database (decommission the targets, then retire
+ * the databases), no credential submission being verified and no open node job or operation. Its
+ * active endpoints and credentials only say how to reach it: they are retired with it, in the same
+ * operation, and listed in the plan; their secrets stay in the secrets store. Nothing changes on
+ * the PostgreSQL cluster.
+ */
+export async function planClusterRetire(
+  tx: Tx,
+  context: RegistryPlanContext,
+  actor: RegistryActor,
+  clusterId: string,
+  reason: string | undefined,
+  backups: BackupBindingsPort,
+): Promise<PlanRecord> {
+  const cluster = await getCluster(tx, clusterId)
+  if (cluster === undefined) throw new RegistryError('NOT_FOUND')
+  if (cluster.state === 'retired') throw conflict('cluster_retired')
+  const retirement = await clusterRetirement(tx, clusterId, { backups })
+  if (retirement === undefined) throw new RegistryError('NOT_FOUND')
+  if (!retirementClear(retirement)) throw conflict('cluster_in_use')
+  const tier = cluster.derivedTier ?? undefined
+  const retiredWith = retirement.retiredWith.flatMap((group) =>
+    group.items.map((item) => ({ kind: group.kind, id: item.id })),
+  )
+  return store(tx, context, actor, {
+    kind: 'registry.cluster.retire',
+    actionClass: 'high',
+    subject: { clusterId, ...(tier === undefined ? {} : { tier }) },
+    content: { clusterId, reason: reason ?? null },
+    expectedState: {
+      clusterState: cluster.state,
+      blockers: 0,
+      retiredWith: retiredWithBinding(retirement),
+    },
+    analysis: {
+      displayName: cluster.displayName,
+      retiredWith,
+      retiredWithTotal: retirement.retiredWith.reduce((sum, g) => sum + g.total, 0),
+      retiredChildren: retirement.retiredChildren,
+      backups: retirement.backups,
+      effect:
+        'The cluster record and its active endpoint and credential records are retired (final) and stay as history; nothing changes on the PostgreSQL cluster, and no secret is erased.',
     },
   })
 }

@@ -326,6 +326,96 @@ sees the other's result. Afterwards the same name on the cluster
 registers again, for example after the database was re-created with a new
 oid (`databases_one_registered_name` covers registered records only).
 
+### 4.4 Retiring a server or a cluster
+
+**[DECIDED]** (the owner's UI/UX order of 2026-10-26, §8A) A server or a
+cluster leaves ExponetDB by operation, **bottom-up and never by cascade**.
+"Remove from ExponetDB" retires the registry record (final; the record and
+its history stay); it never drops a database, stops a cluster, deletes a
+machine, its files or a bucket, and it erases no secret. A physical deletion
+would be its own hosting operation and is not part of ExponetDB.
+
+| Step | Operation | Refused while |
+|---|---|---|
+| 1 | `target.decommission` for each target placed on the cluster's databases (or a reviewed move, when one exists) | the target is not active, suspended or registered |
+| 2 | `registry.database.retire` for each registered database | it is a current placement (`database_in_use`) |
+| 3 | `registry.cluster.retire` (`POST /clusters/{id}/retire`, CLI `cluster retire`) | a database is registered on it, a credential submission is being verified, a node job on its host (agent-managed) or an operation naming it is open (`cluster_in_use`) |
+| 4 | `node.revoke`, then `node.decommission`, for the server's node | the node's own transitions (revoked is not decommissioned) |
+| 5 | `registry.server.retire` (`POST /servers/{id}/retire`, CLI `server retire`) | a cluster on it is not retired, a node on it is live or revoked, an enrollment token for it can still be redeemed, a node job or an operation naming it is open (`server_in_use`) |
+
+- **What goes with a cluster.** Its active endpoint and credential records
+  only say how to reach it: the cluster's retirement retires them in the
+  same operation and lists them in the plan (`analysis.retiredWith`). Their
+  secret versions stay in the secrets store under its own retention. The
+  plan binds them too (`expectedState.retiredWith`: their total and ids, at
+  most 50 per kind named): an endpoint or credential added or retired after
+  the plan was made makes the apply `PLAN_STALE` (binding `retiredWith`),
+  and the worker compares again under the row lock, so no record goes with
+  the cluster that the approver did not see.
+- **A retired server gets no child.** `registry.cluster.register` on it is
+  refused by its planner (`server_retired`) and goes stale at apply when the
+  server is retired after the plan was made (binding `serverState`);
+  `node.enroll` likewise (`server_retired`; binding `server` at apply), and
+  the worker refuses its token record on a retired server.
+- **Authority.** Both kinds are `high`, human only, `registry.manage`
+  (a cluster at its registry tier, a server at production authority: a
+  server that may host production is treated as production), with
+  re-authentication within five minutes. No approval rule applies yet, as
+  for database retirement (a gap recorded in `PRE-WAVE-11-REVIEW.md`).
+- **What blocks, read first.** `GET /servers/{id}/retirement` and `GET
+  /clusters/{id}/retirement` (`registry.manage`, human) answer what a
+  retirement would meet now: the blockers by kind (at most 50 named per
+  kind, with the total), what goes with a cluster, the retired children
+  that stay as history, and the backup engine's answer. The read is a
+  comfort view: the planner, the kind's bindings at apply (a change makes
+  the plan `PLAN_STALE`) and the worker under the row lock check again,
+  with the same queries. An open operation names the subject when its plan
+  body's `subject` does; a stored body that holds an escaped NUL
+  (`\u0000`, valid JSON that `jsonb` refuses) never makes the read fail.
+- **Backups.** The retirement asks a port for the backup bindings of the
+  subject. The port is required wherever a retirement is read, planned or
+  applied: the composition root passes one instance (`BACKUP_BINDINGS`,
+  `apps/server/src/composition/registry.ts`) to the preflight, the planners
+  and the registry kinds of every process. Before Wave 9 no backup record
+  exists in the Control Store, so that instance is `noBackupEngine`, the
+  answer is `not_installed` and nothing blocks. Wave 9 Part B provides
+  the engine's answer; `blocking` or `unknown` refuses the retirement (a
+  backup repository with retention or a running restore is never orphaned
+  by a registry change). **[OPEN]** whether a retirement should wait for
+  Wave 9 instead (recorded for the owner in `PRE-WAVE-11-REVIEW.md`).
+- **The Control Store enforces it** (bundle `registry-retirement`):
+  `registry.servers` gains `state` (`active`, `retired`), `retired_at` and
+  `retired_by_operation_id`; the server guard (EXG06) lets a server record
+  change only by that one move and refuses it while a child is live;
+  `registry.clusters` gains `retired_at` and `retired_by_operation_id`, and
+  a second guard (EXG07) refuses a cluster's retirement while a registered
+  database, an active endpoint or a pending or active credential is left.
+  The two `SECURITY DEFINER` parent locks run with `search_path =
+  pg_catalog, pg_temp`.
+  A cluster that was never confirmed can be retired too: its rule "pending
+  exactly when no system identifier" holds for clusters that are not
+  retired.
+- **Races.** A new child locks its parent row `FOR SHARE` (clusters on a
+  server; databases, endpoints and credentials on a cluster) and needs it
+  live; the retirement takes the row's update lock and its guard takes the
+  row `FOR UPDATE`, which also waits for an enrollment token's foreign-key
+  lock; `node.enroll` checks its server `FOR SHARE` (the nodes schema keeps
+  the triggers its frozen bundle pins). Whichever comes second waits and
+  then sees the other's commit, so a retired parent never gets a live child
+  (integration tests, both orders, each waiting for the one transaction
+  that holds the lock: a cluster's new endpoint and a server's new cluster
+  in `packages/registry/test/registry-retirement.int.test.ts`, a server's
+  new enrollment token in `packages/nodes/test/retired-server.int.test.ts`).
+  A token's redemption is not locked that way: the frozen `nodes.enroll`
+  checks the token's expiry before it inserts its node, so the guard and
+  the preflight hold a token that ran out less than five minutes ago as
+  redeemable still (the margin covers the gap between the two clock reads;
+  a reveal of a created token likewise).
+- **The Control Store's own cluster** can never become an active cluster
+  (confirmation refuses its system identifier), so no target, database or
+  backup of it is ever managed; retiring a pending registration that
+  points at it changes nothing outside the registry.
+
 ## 5. Registry and REOSA's infrastructure register
 
 **[OBSERVED]** REOSA already keeps an infrastructure register in its admin

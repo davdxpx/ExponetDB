@@ -83,6 +83,8 @@ export const plansMessages = {
   'plans.title.registry.execution_role_exception.revoke':
     'Revoke a BYPASSRLS exception of an execution role',
   'plans.title.registry.server.create': 'Create a server record',
+  'plans.title.registry.server.retire': 'Remove server {subject} from ExponetDB',
+  'plans.title.registry.cluster.retire': 'Remove cluster {subject} from ExponetDB',
   'plans.title.registry.cluster.register': 'Register an external cluster',
   'plans.title.other': 'Run {kind} on {subject}',
   'plans.title.otherBare': 'Run {kind}',
