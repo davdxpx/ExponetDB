@@ -18,6 +18,8 @@ Branch `feat/studio-ux-overhaul`, based on `main` at `a4f16e3f` (PR #40), the
 owner's UI/UX order of 2026-10-26, run in parallel to Wave 9 Part B. No
 deployment, no production or bucket change, no change to the REOSA repository,
 no file under `apps/web/src/features/wave9/**` touched.
+Pull request: `davdxpx/ExponetDB#42`. Every test and check in U10 ran on head
+`c91d2d10`; the only later commit records this line (documentation only).
 
 ### U1. Commits
 
