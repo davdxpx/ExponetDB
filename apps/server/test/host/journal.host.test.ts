@@ -8,7 +8,8 @@ import { eventually, hostScenario } from '../support/host-world.ts'
  * Host scenario: the node's own records broken or lost (architecture.md §2
  * and §4), on a node of its own. A corrupted or missing agent journal makes
  * the agent refuse every job (journal_corrupt) and run nothing; restored, it
- * works again. A lost helper ledger makes the helper refuse every effect
+ * works again. A stopped helper (service and socket) leaves the agent
+ * running. A lost helper ledger makes the helper refuse every effect
  * while its reads stay available; nothing on the host changes.
  */
 const w = hostScenario({ scenario: 'journal' })
@@ -60,6 +61,29 @@ describe('a broken or lost journal and a lost helper ledger (host scenario)', ()
     await rename(`${journalFile}.aside`, journalFile)
     await w.startAgent()
     await w.inspect('postgres.status@1')
+  })
+
+  it('a stopped helper (service and socket) does not stop the agent: it keeps heartbeating and serving reads, and the helper works again when its socket starts', async () => {
+    const nodeId = w.requireNode().nodeId
+    const heartbeat = async () =>
+      JSON.stringify(
+        await w.sql('SELECT last_heartbeat_at FROM nodes.nodes WHERE node_id = $1', [nodeId]),
+      )
+    // Under systemd the helper is socket-activated: make sure it has started once.
+    await w.inspect('postgres.config.inspect@2')
+    await w.stopHelper()
+    const last = await heartbeat()
+    await eventually(
+      'a heartbeat after the helper stopped',
+      heartbeat,
+      (now) => now !== last,
+      60_000,
+    )
+    // A read that does not need the helper is claimed and finished.
+    await w.inspect('postgres.status@1')
+    await w.startHelper()
+    // The helper's read goes through the socket again.
+    await w.inspect('postgres.config.inspect@2')
   })
 
   it('a lost helper ledger: every effect is refused, reads stay available, the host is unchanged', async () => {

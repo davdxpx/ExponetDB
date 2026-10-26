@@ -227,6 +227,16 @@ tokens (ADR-0024 §1).
 - Process stopped or crashed: `systemctl restart exponetdb-node`. It
   reports jobs that were running when it stopped as `interrupted`; it never
   resumes them.
+- Helper stopped, restarted or its socket stopped and started again (an
+  operator, a package upgrade whose scripts stop the socket in `prerm` and
+  start it in `postinst`, `systemctl isolate`): the agent **keeps running**.
+  Its unit only `Wants=` the helper socket, never `Requires=` it, so a stop
+  of the socket does not propagate. While the helper is away the agent
+  heartbeats and serves reads that need no helper; every change is refused
+  `failed` and nothing runs. Start the socket again
+  (`systemctl start exponetdb-node-helper.socket`); the helper starts at the
+  next request and changes work again. If the node still reads `offline`,
+  the agent itself is down: `systemctl restart exponetdb-node`.
 - Certificate expired (the node was down for more than 72 hours): the node
   cannot renew; decommission it (`node.decommission`, re-authentication),
   move `/var/lib/exponetdb-node` aside, and enroll again (§3) with a new

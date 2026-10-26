@@ -63,7 +63,12 @@ arbitrary software, or opening a shell.
     capabilities and no network, both `ProtectSystem=strict`, a system call
     filter, `LimitCORE=0`, `MemoryMax`, `TasksMax`; checked by
     `systemd-analyze verify` and run by the host test under systemd (CI job
-    `node-pg`).
+    `node-pg`). The agent unit names the helper socket only in `Wants=` and
+    `After=`, never `Requires=`, `BindsTo=` or `PartOf=`: a stopped helper
+    (the G5 evidence run of 2026-10-26 found `Requires=` stopping the agent
+    with the socket) means refused effects and available reads, not a silent
+    agent. `packaging/verify-units.sh` enforces it; the `journal` host
+    scenario stops and starts the helper under systemd.
 12. Audit on the control plane for every job; local journal on the host as a
     second record (retained 90 days).
 13. Supply chain: reproducible builds where feasible, signed packages, SBOM
