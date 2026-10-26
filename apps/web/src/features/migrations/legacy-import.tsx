@@ -287,11 +287,12 @@ function ReportItems({
   )
   return (
     <div className="flex flex-col gap-3">
-      <div role="group" aria-label={t('migrations.import.filter')} className="flex flex-wrap gap-2">
+      <fieldset className="m-0 flex flex-wrap gap-2 border-0 p-0">
+        <legend className="sr-only">{t('migrations.import.filter')}</legend>
         {chip('all', t('migrations.import.filter.all'), report.items.length)}
         {chip('undecided', t('migrations.import.filter.undecided'), undecided.length)}
         {[...byState].map(([state, count]) => chip(state, stateLabel(state) ?? state, count))}
-      </div>
+      </fieldset>
       {matching.length === 0 ? (
         <p className="m-0 text-sm text-foreground-light">{t('migrations.import.filter.none')}</p>
       ) : (

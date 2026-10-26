@@ -1,6 +1,6 @@
 /**
  * Messages of the projects portfolio (`/projects`) and a project's home
- * (`/p/<product>/<project>`), `src/features/projects/` (ADR-0034).
+ * (`/p/<product>/<project>`), `src/features/projects/` (ADR-0035).
  */
 export const projectsMessages = {
   'projects.title': 'Projects',

@@ -81,7 +81,7 @@ export function AppHeader({
 
 /**
  * The target's Connect, as Studio's: it opens the target's Connect sheet (`?connect=<mode>`,
- * ADR-0034 §4). A target the server does not know shows none.
+ * ADR-0035 §4). A target the server does not know shows none.
  */
 function ConnectButton({ target }: { readonly target: TargetRoute }): ReactNode {
   // The same read the layout and the context bar make (one query, one request).

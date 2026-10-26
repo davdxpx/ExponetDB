@@ -28,7 +28,7 @@ import { ProjectInfrastructure } from './project-infrastructure.tsx'
 import { ProjectStream } from './project-stream.tsx'
 
 /**
- * `/p/<product>/<project>`: one project's home (ADR-0034), between the fleet and one target.
+ * `/p/<product>/<project>`: one project's home (ADR-0035), between the fleet and one target.
  * The header names the project; below are its environments (each one database, production
  * marked), its migration stream against them and where they run. The project is found in the
  * same bounded projects read as the portfolio; slugs outside the grammar are "page not found"

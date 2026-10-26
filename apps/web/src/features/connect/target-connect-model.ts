@@ -2,7 +2,7 @@ import { type ConnectEndpoint, connectionLines } from '../configuration/connect-
 import { shellWord } from './clients.ts'
 
 /**
- * The Connect sheet of a target as data (ADR-0034 §4): its modes, the address parameter that
+ * The Connect sheet of a target as data (ADR-0035 §4): its modes, the address parameter that
  * opens it, and the text a person copies for each mode. Pure, unit-tested with hostile input.
  *
  * Nothing here is a secret or builds one: ExponetDB never holds an application password, so the

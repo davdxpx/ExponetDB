@@ -84,7 +84,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
   },
   {
     // The portfolio of projects and each project's home (`/p/<product>/<project>`): the level
-    // between the fleet and one target (ADR-0034).
+    // between the fleet and one target (ADR-0035).
     id: 'projects',
     label: 'Projects',
     path: '/projects',
@@ -485,7 +485,7 @@ export function targetHref(target: TargetPath, suffix = ''): string {
   return `/t/${encodeURIComponent(target.product)}/${encodeURIComponent(target.project)}/${encodeURIComponent(target.environment)}${suffix}`
 }
 
-/** `/p/<product>/<project>`, each segment percent-encoded: a project's home (ADR-0034). */
+/** `/p/<product>/<project>`, each segment percent-encoded: a project's home (ADR-0035). */
 export function projectHref(product: string, project: string): string {
   return `/p/${encodeURIComponent(product)}/${encodeURIComponent(project)}`
 }

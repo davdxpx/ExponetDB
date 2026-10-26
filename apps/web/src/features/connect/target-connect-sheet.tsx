@@ -83,7 +83,7 @@ function useLocation(): { readonly pathname: string; readonly search: Record<str
 
 /**
  * The Connect button of a target (in the header of its pages) or of a project (on its home,
- * with the environment chosen in the sheet), and the wide sheet it opens (ADR-0034 §4).
+ * with the environment chosen in the sheet), and the wide sheet it opens (ADR-0035 §4).
  *
  * The sheet's state is the address: `?connect=<mode>` (an allowlist value) and, for a project,
  * `?environment=<slug>`; a reload or a link opens it again, Back closes it, and the page's own

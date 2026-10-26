@@ -1,6 +1,6 @@
 /**
  * Messages of the Connect sheet of a target (`?connect=<mode>`,
- * `src/features/connect/target-connect-sheet.tsx`, ADR-0034 §4).
+ * `src/features/connect/target-connect-sheet.tsx`, ADR-0035 §4).
  */
 export const connectSheetMessages = {
   'connectSheet.button': 'Connect',
