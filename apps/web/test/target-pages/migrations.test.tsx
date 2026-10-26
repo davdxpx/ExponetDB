@@ -74,6 +74,33 @@ describe('the migrations page: ledger', () => {
     expect(within(pending).getByText('add_invoices')).toBeInTheDocument()
   })
 
+  it('pages 120 pending bundles while "select all" still chooses every one', async () => {
+    const user = userEvent.setup()
+    const w = world()
+    w.on(
+      'GET',
+      LEDGER,
+      ledgerStatus({
+        pending: Array.from({ length: 120 }, (_, i) => ({
+          checksum: `sha256:c1:${'c'.repeat(64)}`,
+          migrationId: ulid(100 + i),
+          name: `bundle_${String(i).padStart(3, '0')}`,
+        })),
+      }),
+    )
+    mountOps(`${PAGE}?view=pending`, w)
+    const pending = await section('Pending bundles')
+    const table = await within(pending).findByRole('table', {
+      name: 'Bundles of the project not yet applied to this target',
+    })
+    // A header row and one page of 50.
+    expect(within(table).getAllByRole('row')).toHaveLength(51)
+    const pager = within(pending).getByRole('navigation', { name: 'Pending bundle pages' })
+    expect(pager).toHaveTextContent('1–50 of 120')
+    await user.click(within(pager).getByRole('button', { name: 'Next' }))
+    expect(within(table).getByText('bundle_050')).toBeInTheDocument()
+  })
+
   it('says the empty ledger only after a successful read', async () => {
     const w = world()
     w.on('GET', LEDGER, ledgerStatus({ applied: [], pending: [] }))

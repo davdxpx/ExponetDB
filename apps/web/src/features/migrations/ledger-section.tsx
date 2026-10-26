@@ -22,7 +22,7 @@ import {
   useLinkComponent,
 } from '@exponetdb/ui-patterns'
 import { useQuery } from '@tanstack/react-query'
-import { type ChangeEvent, type ReactNode, useId } from 'react'
+import { type ChangeEvent, type ReactNode, useId, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { type MessageKey, t } from '../../lib/i18n/i18n.ts'
 import { pagerText } from '../../lib/ui/pager-text.ts'
@@ -540,6 +540,9 @@ function Verification({ entry }: { readonly entry: LedgerEntry }): ReactNode {
  * environment's mirror says. The chosen ones are planned on this target; the
  * server orders them by `dependsOn`, checks the evidence live and decides.
  */
+/** Pending bundles per page: a target 500 bundles behind shows a page, not 500 checkboxes. */
+const PENDING_PAGE_SIZE = 50
+
 function PendingBlock({
   pending,
   context,
@@ -555,6 +558,9 @@ function PendingBlock({
   const production = context.tier !== 'nonprod'
   const evidence = (bundle: MigrationStatus['pending'][number]) =>
     evidenceOf(context.stream, { slug: context.environment, tier: context.tier }, bundle)
+  // One page of rows; the selection (and "select all") still spans every pending bundle.
+  const [pageNumber, setPageNumber] = useState(1)
+  const page = pageSlice(pending, pageNumber, PENDING_PAGE_SIZE)
   return (
     <div className="flex flex-col gap-2" data-pending-block>
       {pending.length === 0 ? (
@@ -583,7 +589,7 @@ function PendingBlock({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pending.map((bundle) => {
+              {page.items.map((bundle) => {
                 const valid = isMigrationId(bundle.migrationId)
                 return (
                   <TableRow key={bundle.migrationId} data-pending={bundle.migrationId}>
@@ -642,6 +648,17 @@ function PendingBlock({
               })}
             </TableBody>
           </Table>
+          {pending.length > PENDING_PAGE_SIZE ? (
+            <Pager
+              label={t('migrations.pending.pager')}
+              page={page.page}
+              pageSize={PENDING_PAGE_SIZE}
+              total={pending.length}
+              onPage={setPageNumber}
+              text={pagerText()}
+              note={t('migrations.pending.pagerNote')}
+            />
+          ) : null}
           <PlanBundlesAction
             targetPath={context.path}
             environment={context.environment}

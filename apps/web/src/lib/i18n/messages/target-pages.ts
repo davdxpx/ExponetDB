@@ -50,6 +50,8 @@ const migrationsMessages = {
   'migrations.timeline.more': 'Show {count} earlier bundles',
   'migrations.timeline.shown': 'Showing the newest {shown} of {total} bundles',
   'migrations.history.matching': '{shown} of {total} migrations match',
+  'migrations.pending.pager': 'Pending bundle pages',
+  'migrations.pending.pagerNote': 'Select all chooses every pending bundle, not only this page.',
   'migrations.view.history': 'History',
   'migrations.view.pending': 'Pending',
   'migrations.view.timeline': 'Timeline',
