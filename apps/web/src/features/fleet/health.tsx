@@ -95,7 +95,11 @@ export interface HealthRead {
 }
 
 /** The chip with where the sample came from and how old it is, as text. */
-export function HealthCell(props: { readonly health: HealthRead | null }): ReactNode {
+export function HealthCell(props: {
+  readonly health: HealthRead | null
+  /** Inside a link: a long source is cut without a "Show all" button. */
+  readonly inLink?: boolean
+}): ReactNode {
   if (props.health === null) {
     return (
       <span className="flex flex-col items-start gap-1">
@@ -107,7 +111,13 @@ export function HealthCell(props: { readonly health: HealthRead | null }): React
     <span className="flex flex-col items-start gap-1">
       <HealthChip state={props.health.state} />
       <span className="text-xs text-foreground-light">
-        <UntrustedName name={props.health.source} mono maxCodePoints={24} label="source" />
+        <UntrustedName
+          name={props.health.source}
+          mono
+          maxCodePoints={24}
+          expandable={props.inLink !== true}
+          label="source"
+        />
         {', '}
         <ObservedTime observedAt={props.health.observedAt} />
       </span>

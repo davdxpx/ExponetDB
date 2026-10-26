@@ -116,13 +116,7 @@ function WorkRows({ items }: { readonly items: readonly OperationRead[] }): Reac
             {href === undefined ? (
               <div className="rounded-lg border bg-surface-100 px-3 py-2">{body}</div>
             ) : (
-              <LinkCard
-                href={href}
-                bare
-                tone="critical"
-                aria-label={t('fleet.work.open', { id: operation.id })}
-                className="px-3 py-2"
-              >
+              <LinkCard href={href} bare tone="critical" className="px-3 py-2">
                 {body}
               </LinkCard>
             )}

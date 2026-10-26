@@ -250,6 +250,10 @@ function DataReadForm({
   const initial = installationParams(rule)
   const [scope, setScope] = useState('installation')
   const [typed, setTyped] = useState('')
+  // A typed ID is checked when the field is left or the form is sent, not on every key.
+  const [typedChecked, setTypedChecked] = useState(false)
+  const typedInvalid = typed.trim() !== '' && !isTargetId(typed.trim())
+  const typedError = typedChecked && typedInvalid
   const [mode, setMode] = useState<DataReadMode>(modeOf(initial) ?? 'by_tier')
   const [columns, setColumns] = useState(columnsOf(initial['sensitiveColumns']).join('\n'))
   const [error, setError] = useState<string | undefined>()
@@ -265,6 +269,10 @@ function DataReadForm({
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
+    if (typedInvalid) {
+      setTypedChecked(true)
+      return
+    }
     const parsed = parseColumns(columns)
     if (!parsed.ok) {
       setError(t('settings.policies.dataRead.columns.invalid', { line: parsed.line }))
@@ -296,9 +304,11 @@ function DataReadForm({
 
   const typeTarget = (value: string): void => {
     setTyped(value)
-    if (isTargetId(value.trim())) choose(value.trim())
+    const next = value.trim()
+    if (isTargetId(next)) choose(next)
+    // A plan is never made for an ID the field no longer shows.
+    else if (scope === typed.trim()) choose('installation')
   }
-  const typedInvalid = typed.trim() !== '' && !isTargetId(typed.trim())
 
   const chosenTarget = targetList.find((target) => target.id === scope)
   const unlisted = scope !== 'installation' && chosenTarget === undefined
@@ -363,7 +373,7 @@ function DataReadForm({
         id={`${id}-typed`}
         label={t('settings.policies.scope.typed')}
         description={t('settings.policies.scope.typed.hint')}
-        error={typedInvalid ? t('settings.policies.scope.typed.invalid') : undefined}
+        error={typedError ? t('settings.policies.scope.typed.invalid') : undefined}
       >
         <Input
           id={`${id}-typed`}
@@ -373,9 +383,13 @@ function DataReadForm({
           className="max-w-sm font-mono"
           placeholder="tgt_…"
           value={typed}
-          aria-invalid={typedInvalid}
-          aria-describedby={`${id}-typed-description${typedInvalid ? ` ${id}-typed-error` : ''}`}
-          onChange={(event) => typeTarget(event.target.value)}
+          aria-invalid={typedError}
+          aria-describedby={`${id}-typed-description${typedError ? ` ${id}-typed-error` : ''}`}
+          onChange={(event) => {
+            setTypedChecked(false)
+            typeTarget(event.target.value)
+          }}
+          onBlur={() => setTypedChecked(true)}
         />
       </Field>
       {chosenTarget?.tier === 'prod' ? (

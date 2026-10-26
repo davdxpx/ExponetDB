@@ -386,8 +386,9 @@ describe('the operations that need a person', () => {
     const world = new World()
     world.operations = [operationFixture()]
     mountApp('/', world)
+    // Named by what it shows (kind, subject, tier, state), not by a label that hides it.
     const link = await screen.findByRole('link', {
-      name: 'Open operation op_01M4S9000000000000000000Q1',
+      name: /migration\.apply.*shop\/platform\/production/,
     })
     expect(link).toHaveAttribute('href', '/changes/operations/op_01M4S9000000000000000000Q1')
     expect(link.textContent).toContain('migration.apply')

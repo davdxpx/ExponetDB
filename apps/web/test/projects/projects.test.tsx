@@ -301,13 +301,14 @@ describe("a project's home", () => {
   it('shows the environments as cards that link to each target, production marked', async () => {
     mountApp('/p/shop/platform', homeWorld())
     const list = await screen.findByRole('list', { name: 'Environments' })
-    const production = within(list).getByRole('link', { name: 'Open shop/platform/production' })
+    const production = within(list).getByRole('link', {
+      name: /^production.*shop\/platform\/production/,
+    })
     expect(production).toHaveAttribute('href', '/t/shop/platform/production')
     expect(production).toHaveAttribute('data-tone', 'production')
-    expect(within(list).getByRole('link', { name: 'Open shop/platform/staging' })).toHaveAttribute(
-      'data-tone',
-      'neutral',
-    )
+    expect(
+      within(list).getByRole('link', { name: /^staging.*shop\/platform\/staging/ }),
+    ).toHaveAttribute('data-tone', 'neutral')
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Platform')
   })
 

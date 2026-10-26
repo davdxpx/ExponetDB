@@ -169,7 +169,8 @@ function ServerDetail({ serverId }: { readonly serverId: string }): ReactNode {
           )}
         />
       </InfraSection>
-      {value?.state === 'retired' ? null : (
+      {/* Offered only for a server read as active; a retired or unread one offers nothing. */}
+      {value === undefined || value.state === 'retired' ? null : (
         <InfraSection
           id="server-enroll"
           title={t('infra.enroll.title')}
@@ -191,8 +192,9 @@ function ServerDetail({ serverId }: { readonly serverId: string }): ReactNode {
               id: value.id,
               state: value.state ?? 'active',
               retiredAt: value.retiredAt ?? null,
-              // A server that may host production is production (registry.md §4.1).
-              tier: value.derivedTier === 'nonprod' ? 'nonprod' : 'prod',
+              // Removing a server is a production decision whatever it hosts today
+              // (`registry.server.retire` needs production authority), so it is confirmed as one.
+              tier: 'prod',
             }}
           />
         </InfraSection>

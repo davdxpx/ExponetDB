@@ -309,12 +309,24 @@ describe('the policies page', () => {
     ).toBeInTheDocument()
     const typed = within(form).getByLabelText('Or a target by its ID')
     fireEvent.change(typed, { target: { value: 'tgt_nope' } })
+    // Checked when the field is left, not while typing.
+    expect(within(form).queryByText(/Enter a target ID such as tgt_/)).toBeNull()
+    fireEvent.blur(typed)
     expect(within(form).getByText(/Enter a target ID such as tgt_/)).toBeInTheDocument()
     expect((within(form).getByLabelText('Applies to') as HTMLSelectElement).value).toBe(
       'installation',
     )
     fireEvent.change(typed, { target: { value: OTHER } })
     expect((within(form).getByLabelText('Applies to') as HTMLSelectElement).value).toBe(OTHER)
+    // Editing the ID into something invalid leaves no plan for the old one.
+    fireEvent.change(typed, { target: { value: `${OTHER}x` } })
+    expect((within(form).getByLabelText('Applies to') as HTMLSelectElement).value).toBe(
+      'installation',
+    )
+    await user.click(within(form).getByRole('button', { name: 'Create plan to change setting' }))
+    expect(within(form).getByText(/Enter a target ID such as tgt_/)).toBeInTheDocument()
+    expect(world.changes).toEqual([])
+    fireEvent.change(typed, { target: { value: OTHER } })
     // An unlisted target's tier is not known here, and the page does not guess non-production.
     expect(within(form).getByText(/tier of this target is not known here/)).toBeInTheDocument()
     await user.selectOptions(within(form).getByLabelText('Who reads rows'), 'humans_only')

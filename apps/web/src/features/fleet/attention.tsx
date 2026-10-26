@@ -121,7 +121,7 @@ function AttentionRows({ rows }: { readonly rows: Attention['rows'] }): ReactNod
             />
             <TierChip tier={target.tier} />
             <span className="ml-auto">
-              <HealthCell health={target.health} />
+              <HealthCell health={target.health} inLink />
             </span>
           </span>
         )
@@ -134,7 +134,6 @@ function AttentionRows({ rows }: { readonly rows: Attention['rows'] }): ReactNod
                 href={href}
                 bare
                 tone={target.tier === 'nonprod' ? 'neutral' : 'production'}
-                aria-label={t('targets.open', { target: target.path })}
                 className="px-3 py-2"
               >
                 {body}

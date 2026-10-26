@@ -144,7 +144,6 @@ function EnvironmentCard({ environment }: { readonly environment: ProjectEnviron
     <LinkCard
       href={targetHref({ product, project, environment: slug })}
       tone={target.tier === 'nonprod' ? 'neutral' : 'production'}
-      aria-label={t('project.environment.open', { path: target.path })}
       className="h-full gap-3 p-4"
     >
       <span className="flex flex-wrap items-center gap-2 pr-6">
@@ -156,7 +155,7 @@ function EnvironmentCard({ environment }: { readonly environment: ProjectEnviron
       </span>
       <span className="font-mono text-xs text-foreground-light">{target.path}</span>
       <span className="mt-auto">
-        <HealthCell health={target.health} />
+        <HealthCell health={target.health} inLink />
       </span>
     </LinkCard>
   )

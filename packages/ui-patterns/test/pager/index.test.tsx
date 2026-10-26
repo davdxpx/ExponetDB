@@ -68,12 +68,22 @@ describe('Pager', () => {
     expect(onPage.mock.calls).toEqual([[3], [1]])
   })
 
-  it('disables the buttons at the ends instead of removing them', () => {
+  it('marks the buttons at the ends as unavailable, keeping them and their focus', async () => {
+    const onPage = vi.fn()
     const { rerender } = render(
-      <Pager label="Pages" page={1} pageSize={25} total={10} onPage={() => {}} text={text} />,
+      <Pager label="Pages" page={1} pageSize={25} total={10} onPage={onPage} text={text} />,
     )
-    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+    const next = screen.getByRole('button', { name: 'Next' })
+    expect(screen.getByRole('button', { name: 'Previous' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+    expect(next).toHaveAttribute('aria-disabled', 'true')
+    // Not `disabled`: the button pressed on the last page keeps the focus.
+    next.focus()
+    await userEvent.click(next)
+    expect(next).toHaveFocus()
+    expect(onPage).not.toHaveBeenCalled()
     rerender(<Pager label="Pages" page={1} pageSize={25} total={0} onPage={() => {}} text={text} />)
     expect(screen.getByRole('navigation')).toHaveTextContent('0–0 of 0')
   })

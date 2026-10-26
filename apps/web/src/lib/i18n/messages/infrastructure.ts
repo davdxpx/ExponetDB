@@ -63,6 +63,10 @@ export const infrastructureMessages = {
   'infra.retire.action.server': 'Plan removal of this server',
   'infra.retire.action.cluster': 'Plan removal of this cluster',
   'infra.retire.blockedWhy': 'Resolve the items above first.',
+  'infra.retire.blockedWhy.backups':
+    'The backup engine binds it or could not answer (see Backups below). The removal waits for it.',
+  'infra.retire.blockedWhy.retired': 'It is already removed from ExponetDB.',
+  'infra.retire.blockedWhy.other': 'The server refuses the removal now. Refresh to read it again.',
   'infra.retire.confirm.title.server': 'Plan the removal of this server?',
   'infra.retire.confirm.title.cluster': 'Plan the removal of this cluster?',
   'infra.retire.confirm.body.server':

@@ -33,7 +33,7 @@ async function rowsOf(root: HTMLElement): Promise<string[]> {
   const list = await within(root).findByRole('list', { name: 'Targets with the worst health' })
   return within(list)
     .getAllByRole('link')
-    .map((link) => link.getAttribute('aria-label') ?? '')
+    .map((link) => link.getAttribute('href') ?? '')
 }
 
 describe('the targets that need attention (model)', () => {
@@ -125,24 +125,24 @@ describe('the overview section "Targets that need attention"', () => {
     mountApp('/', world)
     const root = await section()
     expect(await rowsOf(root)).toEqual([
-      'Open shop/platform/production',
-      'Open shop/platform/staging',
-      'Open acme/core/staging',
+      '/t/shop/platform/production',
+      '/t/shop/platform/staging',
+      '/t/acme/core/staging',
     ])
     const production = root.querySelector('[data-target]:not([data-tier="nonprod"])') as HTMLElement
     expect(production.querySelector('[data-tier="production"]')).not.toBeNull()
     expect(production.querySelector('[data-health="unreachable"]')).not.toBeNull()
     expect(production.textContent).toContain('sampled')
     expect(production.textContent).toMatch(/sampled, [0-9]+ min ago/)
-    const link = within(root).getByRole('link', { name: 'Open shop/platform/production' })
+    const link = within(root).getByRole('link', { name: /^shop\/platform\/production/ })
     expect(link).toHaveAttribute('href', '/t/shop/platform/production')
     // The whole row is the link, with nothing interactive inside it.
     expect(link.querySelector('a, button')).toBeNull()
     expect(link).toHaveAttribute('data-tone', 'production')
     const none = root.querySelector('[data-health="none"]')
     expect(none?.textContent).toContain('No health sample')
-    expect(within(root).queryByRole('link', { name: 'Open shop/billing/staging' })).toBeNull()
-    expect(within(root).queryByRole('link', { name: 'Open acme/core/production' })).toBeNull()
+    expect(within(root).queryByRole('link', { name: /^shop\/billing\/staging/ })).toBeNull()
+    expect(within(root).queryByRole('link', { name: /^acme\/core\/production/ })).toBeNull()
     expect(
       within(root).getByText('Needing attention: 3 of 5 targets read. Showing the worst 3.'),
     ).toBeVisible()
@@ -282,7 +282,7 @@ describe('the overview section "Targets that need attention"', () => {
       /Showing an earlier read of .*Observed/,
     )
     expect(within(root).getByRole('button', { name: 'Refresh' })).toBeVisible()
-    expect(await rowsOf(root)).toEqual(['Open shop/platform/staging'])
+    expect(await rowsOf(root)).toEqual(['/t/shop/platform/staging'])
   })
 
   it('shows a path that is not three slugs as marked text without a link', async () => {

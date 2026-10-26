@@ -85,7 +85,8 @@ describe('removing a server from ExponetDB', () => {
     expect(root.textContent).toMatch(/Does not delete or stop the machine/)
     expect(root.textContent).toMatch(/no backup engine records anything yet/)
     const action = within(root).getByRole('button', { name: 'Plan removal of this server' })
-    expect(action).toBeDisabled()
+    // Unavailable but reachable by Tab, so its reason is heard.
+    expect(action).toHaveAttribute('aria-disabled', 'true')
     expect(action).toHaveAccessibleDescription('Resolve the items above first.')
     expect(world.changes).toHaveLength(0)
   })
@@ -111,6 +112,20 @@ describe('removing a server from ExponetDB', () => {
     expect(world.changes.map((c) => [c.method, c.path, c.body])).toEqual([
       ['POST', `/api/v1/servers/${SERVER}/retire`, { reason: 'host_returned' }],
     ])
+  })
+
+  it('names the backup engine as the reason when only it blocks', async () => {
+    const world = new World()
+    world.retirements.set(
+      `server:${SERVER}`,
+      preflight({ blockers: [], providers: [{ provider: 'backups', state: 'unknown' }] }),
+    )
+    mountApp(`/infrastructure/servers/${SERVER}`, world)
+    const root = await section()
+    const action = await within(root).findByRole('button', { name: 'Plan removal of this server' })
+    expect(action).toHaveAttribute('aria-disabled', 'true')
+    expect(action).toHaveAccessibleDescription(/backup engine binds it or could not answer/)
+    expect(within(root).queryByText('Before it can be removed')).toBeNull()
   })
 
   it('says a retired server was removed, shows no enrollment and offers nothing (none)', async () => {
@@ -255,6 +270,25 @@ describe('removing a cluster from ExponetDB', () => {
     expect(world.changes.map((c) => c.path)).toEqual([
       `/api/v1/clusters/${CLUSTER}/databases/dbs_01M4S9000000000000000000D1/retire`,
     ])
+  })
+
+  it('names "Retire record" by a database name whose hidden characters are shown, not obeyed', async () => {
+    const world = new World()
+    world.databases = [
+      {
+        id: 'dbs_01M4S9000000000000000000D1',
+        clusterId: CLUSTER,
+        name: `orders${BIDI}`,
+        state: 'registered',
+        createdAt: new Date().toISOString(),
+        observed: null,
+        placement: null,
+      },
+    ] as World['databases']
+    mountApp(`/infrastructure/clusters/${CLUSTER}`, world)
+    const button = await screen.findByRole('button', { name: /Retire the record of database/ })
+    expect(button.getAttribute('aria-label')).toContain('⟨U+202E⟩')
+    expect(button.getAttribute('aria-label')).not.toContain(BIDI)
   })
 
   it('says how many of a group are not named when its list is cut (partial, truncated)', async () => {

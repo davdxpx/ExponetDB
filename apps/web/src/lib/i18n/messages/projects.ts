@@ -67,7 +67,6 @@ export const projectsMessages = {
   'project.environments.more': 'More databases exist than this read holds.',
   'project.environments.search': 'Find an environment',
   'project.environments.showAll': 'Show all {count} environments',
-  'project.environment.open': 'Open {path}',
   'project.environment.findings': '{count} open findings',
   'project.environment.noFindings': 'No open findings',
   'project.stream.title': 'Migrations',

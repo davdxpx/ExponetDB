@@ -74,8 +74,9 @@ export interface PagerProps {
 /**
  * Previous, next and the range shown, for a list too long for one screen. It is a named
  * navigation landmark; the range is a polite live region, so a screen reader hears the new range
- * after a press. The buttons are real buttons and stay in place when they are disabled (the
- * layout never shifts under the pointer).
+ * after a press. The buttons are real buttons and stay in place at the ends (the layout never
+ * shifts under the pointer); there they are `aria-disabled`, not `disabled`, so the button just
+ * pressed keeps the focus on the last or first page.
  */
 export function Pager({
   label,
@@ -93,6 +94,8 @@ export function Pager({
   const pages = pageCount(total, pageSize)
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1
   const to = Math.min(total, page * pageSize)
+  const atStart = page <= 1
+  const atEnd = page >= pages
   return (
     <nav
       aria-label={label}
@@ -131,7 +134,8 @@ export function Pager({
           type="button"
           variant="default"
           size="tiny"
-          disabled={page <= 1}
+          disabled={atStart}
+          focusableWhenDisabled
           onClick={() => onPage(page - 1)}
           icon={<ChevronLeft aria-hidden="true" strokeWidth={1.5} />}
         >
@@ -141,7 +145,8 @@ export function Pager({
           type="button"
           variant="default"
           size="tiny"
-          disabled={page >= pages}
+          disabled={atEnd}
+          focusableWhenDisabled
           onClick={() => onPage(page + 1)}
           iconRight={<ChevronRight aria-hidden="true" strokeWidth={1.5} />}
         >

@@ -32,7 +32,6 @@ export const fleetMessages = {
   'fleet.work.caption': 'Operations that need attention, newest first',
   'fleet.work.empty': 'The read succeeded and no operation needs attention.',
   'fleet.work.more': 'More operations need attention than this list shows.',
-  'fleet.work.open': 'Open operation {id}',
   'fleet.protection.title': 'Backups',
   'fleet.protection.state': 'Backup health is not observed yet',
   'fleet.read.what': 'Fleet overview',

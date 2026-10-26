@@ -215,12 +215,7 @@ function Topology({
       {layers}
     </div>
   ) : (
-    <LinkCard
-      href={href}
-      data-topology="placed"
-      aria-label={t('overview.hero.topology.open')}
-      className={cn('p-4', className)}
-    >
+    <LinkCard href={href} data-topology="placed" className={cn('p-4', className)}>
       {layers}
     </LinkCard>
   )

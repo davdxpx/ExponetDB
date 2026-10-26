@@ -14,7 +14,6 @@ export const targetOverviewMessages = {
   'overview.hero.backups': 'Backups',
   'overview.hero.backups.state': 'Not observed yet',
   'overview.hero.topology': 'Where it runs',
-  'overview.hero.topology.open': 'Open the cluster this database runs on',
   'overview.hero.noServer': 'No server recorded',
   'overview.hero.database': 'Database',
   'overview.hero.thisDatabase': 'This target',

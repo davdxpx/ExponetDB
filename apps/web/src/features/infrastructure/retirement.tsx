@@ -21,6 +21,7 @@ import { holds } from '../access/fields.tsx'
 import { operationPath } from '../changes/model.ts'
 import { type ReasonProblem, reasonCodeProblem } from '../configuration/lifecycle-model.ts'
 import { ReasonCodeField } from '../configuration/reason-code-field.tsx'
+import { inlineName } from '../consent/inline-name.ts'
 import { useGuardedPlan } from '../targets/plan-request.ts'
 import { retirementQuery } from './keys.ts'
 import { clusterPath, nodePath, serverPath } from './model.ts'
@@ -212,9 +213,17 @@ function PreflightBody({
           {t('infra.retire.observed')} <ObservedTime observedAt={preflight.observedAt} />
         </li>
       </ul>
-      <PlanRemoval subject={subject} blocked={blocked} />
+      <PlanRemoval subject={subject} blocked={blocked} why={blockedWhy(preflight, backups)} />
     </div>
   )
+}
+
+/** One reason per cause, so a disabled action never points at a list that is not there. */
+function blockedWhy(preflight: RetirementPreflight, backups: string): MessageKey {
+  if (preflight.verdict === 'retired') return 'infra.retire.blockedWhy.retired'
+  if (preflight.blockers.length > 0) return 'infra.retire.blockedWhy'
+  if (backups === 'blocking' || backups === 'unknown') return 'infra.retire.blockedWhy.backups'
+  return 'infra.retire.blockedWhy.other'
 }
 
 function BlockerGroup({
@@ -299,9 +308,11 @@ function blockerHref(kind: Kind, id: string, subject: RetirementSubject): string
 function PlanRemoval({
   subject,
   blocked,
+  why,
 }: {
   readonly subject: RetirementSubject
   readonly blocked: boolean
+  readonly why: MessageKey
 }): ReactNode {
   const { client } = useApi()
   const createPlan = useGuardedPlan()
@@ -331,6 +342,8 @@ function PlanRemoval({
           variant="danger"
           size="small"
           disabled={blocked}
+          // Reachable by Tab while disabled, so its reason is heard.
+          focusableWhenDisabled
           aria-describedby={blocked ? `${id}-why` : undefined}
           icon={<Trash2 aria-hidden="true" strokeWidth={1.5} />}
           onClick={() => setOpen(true)}
@@ -339,7 +352,7 @@ function PlanRemoval({
         </Button>
         {blocked ? (
           <span id={`${id}-why`} className={cn('text-xs text-foreground-light')}>
-            {t('infra.retire.blockedWhy')}
+            {t(why)}
           </span>
         ) : null}
       </div>
@@ -419,7 +432,8 @@ export function RetireDatabaseButton({
         type="button"
         variant="text"
         size="tiny"
-        aria-label={t('infra.database.retire.label', { database: name })}
+        // A hidden or direction character in the name is shown by its code point, not obeyed.
+        aria-label={t('infra.database.retire.label', { database: inlineName(name) ?? databaseId })}
         onClick={() => setOpen(true)}
       >
         {t('infra.database.retire')}
