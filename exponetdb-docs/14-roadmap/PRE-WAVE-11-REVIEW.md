@@ -32,7 +32,11 @@ no file under `apps/web/src/features/wave9/**` touched.
 | `c55f5726` | ADR-0035 references; a fieldset for the import filters |
 | `6a110e21` | Web: "Remove from ExponetDB" on server and cluster pages; "Retire record" for unplaced databases |
 | `05d8f3ee` | Lists that stopped at their first page (audit, bindings, grants, OAuth clients) |
-| last commit of the PR | Documents: ADR-0035, this section, IA, design system, parity; button links on the Changes landing |
+| `675090d7` | Documents: ADR-0035, this section, IA, design system, parity; button links on the Changes landing |
+| `49694666` | Policies: a data-read setting for any target, not only the first 200 (P1 #9) |
+| `2a03254d` | Documents: built, not planned (source review) |
+| `a4a20879` … `fb33fc9c` | Web fixes of the independent reviews (U13) |
+| `6c6d499a` | Registry: retirement hardening of the security review (U13) |
 
 ### U2. Routes: added, changed, kept
 
@@ -186,8 +190,15 @@ holds the rules. What was built:
 | server with a pending cluster | `server_in_use`; preflight names the cluster; cluster retired with its endpoint; then server retired; history kept | TESTED LOCALLY |
 | cluster with a registered database | `cluster_in_use`; after the database record is retired the cluster retires with 3 credentials; the PostgreSQL database still exists | TESTED LOCALLY |
 | database registered after a cluster retirement was planned | apply refused `PLAN_STALE` | TESTED LOCALLY |
-| retirement and new child at the same time, both orders | the second waits on the row lock and is refused (EXG07) | TESTED LOCALLY (SQL level) |
-| node `active`, `offline`, `revoked`; open node job; open enrollment token; open operation naming the subject | blocks; preflight names it | covered by the queries and the guard; **NOT EXECUTED** as integration cases |
+| cluster retirement and a new endpoint at the same time, both orders | the second waits on the row lock and is refused (EXG07) | TESTED LOCALLY (SQL level; the wait is checked on the blocked backend itself) |
+| server retirement and a new cluster at the same time, both orders | the second waits and is refused (EXG06) | TESTED LOCALLY |
+| server retirement and a new enrollment token at the same time, both orders | the second waits and is refused | TESTED LOCALLY (`packages/nodes`, the real `createEnrollmentToken`) |
+| enroll plan, token creation and the enroll apply on a retired server | `server_retired` conflict; the token refused; the enroll plan stale | TESTED LOCALLY |
+| an enrollment token that ran out less than five minutes ago | still blocks, in preflight, planner and guard alike | TESTED LOCALLY (`created` tokens; the `issued` side **NOT EXECUTED**) |
+| an endpoint added after a cluster's removal was planned | apply refused `PLAN_STALE` (`retiredWith`) | TESTED LOCALLY |
+| a cluster registration planned on a retired server | `server_retired` at plan time; stale at apply | TESTED LOCALLY |
+| a queued plan whose body holds an escaped NUL | the preflight still reads (before the fix: 22P05) | TESTED LOCALLY |
+| node `active`, `offline`, `revoked`; open node job; open operation naming the subject | blocks; preflight names it | covered by the queries and the guard; **NOT EXECUTED** as integration cases |
 | shared server across products and tiers; cross-tier authority; a person without `registry.manage` on the production tier | refused by the authorization engine (production authority for servers) | **NOT EXECUTED** |
 | unauthorized preflight | 403; the Web reads nothing and says blockers may exist | Web TESTED LOCALLY; server **NOT EXECUTED** |
 | 0 / 1 / 10 / 1,000+ dependents | groups name 50 with the total | Web TESTED LOCALLY (120); server **NOT EXECUTED** at 1,000 |
@@ -277,18 +288,25 @@ outside Wave 9's domains.
 
 ### U10. Tests and checks (exact, on `/home/david` WSL2, Docker PostgreSQL 17.11)
 
+Final runs after the review fixes (U13), on the branch head before this
+document's last commit; earlier runs of the same suites are superseded.
+
 | What | Result | Label |
 |---|---|---|
-| `apps/web` vitest | 164 files, 2,441 tests passed | TESTED LOCALLY |
-| `packages/ui-patterns` vitest | 90 files, 1,141 tests; 1 fails in this machine's CET shell (`metric-card` expects UTC clock text; passes with `TZ=UTC`; the file is untouched by this branch) | TESTED LOCALLY, **time-zone dependent test observed** |
-| `packages/icons` vitest | 8 passed | TESTED LOCALLY |
+| `apps/web` vitest (whole suite) | 164 files, 2,450 tests passed | TESTED LOCALLY |
+| `packages/ui-patterns` vitest (whole suite) | 90 files, 1,141 tests passed with `TZ=UTC`; in this machine's CET shell 1 fails (`metric-card` expects UTC clock text; the file is untouched by this branch) | TESTED LOCALLY, **time-zone dependent test observed** |
+| `packages/icons` vitest | 8 passed (before the review fixes, unchanged since) | TESTED LOCALLY |
 | `bun run typecheck` (turbo, every package) | 28 of 28 tasks successful | STATIC CHECKED |
-| `packages/contracts`, `application`, `sdk`, `registry` (unit), `apps/cli`, `apps/server` (unit) | 218, 68, 89, 8, 79, 189 passed | TESTED LOCALLY |
-| `packages/registry` integration (incl. `registry-retirement.int.test.ts`, 5 cases) | 42 passed | TESTED LOCALLY |
-| `packages/control-store` integration | first run: one failure in `registry-schema.int.test.ts` (`migration_verifications_check`, a verification finishing before it started; host and container clocks differ by ~0.1 s); rerun: 13 of 13 passed; full suite 104 passed, 13 skipped | TESTED LOCALLY, **flaky clock check observed, not caused by this branch** |
-| `packages/nodes` integration | 19 passed | TESTED LOCALLY |
-| `bun run verify:generated`, `golden:check`, `golden:history origin/main` (21 frozen bundles byte-identical, 30 MCP tool versions unchanged), `boundaries`, `secrets`, `third-party`, `ui-safety`, `check` (biome) | all hold | STATIC CHECKED |
-| `apps/web` build with bundle budgets | entry 277.2 of 308 kB, CSS 31.3 of 35 kB, largest lazy route 35.7 of 51 kB | STATIC CHECKED |
+| `packages/contracts`, `application`, `registry` (unit), `apps/server` (unit) | 218, 68, 8, 189 passed | TESTED LOCALLY |
+| `packages/sdk`, `apps/cli` (unit) | 89, 79 passed (before the review fixes; neither changed since) | TESTED LOCALLY |
+| `packages/registry` integration: `registry-retirement.int.test.ts` | 10 of 10 passed (5 of them new; they failed before the fix) | TESTED LOCALLY |
+| `packages/registry` integration: `registry.int.test.ts`; `apps/server` `http-registry.int.test.ts`, `http-auth.test.ts`; `control-store` `immutable-bundles.test.ts` | 25, 14, 18, 3 passed | TESTED LOCALLY (run by the implementing agent, U13) |
+| `packages/nodes` integration: `retired-server.int.test.ts` (new) | 4 of 4 passed | TESTED LOCALLY |
+| `packages/control-store` integration: `registry-schema.int.test.ts` | 13 of 13 passed | TESTED LOCALLY |
+| `packages/migrations-engine` integration: `engine.int.test.ts`, `legacy-supabase.int.test.ts` | first run of `engine`: setup failed on `migration_verifications_check` (a verification finishing before it started; host and container clocks differ by ~0.05 s); rerun 28 of 28; `legacy-supabase` 7 of 7. The other migrations-engine integration files are typechecked only | TESTED LOCALLY, **flaky clock check observed, not caused by this branch**; rest **NOT EXECUTED** |
+| `bun run verify:generated`, `golden:check`, `golden:history origin/main` (`02ed23ca`: 21 frozen bundles byte-identical, 30 MCP tool versions unchanged), `boundaries`, `secrets`, `third-party`, `ui-safety`, `check` (biome, 2,297 files) | all hold | STATIC CHECKED |
+| `apps/web` build with bundle budgets | entry 280.8 of 308 kB, CSS 31.4 of 35 kB, largest lazy route 35.7 of 51 kB | STATIC CHECKED |
+| Merge with `main` at `02ed23ca` | no conflict (`git merge-tree`) | STATIC CHECKED |
 | `bun run verify` as a whole, `test:e2e`, `test:conformance`, `go:test`, `smoke:image` | not run | **NOT EXECUTED** |
 | CI | no run observed for this branch | **NOT EXECUTED** |
 
@@ -307,12 +325,13 @@ LOCALLY); nothing below ran in a real browser.
 | Real data: `/t/reosa/platform/staging/migrations` with the imported ledger | migration centre | desktop | NOT EXECUTED (needs the deployed staging) |
 | Cross-browser: Chromium, Firefox, Safari | all | — | NOT EXECUTED |
 
-### U12. Security, RBAC and CSP points (NOT PROVEN until reviewed)
+### U12. Security, RBAC and CSP points (reviewed once, U13; NOT PROVEN beyond its tests)
 
 - No new secret surface: the Connect sheet builds text from registry records
   (`registry.manage` only, OD-41) with placeholders for role and password;
   values that are not safe to paste are refused, never escaped (tested with
-  hostile hosts and names). NOT PROVEN by an independent review.
+  hostile hosts and names). The independent security review found no secret
+  in the sheet, the preflight or the URL (U13); a review is not a proof.
 - Retirement is human only, re-authenticated, `registry.manage` at the cluster
   tier or production authority, `high`; **no approval rule** applies, as for
   database retirement today (gap, owner decision below).
@@ -323,7 +342,23 @@ LOCALLY); nothing below ran in a real browser.
   so no unchecked parent value reaches a page (regression tests).
 - CSP unchanged (`ui-safety` holds); no dependency added; no remote asset.
 
-### U13. Decisions for the owner (none taken here)
+### U13. Independent reviews (P7) and what they changed
+
+Four reviewers ran on the branch, each read-only and briefed with the code,
+not with this document's conclusions; a fifth agent then implemented the
+backend findings, reviewed by this session before its commit.
+
+| Review | Verdict | Findings | Fixed | Left open (why) |
+|---|---|---|---|---|
+| Routing, URL state, IA | approve with notes | 0 P1, 1 P2, 6 P3 | the P2 (a project home said "not found" from a cached list: it reads again and waits); a stale "pushed" flag in the Connect sheet (a later link-opened sheet went back past the page; **reproduced** by a test first); search text dropped, never cut, with the targets rule; an unknown product filter stays visible; `?migration=` off the page says where it is; dead `reportSearch`; return-path tests | the sheet's URL built from the decoded path (only self-made invalid paths, which render "not found"); the legacy import's filter and page in local state |
+| UX and accessibility (WCAG 2.2 AA) | 1 P1, 12 P2, 5 P3 | the P1 (project cards said "No database registered yet" while the target read loaded or failed: now "Environments not read", counts as floors when cut); all twelve P2: whole-card links named by their content, no button inside a link, focusable pager ends, focus kept when "Show all" / "Show earlier" / an import decision changes the list, one reason per cause on the disabled removal (reachable by Tab), safe names in labels, status lines for matches, the pending view paged, a visible mark on the chosen connect mode, decommissioned in words, the policies field (stale scope, error on every key) | duplicate accessible names ("Copy the command", "Decide", "View operation"); real-browser contrast, 320 px overflow and screen-reader speech (U11) |
+| Source and license | nothing blocks release | 0 P1, 0 P2, 3 P3 (docs) | the three document points | — |
+| Security (retirement, sheet, return paths) | no CRITICAL, no HIGH | 1 MEDIUM, 9 LOW | MEDIUM (race tests for server retirement against a new cluster and a new enrollment token, both orders, waiting on the blocked backend itself); LOW-1 (5-minute token margin in guard and preflight); LOW-2 (a plan body with an escaped NUL broke every preflight, **reproduced**: 22P05); LOW-3 (one required backup port); LOW-4 (the retired-with records bound in the plan); LOW-7 (a server's removal confirmed as production); LOW-8 (snippet quoting, safe option labels); LOW-9 (`search_path` with `pg_temp`, cluster registration on a retired server refused when planned, enrollment hidden until the server is read) | LOW-5 (a sealed `submitted` role verifier or rotation of a cluster is not a blocker: owner decision 7); LOW-6 (the preflight names node, job, token and operation ids to a `registry.manage` holder without `nodes.read`: owner decision 8); the same NUL hazard in the pre-existing fleet operations read (`application.ts`, Wave 8), flagged as its own task |
+
+All fixes carry tests; the reproductions above failed before their fix. The
+reviews are not acceptance and not a proof of absence (U11 still applies).
+
+### U14. Decisions for the owner (none taken here)
 
 1. **ADR-0035** (project level, Connect sheet, migration views): accept,
    change or reject.
@@ -339,5 +374,10 @@ LOCALLY); nothing below ran in a real browser.
    the new bundle (not in the frozen one). Accept or ask for another shape.
 5. **Supabase file fidelity**: keep the native rebuilds (recommended) or extend
    the allowlist by three files (U7).
-6. **The open P1 items** 6 and 9 and the reads of U8: which to build before
-   Wave 11.
+6. **The open P1 item** 6 (`q` and `kind` on `GET /identities`) and the reads
+   of U8: which to build before Wave 11. (P1 #9 is fixed.)
+7. **Role verifiers and credential rotations of a retired cluster**: add them
+   to the cluster's blockers, or close them with the retirement (U13, LOW-5).
+8. **What the removal preflight names**: keep listing node, job, token and
+   operation ids to a `registry.manage` holder, or strip them without
+   `nodes.read` / the operations read (U13, LOW-6).
