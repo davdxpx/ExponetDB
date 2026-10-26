@@ -294,6 +294,8 @@ export class World {
   endpoints: EndpointView[] = []
   targets: TargetSummary[] = []
   observations: NodeObservation[] = []
+  /** What a retirement would meet, by `server:<id>` or `cluster:<id>`; absent is 404. */
+  readonly retirements = new Map<string, unknown>()
   /** The reveal answers once; a second reveal is refused like an unknown token. */
   revealed = false
   /** Answers that fail, by a substring of `METHOD path` (first match wins). */
@@ -389,6 +391,11 @@ function read(world: World, p: string, url: URL): Response {
     const found = world.clusters.find((c) => c.id === m?.[1])
     return found === undefined ? problem(404, 'NOT_FOUND', 'Not found.') : json(200, found)
   }
+  m = /^\/api\/v1\/(servers|clusters)\/([^/]+)\/retirement$/.exec(p)
+  if (m !== null) {
+    const found = world.retirements.get(`${m[1] === 'servers' ? 'server' : 'cluster'}:${m[2]}`)
+    return found === undefined ? problem(404, 'NOT_FOUND', 'Not found.') : json(200, found)
+  }
   if (/^\/api\/v1\/clusters\/[^/]+\/bootstrap-sql$/.test(p)) return json(200, world.bootstrap)
   if (/^\/api\/v1\/clusters\/[^/]+\/databases$/.test(p)) {
     return json(200, { items: world.databases, truncated: world.databasesTruncated })
@@ -426,6 +433,15 @@ function change(world: World, p: string): Response {
   }
   if (/^\/api\/v1\/clusters\/[^/]+\/endpoints$/.test(p)) {
     return json(201, planView('registry.endpoint.add'))
+  }
+  if (/^\/api\/v1\/servers\/[^/]+\/retire$/.test(p)) {
+    return json(201, planView('registry.server.retire'))
+  }
+  if (/^\/api\/v1\/clusters\/[^/]+\/retire$/.test(p)) {
+    return json(201, planView('registry.cluster.retire'))
+  }
+  if (/^\/api\/v1\/clusters\/[^/]+\/databases\/[^/]+\/retire$/.test(p)) {
+    return json(201, planView('registry.database.retire'))
   }
   if (/^\/api\/v1\/clusters\/[^/]+\/endpoints\/[^/]+\/retire$/.test(p)) {
     return json(201, planView('registry.endpoint.retire'))

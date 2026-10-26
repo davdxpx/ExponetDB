@@ -171,6 +171,7 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/infrastructure/enrollment.tsx': { tests: NODES },
   'src/features/infrastructure/node-detail.tsx': { tests: NODES },
   'src/features/infrastructure/nodes-page.tsx': { tests: NODES },
+  'src/features/infrastructure/retirement.tsx': { tests: ['infrastructure/retirement.test.tsx'] },
   'src/features/infrastructure/server-detail.tsx': { tests: SERVERS },
   'src/features/infrastructure/servers-page.tsx': { tests: SERVERS },
   'src/features/migrations/bundle-sheet.tsx': {

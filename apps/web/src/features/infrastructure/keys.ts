@@ -35,6 +35,8 @@ export const infraKeys = {
   databases: (id: string) => ['infrastructure', 'clusters', id, 'databases'] as const,
   endpoints: (id: string) => ['infrastructure', 'clusters', id, 'endpoints'] as const,
   bootstrap: (id: string) => ['infrastructure', 'clusters', id, 'bootstrap-sql'] as const,
+  retirement: (kind: 'server' | 'cluster', id: string) =>
+    ['infrastructure', `${kind}s`, id, 'retirement'] as const,
   nodes: () => ['infrastructure', 'nodes'] as const,
   node: (id: string) => ['infrastructure', 'nodes', id] as const,
   jobs: (id: string) => ['infrastructure', 'nodes', id, 'jobs'] as const,
@@ -86,6 +88,28 @@ export function clustersQuery(client: ApiClient) {
     queryKey: infraKeys.clusters(),
     queryFn: ({ signal }) =>
       client.operation('listClusters', { query: { limit: INFRA_PAGE_LIMIT }, signal }),
+    refetchInterval: poll(INFRA_POLL_MS),
+  })
+}
+
+/**
+ * What a retirement of the server or cluster would meet now (`GET /{servers|clusters}/{id}/retirement`,
+ * registry.md §4.4). Read on the page that offers the removal, for `registry.manage` only, and
+ * again every half minute: a blocker someone resolves elsewhere shows up.
+ */
+export function retirementQuery(
+  client: ApiClient,
+  kind: 'server' | 'cluster',
+  id: string,
+  enabled: boolean,
+) {
+  return queryOptions({
+    queryKey: infraKeys.retirement(kind, id),
+    queryFn: ({ signal }) =>
+      kind === 'server'
+        ? client.operation('getServerRetirement', { params: { serverId: id }, signal })
+        : client.operation('getClusterRetirement', { params: { clusterId: id }, signal }),
+    enabled: enabled && (kind === 'server' ? isServerId(id) : isClusterId(id)),
     refetchInterval: poll(INFRA_POLL_MS),
   })
 }

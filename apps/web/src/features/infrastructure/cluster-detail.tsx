@@ -48,6 +48,7 @@ import {
 } from './keys.ts'
 import { credentialsPath, nodePath, serverPath, servingNode } from './model.ts'
 import { InfraPage, InfraSection, NodeStateBadge, ObjectLink } from './parts.tsx'
+import { RetireDatabaseButton, RetiredBadge, RetirementSection } from './retirement.tsx'
 import { RotateCredential } from './rotate-credential.tsx'
 
 /**
@@ -92,7 +93,10 @@ function ClusterDetail({ clusterId }: { readonly clusterId: string }): ReactNode
         value === undefined ? (
           t('infra.cluster.title')
         ) : (
-          <UntrustedName name={value.displayName} label={t('infra.column.name')} />
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <UntrustedName name={value.displayName} label={t('infra.column.name')} />
+            {value.state === 'retired' ? <RetiredBadge /> : null}
+          </span>
         )
       }
       description={t('infra.cluster.description')}
@@ -271,6 +275,21 @@ function ClusterSections({
         <CredentialsHandOff cluster={cluster} tier={tier} />
       </InfraSection>
       {cluster.state === 'pending' ? null : bootstrap}
+      <InfraSection
+        id="cluster-retire"
+        title={t('infra.retire.title')}
+        description={t('infra.retire.description')}
+      >
+        <RetirementSection
+          subject={{
+            kind: 'cluster',
+            id: cluster.id,
+            state: cluster.state,
+            retiredAt: cluster.retiredAt ?? null,
+            tier,
+          }}
+        />
+      </InfraSection>
     </>
   )
 }
@@ -444,6 +463,7 @@ function Placements({ cluster }: { readonly cluster: Cluster }): ReactNode {
           databases={v.items}
           target={(id) => paths.get(id)}
           targetsFailed={targets.isError}
+          tier={clusterTier(cluster)}
         />
       )}
     />
@@ -454,7 +474,9 @@ function DatabaseTable({
   databases,
   target,
   targetsFailed,
+  tier,
 }: {
+  readonly tier: 'prod' | 'nonprod'
   readonly databases: readonly DatabaseView[]
   readonly target: (id: string) => { readonly path: string; readonly tier: string } | undefined
   readonly targetsFailed: boolean
@@ -473,6 +495,9 @@ function DatabaseTable({
             <TableHead scope="col">{t('infra.cluster.placements.state')}</TableHead>
             <TableHead scope="col">{t('infra.cluster.placements.target')}</TableHead>
             <TableHead scope="col">{t('infra.cluster.placements.owner')}</TableHead>
+            <TableHead scope="col">
+              <span className="sr-only">{t('infra.cluster.placements.actions')}</span>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -533,6 +558,16 @@ function DatabaseTable({
                       <ObservedTime observedAt={database.observed.observedAt} withDate />
                     </span>
                   )}
+                </TableCell>
+                <TableCell>
+                  {database.state === 'registered' && placed === null ? (
+                    <RetireDatabaseButton
+                      clusterId={database.clusterId}
+                      databaseId={database.id}
+                      name={database.name}
+                      tier={tier}
+                    />
+                  ) : null}
                 </TableCell>
               </TableRow>
             )

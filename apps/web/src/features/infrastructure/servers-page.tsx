@@ -31,6 +31,7 @@ import { serversQuery } from './keys.ts'
 import { serverPath } from './model.ts'
 import { InfraPage, InfraSection, ObjectLink } from './parts.tsx'
 import { isProvider, PROVIDER_GROUPS, ProviderName } from './provider.tsx'
+import { RetiredBadge } from './retirement.tsx'
 
 const DEFAULT_PROVIDER: ServerProvider = 'unknown'
 
@@ -117,7 +118,10 @@ function ServerTable({ servers }: { readonly servers: readonly Server[] }): Reac
         {servers.map((server) => (
           <TableRow key={server.id} data-server={server.id}>
             <TableCell>
-              <UntrustedName name={server.displayName} label={t('infra.column.name')} />
+              <span className="inline-flex flex-wrap items-center gap-2">
+                <UntrustedName name={server.displayName} label={t('infra.column.name')} />
+                {server.state === 'retired' ? <RetiredBadge /> : null}
+              </span>
             </TableCell>
             <TableCell>
               <ObjectLink

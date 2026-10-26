@@ -11,6 +11,7 @@ import { clustersQuery, isServerId, nodesQuery, serverQuery } from './keys.ts'
 import { clusterPath, nodePath } from './model.ts'
 import { InfraPage, InfraSection, NodeStateBadge, ObjectLink } from './parts.tsx'
 import { ProviderName } from './provider.tsx'
+import { RetiredBadge, RetirementSection } from './retirement.tsx'
 import { ServerFacts } from './servers-page.tsx'
 
 /**
@@ -38,7 +39,10 @@ function ServerDetail({ serverId }: { readonly serverId: string }): ReactNode {
         value === undefined ? (
           t('infra.server.title')
         ) : (
-          <UntrustedName name={value.displayName} label={t('infra.column.name')} />
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <UntrustedName name={value.displayName} label={t('infra.column.name')} />
+            {value.state === 'retired' ? <RetiredBadge /> : null}
+          </span>
         )
       }
       description={t('infra.server.description')}
@@ -165,14 +169,34 @@ function ServerDetail({ serverId }: { readonly serverId: string }): ReactNode {
           )}
         />
       </InfraSection>
-      <InfraSection
-        id="server-enroll"
-        title={t('infra.enroll.title')}
-        description={t('infra.enroll.description')}
-      >
-        <EnrollNodeButton serverId={serverId} />
-        <EnrollmentTokens serverId={serverId} />
-      </InfraSection>
+      {value?.state === 'retired' ? null : (
+        <InfraSection
+          id="server-enroll"
+          title={t('infra.enroll.title')}
+          description={t('infra.enroll.description')}
+        >
+          <EnrollNodeButton serverId={serverId} />
+          <EnrollmentTokens serverId={serverId} />
+        </InfraSection>
+      )}
+      {value === undefined ? null : (
+        <InfraSection
+          id="server-retire"
+          title={t('infra.retire.title')}
+          description={t('infra.retire.description')}
+        >
+          <RetirementSection
+            subject={{
+              kind: 'server',
+              id: value.id,
+              state: value.state ?? 'active',
+              retiredAt: value.retiredAt ?? null,
+              // A server that may host production is production (registry.md §4.1).
+              tier: value.derivedTier === 'nonprod' ? 'nonprod' : 'prod',
+            }}
+          />
+        </InfraSection>
+      )}
     </InfraPage>
   )
 }

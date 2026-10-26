@@ -4,6 +4,88 @@
  * verifiers (information-architecture.md §2.1, §2.3).
  */
 export const infrastructureMessages = {
+  // Removing a server or a cluster from ExponetDB (registry.md §4.4).
+  'infra.retire.title': 'Remove from ExponetDB',
+  'infra.retire.description':
+    'Retire the record when this resource no longer belongs to ExponetDB. Its dependents are removed first, one by one, never by cascade.',
+  'infra.retire.what': 'What a removal would meet',
+  'infra.retire.does.server':
+    'Retires the server record for good. Its history, operations and audit stay readable.',
+  'infra.retire.doesNot.server':
+    'Does not delete or stop the machine, its files, its databases or any backup. Remove those at the host yourself if you want to.',
+  'infra.retire.does.cluster':
+    'Retires the cluster record for good, with its endpoint and credential records. Its history, operations and audit stay readable.',
+  'infra.retire.doesNot.cluster':
+    'Does not drop, stop or change the PostgreSQL cluster, any database on it, any backup or any secret.',
+  'infra.retire.notPermitted.title': 'Removal needs registry administration',
+  'infra.retire.notPermitted.body':
+    'Removing this record needs the registry.manage permission. Blocking resources may exist; ExponetDB did not read them for you.',
+  'infra.retire.retired.server': 'This server was removed from ExponetDB',
+  'infra.retire.retired.cluster': 'This cluster was removed from ExponetDB',
+  'infra.retire.blockers.title': 'Before it can be removed',
+  'infra.retire.clear':
+    'Nothing blocks the removal now. The plan and its apply check again before anything changes.',
+  'infra.retire.group.cluster': '{count} clusters on this server are not retired',
+  'infra.retire.group.node': '{count} nodes of this server are not decommissioned',
+  'infra.retire.group.enrollment_token': '{count} enrollment tokens can still be redeemed',
+  'infra.retire.group.node_job': '{count} node jobs are not finished',
+  'infra.retire.group.database': '{count} databases are registered on this cluster',
+  'infra.retire.group.endpoint': '{count} endpoints are active',
+  'infra.retire.group.credential': '{count} credential submissions are being verified',
+  'infra.retire.group.operation': '{count} operations on it are not finished',
+  'infra.retire.hint.cluster':
+    'Open each cluster and remove it first: decommission its targets, retire its databases, then retire the cluster.',
+  'infra.retire.hint.node':
+    'Open the node, revoke it and then decommission it. A revoked node still blocks.',
+  'infra.retire.hint.enrollment_token':
+    'Wait until the token expires (at most 30 minutes after it was made or revealed).',
+  'infra.retire.hint.node_job':
+    'Wait for the job to finish. A job whose outcome is unknown needs a look at the node first.',
+  'infra.retire.hint.database':
+    'Decommission the target on each database, then retire the database record. The database on the cluster is not touched.',
+  'infra.retire.hint.endpoint': 'Active endpoints are retired with the cluster.',
+  'infra.retire.hint.credential':
+    'Wait until the worker has verified the submission; it then becomes active or failed.',
+  'infra.retire.hint.operation': 'Let it finish, or cancel it on its operation page.',
+  'infra.retire.more': 'And {count} more not listed here.',
+  'infra.retire.with.title': 'Retired with it, in the same operation',
+  'infra.retire.with.endpoint': '{count} active endpoints',
+  'infra.retire.with.credential': '{count} active credentials (their secrets are not erased)',
+  'infra.retire.kept': '{count} retired records stay as history.',
+  'infra.retire.backups.not_installed':
+    'Backups: no backup engine records anything yet (Wave 9), so no backup can be bound to it.',
+  'infra.retire.backups.none': 'Backups: the backup engine holds no binding to it.',
+  'infra.retire.backups.blocking':
+    'Backups: the backup engine still binds backups to it. They are never orphaned by a removal.',
+  'infra.retire.backups.unknown':
+    'Backups: the backup engine could not tell. The removal is refused until it can.',
+  'infra.retire.observed': 'Read live',
+  'infra.retire.action.server': 'Plan removal of this server',
+  'infra.retire.action.cluster': 'Plan removal of this cluster',
+  'infra.retire.blockedWhy': 'Resolve the items above first.',
+  'infra.retire.confirm.title.server': 'Plan the removal of this server?',
+  'infra.retire.confirm.title.cluster': 'Plan the removal of this cluster?',
+  'infra.retire.confirm.body.server':
+    'This creates a plan. Nothing changes until it is reviewed and applied on its own page, with a fresh confirmation of your identity.',
+  'infra.retire.confirm.body.cluster':
+    'This creates a plan. Nothing changes until it is reviewed and applied on its own page, with a fresh confirmation of your identity.',
+  'infra.retire.confirm.action': 'Create plan',
+  'infra.retire.confirm.legend': 'Confirm both before you continue',
+  'infra.retire.confirm.check.final':
+    'I understand the record is retired for good and cannot be brought back.',
+  'infra.retire.confirm.check.physical.server':
+    'I understand the machine and its data stay where they are; ExponetDB deletes nothing on it.',
+  'infra.retire.confirm.check.physical.cluster':
+    'I understand the PostgreSQL cluster and its databases stay as they are; ExponetDB drops nothing.',
+  'infra.state.retired': 'Retired',
+  'infra.database.retire': 'Retire record',
+  'infra.database.retire.label': 'Retire the record of database {database}',
+  'infra.database.retire.title': 'Plan retiring this database record?',
+  'infra.database.retire.body':
+    'The registry record ends for good; the name can be registered again later. This creates a plan that is reviewed and applied on its own page.',
+  'infra.database.retire.check.untouched':
+    'I understand the database on the cluster is not dropped or changed.',
+  'infra.cluster.placements.actions': 'Actions',
   // Shared.
   'infra.column.name': 'Name',
   'infra.column.id': 'ID',
