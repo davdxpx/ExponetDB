@@ -134,10 +134,11 @@ export function apiSnippets(
       "import { ExponetDB } from '@exponetdb/sdk'",
       '',
       'const exdb = new ExponetDB({',
-      `  baseUrl: '${origin}',`,
+      // Quoted as JavaScript strings: the values are checked upstream, the snippet does not rely on it.
+      `  baseUrl: ${JSON.stringify(origin)},`,
       "  auth: { kind: 'apiKey', key: process.env.EXPONETDB_API_KEY },",
       '})',
-      `const target = await exdb.targets.get('${path}')`,
+      `const target = await exdb.targets.get(${JSON.stringify(path)})`,
       'if (!target.ok) throw new Error(target.error.code)',
     ].join('\n'),
   }

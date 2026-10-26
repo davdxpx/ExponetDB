@@ -365,6 +365,29 @@ describe("a project's home", () => {
     expect(world.gets('/api/v1/projects')).toHaveLength(0)
   })
 
+  it('reads the projects again before calling a project missing from a cached list not found', async () => {
+    const world = new World()
+    const { router } = mountApp('/projects', world)
+    await screen.findByRole('list', { name: 'Projects' })
+    // Registered after the portfolio read; the cached list (fresh for 15 s) does not hold it.
+    world.projects = [
+      ...world.projects,
+      {
+        ...world.projects[0],
+        id: 'prj_01M4S9000000000000000000J2',
+        slug: 'billing',
+        displayName: 'Billing',
+        path: 'shop/billing',
+      } as (typeof world.projects)[number],
+    ]
+    await router.navigate({
+      to: '/p/$product/$project',
+      params: { product: 'shop', project: 'billing' },
+    })
+    expect(await screen.findByRole('heading', { level: 1, name: /Billing/ })).toBeVisible()
+    expect(screen.queryByText(/page not found/i)).toBeNull()
+  })
+
   it('names what is missing when the project is beyond the projects read (partial, cut)', async () => {
     const world = new World()
     world.projectsMore = true

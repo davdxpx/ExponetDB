@@ -1,4 +1,13 @@
-import { Bot, Code, Database, Globe, type LucideIcon, Plug, Terminal } from '@exponetdb/icons'
+import {
+  Bot,
+  CircleCheck,
+  Code,
+  Database,
+  Globe,
+  type LucideIcon,
+  Plug,
+  Terminal,
+} from '@exponetdb/icons'
 import {
   Button,
   cn,
@@ -41,6 +50,7 @@ import {
   Snippet,
   useConnectQuery,
 } from '../configuration/connect-section.tsx'
+import { inlineName } from '../consent/inline-name.ts'
 import { environmentsQuery } from '../target/keys.ts'
 import { isSlug } from '../target/params.ts'
 import { nounPhrase } from '../target/phrases.ts'
@@ -343,7 +353,15 @@ function ModePicker({
                   checked ? 'text-primary' : 'text-foreground-light',
                 )}
               />
-              <span className="flex min-w-0 flex-col gap-0.5">
+              {checked ? (
+                // The choice is also marked by a shape, not by color alone (WCAG 1.4.1).
+                <CircleCheck
+                  aria-hidden="true"
+                  strokeWidth={2}
+                  className="absolute top-2.5 right-2.5 size-4 text-primary"
+                />
+              ) : null}
+              <span className="flex min-w-0 flex-col gap-0.5 pr-5">
                 <span className="text-sm font-medium">{t(`connectSheet.mode.${candidate}`)}</span>
                 <span className="text-xs text-foreground-light">
                   {t(`connectSheet.mode.${candidate}.line`)}
@@ -457,7 +475,7 @@ function Templates({ model }: { readonly model: ConnectModel }): ReactNode {
           >
             {model.endpoints.map((candidate) => (
               <option key={candidate.id} value={candidate.id}>
-                {candidate.label.slice(0, 80)} ({candidate.kind})
+                {inlineName(candidate.label, 80) ?? candidate.id} ({candidate.kind})
               </option>
             ))}
           </select>

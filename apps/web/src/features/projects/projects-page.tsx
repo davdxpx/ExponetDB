@@ -385,10 +385,13 @@ function EnvironmentChips({ row }: { readonly row: ProjectRow }): ReactNode {
           data-environment={environment.slug}
           className={cn(
             'inline-flex items-center gap-1.5 rounded-md border bg-surface-200 py-0.5 pr-1 pl-2 text-xs',
-            environment.target.state === 'decommissioned' && 'opacity-60',
+            environment.target.state === 'decommissioned' && 'border-dashed bg-transparent',
           )}
         >
           <span className="font-mono">{environment.slug}</span>
+          {environment.target.state === 'decommissioned' ? (
+            <span className="text-foreground-light">{t('target.lifecycle.decommissioned')}</span>
+          ) : null}
           {environment.target.tier === 'nonprod' ? null : (
             <TierChip tier={environment.target.tier} />
           )}

@@ -54,22 +54,23 @@ function ProjectHome({
   readonly project: string
 }): ReactNode {
   const { client } = useApi()
-  const projects = useQuery(projectsQuery(client))
+  // Read again on every visit: a project registered after a cached portfolio read is not "not found".
+  const projects = useQuery({ ...projectsQuery(client), refetchOnMount: 'always' })
   const products = useQuery(productsQuery(client))
   const rows =
     projects.data === undefined
       ? undefined
       : projectRows(projects.data.items, products.data?.items, [])
   const row = rows === undefined ? undefined : findProject(rows, product, project)
-  if (projects.data !== undefined && row === undefined && !projects.data.more) {
-    return <NotFoundPage />
-  }
+  const missing = projects.data !== undefined && row === undefined
+  if (missing && !projects.isFetching && !projects.data.more) return <NotFoundPage />
   return (
     <>
       <ProjectHeader product={product} project={project} row={row} />
       <PageContainer size="large" className="flex flex-col gap-10 py-6">
         <ReadableView
-          readable={toReadable(projects)}
+          // A project missing from an earlier read waits for the new one before anything is said.
+          readable={missing && projects.isFetching ? { state: 'loading' } : toReadable(projects)}
           what={t('project.what')}
           onRetry={() => void projects.refetch()}
           onRefresh={() => void projects.refetch()}
