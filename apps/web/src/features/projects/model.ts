@@ -59,11 +59,15 @@ export interface ProjectRow {
   readonly projectSlug: string
   /** Its targets in the list read, nonproduction first, then by slug; decommissioned ones last. */
   readonly environments: readonly ProjectEnvironment[]
+  /** Whether the target read is whole, cut (the counts are floors) or missing (nothing is known). */
+  readonly environmentsRead: EnvironmentsRead
   /** Environments whose health needs a person (not healthy, not suspended, not decommissioned). */
   readonly attention: number
   /** The worst health among its live environments, for sorting and the card's edge. */
   readonly worst: HealthFilter | undefined
 }
+
+export type EnvironmentsRead = 'complete' | 'partial' | 'unread'
 
 const NO_ATTENTION: ReadonlySet<HealthFilter> = new Set<HealthFilter>(['healthy', 'suspended'])
 
@@ -104,7 +108,11 @@ export function projectRows(
   projects: readonly Project[],
   products: readonly Product[] | undefined,
   targets: readonly TargetSummary[] | undefined,
+  /** The target read stopped before its end. */
+  targetsCut = false,
 ): readonly ProjectRow[] {
+  const environmentsRead: EnvironmentsRead =
+    targets === undefined ? 'unread' : targetsCut ? 'partial' : 'complete'
   const productById = new Map((products ?? []).map((product) => [product.id, product]))
   return projects
     .flatMap((project) => {
@@ -119,6 +127,7 @@ export function projectRows(
           productSlug,
           projectSlug,
           environments,
+          environmentsRead,
           ...attentionOf(environments),
         },
       ]

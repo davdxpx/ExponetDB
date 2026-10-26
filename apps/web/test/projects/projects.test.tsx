@@ -242,6 +242,20 @@ describe('the projects portfolio', () => {
     world.failures.set('GET /api/v1/targets', { status: 500, code: 'INTERNAL', message: 'Down.' })
     mountApp('/projects', world)
     expect(await screen.findByText(/The environments could not be read/)).toBeVisible()
+    const card = within(screen.getByRole('list', { name: 'Projects' })).getByRole('link')
+    expect(card).toHaveTextContent('Environments not read')
+    expect(card).not.toHaveTextContent('No database registered yet')
+    expect(card).not.toHaveTextContent('Nothing needs attention')
+  })
+
+  it('counts environments as a floor when the target read was cut (partial)', async () => {
+    const world = worldWithProject()
+    world.targetPages = [...world.targetPages, [], [], [], [], []]
+    mountApp('/projects', world)
+    const list = await screen.findByRole('list', { name: 'Projects' })
+    const card = within(list).getByRole('link')
+    expect(card).toHaveTextContent('At least 2 environments')
+    expect(card).toHaveTextContent('At least 1 needs attention')
   })
 
   it('shows an earlier read as stale after a refresh failed (old), keeping the cards', async () => {

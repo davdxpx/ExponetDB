@@ -127,7 +127,12 @@ export function ProjectsPage({
             content: <p className="m-0 text-sm text-foreground-light">{t('projects.empty')}</p>,
           }}
           ready={(value) => {
-            const rows = projectRows(value.items, products.data?.items, targets.data?.items)
+            const rows = projectRows(
+              value.items,
+              products.data?.items,
+              targets.data?.items,
+              targets.data?.more === true,
+            )
             return (
               <Portfolio
                 rows={rows}
@@ -291,17 +296,36 @@ function toneOf(row: ProjectRow): LinkCardTone {
 }
 
 function attentionText(row: ProjectRow): string {
-  if (row.environments.length === 0) return t('projects.card.noEnvironment')
-  if (row.attention === 0) return t('projects.card.allClear')
+  if (row.environmentsRead === 'unread') return t('projects.card.notRead')
+  const cut = row.environmentsRead === 'partial'
+  if (row.environments.length === 0) {
+    return cut ? t('projects.card.noEnvironmentRead') : t('projects.card.noEnvironment')
+  }
+  if (row.attention === 0)
+    return cut ? t('projects.card.allClearRead') : t('projects.card.allClear')
+  const count = formatCount(row.attention)
+  if (cut) {
+    return row.attention === 1
+      ? t('projects.card.attentionAtLeastOne')
+      : t('projects.card.attentionAtLeast', { count })
+  }
   return row.attention === 1
     ? t('projects.card.attentionOne')
-    : t('projects.card.attention', { count: formatCount(row.attention) })
+    : t('projects.card.attention', { count })
 }
 
-function environmentCount(row: ProjectRow): string {
+/** Nothing when the environments were not read (the attention line says so). */
+function environmentCount(row: ProjectRow): string | null {
+  if (row.environmentsRead === 'unread') return null
+  const count = formatCount(row.environments.length)
+  if (row.environmentsRead === 'partial') {
+    return row.environments.length === 1
+      ? t('projects.card.environmentAtLeast')
+      : t('projects.card.environmentsAtLeast', { count })
+  }
   return row.environments.length === 1
     ? t('projects.card.environment')
-    : t('projects.card.environments', { count: formatCount(row.environments.length) })
+    : t('projects.card.environments', { count })
 }
 
 function ProjectGrid({ rows }: { readonly rows: readonly ProjectRow[] }): ReactNode {
@@ -423,9 +447,7 @@ function ProjectTable({ rows }: { readonly rows: readonly ProjectRow[] }): React
             <TableCell>
               <EnvironmentChips row={row} />
               {row.environments.length === 0 ? (
-                <span className="text-xs text-foreground-lighter">
-                  {t('projects.card.noEnvironment')}
-                </span>
+                <span className="text-xs text-foreground-lighter">{attentionText(row)}</span>
               ) : null}
             </TableCell>
             <TableCell className="text-sm">{attentionText(row)}</TableCell>
