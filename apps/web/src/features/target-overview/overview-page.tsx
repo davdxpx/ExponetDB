@@ -15,6 +15,7 @@ import { FindingsBlock, OperationsBlock } from './activity-blocks.tsx'
 import { Block } from './block.tsx'
 import { CapacityValue } from './capacity-row.tsx'
 import { HealthBlock } from './health-block.tsx'
+import { TargetHero } from './hero.tsx'
 import { HistoryBlock } from './history-block.tsx'
 import { HostValue } from './host-row.tsx'
 import { MigrationsBlock } from './migrations-block.tsx'
@@ -32,6 +33,7 @@ export function TargetOverviewBody(props: { readonly target: Target }): ReactNod
   const health = useTargetHealth(scope.target.path)
   return (
     <div className="flex flex-col gap-10" data-page="target-overview">
+      <TargetHero target={props.target} route={scope.target} />
       <HealthBlock health={health} />
       <FactsBlock target={props.target} health={health} />
       <HistoryBlock path={scope.target.path} />
