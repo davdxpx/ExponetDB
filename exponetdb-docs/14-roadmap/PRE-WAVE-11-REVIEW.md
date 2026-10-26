@@ -196,7 +196,7 @@ holds the rules. What was built:
 
 ### U7. Supabase sources
 
-The pinned commit `8b9af568` is **not** in the local clone
+The pinned commit `8b9af568` was **not** in the local clone when this review started
 (`/home/david/Development/AttachmentRepos/Supabase` is 182 commits behind it;
 `git fetch origin 8b9af5686750909eb594a4d5ff79e9217d07741a` brings it); the
 audit read the files at the pin through the GitHub API. No `apps/studio` file
@@ -208,7 +208,7 @@ third-party` holds).
 
 | Source (at `8b9af568`) | Visual function | Decision | Why |
 |---|---|---|---|
-| `ConnectSheet/ConnectSheet.tsx`, `ConnectStepsSection.tsx`, `ConnectConfigSection.tsx` | wide sheet, mode cards, steps | native rebuild (`target-connect-sheet.tsx`) | entangled: API keys read into the browser, `nuqs`, `common`, telemetry, valtio, nine data hooks |
+| `ConnectSheet/ConnectSheet.tsx`, `ConnectStepsSection.tsx`, `ConnectConfigSection.tsx` | wide sheet, mode cards, steps | native rebuild (`target-connect-sheet.tsx`) | entangled: API keys read into the browser, `nuqs`, `common`, telemetry, its data hooks |
 | `ConnectModeButton.tsx`, `ConnectSheetStep.tsx`, `ConnectionParameters.tsx` | mode buttons, numbered step | native rebuild | copyable after strips, but small; ExponetDB uses radio semantics (Studio's `aria-pressed` for one choice is weaker) |
 | `ConnectButton.tsx` | header button | native | data and telemetry imports |
 | `ProjectHome/Home.tsx`, `TopSection.tsx`, `ActivityStats.tsx`, `ServiceStatus.tsx` | project home, key facts, service status | native (`project-page.tsx`, `hero.tsx`) | `@dnd-kit`, platform data, usage and billing concepts that are non-goals |
