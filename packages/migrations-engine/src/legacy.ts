@@ -2197,25 +2197,36 @@ async function chainMirror(
   q: Queryable,
   targetId: string,
   generation: number,
+  baselineSeq: string | null,
   later: readonly { readonly migrationId: string }[],
 ) {
-  if (later.length === 0) return { rows: [], verifications: [] }
-  const ids = JSON.stringify(later.map((r) => r.migrationId))
-  const rows = await q.query(
-    'migrations.baseline.chain_mirror',
-    `SELECT migration_id, checksum, operation_id, fingerprint_before, fingerprint_after,
-            reverted_at IS NOT NULL AS reverted
-       FROM migrations.ledger_mirror
-      WHERE target_id = $1 AND generation = $2
-        AND migration_id = ANY (ARRAY(SELECT jsonb_array_elements_text($3::jsonb)))`,
-    [targetId, generation, ids],
-  )
+  // Every row the mirror holds after the baseline, not only the ones the target still shows.
+  const rows =
+    baselineSeq === null
+      ? { rows: [] }
+      : await q.query(
+          'migrations.baseline.chain_mirror',
+          `SELECT migration_id, checksum, operation_id, fingerprint_before, fingerprint_after,
+                  reverted_at IS NOT NULL AS reverted
+             FROM migrations.ledger_mirror
+            WHERE target_id = $1 AND generation = $2 AND applied_seq > $3::bigint
+            ORDER BY applied_seq`,
+          [targetId, generation, baselineSeq],
+        )
+  const ids = JSON.stringify([
+    ...new Set([
+      ...later.map((r) => r.migrationId),
+      ...rows.rows.map((r) => r.text('migration_id')),
+    ]),
+  ])
   const runs = await q.query(
     'migrations.baseline.chain_runs',
-    `SELECT migration_id, status, finished_at::text AS finished_at
+    `SELECT migration_id, status,
+            to_char(finished_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS finished_at
        FROM migrations.verification_mirror
       WHERE target_id = $1 AND generation = $2
-        AND migration_id = ANY (ARRAY(SELECT jsonb_array_elements_text($3::jsonb)))`,
+        AND migration_id = ANY (ARRAY(SELECT jsonb_array_elements_text($3::jsonb)))
+      ORDER BY finished_at, verification_id`,
     [targetId, generation, ids],
   )
   return {
@@ -2230,8 +2241,8 @@ async function chainMirror(
     verifications: runs.rows.map((r) => ({
       migrationId: r.text('migration_id'),
       status: r.text('status') as 'passed' | 'failed' | 'partial' | 'error',
-      // A comparable instant: the mirror's text form is not the target's.
-      finishedAt: new Date(r.text('finished_at')).toISOString(),
+      // Fixed-width UTC with microseconds: the text order is the time order.
+      finishedAt: r.text('finished_at'),
     })),
   }
 }
@@ -2316,12 +2327,13 @@ export async function verifyBaseline(
   // The migrations applied after the baseline (follow-up 4): their verified states are a way
   // the schema may have moved on, and their up.sql supersedes what the history stated.
   let later: Awaited<ReturnType<typeof readLedgerRows>> = []
+  let baselineSeq: string | null = null
   const unstored: string[] = []
   try {
     await loadParser(opened.session.facts.major)
-    later = await opened.session.readOnly(async (rtx) =>
-      rowsAfterBaseline(await readLedgerRows(rtx), c.baselineId),
-    )
+    const ledger = await opened.session.readOnly((rtx) => readLedgerRows(rtx))
+    later = rowsAfterBaseline(ledger, c.baselineId)
+    baselineSeq = ledger.find((r) => r.migrationId === c.baselineId)?.appliedSeq ?? null
     const applicable = files.filter((f) => !c.notApplicable.includes(f.stem))
     const bundles: ImportFile[] = []
     for (const row of later) {
@@ -2335,7 +2347,8 @@ export async function verifyBaseline(
       }
       bundles.push({
         position: applicable.length + bundles.length,
-        stem: row.migrationId,
+        // Never a legacy file's stem: the replays of both share one map (review P3-h).
+        stem: `migration:${row.migrationId}`,
         bytes: revision.files['up.sql'],
         checksum: revision.checksum,
         sourceDigest: revision.sourceDigest,
@@ -2411,7 +2424,13 @@ export async function verifyBaseline(
   }
   // The chain as the Control Store recorded it: the target's rows must be the mirrored ones,
   // and the runs that count are the mirrored ones (a migration's code can write the target's).
-  const mirror = await chainMirror(deps.store, target.targetId, c.target.generation, later)
+  const mirror = await chainMirror(
+    deps.store,
+    target.targetId,
+    c.target.generation,
+    baselineSeq,
+    later,
+  )
   const differs = mirrorDiffers(later, mirror.rows)
   const accepted = acceptBaselineSchema({
     reviewed: c.expectedState.schemaFingerprint,
@@ -2511,9 +2530,11 @@ export async function verifyBaseline(
       run,
     ),
   )
-  // After later migrations the drift reference is already the newest verified schema (the last
-  // one's): a passed baseline run never moves it back (follow-up 4).
-  if (status === 'passed' && later.length === 0) {
+  // A passed run's schema is the reviewed one or the end of the verified chain after it, the
+  // newest verified state either way: recording it never moves the reference back, and it
+  // catches up a migration verified later by migration.verify, which records none itself
+  // (follow-up 4 review P2-2).
+  if (status === 'passed') {
     try {
       // Only while this worker still holds the operation: a stale one never moves the reference.
       await fenced(fence, 'migrations.baseline.expected', async () => undefined)

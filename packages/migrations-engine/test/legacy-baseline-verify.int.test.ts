@@ -641,9 +641,10 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         acceptedThrough: { migrations: 1, last: first },
       })
       expect(v.structural).toMatchObject({ failed: 0, excused: 4 })
-      // The drift reference stays the bundle's (newest verified) schema.
-      expect(w.expected).toHaveLength(reference)
-      expect(w.expected.at(-1)?.fingerprint).toBe(v.fingerprint)
+      // The drift reference stays the bundle's (newest verified) schema: the run records the
+      // same one again, never an older state.
+      expect(w.expected.slice(reference).map((e) => e.fingerprint)).toEqual([v.fingerprint])
+      expect(w.expected[reference - 1]?.fingerprint).toBe(v.fingerprint)
     })
 
     it('fails while a bundle after the baseline is not verified, and passes once it is', async () => {
@@ -676,10 +677,11 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       expect(verified).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
       const reference = w.expected.length
       expect(await apply(w, await reverify(w))).toMatchObject({ state: 'succeeded' })
-      expect((await latestRun(w)).engine).toMatchObject({
-        acceptedThrough: { migrations: 2, last: second },
-      })
-      expect(w.expected).toHaveLength(reference)
+      const v = await latestRun(w)
+      expect(v.engine).toMatchObject({ acceptedThrough: { migrations: 2, last: second } })
+      // migration.verify records no reference; the passed baseline run catches it up to the
+      // newest verified schema, the second bundle's (review P2-2).
+      expect(w.expected.slice(reference).map((e) => e.fingerprint)).toEqual([v.fingerprint])
     })
 
     it('fails on a change by hand after the last verified bundle', async () => {
