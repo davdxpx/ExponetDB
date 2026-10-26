@@ -63,9 +63,12 @@ BEGIN
                AND n.state IN ('pending_binding', 'active', 'degraded', 'revoked')) THEN
     RAISE EXCEPTION USING ERRCODE = 'EXG06', MESSAGE = 'a server with a node that is not decommissioned is not retired';
   END IF;
+  -- A token that ran out only just now still blocks: the frozen `nodes.enroll` (and a reveal) read
+  -- the clock before this guard did and may still be inserting their row; the five-minute margin
+  -- covers that gap (the preflight in packages/registry/src/retirement.ts uses the same one).
   IF EXISTS (SELECT FROM nodes.enrollment_tokens e WHERE e.server_id = NEW.server_id
-               AND ((e.state = 'created' AND e.reveal_until > clock_timestamp())
-                    OR (e.state = 'issued' AND e.expires_at > clock_timestamp()))) THEN
+               AND ((e.state = 'created' AND e.reveal_until > clock_timestamp() - interval '5 minutes')
+                    OR (e.state = 'issued' AND e.expires_at > clock_timestamp() - interval '5 minutes'))) THEN
     RAISE EXCEPTION USING ERRCODE = 'EXG06', MESSAGE = 'a server with an enrollment token that can still be redeemed is not retired';
   END IF;
   IF EXISTS (SELECT FROM nodes.jobs j JOIN nodes.nodes n ON n.node_id = j.node_id
@@ -122,7 +125,7 @@ CREATE TRIGGER clusters_retirement_guard BEFORE INSERT OR UPDATE ON registry.clu
 -- second sees the other (the lock waits, then the check reads the committed state). SECURITY
 -- DEFINER: the inserting role need not hold UPDATE on the parent for the lock.
 CREATE FUNCTION registry.server_child_lock() RETURNS trigger
-  LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $fn$
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $fn$
 DECLARE
   v_state text;
 BEGIN
@@ -144,7 +147,7 @@ CREATE TRIGGER clusters_server_lock BEFORE INSERT ON registry.clusters
   FOR EACH ROW EXECUTE FUNCTION registry.server_child_lock();
 
 CREATE FUNCTION registry.cluster_child_lock() RETURNS trigger
-  LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $fn$
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $fn$
 DECLARE
   v_state text;
 BEGIN

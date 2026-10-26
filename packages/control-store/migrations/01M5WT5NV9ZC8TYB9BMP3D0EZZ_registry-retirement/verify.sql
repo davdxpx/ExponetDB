@@ -32,3 +32,10 @@ SELECT has_column_privilege('exdb_worker', 'registry.servers', 'state', 'UPDATE'
 SELECT count(*) = 1 AS ok
   FROM pg_catalog.pg_constraint
  WHERE conrelid = 'registry.clusters'::regclass AND conname = 'clusters_pending_without_identifier';
+
+-- check: the two SECURITY DEFINER parent locks search pg_catalog, then pg_temp, and nothing else
+SELECT count(*) = 2 AS ok
+  FROM pg_catalog.pg_proc
+ WHERE pronamespace = 'registry'::regnamespace AND prosecdef
+   AND proname IN ('server_child_lock', 'cluster_child_lock')
+   AND proconfig = ARRAY['search_path=pg_catalog, pg_temp'];

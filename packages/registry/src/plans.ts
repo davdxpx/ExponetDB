@@ -56,7 +56,7 @@ import type { EnvironmentRecord, TargetRecord } from './records.ts'
 import {
   type BackupBindingsPort,
   clusterRetirement,
-  noBackupEngine,
+  retiredWithBinding,
   retirementClear,
   serverRetirement,
 } from './retirement.ts'
@@ -495,7 +495,7 @@ export async function planServerRetire(
   actor: RegistryActor,
   serverId: string,
   reason: string | undefined,
-  backups: BackupBindingsPort = noBackupEngine,
+  backups: BackupBindingsPort,
 ): Promise<PlanRecord> {
   const server = await getServer(tx, serverId)
   if (server === undefined) throw new RegistryError('NOT_FOUND')
@@ -561,8 +561,11 @@ export async function planClusterRegister(
   actor: RegistryActor,
   input: ClusterRegisterRequest,
 ): Promise<PlanRecord> {
-  if (input.serverId !== undefined && (await getServer(tx, input.serverId)) === undefined) {
-    throw new RegistryError('NOT_FOUND')
+  if (input.serverId !== undefined) {
+    const server = await getServer(tx, input.serverId)
+    if (server === undefined) throw new RegistryError('NOT_FOUND')
+    // A retired server gets no cluster (registry.md §4.4); the guard would refuse it at apply.
+    if (server.state !== 'active') throw conflict('server_retired')
   }
   const certificates = parseCaBundle(input.caBundle)
   const endpoints: EndpointContent[] = []
@@ -843,7 +846,7 @@ export async function planClusterRetire(
   actor: RegistryActor,
   clusterId: string,
   reason: string | undefined,
-  backups: BackupBindingsPort = noBackupEngine,
+  backups: BackupBindingsPort,
 ): Promise<PlanRecord> {
   const cluster = await getCluster(tx, clusterId)
   if (cluster === undefined) throw new RegistryError('NOT_FOUND')
@@ -860,7 +863,11 @@ export async function planClusterRetire(
     actionClass: 'high',
     subject: { clusterId, ...(tier === undefined ? {} : { tier }) },
     content: { clusterId, reason: reason ?? null },
-    expectedState: { clusterState: cluster.state, blockers: 0 },
+    expectedState: {
+      clusterState: cluster.state,
+      blockers: 0,
+      retiredWith: retiredWithBinding(retirement),
+    },
     analysis: {
       displayName: cluster.displayName,
       retiredWith,

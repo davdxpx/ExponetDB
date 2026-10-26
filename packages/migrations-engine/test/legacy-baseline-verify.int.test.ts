@@ -16,6 +16,7 @@ import { ROLE_NAMES, TargetError } from '@exponetdb/postgres'
 import {
   type Connector,
   findTarget,
+  noBackupEngine,
   planEnvironmentCreate,
   planProductCreate,
   planProjectCreate,
@@ -145,6 +146,7 @@ async function world(server: TestServer, role: string): Promise<World> {
       installationId: h.db.installationId,
       controlStoreSystemIdentifier: async () => h.controlStoreSystemIdentifier,
       snapshots: h.snapshots,
+      backupBindings: noBackupEngine,
     }),
     ...migrationKinds({
       store: h.worker,

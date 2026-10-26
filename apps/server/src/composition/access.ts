@@ -53,6 +53,7 @@ import { keyringStatus } from '@exponetdb/secrets'
 import { BUILD } from '../config/build-info.ts'
 import type { AuthOperatorConfig, ServeConfig } from '../config/env.ts'
 import {
+  BACKUP_BINDINGS,
   connectorFor,
   controlStoreSystemIdentifier,
   registryKindsFor,
@@ -173,6 +174,8 @@ export function composeAccess(
         egressAddresses: config.egressAddresses,
       },
       observation: { store: services.store, connector, installationId: config.installationId },
+      // The same backup bindings as the registry kinds (registryKindsFor).
+      backups: BACKUP_BINDINGS,
       // Node and cluster plans are re-checked with the tier the registry derives now (F2).
       accept: { policy, kinds, systemActor: SERVE_OPERATION_ACTOR, liveSubject: livePolicySubject },
     },

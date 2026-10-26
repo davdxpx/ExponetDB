@@ -101,6 +101,7 @@ import {
 import type { IdentityId } from '@exponetdb/kernel'
 import type { PlanRecord } from '@exponetdb/operations'
 import {
+  type BackupBindingsPort,
   type BootstrapRequest,
   brand,
   type ClusterRecord,
@@ -187,6 +188,11 @@ export interface RegistryServices {
   readonly plans: RegistryPlanContext
   /** Schema, health, drift and session reads as `serve` (its Control Store login and observer connector). */
   readonly observation: SnapshotDeps
+  /**
+   * The backup engine's bindings of a server or cluster (registry.md §4.4): the one instance the
+   * retirement preflight, the planners and the registry kinds share (`noBackupEngine` before Wave 9).
+   */
+  readonly backups: BackupBindingsPort
 }
 
 /** What the use cases need from the application around them. */
@@ -944,7 +950,9 @@ export class RegistryUseCases {
       kind: 'server',
       serverId,
     })
-    const retirement = await serverRetirement(this.#h.store, serverId)
+    const retirement = await serverRetirement(this.#h.store, serverId, {
+      backups: this.#services().backups,
+    })
     if (retirement === undefined) throw new RegistryError('NOT_FOUND')
     return this.#preflight('server', serverId, retirement)
   }
@@ -952,7 +960,9 @@ export class RegistryUseCases {
   /** What a retirement of the cluster would meet now (registry.md §4.4), read live; `registry.manage`. */
   async clusterRetirement(caller: CallerLike, clusterId: string): Promise<RetirementPreflight> {
     await this.#cluster('registry.cluster.retirement.get', caller, clusterId)
-    const retirement = await clusterRetirement(this.#h.store, clusterId)
+    const retirement = await clusterRetirement(this.#h.store, clusterId, {
+      backups: this.#services().backups,
+    })
     if (retirement === undefined) throw new RegistryError('NOT_FOUND')
     return this.#preflight('cluster', clusterId, retirement)
   }
@@ -998,7 +1008,7 @@ export class RegistryUseCases {
       'registry.server.retire.plan',
       idem,
       { kind: 'server', serverId },
-      (tx, c, a) => planServerRetire(tx, c, a, serverId, body.reason),
+      (tx, c, a) => planServerRetire(tx, c, a, serverId, body.reason, this.#services().backups),
     )
   }
 
@@ -1013,7 +1023,7 @@ export class RegistryUseCases {
       'registry.cluster.retire.plan',
       idem,
       { kind: 'cluster', clusterId },
-      (tx, c, a) => planClusterRetire(tx, c, a, clusterId, body.reason),
+      (tx, c, a) => planClusterRetire(tx, c, a, clusterId, body.reason, this.#services().backups),
     )
   }
 

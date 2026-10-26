@@ -15,6 +15,7 @@ import { readLedgerRows, readMigrationEvents, readVerifications } from '@exponet
 import { loadParser } from '@exponetdb/postgres/parser'
 import {
   findTarget,
+  noBackupEngine,
   planEnvironmentCreate,
   planProductCreate,
   planProjectCreate,
@@ -263,6 +264,7 @@ beforeAll(async () => {
       installationId: h.db.installationId,
       controlStoreSystemIdentifier: async () => h.controlStoreSystemIdentifier,
       snapshots: h.snapshots,
+      backupBindings: noBackupEngine,
     }),
     ...migrationKinds({
       store: h.worker,

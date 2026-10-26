@@ -34,6 +34,7 @@ import { TargetRegisterKind } from './register.ts'
 import {
   clusterRetirement,
   type Retirement,
+  retiredWithBinding,
   retirementClear,
   serverRetirement,
 } from './retirement.ts'
@@ -453,8 +454,14 @@ export class ClusterRegisterKind extends RegistryKind {
   async bindings(_plan: PlanRecord, c: Body) {
     const changed: ChangedBinding[] = []
     const serverId = c.textOrNull('serverId')
-    if (serverId !== null && (await getServer(this.deps.store, serverId)) === undefined) {
-      changed.push({ binding: 'server', expected: serverId, actual: null })
+    if (serverId !== null) {
+      const server = await getServer(this.deps.store, serverId)
+      if (server === undefined) {
+        changed.push({ binding: 'server', expected: serverId, actual: null })
+      } else if (server.state !== 'active') {
+        // Retired after the plan was made: refused here, not left to the guard (EXG06).
+        changed.push({ binding: 'serverState', expected: 'active', actual: server.state })
+      }
     }
     for (const e of c.list('endpoints')) {
       if ((await activeEndpointAt(this.deps.store, e.text('host'), e.int('port'))) !== undefined) {
@@ -904,10 +911,7 @@ export class ServerRetireKind extends RegistryKind {
   }
 
   private retirementOptions(plan: PlanRecord) {
-    return {
-      exceptPlanId: plan.planId,
-      ...(this.deps.backupBindings === undefined ? {} : { backups: this.deps.backupBindings }),
-    }
+    return { exceptPlanId: plan.planId, backups: this.deps.backupBindings }
   }
 }
 
@@ -929,7 +933,12 @@ export class ClusterRetireKind extends RegistryKind {
       c.text('clusterId'),
       this.retirementOptions(plan),
     )
-    return retirementBindings('clusterState', expected.text('clusterState'), retirement)
+    return retirementBindings(
+      'clusterState',
+      expected.text('clusterState'),
+      retirement,
+      expected.object('retiredWith'),
+    )
   }
 
   async run(ctx: ExecutionContext, c: Body) {
@@ -943,7 +952,14 @@ export class ClusterRetireKind extends RegistryKind {
       const state = rows[0]?.text('state')
       if (state === undefined || state === 'retired') return false
       const now = await clusterRetirement(tx, clusterId, this.retirementOptions(ctx.plan))
-      if (now === undefined || !retirementClear(now)) return false
+      // Under the row lock: still clear, and still exactly the records the plan named go with it.
+      const expectedWith = Body.expected(ctx.plan).object('retiredWith')
+      if (
+        now === undefined ||
+        retirementBindings('clusterState', state, now, expectedWith).length > 0
+      ) {
+        return false
+      }
       const endpoints = await tx.query(
         'registry.kind.cluster.retire.endpoints',
         `UPDATE registry.endpoints SET state = 'retired', retired_by_operation_id = $2
@@ -998,18 +1014,19 @@ export class ClusterRetireKind extends RegistryKind {
   }
 
   private retirementOptions(plan: PlanRecord) {
-    return {
-      exceptPlanId: plan.planId,
-      ...(this.deps.backupBindings === undefined ? {} : { backups: this.deps.backupBindings }),
-    }
+    return { exceptPlanId: plan.planId, backups: this.deps.backupBindings }
   }
 }
 
-/** The changed bindings of a retirement: the subject's state, then anything that blocks now. */
+/**
+ * The changed bindings of a retirement: the subject's state, then anything that blocks now, then
+ * (a cluster) whether the records that would go with it are still the ones the plan named.
+ */
 function retirementBindings(
   binding: string,
   expectedState: string,
   retirement: Retirement | undefined,
+  expectedWith?: Body,
 ): ChangedBinding[] {
   if (retirement === undefined || retirement.subjectState !== expectedState) {
     return [{ binding, expected: expectedState, actual: retirement?.subjectState ?? null }]
@@ -1022,6 +1039,17 @@ function retirementBindings(
         actual: retirement.blockers.reduce((sum, g) => sum + g.total, 0),
       },
     ]
+  }
+  if (expectedWith !== undefined) {
+    // The totals say how many; equal totals with other ids (one added, one retired) are stale too.
+    const actual = retiredWithBinding(retirement)
+    const total = expectedWith.int('total')
+    if (
+      actual.total !== total ||
+      JSON.stringify(actual.ids) !== JSON.stringify(expectedWith.raw('ids'))
+    ) {
+      return [{ binding: 'retiredWith', expected: total, actual: actual.total }]
+    }
   }
   return []
 }

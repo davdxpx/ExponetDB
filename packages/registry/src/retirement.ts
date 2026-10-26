@@ -66,7 +66,9 @@ const OPEN_JOB_STATES = ['pending', 'dispatched', 'running', 'outcome_unknown'] 
 /**
  * The backup bindings of a subject. Wave 9 Part B replaces this with its engine's answer; until
  * then no backup record exists in the Control Store, so nothing can bind a server or cluster
- * (`not_installed`). A provider that cannot tell answers `unknown`, which blocks.
+ * (`not_installed`). A provider that cannot tell answers `unknown`, which blocks. Required
+ * wherever a retirement is read, planned or applied: the composition root passes one instance to
+ * all three, so the preflight, the planner and the kind never ask different engines.
  */
 export type BackupBindingsPort = (
   q: Queryable,
@@ -74,6 +76,20 @@ export type BackupBindingsPort = (
 ) => Promise<BackupBindings>
 
 export const noBackupEngine: BackupBindingsPort = async () => 'not_installed'
+
+export interface RetirementOptions {
+  /** The retirement's own plan, which does not block itself. */
+  readonly exceptPlanId?: string
+  readonly backups: BackupBindingsPort
+}
+
+/**
+ * A token that ran out less than this long ago still blocks a server's retirement: the frozen
+ * `nodes.enroll` read the clock before the guard did and may still be inserting its node. The
+ * guard of bundle `registry-retirement` uses the same margin, so a clear preflight is never refused
+ * for a token alone.
+ */
+const TOKEN_MARGIN = "interval '5 minutes'"
 
 interface GroupQuery {
   readonly kind: DependencyKind
@@ -108,7 +124,12 @@ async function group(q: Queryable, query: GroupQuery): Promise<DependencyGroup> 
 const nonEmpty = (groups: readonly DependencyGroup[]): readonly DependencyGroup[] =>
   groups.filter((g) => g.total > 0)
 
-/** Open operations whose plan names the subject, other than the one of `exceptPlanId` (the retirement itself). */
+/**
+ * Open operations whose plan names the subject, other than the one of `exceptPlanId` (the
+ * retirement itself). A body is parsed only when its text contains the id, and an escaped NUL
+ * (`\u0000`, valid JSON that jsonb refuses) is read as U+FFFD first: no stored body, related or
+ * not, can make the read fail.
+ */
 function openOperations(
   kind: 'server' | 'cluster',
   id: string,
@@ -120,7 +141,10 @@ function openOperations(
     sql: `SELECT o.operation_id AS id, o.state, o.kind AS label, NULL::text AS target_id
             FROM operations.operations o JOIN operations.plan_bodies b ON b.plan_id = o.plan_id
            WHERE o.state = ANY($2::text[])
-             AND (b.body::jsonb -> 'subject' ->> '${kind === 'server' ? 'serverId' : 'clusterId'}') = $1
+             AND CASE WHEN strpos(b.body, $1) > 0
+                      THEN replace(b.body, '\\u0000', '\\ufffd')::jsonb -> 'subject'
+                             ->> '${kind === 'server' ? 'serverId' : 'clusterId'}'
+                 END = $1
              AND o.plan_id IS DISTINCT FROM $3`,
     params: [id, [...OPEN_OPERATION_STATES], exceptPlanId],
   }
@@ -130,7 +154,7 @@ function openOperations(
 export async function serverRetirement(
   q: Queryable,
   serverId: string,
-  options: { readonly exceptPlanId?: string; readonly backups?: BackupBindingsPort } = {},
+  options: RetirementOptions,
 ): Promise<Retirement | undefined> {
   const { rows } = await q.query(
     'registry.retirement.server',
@@ -161,8 +185,8 @@ export async function serverRetirement(
       name: 'registry.retirement.server.tokens',
       sql: `SELECT token_id AS id, state, NULL::text AS label, NULL::text AS target_id
               FROM nodes.enrollment_tokens WHERE server_id = $1
-               AND ((state = 'created' AND reveal_until > clock_timestamp())
-                    OR (state = 'issued' AND expires_at > clock_timestamp()))`,
+               AND ((state = 'created' AND reveal_until > clock_timestamp() - ${TOKEN_MARGIN})
+                    OR (state = 'issued' AND expires_at > clock_timestamp() - ${TOKEN_MARGIN}))`,
       params: [serverId],
     }),
     group(q, {
@@ -182,7 +206,7 @@ export async function serverRetirement(
               AND state IN ('decommissioned', 'binding_failed')))::int AS n`,
     [serverId],
   )
-  const backups = await (options.backups ?? noBackupEngine)(q, { kind: 'server', id: serverId })
+  const backups = await options.backups(q, { kind: 'server', id: serverId })
   return {
     subjectState: state,
     blockers: nonEmpty(blockers),
@@ -196,7 +220,7 @@ export async function serverRetirement(
 export async function clusterRetirement(
   q: Queryable,
   clusterId: string,
-  options: { readonly exceptPlanId?: string; readonly backups?: BackupBindingsPort } = {},
+  options: RetirementOptions,
 ): Promise<Retirement | undefined> {
   const { rows } = await q.query(
     'registry.retirement.cluster',
@@ -260,7 +284,7 @@ export async function clusterRetirement(
           + (SELECT count(*) FROM registry.endpoints WHERE cluster_id = $1 AND state = 'retired'))::int AS n`,
     [clusterId],
   )
-  const backups = await (options.backups ?? noBackupEngine)(q, { kind: 'cluster', id: clusterId })
+  const backups = await options.backups(q, { kind: 'cluster', id: clusterId })
   return {
     subjectState: cluster.text('state'),
     blockers: nonEmpty(blockers),
@@ -276,4 +300,21 @@ export function retirementClear(retirement: Retirement): boolean {
     retirement.blockers.length === 0 &&
     (retirement.backups === 'not_installed' || retirement.backups === 'none')
   )
+}
+
+/**
+ * What goes with a cluster, as its plan binds it (expected state `retiredWith`): how many records
+ * and the ids named. An endpoint or credential added after the plan was made changes it, so the
+ * apply fails `PLAN_STALE` instead of retiring a record nobody saw. shortcut: beyond `GROUP_LIMIT`
+ * records of one kind only the total and the first ids are compared; bind a digest of every id
+ * if a cluster ever carries that many.
+ */
+export function retiredWithBinding(retirement: Retirement): {
+  readonly total: number
+  readonly ids: readonly string[]
+} {
+  return {
+    total: retirement.retiredWith.reduce((sum, g) => sum + g.total, 0),
+    ids: retirement.retiredWith.flatMap((g) => g.items.map((item) => item.id)).sort(),
+  }
 }

@@ -12,7 +12,9 @@ description: |
   server_guard is replaced: a server record still never changes except the
   one move active → retired by an operation, and only while no cluster on it
   is unretired, no node on it is live or revoked, no enrollment token for it
-  can still be redeemed and no node job on it is open. A new guard holds a
+  can still be redeemed (or ran out less than five minutes ago, a margin
+  over the frozen `nodes.enroll`'s own clock read) and no node job on it is
+  open. A new guard holds a
   cluster's retirement to the same rule for its children: no registered
   database, no active endpoint, no active or pending credential. Inserts of
   a cluster's children and of clusters lock their parent row FOR SHARE and

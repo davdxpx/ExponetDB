@@ -37,10 +37,11 @@ export interface RegistryKindDeps {
   /** Takes and stores the registration snapshot (diagnostics); see `register.ts`. */
   readonly snapshots: RegistrationSnapshots
   /**
-   * The backup engine's bindings of a server or cluster, for retirement (registry.md §4.4).
-   * Wave 9 Part B provides it; without one no backup record exists (`not_installed`).
+   * The backup engine's bindings of a server or cluster, for retirement (registry.md §4.4): the
+   * same instance the application's preflight and planners use (`noBackupEngine` until Wave 9
+   * Part B provides the engine's answer).
    */
-  readonly backupBindings?: BackupBindingsPort
+  readonly backupBindings: BackupBindingsPort
 }
 
 /**
