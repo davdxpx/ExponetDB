@@ -132,7 +132,9 @@ exit codes are in [`README.md`](./README.md).
 | [`approval approve`](#approval-approve) | remote | read | Open the approval page to approve (re-authentication there), then wait for the decision. |
 | [`approval reject`](#approval-reject) | remote | read | Open the approval page to reject (re-authentication there), then wait for the decision. |
 | [`health`](#health) | remote | read | A target’s health: probes, conditions, node and backups, with source and time. |
-| [`finding list`](#finding-list) | remote | read | Findings of a target (drift, health, security), open by default. |
+| [`finding list`](#finding-list) | remote | read | Findings across the targets you may read (drift, health, advisors, statements), open by default. |
+| [`finding summary`](#finding-summary) | remote | read | Counts of the open findings you may read, by severity, kind and code. |
+| [`cluster findings`](#cluster-findings) | remote | read | Findings of a cluster (backups and other cluster-level findings), open by default. |
 | [`finding show`](#finding-show) | remote | read | One finding of a target. |
 | [`schema overview`](#schema-overview) | remote | read | The schemas of a target with object counts, its fingerprint and what is visible. |
 | [`schema search`](#schema-search) | remote | read | Search a target’s catalog by name. |
@@ -140,6 +142,31 @@ exit codes are in [`README.md`](./README.md).
 | [`schema fingerprint`](#schema-fingerprint) | remote | read | A target’s schema fingerprint (what plans and evidence bind). |
 | [`schema diff`](#schema-diff) | remote | read | Compare two targets (or a target and a fingerprint) object by object. |
 | [`drift check`](#drift-check) | remote | plan | Run a drift check of a target now (expected vs. live schema). |
+| [`diagnose query-stats`](#diagnose-query-stats) | remote | read | Normalized statements of a target with calls, time, rows and I/O over a window (pg_stat_statements). |
+| [`diagnose table-stats`](#diagnose-table-stats) | remote | read | Table and index sizes, scans, vacuum state, estimated bloat and transaction id age of a target. |
+| [`diagnose advisors`](#diagnose-advisors) | remote | read | Run the live advisors of a target (read-only): security, performance, operations, change safety. |
+| [`session list`](#session-list) | remote | read | Sessions of a target with redacted statements (the pid and start times the session actions take). |
+| [`session cancel`](#session-cancel) | remote | mutation | Cancel a session’s running query (inline, low): only while the same backend runs the same query. |
+| [`session terminate`](#session-terminate) | remote | plan | Plan terminating a session, bound to its pid and backend start; the condition is re-checked when it is terminated. |
+| [`backup overview`](#backup-overview) | remote | read | Backup protection of every cluster you may read: state, measured RPO, last verified backup and drills. |
+| [`backup list`](#backup-list) | remote | read | A cluster’s backups from the catalog mirror, with its protection, repositories and WAL coverage. |
+| [`backup repositories`](#backup-repositories) | remote | read | The backup repositories of a cluster: ownership, lock capability, engine advisory and reconciliation. |
+| [`backup policy show`](#backup-policy-show) | remote | read | The active backup policy of a cluster: schedules, retention, objectives, drill cadence. |
+| [`backup runs`](#backup-runs) | remote | read | Engine runs of a cluster: backups, verifies, expiry, restores and discards. |
+| [`backup adopt`](#backup-adopt) | remote | plan | Plan adopting an existing backup repository for read-only observation (nothing changes on the host or in the bucket). |
+| [`backup ownership`](#backup-ownership) | remote | plan | Plan what ExponetDB may do with an adopted repository (adopted_runs: start runs with the host configuration). |
+| [`backup retire-repository`](#backup-retire-repository) | remote | plan | Plan retiring a backup repository record: it is no longer observed or used; nothing in storage is deleted. |
+| [`backup policy set`](#backup-policy-set) | remote | plan | Plan a new revision of a cluster’s backup policy (high: a person applies it with a fresh re-authentication). |
+| [`backup refresh`](#backup-refresh) | remote | mutation | Read the engine catalog of every observed repository of a cluster through its node into the mirror. |
+| [`backup run`](#backup-run) | remote | plan | Plan a backup run into one repository (refused unless backup execution is activated and the repository allows runs). |
+| [`backup verify`](#backup-verify) | remote | mutation | Verify one backup with the engine’s verify command; it counts as verified only after the run passed. |
+| [`restore plan`](#restore-plan) | remote | plan | Plan a recovery of a target into a new cluster directory on a node (never in place); a person applies it with `plan apply`. |
+| [`restore list`](#restore-list) | remote | read | Restores of a cluster (drills and recoveries) with their phases and checks. |
+| [`restore discard`](#restore-discard) | remote | plan | Plan discarding a scratch restore: stop its temporary cluster and remove its directory on the node. |
+| [`restore runbook`](#restore-runbook) | remote | read | Write the offline restore runbook of a repository (plain POSIX shell, placeholders for every secret) to a new file. |
+| [`drill plan`](#drill-plan) | remote | plan | Plan a restore drill into scratch on a node: the latest backup, an older one, a random point in time, or a named backup or time. |
+| [`drill list`](#drill-list) | remote | read | Drills of a cluster with their outcome and measured duration. |
+| [`drill record-offline`](#drill-record-offline) | remote | mutation | Record a drill you ran from the offline runbook with the Control Plane stopped: an attestation, shown as such. |
 | [`audit list`](#audit-list) | remote | read | Audit events, newest first (actors pseudonymous). |
 | [`audit show`](#audit-show) | remote | read | One audit event by id (searched newest first within the filters). |
 | [`access identities`](#access-identities) | remote | read | Identities (people and service accounts). |
@@ -2320,20 +2347,51 @@ Runs: against the server; effect: read; action: `target.health.get`; scopes: `di
 
 ### finding list
 
-Findings of a target (drift, health, security), open by default.
+Findings across the targets you may read (drift, health, advisors, statements), open by default.
+
+Without --target, the findings of every target you may read with diagnostics.read, newest first; --kind and --code narrow to one rule or condition.
 
 ```text
 exponetdb finding list [flags]
 ```
 
-Runs: against the server; effect: read; action: `target.finding.list`; scopes: `diagnostics.read`; output: `FindingList`.
+Runs: against the server; effect: read; action: `finding.list`; scopes: `diagnostics.read`; output: `FleetFindingList`.
 
 | Argument or flag | Meaning |
 |---|---|
-| `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
+| `--target <target>` | A target id (tgt_…) or path (product/project/environment). |
 | `--include-resolved` | Also resolved findings. |
 | `--severity <info\|warning\|critical>` | Only this severity. |
-| `--kind <kind>` | Only this kind. |
+| `--kind <drift\|health\|advisor\|statements>` | Only this kind. |
+| `--code <code>` | Only this rule or condition code. |
+| `--limit <number>` | Items to show (1 to 10000). (default 50) |
+| `--all` | Every page (at most 10000 items). |
+| `--cursor <cursor>` | Continue after a previous page. |
+
+### finding summary
+
+Counts of the open findings you may read, by severity, kind and code.
+
+```text
+exponetdb finding summary
+```
+
+Runs: against the server; effect: read; action: `finding.summary`; scopes: `diagnostics.read`; output: `FindingSummary`.
+
+### cluster findings
+
+Findings of a cluster (backups and other cluster-level findings), open by default.
+
+```text
+exponetdb cluster findings <cluster> [flags]
+```
+
+Runs: against the server; effect: read; action: `cluster.finding.list`; scopes: `backups.read`; output: `FindingList`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id (cls_…). |
+| `--state <open\|resolved\|all>` | Which findings (default open). |
 | `--limit <number>` | Items to show (1 to 10000). (default 50) |
 | `--all` | Every page (at most 10000 items). |
 | `--cursor <cursor>` | Continue after a previous page. |
@@ -2444,6 +2502,517 @@ Runs: against the server; effect: plan; action: `drift.check`; scopes: `schema.r
 | Argument or flag | Meaning |
 |---|---|
 | `target` (required) | A target id or path. |
+
+### diagnose query-stats
+
+Normalized statements of a target with calls, time, rows and I/O over a window (pg_stat_statements).
+
+CAPABILITY_UNAVAILABLE when pg_stat_statements is not installed or not preloaded. Statement text has its constants removed and is replaced when it could carry a secret; it is printed as data. A regression compares the last 24 hours with the last 7 days; migrations in between are a time coincidence, never a proven cause.
+
+```text
+exponetdb diagnose query-stats <target> [flags]
+```
+
+Runs: against the server; effect: read; action: `query_stats.list`; scopes: `diagnostics.read`; output: `QueryStats`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `target` (required) | A target id or path. |
+| `--from <time>` | Window start (RFC 3339). |
+| `--to <time>` | Window end (RFC 3339). |
+| `--order <total_time\|mean_time\|calls\|io>` | Order of the statements. |
+| `--limit <number>` | Statements to show (1 to 500). |
+
+### diagnose table-stats
+
+Table and index sizes, scans, vacuum state, estimated bloat and transaction id age of a target.
+
+Bloat is an estimate (a heuristic page estimate, never measured). "Unused" means unused since the statistics were reset or the server started (shown as Since).
+
+```text
+exponetdb diagnose table-stats <target> [flags]
+```
+
+Runs: against the server; effect: read; action: `table_stats.list`; scopes: `diagnostics.read`; output: `TableStats`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `target` (required) | A target id or path. |
+| `--schema <name>` | Only this schema. |
+| `--limit <number>` | Tables to show (1 to 1000). |
+
+### diagnose advisors
+
+Run the live advisors of a target (read-only): security, performance, operations, change safety.
+
+The server records each result as a finding (deduplicated). A rule that did not run is listed with its reason and is never a pass. A fix that can be drafted is a migration draft for review, never run here.
+
+```text
+exponetdb diagnose advisors <target> [flags]
+```
+
+Runs: against the server; effect: read; action: `advisor.run`; scopes: `diagnostics.read`; output: `AdvisorRun`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `target` (required) | A target id or path. |
+| `--category <security,performance,operations,change_safety>` | Categories to run (default security,performance). |
+
+### session list
+
+Sessions of a target with redacted statements (the pid and start times the session actions take).
+
+```text
+exponetdb session list <target> [flags]
+```
+
+Runs: against the server; effect: read; action: `session.list`; scopes: `diagnostics.read`; output: `SessionList`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `target` (required) | A target id or path. |
+| `--state <state>` | Only this state (e.g. active). |
+| `--min-age <seconds>` | Only sessions at least this old. |
+| `--application <name>` | Only this application_name. |
+| `--limit <number>` | Sessions to show (1 to 1000). |
+
+### session cancel
+
+Cancel a session’s running query (inline, low): only while the same backend runs the same query.
+
+Bound to the pid, the backend start and the query start you saw (`session list`), re-checked in the cancelling statement; never a replication, backup or ExponetDB session. Production needs connections.operate:prod. Waits by default.
+
+```text
+exponetdb session cancel <target> <pid> [flags]
+```
+
+Runs: against the server; effect: mutation; action: `connections.cancel`; scopes: `connections.operate:nonprod`; output: `Operation`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `target` (required) | A target id or path. |
+| `pid` (required) | The backend process id. |
+| `--backend-start <time>` | The session’s backend start (RFC 3339, as `session list` shows it). (required) |
+| `--query-start <time>` | The query start (RFC 3339, as `session list` shows it). (required) |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### session terminate
+
+Plan terminating a session, bound to its pid and backend start; the condition is re-checked when it is terminated.
+
+stalled: active, waiting on the client, query 60 s or older; idle_in_transaction: idle in a transaction for 60 s or more; long_running: active, query 300 s or older; any. Production needs connections.operate:prod, and an agent’s production plan a human approval.
+
+```text
+exponetdb session terminate <target> <pid> [flags]
+```
+
+Runs: against the server; effect: plan; action: `connections.terminate.plan`; scopes: `connections.operate:nonprod`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `target` (required) | A target id or path. |
+| `pid` (required) | The backend process id. |
+| `--backend-start <time>` | The session’s backend start (RFC 3339, as `session list` shows it). (required) |
+| `--condition <stalled\|idle_in_transaction\|long_running\|any>` | What must still hold when the session is terminated. (required) |
+| `--reason <text>` | Why. |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+## Backups and restores
+
+### backup overview
+
+Backup protection of every cluster you may read: state, measured RPO, last verified backup and drills.
+
+Computed by the server from the catalog mirror. The counts cover every cluster you may read; the table is a page (--limit, --all, --cursor).
+
+```text
+exponetdb backup overview [flags]
+```
+
+Runs: against the server; effect: read; action: `backup.overview`; scopes: `backups.read`; output: `BackupOverview`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `--state <protected\|at_risk\|unprotected\|unproven\|unknown>` | Only clusters with this protection state. |
+| `--limit <number>` | Items to show (1 to 10000). (default 50) |
+| `--all` | Every page (at most 10000 items). |
+| `--cursor <cursor>` | Continue after a previous page. |
+
+### backup list
+
+A cluster’s backups from the catalog mirror, with its protection, repositories and WAL coverage.
+
+A backup the latest engine catalog no longer lists is marked "missing in engine" and never counts as protection. The backups are paged (--limit, --all, --cursor); refresh the mirror with `backup refresh`.
+
+```text
+exponetdb backup list <cluster> [flags]
+```
+
+Runs: against the server; effect: read; action: `backup.list`; scopes: `backups.read`; output: `BackupCatalog`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id (cls_…). |
+| `--limit <number>` | Items to show (1 to 10000). (default 50) |
+| `--all` | Every page (at most 10000 items). |
+| `--cursor <cursor>` | Continue after a previous page. |
+
+### backup repositories
+
+The backup repositories of a cluster: ownership, lock capability, engine advisory and reconciliation.
+
+The location (endpoint, bucket, prefix, stanza) is shown only to callers with registry.manage; a key or credential is never shown.
+
+```text
+exponetdb backup repositories <cluster>
+```
+
+Runs: against the server; effect: read; action: `backup.repository.list`; scopes: `backups.read`; output: `BackupRepositoryList`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id (cls_…). |
+
+### backup policy show
+
+The active backup policy of a cluster: schedules, retention, objectives, drill cadence.
+
+```text
+exponetdb backup policy show <cluster>
+```
+
+Runs: against the server; effect: read; action: `backup.policy.get`; scopes: `backups.read`; output: `BackupPolicyView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id (cls_…). |
+
+### backup runs
+
+Engine runs of a cluster: backups, verifies, expiry, restores and discards.
+
+A run that is lost (it disappeared, e.g. a host reboot) or unknown (the node could not be asked) is never retried automatically for restores, expiry or verification.
+
+```text
+exponetdb backup runs <cluster> [flags]
+```
+
+Runs: against the server; effect: read; action: `backup.run.list`; scopes: `backups.read`; output: `EngineRunList`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id (cls_…). |
+| `--limit <number>` | Items to show (1 to 10000). (default 50) |
+| `--all` | Every page (at most 10000 items). |
+| `--cursor <cursor>` | Continue after a previous page. |
+
+### backup adopt
+
+Plan adopting an existing backup repository for read-only observation (nothing changes on the host or in the bucket).
+
+The file names layer, engine, provider and location (endpoint host, region, bucket, prefix, and for pgBackRest the stanza and repository index), and optionally priority, purpose, the declared lock mode, cipher and pinned engine version. It never holds a key or a credential: the engine reads them on the host (secret source host_config). The repository starts as adopted_observed.
+
+```text
+exponetdb backup adopt <cluster> [flags]
+```
+
+Runs: against the server; effect: plan; action: `backup.repository.adopt.plan`; scopes: `registry.manage`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id (cls_…). |
+| `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+```sh
+exponetdb backup adopt cls_01J… --file repository.yaml
+```
+
+### backup ownership
+
+Plan what ExponetDB may do with an adopted repository (adopted_runs: start runs with the host configuration).
+
+adopted_runs lets ExponetDB start incremental backups and verifies with the configuration the host already has, never changing configuration, schedules, keys or retention; --host-configuration-unchanged states that and is required. owned is refused by the server until its capability exists.
+
+```text
+exponetdb backup ownership <repository> [flags]
+```
+
+Runs: against the server; effect: plan; action: `backup.repository.ownership.plan`; scopes: `registry.manage`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `repository` (required) | A backup repository id (bkr_…). |
+| `--to <adopted_runs\|owned>` | The ownership to plan. (required) |
+| `--host-configuration-unchanged` | Acknowledge that the host configuration, schedules, keys and retention stay as they are. (required) |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### backup retire-repository
+
+Plan retiring a backup repository record: it is no longer observed or used; nothing in storage is deleted.
+
+```text
+exponetdb backup retire-repository <repository> [flags]
+```
+
+Runs: against the server; effect: plan; action: `backup.repository.retire.plan`; scopes: `registry.manage`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `repository` (required) | A backup repository id (bkr_…). |
+| `--storage-kept` | Acknowledge that nothing in the bucket or on the host is deleted; only the record leaves ExponetDB. (required) |
+| `--no-longer-protected` | Acknowledge that the cluster is no longer protected by this repository through ExponetDB. (required) |
+| `--reason <text>` | Why. |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### backup policy set
+
+Plan a new revision of a cluster’s backup policy (high: a person applies it with a fresh re-authentication).
+
+The file holds schedules (kind, repository, five-field UTC cron, enabled), retention, the archive timeout, the RPO and RTO objectives, the drill cadence and the size floor.
+
+```text
+exponetdb backup policy set <cluster> [flags]
+```
+
+Runs: against the server; effect: plan; action: `backup.policy.set.plan`; scopes: `registry.manage`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id (cls_…). |
+| `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+```sh
+exponetdb backup policy set cls_01J… --file policy.yaml
+```
+
+### backup refresh
+
+Read the engine catalog of every observed repository of a cluster through its node into the mirror.
+
+An inline operation (low): the node runs backup.list@1 and the mirror is reconciled. Waits by default; exit 0 only when it succeeded.
+
+```text
+exponetdb backup refresh <cluster> [flags]
+```
+
+Runs: against the server; effect: mutation; action: `backup.catalog.refresh`; scopes: `backups.run`; output: `Operation`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id (cls_…). |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### backup run
+
+Plan a backup run into one repository (refused unless backup execution is activated and the repository allows runs).
+
+```text
+exponetdb backup run <cluster> [flags]
+```
+
+Runs: against the server; effect: plan; action: `backup.run.plan`; scopes: `backups.run`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id (cls_…). |
+| `--repository <bkr_…>` | A backup repository id (bkr_…). (required) |
+| `--kind <full\|differential\|incremental\|logical>` | The backup kind. (required) |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### backup verify
+
+Verify one backup with the engine’s verify command; it counts as verified only after the run passed.
+
+An inline operation (low). Waits by default; exit 0 only when the verify passed.
+
+```text
+exponetdb backup verify <cluster> <backup> [flags]
+```
+
+Runs: against the server; effect: mutation; action: `backup.verify`; scopes: `backups.run`; output: `Operation`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id (cls_…). |
+| `backup` (required) | A backup id (bkp_…). |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### restore plan
+
+Plan a recovery of a target into a new cluster directory on a node (never in place); a person applies it with `plan apply`.
+
+The file names purpose recovery, the repository, the source (backupId, pointInTime or latest: true), the destination (kind new_cluster, nodeId) and the reason (an incident reference). The plan is shown, never run here: a person reviews it and applies it with `exponetdb plan apply <plan>`, which asks for a fresh re-authentication in the browser (restore.execute, human only). Switching the target to the restored cluster is a separate placement plan.
+
+```text
+exponetdb restore plan <target> [flags]
+```
+
+Runs: against the server; effect: plan; action: `restore.plan`; scopes: `restore.plan`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `target` (required) | A target id or path. |
+| `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
+
+```sh
+exponetdb restore plan demo/platform/staging --file recovery.yaml
+exponetdb plan apply pln_01J…
+```
+
+### restore list
+
+Restores of a cluster (drills and recoveries) with their phases and checks.
+
+```text
+exponetdb restore list <cluster> [flags]
+```
+
+Runs: against the server; effect: read; action: `restore.list`; scopes: `backups.read`; output: `RestoreList`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id (cls_…). |
+| `--limit <number>` | Items to show (1 to 10000). (default 50) |
+| `--all` | Every page (at most 10000 items). |
+| `--cursor <cursor>` | Continue after a previous page. |
+
+### restore discard
+
+Plan discarding a scratch restore: stop its temporary cluster and remove its directory on the node.
+
+Human only (restore.execute); applying it asks for a fresh re-authentication in the browser.
+
+```text
+exponetdb restore discard <cluster> <restore> [flags]
+```
+
+Runs: against the server; effect: plan; action: `restore.discard.plan`; scopes: `restore.execute`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id (cls_…). |
+| `restore` (required) | A restore id (rst_…). |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### restore runbook
+
+Write the offline restore runbook of a repository (plain POSIX shell, placeholders for every secret) to a new file.
+
+The runbook restores without ExponetDB (C-35). It is written to a new file with mode 0700 and never over an existing one; `--out -` prints it to stdout (the digest and placeholders go to stderr). The script is checked against its digest before it is written; the download is audited.
+
+```text
+exponetdb restore runbook <cluster> [flags]
+```
+
+Runs: against the server; effect: read; action: `restore.runbook.get`; scopes: `restore.plan`; output: `RestoreRunbook`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id (cls_…). |
+| `--repository <bkr_…>` | A backup repository id (bkr_…). (required) |
+| `--out <file|->` | A new file for the script, or - for stdout. (required) |
+
+```sh
+exponetdb restore runbook cls_01J… --repository bkr_01J… --out ./restore.sh
+```
+
+### drill plan
+
+Plan a restore drill into scratch on a node: the latest backup, an older one, a random point in time, or a named backup or time.
+
+A drill always restores into a scratch directory, never over a cluster. Applying it is human only (restore.execute) with a fresh re-authentication in the browser.
+
+```text
+exponetdb drill plan <cluster> [flags]
+```
+
+Runs: against the server; effect: plan; action: `restore.drill.plan`; scopes: `restore.plan`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id (cls_…). |
+| `--repository <bkr_…>` | A backup repository id (bkr_…). Required unless --file is given. |
+| `--selection <latest|older|pitr_random|backup:<bkp_…>|pitr:<time>>` | What to restore. Required unless --file is given. |
+| `--node <nod_…>` | The node to restore on (default: the cluster’s own node). |
+| `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+```sh
+exponetdb drill plan cls_01J… --repository bkr_01J… --selection pitr_random
+exponetdb drill plan cls_01J… --repository bkr_01J… --selection pitr:2026-10-20T08:00:00Z
+```
+
+### drill list
+
+Drills of a cluster with their outcome and measured duration.
+
+A drill recorded from the offline runbook is an attestation and shows as such.
+
+```text
+exponetdb drill list <cluster> [flags]
+```
+
+Runs: against the server; effect: read; action: `restore.list`; scopes: `backups.read`; output: `DrillList`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id (cls_…). |
+| `--limit <number>` | Items to show (1 to 10000). (default 50) |
+| `--all` | Every page (at most 10000 items). |
+| `--cursor <cursor>` | Continue after a previous page. |
+
+### drill record-offline
+
+Record a drill you ran from the offline runbook with the Control Plane stopped: an attestation, shown as such.
+
+Your statement of what you ran, where, and what you checked, with the runbook digest, the restore time, the duration and the outcome (no secrets in the notes). It is recorded as an attestation (mode offline_runbook), never as a drill ExponetDB observed. Human only (restore.execute) with a fresh re-authentication.
+
+```text
+exponetdb drill record-offline <cluster> [flags]
+```
+
+Runs: against the server; effect: mutation; action: `restore.drill.offline.record`; scopes: `restore.execute`; output: `Drill`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `cluster` (required) | A cluster id (cls_…). |
+| `--file <path>` | The request as a JSON or YAML file (checked against the contract). (required) |
+
+```sh
+exponetdb drill record-offline cls_01J… --file drill-record.yaml
+```
 
 ## Access and audit
 

@@ -191,3 +191,23 @@ export function waits(flags: Readonly<Record<string, unknown>>): boolean {
   }
   return flags['no-wait'] !== true
 }
+
+/**
+ * The result of an inline operation the server accepted (a catalog
+ * refresh, a verify, a query cancel): watched until final by default; with
+ * `--no-wait` reported as accepted (exit 0) unless it already ended, like
+ * `--apply --no-wait`.
+ */
+export async function inlineResult(
+  ctx: RunContext,
+  remote: Remote,
+  command: string,
+  o: Operation,
+  flags: Readonly<Record<string, unknown>>,
+): Promise<CommandResult> {
+  if (waits(flags)) {
+    return watchOperation(ctx, remote, command, o, Number(flags['timeout-wait'] ?? 900_000))
+  }
+  if (FINAL.has(o.state)) return operationResult(command, remote, o)
+  return operationResult(command, remote, o, { status: 'accepted', exitCode: EXIT.ok })
+}

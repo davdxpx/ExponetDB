@@ -22,7 +22,7 @@ src/cli/usage.ts            usage errors (exit 2)
 src/cli/spec.ts             group titles and command names of the registry
 src/commands/index.ts       the command registry: the only list of commands
 src/commands/*.ts           one module per group (general, auth, profile, tool, registry, node,
-                            migration, plan, diagnose, access)
+                            migration, plan, diagnose, backup, access)
 src/cli/args.ts             global and command flags (deterministic, suggestions by edit distance)
 src/cli/dispatch.ts         parse, help, run the command, render, exit code
 src/cli/run.ts              the run context of one invocation (progress, hints, the remote on demand)
@@ -280,8 +280,8 @@ Without a TTY there is no spinner, cursor movement or color.
 
 No remote SQL, `exec`, `ssh`, `db reset --prod`, `migration apply --force`,
 ledger repair or self-update; no approval endpoint of its own (ADR-0026 §6);
-no Wave 9 diagnostics or backups. A command for a capability a node does
-not offer is not offered.
+no command that restores directly (§10). A command for a capability a node
+does not offer is not offered.
 
 `dev sql` and `dev shell` are the one local exception: they open the local
 test lab's own containers through the local Docker socket, checked by
@@ -324,3 +324,66 @@ label and recorded ID, never a server or a registered target
   by the CLI (ADR-0026 §6).
 - To check Wave 7 yourself, with the lab and with real MCP clients, follow
   [`../05-mcp/owner-test-package.md`](../05-mcp/owner-test-package.md).
+
+## 10. Backups, restores, statistics and session actions (Wave 9 Part B)
+
+**[OBSERVED]** (2026-10-26; `apps/cli/src/commands/backup.ts`,
+`apps/cli/src/commands/diagnose.ts`, `apps/cli/test/backups.test.ts`,
+[`reference.md`](./reference.md); G9 not yet accepted. The commands are
+built over the committed Part B contracts and the generated SDK; the
+server side is in progress, so they are proven against a contract-checked
+fake server only, not yet against a running installation.)
+
+- **Reads** carry their source and time and show the measured protection
+  as the server computed it (`backup overview`, `backup list <cluster>`,
+  `backup repositories`, `backup policy show`, `backup runs`,
+  `restore list`, `drill list`, `cluster findings`). A value the server
+  could not measure reads as unknown or "not measured", never a guess. The
+  paged reads take `--limit`, `--all` and `--cursor` like every list; the
+  facts of the answer (protection, counts, WAL coverage) come from its
+  first page. A repository location is shown only when the server returns
+  it (callers with `registry.manage`); no key, passphrase or storage
+  credential is ever read or shown.
+- **Plans.** `backup adopt`, `backup policy set` and `restore plan` take
+  their request only from `--file` (JSON or YAML), checked against the
+  contract before anything is sent. `backup ownership --to adopted_runs`
+  needs `--host-configuration-unchanged` and `backup retire-repository`
+  needs `--storage-kept` and `--no-longer-protected`: each acknowledgement
+  is a flag the person types, never a default; without it nothing is sent
+  (exit 2). There is no `--force` or other bypass.
+- **No direct restore.** `restore plan` plans a recovery and shows it; it
+  has no `--apply`. A person reviews it and applies it with
+  `exponetdb plan apply <plan>`, which takes the fresh re-authentication
+  through the browser step-up (ADR-0026); `restore.execute` is in no scope
+  preset (§3). `drill plan` (always into scratch) and `restore discard`
+  offer `--apply`, which is the same `plan apply` path with its step-up.
+- **Inline operations** (`backup refresh`, `backup verify`,
+  `session cancel`) send an idempotency key and wait by default like
+  `plan apply` (§6); with `--no-wait` they report `accepted` (exit 0)
+  unless the operation already ended.
+- **The offline runbook** (`restore runbook <cluster> --repository <bkr_>
+  --out <file>`) is checked against its digest, then written to a new file
+  with mode 0700, never over an existing file (an existing path is refused
+  before the audited download). `--out -` prints the script alone on
+  stdout and the digest and placeholders on stderr; a script with terminal
+  control characters is refused there. `drill record-offline --file`
+  records a drill run from it as an attestation, labeled as such.
+- **Diagnostics:** `diagnose query-stats` (CAPABILITY_UNAVAILABLE without
+  pg_stat_statements), `diagnose table-stats` (bloat labeled an
+  estimate), `diagnose advisors --category …` (rules that did not run are
+  listed with their reason, never a pass), `finding summary`, and
+  `finding list`, which now reads the findings across the targets you may
+  read (`finding.list`) with `--target`, `--kind drift|health|advisor|statements`
+  and `--code`. Statement text, engine labels and catalog text are
+  untrusted and printed inert (§7).
+- **Sessions:** `session list` shows the pid, backend start and query start
+  the actions take; `session cancel <target> <pid> --backend-start
+  --query-start` cancels only while the same query runs; `session
+  terminate <target> <pid> --backend-start --condition
+  stalled|idle_in_transaction|long_running|any` plans a termination whose
+  condition is re-checked when it runs.
+- **[OPEN]** `drill record-offline` needs a fresh re-authentication, and the
+  server has no step-up binding for `restore.drill.offline.record` yet
+  (only `plan.apply` and `node.enrollment_token.reveal`), so from the CLI it
+  ends with `REAUTH_REQUIRED` and points to the Web App until one exists.
+
