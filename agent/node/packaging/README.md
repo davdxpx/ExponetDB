@@ -19,7 +19,9 @@ nothing else. No Docker, Node.js or Bun on a database host.
   all of it.
   `exponetdb-node version` prints the version and the commit.
 - `verify-units.sh` checks the units with `systemd-analyze verify` in a
-  scratch root. Their behavior under systemd is tested by the host test
+  scratch root, and that the agent unit names the helper socket only in
+  `Wants=`/`After=` (a stopped helper must not stop the agent). Their
+  behavior under systemd is tested by the host test
   (`apps/server/test/agent-capabilities.host.test.ts`, CI job `node-pg`),
   which runs the agent and the helper from these unit files.
 - The managed PostgreSQL files (configuration fragment, `pg_hba.conf`, TLS

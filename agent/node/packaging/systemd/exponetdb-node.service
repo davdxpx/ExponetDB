@@ -6,9 +6,11 @@
 [Unit]
 Description=ExponetDB node agent
 Documentation=file:///usr/share/doc/exponetdb-node/node-runbook.md
-Wants=network-online.target
+Wants=network-online.target exponetdb-node-helper.socket
 After=network-online.target exponetdb-node-helper.socket postgresql.service
-Requires=exponetdb-node-helper.socket
+# Not Requires=: stopping the helper socket (an operator, a package's prerm,
+# systemctl isolate) must not stop the agent. Without its helper the agent
+# refuses effects and keeps serving reads and heartbeats.
 
 [Service]
 Type=simple
