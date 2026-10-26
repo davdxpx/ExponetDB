@@ -72,8 +72,19 @@ const FILE_READ = { staleAfterMs: Number.POSITIVE_INFINITY } as const
  * "View SQL": opens the side panel of one stored bundle. Nothing is read
  * before the panel opens; an id that fails its grammar offers no button.
  */
-export function ViewSqlButton({ bundle }: { readonly bundle: BundleRef }): ReactNode {
-  const [open, setOpen] = useState(false)
+export function ViewSqlButton({
+  bundle,
+  open: controlledOpen,
+  onOpenChange,
+}: {
+  readonly bundle: BundleRef
+  /** Controlled from outside (the migration centre keeps it in the address); else its own state. */
+  readonly open?: boolean
+  readonly onOpenChange?: (open: boolean) => void
+}): ReactNode {
+  const [ownOpen, setOwnOpen] = useState(false)
+  const open = controlledOpen ?? ownOpen
+  const setOpen = onOpenChange ?? setOwnOpen
   if (!isProjectId(bundle.projectId) || !isMigrationId(bundle.migrationId)) return null
   return (
     <Sheet open={open} onOpenChange={setOpen}>

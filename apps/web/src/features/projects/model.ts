@@ -17,27 +17,31 @@ export const PROJECT_PAGE_SIZE: Readonly<Record<ProjectView, number>> = { grid: 
 
 export interface ProjectsSearch {
   /** Matches the display name or the path, case-insensitively; at most 100 characters. */
-  readonly q?: string
+  readonly q?: string | undefined
   /** A product slug. */
-  readonly product?: string
-  readonly view?: ProjectView
+  readonly product?: string | undefined
+  readonly view?: ProjectView | undefined
   /** 1-based. */
-  readonly page?: number
+  readonly page?: number | undefined
 }
 
 const SLUG = /^[a-z][a-z0-9-]{0,38}$/
 
-/** The validated search of `/projects`: anything outside the grammar is dropped, never trusted. */
+/**
+ * The validated search of `/projects`. Every key is present, `undefined` when its value is outside
+ * the grammar: the router merges the raw search of the parent routes into a route's validated
+ * search, so a key left out here would arrive unchecked.
+ */
 export function projectsSearch(search: Readonly<Record<string, unknown>>): ProjectsSearch {
   const q = typeof search['q'] === 'string' ? search['q'].slice(0, PROJECT_SEARCH_MAX_LENGTH) : ''
   const product = search['product']
   const view = search['view']
   const page = Number(search['page'])
   return {
-    ...(q.trim() === '' ? {} : { q }),
-    ...(typeof product === 'string' && SLUG.test(product) ? { product } : {}),
-    ...(view === 'table' || view === 'grid' ? { view } : {}),
-    ...(Number.isInteger(page) && page > 1 && page < 100_000 ? { page } : {}),
+    q: q.trim() === '' ? undefined : q,
+    product: typeof product === 'string' && SLUG.test(product) ? product : undefined,
+    view: view === 'table' || view === 'grid' ? view : undefined,
+    page: Number.isInteger(page) && page > 1 && page < 100_000 ? page : undefined,
   }
 }
 

@@ -124,7 +124,7 @@ function world(path = TARGET): OpsWorld {
   return w
 }
 
-const page = (path = TARGET) => `/t/${path}/migrations`
+const page = (path = TARGET, view = 'pending') => `/t/${path}/migrations?view=${view}`
 
 async function section(name: string): Promise<HTMLElement> {
   const heading = await screen.findByRole('heading', { level: 2, name })
@@ -134,11 +134,11 @@ async function section(name: string): Promise<HTMLElement> {
 }
 
 async function pendingBlock(): Promise<HTMLElement> {
-  const ledger = await section('Ledger')
-  await within(ledger).findByRole('table', {
+  const pending = await section('Pending bundles')
+  await within(pending).findByRole('table', {
     name: 'Bundles of the project not yet applied to this target',
   })
-  const block = ledger.querySelector('[data-pending-block]')
+  const block = pending.querySelector('[data-pending-block]')
   if (!(block instanceof HTMLElement)) throw new Error('no pending block')
   return block
 }
@@ -216,7 +216,7 @@ describe('plan a pending bundle on this target', () => {
       await within(dialog).findByText('MIGRATION_DEPENDENCY_MISSING happened.'),
     ).toBeInTheDocument()
     expect(within(dialog).getByText('MIGRATION_DEPENDENCY_MISSING')).toBeInTheDocument()
-    expect(router.state.location.pathname).toBe(page())
+    expect(router.state.location.pathname).toBe(`/t/${TARGET}/migrations`)
   })
 
   it('on production, names the evidence state before sending and still offers the plan', async () => {
@@ -475,7 +475,7 @@ describe('plan bundles on another environment from the migrations page', () => {
     const user = userEvent.setup()
     const w = world()
     w.on('POST', plans(PROD_TARGET), { id: PLANNED }, 201)
-    const { router } = mountOps(page(), w)
+    const { router } = mountOps(page(TARGET, 'promote'), w)
     const promote = await section('Plan bundles on an environment')
     // From staging the panel opens on the environment that takes its evidence from staging.
     expect(await within(promote).findByLabelText('Environment')).toHaveValue('production')
@@ -495,13 +495,15 @@ describe('plan bundles on another environment from the migrations page', () => {
   })
 
   it('links to the compare page of this target against its evidence environment', async () => {
-    mountOps(page(), world())
+    mountOps(page(TARGET, 'timeline'), world())
     const timeline = await section('Across environments')
     expect(
       await within(timeline).findByRole('link', {
         name: 'Compare the schema with another environment',
       }),
     ).toHaveAttribute('href', `/t/${TARGET}/compare?to=development`)
+    cleanup()
+    mountOps(page(TARGET, 'promote'), world())
     const promote = await section('Plan bundles on an environment')
     expect(
       await within(promote).findByRole('link', {
@@ -513,7 +515,7 @@ describe('plan bundles on another environment from the migrations page', () => {
   it('shows a failed stream read as failed in the promotion section, never as nothing to plan', async () => {
     const w = world()
     w.fail('GET', /\/api\/v1\/projects\/[^/]+\/migrations$/, 500, 'INTERNAL_ERROR')
-    mountOps(page(), w)
+    mountOps(page(TARGET, 'promote'), w)
     const promote = await section('Plan bundles on an environment')
     expect(
       await within(promote).findByText(/Could not read migration timeline/),

@@ -1,8 +1,14 @@
 import type { MigrationStream } from '@exponetdb/sdk/operations'
+import { Button } from '@exponetdb/ui'
 import { MigrationTimeline } from '@exponetdb/ui-data'
-import { NotPermittedState, UntrustedName, useLinkComponent } from '@exponetdb/ui-patterns'
+import {
+  formatCount,
+  NotPermittedState,
+  UntrustedName,
+  useLinkComponent,
+} from '@exponetdb/ui-patterns'
 import { useQuery } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { t } from '../../lib/i18n/i18n.ts'
 import { classifyFailure } from '../../lib/query/errors.ts'
@@ -21,6 +27,10 @@ import {
   timelineDataOf,
 } from './model.ts'
 import { PromotePanel } from './promote-panel.tsx'
+
+/** Bundles the timeline shows at first (the newest in dependency order), and how many more a press adds. */
+export const TIMELINE_WINDOW = 25
+export const TIMELINE_STEP = 100
 
 /**
  * The promotion timeline of the project (`GET /projects/{id}/migrations`):
@@ -49,6 +59,9 @@ export function TimelineSection({
     query.isError &&
     classifyFailure(query.error).kind === 'not_permitted'
   const stream = toReadable(query, { missing: streamMissing })
+  // The newest bundles first: a window of rows, widened on request, never 1,000 rows at once.
+  const [window, setWindow] = useState(TIMELINE_WINDOW)
+  const listed = query.data?.bundles.length ?? 0
   return (
     <Section
       id="timeline"
@@ -65,12 +78,27 @@ export function TimelineSection({
         <>
           <MigrationTimeline
             readable={mapReadable(stream, timelineDataOf)}
+            maxBundles={window}
             what={nounPhrase('migrations.timeline.what')}
             onRetry={refetch}
             onRefresh={refetch}
             busy={query.isFetching}
             headingLevel={3}
           />
+          {listed > window ? (
+            <div>
+              <Button
+                type="button"
+                size="tiny"
+                variant="default"
+                onClick={() => setWindow((shown) => shown + TIMELINE_STEP)}
+              >
+                {t('migrations.timeline.more', {
+                  count: formatCount(Math.min(TIMELINE_STEP, listed - window)),
+                })}
+              </Button>
+            </div>
+          ) : null}
           {query.data === undefined ? null : <EnvironmentNotes stream={query.data} />}
         </>
       )}

@@ -112,7 +112,12 @@ describe('the projects model', () => {
       view: 'table',
       page: 3,
     })
-    expect(projectsSearch({ q: '   ', product: 'Shop!', view: 'cards', page: '-1' })).toEqual({})
+    expect(projectsSearch({ q: '   ', product: 'Shop!', view: 'cards', page: '-1' })).toEqual({
+      q: undefined,
+      product: undefined,
+      view: undefined,
+      page: undefined,
+    })
     expect(projectsSearch({ q: 'x'.repeat(500) }).q).toHaveLength(100)
   })
 
@@ -157,6 +162,15 @@ describe('the projects portfolio', () => {
     expect(world.gets('/api/v1/projects')).toHaveLength(1)
     expect(world.gets('/api/v1/products')).toHaveLength(1)
     expect(world.gets('/api/v1/targets')).toHaveLength(1)
+  })
+
+  it('never takes an unchecked value from the address (the router merges raw parent search)', async () => {
+    const { router } = mountApp('/projects?view=evil&page=abc&product=Shop!', worldWithProject())
+    await screen.findByRole('list', { name: 'Projects' })
+    const search = router.state.matches.at(-1)?.search as Record<string, unknown>
+    expect(search['view']).toBeUndefined()
+    expect(search['page']).toBeUndefined()
+    expect(search['product']).toBeUndefined()
   })
 
   it('keeps the search in the address and says when nothing matches', async () => {

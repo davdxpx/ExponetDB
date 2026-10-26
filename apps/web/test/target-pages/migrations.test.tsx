@@ -61,13 +61,17 @@ describe('the migrations page: ledger', () => {
       'href',
       `/changes/operations/op_${ulid(1)}`,
     )
-    // The pending bundles of the project.
+    // The pending bundles of the project are their own view.
+    expect(within(ledger).queryByText('add_invoices')).toBeNull()
+    cleanup()
+    mountOps(`${PAGE}?view=pending`, world())
+    const pending = await section('Pending bundles')
     expect(
-      within(ledger).getByRole('table', {
+      await within(pending).findByRole('table', {
         name: 'Bundles of the project not yet applied to this target',
       }),
     ).toBeInTheDocument()
-    expect(within(ledger).getByText('add_invoices')).toBeInTheDocument()
+    expect(within(pending).getByText('add_invoices')).toBeInTheDocument()
   })
 
   it('says the empty ledger only after a successful read', async () => {
@@ -77,8 +81,10 @@ describe('the migrations page: ledger', () => {
     expect(
       await screen.findByText('The read succeeded: no migration is applied to this target yet.'),
     ).toBeInTheDocument()
+    cleanup()
+    mountOps(`${PAGE}?view=pending`, w)
     expect(
-      screen.getByText('The read succeeded: no bundle is pending for this target.'),
+      await screen.findByText('The read succeeded: no bundle is pending for this target.'),
     ).toBeInTheDocument()
   })
 
@@ -145,9 +151,95 @@ describe('the migrations page: ledger', () => {
   })
 })
 
+describe('the migration centre: counters, views and history', () => {
+  it('counts the ledger in cards that link to the history filtered by them', async () => {
+    mountOps(PAGE, world())
+    const counters = await screen.findByRole('list', { name: 'Ledger counters' })
+    const verified = within(counters).getByRole('link', { name: /^Verified/ })
+    expect(verified).toHaveAttribute(
+      'href',
+      `/t/${TARGET}/migrations?view=history&verification=passed`,
+    )
+    expect(within(counters).getByRole('link', { name: /^Not applied/ })).toHaveAttribute(
+      'href',
+      `/t/${TARGET}/migrations?view=pending`,
+    )
+    // One view at a time: the timeline, promotion and import are not in the document.
+    expect(screen.queryByRole('heading', { level: 2, name: 'Across environments' })).toBeNull()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Legacy import' })).toBeNull()
+    const views = screen.getByRole('navigation', { name: 'Migration views' })
+    expect(within(views).getByRole('link', { name: 'History' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+  })
+
+  it('renders one page of 500 imported entries, never the whole ledger, and pages through it', async () => {
+    const user = userEvent.setup()
+    const w = world()
+    w.on(
+      'GET',
+      LEDGER,
+      ledgerStatus({
+        applied: Array.from({ length: 500 }, (_, i) =>
+          ledgerEntry(i + 1, {
+            origin: 'legacy_import',
+            name: `legacy_${String(i).padStart(3, '0')}`,
+          }),
+        ),
+      }),
+    )
+    const { router } = mountOps(PAGE, w)
+    const table = await screen.findByRole('table', { name: 'Applied migrations of this target' })
+    expect(within(table).getAllByRole('row')).toHaveLength(51)
+    const pager = screen.getByRole('navigation', { name: 'History pages' })
+    expect(pager).toHaveTextContent('1–50 of 500')
+    expect(pager).toHaveTextContent('one live read of the ledger')
+    await user.click(within(pager).getByRole('button', { name: 'Next' }))
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ page: 2 }))
+    expect(screen.getByRole('navigation', { name: 'History pages' })).toHaveTextContent(
+      '51–100 of 500',
+    )
+    expect(
+      screen
+        .getByRole('list', { name: 'Ledger counters' })
+        .querySelector('[data-counter="applied"]'),
+    ).toHaveTextContent('500 imported from a legacy ledger')
+  })
+
+  it('filters by text, origin and verification from the address, and says when none match', async () => {
+    const user = userEvent.setup()
+    mountOps(`${PAGE}?view=history&q=orders_1&origin=exponetdb`, world())
+    const table = await screen.findByRole('table', { name: 'Applied migrations of this target' })
+    expect(within(table).getByText('add_orders_1')).toBeInTheDocument()
+    expect(within(table).queryByText('add_orders_2')).toBeNull()
+    expect(screen.getByRole('searchbox', { name: 'Search the history' })).toHaveValue('orders_1')
+    await user.selectOptions(screen.getByLabelText('Verification'), 'failed')
+    expect(await screen.findByText('No entry of the ledger matches these filters.')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Reset the filters' }))
+    expect(
+      await screen.findByRole('table', { name: 'Applied migrations of this target' }),
+    ).toBeVisible()
+  })
+
+  it('drops search values outside the grammar of the address', async () => {
+    const { router } = mountOps(
+      `${PAGE}?view=nope&origin=evil&verification=x&page=-4&size=7&migration=../x&report=../y`,
+      world(),
+    )
+    expect(
+      await screen.findByRole('table', { name: 'Applied migrations of this target' }),
+    ).toBeVisible()
+    const search = router.state.matches.at(-1)?.search as Record<string, unknown>
+    for (const key of ['view', 'origin', 'verification', 'page', 'size', 'migration', 'report']) {
+      expect(search[key], key).toBeUndefined()
+    }
+  })
+})
+
 describe('the migrations page: timeline, plans and drift', () => {
   it('shows a cell with no record as unknown, never as not applied', async () => {
-    mountOps(PAGE, world())
+    mountOps(`${PAGE}?view=timeline`, world())
     const timeline = await section('Across environments')
     // Bundle 2 has no production cell: its production marker reads unknown.
     await within(timeline).findByText('add_orders_2')
@@ -171,7 +263,7 @@ describe('the migrations page: timeline, plans and drift', () => {
       },
     }
     w.on('GET', /\/api\/v1\/projects\/[^/]+\/migrations$/, { ...s, environments })
-    mountOps(PAGE, w)
+    mountOps(`${PAGE}?view=timeline`, w)
     const timeline = await section('Across environments')
     expect(await within(timeline).findByText(/No target you may see/)).toBeInTheDocument()
     expect(within(timeline).getByText(/1 missing, 0 with another checksum/)).toBeInTheDocument()
@@ -184,7 +276,7 @@ describe('the migrations page: timeline, plans and drift', () => {
       /\/api\/v1\/projects\/[^/]+\/migrations$/,
       stream({ truncated: true, bundleCount: 1500 }),
     )
-    mountOps(PAGE, w)
+    mountOps(`${PAGE}?view=timeline`, w)
     const timeline = await section('Across environments')
     expect(await within(timeline).findByText(/Showing part of/)).toBeInTheDocument()
   })
@@ -192,7 +284,7 @@ describe('the migrations page: timeline, plans and drift', () => {
   it('shows a failed stream as failed', async () => {
     const w = world()
     w.fail('GET', /\/api\/v1\/projects\/[^/]+\/migrations$/, 500, 'INTERNAL_ERROR')
-    mountOps(PAGE, w)
+    mountOps(`${PAGE}?view=timeline`, w)
     const timeline = await section('Across environments')
     expect(
       await within(timeline).findByText(/Could not read migration timeline/),
@@ -202,7 +294,7 @@ describe('the migrations page: timeline, plans and drift', () => {
   it('lists the plans for this target with a link to each review page and says when more exist', async () => {
     const w = world()
     w.on('GET', /\/api\/v1\/plans\?/, { items: [plan(1), plan(2)], nextCursor: 'more' })
-    mountOps(PAGE, w)
+    mountOps(`${PAGE}?view=plans`, w)
     const plans = await section('Plans for this target')
     const table = await within(plans).findByRole('table', { name: 'Newest plans for this target' })
     expect(within(table).getByRole('link', { name: `pln_${ulid(1)}` })).toHaveAttribute(
@@ -239,7 +331,7 @@ describe('the migrations page: timeline, plans and drift', () => {
       ],
       nextCursor: null,
     })
-    mountOps(PAGE, w)
+    mountOps(`${PAGE}?view=drift`, w)
     const drift = await section('Drift findings')
     expect(await within(drift).findByText('public.orders')).toBeInTheDocument()
     expect(
@@ -278,7 +370,7 @@ describe('the legacy import review', () => {
 
   it('asks for a report id and refuses anything that is not one', async () => {
     const w = world()
-    mountOps(PAGE, w)
+    mountOps(`${PAGE}?view=import`, w)
     const user = userEvent.setup()
     const import_ = await section('Legacy import')
     await user.type(within(import_).getByLabelText('Import report id'), '../x')
@@ -289,9 +381,9 @@ describe('the legacy import review', () => {
 
   it('ignores a malformed report in the address and asks for nothing', async () => {
     const w = world()
-    mountOps(`${PAGE}?report=../../x`, w)
+    mountOps(`${PAGE}?view=import&report=../../x`, w)
     const import_ = await section('Legacy import')
-    expect(within(import_).getByLabelText('Import report id')).toBeInTheDocument()
+    expect(await within(import_).findByLabelText('Import report id')).toBeInTheDocument()
     expect(w.callsTo('GET', /import-reports/)).toHaveLength(0)
   })
 
