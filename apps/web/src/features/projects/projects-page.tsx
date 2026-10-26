@@ -165,6 +165,14 @@ function Portfolio(props: {
   return (
     <div className="flex flex-col gap-4">
       <Toolbar rows={rows} search={search} view={view} change={change} />
+      <p role="status" className="m-0 text-xs text-foreground-light">
+        {shown.length === rows.length
+          ? t('projects.count', { total: formatCount(rows.length) })
+          : t('projects.matching', {
+              shown: formatCount(shown.length),
+              total: formatCount(rows.length),
+            })}
+      </p>
       {props.targetsFailed === null ? null : (
         <Admonition
           type="warning"

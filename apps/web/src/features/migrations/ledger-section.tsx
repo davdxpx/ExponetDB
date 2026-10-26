@@ -238,6 +238,13 @@ function History({
   return (
     <div className="flex flex-col gap-3" data-history>
       <HistoryToolbar search={search} change={change} />
+      {/* Stays when no row matches and the pager (with its live range) is gone. */}
+      <p role="status" className="sr-only">
+        {t('migrations.history.matching', {
+          shown: formatCount(rows.length),
+          total: formatCount(entries.length),
+        })}
+      </p>
       {rows.length === 0 ? (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed p-4">
           <p className="m-0 text-sm text-foreground-light">{t('migrations.history.noMatch')}</p>

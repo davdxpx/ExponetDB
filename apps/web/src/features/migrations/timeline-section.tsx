@@ -8,7 +8,7 @@ import {
   useLinkComponent,
 } from '@exponetdb/ui-patterns'
 import { useQuery } from '@tanstack/react-query'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useRef, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { t } from '../../lib/i18n/i18n.ts'
 import { classifyFailure } from '../../lib/query/errors.ts'
@@ -60,8 +60,10 @@ export function TimelineSection({
     classifyFailure(query.error).kind === 'not_permitted'
   const stream = toReadable(query, { missing: streamMissing })
   // The newest bundles first: a window of rows, widened on request, never 1,000 rows at once.
-  const [window, setWindow] = useState(TIMELINE_WINDOW)
+  const [shown, setShown] = useState(TIMELINE_WINDOW)
   const listed = query.data?.bundles.length ?? 0
+  // The line stays when the last press removes the button, so the focus lands on it, not the body.
+  const statusRef = useRef<HTMLParagraphElement>(null)
   return (
     <Section
       id="timeline"
@@ -78,25 +80,42 @@ export function TimelineSection({
         <>
           <MigrationTimeline
             readable={mapReadable(stream, timelineDataOf)}
-            maxBundles={window}
+            maxBundles={shown}
             what={nounPhrase('migrations.timeline.what')}
             onRetry={refetch}
             onRefresh={refetch}
             busy={query.isFetching}
             headingLevel={3}
           />
-          {listed > window ? (
-            <div>
-              <Button
-                type="button"
-                size="tiny"
-                variant="default"
-                onClick={() => setWindow((shown) => shown + TIMELINE_STEP)}
+          {listed > TIMELINE_WINDOW ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <p
+                ref={statusRef}
+                tabIndex={-1}
+                role="status"
+                className="m-0 rounded-sm text-xs text-foreground-light focus-ring"
               >
-                {t('migrations.timeline.more', {
-                  count: formatCount(Math.min(TIMELINE_STEP, listed - window)),
+                {t('migrations.timeline.shown', {
+                  shown: formatCount(Math.min(shown, listed)),
+                  total: formatCount(listed),
                 })}
-              </Button>
+              </p>
+              {listed > shown ? (
+                <Button
+                  type="button"
+                  size="tiny"
+                  variant="default"
+                  onClick={() => {
+                    const next = shown + TIMELINE_STEP
+                    setShown(next)
+                    if (next >= listed) statusRef.current?.focus()
+                  }}
+                >
+                  {t('migrations.timeline.more', {
+                    count: formatCount(Math.min(TIMELINE_STEP, listed - shown)),
+                  })}
+                </Button>
+              ) : null}
             </div>
           ) : null}
           {query.data === undefined ? null : <EnvironmentNotes stream={query.data} />}

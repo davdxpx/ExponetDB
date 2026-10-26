@@ -216,6 +216,8 @@ describe('the migration centre: counters, views and history', () => {
     expect(screen.getByRole('searchbox', { name: 'Search the history' })).toHaveValue('orders_1')
     await user.selectOptions(screen.getByLabelText('Verification'), 'failed')
     expect(await screen.findByText('No entry of the ledger matches these filters.')).toBeVisible()
+    // Said in a status line that stays when the pager is gone.
+    expect(screen.getByText(/^0 of \d+ migrations match$/)).toHaveAttribute('role', 'status')
     await user.click(screen.getByRole('button', { name: 'Reset the filters' }))
     expect(
       await screen.findByRole('table', { name: 'Applied migrations of this target' }),
@@ -475,6 +477,7 @@ describe('the legacy import review', () => {
     })
     // Only the review item can be decided.
     expect(import_.querySelectorAll('[data-decide]')).toHaveLength(1)
+    await user.click(within(import_).getByRole('button', { name: /^Needs a decision/ }))
     await user.click(import_.querySelector('[data-decide="2"]') as HTMLElement)
     const dialog = await screen.findByRole('alertdialog')
     // Without a choice and a note nothing is sent.
@@ -493,6 +496,8 @@ describe('the legacy import review', () => {
     expect(
       await within(import_).findByRole('button', { name: 'Create baseline plan' }),
     ).toBeInTheDocument()
+    // The decided row stays under "Needs a decision" until the filter is chosen again.
+    expect(import_.querySelector('[data-item="2"]')).not.toBeNull()
   })
 
   it('creates the baseline plan from a resolved report and opens the plan', async () => {

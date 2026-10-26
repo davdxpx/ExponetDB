@@ -180,6 +180,7 @@ describe('the projects portfolio', () => {
     await user.type(screen.getByRole('searchbox', { name: 'Search projects' }), 'nothing')
     await waitFor(() => expect(router.state.location.search).toMatchObject({ q: 'nothing' }))
     expect(await screen.findByText('No project matches this search.')).toBeVisible()
+    expect(screen.getByText('0 of 1 projects match')).toHaveAttribute('role', 'status')
     await user.click(screen.getByRole('button', { name: 'Reset the search' }))
     expect(await screen.findByRole('list', { name: 'Projects' })).toBeVisible()
   })
@@ -297,6 +298,25 @@ describe("a project's home", () => {
     }
     return world
   }
+
+  it('moves the focus to the first card "Show all" revealed, and says when a search matches none', async () => {
+    const user = userEvent.setup()
+    const world = new World()
+    world.targetPages = [
+      Array.from({ length: 14 }, (_, i) =>
+        projectTarget(`shop/platform/env-${String(i).padStart(2, '0')}`),
+      ),
+    ]
+    mountApp('/p/shop/platform', world)
+    const list = await screen.findByRole('list', { name: 'Environments' })
+    expect(within(list).getAllByRole('link')).toHaveLength(12)
+    await user.click(screen.getByRole('button', { name: /^Show all/ }))
+    expect(within(list).getAllByRole('link')).toHaveLength(14)
+    expect(within(list).getAllByRole('link')[12]).toHaveFocus()
+    await user.type(screen.getByRole('searchbox'), 'nothing')
+    expect(screen.getByText('No environment matches the search.')).toBeVisible()
+    expect(screen.getByText('0 of 14 environments shown')).toHaveAttribute('role', 'status')
+  })
 
   it('shows the environments as cards that link to each target, production marked', async () => {
     mountApp('/p/shop/platform', homeWorld())

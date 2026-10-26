@@ -8,7 +8,7 @@ import {
   useLinkComponent,
 } from '@exponetdb/ui-patterns'
 import { useQuery } from '@tanstack/react-query'
-import { type ChangeEvent, type ReactNode, useId, useState } from 'react'
+import { type ChangeEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { t } from '../../lib/i18n/i18n.ts'
 import { toReadable } from '../../lib/query/readable.ts'
@@ -86,6 +86,11 @@ function EnvironmentCards({
   const id = useId()
   const [q, setQ] = useState('')
   const [all, setAll] = useState(false)
+  const listRef = useRef<HTMLUListElement>(null)
+  // "Show all" removes itself: the focus moves to the first card it revealed.
+  useEffect(() => {
+    if (all) listRef.current?.querySelectorAll('a')[ENVIRONMENTS_SHOWN]?.focus()
+  }, [all])
   const many = environments.length > ENVIRONMENTS_SHOWN
   const needle = q.trim().toLowerCase()
   const matching =
@@ -115,7 +120,19 @@ function EnvironmentCards({
           />
         </div>
       ) : null}
+      {many ? (
+        <p role="status" className="sr-only">
+          {t('project.environments.matching', {
+            shown: formatCount(shown.length),
+            total: formatCount(environments.length),
+          })}
+        </p>
+      ) : null}
+      {shown.length === 0 ? (
+        <p className="m-0 text-sm text-foreground-light">{t('project.environments.noMatch')}</p>
+      ) : null}
       <ul
+        ref={listRef}
         aria-label={t('project.environments.title')}
         className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 xl:grid-cols-4"
       >

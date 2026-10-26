@@ -48,6 +48,8 @@ const migrationsMessages = {
   'migrations.import.filter.none': 'No review item matches this filter.',
   'migrations.import.pager': 'Review item pages',
   'migrations.timeline.more': 'Show {count} earlier bundles',
+  'migrations.timeline.shown': 'Showing the newest {shown} of {total} bundles',
+  'migrations.history.matching': '{shown} of {total} migrations match',
   'migrations.view.history': 'History',
   'migrations.view.pending': 'Pending',
   'migrations.view.timeline': 'Timeline',

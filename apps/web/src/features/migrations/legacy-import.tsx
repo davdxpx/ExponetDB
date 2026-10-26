@@ -251,7 +251,13 @@ function ReportItems({
 }): ReactNode {
   const [filter, setFilter] = useState<ItemFilter>('all')
   const [page, setPage] = useState(1)
-  const undecided = report.items.filter((item) => needsDecision(item) && item.decision === null)
+  const open = (item: Item) => needsDecision(item) && item.decision === null
+  // The undecided set as it was when the filter was chosen: a decision does not move or remove
+  // its row (and the focus returning to it) until the filter is chosen again.
+  const [waiting, setWaiting] = useState<ReadonlySet<string>>(
+    () => new Set(report.items.filter(open).map((item) => item.itemId)),
+  )
+  const undecided = report.items.filter(open)
   const byState = new Map<Item['state'], number>()
   for (const item of report.items) byState.set(item.state, (byState.get(item.state) ?? 0) + 1)
   const matching = report.items
@@ -259,18 +265,15 @@ function ReportItems({
       filter === 'all'
         ? true
         : filter === 'undecided'
-          ? needsDecision(item) && item.decision === null
+          ? waiting.has(item.itemId)
           : item.state === filter,
     )
-    .sort(
-      (a, b) =>
-        Number(needsDecision(b) && b.decision === null) -
-        Number(needsDecision(a) && a.decision === null),
-    )
+    .sort((a, b) => Number(waiting.has(b.itemId)) - Number(waiting.has(a.itemId)))
   const slice = pageSlice(matching, page, IMPORT_PAGE_SIZE)
   const choose = (next: ItemFilter) => {
     setFilter(next)
     setPage(1)
+    setWaiting(new Set(undecided.map((item) => item.itemId)))
   }
   const chip = (value: ItemFilter, label: string, count: number) => (
     <Button
