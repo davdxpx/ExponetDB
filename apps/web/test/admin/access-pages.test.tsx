@@ -118,6 +118,24 @@ describe('the People page', () => {
     expect(card(OTHER).textContent).not.toContain('No role.')
   })
 
+  it('says not all roles were read, never "no role", when the binding list was cut (partial)', async () => {
+    const world = peopleWorld()
+    world.on('GET', '/api/v1/role-bindings', { items: [], nextCursor: 'more' })
+    mountApp('/access/people', world)
+    await waitFor(() => expect(card(OTHER)).toBeInTheDocument())
+    await waitFor(() => expect(card(OTHER).textContent).toContain('not all bindings were read'))
+    expect(card(OTHER).textContent).not.toContain('No role.')
+    cleanup()
+    mountApp('/access/roles', world)
+    const owner = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>('li[data-role="owner"]')
+      if (found === null) throw new Error('no role')
+      return found
+    })
+    await waitFor(() => expect(owner.textContent).toContain('Someone may hold this role.'))
+    expect(owner.textContent).not.toContain('Nobody holds this role.')
+  })
+
   it('invites with a fresh proof and shows the link once, never in the cache', async () => {
     const user = userEvent.setup()
     const world = peopleWorld()

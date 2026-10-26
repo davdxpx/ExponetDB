@@ -13,7 +13,7 @@ import {
   PageSectionSummary,
   PageSectionTitle,
 } from '@exponetdb/ui-patterns'
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { type ReactNode, useId, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { t } from '../../lib/i18n/i18n.ts'
@@ -21,6 +21,7 @@ import { classifyFailure } from '../../lib/query/errors.ts'
 import { toReadable } from '../../lib/query/readable.ts'
 import { useMe } from '../../lib/session/guard.tsx'
 import { installationQuery } from '../settings/keys.ts'
+import { LoadMore } from '../target-ops/paged.tsx'
 import { CimdForm } from './cimd-form.tsx'
 import { ClientCard } from './client-card.tsx'
 import { Field, NativeSelect } from './fields.tsx'
@@ -28,6 +29,7 @@ import { ACCESS_PAGE_LIMIT, type ClientStateFilter, oauthClientsQuery } from './
 import { ListView } from './list-view.tsx'
 import { canManageAccess, clientStateLabel } from './model.ts'
 import { NoMatch } from './no-match.tsx'
+import { loadedPages } from './paged-list.ts'
 import { StatusLines, useStatusLine } from './status.tsx'
 
 const STATE_FILTERS: readonly ClientStateFilter[] = [
@@ -70,8 +72,8 @@ export function OAuthClientsPage(): ReactNode {
   const line = useStatusLine()
   const filterId = useId()
   const [filter, setFilter] = useState<ClientStateFilter>('all')
-  const query = useQuery(oauthClientsQuery(client, filter))
-  const readable = toReadable(query, {
+  const query = useInfiniteQuery(oauthClientsQuery(client, filter))
+  const readable = toReadable(loadedPages(query), {
     missing: (page) =>
       page.nextCursor === null
         ? undefined
@@ -151,23 +153,33 @@ export function OAuthClientsPage(): ReactNode {
             what={t('access.clients.what')}
             permission="access.read"
             // A state filter that leaves nothing is "No match" (below), not an empty list.
-            isEmpty={(page) => filter === 'all' && page.items.length === 0}
+            isEmpty={(page) =>
+              filter === 'all' && page.items.length === 0 && page.nextCursor === null
+            }
             emptyTitle={t('access.clients.empty.title')}
             emptyDescription={t('access.clients.empty.body')}
             onRetry={() => void query.refetch()}
-            busy={query.isFetching}
+            busy={query.isFetching && !query.isFetchingNextPage}
           >
             {(page) =>
-              page.items.length === 0 ? (
+              page.items.length === 0 && page.nextCursor === null ? (
                 filter === 'all' ? null : (
                   <NoMatch onReset={() => setFilter('all')} />
                 )
               ) : (
-                <ul id="client-list" className="cards flex flex-col gap-4">
-                  {page.items.map((item) => (
-                    <ClientCard key={item.id} client={item} line={line} canManage={canManage} />
-                  ))}
-                </ul>
+                <>
+                  <ul id="client-list" className="cards flex flex-col gap-4">
+                    {page.items.map((item) => (
+                      <ClientCard key={item.id} client={item} line={line} canManage={canManage} />
+                    ))}
+                  </ul>
+                  <LoadMore
+                    more={page.nextCursor !== null}
+                    loading={query.isFetchingNextPage}
+                    onLoad={() => void query.fetchNextPage()}
+                    label={t('access.clients.loadMore')}
+                  />
+                </>
               )
             }
           </ListView>

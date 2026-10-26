@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query'
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
 import type { ApiClient } from '../../lib/api/client.ts'
 import { classifyFailure } from '../../lib/query/errors.ts'
 import { ACCESS_PAGE_LIMIT, ACCESS_POLL_MS } from './keys.ts'
@@ -62,14 +62,24 @@ export function rolesQuery(client: ApiClient) {
 
 export type GrantFilter = 'active' | 'revoked' | 'expired' | 'all'
 
+/**
+ * The grants, page by page through the server's cursor ("Load more"): a grant past the first
+ * page can still be found and revoked. A refetch reads the pages loaded so far again.
+ */
 export function grantsQuery(client: ApiClient, state: GrantFilter) {
-  return queryOptions({
+  return infiniteQueryOptions({
     queryKey: peopleKeys.grants(state),
-    queryFn: ({ signal }) =>
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ signal, pageParam }) =>
       client.operation('listGrants', {
-        query: state === 'all' ? { limit: ACCESS_PAGE_LIMIT } : { state, limit: ACCESS_PAGE_LIMIT },
+        query: {
+          ...(state === 'all' ? {} : { state }),
+          limit: ACCESS_PAGE_LIMIT,
+          ...(pageParam === undefined ? {} : { cursor: pageParam }),
+        },
         signal,
       }),
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
     refetchInterval: (query) => pollUnless(query.state.error),
   })
 }

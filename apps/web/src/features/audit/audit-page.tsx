@@ -85,7 +85,11 @@ export function AuditPage({ search }: { readonly search: AuditSearch }): ReactNo
             what={t('audit.events.what')}
             permission="audit.read"
             // A filtered search that finds nothing is "No match" (below), not an empty log.
-            isEmpty={(value) => !hasFilters(search) && value.items.length === 0}
+            // A page can come back empty with a cursor (the server scans a bounded window for a
+            // caller limited to some targets): that is not an empty log, older events may match.
+            isEmpty={(value) =>
+              !hasFilters(search) && value.items.length === 0 && value.nextCursor === null
+            }
             emptyTitle={t('audit.events.empty.title')}
             emptyDescription={t('audit.events.empty.body')}
             onRetry={() => void events.refetch()}
@@ -93,7 +97,20 @@ export function AuditPage({ search }: { readonly search: AuditSearch }): ReactNo
           >
             {(value) =>
               value.items.length === 0 ? (
-                hasFilters(search) && value.nextCursor === null ? (
+                value.nextCursor !== null ? (
+                  <div className="flex flex-col items-start gap-3" data-state="partial">
+                    <p className="m-0 text-sm text-foreground-light">{t('audit.events.noneYet')}</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="small"
+                      loading={events.isFetchingNextPage}
+                      onClick={() => void events.fetchNextPage()}
+                    >
+                      {t('audit.events.older')}
+                    </Button>
+                  </div>
+                ) : hasFilters(search) ? (
                   <NoMatch onReset={() => navigate('/audit')} />
                 ) : null
               ) : (

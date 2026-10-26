@@ -5,6 +5,8 @@
  * one this installation runs, read from `GET /installation`).
  */
 export const accessAdminMessages = {
+  'connectedApps.loadMore': 'Load more grants',
+  'access.clients.loadMore': 'Load more clients',
   // ----- OAuth client registration (OD-5, revised 2026-10-13) -----
   'oauthRegistration.open':
     'Open (the default): a new MCP client that registers itself (DCR) or presents a metadata document (CIMD) is approved automatically, so connecting one needs no administrator. Every person still signs in and consents on this installation’s own page before a client gets any access, and production changes by agents still wait for a human approval. A rejected or disabled client is never approved automatically.',
@@ -63,6 +65,8 @@ export const accessAdminMessages = {
   'people.state.erased': 'Erased',
   'people.bindings.title': 'Roles',
   'people.bindings.none': 'No role. This person can sign in but see or change nothing.',
+  'people.bindings.notAllRead':
+    'No role among the bindings read, but not all bindings were read. This does not mean this person has no role.',
   'people.bindings.unknown':
     'The role bindings could not be read. This does not mean this person has no role.',
   'people.bindings.failed.title': 'Role bindings could not be read',
@@ -173,6 +177,8 @@ export const accessAdminMessages = {
   'roles.holders': 'Held by',
   'roles.holders.none': 'Nobody holds this role.',
   'roles.holders.unknown': 'Who holds this role could not be read.',
+  'roles.holders.notAllRead':
+    'No holder among the bindings read, but not all bindings were read. Someone may hold this role.',
   'roles.role.owner': 'Owner',
   'roles.role.admin': 'Administrator',
   'roles.role.operator': 'Operator',

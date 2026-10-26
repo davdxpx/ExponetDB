@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query'
+import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query'
 import type { ApiClient } from '../../lib/api/client.ts'
 import { classifyFailure } from '../../lib/query/errors.ts'
 
@@ -39,14 +39,24 @@ export type ClientStateFilter = 'all' | 'pending' | 'active' | 'rejected' | 'dis
  * The key of a state sits under the list's key, so a decision on a client
  * reads every state again.
  */
+/**
+ * The OAuth clients, page by page through the server's cursor ("Load more"): with open
+ * registration (OD-5) the list grows, and a client past the first page can still be reviewed.
+ */
 export function oauthClientsQuery(client: ApiClient, state: ClientStateFilter = 'all') {
-  return queryOptions({
+  return infiniteQueryOptions({
     queryKey: state === 'all' ? accessKeys.oauthClients : [...accessKeys.oauthClients, state],
-    queryFn: ({ signal }) =>
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ signal, pageParam }) =>
       client.operation('listOAuthClients', {
-        query: state === 'all' ? { limit: ACCESS_PAGE_LIMIT } : { state, limit: ACCESS_PAGE_LIMIT },
+        query: {
+          ...(state === 'all' ? {} : { state }),
+          limit: ACCESS_PAGE_LIMIT,
+          ...(pageParam === undefined ? {} : { cursor: pageParam }),
+        },
         signal,
       }),
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
     refetchInterval: (query) => pollUnless(query.state.error),
   })
 }

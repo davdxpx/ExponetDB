@@ -108,6 +108,8 @@ export const auditMessages = {
   'audit.events.all': 'All {count} matching events are shown.',
   'audit.events.some': '{count} events are shown. Older events match too.',
   'audit.events.older': 'Show older events',
+  'audit.events.noneYet':
+    'None of the newest events read so far matches. Older events may: the server reads the log in windows.',
   'audit.column.time': 'Time',
   'audit.column.actor': 'Actor',
   'audit.column.action': 'Action',

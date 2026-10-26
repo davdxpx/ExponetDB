@@ -13,17 +13,19 @@ import {
   TimestampInfo,
   UntrustedName,
 } from '@exponetdb/ui-patterns'
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { type ReactNode, useId, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
 import { t } from '../../lib/i18n/i18n.ts'
 import { toReadable } from '../../lib/query/readable.ts'
 import { useMe } from '../../lib/session/guard.tsx'
+import { LoadMore } from '../target-ops/paged.tsx'
 import { useAccessAction } from './actions.ts'
 import { Field, holds, NativeSelect } from './fields.tsx'
 import { ACCESS_PAGE_LIMIT } from './keys.ts'
 import { ListView } from './list-view.tsx'
 import { tiersLabel } from './model.ts'
+import { loadedPages } from './paged-list.ts'
 import { type GrantFilter, grantsQuery, identitiesQuery, peopleKeys } from './people-keys.ts'
 import {
   type Grant,
@@ -73,9 +75,9 @@ export function ConnectedAppsPage(): ReactNode {
   const line = useStatusLine()
   const filterId = useId()
   const [filter, setFilter] = useState<GrantFilter>('active')
-  const grants = useQuery(grantsQuery(client, filter))
+  const grants = useInfiniteQuery(grantsQuery(client, filter))
   const identities = useQuery(identitiesQuery(client))
-  const readable = toReadable(grants, {
+  const readable = toReadable(loadedPages(grants), {
     missing: (page) =>
       page.nextCursor === null
         ? undefined
@@ -122,20 +124,28 @@ export function ConnectedAppsPage(): ReactNode {
             emptyTitle={t('connectedApps.empty.title')}
             emptyDescription={t('connectedApps.empty.body')}
             onRetry={() => void grants.refetch()}
-            busy={grants.isFetching}
+            busy={grants.isFetching && !grants.isFetchingNextPage}
           >
             {(page) => (
-              <ul id="grant-admin-list" className="cards flex flex-col gap-4">
-                {page.items.map((grant) => (
-                  <GrantCard
-                    key={grant.id}
-                    grant={grant}
-                    person={index.get(grant.identityId)}
-                    line={line}
-                    canManage={canManage}
-                  />
-                ))}
-              </ul>
+              <>
+                <ul id="grant-admin-list" className="cards flex flex-col gap-4">
+                  {page.items.map((grant) => (
+                    <GrantCard
+                      key={grant.id}
+                      grant={grant}
+                      person={index.get(grant.identityId)}
+                      line={line}
+                      canManage={canManage}
+                    />
+                  ))}
+                </ul>
+                <LoadMore
+                  more={page.nextCursor !== null}
+                  loading={grants.isFetchingNextPage}
+                  onLoad={() => void grants.fetchNextPage()}
+                  label={t('connectedApps.loadMore')}
+                />
+              </>
             )}
           </ListView>
         </section>

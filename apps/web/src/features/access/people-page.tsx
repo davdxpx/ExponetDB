@@ -230,6 +230,7 @@ export function PeoplePage(): ReactNode {
                             ? undefined
                             : bindingsOf(identity.id, bindingValue.items)
                         }
+                        bindingsPartial={bindingValue?.nextCursor != null}
                         line={line}
                         canManage={canManage}
                         isYou={identity.id === me.identity.id}
