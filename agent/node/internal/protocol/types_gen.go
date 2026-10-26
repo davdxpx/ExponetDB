@@ -13,6 +13,17 @@ import "encoding/json"
 // ProtocolID is the protocol identifier sent in the X-Exponetdb-Protocol header.
 const ProtocolID = "exponetdb.node/v1"
 
+// BackupRepositoryRef is part of an exponetdb.node/v1 message.
+type BackupRepositoryRef struct {
+	// One of: "pgbackrest", "pg_dump", "restic".
+	Engine    string `json:"engine"`
+	RepoIndex *int64 `json:"repoIndex"`
+	// Pattern: ^bkr_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	RepositoryID string `json:"repositoryId"`
+	// Pattern: ^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$
+	Stanza *string `json:"stanza"`
+}
+
 // CapAgentDiagnosticsArgs is part of an exponetdb.node/v1 message.
 type CapAgentDiagnosticsArgs struct {
 }
@@ -46,6 +57,141 @@ type CapAgentDiagnosticsResultJournal struct {
 type CapAgentDiagnosticsResultNonceCache struct {
 	Bytes   int64 `json:"bytes"`
 	Entries int64 `json:"entries"`
+}
+
+// CapBackupExpireArgs is part of an exponetdb.node/v1 message. Only on
+// repositories whose host mode is owned.
+type CapBackupExpireArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+	// Backups the Control Plane proved restorable last and that must survive (the
+	// node refuses a retention that would remove one).
+	KeepLabels []string                     `json:"keepLabels"`
+	Repository BackupRepositoryRef          `json:"repository"`
+	Retention  CapBackupExpireArgsRetention `json:"retention"`
+	// Pattern: ^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	RunID string `json:"runId"`
+}
+
+// CapBackupExpireArgsRetention is part of an exponetdb.node/v1 message.
+type CapBackupExpireArgsRetention struct {
+	DifferentialCount *int64 `json:"differentialCount"`
+	FullCount         *int64 `json:"fullCount"`
+	LogicalDays       *int64 `json:"logicalDays"`
+}
+
+// CapBackupListArgs is part of an exponetdb.node/v1 message.
+type CapBackupListArgs struct {
+	Cluster    ClusterRef          `json:"cluster"`
+	Repository BackupRepositoryRef `json:"repository"`
+}
+
+// CapBackupListResult is part of an exponetdb.node/v1 message.
+type CapBackupListResult struct {
+	Archive []CapBackupListResultArchiveItem `json:"archive"`
+	Backups []CapBackupListResultBackup      `json:"backups"`
+	// Engine version of the node.
+	EngineVersion *string `json:"engineVersion"`
+	// pgBackRest only.
+	Stanza    *CapBackupListResultStanza `json:"stanza"`
+	Truncated bool                       `json:"truncated"`
+}
+
+// CapBackupListResultArchiveItem is part of an exponetdb.node/v1 message.
+type CapBackupListResultArchiveItem struct {
+	// Archive id (major-version and history id).
+	ID string `json:"id"`
+	// Newest WAL segment.
+	Max *string `json:"max"`
+	// Oldest WAL segment.
+	Min *string `json:"min"`
+}
+
+// CapBackupListResultBackup is part of an exponetdb.node/v1 message.
+type CapBackupListResultBackup struct {
+	Error bool `json:"error"`
+	// RFC 3339 UTC timestamp ending in Z.
+	FinishedAt *string `json:"finishedAt"`
+	// One of: "full", "differential", "incremental", "logical".
+	Kind string `json:"kind"`
+	// pgBackRest label or restic snapshot id.
+	Label string `json:"label"`
+	// Pattern: ^[0-9A-F]{1,8}\/[0-9A-F]{1,8}$
+	LsnStart *string `json:"lsnStart"`
+	// Pattern: ^[0-9A-F]{1,8}\/[0-9A-F]{1,8}$
+	LsnStop             *string `json:"lsnStop"`
+	PostgresMajor       *int64  `json:"postgresMajor"`
+	RepositorySizeBytes *int64  `json:"repositorySizeBytes"`
+	SizeBytes           *int64  `json:"sizeBytes"`
+	// RFC 3339 UTC timestamp ending in Z.
+	StartedAt string `json:"startedAt"`
+	// First WAL segment.
+	WALStart *string `json:"walStart"`
+}
+
+// CapBackupListResultStanza is part of an exponetdb.node/v1 message.
+// pgBackRest only.
+type CapBackupListResultStanza struct {
+	// One of: "aes-256-cbc", "none", "unknown".
+	Cipher string `json:"cipher"`
+	// The engine status text (redacted on the host).
+	Message string `json:"message"`
+	// One of: "ok", "missing", "error".
+	Status string `json:"status"`
+	// PostgreSQL system_identifier (uint64 as decimal text).
+	SystemIdentifier *string `json:"systemIdentifier"`
+}
+
+// CapBackupRunArgs is part of an exponetdb.node/v1 message. Starts an engine
+// run. pgBackRest runs with --no-expire-auto (expiry is its own run); the node
+// refuses any run on a repository whose host directory does not allow runs
+// (mode adopted_runs or owned), and a full or differential backup on
+// adopted_runs.
+type CapBackupRunArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+	// logical only: the databases to dump; empty for physical kinds.
+	Databases []string `json:"databases"`
+	// One of: "full", "differential", "incremental", "logical".
+	Kind       string              `json:"kind"`
+	Repository BackupRepositoryRef `json:"repository"`
+	// Pattern: ^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	RunID string `json:"runId"`
+}
+
+// CapBackupTimersArgs is part of an exponetdb.node/v1 message.
+type CapBackupTimersArgs struct {
+}
+
+// CapBackupTimersResult is part of an exponetdb.node/v1 message. Timers whose
+// unit or activated unit names pgbackrest, restic or backup: discovered, never
+// changed (ADR-0036 §3).
+type CapBackupTimersResult struct {
+	Timers []CapBackupTimersResultTimer `json:"timers"`
+}
+
+// CapBackupTimersResultTimer is part of an exponetdb.node/v1 message.
+type CapBackupTimersResultTimer struct {
+	// The unit it starts (host text).
+	Activates string `json:"activates"`
+	// RFC 3339 UTC timestamp ending in Z.
+	LastAt *string `json:"lastAt"`
+	// Result of the last run of the activated unit.
+	LastResult *string `json:"lastResult"`
+	// RFC 3339 UTC timestamp ending in Z.
+	NextAt *string `json:"nextAt"`
+	// Timer unit name (host text).
+	Unit string `json:"unit"`
+}
+
+// CapBackupVerifyArgs is part of an exponetdb.node/v1 message.
+type CapBackupVerifyArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+	// null: the whole repository.
+	Label      *string             `json:"label"`
+	Repository BackupRepositoryRef `json:"repository"`
+	// Pattern: ^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	RunID string `json:"runId"`
+	// Pattern: ^[0-9a-f]{8,64}$
+	Snapshot *string `json:"snapshot"`
 }
 
 // CapConfigApplyArgs2 is part of an exponetdb.node/v1 message.
@@ -616,6 +762,87 @@ type CapRebootRequiredResult struct {
 	Required bool     `json:"required"`
 }
 
+// CapRestoreDiscardArgs is part of an exponetdb.node/v1 message.
+type CapRestoreDiscardArgs struct {
+	// Pattern: ^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	RunID string `json:"runId"`
+}
+
+// CapRestoreDiscardResult is part of an exponetdb.node/v1 message.
+type CapRestoreDiscardResult struct {
+	Removed bool `json:"removed"`
+	// Pattern: ^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	RunID      string `json:"runId"`
+	WasRunning bool   `json:"wasRunning"`
+}
+
+// CapRestoreExecuteArgs is part of an exponetdb.node/v1 message. Restores into
+// the node-chosen scratch directory of the run and starts a temporary cluster
+// on the given localhost port; never over the data directory of any instance
+// (ADR-0038 §3).
+type CapRestoreExecuteArgs struct {
+	Checks []string `json:"checks"`
+	// The source cluster: its system identifier must equal the stanza's.
+	Cluster ClusterRef `json:"cluster"`
+	Port    int64      `json:"port"`
+	// One of: "drill", "recovery".
+	Purpose    string                          `json:"purpose"`
+	Repository BackupRepositoryRef             `json:"repository"`
+	RowCounts  []CapRestoreExecuteArgsRowCount `json:"rowCounts"`
+	// Pattern: ^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	RunID  string        `json:"runId"`
+	Target RestoreTarget `json:"target"`
+}
+
+// CapRestoreExecuteArgsRowCount is part of an exponetdb.node/v1 message.
+type CapRestoreExecuteArgsRowCount struct {
+	// Pattern: ^[A-Za-z0-9_][A-Za-z0-9_$-]{0,62}$
+	Database string `json:"database"`
+	Max      int64  `json:"max"`
+	Min      int64  `json:"min"`
+	// Pattern: ^[a-z_][a-z0-9_]{0,62}$
+	Schema string `json:"schema"`
+	// Pattern: ^[a-z_][a-z0-9_]{0,62}$
+	Table string `json:"table"`
+}
+
+// CapRestorePrepareArgs is part of an exponetdb.node/v1 message.
+type CapRestorePrepareArgs struct {
+	Cluster ClusterRef `json:"cluster"`
+	// One of: "drill", "recovery".
+	Purpose    string              `json:"purpose"`
+	Repository BackupRepositoryRef `json:"repository"`
+	// Pattern: ^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	RunID  string        `json:"runId"`
+	Target RestoreTarget `json:"target"`
+}
+
+// CapRestorePrepareResult is part of an exponetdb.node/v1 message.
+type CapRestorePrepareResult struct {
+	EngineCanRead bool     `json:"engineCanRead"`
+	Port          *int64   `json:"port"`
+	Refusals      []string `json:"refusals"`
+	// Pattern: ^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	RunID string `json:"runId"`
+	// The node-chosen scratch directory for this run does not exist yet and lies
+	// outside every data, WAL and tablespace directory of the host.
+	ScratchFree         bool   `json:"scratchFree"`
+	SpaceAvailableBytes int64  `json:"spaceAvailableBytes"`
+	SpaceRequiredBytes  *int64 `json:"spaceRequiredBytes"`
+	// null when the engine cannot tell.
+	WALContinuous *bool `json:"walContinuous"`
+}
+
+// CapRestoreVerifyArgs is part of an exponetdb.node/v1 message.
+type CapRestoreVerifyArgs struct {
+	Checks []string `json:"checks"`
+	Port   int64    `json:"port"`
+	// The restore run whose scratch cluster is verified again.
+	RunID string `json:"runId"`
+	// Pattern: ^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	VerifyRunID string `json:"verifyRunId"`
+}
+
 // CapRolesApplyArgs2 is part of an exponetdb.node/v1 message.
 type CapRolesApplyArgs2 struct {
 	Cluster ClusterRef `json:"cluster"`
@@ -768,6 +995,111 @@ type CapRolesPlanResult2Change struct {
 	Detail string `json:"detail"`
 	// Pattern: ^[a-z_][a-z0-9_$-]{0,62}$
 	Role string `json:"role"`
+}
+
+// CapRunCancelArgs is part of an exponetdb.node/v1 message.
+type CapRunCancelArgs struct {
+	// Pattern: ^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	RunID string `json:"runId"`
+}
+
+// CapRunCancelResult is part of an exponetdb.node/v1 message.
+type CapRunCancelResult struct {
+	// Pattern: ^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	RunID string `json:"runId"`
+	// One of: "stopping", "already_finished", "not_found".
+	State string `json:"state"`
+}
+
+// CapRunStartedResult is part of an exponetdb.node/v1 message.
+type CapRunStartedResult struct {
+	// Pattern: ^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	RunID string `json:"runId"`
+	// RFC 3339 UTC timestamp ending in Z.
+	StartedAt string `json:"startedAt"`
+	// Pattern: ^exponetdb-run-run_[0-7][0-9A-HJKMNP-TV-Z]{25}\.service$
+	Unit string `json:"unit"`
+}
+
+// CapRunStatusArgs is part of an exponetdb.node/v1 message.
+type CapRunStatusArgs struct {
+	// Pattern: ^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	RunID string `json:"runId"`
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	StartArgsHash string `json:"startArgsHash"`
+	// Pattern: ^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	StartJobID string `json:"startJobId"`
+}
+
+// CapRunStatusResult is part of an exponetdb.node/v1 message. The run as the
+// node knows it, bound to the job that started it (ADR-0037 §1); the terminal
+// outcome is node-signed in this statement.
+type CapRunStatusResult struct {
+	// The engine output, redacted on the host, last lines only.
+	Excerpt  string `json:"excerpt"`
+	ExitCode *int64 `json:"exitCode"`
+	// RFC 3339 UTC timestamp ending in Z.
+	FinishedAt *string                     `json:"finishedAt"`
+	Found      bool                        `json:"found"`
+	Outcome    *CapRunStatusResultOutcome  `json:"outcome"`
+	Progress   *CapRunStatusResultProgress `json:"progress"`
+	// One of: "backup", "verify", "expire", "restore", "reverify".
+	Purpose *string `json:"purpose"`
+	// Pattern: ^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	RunID string `json:"runId"`
+	// Pattern: ^sha256:[0-9a-f]{64}$
+	StartArgsHash *string `json:"startArgsHash"`
+	// Pattern: ^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$
+	StartJobID *string `json:"startJobId"`
+	// RFC 3339 UTC timestamp ending in Z.
+	StartedAt *string `json:"startedAt"`
+	// One of: "starting", "running", "succeeded", "failed", "canceled", "lost",
+	// "not_found".
+	State string `json:"state"`
+}
+
+// CapRunStatusResultOutcome is part of an exponetdb.node/v1 message.
+type CapRunStatusResultOutcome struct {
+	Checks []CapRunStatusResultOutcomeCheck `json:"checks"`
+	// The backup label or snapshot the run produced.
+	Label  *string                          `json:"label"`
+	Phases []CapRunStatusResultOutcomePhase `json:"phases"`
+	Port   *int64                           `json:"port"`
+	// RFC 3339 UTC timestamp ending in Z.
+	RecoveryReachedAt *string `json:"recoveryReachedAt"`
+	// Pattern: ^[0-9A-F]{1,8}\/[0-9A-F]{1,8}$
+	RecoveryReachedLsn *string `json:"recoveryReachedLsn"`
+	Timeline           *int64  `json:"timeline"`
+	VerifyErrors       *int64  `json:"verifyErrors"`
+}
+
+// CapRunStatusResultOutcomeCheck is part of an exponetdb.node/v1 message.
+type CapRunStatusResultOutcomeCheck struct {
+	// One of: "recovery_target_reached", "probe_simple", "probe_extended",
+	// "amcheck", "row_counts", "fingerprint_inputs".
+	Check string `json:"check"`
+	// Redacted detail.
+	Detail *string `json:"detail"`
+	// One of: "passed", "failed", "not_run", "error".
+	Outcome string `json:"outcome"`
+}
+
+// CapRunStatusResultOutcomePhase is part of an exponetdb.node/v1 message.
+type CapRunStatusResultOutcomePhase struct {
+	// RFC 3339 UTC timestamp ending in Z.
+	FinishedAt *string `json:"finishedAt"`
+	// One of: "restore", "recover", "verify", "stop".
+	Name string `json:"name"`
+	// One of: "running", "passed", "failed".
+	Outcome string `json:"outcome"`
+	// RFC 3339 UTC timestamp ending in Z.
+	StartedAt string `json:"startedAt"`
+}
+
+// CapRunStatusResultProgress is part of an exponetdb.node/v1 message.
+type CapRunStatusResultProgress struct {
+	Bytes   *int64   `json:"bytes"`
+	Percent *float64 `json:"percent"`
 }
 
 // CapServiceStatusArgs is part of an exponetdb.node/v1 message.
@@ -1371,6 +1703,17 @@ type RenewResponse struct {
 	CertificateExpiresAt string `json:"certificateExpiresAt"`
 }
 
+// RestoreTarget is part of an exponetdb.node/v1 message.
+type RestoreTarget struct {
+	// Pattern: ^[0-9]{8}-[0-9]{6}F(_[0-9]{8}-[0-9]{6}[DI])?$
+	Label *string `json:"label"`
+	// Pattern: ^[0-9A-F]{1,8}\/[0-9A-F]{1,8}$
+	Lsn *string `json:"lsn"`
+	// RFC 3339 UTC timestamp ending in Z.
+	Time     *string `json:"time"`
+	Timeline *int64  `json:"timeline"`
+}
+
 // RoleAttributes is part of an exponetdb.node/v1 message. null leaves an
 // attribute as it is. SUPERUSER is never set by a capability.
 type RoleAttributes struct {
@@ -1479,6 +1822,11 @@ func NewMessage(name string) (any, bool) {
 // CapabilityKeys lists the capabilities of the catalog as name@major.
 var CapabilityKeys = []string{
 	"agent.diagnostics@2",
+	"backup.expire@1",
+	"backup.list@1",
+	"backup.run@1",
+	"backup.timers@1",
+	"backup.verify@1",
 	"config.update@1",
 	"cpu.stats@1",
 	"disk.stats@1",
@@ -1503,6 +1851,12 @@ var CapabilityKeys = []string{
 	"postgres.tls.inspect@1",
 	"postgres.tls.plan@1",
 	"postgres.tls.rotate@1",
+	"restore.discard@1",
+	"restore.execute@1",
+	"restore.prepare@1",
+	"restore.verify@1",
+	"run.cancel@1",
+	"run.status@1",
 	"service.status@1",
 	"system.health@1",
 	"system.reboot_required@1",
@@ -1516,6 +1870,16 @@ func NewCapabilityArgs(key string) (any, bool) {
 	switch key {
 	case "agent.diagnostics@2":
 		return &CapAgentDiagnosticsArgs{}, true
+	case "backup.expire@1":
+		return &CapBackupExpireArgs{}, true
+	case "backup.list@1":
+		return &CapBackupListArgs{}, true
+	case "backup.run@1":
+		return &CapBackupRunArgs{}, true
+	case "backup.timers@1":
+		return &CapBackupTimersArgs{}, true
+	case "backup.verify@1":
+		return &CapBackupVerifyArgs{}, true
 	case "config.update@1":
 		return &CapConfigUpdateArgs{}, true
 	case "cpu.stats@1":
@@ -1564,6 +1928,18 @@ func NewCapabilityArgs(key string) (any, bool) {
 		return &CapTlsPlanArgs{}, true
 	case "postgres.tls.rotate@1":
 		return &CapTlsRotateArgs{}, true
+	case "restore.discard@1":
+		return &CapRestoreDiscardArgs{}, true
+	case "restore.execute@1":
+		return &CapRestoreExecuteArgs{}, true
+	case "restore.prepare@1":
+		return &CapRestorePrepareArgs{}, true
+	case "restore.verify@1":
+		return &CapRestoreVerifyArgs{}, true
+	case "run.cancel@1":
+		return &CapRunCancelArgs{}, true
+	case "run.status@1":
+		return &CapRunStatusArgs{}, true
 	case "service.status@1":
 		return &CapServiceStatusArgs{}, true
 	case "system.health@1":
@@ -1584,6 +1960,16 @@ func NewCapabilityResult(key string) (any, bool) {
 	switch key {
 	case "agent.diagnostics@2":
 		return &CapAgentDiagnosticsResult{}, true
+	case "backup.expire@1":
+		return &CapRunStartedResult{}, true
+	case "backup.list@1":
+		return &CapBackupListResult{}, true
+	case "backup.run@1":
+		return &CapRunStartedResult{}, true
+	case "backup.timers@1":
+		return &CapBackupTimersResult{}, true
+	case "backup.verify@1":
+		return &CapRunStartedResult{}, true
 	case "config.update@1":
 		return &CapConfigUpdateResult{}, true
 	case "cpu.stats@1":
@@ -1632,6 +2018,18 @@ func NewCapabilityResult(key string) (any, bool) {
 		return &CapTlsPlanResult{}, true
 	case "postgres.tls.rotate@1":
 		return &CapTlsRotateResult{}, true
+	case "restore.discard@1":
+		return &CapRestoreDiscardResult{}, true
+	case "restore.execute@1":
+		return &CapRunStartedResult{}, true
+	case "restore.prepare@1":
+		return &CapRestorePrepareResult{}, true
+	case "restore.verify@1":
+		return &CapRunStartedResult{}, true
+	case "run.cancel@1":
+		return &CapRunCancelResult{}, true
+	case "run.status@1":
+		return &CapRunStatusResult{}, true
 	case "service.status@1":
 		return &CapServiceStatusResult{}, true
 	case "system.health@1":

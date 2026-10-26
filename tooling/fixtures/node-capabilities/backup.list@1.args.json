@@ -1,0 +1,12 @@
+{
+  "cluster": {
+    "localName": "17/main",
+    "systemIdentifier": "7291234567890123456"
+  },
+  "repository": {
+    "repositoryId": "bkr_01M60000000000000000000001",
+    "engine": "pgbackrest",
+    "stanza": "main",
+    "repoIndex": 1
+  }
+}

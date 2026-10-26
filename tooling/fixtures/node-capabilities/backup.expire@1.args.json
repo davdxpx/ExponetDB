@@ -1,0 +1,19 @@
+{
+  "cluster": {
+    "localName": "17/main",
+    "systemIdentifier": "7291234567890123456"
+  },
+  "repository": {
+    "repositoryId": "bkr_01M60000000000000000000001",
+    "engine": "pgbackrest",
+    "stanza": "main",
+    "repoIndex": 1
+  },
+  "runId": "run_01M60000000000000000000002",
+  "retention": {
+    "fullCount": 2,
+    "differentialCount": 6,
+    "logicalDays": null
+  },
+  "keepLabels": ["20261025-010000F"]
+}

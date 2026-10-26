@@ -1,0 +1,6 @@
+{
+  "runId": "run_01M60000000000000000000002",
+  "verifyRunId": "run_01M60000000000000000000004",
+  "port": 55401,
+  "checks": ["probe_simple", "amcheck"]
+}

@@ -1,0 +1,11 @@
+{
+  "timers": [
+    {
+      "unit": "pgbackrest-diff.timer",
+      "activates": "pgbackrest-diff.service",
+      "nextAt": "2026-10-27T01:00:00Z",
+      "lastAt": "2026-10-26T01:00:00Z",
+      "lastResult": "success"
+    }
+  ]
+}

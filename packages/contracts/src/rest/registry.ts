@@ -17,6 +17,7 @@ import {
 } from '../common.ts'
 import { ExecutionRoleAliasSchema, ExtensionNameSchema } from '../manifest/migration.ts'
 import { PostgresRoleNameSchema } from '../manifest/project.ts'
+import { BackupDependencySchema } from './backups.ts'
 
 /*
  * Registry management (Wave 4, registry.md, resources.md "Registry"):
@@ -389,6 +390,10 @@ export const RetirementPreflightSchema = z
         state: z.enum(['not_installed', 'none', 'blocking', 'unknown']).meta({
           description:
             'not_installed: no backup engine records anything yet (Wave 9), so no backup binding can exist; none: the engine holds no binding; blocking: it does (listed by the engine); unknown: it could not tell, which blocks.',
+        }),
+        dependencies: z.array(BackupDependencySchema).max(50).optional().meta({
+          description:
+            'Wave 9 Part B, additive: what binds the subject (repositories, open runs, restores, drills, lock retention, a WAL chain still needed) or why the engine could not tell; ids and states only, never a bucket, prefix or key.',
         }),
       }),
     ),

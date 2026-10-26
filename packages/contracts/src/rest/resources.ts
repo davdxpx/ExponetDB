@@ -2,9 +2,9 @@ import * as z from 'zod'
 import { ActionClassSchema, ActionIdSchema } from '../actions.ts'
 import { StoredAuditEventSchema } from '../audit.ts'
 import {
+  AdvisorRunIdSchema,
   ApplyChecksumSchema,
   AuditEventIdSchema,
-  BackupIdSchema,
   ClusterIdSchema,
   CursorSchema,
   EndpointIdSchema,
@@ -50,6 +50,12 @@ import {
   BundleSubmissionSchema,
   ProjectDefaultsSchema,
 } from '../manifest/index.ts'
+import {
+  BackupEntrySchema,
+  BackupProtectionSchema,
+  BackupRepositorySummarySchema,
+  WalCoverageSchema,
+} from './backups.ts'
 import { LintCodeSchema, MigrationProgressSchema, VerificationRunSchema } from './migrations.ts'
 import { ServerProviderSchema } from './registry.ts'
 
@@ -1556,6 +1562,55 @@ export const LockGraphSchema = z
   })
   .meta({ id: 'LockGraph' })
 
+/** The statement sampler's state for a target (performance.md §2). */
+export const StatementSamplingSchema = z
+  .object({
+    state: z
+      .enum(['active', 'extension_missing', 'not_sampled_yet', 'failing', 'not_permitted'])
+      .meta({
+        description:
+          "extension_missing: pg_stat_statements is not installed or not preloaded (CAPABILITY_UNAVAILABLE for live reads); not_permitted: the observer role cannot read other roles' statements (pg_read_all_stats); failing: the last samples failed.",
+      }),
+    intervalSeconds: z.int().min(60),
+    lastSampleAt: TimestampSchema.nullable(),
+    lastErrorCode: z
+      .string()
+      .regex(/^[A-Z][A-Z0-9_]{1,63}$/)
+      .nullable(),
+    resets: z
+      .array(
+        z.object({
+          at: TimestampSchema,
+          kind: z.enum(['stats_reset', 'server_restart', 'entries_deallocated']),
+        }),
+      )
+      .max(64)
+      .meta({
+        description:
+          'Discontinuities inside the window: deltas never cross one, so no value is negative.',
+      }),
+    gaps: z
+      .array(z.object({ from: TimestampSchema, to: TimestampSchema }))
+      .max(64)
+      .meta({ description: 'Intervals without a successful sample inside the window.' }),
+  })
+  .meta({ id: 'StatementSampling' })
+
+export const StatementRegressionSchema = z
+  .object({
+    state: z.enum(['regressed', 'none', 'insufficient_data']),
+    meanTimeMs24h: z.number().min(0).nullable(),
+    meanTimeMs7d: z.number().min(0).nullable(),
+    factor: z.number().min(0).nullable(),
+    thresholdFactor: z.number().min(1),
+    minCalls: z.int().min(1),
+    migrationsBetween: z.int().min(0).nullable().meta({
+      description:
+        'Migrations applied to the target between the baseline and the window (from the ledger mirror). A time coincidence, never a proven cause.',
+    }),
+  })
+  .meta({ id: 'StatementRegression' })
+
 export const QueryStatsSchema = z
   .object({
     targetId: TargetIdSchema,
@@ -1570,11 +1625,26 @@ export const QueryStatsSchema = z
         rows: z.int().min(0),
         sharedBlocksHit: z.int().min(0),
         sharedBlocksRead: z.int().min(0),
+        queryId: z
+          .string()
+          .regex(/^-?[0-9]{1,20}$/)
+          .optional()
+          .meta({ description: 'Wave 9, additive: pg_stat_statements queryid.' }),
+        database: name(63, 'Database name.').optional(),
+        role: name(63, 'Role name.').optional(),
+        textRedacted: z.boolean().optional().meta({
+          description:
+            'Wave 9, additive: the text was replaced because it could carry a secret (utility statements naming passwords, role or user mapping options).',
+        }),
+        regression: StatementRegressionSchema.optional(),
       }),
     ),
     truncated: z.boolean(),
     source: ObservationSourceSchema,
     observedAt: TimestampSchema,
+    sampling: StatementSamplingSchema.optional().meta({
+      description: 'Wave 9, additive: the sampler state, resets and gaps of the window.',
+    }),
   })
   .meta({ id: 'QueryStats' })
 
@@ -1612,21 +1682,34 @@ export const TableStatsSchema = z
         scans: z.int().min(0),
         valid: z.boolean(),
         duplicateOf: name(63, 'Index with the same definition.').nullable(),
+        unique: z.boolean().optional(),
+        primary: z.boolean().optional(),
       }),
     ),
     truncated: z.boolean(),
     source: ObservationSourceSchema,
     observedAt: TimestampSchema,
+    statsSince: TimestampSchema.nullable().optional().meta({
+      description:
+        'Wave 9, additive: since when the database statistics count (pg_stat_database.stats_reset, else the server start): "unused" means unused since then.',
+    }),
+    estimateMethod: z.literal('heuristic_page_estimate').optional().meta({
+      description: 'Wave 9, additive: how bloatEstimateBytes is estimated (never measured).',
+    }),
   })
   .meta({ id: 'TableStats' })
 
+export const ADVISOR_CATEGORIES = [
+  'security',
+  'performance',
+  'operations',
+  'change_safety',
+] as const
+export const AdvisorCategorySchema = z.enum(ADVISOR_CATEGORIES).meta({ id: 'AdvisorCategory' })
+
 export const AdvisorRunRequestSchema = z
   .strictObject({
-    categories: z
-      .array(z.enum(['security', 'performance']))
-      .min(1)
-      .max(2)
-      .default(['security', 'performance']),
+    categories: z.array(AdvisorCategorySchema).min(1).max(4).default(['security', 'performance']),
   })
   .meta({ id: 'AdvisorRunRequest' })
 
@@ -1637,15 +1720,99 @@ export const AdvisorRunSchema = z
     findings: z.array(
       z.object({
         rule: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
-        category: z.enum(['security', 'performance']),
+        category: AdvisorCategorySchema,
         level: z.enum(['info', 'warning', 'critical']),
         object: name(512, 'Affected object.').nullable(),
         message: z.string().max(1024),
         remediation: z.string().max(2048),
+        findingId: FindingIdSchema.nullable().optional().meta({
+          description: 'Wave 9, additive: the recorded finding (deduplicated).',
+        }),
+        evidence: z
+          .record(
+            z.string().regex(/^[a-z][a-zA-Z0-9]{0,31}$/),
+            z.union([z.string().max(256), z.number(), z.boolean(), z.null()]),
+          )
+          .optional()
+          .meta({
+            untrusted: true,
+            description: 'Wave 9, additive: bounded facts behind the finding.',
+          }),
+        draft: z.enum(['none', 'migration_draft']).optional().meta({
+          description:
+            'Wave 9, additive: migration_draft: a fix can be drafted as a migration bundle for review (never executed here; OD-44 limits apply).',
+        }),
       }),
     ),
+    id: AdvisorRunIdSchema.optional(),
+    catalogVersion: z.int().min(1).optional(),
+    skipped: z
+      .array(
+        z.object({
+          rule: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
+          reason: z.enum([
+            'needs_node',
+            'version_unsupported',
+            'not_permitted',
+            'timeout',
+            'error',
+          ]),
+        }),
+      )
+      .max(64)
+      .optional()
+      .meta({ description: 'Wave 9, additive: rules that did not run, and why (never a pass).' }),
   })
   .meta({ id: 'AdvisorRun' })
+
+/** Cancel a running query of a session (performance.md §5; an inline plan). */
+export const ConnectionCancelRequestSchema = z
+  .strictObject({
+    backendStart: TimestampSchema,
+    queryStart: TimestampSchema.meta({
+      description: 'The query the person saw: the cancel acts only while the same query runs.',
+    }),
+  })
+  .meta({ id: 'ConnectionCancelRequest' })
+
+/** Terminate a session (a stored plan; precondition re-checked in the terminating statement). */
+export const ConnectionTerminateRequestSchema = z
+  .strictObject({
+    backendStart: TimestampSchema,
+    condition: z.enum(['stalled', 'idle_in_transaction', 'long_running', 'any']).meta({
+      description:
+        'The condition that must still hold when the session is terminated, re-checked in the same statement: stalled (active, ClientRead, query age >= 60 s), idle_in_transaction (state age >= 60 s), long_running (active, query age >= 300 s), any.',
+    }),
+    reason: z.string().min(1).max(500).meta({ untrusted: true }).optional(),
+  })
+  .meta({ id: 'ConnectionTerminateRequest' })
+
+export const FindingSummarySchema = z
+  .object({
+    open: z.int().min(0),
+    bySeverity: z.object({
+      critical: z.int().min(0),
+      warning: z.int().min(0),
+      info: z.int().min(0),
+    }),
+    byKind: z.array(z.object({ kind: z.string().max(64), count: z.int().min(0) })).max(32),
+    topCodes: z
+      .array(
+        z.object({
+          kind: z.string().max(64),
+          code: z.string().max(64),
+          severity: z.enum(['info', 'warning', 'critical']),
+          count: z.int().min(0),
+        }),
+      )
+      .max(50),
+    source: z.literal('control_store'),
+    observedAt: TimestampSchema,
+  })
+  .meta({
+    id: 'FindingSummary',
+    description: 'Counts of the open findings the caller may read (Wave 9; the UI/UX U8 read).',
+  })
 
 // ----- infrastructure -----
 
@@ -1772,26 +1939,13 @@ export const EnrollmentTokenRevealSchema = z
   })
   .meta({ id: 'EnrollmentTokenReveal' })
 
-export const BackupSchema = z
-  .object({
-    id: BackupIdSchema,
-    kind: z.enum(['full', 'differential', 'incremental', 'logical']),
-    state: z.enum(['running', 'succeeded', 'failed']),
-    startedAt: TimestampSchema,
-    finishedAt: TimestampSchema.nullable(),
-    sizeBytes: z.int().min(0).nullable(),
-    verification: z.object({
-      state: z.enum(['pending', 'passed', 'failed']),
-      verifiedAt: TimestampSchema.nullable(),
-    }),
-  })
-  .meta({ id: 'Backup' })
+export const BackupSchema = BackupEntrySchema
 
 export const BackupCatalogSchema = z
   .object({
     clusterId: ClusterIdSchema,
     state: BackupHealthStateSchema,
-    backups: z.array(BackupSchema),
+    backups: z.array(BackupEntrySchema),
     walWindow: z.object({ from: TimestampSchema, to: TimestampSchema }).nullable(),
     achievableRpoSeconds: z
       .int()
@@ -1802,6 +1956,15 @@ export const BackupCatalogSchema = z
     truncated: z.boolean(),
     source: ObservationSourceSchema,
     observedAt: TimestampSchema,
+    repositories: z.array(BackupRepositorySummarySchema).max(64).meta({
+      description: 'Wave 9 Part B, additive: the repositories, without location or credential.',
+    }),
+    protection: BackupProtectionSchema.meta({
+      description:
+        'Wave 9 Part B, additive: the measured protection and the reasons it is not protected.',
+    }),
+    walCoverage: z.array(WalCoverageSchema).max(64),
+    nextCursor: z.string().max(512).nullable(),
   })
   .meta({ id: 'BackupCatalog' })
 
@@ -2607,7 +2770,15 @@ export const FindingListQuerySchema = z.strictObject({
   state: z.enum(['open', 'resolved', 'all']).optional().meta({
     description: 'Default `open`: the open findings; `all` lists open and resolved.',
   }),
-  kind: z.enum(['drift', 'health']).optional(),
+  kind: z
+    .enum(['drift', 'health', 'advisor', 'statements'])
+    .optional()
+    .meta({ description: 'advisor and statements: Wave 9, additive.' }),
+  code: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]{0,63}$/)
+    .optional()
+    .meta({ description: 'Wave 9, additive: one rule or condition code.' }),
   target: TargetRefSchema.optional().meta({
     description: 'One target, by `tgt_` id or URL-decoded path.',
   }),

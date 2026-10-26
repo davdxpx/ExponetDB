@@ -1,0 +1,26 @@
+{
+  "runId": "run_01M60000000000000000000002",
+  "found": true,
+  "startJobId": "job_01M60000000000000000000003",
+  "startArgsHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "purpose": "backup",
+  "state": "succeeded",
+  "startedAt": "2026-10-26T12:00:01Z",
+  "finishedAt": "2026-10-26T12:04:30Z",
+  "exitCode": 0,
+  "progress": {
+    "percent": 100,
+    "bytes": 123456789
+  },
+  "excerpt": "INFO: backup command end: completed successfully",
+  "outcome": {
+    "label": "20261025-010000F_20261026-120001I",
+    "verifyErrors": null,
+    "recoveryReachedLsn": null,
+    "recoveryReachedAt": null,
+    "timeline": null,
+    "port": null,
+    "checks": [],
+    "phases": []
+  }
+}

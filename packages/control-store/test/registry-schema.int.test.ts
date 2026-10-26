@@ -783,6 +783,10 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M5PZFYDPT065MDFHG5G3WSG1',
         // The UI/UX order of 2026-10-26 (§8A): servers and clusters retired bottom-up.
         '01M5WT5NV9ZC8TYB9BMP3D0EZZ',
+        // Wave 9 Part B (2026-10-26): statement statistics, subject findings, the backup catalog.
+        '01M5X840BFXMZ7Z6FF13AD56YJ',
+        '01M5X840BJSCYX2JZ3HYCMHDBT',
+        '01M5X840BK55NGFGQ5G3Z1C5NH',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

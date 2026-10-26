@@ -1,0 +1,45 @@
+{
+  "engineVersion": "2.60.0",
+  "stanza": {
+    "status": "ok",
+    "message": "ok",
+    "systemIdentifier": "7291234567890123456",
+    "cipher": "aes-256-cbc"
+  },
+  "backups": [
+    {
+      "label": "20261025-010000F",
+      "kind": "full",
+      "startedAt": "2026-10-25T01:00:00Z",
+      "finishedAt": "2026-10-25T01:20:00Z",
+      "lsnStart": "1A/3B000028",
+      "lsnStop": "1A/3C000050",
+      "walStart": "000000010000001A0000003B",
+      "sizeBytes": 41234567890,
+      "repositorySizeBytes": 9876543210,
+      "postgresMajor": 17,
+      "error": false
+    },
+    {
+      "label": "20261025-010000F_20261026-010000I",
+      "kind": "incremental",
+      "startedAt": "2026-10-26T01:00:00Z",
+      "finishedAt": "2026-10-26T01:03:00Z",
+      "lsnStart": "1B/10000028",
+      "lsnStop": "1B/10000100",
+      "walStart": "000000010000001B00000010",
+      "sizeBytes": 41234567890,
+      "repositorySizeBytes": 123456789,
+      "postgresMajor": 17,
+      "error": false
+    }
+  ],
+  "archive": [
+    {
+      "id": "17-1",
+      "min": "000000010000001A0000003B",
+      "max": "000000010000001B00000042"
+    }
+  ],
+  "truncated": false
+}

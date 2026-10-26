@@ -1,0 +1,10 @@
+{
+  "runId": "run_01M60000000000000000000002",
+  "scratchFree": true,
+  "port": 55401,
+  "spaceAvailableBytes": 193273528320,
+  "spaceRequiredBytes": 44023414784,
+  "engineCanRead": true,
+  "walContinuous": true,
+  "refusals": []
+}

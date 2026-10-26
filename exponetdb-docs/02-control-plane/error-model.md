@@ -271,6 +271,7 @@ later without changes).
 | `RESTORE_TARGET_MISMATCH` | 409 | no | Destination is not the target named in the plan, or its identity/tier differs. |
 | `RESTORE_SOURCE_INVALID` | 409 | no | Backup missing, incomplete, or WAL range insufficient for the requested point in time. |
 | `RESTORE_FAILED` | 422 | no | |
+| `FEATURE_NOT_ACTIVATED` | 409 | no | Wave 9: backup runs or restores are not activated on this installation for the tier (ADR-0037, ADR-0038); details name the setting and its value |
 
 ### Queries and diagnostics
 

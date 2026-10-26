@@ -1209,6 +1209,20 @@ export const ERRORS = {
     title: 'Restore failed',
     message: 'The restore failed.',
   },
+  FEATURE_NOT_ACTIVATED: {
+    group: 'backup_and_restore',
+    status: 409,
+    retryable: false,
+    title: 'Not activated on this installation',
+    message:
+      'This installation has not activated the action for this tier: backup runs and restores stay off until the evidence they need exists.',
+    remediation:
+      'An operator activates it with EXPONETDB_BACKUP_EXECUTION or EXPONETDB_RESTORE_EXECUTION after the pre-Wave-11 drills passed; until then plan it only.',
+    details: z.strictObject({
+      setting: z.enum(['EXPONETDB_BACKUP_EXECUTION', 'EXPONETDB_RESTORE_EXECUTION']),
+      current: z.enum(['disabled', 'nonprod', 'scratch', 'all']),
+    }),
+  },
   // ----- Queries and diagnostics -----
   QUERY_NOT_READ_ONLY: {
     group: 'queries_and_diagnostics',

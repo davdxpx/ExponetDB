@@ -19,9 +19,11 @@ import {
  * chosen by the Control Plane; every value is typed. Names and values that
  * come from PostgreSQL or the host are untrusted text (C-26).
  *
- * Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
- * `postgres.databases.apply`) are not in this catalog; the agent answers
- * `capability_unsupported` for them.
+ * Wave 9 Part B adds the backup and restore capabilities (ADR-0037): short
+ * jobs that read the engine catalog and start, observe and stop supervised
+ * engine runs, never a command, path or option from the Control Plane.
+ * `packages.apply_update` and `postgres.databases.apply` are not in this
+ * catalog; the agent answers `capability_unsupported` for them.
  */
 
 // ----- shared parts -----
@@ -1234,6 +1236,349 @@ const AgentDiagnosticsResult = z
   })
   .meta({ id: 'NodeCapAgentDiagnosticsResult' })
 
+// ----- backups and restores (Wave 9 Part B, ADR-0036, ADR-0037, ADR-0038) -----
+
+/**
+ * The repository a job acts on. The node never takes a location from the
+ * Control Plane: a pgBackRest repository is the stanza and `repoN` of the
+ * host's own configuration, a restic repository is the directory the
+ * operator provisioned under `/etc/exponetdb-node/repositories/<id>/`
+ * (repository URL, password file, environment). The node refuses a
+ * repository it has no host configuration for (`precondition_failed`).
+ */
+const BackupRepositoryRefSchema = z
+  .strictObject({
+    repositoryId: z.string().regex(/^bkr_[0-7][0-9A-HJKMNP-TV-Z]{25}$/),
+    engine: z.enum(['pgbackrest', 'pg_dump', 'restic']),
+    stanza: z
+      .string()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$/)
+      .nullable(),
+    repoIndex: z.int().min(1).max(4).nullable(),
+  })
+  .meta({ id: 'NodeBackupRepositoryRef' })
+
+/** An engine run id, chosen by the worker and bound in the start job (ADR-0037 §1). */
+const RunIdSchema = z.string().regex(/^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
+/** A pgBackRest backup label (`20261026-120000F`, `…F_20261027-010000D`, `…I`). */
+const BackupLabelSchema = z.string().regex(/^[0-9]{8}-[0-9]{6}F(_[0-9]{8}-[0-9]{6}[DI])?$/)
+/** A restic snapshot id (hex). */
+const SnapshotIdSchema = z.string().regex(/^[0-9a-f]{8,64}$/)
+/** A database name the node may name in an engine argument (refused otherwise). */
+const SafeDatabaseNameSchema = z.string().regex(/^[A-Za-z0-9_][A-Za-z0-9_$-]{0,62}$/)
+const StartedRunResult = z
+  .strictObject({
+    runId: RunIdSchema,
+    unit: z.string().regex(/^exponetdb-run-run_[0-7][0-9A-HJKMNP-TV-Z]{25}\.service$/),
+    startedAt: TimestampSchema,
+  })
+  .meta({ id: 'NodeCapRunStartedResult' })
+
+const BackupListArgs = z
+  .strictObject({ cluster: ClusterRefSchema, repository: BackupRepositoryRefSchema })
+  .meta({ id: 'NodeCapBackupListArgs' })
+const BackupListResult = z
+  .strictObject({
+    engineVersion: untrustedText(32, 'Engine version of the node.').nullable(),
+    stanza: z
+      .strictObject({
+        status: z.enum(['ok', 'missing', 'error']),
+        message: untrustedText(256, 'The engine status text (redacted on the host).'),
+        systemIdentifier: SystemIdentifierSchema.nullable(),
+        cipher: z.enum(['aes-256-cbc', 'none', 'unknown']),
+      })
+      .nullable()
+      .meta({ description: 'pgBackRest only.' }),
+    backups: z
+      .array(
+        z.strictObject({
+          label: untrustedText(128, 'pgBackRest label or restic snapshot id.'),
+          kind: z.enum(['full', 'differential', 'incremental', 'logical']),
+          startedAt: TimestampSchema,
+          finishedAt: TimestampSchema.nullable(),
+          lsnStart: LsnSchema.nullable(),
+          lsnStop: LsnSchema.nullable(),
+          walStart: untrustedText(24, 'First WAL segment.').nullable(),
+          sizeBytes: BytesSchema.nullable(),
+          repositorySizeBytes: BytesSchema.nullable(),
+          postgresMajor: z.int().min(9).max(99).nullable(),
+          error: z.boolean(),
+        }),
+      )
+      .max(1000),
+    archive: z
+      .array(
+        z.strictObject({
+          id: untrustedText(32, 'Archive id (major-version and history id).'),
+          min: untrustedText(24, 'Oldest WAL segment.').nullable(),
+          max: untrustedText(24, 'Newest WAL segment.').nullable(),
+        }),
+      )
+      .max(16),
+    truncated: z.boolean(),
+  })
+  .meta({ id: 'NodeCapBackupListResult' })
+
+const BackupTimersArgs = z.strictObject({}).meta({ id: 'NodeCapBackupTimersArgs' })
+const BackupTimersResult = z
+  .strictObject({
+    timers: z
+      .array(
+        z.strictObject({
+          unit: untrustedText(256, 'Timer unit name (host text).'),
+          activates: untrustedText(256, 'The unit it starts (host text).'),
+          nextAt: TimestampSchema.nullable(),
+          lastAt: TimestampSchema.nullable(),
+          lastResult: untrustedText(64, 'Result of the last run of the activated unit.').nullable(),
+        }),
+      )
+      .max(64),
+  })
+  .meta({
+    id: 'NodeCapBackupTimersResult',
+    description:
+      'Timers whose unit or activated unit names pgbackrest, restic or backup: discovered, never changed (ADR-0036 §3).',
+  })
+
+const BackupRunArgs = z
+  .strictObject({
+    cluster: ClusterRefSchema,
+    repository: BackupRepositoryRefSchema,
+    runId: RunIdSchema,
+    kind: z.enum(['full', 'differential', 'incremental', 'logical']),
+    databases: z.array(SafeDatabaseNameSchema).max(64).meta({
+      description: 'logical only: the databases to dump; empty for physical kinds.',
+    }),
+  })
+  .meta({
+    id: 'NodeCapBackupRunArgs',
+    description:
+      'Starts an engine run. pgBackRest runs with --no-expire-auto (expiry is its own run); the node refuses any run on a repository whose host directory does not allow runs (mode adopted_runs or owned), and a full or differential backup on adopted_runs.',
+  })
+const BackupVerifyArgs = z
+  .strictObject({
+    cluster: ClusterRefSchema,
+    repository: BackupRepositoryRefSchema,
+    runId: RunIdSchema,
+    label: BackupLabelSchema.nullable().meta({ description: 'null: the whole repository.' }),
+    snapshot: SnapshotIdSchema.nullable(),
+  })
+  .meta({ id: 'NodeCapBackupVerifyArgs' })
+const BackupExpireArgs = z
+  .strictObject({
+    cluster: ClusterRefSchema,
+    repository: BackupRepositoryRefSchema,
+    runId: RunIdSchema,
+    retention: z.strictObject({
+      fullCount: z.int().min(1).max(100).nullable(),
+      differentialCount: z.int().min(1).max(100).nullable(),
+      logicalDays: z.int().min(1).max(3650).nullable(),
+    }),
+    keepLabels: z.array(BackupLabelSchema).max(16).meta({
+      description:
+        'Backups the Control Plane proved restorable last and that must survive (the node refuses a retention that would remove one).',
+    }),
+  })
+  .meta({
+    id: 'NodeCapBackupExpireArgs',
+    description: 'Only on repositories whose host mode is owned.',
+  })
+
+const RunStatusArgs = z
+  .strictObject({
+    runId: RunIdSchema,
+    startJobId: z.string().regex(/^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$/),
+    startArgsHash: Sha256DigestSchema,
+  })
+  .meta({ id: 'NodeCapRunStatusArgs' })
+const RunStatusResult = z
+  .strictObject({
+    runId: RunIdSchema,
+    found: z.boolean(),
+    startJobId: z
+      .string()
+      .regex(/^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
+      .nullable(),
+    startArgsHash: Sha256DigestSchema.nullable(),
+    purpose: z.enum(['backup', 'verify', 'expire', 'restore', 'reverify']).nullable(),
+    state: z.enum(['starting', 'running', 'succeeded', 'failed', 'canceled', 'lost', 'not_found']),
+    startedAt: TimestampSchema.nullable(),
+    finishedAt: TimestampSchema.nullable(),
+    exitCode: z.int().min(-1).max(255).nullable(),
+    progress: z
+      .strictObject({
+        percent: z.number().min(0).max(100).nullable(),
+        bytes: BytesSchema.nullable(),
+      })
+      .nullable(),
+    excerpt: untrustedText(2048, 'The engine output, redacted on the host, last lines only.'),
+    outcome: z
+      .strictObject({
+        label: untrustedText(128, 'The backup label or snapshot the run produced.').nullable(),
+        verifyErrors: CountSchema.nullable(),
+        recoveryReachedLsn: LsnSchema.nullable(),
+        recoveryReachedAt: TimestampSchema.nullable(),
+        timeline: z.int().min(1).nullable(),
+        port: z.int().min(55400).max(55499).nullable(),
+        checks: z
+          .array(
+            z.strictObject({
+              check: z.enum([
+                'recovery_target_reached',
+                'probe_simple',
+                'probe_extended',
+                'amcheck',
+                'row_counts',
+                'fingerprint_inputs',
+              ]),
+              outcome: z.enum(['passed', 'failed', 'not_run', 'error']),
+              detail: untrustedText(512, 'Redacted detail.').nullable(),
+            }),
+          )
+          .max(16),
+        phases: z
+          .array(
+            z.strictObject({
+              name: z.enum(['restore', 'recover', 'verify', 'stop']),
+              startedAt: TimestampSchema,
+              finishedAt: TimestampSchema.nullable(),
+              outcome: z.enum(['running', 'passed', 'failed']),
+            }),
+          )
+          .max(8),
+      })
+      .nullable(),
+  })
+  .meta({
+    id: 'NodeCapRunStatusResult',
+    description:
+      'The run as the node knows it, bound to the job that started it (ADR-0037 §1); the terminal outcome is node-signed in this statement.',
+  })
+
+const RunCancelArgs = z.strictObject({ runId: RunIdSchema }).meta({ id: 'NodeCapRunCancelArgs' })
+const RunCancelResult = z
+  .strictObject({
+    runId: RunIdSchema,
+    state: z.enum(['stopping', 'already_finished', 'not_found']),
+  })
+  .meta({ id: 'NodeCapRunCancelResult' })
+
+const RestoreTargetSchema = z
+  .strictObject({
+    label: BackupLabelSchema.nullable(),
+    time: TimestampSchema.nullable(),
+    lsn: LsnSchema.nullable(),
+    timeline: z.int().min(1).max(1000000).nullable(),
+  })
+  .refine(
+    (t) => [t.time, t.lsn].filter((v) => v !== null).length <= 1,
+    'at most one of time and lsn',
+  )
+  .meta({ id: 'NodeRestoreTarget' })
+
+const RestorePrepareArgs = z
+  .strictObject({
+    cluster: ClusterRefSchema,
+    repository: BackupRepositoryRefSchema,
+    runId: RunIdSchema,
+    purpose: z.enum(['drill', 'recovery']),
+    target: RestoreTargetSchema,
+  })
+  .meta({ id: 'NodeCapRestorePrepareArgs' })
+const RestorePrepareResult = z
+  .strictObject({
+    runId: RunIdSchema,
+    scratchFree: z.boolean().meta({
+      description:
+        'The node-chosen scratch directory for this run does not exist yet and lies outside every data, WAL and tablespace directory of the host.',
+    }),
+    port: z.int().min(55400).max(55499).nullable(),
+    spaceAvailableBytes: BytesSchema,
+    spaceRequiredBytes: BytesSchema.nullable(),
+    engineCanRead: z.boolean(),
+    walContinuous: z
+      .boolean()
+      .nullable()
+      .meta({ description: 'null when the engine cannot tell.' }),
+    refusals: z
+      .array(
+        z.enum([
+          'scratch_exists',
+          'space_insufficient',
+          'engine_cannot_read',
+          'label_not_found',
+          'target_outside_window',
+          'system_identifier_mismatch',
+          'no_free_port',
+          'repository_not_configured',
+        ]),
+      )
+      .max(8),
+  })
+  .meta({ id: 'NodeCapRestorePrepareResult' })
+
+const RestoreExecuteArgs = z
+  .strictObject({
+    cluster: ClusterRefSchema.meta({
+      description: "The source cluster: its system identifier must equal the stanza's.",
+    }),
+    repository: BackupRepositoryRefSchema,
+    runId: RunIdSchema,
+    purpose: z.enum(['drill', 'recovery']),
+    target: RestoreTargetSchema,
+    port: z.int().min(55400).max(55499),
+    checks: z
+      .array(
+        z.enum([
+          'recovery_target_reached',
+          'probe_simple',
+          'probe_extended',
+          'amcheck',
+          'row_counts',
+        ]),
+      )
+      .max(8),
+    rowCounts: z
+      .array(
+        z.strictObject({
+          database: SafeDatabaseNameSchema,
+          schema: z.string().regex(/^[a-z_][a-z0-9_]{0,62}$/),
+          table: z.string().regex(/^[a-z_][a-z0-9_]{0,62}$/),
+          min: CountSchema,
+          max: CountSchema,
+        }),
+      )
+      .max(32),
+  })
+  .meta({
+    id: 'NodeCapRestoreExecuteArgs',
+    description:
+      'Restores into the node-chosen scratch directory of the run and starts a temporary cluster on the given localhost port; never over the data directory of any instance (ADR-0038 §3).',
+  })
+const RestoreReverifyArgs = z
+  .strictObject({
+    runId: RunIdSchema.meta({
+      description: 'The restore run whose scratch cluster is verified again.',
+    }),
+    verifyRunId: RunIdSchema,
+    port: z.int().min(55400).max(55499),
+    checks: z
+      .array(z.enum(['probe_simple', 'probe_extended', 'amcheck', 'row_counts']))
+      .min(1)
+      .max(8),
+  })
+  .meta({ id: 'NodeCapRestoreVerifyArgs' })
+const RestoreDiscardArgs = z
+  .strictObject({ runId: RunIdSchema })
+  .meta({ id: 'NodeCapRestoreDiscardArgs' })
+const RestoreDiscardResult = z
+  .strictObject({
+    runId: RunIdSchema,
+    removed: z.boolean(),
+    wasRunning: z.boolean(),
+  })
+  .meta({ id: 'NodeCapRestoreDiscardResult' })
+
 // ----- the catalog -----
 
 export const CAPABILITY_KINDS = ['read', 'plan', 'apply'] as const
@@ -1541,6 +1886,77 @@ export const NODE_CAPABILITIES = {
     NoArgsSchema('NodeCapAgentDiagnosticsArgs'),
     AgentDiagnosticsResult,
     { major: 2 },
+  ),
+  // Wave 9 Part B (ADR-0037): short jobs that read the engine catalog, start,
+  // observe and stop supervised engine runs. A start finishes in seconds; the
+  // run's outcome is stated by the run.status@1 job that observes it.
+  'backup.list@1': capability('backup.list', 'read', 'helper', BackupListArgs, BackupListResult, {
+    runSeconds: 300,
+  }),
+  'backup.timers@1': capability(
+    'backup.timers',
+    'read',
+    'helper',
+    BackupTimersArgs,
+    BackupTimersResult,
+  ),
+  'backup.run@1': capability('backup.run', 'apply', 'helper', BackupRunArgs, StartedRunResult, {
+    reconcile: 'observable',
+    effectStep: 'start_run',
+    runSeconds: 120,
+  }),
+  'backup.verify@1': capability(
+    'backup.verify',
+    'apply',
+    'helper',
+    BackupVerifyArgs,
+    StartedRunResult,
+    { reconcile: 'idempotent', effectStep: 'start_run', runSeconds: 120 },
+  ),
+  'backup.expire@1': capability(
+    'backup.expire',
+    'apply',
+    'helper',
+    BackupExpireArgs,
+    StartedRunResult,
+    { reconcile: 'idempotent', effectStep: 'start_run', runSeconds: 120 },
+  ),
+  'run.status@1': capability('run.status', 'read', 'helper', RunStatusArgs, RunStatusResult),
+  'run.cancel@1': capability('run.cancel', 'apply', 'helper', RunCancelArgs, RunCancelResult, {
+    reconcile: 'observable',
+    effectStep: 'stop_run',
+    runSeconds: 120,
+  }),
+  'restore.prepare@1': capability(
+    'restore.prepare',
+    'plan',
+    'helper',
+    RestorePrepareArgs,
+    RestorePrepareResult,
+  ),
+  'restore.execute@1': capability(
+    'restore.execute',
+    'apply',
+    'helper',
+    RestoreExecuteArgs,
+    StartedRunResult,
+    { reconcile: 'observable', effectStep: 'start_run', runSeconds: 120 },
+  ),
+  'restore.verify@1': capability(
+    'restore.verify',
+    'apply',
+    'helper',
+    RestoreReverifyArgs,
+    StartedRunResult,
+    { reconcile: 'idempotent', effectStep: 'start_run', runSeconds: 120 },
+  ),
+  'restore.discard@1': capability(
+    'restore.discard',
+    'apply',
+    'helper',
+    RestoreDiscardArgs,
+    RestoreDiscardResult,
+    { reconcile: 'idempotent', effectStep: 'remove_scratch', runSeconds: 720, settleSeconds: 635 },
   ),
 } as const satisfies Record<string, NodeCapabilityDefinition>
 

@@ -1,0 +1,31 @@
+{
+  "cluster": {
+    "localName": "17/main",
+    "systemIdentifier": "7291234567890123456"
+  },
+  "repository": {
+    "repositoryId": "bkr_01M60000000000000000000001",
+    "engine": "pgbackrest",
+    "stanza": "main",
+    "repoIndex": 1
+  },
+  "runId": "run_01M60000000000000000000002",
+  "purpose": "drill",
+  "target": {
+    "label": null,
+    "time": "2026-10-26T09:30:00Z",
+    "lsn": null,
+    "timeline": 1
+  },
+  "port": 55401,
+  "checks": ["recovery_target_reached", "probe_simple", "probe_extended", "amcheck", "row_counts"],
+  "rowCounts": [
+    {
+      "database": "app",
+      "schema": "public",
+      "table": "accounts",
+      "min": 1,
+      "max": 1000000
+    }
+  ]
+}

@@ -7654,6 +7654,743 @@
       "title": "Set a role's SCRAM verifier through the node",
       "verification": "required",
       "wave": "8"
+    },
+    {
+      "basis": "architecture.md §4 (09-backups-and-restore); ADR-0036",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "backup.overview",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "backups.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "backups.read"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "Backup protection of every cluster the caller may read",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "ADR-0036 §1; location withheld without registry.manage",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "backup.repository.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "backups.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "backups.read"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "List the backup repositories of a cluster",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "architecture.md §3 (09-backups-and-restore)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "backup.policy.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "backups.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "backups.read"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "Get the backup policy of a cluster",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "ADR-0037",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "backup.run.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "backups.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "backups.read"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "List the engine runs of a cluster",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "restore.md §3, §6; ADR-0038",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "restore.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "backups.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "backups.read"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "List the restores and drills of a cluster",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "C-35; ADR-0038 §6: generated without secrets, audited when downloaded",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "restore.runbook.get",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "restore.plan"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "restore.plan"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "The generated offline restore runbook of a repository (no secrets)",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "performance.md §4; architecture.md §3 (backup_catalog_divergence)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "cluster.finding.list",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "backups.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "backups.read"
+      },
+      "subject": "cluster",
+      "tierSemantics": "none",
+      "title": "List the findings of a cluster (backups)",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "PRE-WAVE-11-REVIEW U8; visibility as finding.list",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "ci"
+      ],
+      "effect": "read",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "finding.summary",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "diagnostics.read"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "diagnostics.read"
+      },
+      "subject": "target",
+      "tierSemantics": "none",
+      "title": "Counts of the open findings across targets",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "ADR-0036 §3 (OD-52): adopt, observe, then hand over; adoption changes nothing on the host",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "backup.repository.adopt.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "cluster_registry",
+      "title": "Plan the adoption of an existing backup repository",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "ADR-0036 §3",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "backup.repository.adopt",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "cluster_registry",
+      "title": "Adopt an existing backup repository for read-only observation",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "ADR-0036 §3: adopted_observed to adopted_runs; owned is refused until its capability exists",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "backup.repository.ownership.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "cluster_registry",
+      "title": "Plan a change of what ExponetDB may do with an adopted repository",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "ADR-0036 §3",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "backup.repository.ownership",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "cluster_registry",
+      "title": "Change what ExponetDB may do with an adopted repository",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "ADR-0036; registry.md §4.4: nothing in the bucket or on the host is deleted",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "backup.repository.retire.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "cluster_registry",
+      "title": "Plan the retirement of a backup repository record",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "ADR-0036; registry.md §4.4",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "backup.repository.retire",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "cluster_registry",
+      "title": "Retire a backup repository record (nothing in storage is deleted)",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "architecture.md §5 (09-backups-and-restore): repository or policy change, high, human",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "backup.policy.set.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "cluster_registry",
+      "title": "Plan a backup policy for a cluster",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "architecture.md §5 (09-backups-and-restore)",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "backup.policy.set",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "cluster_registry",
+      "title": "Set the backup policy of a cluster",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "architecture.md §3: the mirror is refreshed by backup.list@1",
+      "class": {
+        "class": "low",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "backup.catalog.refresh",
+      "mechanism": "inline_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "backups.run"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "backups.run"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Read the backup catalog of a cluster from its engine",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "architecture.md §5 (09-backups-and-restore); ADR-0037",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "backup.run.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "backups.run"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "backups.run"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Plan a backup run",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "restore.md §6; ADR-0038 §4: agents may plan drills; only people execute them",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli",
+        "mcp",
+        "ci"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": false,
+      "id": "restore.drill.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "restore.plan"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "restore.plan"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Plan a restore drill into scratch",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "restore.md §1 (drill: standard, scratch only); ADR-0038",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "cluster.backup"
+      ],
+      "humanOnly": true,
+      "id": "restore.drill",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "restore.execute"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "restore.execute"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Run a restore drill into scratch",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "restore.md §6: a scratch cluster is discarded by restore.discard",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "restore.discard.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "restore.execute"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "restore.execute"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Plan the discard of a scratch restore",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "restore.md §6; ADR-0038",
+      "class": {
+        "class": "standard",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [
+        "cluster.backup"
+      ],
+      "humanOnly": true,
+      "id": "restore.discard",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "restore.execute"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "restore.execute"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Discard a scratch restore (stop its temporary cluster, remove its directory)",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "restore.md §6 (C-35: recorded afterwards); ADR-0038 §6",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "restore.drill.offline.record",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "restore.execute"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "restore.execute"
+      },
+      "subject": "cluster",
+      "tierSemantics": "subject_max",
+      "title": "Record a drill run from the offline runbook with the Control Plane stopped (an attestation)",
+      "verification": "none",
+      "wave": "9"
     }
   ],
   "authRoutes": [
@@ -10323,6 +11060,45 @@
       "status": 422,
       "title": "Restore failed",
       "type": "https://db.exponet.cloud/errors/restore-failed"
+    },
+    {
+      "code": "FEATURE_NOT_ACTIVATED",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/FEATURE_NOT_ACTIVATED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "enum": [
+              "disabled",
+              "nonprod",
+              "scratch",
+              "all"
+            ],
+            "type": "string"
+          },
+          "setting": {
+            "enum": [
+              "EXPONETDB_BACKUP_EXECUTION",
+              "EXPONETDB_RESTORE_EXECUTION"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "setting",
+          "current"
+        ],
+        "type": "object"
+      },
+      "group": "backup_and_restore",
+      "message": "This installation has not activated the action for this tier: backup runs and restores stay off until the evidence they need exists.",
+      "remediation": "An operator activates it with EXPONETDB_BACKUP_EXECUTION or EXPONETDB_RESTORE_EXECUTION after the pre-Wave-11 drills passed; until then plan it only.",
+      "retryable": false,
+      "status": 409,
+      "title": "Not activated on this installation",
+      "type": "https://db.exponet.cloud/errors/feature-not-activated"
     },
     {
       "code": "QUERY_NOT_READ_ONLY",

@@ -104,13 +104,16 @@ the chosen backup engine package, `libpq5`. Anything else is outside scope (C-3)
 |---|---|---|---|---|
 | `wal.status@1` | read | agent | — | current LSN, WAL dir size, `max_wal_size`, replication slots and retained WAL, `pg_stat_wal` |
 | `wal.archive_status@1` | read | agent | — | `pg_stat_archiver`, last archived/failed segment and time, engine-specific archive check |
-| `backup.list@1` | read | helper or agent (engine `info` command with fixed argv) | — | engine catalog: backups, sizes, LSN ranges, WAL coverage |
-| `backup.run@1` | apply | helper (engine `backup` with fixed argv from repository config) | observable (engine catalog shows the backup label) | kinds: full, differential/incremental (engine-dependent), logical dump |
-| `backup.verify@1` | apply (read on repository) | helper (engine `verify`/checksum command) | idempotent | |
-| `backup.expire@1` | apply | helper (engine retention command) | idempotent | runs only as part of an approved retention policy; ad-hoc deletion of backups is a separate planned operation |
-| `restore.prepare@1` | plan | agent/helper | — | checks space, chooses a scratch data directory and port, validates the backup and WAL range for the requested point in time |
-| `restore.execute@1` | apply | helper (engine restore into the **scratch** directory, start a temporary cluster on a non-default port bound to localhost) | observable | never restores over the data directory of a running, registered cluster in V1 |
-| `restore.verify@1` | apply (read on scratch cluster) | agent | idempotent | `amcheck` on indexes, fingerprint, ledger head, row counts of configured tables, recovery target reached |
+| `backup.list@1` | read | helper (engine `info` with fixed argv, run as the engine user through a transient unit; restic `snapshots`) | — | engine catalog: backups, sizes, LSN ranges, archive range, the stanza's `db-system-id` and cipher (Wave 9 Part B, ADR-0037) |
+| `backup.timers@1` | read | helper (`systemctl list-timers`, fixed argv) | — | timers that name pgbackrest, restic or backup: discovered, never changed (adopt mode, ADR-0036 §3) |
+| `backup.run@1` | apply | helper (starts a supervised engine run, ADR-0037) | observable (the run record and the unit say whether it started; the engine catalog shows the label) | kinds: full, differential, incremental, logical dump; pgBackRest always with `--no-expire-auto`; the host's repository mode must allow runs (`adopted_runs`: incremental only; `owned`: all) |
+| `backup.verify@1` | apply (read on repository; starts a run) | helper (engine `verify` with fixed argv; restic `check --read-data-subset`) | idempotent | |
+| `backup.expire@1` | apply (starts a run) | helper (engine retention command) | idempotent | runs only as part of an approved retention policy, only on `owned` repositories, never removing a backup named in `keepLabels`; ad-hoc deletion of backups is a separate planned operation |
+| `run.status@1` | read | helper (the run record and the unit) | — | the state, progress and redacted output of a run, bound to the start job's id and `argsHash`; states the terminal outcome node-signed (ADR-0037 §1) |
+| `run.cancel@1` | apply | helper (stops the unit) | observable | never claims a rollback |
+| `restore.prepare@1` | plan | helper | — | checks space, chooses a scratch directory (named by the run, under the node's scratch root) and a localhost port in 55400 to 55499, validates the backup and WAL range for the requested point in time and the stanza's `system_identifier` |
+| `restore.execute@1` | apply (starts a run) | helper (engine restore into the **scratch** directory, start a temporary cluster on a localhost port, run the checks) | observable | never restores over the data directory of any instance on the host in V1 |
+| `restore.verify@1` | apply (read on scratch; starts a run) | helper | idempotent | `amcheck` on indexes, probes, row counts of configured tables; the fingerprint and ledger head are compared by the Control Plane from the inputs the run reports |
 | `restore.discard@1` | apply | helper (stop temporary cluster, remove scratch directory) | idempotent | |
 
 Promoting a restored scratch cluster to serve a target is a **placement move**

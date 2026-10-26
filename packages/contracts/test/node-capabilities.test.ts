@@ -101,8 +101,11 @@ describe('node capability catalog (capabilities.md, G5 record §2)', () => {
     }
   })
 
-  it('holds exactly the capabilities the G5 scope matrix puts in Wave 5', () => {
-    const matrix = section(readDoc('14-roadmap/gates/5.md'), '## 2. Capability scope matrix')
+  it('holds exactly the capabilities the G5 scope matrix puts in Wave 5 and the G9 matrix adds', () => {
+    const matrix = [
+      section(readDoc('14-roadmap/gates/5.md'), '## 2. Capability scope matrix'),
+      section(readDoc('14-roadmap/gates/9.md'), '## 2. Capability scope matrix'),
+    ].join('\n')
     const inScope = new Set<string>()
     for (const row of tableRows(matrix)) {
       if (row[1] !== 'yes') {

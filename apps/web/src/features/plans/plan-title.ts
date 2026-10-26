@@ -94,6 +94,13 @@ export const KIND_TITLES: Readonly<Record<string, KindTitle>> = {
   'registry.server.retire': { key: 'plans.title.registry.server.retire', subject: 'server' },
   'registry.cluster.retire': cluster('plans.title.registry.cluster.retire'),
   'registry.cluster.register': none('plans.title.registry.cluster.register'),
+  // Wave 9 Part B (ADR-0036, ADR-0038)
+  'backup.repository.adopt': cluster('plans.title.backup.repository.adopt'),
+  'backup.repository.ownership': cluster('plans.title.backup.repository.ownership'),
+  'backup.repository.retire': cluster('plans.title.backup.repository.retire'),
+  'backup.policy.set': cluster('plans.title.backup.policy.set'),
+  'restore.drill': cluster('plans.title.restore.drill'),
+  'restore.discard': cluster('plans.title.restore.discard'),
 }
 
 /** The ids a title can name, from the subject of the plan or operation and its change. */

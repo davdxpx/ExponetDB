@@ -1,0 +1,28 @@
+schema: exponetdb.migration/v1
+id: 01M5X840BK55NGFGQ5G3Z1C5NH
+name: backup-catalog
+description: |
+  The backup domain of Wave 9 Part B (ADR-0036, ADR-0037, ADR-0038;
+  09-backups-and-restore/architecture.md §3). Schema backups holds the
+  repositories of a cluster (provider-neutral; ownership external,
+  adopted_observed, adopted_runs or owned; the lock capability is never
+  "proven" in this bundle, which has no proof operation; secrets only from
+  the host configuration), the policy revisions, the catalog mirror of what
+  the engines list (never deleted; an entry the engine stops listing is
+  marked missing, never removed), WAL coverage per repository and timeline,
+  the reconciliations that refreshed the mirror, the engine runs a node
+  executes (at most one open run per cluster), restores (drill and recovery;
+  clone is refused) and drills (with the offline C-35 attestation). Records
+  are written by the worker as operations of their kinds; serve only reads.
+  A cluster whose repositories are not retired, or with an open run or an
+  undiscarded restore, is not retired (an additive guard on the frozen
+  registry.clusters). Additive: no frozen bundle changes.
+dependsOn:
+  - 01M5X840BJSCYX2JZ3HYCMHDBT
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

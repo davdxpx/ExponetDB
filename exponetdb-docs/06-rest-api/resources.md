@@ -190,26 +190,47 @@ an operation of another subject.
 | `GET /targets/{id}/sessions` | sessions (redacted statements) | `diagnostics.read` |
 | `GET /targets/{id}/locks` | lock graph | `diagnostics.read` |
 | `POST /targets/{id}/sessions/{pid}/cancel` | cancel (body: `backendStart`, `queryStart`) | `connections.operate:<tier>` |
-| `POST /targets/{id}/sessions/{pid}/terminate` | create a terminate plan (body: `backendStart`, `reason`); `201` plan, applied via `POST /plans/{id}/apply` | `connections.operate:<tier>` |
+| `POST /targets/{id}/sessions/{pid}/terminate` | create a terminate plan (body: `backendStart`, `condition`, `reason?`); `201` plan, applied via `POST /plans/{id}/apply`. **[DECIDED]** (Wave 9 Part B) the condition (`stalled`, `idle_in_transaction`, `long_running`, `any`) is re-checked in the terminating statement; replication, backup and ExponetDB sessions are never terminated | `connections.operate:<tier>` |
 | `GET /targets/{id}/health` | health with sub-states. **[OBSERVED]** (Wave 8 completion, additive) an optional `capacity` `{clientBackends, usableSlots, source, observedAt}`: the client backends and the usable connection slots (`max_connections` minus `superuser_reserved_connections` and `reserved_connections`) that **the latest sample measured**, both from the one sample, with that sample's time and its source (`sampled`, or `cached` once the sample is older than two intervals). Absent when that sample did not measure them (never sampled, an unreachable target, a read that failed, a row written before this member existed): never `0` as a stand-in, and `usableSlots: 0` is a measured value. REST only: the MCP tool `target_health` answers with the schema it had and does not carry the member. The database size is **not sampled** today, so it is not part of the view; adding it needs a probe of its own ([`../10-observability/health.md` §2](../10-observability/health.md#2-probes)) | `diagnostics.read` |
 | `GET /targets/{id}/health/history?from&to` | **[OBSERVED]** (Wave 8, `getTargetHealthHistory`, `target.health.history.get`; REST only, no MCP tool) the sampled history of one target from `observation.health_samples` (one sample about every 15 seconds, daily partitions, kept 3 to 60 days, 14 by default). `from` and `to` (RFC 3339 UTC; default the last 24 hours; at most 60 days, none in the future, else `VALIDATION_FAILED`). Downsampled to at most 501 buckets whose size the answer returns (`bucketSeconds`, aligned to multiples of itself; a bucket exists only if a sample landed in it): per bucket the `worst` state (order unreachable, unhealthy, degraded, suspended, unknown, healthy: a bucket holding an `unknown` sample is never `healthy`) and the count of every state. **Gaps**: intervals between two samples longer than 30 seconds (twice the period), clipped to the range, at most 200 (`gapsTruncated`), each with a derived `cause`: `control_plane_down` (no worker heartbeat covered the interval; `reason` `no_live_process` or `no_live_worker`), `sampler_lagging` (a worker was alive and wrote no sample), `unknown` with `heartbeats_pruned` (heartbeat rows are kept a day after a process stopped, so older intervals without a live worker cannot be explained). Nothing before the first retained sample (`firstSampleAt`) and nothing after a decommissioned target stopped being sampled is a gap; `node_offline` cannot be derived (a node keeps only its current state) and a failed sample is a sample. An invisible or unknown target reads as `TARGET_NOT_FOUND` | `diagnostics.read` |
 | `GET /targets/{id}/query-stats` | statement statistics | `diagnostics.read` |
 | `GET /targets/{id}/table-stats` | tables, indexes, vacuum, bloat | `diagnostics.read` |
-| `POST /targets/{id}/advisor-runs` | live advisors | `diagnostics.read` |
+| `POST /targets/{id}/advisor-runs` | live advisors (security, performance, operations, change safety); findings recorded and deduplicated; nothing is changed | `diagnostics.read` |
+| `GET /findings/summary` | **[DECIDED]** (Wave 9 Part B; the UI/UX U8 read) counts of the open findings the caller may read, by severity, kind and code | `diagnostics.read` (REST only) |
 | `GET /statements/{digest}/raw?target=…[&pid=…&backendStart=…]` | **[OBSERVED]** (Wave 8, owner decision S2, `getRawStatement`, `statement.raw.get`; no MCP tool) the text of **one** statement, read **live** from the target at request time through serve's observer session (identity checked first, `pg_read_all_stats` required; never a write path, never a superuser) and **checked against the digest**: the digest is the one the sessions list shows (`sha256` of the statement's redacted form), recomputed from the text read; only a match is answered. Searched: `pg_stat_activity` of the target's database (or only the session `pid` names, with its `backendStart` from the sessions list), then `pg_stat_statements` when installed and loaded. Secrets are still removed (role passwords and the other sensitive commands as their summary; passwords in conninfo strings and URLs, secret assignments, JSON members, key blocks, tokens, the arguments of pgcrypto, hash and `dblink_connect` calls: [`statement-redaction.md` §4](../03-database-model/statement-redaction.md#4-raw-text-access)). Answer: `text` (untrusted data, at most 64 KiB, `truncated`), `redaction` (`mode` `literal`, `summary` or `unparseable`; `removed`), `origin` (the session: `pid`, `backendStart`, `queryStart`; or the statistics row: `calls`, total and mean time, `rows`), `source: live`, `observedAt`. A statement the target does not hold now, or a target that cannot be read, is `404 STATEMENT_NOT_AVAILABLE` with `reason` `not_held`, `digest_mismatch`, `extension_missing` or `target_unreachable`, never stored or invented text. **Nothing is stored**: no Control Store table, cache, log line or audit event holds the text; each view (also a refused lookup) writes `diagnostics.raw_statement_viewed` with target, digest, where it was found and the outcome before the answer leaves. `backendStart` without `pid`, or a digest that is not `sha256:<64 hex>`, is `VALIDATION_FAILED` | `diagnostics.read_sensitive` at a scope covering the target; a person in the Web App only (`web`, human; the CLI, API keys, OAuth and MCP clients are refused), re-authenticated within 900 s (`REAUTH_REQUIRED`); a denial is `authz.denied` |
 
 ## Backups and restore
 
+**[DECIDED]** (Wave 9 Part B, 2026-10-26; [ADR-0036](../01-architecture/adr/0036-backup-repositories-and-providers.md),
+[ADR-0037](../01-architecture/adr/0037-durable-long-running-node-capabilities.md),
+[ADR-0038](../01-architecture/adr/0038-restore-plans-drills-and-offline-runbooks.md))
+The contract replaces the Wave 0 sketch of this table (`/backup-policies`,
+`/restores/plans`, `/restore-drills`). Which routes are served is pinned
+by `apps/server/test/http-auth.test.ts`; the G9 record lists the evidence.
+No response carries a key, a passphrase, a storage credential or a host
+path; repository locations are withheld without `registry.manage`.
+
 | Method & path | Purpose | Scope |
 |---|---|---|
-| `GET /clusters/{id}/backup-repositories`, `POST …` | repositories (engine, location, encryption key reference) | read `backups.read`; write `registry.manage` (plan) |
-| `GET /clusters/{id}/backup-policies`, `PUT …` | schedules, retention | read `backups.read`; write `registry.manage` (plan) |
-| `GET /clusters/{id}/backups` | backups, WAL window, RPO status | `backups.read` |
-| `POST /clusters/{id}/backups` | run a backup | `backups.run` |
-| `POST /backups/{id}/verifications` | verify a backup | `backups.run` |
-| `POST /restores/plans` | plan a restore (source, explicit destination) | `restore.plan` |
-| `GET /restores`, `GET /restores/{id}` | restore records | `backups.read` |
-| `GET /restore-drills`, `POST /restore-drills/plans` | drills | read `backups.read`; plan `restore.plan` |
+| `GET /backups/overview?state&limit&cursor` | protection per cluster (`BackupOverview`): measured RPO, last verified backup, drill state and the reasons a cluster is not protected; counts over every readable cluster | `backups.read` (REST only) |
+| `GET /clusters/{id}/backup-repositories` | repositories with layer, engine, provider label, ownership (`external`, `adopted_observed`, `adopted_runs`, `owned`), lock capability (`proven` only after a recorded deletion test), engine advisory, reconciliation | `backups.read`; the location only with `registry.manage` |
+| `POST /clusters/{id}/backup-repositories` | plan the **adoption** of an existing repository (`backup.repository.adopt`, standard, human, re-authentication): read-only observation, nothing changes on the host or in the bucket | `registry.manage` (plan) |
+| `POST /backup-repositories/{id}/ownership` | plan `adopted_observed` → `adopted_runs` (high, human, re-authentication; the host must allow runs as well); `owned` is refused until its capability exists | `registry.manage` (plan) |
+| `POST /backup-repositories/{id}/retire` | plan the retirement of a repository record (high, human, re-authentication); nothing in storage is deleted | `registry.manage` (plan) |
+| `GET /clusters/{id}/backup-policy`, `POST /clusters/{id}/backup-policy` | the active policy (schedules, retention, objectives, drill cadence, size floor); a new revision is a plan (high, human, re-authentication) | read `backups.read`; write `registry.manage` (plan) |
+| `GET /clusters/{id}/backups?limit&cursor` | the catalog mirror (`BackupCatalog`): backups as the engine lists them, WAL coverage, repositories without location, protection with measured RPO/RTO | `backups.read` |
+| `POST /clusters/{id}/backups/refresh` | read the engine catalog through the node now (inline, low) | `backups.run` |
+| `POST /clusters/{id}/backup-runs` | plan a backup run into one repository (ADR-0037); refused unless backup execution is activated (`FEATURE_NOT_ACTIVATED`) | `backups.run` |
+| `GET /clusters/{id}/backup-runs?limit&cursor` | engine runs (backups, verifies, expiry, restores, discards) with state and progress | `backups.read` |
+| `POST /clusters/{id}/backups/{backupId}/verify` | verify one backup with the engine (inline, low) | `backups.run` |
+| `GET /clusters/{id}/findings?state&limit&cursor` | findings of the cluster (backup catalog divergence, archive failing, drill overdue, engine advisory) | `backups.read` |
+| `POST /targets/{id}/restore-plans` | plan a **recovery** into a new cluster directory (never in place; `critical`; agents' plans are denied by `restore.human-only` and keep the analysis) | `restore.plan` (plan); apply `restore.execute`, human |
+| `POST /clusters/{id}/drills` | plan a drill into scratch (`latest`, `older`, `pitr_random`, a named backup or time) | `restore.plan` (plan); apply `restore.execute`, human |
+| `GET /clusters/{id}/drills?limit&cursor` | drills with outcome and measured duration | `backups.read` |
+| `POST /clusters/{id}/drills/offline` | record a drill run from the offline runbook with the Control Plane stopped (C-35): an attestation, labeled as such | `restore.execute`, human, re-authentication |
+| `GET /clusters/{id}/restores?limit&cursor` | restores with phases and checks | `backups.read` |
+| `POST /clusters/{id}/restores/{restoreId}/discard` | plan the discard of a scratch restore | `restore.execute`, human (plan) |
+| `GET /clusters/{id}/restore-runbook?repository` | the generated offline runbook (plain POSIX shell, placeholders for every secret, deterministic digest); audited | `restore.plan`, human |
 
 ## Nodes
 
