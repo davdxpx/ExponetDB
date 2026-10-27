@@ -13,6 +13,7 @@ graph TD
   packages_application["@exponetdb/application"]
   packages_audit["@exponetdb/audit"]
   packages_auth["@exponetdb/auth"]
+  packages_backups["@exponetdb/backups"]
   packages_contracts["@exponetdb/contracts"]
   packages_control-store["@exponetdb/control-store"]
   packages_diagnostics["@exponetdb/diagnostics"]
@@ -46,6 +47,7 @@ graph TD
   apps_server["@exponetdb/server"] --> packages_application
   apps_server["@exponetdb/server"] --> packages_audit
   apps_server["@exponetdb/server"] --> packages_auth
+  apps_server["@exponetdb/server"] --> packages_backups
   apps_server["@exponetdb/server"] --> packages_contracts
   apps_server["@exponetdb/server"] --> packages_control-store
   apps_server["@exponetdb/server"] --> packages_diagnostics
@@ -69,6 +71,7 @@ graph TD
   apps_web["@exponetdb/web"] --> packages_ui-patterns
   packages_application["@exponetdb/application"] --> packages_audit
   packages_application["@exponetdb/application"] --> packages_auth
+  packages_application["@exponetdb/application"] --> packages_backups
   packages_application["@exponetdb/application"] --> packages_contracts
   packages_application["@exponetdb/application"] --> packages_control-store
   packages_application["@exponetdb/application"] --> packages_diagnostics
@@ -88,6 +91,16 @@ graph TD
   packages_auth["@exponetdb/auth"] --> packages_operations
   packages_auth["@exponetdb/auth"] --> packages_policy
   packages_auth["@exponetdb/auth"] --> packages_secrets
+  packages_backups["@exponetdb/backups"] --> packages_audit
+  packages_backups["@exponetdb/backups"] --> packages_contracts
+  packages_backups["@exponetdb/backups"] --> packages_control-store
+  packages_backups["@exponetdb/backups"] --> packages_kernel
+  packages_backups["@exponetdb/backups"] --> packages_nodes
+  packages_backups["@exponetdb/backups"] --> packages_operations
+  packages_backups["@exponetdb/backups"] --> packages_policy
+  packages_backups["@exponetdb/backups"] --> packages_registry
+  packages_backups["@exponetdb/backups"] --> packages_secrets
+  packages_backups["@exponetdb/backups"] --> packages_testkit
   packages_contracts["@exponetdb/contracts"] --> packages_kernel
   packages_control-store["@exponetdb/control-store"] --> packages_contracts
   packages_control-store["@exponetdb/control-store"] --> packages_kernel
