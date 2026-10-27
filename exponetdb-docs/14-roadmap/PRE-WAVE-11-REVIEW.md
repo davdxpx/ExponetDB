@@ -538,6 +538,56 @@ expected results in W9-02 T-S3-1 to T-S3-8):
 
 ### W9-04. Security residuals
 
+#### Security review findings (B5)
+
+Six independent adversarial reviews by fresh reviewers, at `cb11137`
+(reviews a to d and f) and after the OD-55/56 work (review e): (a)
+encrypted backups and the immutable object store, (b) long-run node
+capabilities, (c) restore identity and recovery, (d) session cancel and
+terminate and the advisor SQL, (e) cross-role migration escape and the
+baseline HMAC, (f) OAuth, RBAC, CLI and MCP consistency. "Reproduced"
+means the reviewer showed the defect in the local lab or against the
+Control Store; "traced" means read through the code. Every Critical,
+High and Medium finding is fixed on this branch; none is waived. A fix
+is proven only as far as its regression artifact reaches; the last column
+says what it does not prove. `pglab` tests need root and real pgBackRest
+2.60, PostgreSQL and restic; they ran in the session's lab, not in CI.
+
+| Id | Severity | Cause | Affected actions | Fix | Regression artifact | Proof gap |
+|---|---|---|---|---|---|---|
+| A-1 / B-1 | High (reproduced) | the host mode file was not tied to the stanza and repo index a job names; a compromised Control Plane could expire or back up an observed repository | `backup.run`, `backup.expire`, `backup.verify` (node) | `bd60378`: root-owned `repositories/<id>/pgbackrest` binds `stanza=` and `repo=`, required when the mode allows runs; any other job refused | `TestRepositoryBinding` (`agent/node/internal/helper/backup_test.go`) | not run on a real systemd host (G5 waiver items 2 and 4 still apply) |
+| A-2 / C-1 | High (reproduced) | the C-35 runbook kept the pgBackRest config in a temporary directory deleted on exit; recovery promoted early with most archived WAL missing, exit 0 | offline restore (C-35), RB-08 | `0928c31`: config in a kept `TARGET_DIR.exponetdb`, the script waits until recovery has ended and prints the replayed LSN | `packages/backups/test/runbook.lab.test.ts` (200000 rows written after the backup, all restored) | the owner's offline drill on separate hardware (M-9) not run |
+| C-2 / B-4 | High (reproduced) | a restored scratch server kept enabled subscriptions and preload libraries; a drill advanced a real publisher's slot | `restore.drill`, `restore.execute` (node) | `bd60378`: command-line settings with no preload library, no logical replication or background worker, no WAL sender, autovacuum or JIT; restored `auto.conf` kept aside; the run fails unless no worker runs; check sessions read-only with `search_path=pg_catalog` | `TestScratchStartNeutralizesTheRestoredServer` (pglab) | the scratch postmaster keeps network access (R-NODE-4) |
+| B-2 | Medium (traced) | the stanza was not checked against the job's cluster for backup, verify and expire | `backup.run`, `backup.verify`, `backup.expire` (node) | `bd60378`: every run and restore checks the stanza's `db-system-id` first | `TestStartsCheckTheStanzasCluster` (pglab) | none beyond the lab |
+| B-3 | Medium (traced) | keep-label check and expiry could disagree when a full backup finished between them | `backup.expire` (node) | `bd60378`: pgBackRest dry run first, catalog read again afterwards; a kept label gone fails the run | `TestEngineRunExpireRace` (pglab) | narrowed, not removed: the label is still lost in the race; the run reports it (R-BKP-6) |
+| B-5 | Medium (traced) | the unit's `EnvironmentFile` sat in a directory the engine user owns | restic runs and reads (node) | `bd60378`: root-owned 0700 directory | `backup_test.go` (environment file placement) | not run under real systemd |
+| A-3 / C-3 | Medium (reproduced) | a lagging repository took the archiver's newest time; the RPO and PITR window looked fresher than the repository | protection, `restore.plan` (PITR) | `c2eed29`: time only for exactly the repository's newest segment; future times refused | `reconcile.int.test.ts` "archive times of a repository"; `protection.test.ts` (A-3) | per-repository segment times from the node remain a later capability |
+| A-4 | Medium (traced) | WAL gaps were never recorded, so continuity was assumed | protection, `restore.source-verified` | `c2eed29`: a WAL basis carries `wal_continuity_unproven` (at most `unproven`); a restore to the archive end fails `recovery_target_reached` if replay stops short | `protection.test.ts` (A-4) | gaps are still not listed segment by segment (R-BKP-1) |
+| A-5 | Medium (traced) | a truncated listing disabled `missing_in_engine` and still counted as fresh | protection, restore sources | `c2eed29`: `partial` reconciliation is stale | `protection.test.ts` (A-5) | missing entries inside the listed window are not marked yet (R-BKP-7) |
+| A-6 | Medium (reproduced) | bundle guards let the worker set `passed` from a failed run, flip a result under one run id, reuse an ownership operation for two repositories, and clear the advisory | Control Store guards (`backups` bundle) | see W9-09 (fix agent commit) | `packages/backups/test/backups.int.test.ts` (guards) | a direct write by a role with table ownership is out of scope (bundle owner) |
+| A-7 / B-7 | Medium / Low (traced) | restic "verification" checked a 1/10 repository subset, not the named snapshot | `backup.verify` (restic, pg_dump) | `ac40e8b`: refused with `CAPABILITY_UNAVAILABLE` until a snapshot-scoped check exists | `http-backups.int.test.ts` | logical-backup verification does not exist (residual R-BKP-8) |
+| C-4 | Medium (traced) | a lost worker left a run `starting` or `unknown` forever and blocked the cluster | `backup.run`, `restore.*` reconciliation | `c2eed29`: reconciliation binds the run row to its start job, fails a run never started, asks the node for a start whose statement was lost | `http-backups.int.test.ts` (C-4) | none beyond the simulated node |
+| C-5 | Medium (traced) | the runbook could not start a Debian-style data directory | offline restore (C-35) | `0928c31`: own `postgresql.conf`, hba and ident files, every safety setting on the command line | `runbook.lab.test.ts` (config outside the data directory) | M-9 |
+| D-1 | Medium (reproduced) | a healthy `COPY FROM STDIN` matched the `stalled` terminate condition | `connections.terminate` (condition `stalled`), health `stalled_sessions` | see W9-09 (fix agent commit) | `packages/diagnostics/test/performance.int.test.ts` | a COPY from a client that really stalls mid-stream is no longer `stalled` (fails safe) |
+| D-2 | Medium (reproduced) | advisor `message` and `remediation` carried raw catalog names but were not marked untrusted | `advisor.run`, MCP `advisors_run` | see W9-09 (fix agent commit) | `packages/diagnostics/test/advisors.test.ts` | none |
+| F-1 | Medium (engine-level) | plan views showed the repository location to holders of `backups.read` | `plan.get`, `operation.list` (REST, MCP) | `c2eed29`: `backup.*` plan content without location fields | regression test pending | `registry.endpoint.add` plans readable with `nodes.read` predate Wave 9 (R-VIEW-1) |
+| F-2 | Medium (engine-level) | the cluster tier ignored a declared `prod` | every backup and restore action on a cluster subject | `c2eed29`: prod if either derived or declared tier is prod | regression test pending | none |
+| A-8 | Low | the declared cipher overrode the observed one | protection, runbook | `c2eed29` | `reconcile.int.test.ts` "cipher of a repository" | none |
+| A-9 | Low (reproduced) | `conf.d` merged by the helper but not named to the engine | engine runs (node) | `bd60378` | `TestConfDIsNamedToTheEngine` (pglab) | none |
+| A-10 | Low | the engine floor was not enforced for runs | `backup.run` | `c2eed29`: `repository_engine_below_floor` | regression test pending | none |
+| A-11 / F-3 | Low | the runbook showed the location without `registry.manage` | `restore.runbook.get` | `c2eed29`: the location permission is required | regression test pending | none |
+| B-6 | Low | engine-written `outcome.json` naming an older label passed | `backup.run` verify | `ac40e8b`: the label must be first seen after the run's row | `http-backups.int.test.ts` (B-6) | none |
+| C-6, C-7, C-9, C-10, C-11 | Low | apply re-checks missing for the WAL end and archived point, a backup chosen by id, the target's placement and generation; any runbook digest accepted; `target.maintenance` exclusivity missing | `restore.execute`, `restore.drill`, `restore.drill.offline.record` | `c2eed29` | covered by the existing drill path only; specific regression tests pending | a stale WAL end, a moved target and a wrong digest are traced, not tested |
+| C-8 | Low | discarding a recovered cluster needed no approval | `restore.discard` | see W9-09 (rule `restore.recovery-discard-approval`) | `packages/policy/test/backup-rules.test.ts` | none |
+| D-3 / F-4 | Low | `advisors_run` was annotated read-only but writes runs, findings and audit (audit in a later transaction) | `advisor.run`, MCP `advisors_run` | see W9-09 (a `record` action, `RECORDS` annotation, one transaction) | `mcp-catalog.test.ts` pins, diagnostics tests | none |
+| D-4 | Low (reproduced) | a session after `SET ROLE` to a superuser, and some backup tools, were not protected from signals | `connections.cancel`, `connections.terminate` | see W9-09 | `performance.int.test.ts` | backup tool names are best-effort (application names can be anything) |
+| D-5 | Low | a statement re-entering the top 200 put days of calls in one delta | statistics windows, regression baseline | see W9-09 | `statements.test.ts` | none |
+| F-5 | Low | MCP pins broken by the advisor schema change | MCP catalog | `e05826f` | `mcp-catalog.test.ts` | none |
+| F-6 | Low | the dispatch re-check missed `registry.cluster.adopt_agent`, `backup.verify`, `backup.catalog.refresh` | worker dispatch | see W9-09 | `http-backups.int.test.ts` "the worker's dispatch re-check" | none |
+| F-7 | Low | rule and preset text said more than the code | `backup.run-agent-prod-approval`, CLI `operator:nonprod` | see W9-09 | none (text) | none |
+
+#### Residuals
+
 Residual risks this branch knows of and does not remove. None is waived;
 each stays until its condition is met or the owner decides.
 
@@ -549,6 +599,11 @@ each stays until its condition is met or the owner decides.
 | R-BKP-3 | the catalog is refreshed on request only | node jobs belong to operations; no worker-started operation exists | a system-actor plan path (W9-05) |
 | R-BKP-4 | drills record `fingerprint` and `ledger_head` as `not_run` | the Control Plane does not read the scratch cluster in V1 | a read path to scratch over the node |
 | R-BKP-5 | the subkey check of the 2026-10-04 advisory is the operator's; ExponetDB keeps the advisory open but cannot close it | subkeys are key material and are never read | a record field for the operator's attestation |
+| R-NODE-4 | the scratch postmaster of a drill or recovery keeps network access: `restore_command` must reach the repository; logical replication, background workers, preload libraries and WAL senders are off (C-2), but a restored function a check session calls could still connect out | `PrivateNetwork=` would cut off the archive | a pinned-egress unit (with R-NODE-3) or WAL staged locally before start |
+| R-BKP-6 | B-3 narrowed: a full backup that finishes between pgBackRest's dry run and the expiry can still remove a label the Control Plane asked to keep; the run then fails and names it | pgBackRest has no keep-label option and no lock that spans both commands | an engine option, or expiry only while the host's own timers are stopped |
+| R-BKP-7 | a truncated listing marks no entry `missing_in_engine`; it only makes the reconciliation stale (A-5) | marking inside the listed window needs an ordered, complete page from the node | a paged `backup.list` |
+| R-BKP-8 | logical backups (restic, pg_dump) cannot be verified: `backup.verify` refuses them (A-7/B-7), so they never reach `verified_backup` | restic cannot check one snapshot's data | a snapshot-scoped check or a restore-and-list verification |
+| R-VIEW-1 | `registry.endpoint.add` plan views show the endpoint to holders of `nodes.read` (predates Wave 9; found by F-1) | outside Wave 9 Part B's scope | the same stripping as for `backup.*` plans |
 | R-OD55 | cross-project role reach on one cluster (OD-55) | decided as a residual by the owner | the owner's later decision |
 | R-CLI-1 | `drill record-offline` needs re-authentication the CLI cannot give (step-ups bind `plan.apply` and token reveal only) | the step-up action list is a contract; extending it is a separate change | a step-up for `restore.drill.offline.record` |
 
