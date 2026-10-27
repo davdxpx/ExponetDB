@@ -86,13 +86,15 @@ done
 echo "== serve probes"
 curl -fsS http://127.0.0.1:18080/healthz/ready
 echo
-# Wave 4 and Wave 5 routes are served and need authentication; a later wave's route is not served.
-for path in targets nodes; do
+# Wave 4, Wave 5 and Wave 9 Part B routes are served and need authentication; a route that is
+# contracted but not served (the ledger reconciliation plan) answers 404.
+for path in targets nodes clusters/cls_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/backups backups/overview; do
   code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:18080/api/v1/$path")"
   [ "$code" = 401 ] || { echo "/api/v1/$path without credentials answered $code" >&2; exit 1; }
 done
-code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/v1/clusters/cls_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/backups)"
-[ "$code" = 404 ] || { echo "a Wave 9 path answered $code" >&2; exit 1; }
+code="$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+  http://127.0.0.1:18080/api/v1/targets/tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/ledger/reconcile-plans)"
+[ "$code" = 404 ] || { echo "an unserved route answered $code" >&2; exit 1; }
 # Wave 7: /mcp is served; without a token it answers 401 with the challenge naming its metadata.
 curl -s -o /dev/null -D "$work/mcp.headers" -w '%{http_code}' -X POST \
   -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \

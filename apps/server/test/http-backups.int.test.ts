@@ -1,6 +1,6 @@
 import { operationView } from '@exponetdb/application'
-import { type MigratedTestDatabase, migratedTestDatabase } from '@exponetdb/control-store/testing'
 import { maintainDrillFindings } from '@exponetdb/backups'
+import { type MigratedTestDatabase, migratedTestDatabase } from '@exponetdb/control-store/testing'
 import { type JsonObject, newId, systemClock } from '@exponetdb/kernel'
 import { initPki } from '@exponetdb/nodes'
 import { createLogger, MetricsRegistry } from '@exponetdb/observability'
@@ -356,7 +356,10 @@ async function findingsPass() {
 }
 
 async function openFindings(clusterId: string): Promise<string[]> {
-  const listed = await owner.browser.call('GET', `/api/v1/clusters/${clusterId}/findings?state=open`)
+  const listed = await owner.browser.call(
+    'GET',
+    `/api/v1/clusters/${clusterId}/findings?state=open`,
+  )
   expect(listed.status, JSON.stringify(listed.body)).toBe(200)
   return listed.body.items.map((f: { code: string }) => f.code)
 }

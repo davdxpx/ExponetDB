@@ -53,7 +53,8 @@ export function drillFindings(f: ClusterFacts, nowMs: number): Wanted[] {
       out.push({
         code: 'backup_drill_never_run',
         severity: 'warning',
-        summary: 'No restore drill of this cluster ever passed; its backups are not proven restorable.',
+        summary:
+          'No restore drill of this cluster ever passed; its backups are not proven restorable.',
         details: { cadenceDays: f.cadenceDays },
       })
     } else {

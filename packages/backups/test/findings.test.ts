@@ -13,7 +13,8 @@ const facts = (over: Partial<Parameters<typeof drillFindings>[0]> = {}) => ({
   ...over,
 })
 
-const codes = (f: ReturnType<typeof facts>) => drillFindings(f, NOW).map((w) => `${w.code}:${w.severity}`)
+const codes = (f: ReturnType<typeof facts>) =>
+  drillFindings(f, NOW).map((w) => `${w.code}:${w.severity}`)
 
 describe('drill findings (restore.md §6)', () => {
   it('a passed drill inside the cadence raises nothing', () => {
@@ -26,8 +27,12 @@ describe('drill findings (restore.md §6)', () => {
   })
 
   it('overdue is a warning at the cadence and critical at twice the cadence', () => {
-    expect(codes(facts({ lastPassedAt: new Date(NOW - 31 * DAY) }))).toEqual(['backup_drill_overdue:warning'])
-    expect(codes(facts({ lastPassedAt: new Date(NOW - 61 * DAY) }))).toEqual(['backup_drill_overdue:critical'])
+    expect(codes(facts({ lastPassedAt: new Date(NOW - 31 * DAY) }))).toEqual([
+      'backup_drill_overdue:warning',
+    ])
+    expect(codes(facts({ lastPassedAt: new Date(NOW - 61 * DAY) }))).toEqual([
+      'backup_drill_overdue:critical',
+    ])
   })
 
   it('a failed newest drill is critical; a scratch left behind is a warning', () => {

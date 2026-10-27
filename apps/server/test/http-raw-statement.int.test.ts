@@ -197,10 +197,7 @@ describe('the raw statement view', () => {
     const installedReason = loaded ? 'not_held' : 'extension_missing'
     await held.query('CREATE EXTENSION IF NOT EXISTS pg_stat_statements')
     const installed = await w.owner.browser.call('GET', path(`sha256:${'0'.repeat(64)}`))
-    expect([installed.status, installed.body.details]).toEqual([
-      404,
-      { reason: installedReason },
-    ])
+    expect([installed.status, installed.body.details]).toEqual([404, { reason: installedReason }])
     await held.query('DROP EXTENSION pg_stat_statements')
     // A digest that is not one is a validation failure, not a lookup.
     const bad = await w.owner.browser.call('GET', path('sha256:abc'))
