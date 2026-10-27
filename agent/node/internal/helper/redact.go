@@ -18,7 +18,7 @@ var redactions = []struct {
 	// key=value and key: value pairs whose key names a secret
 	// (repo1-cipher-pass=…, AWS_SECRET_ACCESS_KEY=…, password=…).
 	{regexp.MustCompile(`(?i)([A-Za-z0-9_.-]*(?:pass|passwd|password|secret|token|credential|access[_-]?key|private[_-]?key|api[_-]?key|session)[A-Za-z0-9_.-]*)(\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)`), "$1$2<redacted>"},
-	// Credentials in URLs (scheme://user:secret@host).
+	// Credentials in URLs: everything between the scheme and the "@" of the host.
 	{regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://)[^/\s@]+@`), "$1<redacted>@"},
 	// Authorization headers.
 	{regexp.MustCompile(`(?i)(authorization|bearer)(\s*[:=]?\s*)\S+`), "$1$2<redacted>"},
