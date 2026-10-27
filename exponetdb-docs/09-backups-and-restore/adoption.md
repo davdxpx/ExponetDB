@@ -60,8 +60,13 @@ ExponetDB start runs either.
    always `host_config`). The plan binds the cluster's `system_identifier`.
 3. **Apply** (`exponetdb plan apply <plan>`). The record starts as
    `adopted_observed`, state `observing`, revision 1.
-4. **Observe.** The worker refreshes the catalog every 10 minutes and on
-   `exponetdb backup refresh <cluster>`. Each refresh reconciles the
+4. **Observe.** A catalog refresh runs on request:
+   `exponetdb backup refresh <cluster>` (or the Web App's refresh, or
+   `POST /clusters/{id}/backups/refresh`). **[PLANNED]** A scheduled refresh
+   needs operations the worker starts on its own (a node job always
+   belongs to an operation), which this wave does not build; until then a
+   mirror older than 30 minutes keeps the protection state at most
+   `at_risk` (reason `catalog_stale`), never `protected`. Each refresh reconciles the
    engine's listing into the mirror ([`architecture.md` §3](./architecture.md#3-catalog)):
    - a stanza whose `db-system-id` differs from the registered cluster's
      fails closed: nothing is mirrored, the critical finding

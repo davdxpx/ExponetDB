@@ -292,7 +292,7 @@ export async function planPolicySet(
     analysis: {
       schedules: body.schedules.length,
       effect:
-        'A new policy revision: schedules, retention, objectives and drill cadence. Scheduled runs start only where the repository allows runs and the installation has activated backup execution for the tier.',
+        'A new policy revision: schedules, retention, objectives and drill cadence. The objectives and the drill cadence drive the protection state and its findings; ExponetDB starts no scheduled run in this wave (the host keeps its own timers), so the schedules are recorded intent.',
     },
   })
 }
