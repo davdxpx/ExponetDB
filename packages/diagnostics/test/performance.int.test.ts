@@ -316,7 +316,7 @@ describe('table statistics, advisors and findings (PostgreSQL 17)', () => {
     // The statistics count for less than 7 days on a fresh server window: skipped, never a pass.
     const skipped = first.skipped ?? []
     if (skipped.some((s) => s.rule === 'unused_index')) {
-      expect(skipped.find((s) => s.rule === 'unused_index')?.reason).toBe('error')
+      expect(skipped.find((s) => s.rule === 'unused_index')?.reason).toBe('stats_window_short')
     }
     const noPk = first.findings.find((f) => f.rule === 'table_without_primary_key')
     expect(noPk?.object).toBe('table perf.log')
