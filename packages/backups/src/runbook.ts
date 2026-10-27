@@ -87,28 +87,66 @@ if [ -e "$TARGET_DIR" ] && [ -n "$(ls -A "$TARGET_DIR" 2>/dev/null)" ]; then
 fi
 PORT="\${PORT:-55432}"
 case "$PORT" in *[!0-9]*|'') fail "PORT must be a number" ;; esac
+RECOVERY_WAIT_SECONDS="\${RECOVERY_WAIT_SECONDS:-86400}"
+case "$RECOVERY_WAIT_SECONDS" in *[!0-9]*|'') fail "RECOVERY_WAIT_SECONDS must be a number" ;; esac
 [ -x "$PG_BIN/pg_ctl" ] || fail "PG_BIN does not contain pg_ctl"
+[ -x "$PG_BIN/psql" ] || fail "PG_BIN does not contain psql"
+# The restore's own configuration lives beside the cluster, never in a directory removed on
+# exit: the restored server keeps reading it (pgBackRest's restore_command names it) until
+# recovery has ended. Remove it only after the cluster was promoted and checked.
+CONF_DIR="$TARGET_DIR.exponetdb"
+if [ -e "$CONF_DIR" ] && [ -n "$(ls -A "$CONF_DIR" 2>/dev/null)" ]; then
+  fail "$CONF_DIR exists and is not empty: refusing to reuse it"
+fi
+mkdir -p "$CONF_DIR"
+chmod 700 "$CONF_DIR"
 `
 
 const START_AND_CHECK = `
-# Start the restored cluster on localhost only, with its own socket directory.
-mkdir -p "$TARGET_DIR/exponetdb-socket"
-cat > "$TARGET_DIR/exponetdb-restore.conf" <<CONF
+# Start the restored cluster with a configuration of its own: localhost only, its own socket,
+# client authentication by the OS user only, no archiving. A restored data directory may hold
+# no postgresql.conf at all (Debian keeps it in /etc/postgresql). The fixed -c settings below
+# override what the restored postgresql.auto.conf says (it is read after the configuration file,
+# so only the command line wins over it): no preloaded library and no logical
+# replication worker runs restored code, so a restored subscription never connects to its
+# publisher and never moves its replication slot.
+mkdir -p "$CONF_DIR/socket"
+printf 'local all all peer\\n' > "$CONF_DIR/pg_hba.conf"
+: > "$CONF_DIR/pg_ident.conf"
+cat > "$CONF_DIR/postgresql.conf" <<CONF
 port = $PORT
 listen_addresses = 'localhost'
-unix_socket_directories = '$TARGET_DIR/exponetdb-socket'
+unix_socket_directories = '$CONF_DIR/socket'
+hba_file = '$CONF_DIR/pg_hba.conf'
+ident_file = '$CONF_DIR/pg_ident.conf'
 archive_mode = off
 CONF
-printf 'include_if_exists = %s\\n' "'$TARGET_DIR/exponetdb-restore.conf'" >> "$TARGET_DIR/postgresql.auto.conf"
-"$PG_BIN/pg_ctl" -D "$TARGET_DIR" -l "$TARGET_DIR/exponetdb-restore.log" -w -t 3600 start
+"$PG_BIN/pg_ctl" -D "$TARGET_DIR" -l "$CONF_DIR/restore.log" -w -t "$RECOVERY_WAIT_SECONDS" \\
+  -o "-c config_file=$CONF_DIR/postgresql.conf -c port=$PORT -c listen_addresses=localhost -c unix_socket_directories=$CONF_DIR/socket -c hba_file=$CONF_DIR/pg_hba.conf -c ident_file=$CONF_DIR/pg_ident.conf -c archive_mode=off -c hot_standby=off -c shared_preload_libraries= -c session_preload_libraries= -c local_preload_libraries= -c max_logical_replication_workers=0 -c max_wal_senders=0" start
 
-cat <<'NEXT'
-The cluster runs. Check it before you trust it (restore.md §3):
-  1. recovery finished:   psql -h "$TARGET_DIR/exponetdb-socket" -p "$PORT" -c 'SELECT pg_is_in_recovery(), pg_last_wal_replay_lsn()'
-  2. index integrity:     CREATE EXTENSION IF NOT EXISTS amcheck; SELECT bt_index_check(c.oid) FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid JOIN pg_am a ON a.oid = c.relam WHERE a.amname = 'btree';
-  3. data:                row counts of the tables you know, and your application's own checks.
+# Without hot standby the server accepts no connection before recovery has ended (and PostgreSQL
+# does not compare these settings with the source's). Wait until it is promoted, so nothing this
+# script set up is gone while it still needs it.
+waited=0
+until [ "$("$PG_BIN/psql" -h "$CONF_DIR/socket" -p "$PORT" -d postgres -Atc 'SELECT pg_is_in_recovery()' 2>/dev/null)" = f ]; do
+  waited=$((waited + 5))
+  [ "$waited" -le "$RECOVERY_WAIT_SECONDS" ] || fail "recovery has not ended after $RECOVERY_WAIT_SECONDS seconds; the cluster still runs, see $CONF_DIR/restore.log"
+  sleep 5
+done
+"$PG_BIN/psql" -h "$CONF_DIR/socket" -p "$PORT" -d postgres -Atc "SELECT 'recovery ended; replayed to ' || coalesce(pg_last_wal_replay_lsn()::text, 'no WAL') || ' on timeline ' || (SELECT timeline_id FROM pg_control_checkpoint())"
+
+cat <<NEXT
+The cluster runs and its recovery has ended. Compare the replayed position above with the
+newest archived WAL the engine listed at the start: a replay that stops well before it lost data.
+Check it before you trust it (restore.md §3):
+  1. index integrity:  CREATE EXTENSION IF NOT EXISTS amcheck; SELECT bt_index_check(c.oid) FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid JOIN pg_am a ON a.oid = c.relam WHERE a.amname = 'btree';
+  2. data:             row counts of the tables you know, and your application's own checks.
+  3. subscriptions:    the restored catalog keeps its subscriptions; disable or drop them before the
+                       cluster serves anything (ALTER SUBSCRIPTION ... DISABLE).
+Connect with: "$PG_BIN/psql" -h "$CONF_DIR/socket" -p "$PORT" -d postgres
 Record the result afterwards in ExponetDB (POST /clusters/{id}/drills/offline): it is an attestation.
 Stop it with: "$PG_BIN/pg_ctl" -D "$TARGET_DIR" stop
+Remove $CONF_DIR only after the cluster is stopped or reconfigured.
 NEXT
 `
 
@@ -150,10 +188,7 @@ command -v pgbackrest >/dev/null 2>&1 || fail "pgbackrest is not installed"
     lines += `pgbackrest version | grep -q 'pgBackRest ${v}' || printf 'runbook: warning: the installed pgBackRest is not the pinned %s\\n' '${v}' >&2
 `
   }
-  const work = '"$WORK"'
-  lines += `WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
-CONF=${work}/pgbackrest.conf
+  lines += `CONF="$CONF_DIR/pgbackrest.conf"
 {
   printf '[global]\\n'
 `
@@ -298,17 +333,17 @@ mkdir -p "$TARGET_DIR"
 "$PG_BIN/initdb" -D "$TARGET_DIR" --auth=peer >/dev/null
 `
   lines += START_AND_CHECK.replace(
-    "cat <<'NEXT'",
+    'cat <<NEXT',
     `for globals in $(find "$WORK/dump" -name 'globals*.sql' -type f); do
   printf 'runbook: review %s before applying it (roles without passwords)\\n' "$globals" >&2
 done
 for dump in $(find "$WORK/dump" -name '*.dump' -type f); do
   "$PG_BIN/pg_restore" --list "$dump" >/dev/null || fail "unreadable dump: $dump"
   name="$(basename "$dump" .dump)"
-  "$PG_BIN/psql" -h "$TARGET_DIR/exponetdb-socket" -p "$PORT" -d postgres -c "CREATE DATABASE \\"$name\\"" || true
-  "$PG_BIN/pg_restore" -h "$TARGET_DIR/exponetdb-socket" -p "$PORT" -d "$name" --no-owner --exit-on-error "$dump"
+  "$PG_BIN/psql" -h "$CONF_DIR/socket" -p "$PORT" -d postgres -c "CREATE DATABASE \\"$name\\"" || true
+  "$PG_BIN/pg_restore" -h "$CONF_DIR/socket" -p "$PORT" -d "$name" --no-owner --exit-on-error "$dump"
 done
-cat <<'NEXT'`,
+cat <<NEXT`,
   )
   return { script: lines, placeholders }
 }

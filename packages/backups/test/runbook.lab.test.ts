@@ -6,6 +6,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
@@ -18,7 +19,11 @@ import { generateRunbook } from '../src/runbook.ts'
  * cluster archives into an encrypted pgBackRest repository on a local
  * directory (posix), a full backup is taken, then the generated runbook,
  * with no ExponetDB process involved, restores it into a new directory and
- * starts it on a localhost port. Needs root, pgBackRest and PostgreSQL 17
+ * starts it on a localhost port. The source keeps its configuration outside
+ * the data directory (as Debian's /etc/postgresql does), and rows written
+ * after the backup reach the restore only through the archived WAL: the
+ * restore must replay all of it before the script ends (review findings
+ * C-1/A-2, C-5). Needs root, pgBackRest and PostgreSQL 17
  * binaries on the machine (`vitest.lab.config.ts`). It proves the script
  * works against a real engine; it is not the owner's C-35 drill (offline
  * keys, real storage, Control Plane stopped on the installation).
@@ -51,6 +56,10 @@ const repo = join(lab, 'repo')
 const conf = join(lab, 'pgbackrest.conf')
 const passFile = join(lab, 'cipher-pass')
 const restored = join(lab, 'restored')
+const etc = join(lab, 'etc')
+/** Rows in the full backup, and rows written afterwards (only in the archived WAL). */
+const IN_BACKUP = 1234
+const AFTER_BACKUP = 200_000
 const port = 55471
 const restoredPort = 55472
 
@@ -75,17 +84,37 @@ beforeAll(() => {
   execFileSync('chown', ['postgres', conf])
   chmodSync(conf, 0o600)
   expect(asPostgres(`${PG}/initdb`, ['-D', data, '--auth=peer']).status).toBe(0)
+  // Debian's layout: the configuration lives outside the data directory, so no backup holds it.
+  mkdirSync(etc)
+  for (const f of ['postgresql.conf', 'pg_hba.conf', 'pg_ident.conf']) {
+    execFileSync('mv', [join(data, f), join(etc, f)])
+  }
+  writeFileSync(
+    join(etc, 'postgresql.conf'),
+    `hba_file = '${join(etc, 'pg_hba.conf')}'\nident_file = '${join(etc, 'pg_ident.conf')}'\n`,
+  )
+  execFileSync('chown', ['-R', 'postgres', etc])
   writeFileSync(
     join(data, 'postgresql.auto.conf'),
     `port = ${port}\nlisten_addresses = ''\nunix_socket_directories = '${lab}'\narchive_mode = on\narchive_command = 'pgbackrest --config=${conf} --stanza=main archive-push %p'\nwal_level = replica\n`,
   )
   expect(
-    asPostgres(`${PG}/pg_ctl`, ['-D', data, '-l', join(lab, 'source.log'), '-w', 'start']).status,
+    asPostgres(`${PG}/pg_ctl`, [
+      '-D',
+      data,
+      '-l',
+      join(lab, 'source.log'),
+      '-o',
+      `-c config_file=${join(etc, 'postgresql.conf')}`,
+      '-w',
+      'start',
+    ]).status,
   ).toBe(0)
   const psql = (sql: string) =>
     asPostgres(`${PG}/psql`, ['-h', lab, '-p', String(port), '-d', 'postgres', '-Atc', sql])
   expect(
-    psql('CREATE TABLE drill_rows AS SELECT g AS id FROM generate_series(1, 1234) g').status,
+    psql(`CREATE TABLE drill_rows AS SELECT g AS id FROM generate_series(1, ${IN_BACKUP}) g`)
+      .status,
   ).toBe(0)
   expect(
     asPostgres('pgbackrest', [`--config=${conf}`, '--stanza=main', 'stanza-create']).status,
@@ -97,6 +126,21 @@ beforeAll(() => {
     'backup',
   ])
   expect(backup.status, backup.stderr).toBe(0)
+  // Written after the backup: only the archived WAL carries these rows to the restore.
+  expect(
+    psql(
+      `INSERT INTO drill_rows SELECT g FROM generate_series(${IN_BACKUP + 1}, ${IN_BACKUP + AFTER_BACKUP}) g`,
+    ).status,
+  ).toBe(0)
+  const switched = psql('SELECT pg_walfile_name(pg_switch_wal())').stdout.trim()
+  for (let i = 0; i < 120; i++) {
+    const archived = psql('SELECT last_archived_wal FROM pg_stat_archiver').stdout.trim()
+    if (archived >= switched && archived !== '') break
+    execFileSync('sleep', ['1'])
+  }
+  expect(
+    psql('SELECT last_archived_wal >= $$' + switched + '$$ FROM pg_stat_archiver').stdout.trim(),
+  ).toBe('t')
 }, 300_000)
 
 afterAll(() => {
@@ -136,10 +180,14 @@ describe('the generated runbook restores a real pgBackRest repository (lab)', ()
       PORT: String(restoredPort),
       CIPHER_PASS_FILE: passFile,
     })
-    expect(run.status, `${run.stdout}\n${run.stderr}`).toBe(0)
+    const log = join(`${restored}.exponetdb`, 'restore.log')
+    expect(
+      run.status,
+      `${run.stdout}\n${run.stderr}\n${existsSync(log) ? readFileSync(log, 'utf8') : ''}`,
+    ).toBe(0)
     const count = asPostgres(`${PG}/psql`, [
       '-h',
-      join(restored, 'exponetdb-socket'),
+      join(`${restored}.exponetdb`, 'socket'),
       '-p',
       String(restoredPort),
       '-d',
@@ -147,7 +195,9 @@ describe('the generated runbook restores a real pgBackRest repository (lab)', ()
       '-Atc',
       'SELECT count(*) FROM drill_rows',
     ])
-    expect(count.stdout.trim()).toBe('1234')
+    // Every archived row is there: the script waited for the end of recovery.
+    expect(count.stdout.trim()).toBe(String(IN_BACKUP + AFTER_BACKUP))
+    expect(run.stdout).toContain('recovery ended; replayed to')
   }, 300_000)
 
   it('refuses to restore over a non-empty directory', () => {
