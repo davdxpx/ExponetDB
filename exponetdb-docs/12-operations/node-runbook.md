@@ -472,7 +472,9 @@ installation.
    Each stored value becomes
    `{"exdbScrubbed": {"procedure": "od28/v1", "sha256": "<hex>"}}`, the
    SHA-256 of the stored text (for a plan body the stored JCS text, so it
-   equals the plan hash). Rows, identifiers, args hashes, verdicts, states
+   equals the plan hash). A plan body that holds an escaped NUL (`\u0000`,
+   valid JSON that `jsonb` refuses) is matched with U+FFFD in its place, so it
+   fails neither the census nor the scrub. Rows, identifiers, args hashes, verdicts, states
    and times stay; the audit chain is not touched; a second run changes
    nothing. The tables' guards are set aside for the updates only and are on
    again before the commit.

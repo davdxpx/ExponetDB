@@ -27,12 +27,13 @@ SELECT 'nodes.observations.result', count(*)::int
   FROM nodes.observations o
  WHERE o.capability IN (SELECT capability FROM retired) AND NOT o.result ? 'exdbScrubbed'
 UNION ALL
+-- An escaped NUL (\u0000, valid JSON that jsonb refuses) is read as U+FFFD, so no stored body fails the count.
 SELECT 'operations.plan_bodies.body', count(*)::int
   FROM operations.plan_bodies b JOIN operations.plans p USING (plan_id)
  WHERE p.kind IN ('postgres.config.apply', 'postgres.hba.apply', 'postgres.roles.apply', 'postgres.restart',
                   'postgres.reload')
-   AND b.body::jsonb -> 'content' -> 'basis' ->> 'capability' IN (SELECT capability FROM retired)
-   AND NOT b.body::jsonb ? 'exdbScrubbed'
+   AND replace(b.body, '\u0000', '\ufffd')::jsonb -> 'content' -> 'basis' ->> 'capability' IN (SELECT capability FROM retired)
+   AND NOT replace(b.body, '\u0000', '\ufffd')::jsonb ? 'exdbScrubbed'
 UNION ALL
 SELECT 'nodes.jobs open (scrub refuses while > 0)', count(*)::int
   FROM nodes.jobs j

@@ -126,9 +126,12 @@ describe('OD-28 remediation procedure (fixture)', () => {
       newId('pln', Date.now() + 6),
       newId('pln', Date.now() + 7),
     ]
+    // Both bodies of the scrubbed kind hold an escaped NUL ("\u0000"), valid JSON that jsonb refuses.
     const legacyBody = JSON.stringify({
       analysis: {
-        parameters: [{ current: `host=10.0.0.9 password=${CANARY}`, name: 'primary_conninfo' }],
+        parameters: [
+          { current: `host=10.0.0.9 password=${CANARY}\u0000`, name: 'primary_conninfo' },
+        ],
       },
       content: { basis: { capability: 'postgres.config.plan@1', digest: null, jobId: inspected } },
     })
@@ -143,7 +146,7 @@ describe('OD-28 remediation procedure (fixture)', () => {
       expectedState: { activeCredentialId: null },
     })
     const currentBody = JSON.stringify({
-      analysis: { tier: 'nonprod' },
+      analysis: { tier: 'nonprod', note: 'nul \u0000 inside' },
       content: { basis: { capability: 'postgres.config.plan@2', digest: null, jobId: current } },
     })
     // As the earlier release left them (the guards would refuse a raw insert).
