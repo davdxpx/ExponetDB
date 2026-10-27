@@ -314,7 +314,9 @@ export function workerDispatchAdmission(
     // Migrations as well: an approval revoked or a tier changed after acceptance stops them here;
     // and a drift acceptance (Wave 8), whose production approval must still hold when it starts.
     // A session cancel or termination (Wave 9 Part B) as well: its denial or approval must still hold.
-    // Backup changes, runs and restores (Wave 9 Part B): their approvals and tier must still hold too.
+    // Backup changes, runs and restores (Wave 9 Part B): their approvals and tier must still hold too;
+    // a verification and a catalog refresh as well, so a revoked grant stops them before the node is asked.
+    // A cluster adoption by the agent (OD-54 (a)): its production authority must still hold when it starts.
     [
       ...NODE_OPERATION_KINDS,
       ...SQL_KINDS,
@@ -324,6 +326,9 @@ export function workerDispatchAdmission(
       ...BACKUP_CHANGE_KINDS,
       ...RESTORE_KINDS,
       'backup.run',
+      'backup.verify',
+      'backup.catalog.refresh',
+      'registry.cluster.adopt_agent',
     ],
     // The plan's subject as serve's authorizer resolves it, read in the dispatch transaction.
     (q) => new ControlPlaneSubjectResolver(registryChains(q)),
