@@ -387,7 +387,8 @@ reviews are not acceptance and not a proof of absence (U11 still applies).
 ## Wave 9 Part B – Parallel Session
 
 Branch `ccr-4bf70a3d-5p1q3c` (the platform's branch rule wins over
-`feat/…`), based on `main` at `cad5ac1` (`#42` merged before this session's
+`feat/…`), draft pull request `davdxpx/ExponetDB#43`, owner approval: none
+(awaiting review), CI: the PR's runs (W9-09 records them), based on `main` at `cad5ac1` (`#42` merged before this session's
 first commit, so this section runs after the UI/UX section, not beside an
 open branch). The owner's order of 2026-10-26 is recorded in
 [`orders/wave-9-part-b-order.md`](./orders/wave-9-part-b-order.md). No
@@ -419,6 +420,30 @@ owner decision or infrastructure) and **OWNER REVIEW REQUIRED**.
 
 ### W9-01. Gating dashboard
 
+Gates as their records say them (no gate is changed by this branch, none is
+`ACCEPTED` by it). Columns: what the owner decided, what is implemented,
+what evidence exists.
+
+| Gate | Decided | Implemented | Evidence | Status |
+|---|---|---|---|---|
+| G2 | accepted 2026-10-05 | yes | off-host deployment evidence outstanding | **NOT PROVEN** (deployment) |
+| G5 | accepted 2026-10-12, items 2 and 4 waived (real systemd host) | yes; Wave 9 Part B adds 11 capabilities | waiver expiry "before a node agent is installed on, or enrolled for, any real host" | **OWNER REVIEW REQUIRED** before any real enrollment (T-NODE-1) |
+| G6 | accepted 2026-10-12 with waivers | yes | E25 partial, E16/E18 open, eleven partial cases (W9-05) | **OWNER REVIEW REQUIRED** |
+| G7 | awaits the owner | yes (Wave 7); Part B serves four more read tools | [`gates/7.md`](./gates/7.md) | **OWNER REVIEW REQUIRED** |
+| G8 | awaits the owner | yes (Wave 8); Part B replaces the Wave 9 placeholders | [`gates/8.md`](./gates/8.md) | **OWNER REVIEW REQUIRED** |
+| G9 | Part B ordered 2026-10-26 | this branch ([`gates/9.md`](./gates/9.md) §3) | none on real infrastructure | **BLOCKED** by `OD-4-storage`; criteria **NOT PROVEN** |
+| G10 | Wave 10 | not started | — | **NOT PROVEN** |
+
+Product gates touched by this wave (all others unchanged by it):
+
+| Gate | What Part B adds | Status |
+|---|---|---|
+| PG-13 Backups | repositories, catalog mirror, measured RPO, runs behind activation | **NOT PROVEN** (needs the new cluster, WAL archive and T-S3) |
+| PG-14 Restore test | drills into scratch, the C-35 runbook | **NOT PROVEN** (needs a drill on the new cluster and T-C35-1) |
+| PG-16 Connection diagnostics | cancel and terminate plans with single-statement re-checks | **NOT PROVEN** on staging |
+| PG-11 Audit | runbook downloads, offline drills, runs and advisor runs are audited | **NOT PROVEN** (rehearsal) |
+| PG-1 to PG-10, PG-12, PG-15, PG-17 to PG-20 | not changed by Part B | as recorded in [`acceptance-gates.md`](./acceptance-gates.md#product-gates-before-reosa-production-moves) |
+
 What stands between this branch and a G9 acceptance, in one place. A row is
 closed only by the evidence named in its last column; nothing here is
 closed by this session.
@@ -438,29 +463,43 @@ closed by this session.
 
 ### W9-02. Manual test matrix
 
-**None of these ran.** Each is a test the owner (or a later session with
-infrastructure) runs on disposable resources; the expected result is what
-the code and the ADRs claim. A failed expectation is a defect, not a
-waiver.
+**None of these ran on real infrastructure** (result `NOT EXECUTED` until
+the owner fills the date and outcome). The order's minimum list (order
+§10, items 1 to 12) is M-1 to M-12; the T- rows are their concrete steps.
+A failed expectation is a defect, not a waiver. "Local" names the
+development check that exists in the repository (run in this session on
+local lab servers; not a proof).
 
-| Id | Where | Steps | Expected |
-|---|---|---|---|
-| T-S3-1 | disposable Hetzner bucket created with Object Lock, `COMPLIANCE 1d` | pgBackRest `stanza-create`, full backup, 30 min WAL, differential | all succeed (metadata rewrites as new versions) |
-| T-S3-2 | same | writer credential: `DELETE` and overwrite `PUT` of a WAL segment and a backup file | both refused |
-| T-S3-3 | same | writer credential: change or remove the bucket's lock configuration | refused |
-| T-S3-4 | same | `expire` with a retention shorter than the lock | expiry reports the locked sets; nothing locked disappears |
-| T-S3-5 | same | overwrite `backup.info`; list object versions | the old version is kept (versioning) |
-| T-S3-6 | disposable R2 bucket, lock rule on `archive/` and backup-set prefixes only | T-S3-1 to T-S3-4 | backups and expiry work; delete and overwrite of covered objects refused; the writer token without bucket-configuration rights cannot change the rule |
-| T-S3-7 | each bucket | restore and PITR to a disposable cluster from the generated runbook | the cluster starts at the target; data checked |
-| T-S3-8 | each provider | costs per GiB-month and request class over a week | recorded for OD-4 (optional) |
-| T-NODE-1 | disposable host with the agent and helper from this branch | `backup.run@1` → `run.status@1` until done; `run.cancel@1` during a run | a transient unit `exponetdb-run-<runId>.service` runs and finishes; cancel stops it; the run record is root-owned `0600` |
-| T-NODE-2 | same | kill the helper and the agent during a run; restart them; reboot the host during a run | the run survives helper and agent restarts; after a reboot `run.status@1` says `lost`; nothing restarts on its own |
-| T-NODE-3 | same | host mode file absent, `adopted_observed`, `adopted_runs`, unsafe owner or mode | runs refused, incremental only, refused (`PRECONDITION_FAILED`) |
-| T-NODE-4 | same | `restore.prepare@1` with a scratch directory that exists, not enough space, a stanza of another cluster | refused with the named refusal; nothing written |
-| T-NODE-5 | same | a drill end to end, then `restore.discard@1` | scratch removed only inside the scratch root; the registered cluster untouched |
-| T-C35-1 | disposable host, Control Plane stopped | download the runbook beforehand; run it with the offline key copy into an empty directory | the cluster starts; recorded with `exponetdb drill record-offline` as an attestation |
-| T-ADV-1 | the owner's existing pgBackRest setup, read-only | adopt (`adopted_observed`), refresh | catalog mirrored, nothing changed on the host (timers, config, keys); `backup_engine_advisory` open until the 2.59.3 subkey check is recorded |
-| T-RET-1 | disposable server and cluster with a live repository | retirement preflight | `backups: blocking` with the repository id; retirement refused (`EXB07`) |
+| Id | Feature | Preconditions, disposable infrastructure | Steps | Expected | Negative variant | Result | Evidence | Reviewer |
+|---|---|---|---|---|---|---|---|---|
+| M-1 | new SQL on PostgreSQL 16/17/18 (statistics, advisors, cancel/terminate, ledger/marker guard) | disposable PG 16, 17, 18 with `pg_stat_statements` preloaded (`tooling/dev/targets.sh`) | `bun run test:integration` | all suites green on the three majors | a role without `pg_read_all_stats`: `not_permitted`, never empty | NOT EXECUTED (CI) | local: `packages/diagnostics/test/performance.int.test.ts`, `packages/backups/test/*.int.test.ts` | |
+| M-2 | node agent on a real systemd host | T-NODE-1 to T-NODE-5 | below | below | below | NOT EXECUTED | local: `go test -race ./...`, pglab | |
+| M-3 | object lock | T-S3-1 to T-S3-6 | below | below | below | NOT EXECUTED | — | |
+| M-4 | full, differential, incremental, WAL PITR; corrupted archive or key; retention boundary; restarts | disposable host, pgBackRest ≥ 2.59.3, a repository with mode `owned` | runs through `exponetdb backup run`; corrupt one WAL segment and the passphrase file; expire at the boundary; restart helper and agent mid-run | runs succeed; the catalog lists each; PITR reaches the target | a corrupt segment fails the restore (never "good enough"); a wrong key fails `backup.list` with `BACKUP_REPOSITORY_UNAVAILABLE`; a kept label is never expired | NOT EXECUTED | local: pglab (posix repository, one cluster) | |
+| M-5 | `pg_dump` and restic restore to a clean destination | restic repository directory provisioned (adoption.md §2) | logical run; restore with the runbook's restic variant | databases and globals restore | missing globals file: the runbook stops; an over- or under-privileged restore role is refused | NOT EXECUTED | local: pglab logical run and `restic check` | |
+| M-6 | drills (oldest, latest, PITR random) and C-35 | T-C35-1; a passed verify | `exponetdb drill plan … --selection latest|older|pitr_random` | each passes, discarded, RTO measured | an unverified source: plan denied (`restore.source-verified`) | NOT EXECUTED | local: `http-backups.int.test.ts` (latest, simulated node) | |
+| M-7 | wrong node, wrong cluster id, duplicate restore, unsafe path, concurrent job, stale source, WAL gap | disposable host | plan with another node; a stanza of another cluster; two drills at once; a scratch directory planted; verification changed after planning; a removed segment | — | each refused: `RESTORE_TARGET_MISMATCH`, `run_active`, `scratch_exists`, `PLAN_STALE`, `RESTORE_SOURCE_INVALID` | NOT EXECUTED | local: policy and kind tests; T-NODE-4 | |
+| M-8 | REST, MCP, SDK, CLI contracts, permissions, tiers, scopes, client kinds | the deployed lab installation | an MCP client and an API key with `:nonprod` scopes try every Wave 9 action | reads within scope; plans where allowed | restore, drill, discard by an agent: denied; prod with a nonprod scope: refused | NOT EXECUTED | local: `http-auth.test.ts`, `mcp-*.test.ts`, `apps/cli/test/backups.test.ts` | |
+| M-9 | cancel and terminate | staging target | cancel a long query; terminate an idle-in-transaction session | signaled once, audited | reused pid, stale backend start, a backup or replication session, a superuser: refused or `PLAN_STALE` | NOT EXECUTED | local: `performance.int.test.ts` (PG 17, 18) | |
+| M-10 | statistics resets and deltas; advisor false positives; 500+ migration baseline chain; OD-55; OD-56 | disposable targets | reset `pg_stat_statements` between samples; run advisors on a clean schema; import a 500-migration history | no negative delta; no finding on a clean schema | a procedural agent plan without a person: requires approval; a changed excused value: verification fails | NOT EXECUTED | local: statements and advisor tests; OD-55/56 tests | |
+| M-11 | Wave 9 Web pages: keyboard, responsive, light and dark, CSP, states | a browser against the lab installation | walk the four pages and the dialogs by keyboard; 360 px width; both themes | every state named; no CSP violation | a failed read never shows an empty list | NOT EXECUTED (jsdom only) | local: `apps/web/test/wave9/*` | |
+| M-12 | frozen bundles and contracts; G6 cases; PG-13, PG-14, PG-16; older waves after merge | CI on the merged head | `bun run verify` | green | a changed frozen bundle or vector fails `golden:history` | NOT EXECUTED | local: `golden:check`, `golden:history origin/main` | |
+| T-S3-1 | lock (Hetzner) | disposable Hetzner bucket created with Object Lock, `COMPLIANCE 1d`; writer-shaped credential | `stanza-create`, full backup, 30 min WAL, differential | all succeed (metadata rewrites as new versions) | — | NOT EXECUTED | | |
+| T-S3-2 | lock (Hetzner) | same | writer: `DELETE` and overwrite `PUT` of a WAL segment and a backup file | — | both refused | NOT EXECUTED | | |
+| T-S3-3 | lock (Hetzner) | same | writer: change or remove the lock configuration | — | refused | NOT EXECUTED | | |
+| T-S3-4 | lock and expiry | same | `expire` with a retention shorter than the lock | locked sets reported; nothing locked disappears | — | NOT EXECUTED | | |
+| T-S3-5 | versioning | same | overwrite `backup.info`; list versions | the old version is kept | — | NOT EXECUTED | | |
+| T-S3-6 | lock (R2) | disposable R2 bucket, lock rule on WAL and backup-set prefixes only; token without bucket-configuration rights | T-S3-1 to T-S3-4 | backups and expiry work | delete and overwrite of covered objects refused; the token cannot change the rule | NOT EXECUTED | | |
+| T-S3-7 | restore from each bucket | T-S3-1, T-S3-6 | runbook restore and PITR to a disposable cluster | starts at the target | — | NOT EXECUTED | | |
+| T-S3-8 | costs | one week per provider | record per GiB-month and request class | recorded for OD-4 | — | NOT EXECUTED (optional) | | |
+| T-NODE-1 | supervised runs | disposable host with the agent and helper of this branch | `backup.run@1`, `run.status@1` until done; `run.cancel@1` during a run | a transient unit runs and finishes; cancel stops it; the run record is root-owned | — | NOT EXECUTED | local: pglab (direct children, no systemd) | |
+| T-NODE-2 | crash and reboot | same | kill helper and agent mid-run, restart; reboot mid-run | survives restarts; after a reboot `run.status@1` says `lost`; nothing restarts by itself | — | NOT EXECUTED | | |
+| T-NODE-3 | host mode file | same | mode absent, `adopted_observed`, `adopted_runs`, unsafe owner or mode | incremental only with `adopted_runs` | runs refused otherwise (`PRECONDITION_FAILED`) | NOT EXECUTED | local: helper unit tests | |
+| T-NODE-4 | restore preparation | same | an existing scratch directory, too little space, another cluster's stanza | — | refused with the named refusal; nothing written | NOT EXECUTED | local: helper unit tests | |
+| T-NODE-5 | drill and discard | same | a drill end to end, then `restore.discard@1` | scratch removed only inside the scratch root; the registered cluster untouched | — | NOT EXECUTED | local: pglab | |
+| T-C35-1 | offline restore | disposable host, Control Plane stopped, the offline key copy | run the downloaded runbook into an empty directory | the cluster starts; recorded with `exponetdb drill record-offline` (an attestation) | a non-empty `TARGET_DIR`: the script refuses | NOT EXECUTED | local: `runbook.lab.test.ts` (posix repository) | |
+| T-ADV-1 | adopting the owner's existing setup | the existing pgBackRest setup, read-only | adopt (`adopted_observed`), refresh | catalog mirrored; nothing changed on the host (timers, configuration, keys); `backup_engine_advisory` open until the 2.59.3 subkey check is recorded | — | NOT EXECUTED | local: `http-backups.int.test.ts` (simulated) | |
+| T-RET-1 | retirement blocked by backups (the negative integration proof of the lifecycle port) | disposable server and cluster with a live repository | retirement preflight; plan the retirement | `backups: blocking` with the repository id | the retirement is refused (`EXB07`); after the repository's retirement no backup byte is deleted | NOT EXECUTED | local: `backups.int.test.ts` (EXB07), `http-backups.int.test.ts` (preflight) | |
 
 ### W9-03. Storage choice spike
 
@@ -553,9 +592,23 @@ them only as U9 describes (see the commits listed in W9-09):
 
 | U9 point | This branch |
 |---|---|
-| `features/fleet/protection-slot.tsx` renders `FleetBackupHealth` from `features/wave9/fleet-backup-health.tsx` | pending (B5) |
+| `features/fleet/protection-slot.tsx` renders `FleetBackupHealth` from `features/wave9/fleet-backup-health.tsx` | **IMPLEMENTED, TESTED LOCALLY** (`cb11137`; `apps/web/test/wave9/global-backups.test.tsx`); the hero's backup fact and the connections page's session actions likewise |
 | `BackupBindingsPort` provided by Wave 9 | **IMPLEMENTED, TESTED LOCALLY**: `backupBindings` (`packages/backups/src/dependencies.ts`) answers `none`, `blocking` or `unknown` (never `not_installed`); the preflight lists the dependencies by id; the Control Store guard `EXB07` decides again (`packages/backups/test/backups.int.test.ts`, `apps/server/test/http-backups.int.test.ts`). The negative integration proof against the retirement path is the T-RET-1 manual test and the EXB07 test |
 | ADR numbering | this branch uses ADR-0036 to ADR-0038; ADR-0035 stays the UI/UX one |
+
+The lifecycle dependency port (the owner's requirement of 2026-10-26),
+as built:
+
+| Contract | Shape | Failure semantics |
+|---|---|---|
+| `BackupBindingsPort` (`packages/registry`, `kind-base.ts`) | `(q, { kind: 'server' \| 'cluster', id }) => 'none' \| 'blocking' \| 'unknown'` | the registry's preflight, planners and kinds share one instance (`BACKUP_BINDINGS`); `not_installed` is no longer answered |
+| `backupDependencies` (`packages/backups/src/dependencies.ts`) | `{ state, dependencies: BackupDependency[] (≤ 50), total }` | records unreadable → `unknown` with one `unreadable` dependency, which blocks like `blocking`, never "nothing binds it" |
+| `RetirementPreflight.providers[{ provider: 'backups', state, dependencies? }]` (REST `GET /servers/{id}/retirement`, `GET /clusters/{id}/retirement`) | `BackupDependency`: `kind` (`repository`, `engine_run`, `restore`, …), `id` (ExponetDB id), `state`, `reason` | listed when `blocking` or `unknown`; ids and states only, never a bucket, prefix, endpoint or key |
+| Control Store guard `clusters_backup_obligations` (`EXB07`, bundle `backup-catalog`) | a cluster is not retired while a repository is live, a run is open or a restore is not discarded | decides again under the row lock, whatever the application answered |
+| Retiring a repository record | `backup.repository.retire` | deletes nothing in storage or on the host; catalog, runs, restores, drills stay as history |
+
+Still to prove at merge: T-RET-1 (a live repository blocks the UI/UX
+session's server and cluster retirement end to end).
 | Bundle `dependsOn` | this branch's first bundle depends on `01M5WT5NV9ZC8TYB9BMP3D0EZZ` (`registry-retirement`) |
 
 ### W9-08. Owner walkthrough
