@@ -169,6 +169,16 @@ only. **[OBSERVED]** (2026-10-13, Wave 7; G7 not yet accepted)
 | `connections.prod-terminate-approval` | require | terminating a backend on prod tier from an agent client requires approval; human with re-auth may proceed |
 | `connections.replication-protect` | deny (break-glass) | never terminate walsender / replication or backup sessions |
 
+**[OBSERVED]** (Wave 9 Part B, `packages/policy/src/catalog/connections.ts`)
+The three rules apply to `connections.cancel` and `connections.terminate`
+(the approval rule to `connections.terminate` only). They read the session
+facts the planner recorded (`content.session.protected`:
+`not_client_backend`, `backup_session`, `exponetdb_session`,
+`superuser_session` or `null`); missing facts are `unknown`, which denies.
+`connections.prod-terminate-approval` requires one approval
+(`plans.approve`) when the planner is not a person through the Web App or the
+first-party CLI and the tier is production or unknown; a person proceeds.
+
 ### Data reads
 
 | Rule id | Applies to | Severity | Default |
@@ -257,13 +267,26 @@ request without one (`422`, `reason_required`) whenever a covered finding is
 
 ### Backup and restore
 
-| Rule id | Severity | Default |
-|---|---|---|
-| `restore.target-identity` | deny, not overridable | the destination is explicit (scratch, or a named new target or cluster) with identity and tier in the plan; restoring over a running registered cluster is refused in V1; recovery reaches a prod target only through a `critical` placement move |
-| `restore.source-verified` | require (break-glass) | the backup was verified |
-| `restore.human-only` | deny | actor must be human in V1; the only exception is a scheduled drill into scratch, run by the system actor under the approved backup policy |
-| `backup.repository-healthy` | deny | repository reachable and writable |
-| `restore.clone-masking` | deny (break-glass) | a clone of prod-tier data into a nonprod target needs a masking profile or a recorded human decision with expiry |
+**[DECIDED]** (Wave 9 Part B, 2026-10-26; `packages/policy/src/catalog/backups.ts`,
+ADR-0036 to ADR-0038). None of these rules can be overridden by
+break-glass; an unknown tier counts as production.
+
+| Rule id | Applies to | Severity | Default |
+|---|---|---|---|
+| `backup.change-prod-approval` | `backup.repository.adopt`, `.ownership`, `.retire`, `backup.policy.set` | require approval + reauth (300 s) | a production (or unknown-tier) cluster's backup records change only after a human approval |
+| `backup.repository-runs-allowed` | `backup.run` | deny | the repository's ownership allows runs: `owned` every kind, `adopted_runs` incremental only (a full or differential run would shorten the host's retention); the node checks its host mode file again |
+| `backup.run-agent-prod-approval` | `backup.run` | require approval | an agent's backup run on a production (or unknown-tier) cluster waits for a person |
+| `restore.human-only` | `restore.drill`, `restore.execute`, `restore.discard` | deny | a person in the Web App or the CLI plans and applies them; an agent's plan is stored denied and keeps its analysis. **[DECIDED]** No system-actor drill exists in this wave (no scheduler) |
+| `restore.recovery-approval` | `restore.execute` | require approval + reauth (300 s) | a recovery restore is approved by a person on every tier |
+| `restore.source-verified` | `restore.drill`, `restore.execute` | deny | the source backup passed its verification and the WAL range is shown continuous; the kind checks both again at apply |
+| `restore.target-identity` | `restore.drill`, `restore.execute` | deny | a drill restores into scratch, a recovery into a new cluster on a bound node; never in place; the source system identifier is bound |
+| `restore.clone-masking` | `restore.execute` | deny | clones are not built in V1 (no masking profile) |
+
+`backup.repository-healthy` of the Wave 0 catalog is not a rule in this
+wave: a repository that cannot be read makes the catalog refresh fail
+(`BACKUP_REPOSITORY_UNAVAILABLE`) and the protection state `unknown` or
+`at_risk`; the node refuses a run on a repository it has no host
+configuration for.
 
 ### Access
 
