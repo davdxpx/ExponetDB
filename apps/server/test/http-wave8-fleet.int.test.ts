@@ -221,11 +221,12 @@ async function seedFindings() {
   await addFinding('prodB', 'warning', 'drift', n++, true)
 }
 
-/** An operation of a kind, in a state, on a plan whose subject is a target (or none). */
+/** An operation of a kind, in a state, on a plan whose subject is a target (or none); `extra` adds body fields. */
 async function addOperation(
   state: 'running' | 'awaiting_approval' | 'needs_attention' | 'succeeded',
   target: keyof typeof t | null,
   tier: 'prod' | 'nonprod',
+  extra: Record<string, string> = {},
 ) {
   const outcomes: Record<string, [string, string]> = {
     running: ['not_started', 'pending'],
@@ -240,7 +241,11 @@ async function addOperation(
     await c.query('BEGIN')
     await c.query("SET LOCAL session_replication_role = 'replica'")
     if (planId !== null && target !== null) {
-      const body = JSON.stringify({ nonce: operationId, subject: { targetId: t[target], tier } })
+      const body = JSON.stringify({
+        nonce: operationId,
+        subject: { targetId: t[target], tier },
+        ...extra,
+      })
       await c.query(
         `INSERT INTO operations.plans (plan_id, kind, kind_version, action_class, state, decision, plan_hash,
            content_checksum, policy_version, actor_kind, client_kind, target_id, tier, created_at, expires_at)
@@ -473,6 +478,22 @@ describe('GET /fleet', () => {
       })
     }
     expect((await owner.browser.call('GET', '/api/v1/fleet')).status).toBe(200)
+  })
+
+  it('counts an operation whose plan body holds an escaped NUL character, at its subject', async () => {
+    // "\u0000" is valid JSON text that jsonb refuses (22P05); the body stays text in the store.
+    await addOperation('awaiting_approval', 'nonprodA', 'nonprod', { reason: 'nul \u0000 inside' })
+    const r = await owner.browser.call('GET', '/api/v1/fleet')
+    expect(r.status, r.text).toBe(200)
+    expect(r.body.operations).toMatchObject({
+      running: 3,
+      needs_attention: 1,
+      awaiting_approval: 2,
+    })
+    // The subject is still read: the nonprod key sees the operation on its nonprod target.
+    const nonprod = await bearer(key.nonprod, '/api/v1/fleet')
+    expect(nonprod.status, nonprod.text).toBe(200)
+    expect(nonprod.body.operations).toMatchObject({ running: 2, awaiting_approval: 2 })
   })
 })
 
