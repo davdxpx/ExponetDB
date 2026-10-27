@@ -703,3 +703,4 @@ evidence; nothing here is a claim that it passed on real infrastructure):
 | 2026-10-27 | `9274d50` | OD-55 (c)+(d) and OD-56 (a) built; review e: E-1 (Medium) fixed, E-2 and E-3 fixed, E-4 not reachable (pinned), E-5 a residual |
 | 2026-10-27 | `c10417a` | CI: the phone tour of the pending view (red on `main` since #42), the unserved-route example, the secret scan |
 | 2026-10-27 | (docs) | OD-57 opened (F-4) |
+| 2026-10-27 | `f35319d`, `aac31cf` | MCP replay recordings recorded again (the Wave 9 read tools, the procedural facts), the role-start probe, the partition scenario waits for the node after the gateway outage; CI green on `aac31cf` (17 of 17 jobs, run 40437293860) |
