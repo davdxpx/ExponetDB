@@ -9,6 +9,19 @@ export {
   lowersSafety,
 } from './catalog/access.ts'
 export {
+  BACKUP_CHANGE_KINDS,
+  BACKUP_RULES,
+  backupChangeProdApproval,
+  backupRunAgentProd,
+  backupRunsAllowed,
+  RESTORE_KINDS,
+  restoreCloneRefused,
+  restoreHumanOnly,
+  restoreRecoveryApproval,
+  restoreSourceVerified,
+  restoreTargetIdentity,
+} from './catalog/backups.ts'
+export {
   DATA_READ_MODES,
   DATA_RULES,
   type DataReadMode,

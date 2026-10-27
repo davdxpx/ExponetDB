@@ -115,6 +115,7 @@ export {
   planTargetRegister,
   planTargetStateChange,
   type RegistryPlanContext,
+  storeRegistryPlan,
 } from './plans.ts'
 export {
   evaluateRegistryPolicy,

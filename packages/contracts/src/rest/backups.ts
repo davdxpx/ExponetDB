@@ -750,3 +750,15 @@ export const RestoreRunbookSchema = z
     generatedAt: TimestampSchema,
   })
   .meta({ id: 'RestoreRunbook' })
+
+export type BackupRepository = z.infer<typeof BackupRepositorySchema>
+export type BackupEntry = z.infer<typeof BackupEntrySchema>
+export type WalCoverage = z.infer<typeof WalCoverageSchema>
+export type EngineRun = z.infer<typeof EngineRunSchema>
+export type Restore = z.infer<typeof RestoreSchema>
+export type Drill = z.infer<typeof DrillSchema>
+export type BackupOverview = z.infer<typeof BackupOverviewSchema>
+export type BackupRepositoryOwnershipRequest = z.infer<typeof BackupRepositoryOwnershipRequestSchema>
+export type BackupRepositoryRetireRequest = z.infer<typeof BackupRepositoryRetireRequestSchema>
+export type OfflineDrillRecordRequest = z.infer<typeof OfflineDrillRecordRequestSchema>
+export type RestoreRunbook = z.infer<typeof RestoreRunbookSchema>
