@@ -739,8 +739,11 @@ export class BackupRunKind extends RunKind {
                   AND p.engine_label <> c.engine_label AND p.started_at < c.started_at
                 ORDER BY p.started_at DESC LIMIT 1) AS previous
          FROM backups.catalog c
-        WHERE c.repository_id = $1 AND c.engine_label = $2 AND c.state = 'succeeded' AND c.divergence = 'none'`,
-      [c.text('repositoryId'), label],
+        WHERE c.repository_id = $1 AND c.engine_label = $2 AND c.state = 'succeeded' AND c.divergence = 'none'
+          -- The label the node names must be new: first mirrored after this run's row existed, so an
+          -- older backup (or engine-user state naming one) never passes for this run.
+          AND c.first_seen_at >= (SELECT r.created_at FROM backups.runs r WHERE r.run_id = $3)`,
+      [c.text('repositoryId'), label, c.text('runId')],
     )
     const row = rows[0]
     if (row === undefined) return 'failed'

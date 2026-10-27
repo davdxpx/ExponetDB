@@ -701,6 +701,9 @@ export async function planBackupVerify(
     RUN_CAPABILITIES['backup.verify'] ?? [],
   )
   const pgbackrest = r.engine === 'pgbackrest'
+  // restic check cannot be limited to one snapshot (restic 0.16): a pass would claim more than it
+  // read, so a logical backup's verification is not offered until a snapshot-scoped check exists.
+  if (!pgbackrest) throw new BackupError('CAPABILITY_UNAVAILABLE')
   // Engine text from the catalog: the node takes only its own label or snapshot form.
   if (!(pgbackrest ? PGBACKREST_LABEL : RESTIC_SNAPSHOT).test(row.text('engine_label'))) {
     throw conflict('backup_not_found')

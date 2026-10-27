@@ -69,6 +69,8 @@ interface Host {
   labels: string[]
   runs: Map<string, { purpose: string; startJobId: string; label: string | null }>
   calls: string[]
+  /** The label the next backup run reports (an existing one simulates engine-user state naming an old backup). */
+  runLabel: string
 }
 
 function listing(host: Host): JsonObject {
@@ -116,7 +118,7 @@ function answer(host: Host) {
       case 'backup.list@1':
         return listing(host)
       case 'backup.run@1':
-        host.runs.set(runId, { purpose: 'backup', startJobId: job.jobId, label: INCREMENTAL })
+        host.runs.set(runId, { purpose: 'backup', startJobId: job.jobId, label: host.runLabel })
         return started(args)
       case 'backup.verify@1':
         host.runs.set(runId, { purpose: 'verify', startJobId: job.jobId, label: null })
@@ -305,6 +307,7 @@ async function setup(
     labels: [FULL],
     runs: new Map(),
     calls: [],
+    runLabel: INCREMENTAL,
   }
   const node = await simulatedNode(db, keyring, w, answer(host))
   node.start()
@@ -483,6 +486,25 @@ describe('backups through REST, the worker and a simulated node', () => {
       },
     )
     expect(owned.body?.code).toBe('CAPABILITY_UNAVAILABLE')
+    await node.stop()
+  })
+
+  it('a run whose node names a backup that existed before it does not verify', async () => {
+    const { w, node, host } = await setup('nonprod')
+    const repositoryId = await adopt(w)
+    await refresh(w)
+    await planAndApply(`/api/v1/backup-repositories/${repositoryId}/ownership`, {
+      to: 'adopted_runs',
+      acknowledge: { hostConfigurationUnchanged: true },
+    })
+    // The node's run statement names the full backup the catalog already held.
+    host.runLabel = FULL
+    const run = await planAndApply(`/api/v1/clusters/${w.clusterId}/backup-runs`, {
+      repositoryId,
+      kind: 'incremental',
+    })
+    expect(run.operation.state).not.toBe('succeeded')
+    expect(run.operation).toMatchObject({ applyOutcome: 'applied', verificationOutcome: 'failed' })
     await node.stop()
   })
 
