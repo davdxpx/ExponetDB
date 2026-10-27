@@ -226,6 +226,7 @@ beforeAll(async () => {
     }),
     ...migrationKinds({
       store: h.worker,
+      keyring: h.keyring,
       clock: systemClock,
       connector: h.workerConnector,
       installationId: h.db.installationId,
@@ -413,6 +414,7 @@ describe('an imported target that cannot be read', () => {
     const blindKinds = new KindRegistry([
       ...migrationKinds({
         store: h.worker,
+        keyring: h.keyring,
         clock: systemClock,
         connector: blind,
         installationId: h.db.installationId,

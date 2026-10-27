@@ -20,6 +20,7 @@ import {
   type CompatibilityClass,
   loadParser,
   mostSevere,
+  proceduralReasons,
   type StatementFacts,
   worstSeverity,
 } from '@exponetdb/postgres/parser'
@@ -335,6 +336,9 @@ export async function planMigrationResume(
       legacyProject: read.state.meta.baselineId !== null,
       executionRoleExceptions: Object.keys(resumeExceptions).length,
       executionRoleParity: 'not_required',
+      // OD-55: the whole bundle, as at its apply (what already ran is procedural too).
+      procedural: proceduralReasons(analysis.statements).length > 0,
+      proceduralReasons: proceduralReasons(analysis.statements),
     }
     const resume: ResumeBinding = {
       originalOperationId: log.originalOperationId,

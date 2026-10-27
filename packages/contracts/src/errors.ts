@@ -638,10 +638,10 @@ export const ERRORS = {
     retryable: false,
     title: 'Legacy import analyzed before failures were recorded',
     message:
-      'The import report was analyzed before the failing expectations of each file were recorded, so a review decision would not say what it accepts.',
+      'The import report was analyzed before the failing expectations of each file, or the keyed digests of the values they observed, were recorded, so a review decision would not say what it accepts.',
     remediation: 'Analyze the import again and record the decisions on the new report.',
     details: z.strictObject({
-      // How many file items of the report have no recorded failures.
+      // How many file items of the report have no recorded failures (or no digests of their values).
       items: z.int().min(1),
     }),
   },
@@ -1090,6 +1090,7 @@ export const ERRORS = {
             'wal_not_continuous',
             'point_in_time_outside_window',
             'no_backup_selectable',
+            'repository_engine_below_floor',
             // OD-54 (a), registry.cluster.adopt_agent: only an external cluster is adopted, by
             // an enrolled node that is live (active or degraded, with a recent heartbeat).
             'cluster_not_external',

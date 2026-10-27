@@ -472,6 +472,25 @@ export const MigrationPlanContentSchema = z
             description:
               "Production: whether the evidence target's execution roles have the same attributes and exception status (rule migration.execution-role-parity; Wave 9).",
           }),
+        procedural: z.boolean().optional().meta({
+          description:
+            'Whether the SQL the plan runs is procedural (DO blocks, procedure calls, functions a top-level SELECT, CREATE TABLE AS or a materialized view calls, routines, triggers or rules the bundle creates, dynamic SQL where the text shows it); unclassified SQL counts as procedural (rules migration.agent-procedural and migration.procedural-nontransactional; OD-55). Absent on plans made before Wave 9 Part B: counted as procedural.',
+        }),
+        proceduralReasons: z
+          .array(
+            z.enum([
+              'do_block',
+              'call',
+              'function_call',
+              'routine_created',
+              'trigger_created',
+              'dynamic_sql',
+              'unclassified',
+            ]),
+          )
+          .max(7)
+          .optional()
+          .meta({ description: 'Why the SQL is procedural, as fixed codes (OD-55 (c)).' }),
       })
       .meta({ description: 'What the policy rules decide on (policy-engine.md §4, Migrations).' }),
     resume: MigrationResumeBindingSchema.optional().meta({
@@ -529,7 +548,7 @@ export const VerificationFailureSchema = z
     object: z.string().max(300).meta({ description: 'What was expected, by object name.' }),
     failed: z.array(z.string().max(32)).max(16).meta({
       description:
-        'The aspects that differ (missing, present, type, not_null, order, body, value, …); unreadable when the check could not be read on the target, changed when the reviewed decisions changed.',
+        'The aspects that differ (missing, present, type, not_null, order, body, value, …); unreadable when the check could not be read on the target, changed when the reviewed decisions changed; value_changed when an excused failure of a value now holds another value than the one a person accepted, value_unverifiable when that cannot be compared (no digest recorded, the excused-value key missing or rotated; OD-56). Never the value.',
     }),
     excused: z.boolean().meta({
       description:

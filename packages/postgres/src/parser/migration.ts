@@ -331,6 +331,12 @@ export interface StatementDetails {
   readonly referencedNames: readonly string[]
   readonly dataChange?: 'insert' | 'update' | 'delete' | 'merge' | 'truncate'
   readonly unboundedDataChange?: boolean
+  /**
+   * A `DO` block or a created routine whose body runs dynamic SQL
+   * (`EXECUTE` in its text; OD-55 (c)). Detected in the text only: a body
+   * without the keyword can still call code that does.
+   */
+  readonly dynamicSql?: boolean
 }
 
 export type MigrationAnalysis =
@@ -1237,6 +1243,9 @@ function functionArgs(parameters: unknown): string[] | null {
   return out
 }
 
+/** Dynamic SQL in a procedural body (PL/pgSQL `EXECUTE`), by its text (OD-55 (c)). */
+const DYNAMIC_SQL = /\bEXECUTE\b/i
+
 function createFunction(d: Draft, body: JsonNode): void {
   const name = qualifiedName(body['funcname'])
   const procedure = bool(body['is_procedure'])
@@ -1268,6 +1277,7 @@ function createFunction(d: Draft, body: JsonNode): void {
   d.details.securityDefiner = security
   d.details.searchPathSet = searchPathSet
   d.details.functionCreated = true
+  if (bodyText !== null && DYNAMIC_SQL.test(bodyText)) d.details.dynamicSql = true
   const args = functionArgs(body['parameters'])
   if (name === null) {
     d.underivedParts = true
@@ -1915,6 +1925,7 @@ function classify(statement: ParsedStatement, trusted: ReadonlySet<string>): Dra
       d.procedural = true
       const as = nodeType(defElems(body['args']).get('as'))
       const code = str(as?.body['sval']) ?? ''
+      if (DYNAMIC_SQL.test(code)) d.details.dynamicSql = true
       d.conditional =
         /\b(pg_roles|pg_catalog|to_regclass|to_regproc|to_regtype|information_schema|pg_namespace|pg_class|pg_proc|current_setting)\b/i.test(
           code,

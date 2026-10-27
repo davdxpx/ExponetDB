@@ -1,0 +1,27 @@
+schema: exponetdb.migration/v1
+id: 01M5X840BP8JXGEQGS0PHPTB58
+name: excused-value-digests
+description: |
+  OD-56 (a), Wave 9 Part B order (2026-10-26; legacy-import.md §2 steps 5
+  and 7): a review decision that excuses a failing expectation of a value
+  (a role setting, a connection limit, a comment, a function body, a type)
+  excuses that value only. The analysis records, per failure of a value, a
+  keyed digest of the value it observed (HMAC-SHA-256 under the
+  installation's excused-value key, never a plain hash and never the value)
+  and the key it used; the baseline's verification compares the digest it
+  observes and fails closed on another value, another key or none.
+  migrations.excused_value_key names the key's secret (a worker secret of
+  purpose migrations.excused_value_key); migrations.import_value_keys says
+  that a report was analyzed with digests and with which key version;
+  migrations.import_value_digests holds the digests. The worker writes each
+  row once; nobody changes or removes one; serve reads only which key a
+  report used, never a digest. Additive: no frozen bundle changes.
+dependsOn:
+  - 01M5X840BMQPER7PK6WH64NR2J
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

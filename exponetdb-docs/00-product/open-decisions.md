@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); OD-50 added on 2026-10-21 with the CLI's scope presets; on 2026-10-21 the owner's Wave 9 order ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)) split OD-7 into OD-7a (staging: yes) and OD-7b (production: no applies before Wave 11), decided the engine part of OD-4 (pgBackRest; the storage stays open until the measured spike B0), and added OD-51 (a declared `BYPASSRLS` execution-role exception) and OD-52 (adopting a running pgBackRest setup), both decided by the order's defaults; OD-53 (fingerprint lineage across per-environment owner roles) added on 2026-10-21 by Part A (A5); OD-54 (how an external cluster gains the node agent) added on 2026-10-22 by Part A (A8); OD-55 (procedural code in a migration session can act as any role the migrator holds) added on 2026-10-22 by Part A's review round 3; OD-56 (an excused value outside the fingerprint that changes after the review) added on 2026-10-24 by the review of Part A follow-up 3; on 2026-10-26 the owner's Wave 9 Part B order decided OD-8 (technical default option (a); the legal review stays open as EXTERNAL LEGAL REVIEW), OD-53 (a), OD-54 (a), OD-55 (c) with (d) and OD-56 (a), and kept the storage part of OD-4 open (it blocks the full G9 acceptance; see ["Owner decisions of the Wave 9 Part B order"](#owner-decisions-of-the-wave-9-part-b-order-2026-10-26)); all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); OD-50 added on 2026-10-21 with the CLI's scope presets; on 2026-10-21 the owner's Wave 9 order ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)) split OD-7 into OD-7a (staging: yes) and OD-7b (production: no applies before Wave 11), decided the engine part of OD-4 (pgBackRest; the storage stays open until the measured spike B0), and added OD-51 (a declared `BYPASSRLS` execution-role exception) and OD-52 (adopting a running pgBackRest setup), both decided by the order's defaults; OD-53 (fingerprint lineage across per-environment owner roles) added on 2026-10-21 by Part A (A5); OD-54 (how an external cluster gains the node agent) added on 2026-10-22 by Part A (A8); OD-55 (procedural code in a migration session can act as any role the migrator holds) added on 2026-10-22 by Part A's review round 3; OD-56 (an excused value outside the fingerprint that changes after the review) added on 2026-10-24 by the review of Part A follow-up 3; on 2026-10-26 the owner's Wave 9 Part B order decided OD-8 (technical default option (a); the legal review stays open as EXTERNAL LEGAL REVIEW), OD-53 (a), OD-54 (a), OD-55 (c) with (d) and OD-56 (a), and kept the storage part of OD-4 open (it blocks the full G9 acceptance; see ["Owner decisions of the Wave 9 Part B order"](#owner-decisions-of-the-wave-9-part-b-order-2026-10-26)); OD-57 (an advisor run's scope) added on 2026-10-27 by the Part B review F-4; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -76,6 +76,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-54 | How an external cluster gains the node agent | **resolved 2026-10-26** | option (a): a controlled, one-way operation `registry.cluster.adopt_agent` (human only, production authority also while the tier is unknown, fresh re-authentication, audited, idempotent; the `system_identifier` pinned at registration must be reported exactly once by an enrolled node of the same server, checked at plan and again at apply); an additive bundle allows exactly external → agent and nothing else; targets keep placement, generation and marker | node capabilities on a cluster first registered external | decided |
 | OD-55 | Procedural code in a migration session can act as any role the migrator holds | **resolved 2026-10-26** | options (c) and (d): a person approves every agent-initiated plan with procedural statements (`DO`, created and called routines, dynamic SQL where detectable) on **every** tier; the executor compares the `exponetdb` schema's ledger and marker state before and after each authored statement inside the transaction and refuses a change it did not make; fail closed where the check cannot run; cross-project role reach on one cluster stays a recorded residual risk | agent applies of procedural bundles without a person | decided |
 | OD-56 | An excused value outside the fingerprint that changes after the review | **resolved 2026-10-26** | option (a): a keyed digest (HMAC-SHA-256 under a server-side installation key, never a plain hash) of the observed value of open-domain kinds is recorded with the excused failure and compared at every later verification; a changed value fails closed even with the same aspect; a missing or rotated key fails closed; values never appear in UI, API, audit or logs | nothing | decided |
+| OD-57 | `advisors_run` records a run, but its scope `diagnostics.read` is a read scope | **open** | (a) a new additive oauth bundle makes `diagnostics.read` a write scope (consent shows it; clients that auto-approve read tools stop doing so); (b) a separate record scope for advisor runs (`diagnostics.record`), `diagnostics.read` stays read-only; (c) an advisor run over MCP records nothing (findings only from Web App, CLI and the worker) | nothing in Part B; the MCP annotation stays `readOnlyHint` until decided | open |
 
 ---
 
@@ -1669,6 +1670,14 @@ History:
   Cross-project role reach inside one cluster (option (a)'s concern) stays
   a **recorded residual risk**; nothing claims full containment.
 - **Source.** the owner's Wave 9 Part B order (2026-10-26), §1 item 4.
+- **Implementation.** **[DECIDED]** (Wave 9 Part B) (c): the plan fact
+  `facts.procedural` with `facts.proceduralReasons` and the rule
+  `migration.agent-procedural` ([`../04-migrations/planning-and-apply.md` §2](../04-migrations/planning-and-apply.md#2-plan-content),
+  [`../02-control-plane/policy-engine.md` §4](../02-control-plane/policy-engine.md#4-rule-catalog-v1));
+  (d): the executor's ledger guard and, where it cannot roll back, the deny
+  rule `migration.procedural-nontransactional`
+  ([`../04-migrations/planning-and-apply.md` §4.3, §4.4](../04-migrations/planning-and-apply.md#43-transactional-migration));
+  the residual is threat T38.
 - **Question.** How is code a migration runs kept to the project's
   execution role when that code is procedural?
 - **Why it matters.** **[OBSERVED]** (PostgreSQL 17, 2026-10-22) An
@@ -1733,6 +1742,11 @@ History:
   digests appear in UI, API, MCP output, audit or logs beyond the stored
   comparison record.
 - **Source.** the owner's Wave 9 Part B order (2026-10-26), §1 item 5.
+- **Implementation.** **[DECIDED]** (Wave 9 Part B) the installation's
+  excused-value key (a worker secret), the digests recorded at the analysis
+  and compared at every verification, `value_changed` and
+  `value_unverifiable` ([`../04-migrations/legacy-import.md` Step 7](../04-migrations/legacy-import.md#step-7-verify));
+  bundle `01M5X840BP8JXGEQGS0PHPTB58_excused-value-digests`.
 - **Question.** Must an excused failure of a baseline's verification also
   prove that the failing value is still the one the person accepted?
 - **Why it matters.** **[OBSERVED]** (PostgreSQL 17, 2026-10-24) A review
@@ -1756,6 +1770,34 @@ History:
   could reverse; (b) is useful on its own and later.
 - **Blocks.** Nothing in Part A; the reviewed baseline on `reos-db-01` is
   not affected beyond this residual.
+
+## OD-57. `advisors_run` records a run, but its scope is a read scope
+
+- **Status.** OPEN (found on 2026-10-27 by the Wave 9 Part B review F-4)
+- **Question.** How is an advisor run over MCP classified, given that it
+  writes Control Store records?
+- **Why it matters.** **[OBSERVED]** (Wave 9 Part B) `advisors_run`
+  inserts an `observation.advisor_runs` row, opens, counts and resolves
+  subject findings and appends an `advisor.run` audit event; since the
+  review fix these commit in one transaction. The tool is annotated
+  `readOnlyHint` and `advisor.run` has the effect `read`, so an MCP client
+  that auto-approves read-only tools can loop it under the read rate
+  limit, growing runs and audit and churning finding states. `drift.check`,
+  which records the same way, is a `record` action with the `RECORDS`
+  annotation. Making `advisor.run` a `record` action turns
+  `diagnostics.read` into a write scope; the frozen G3B bundle
+  `01M47XQ56MW0JQX3J715X2GDB8_oauth-delegation` stores that scope with
+  `write=false`, and `checkScopeCatalog` compares the row with the release.
+- **Options.** (a) a new additive oauth bundle makes `diagnostics.read` a
+  write scope (a consent screen change for every grant holding it); (b) a
+  separate scope for recording advisor runs, `diagnostics.read` stays
+  read-only and `advisors_run` needs the new scope; (c) an advisor run
+  through MCP evaluates without recording (findings come from the Web App,
+  the CLI and the worker only).
+- **Recommendation.** (b): the read scope keeps its meaning and an agent's
+  grant shows the record right separately.
+- **Blocks.** Nothing in Part B; the residual is listed in
+  [`../14-roadmap/PRE-WAVE-11-REVIEW.md`](../14-roadmap/PRE-WAVE-11-REVIEW.md) W9-04.
 
 ## Owner decisions of the Wave 9 Part B order (2026-10-26)
 

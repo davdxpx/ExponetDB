@@ -402,7 +402,14 @@ not in `verify.sql`.
   function's security, search path, language and body; …); a `verify.sql`
   check is `failed` or `error`, with its redacted `firstFailure` detail as
   before. A baseline's run also counts what review decisions `excused`
-  ([`legacy-import.md` Step 7](./legacy-import.md#step-7-verify)). The
+  ([`legacy-import.md` Step 7](./legacy-import.md#step-7-verify)).
+  **[DECIDED]** (OD-56 (a), 2026-10-26) An excused failure of a value is
+  excused only while a keyed digest (HMAC-SHA-256 under the installation's
+  excused-value key) of the observed value equals the one the analysis
+  recorded; otherwise it is not excused and carries the extra aspect
+  `value_changed` (another value) or `value_unverifiable` (no digest, a
+  missing or rotated key). The digest is computed inside the check and
+  never kept in a run, the ledger or the mirror. The
   operation read (`Operation.verifications`, REST and Web App) carries the
   operation's runs from the mirror; `migration show <id>` lists the newest
   run's failures. A run written before this change has counts only.

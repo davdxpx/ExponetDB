@@ -198,6 +198,7 @@ export async function largeWorld(): Promise<LargeWorld> {
     }),
     ...migrationKinds({
       store: h.worker,
+      keyring: h.keyring,
       clock: systemClock,
       connector: h.workerConnector,
       installationId: h.db.installationId,

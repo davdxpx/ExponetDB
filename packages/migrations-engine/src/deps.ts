@@ -1,6 +1,6 @@
 import type { ControlStore, Tx } from '@exponetdb/control-store'
 import type { Clock } from '@exponetdb/kernel'
-import type { Connector } from '@exponetdb/registry'
+import type { Connector, Keyring } from '@exponetdb/registry'
 import type { ManagedScope } from './target.ts'
 
 /** What the migration kinds need from the worker. */
@@ -13,6 +13,12 @@ export interface MigrationKindDeps {
   readonly installationId: string
   /** `<package version>+<commit>`, recorded in each ledger row. */
   readonly engineVersion: string
+  /**
+   * The worker's keyring, for the installation's excused-value key (OD-56
+   * (a)). Without it a failure of a value is never excused: the analysis
+   * stays incomplete and a baseline's verification fails closed.
+   */
+  readonly keyring?: Keyring
   /**
    * Records the schema a verified migration left as the target's expected
    * state for drift checks (drift-detection.md §7; the worker composes it

@@ -27,6 +27,7 @@ import {
   registryKinds,
   type TargetRecord,
 } from '@exponetdb/registry'
+import { addSecretVersion } from '@exponetdb/secrets'
 import {
   matrix,
   runAsSuperuser,
@@ -80,6 +81,8 @@ interface World {
   readonly a: RegistryActor
   readonly ctx: MigrationPlanContext
   readonly kinds: KindRegistry
+  /** The same kinds without the keyring: no excused-value key (OD-56 (a)). */
+  readonly keyless: KindRegistry
   readonly imported: TargetRecord
   readonly scratch: TargetRecord
   readonly importedDb: string
@@ -138,30 +141,34 @@ async function world(server: TestServer, role: string): Promise<World> {
   }
   const expected: { targetId: string; fingerprint: string }[] = []
   const faults = { verifyUnreachable: false }
-  const kinds = new KindRegistry([
-    ...registryKinds({
-      store: h.worker,
-      clock: systemClock,
-      connector: h.workerConnector,
-      installationId: h.db.installationId,
-      controlStoreSystemIdentifier: async () => h.controlStoreSystemIdentifier,
-      snapshots: h.snapshots,
-      backupBindings: noBackupEngine,
-    }),
-    ...migrationKinds({
-      store: h.worker,
-      clock: systemClock,
-      connector: faulty(h.workerConnector, faults),
-      installationId: h.db.installationId,
-      engineVersion: '0.1.0+test',
-      expected: {
-        record: async (input) => {
-          expected.push({ targetId: input.targetId, fingerprint: input.fingerprint })
-          return 'recorded'
+  const kindsWith = (keyed: boolean) =>
+    new KindRegistry([
+      ...registryKinds({
+        store: h.worker,
+        clock: systemClock,
+        connector: h.workerConnector,
+        installationId: h.db.installationId,
+        controlStoreSystemIdentifier: async () => h.controlStoreSystemIdentifier,
+        snapshots: h.snapshots,
+        backupBindings: noBackupEngine,
+      }),
+      ...migrationKinds({
+        store: h.worker,
+        ...(keyed ? { keyring: h.keyring } : {}),
+        clock: systemClock,
+        connector: faulty(h.workerConnector, faults),
+        installationId: h.db.installationId,
+        engineVersion: '0.1.0+test',
+        expected: {
+          record: async (input) => {
+            expected.push({ targetId: input.targetId, fingerprint: input.fingerprint })
+            return 'recorded'
+          },
         },
-      },
-    }),
-  ])
+      }),
+    ])
+  const kinds = kindsWith(true)
+  const keyless = kindsWith(false)
   const product = await run(h, a, (tx) =>
     planProductCreate(tx, h.context, a, { slug, displayName: 'Reviewed baseline' }),
   )
@@ -229,6 +236,7 @@ async function world(server: TestServer, role: string): Promise<World> {
     a,
     ctx,
     kinds,
+    keyless,
     imported,
     scratch,
     importedDb: databases['imported'] ?? '',
@@ -261,7 +269,7 @@ const files = (role: string) => [
   { name: '0007_scratch_gone.sql', text: 'DROP TABLE public.acme_scratch;\n' },
 ]
 
-async function apply(w: World, p: PlanRecord): Promise<OperationRecord> {
+async function apply(w: World, p: PlanRecord, kinds = w.kinds): Promise<OperationRecord> {
   const result = await w.h.serve.transaction('test.bv.accept', (tx) =>
     acceptPlan(
       tx,
@@ -277,21 +285,21 @@ async function apply(w: World, p: PlanRecord): Promise<OperationRecord> {
       },
       registryAcceptDependencies(
         tx,
-        { policy: w.ctx.policy, kinds: w.kinds, systemActor: WORKER_ACTOR },
+        { policy: w.ctx.policy, kinds, systemActor: WORKER_ACTOR },
         w.a,
       ),
     ),
   )
   if (result.status !== 'accepted') throw result.error
-  return drive(w, result.operation.operationId)
+  return drive(w, result.operation.operationId, kinds)
 }
 
-async function drive(w: World, operationId: string): Promise<OperationRecord> {
+async function drive(w: World, operationId: string, kinds = w.kinds): Promise<OperationRecord> {
   const workerId = newId('prc', Date.now())
   for (let i = 0; i < 50; i++) {
     const r = await processNextOperation(w.h.worker, {
       workerId,
-      kinds: w.kinds,
+      kinds,
       clock: systemClock,
     })
     if (r.status === 'idle') break
@@ -530,15 +538,17 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       const failed = await apply(w, await reverify(w))
       expect(failed).toMatchObject({ kind: 'migration.verify', state: 'verification_failed' })
       const v = await latestRun(w)
-      expect(v.structural.failed).toBe(1)
-      // The role is missing: not what the person accepted. Its attribute still fails as reviewed.
+      expect(v.structural.failed).toBe(2)
+      // The role is missing: not what the person accepted. Its attribute fails with the same
+      // aspect, but the value the analysis saw (NOLOGIN) is gone, so it is no longer excused
+      // (OD-56 (a)).
       expect(
         v.structural.failures
           ?.filter((f) => f.file === '0004_role')
-          .map((f) => [f.kind, f.excused]),
+          .map((f) => [f.kind, f.failed, f.excused]),
       ).toEqual([
-        ['role', false],
-        ['role_attribute', true],
+        ['role', ['missing'], false],
+        ['role_attribute', ['value', 'value_changed'], false],
       ])
       // Only the file with the open failure reads as failed; the others' share passed.
       const rows = await importedRows(w)
@@ -749,3 +759,188 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
     })
   },
 )
+
+/**
+ * OD-56 (a) on PostgreSQL 17: an excused failure of a value outside the
+ * fingerprint (a role's connection limit and comment are cluster-global)
+ * stays excused only while it holds the value the person accepted. The
+ * analysis records a keyed digest (HMAC-SHA-256 under the installation's
+ * excused-value key) of each value it saw, never the value; a later value
+ * fails the verification closed with the same aspect, and so does a key
+ * that is missing or rotated, or an analysis without the key.
+ */
+describe('excused values (OD-56 (a)) on PostgreSQL 17', () => {
+  const server = matrix().find((s) => s.major === 17) as TestServer
+  const role = `acme_ev_r17_${Date.now().toString(36)}`
+  let w: World
+  let reportId = ''
+  const history = () => [
+    ...files(role),
+    {
+      name: '0008_limits.sql',
+      text: `ALTER ROLE ${role} CONNECTION LIMIT 5;\nCOMMENT ON ROLE ${role} IS 'from the history';\n`,
+    },
+  ]
+  const roleSql = (statements: readonly string[]) =>
+    withRolesHeld(server, () => runAsSuperuser(server, 'postgres', [...statements]))
+  const limitsOf = async () =>
+    (await latestRun(w)).structural.failures
+      ?.filter((f) => f.file === '0008_limits')
+      .map((f) => [f.kind, f.failed, f.excused])
+      // Not excused ones first in the run; compared by kind here.
+      .sort((a, b) => (String(a[0]) < String(b[0]) ? 1 : -1))
+
+  beforeAll(async () => {
+    w = await world(server, role)
+    // What the reviewed database holds instead of what the history says.
+    await roleSql([
+      `ALTER ROLE ${role} CONNECTION LIMIT 3`,
+      `COMMENT ON ROLE ${role} IS 'zq-accepted-text'`,
+    ])
+  }, 300_000)
+
+  afterAll(async () => {
+    await w?.h.close()
+    await roleSql([`DROP ROLE IF EXISTS ${role}`]).catch(() => undefined)
+  })
+
+  it('records a keyed digest of each value it saw, never the value, and serve reads none', async () => {
+    const p = await w.h.serve.transaction('test.ev.analyze', (tx) =>
+      planImportAnalysis(tx, w.ctx, w.a, w.imported.targetId, {
+        scratchTarget: w.scratch.targetId,
+        baseline: BASELINE,
+        files: history(),
+      }),
+    )
+    reportId = String((p.body['content'] as { reportId: string }).reportId)
+    expect(await apply(w, p)).toMatchObject({ state: 'succeeded', applyOutcome: 'applied' })
+    const r = await w.h.worker.transaction('test.ev.report', (tx) =>
+      importReportView(tx, w.imported.targetId, reportId),
+    )
+    const limits = r.items.find((i) => i.name === '0008_limits')
+    expect(limits?.failing?.items.map((f) => [f.kind, f.failed])).toEqual([
+      ['role_connection_limit', ['value']],
+      ['role_comment', ['value']],
+    ])
+    // Nothing a reader could reverse: no digest and no value in the report.
+    const text = JSON.stringify(r)
+    expect(text).not.toContain('hmac-sha256')
+    expect(text).not.toContain('zq-accepted-text')
+    const stored = await w.h.db.asSuperuser(async (c) => {
+      const key = await c.query(
+        'SELECT key_ref FROM migrations.import_value_keys WHERE report_id = $1',
+        [reportId],
+      )
+      const digests = await c.query(
+        `SELECT d.digest FROM migrations.import_value_digests d
+           JOIN migrations.import_items i USING (report_id, item_id)
+          WHERE d.report_id = $1 AND i.name = '0008_limits'`,
+        [reportId],
+      )
+      return { keyRef: key.rows[0]?.key_ref, digests: digests.rows.map((x) => String(x.digest)) }
+    })
+    expect(stored.keyRef).toMatch(/^sec_[0-9A-HJKMNP-TV-Z]{26}:1$/)
+    expect(stored.digests).toHaveLength(2)
+    for (const d of stored.digests) expect(d).toMatch(/^hmac-sha256:[0-9a-f]{64}$/)
+    await expect(
+      w.h.serve.transaction('test.ev.serve', (tx) =>
+        tx.query('test.ev.serve.read', 'SELECT digest FROM migrations.import_value_digests'),
+      ),
+    ).rejects.toThrow()
+    for (const item of r.items.filter(
+      (i) => i.decision === null && i.state !== 'unrecorded_present',
+    )) {
+      await w.h.serve.transaction('test.ev.decide', (tx) =>
+        decideImportItem(tx, {
+          targetId: w.imported.targetId,
+          reportId,
+          itemId: Number(item.itemId),
+          state: item.name === '0006_scratch' ? 'superseded' : 'unrecorded_present',
+          note: 'reviewed: the limit and the comment are intended',
+          identityId: w.a.identityId,
+        }),
+      )
+    }
+    const p2 = await w.h.serve.transaction('test.ev.baseline', (tx) =>
+      planBaseline(tx, w.ctx, w.a, w.imported.targetId, reportId),
+    )
+    expect(await apply(w, p2)).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
+    expect(await limitsOf()).toEqual([
+      ['role_connection_limit', ['value'], true],
+      ['role_comment', ['value'], true],
+    ])
+  })
+
+  it('fails closed when an excused value changes with the same aspect, and passes once it is back', async () => {
+    await roleSql([`ALTER ROLE ${role} CONNECTION LIMIT 100`])
+    expect(await apply(w, await reverify(w))).toMatchObject({
+      kind: 'migration.verify',
+      state: 'verification_failed',
+    })
+    expect(await limitsOf()).toEqual([
+      ['role_connection_limit', ['value', 'value_changed'], false],
+      ['role_comment', ['value'], true],
+    ])
+    await roleSql([`ALTER ROLE ${role} CONNECTION LIMIT 3`, `COMMENT ON ROLE ${role} IS 'changed'`])
+    expect((await apply(w, await reverify(w))).state).toBe('verification_failed')
+    expect(await limitsOf()).toEqual([
+      ['role_connection_limit', ['value'], true],
+      ['role_comment', ['value', 'value_changed'], false],
+    ])
+    await roleSql([`COMMENT ON ROLE ${role} IS 'zq-accepted-text'`])
+    expect(await apply(w, await reverify(w))).toMatchObject({
+      state: 'succeeded',
+      verificationOutcome: 'passed',
+    })
+  })
+
+  it('fails closed without the key, and after the key is rotated', async () => {
+    const missing = await apply(w, await reverify(w), w.keyless)
+    expect(missing.state).toBe('verification_failed')
+    expect(await limitsOf()).toEqual([
+      ['role_connection_limit', ['value', 'value_unverifiable'], false],
+      ['role_comment', ['value', 'value_unverifiable'], false],
+    ])
+    // A new version of the key's secret: the recorded digests are not compared under it.
+    await w.h.worker.transaction('test.ev.rotate', async (tx) => {
+      const { rows } = await tx.query(
+        'test.ev.key',
+        'SELECT secret_id FROM migrations.excused_value_key',
+      )
+      await addSecretVersion(tx, w.h.keyring, rows[0]?.text('secret_id') as never, randomBytes(32))
+    })
+    expect((await apply(w, await reverify(w))).state).toBe('verification_failed')
+    expect(await limitsOf()).toEqual([
+      ['role_connection_limit', ['value', 'value_unverifiable'], false],
+      ['role_comment', ['value', 'value_unverifiable'], false],
+    ])
+  })
+
+  it('leaves an analysis without the key incomplete when a value fails', async () => {
+    const other = `acme_ev_k17_${Date.now().toString(36)}`
+    const k = await world(server, other)
+    try {
+      await roleSql([`ALTER ROLE ${other} CONNECTION LIMIT 3`])
+      const p = await k.h.serve.transaction('test.ev.analyze_keyless', (tx) =>
+        planImportAnalysis(tx, k.ctx, k.a, k.imported.targetId, {
+          scratchTarget: k.scratch.targetId,
+          baseline: BASELINE,
+          files: [{ name: '0001_limit.sql', text: `ALTER ROLE ${other} CONNECTION LIMIT 5;\n` }],
+        }),
+      )
+      const id = String((p.body['content'] as { reportId: string }).reportId)
+      // The replay ran; the report says why it could not be opened.
+      expect(await apply(k, p, k.keyless)).toMatchObject({ applyOutcome: 'applied' })
+      const r = await k.h.worker.transaction('test.ev.report_keyless', (tx) =>
+        importReportView(tx, k.imported.targetId, id),
+      )
+      expect(r).toMatchObject({
+        state: 'incomplete',
+        incompleteReason: 'excused_value_key_unavailable',
+      })
+    } finally {
+      await k.h.close()
+      await roleSql([`DROP ROLE IF EXISTS ${other}`]).catch(() => undefined)
+    }
+  }, 300_000)
+})

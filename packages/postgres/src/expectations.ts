@@ -29,6 +29,13 @@ export interface ExpectationResult {
    * value read from the catalog (Part A follow-up 3, F1 and F2).
    */
   readonly failed?: readonly ExpectationAspect[]
+  /**
+   * OD-56 (a): when it does not hold and a value aspect differs, the keyed
+   * digest of the observed values of those aspects (only with
+   * {@link CheckOptions.valueDigest}). Never the value; kept out of every
+   * record but the excused-value comparison.
+   */
+  readonly observedDigest?: string
 }
 
 /** The aspects an expectation's check compares; a failed result names those that differ. */
@@ -191,36 +198,95 @@ async function first(
   return (await tx.query(statement, params))[0]
 }
 
+/** A value the check observed for an aspect, before it is digested (never kept or returned). */
+type Observed = string | number | boolean | null | readonly string[]
+
+/**
+ * Keys what a failing check observed (OD-56 (a)): called with the failure
+ * (no value) and the canonical text of the observed values of its failing
+ * value aspects; returns the keyed digest the result carries. The engine
+ * passes it with the installation's excused-value key; without it no
+ * digest is made.
+ */
+export type ObservedValueDigest = (
+  failure: {
+    readonly statement: number
+    readonly kind: Expectation['kind']
+    readonly description: string
+    readonly failed: readonly ExpectationAspect[]
+  },
+  observation: string,
+) => string
+
+export interface CheckOptions {
+  readonly valueDigest?: ObservedValueDigest
+}
+
+/** Aspects that state existence only: what they observe is the aspect itself. */
+const EXISTENCE: ReadonlySet<ExpectationAspect> = new Set(['missing', 'present'])
+
+/** `{"aspect":value,…}` with sorted members (arrays as observed, in their order). */
+function observation(values: ReadonlyMap<ExpectationAspect, Observed>): string {
+  return JSON.stringify(Object.fromEntries([...values].sort(([a], [b]) => (a < b ? -1 : 1))))
+}
+
 /** Checks one expectation; never throws for a missing object (that is a result). */
 export async function checkExpectation(
   tx: CatalogReader,
   statement: number,
   e: Expectation,
+  options: CheckOptions = {},
 ): Promise<ExpectationResult> {
   const result = (
     ok: boolean,
     description: string,
     failed: readonly ExpectationAspect[] = [],
-  ): ExpectationResult =>
-    ok
-      ? { statement, kind: e.kind, ok, description }
-      : {
-          statement,
-          kind: e.kind,
-          ok,
-          description,
-          failed: failed.length > 0 ? failed : ['missing'],
-        }
-  /** The aspects of `checks` that do not hold. */
-  const differing = (checks: readonly (readonly [boolean, ExpectationAspect])[]) =>
-    checks.filter(([holds]) => !holds).map(([, aspect]) => aspect)
+    observed: ReadonlyMap<ExpectationAspect, Observed> = new Map(),
+  ): ExpectationResult => {
+    if (ok) return { statement, kind: e.kind, ok, description }
+    const aspects = failed.length > 0 ? failed : (['missing'] as const)
+    // OD-56 (a): the values of the failing value aspects, as a keyed digest only.
+    const values = new Map(
+      aspects
+        .filter((a) => !EXISTENCE.has(a) && observed.has(a))
+        .map((a) => [a, observed.get(a) ?? null]),
+    )
+    const digest =
+      options.valueDigest === undefined || values.size === 0
+        ? undefined
+        : options.valueDigest(
+            { statement, kind: e.kind, description, failed: aspects },
+            observation(values),
+          )
+    return {
+      statement,
+      kind: e.kind,
+      ok,
+      description,
+      failed: aspects,
+      ...(digest === undefined ? {} : { observedDigest: digest }),
+    }
+  }
+  type Check = readonly [boolean, ExpectationAspect, Observed]
+  /** The aspects of `checks` that do not hold, and what each observed. */
+  const differing = (checks: readonly Check[]) =>
+    checks.filter(([holds]) => !holds).map(([, a]) => a)
+  const observedOf = (checks: readonly Check[]) =>
+    new Map<ExpectationAspect, Observed>(checks.map(([, a, v]) => [a, v]))
+  const one = (aspect: ExpectationAspect, value: Observed) =>
+    new Map<ExpectationAspect, Observed>([[aspect, value]])
   switch (e.kind) {
     case 'relation': {
       const row = await first(tx, REL, [name(e.schema, e.name)])
       const what = `${e.present ? 'relation' : 'no relation'} ${name(e.schema, e.name)}`
       if (!e.present) return result(row === undefined, what, ['present'])
       if (row === undefined) return result(false, what, ['missing'])
-      return result(e.relkinds.includes(row.text('relkind')), what, ['relkind'])
+      return result(
+        e.relkinds.includes(row.text('relkind')),
+        what,
+        ['relkind'],
+        one('relkind', row.text('relkind')),
+      )
     }
     case 'column': {
       const typeName = e.type ?? null
@@ -232,26 +298,27 @@ export async function checkExpectation(
       if (row === undefined) {
         return result(false, what, ['missing'])
       }
-      const checks: [boolean, ExpectationAspect][] = []
+      const checks: Check[] = []
       if (typeName !== null) {
         checks.push([
           row.textOrNull('expected_oid') !== null &&
             row.text('type_oid') === row.text('expected_oid'),
           'type',
+          row.text('type_oid'),
         ])
         const typmod = expectedTypmod(typeName, e.typmods)
         if (typmod !== null) {
-          checks.push([row.int('typmod') === typmod, 'typmod'])
+          checks.push([row.int('typmod') === typmod, 'typmod', row.int('typmod')])
         }
       }
       if (e.notNull !== undefined && e.notNull !== null) {
-        checks.push([row.bool('not_null') === e.notNull, 'not_null'])
+        checks.push([row.bool('not_null') === e.notNull, 'not_null', row.bool('not_null')])
       }
       if (e.hasDefault !== undefined && e.hasDefault !== null) {
-        checks.push([row.bool('has_default') === e.hasDefault, 'default'])
+        checks.push([row.bool('has_default') === e.hasDefault, 'default', row.bool('has_default')])
       }
       const failed = differing(checks)
-      return result(failed.length === 0, what, failed)
+      return result(failed.length === 0, what, failed, observedOf(checks))
     }
     case 'columns_exactly': {
       const row = await first(tx, COLUMN_NAMES, [name(e.schema, e.table)])
@@ -262,9 +329,8 @@ export async function checkExpectation(
         a.length === b.length && a.every((n, i) => n === b[i])
       if (same(names, e.columns)) return result(true, what)
       // The same columns in another order (an ADD COLUMN replayed elsewhere), or other columns.
-      return result(false, what, [
-        same([...names].sort(), [...e.columns].sort()) ? 'order' : 'columns',
-      ])
+      const aspect = same([...names].sort(), [...e.columns].sort()) ? 'order' : 'columns'
+      return result(false, what, [aspect], one(aspect, names))
     }
     case 'index': {
       const table = e.table === undefined ? null : name(e.table.schema, e.table.name)
@@ -276,16 +342,23 @@ export async function checkExpectation(
       if (row === undefined) {
         return result(false, what, ['missing'])
       }
-      const checks: [boolean, ExpectationAspect][] = [
-        [row.bool('valid') && row.bool('ready'), 'valid'],
-      ]
-      if (table !== null) checks.push([row.bool('on_table'), 'table'])
-      if (e.unique !== undefined) checks.push([row.bool('is_unique') === e.unique, 'unique'])
-      if (e.method !== undefined) checks.push([row.text('method') === e.method, 'method'])
-      if (e.partial !== undefined) checks.push([row.bool('partial') === e.partial, 'partial'])
-      if (e.keyCount !== undefined) checks.push([row.int('keys') === e.keyCount, 'keys'])
+      const usable = row.bool('valid') && row.bool('ready')
+      const checks: Check[] = [[usable, 'valid', usable]]
+      if (table !== null) checks.push([row.bool('on_table'), 'table', row.bool('on_table')])
+      if (e.unique !== undefined) {
+        checks.push([row.bool('is_unique') === e.unique, 'unique', row.bool('is_unique')])
+      }
+      if (e.method !== undefined) {
+        checks.push([row.text('method') === e.method, 'method', row.text('method')])
+      }
+      if (e.partial !== undefined) {
+        checks.push([row.bool('partial') === e.partial, 'partial', row.bool('partial')])
+      }
+      if (e.keyCount !== undefined) {
+        checks.push([row.int('keys') === e.keyCount, 'keys', row.int('keys')])
+      }
       const failed = differing(checks)
-      return result(failed.length === 0, what, failed)
+      return result(failed.length === 0, what, failed, observedOf(checks))
     }
     case 'constraint': {
       const row = await first(tx, CONSTRAINT, [name(e.schema, e.table), e.name])
@@ -296,12 +369,15 @@ export async function checkExpectation(
       if (row === undefined) {
         return result(false, what, ['missing'])
       }
-      const checks: [boolean, ExpectationAspect][] = []
-      if (e.contype !== undefined) checks.push([row.text('contype') === e.contype, 'contype'])
-      if (e.validated !== undefined)
-        checks.push([row.bool('validated') === e.validated, 'validated'])
+      const checks: Check[] = []
+      if (e.contype !== undefined) {
+        checks.push([row.text('contype') === e.contype, 'contype', row.text('contype')])
+      }
+      if (e.validated !== undefined) {
+        checks.push([row.bool('validated') === e.validated, 'validated', row.bool('validated')])
+      }
       const failed = differing(checks)
-      return result(failed.length === 0, what, failed)
+      return result(failed.length === 0, what, failed, observedOf(checks))
     }
     case 'not_null': {
       const row = await first(tx, COLUMN, [name(e.schema, e.table), e.column, 'text'])
@@ -309,17 +385,21 @@ export async function checkExpectation(
         row !== undefined && row.bool('not_null') === e.notNull,
         `${name(e.schema, e.table)}.${quoteIdent(e.column)} ${e.notNull ? 'NOT NULL' : 'nullable'}`,
         [row === undefined ? 'missing' : 'not_null'],
+        row === undefined ? new Map() : one('not_null', row.bool('not_null')),
       )
     }
     case 'row_security': {
       const row = await first(tx, REL, [name(e.schema, e.table)])
       const what = `row security of ${name(e.schema, e.table)}`
       if (row === undefined) return result(false, what, ['missing'])
-      const checks: [boolean, ExpectationAspect][] = []
-      if (e.enabled !== undefined) checks.push([row.bool('rls') === e.enabled, 'enabled'])
-      if (e.forced !== undefined) checks.push([row.bool('forced') === e.forced, 'forced'])
+      const checks: Check[] = []
+      if (e.enabled !== undefined)
+        checks.push([row.bool('rls') === e.enabled, 'enabled', row.bool('rls')])
+      if (e.forced !== undefined) {
+        checks.push([row.bool('forced') === e.forced, 'forced', row.bool('forced')])
+      }
       const failed = differing(checks)
-      return result(failed.length === 0, what, failed)
+      return result(failed.length === 0, what, failed, observedOf(checks))
     }
     case 'policy': {
       const row = await first(tx, POLICY, [name(e.schema, e.table), e.name])
@@ -330,12 +410,16 @@ export async function checkExpectation(
       if (row === undefined) {
         return result(false, what, ['missing'])
       }
-      const checks: [boolean, ExpectationAspect][] = []
+      const checks: Check[] = []
       if (e.command !== undefined) {
-        checks.push([COMMANDS[row.text('cmd')] === e.command.toUpperCase(), 'command'])
+        checks.push([
+          COMMANDS[row.text('cmd')] === e.command.toUpperCase(),
+          'command',
+          row.text('cmd'),
+        ])
       }
       if (e.permissive !== undefined) {
-        checks.push([row.bool('permissive') === e.permissive, 'permissive'])
+        checks.push([row.bool('permissive') === e.permissive, 'permissive', row.bool('permissive')])
       }
       if (e.roles !== undefined) {
         const roles = row.jsonArray('roles').map(String).sort()
@@ -343,10 +427,11 @@ export async function checkExpectation(
         checks.push([
           roles.length === expected.length && roles.every((r, i) => r === expected[i]),
           'roles',
+          roles,
         ])
       }
       const failed = differing(checks)
-      return result(failed.length === 0, what, failed)
+      return result(failed.length === 0, what, failed, observedOf(checks))
     }
     case 'table_privilege': {
       const row = await first(tx, TABLE_PRIVILEGES, [
@@ -355,10 +440,12 @@ export async function checkExpectation(
       ])
       const held = new Set((row?.jsonArray('privileges') ?? []).map(String))
       const ok = e.privileges.every((p) => held.has(p.toUpperCase()) === e.granted)
+      const present = row?.bool('present') === true
       return result(
-        row?.bool('present') === true && ok,
+        present && ok,
         `${e.granted ? 'grant' : 'no grant'} of ${e.privileges.join(', ')} on ${name(e.schema, e.table)} to ${e.grantee}`,
-        [row?.bool('present') === true ? 'privileges' : 'missing'],
+        [present ? 'privileges' : 'missing'],
+        present ? one('privileges', [...held].sort()) : new Map(),
       )
     }
     case 'function': {
@@ -371,19 +458,28 @@ export async function checkExpectation(
       if (row === undefined) {
         return result(false, what, ['missing'])
       }
-      const checks: [boolean, ExpectationAspect][] = []
+      const checks: Check[] = []
       if (e.securityDefiner !== undefined) {
-        checks.push([row.bool('secdef') === e.securityDefiner, 'security_definer'])
+        checks.push([
+          row.bool('secdef') === e.securityDefiner,
+          'security_definer',
+          row.bool('secdef'),
+        ])
       }
-      if (e.searchPathSet === true) checks.push([row.bool('path_set'), 'search_path'])
+      if (e.searchPathSet === true)
+        checks.push([row.bool('path_set'), 'search_path', row.bool('path_set')])
       if (e.language !== undefined) {
-        checks.push([row.text('language') === e.language.toLowerCase(), 'language'])
+        checks.push([
+          row.text('language') === e.language.toLowerCase(),
+          'language',
+          row.text('language'),
+        ])
       }
       if (e.body !== undefined && e.body !== null && !row.bool('sql_body')) {
-        checks.push([row.text('body') === e.body, 'body'])
+        checks.push([row.text('body') === e.body, 'body', row.text('body')])
       }
       const failed = differing(checks)
-      return result(failed.length === 0, what, failed)
+      return result(failed.length === 0, what, failed, observedOf(checks))
     }
     case 'trigger': {
       const row = await first(tx, TRIGGER, [name(e.schema, e.table), e.name])
@@ -396,14 +492,18 @@ export async function checkExpectation(
     case 'enum_labels': {
       const row = await first(tx, ENUM_LABELS, [name(e.schema, e.name)])
       const labels = (row?.jsonArray('labels') ?? []).map(String)
+      const present = row?.bool('present') === true
       const ok =
-        row?.bool('present') === true &&
+        present &&
         (e.exact
           ? labels.length === e.labels.length && labels.every((l, i) => l === e.labels[i])
           : e.labels.every((l) => labels.includes(l)))
-      return result(ok, `labels of ${name(e.schema, e.name)}`, [
-        row?.bool('present') === true ? 'labels' : 'missing',
-      ])
+      return result(
+        ok,
+        `labels of ${name(e.schema, e.name)}`,
+        [present ? 'labels' : 'missing'],
+        present ? one('labels', labels) : new Map(),
+      )
     }
     case 'schema': {
       const row = await first(tx, SCHEMA, [quoteIdent(e.name)])
@@ -421,7 +521,12 @@ export async function checkExpectation(
       const ok =
         row !== undefined &&
         (e.version === undefined || e.version === null || row.text('version') === e.version)
-      return result(ok, `extension ${e.name}`, [row === undefined ? 'missing' : 'version'])
+      return result(
+        ok,
+        `extension ${e.name}`,
+        [row === undefined ? 'missing' : 'version'],
+        row === undefined ? new Map() : one('version', row.text('version')),
+      )
     }
     case 'type': {
       const row = await first(tx, TYPE, [name(e.schema, e.name)])
@@ -438,6 +543,7 @@ export async function checkExpectation(
           row !== undefined && row.textOrNull('comment') === e.text,
           `comment on ${name(e.schema, e.table)}`,
           [row === undefined ? 'missing' : 'text'],
+          row === undefined ? new Map() : one('text', row.textOrNull('comment')),
         )
       }
       const row = await first(tx, COLUMN, [name(e.schema, e.table), e.column ?? '', 'text'])
@@ -445,6 +551,7 @@ export async function checkExpectation(
         row !== undefined && row.textOrNull('comment') === e.text,
         `comment on ${name(e.schema, e.table)}.${quoteIdent(e.column ?? '')}`,
         [row === undefined ? 'missing' : 'text'],
+        row === undefined ? new Map() : one('text', row.textOrNull('comment')),
       )
     }
   }
@@ -454,10 +561,11 @@ export async function checkExpectation(
 export async function checkExpectations(
   tx: CatalogReader,
   expectations: readonly { readonly statement: number; readonly expectation: Expectation }[],
+  options: CheckOptions = {},
 ): Promise<ExpectationResult[]> {
   const out: ExpectationResult[] = []
   for (const { statement, expectation } of expectations) {
-    out.push(await checkExpectation(tx, statement, expectation))
+    out.push(await checkExpectation(tx, statement, expectation, options))
   }
   return out
 }

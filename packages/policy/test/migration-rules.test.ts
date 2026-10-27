@@ -27,6 +27,8 @@ const CLEAN: MigrationFacts = {
   lineage: 'match',
   dependenciesVerified: true,
   legacyProject: false,
+  procedural: false,
+  proceduralReasons: [],
 }
 
 function decide(
@@ -320,6 +322,134 @@ describe('execution-role exceptions and parity (ADR-0034)', () => {
     ).toBe('pass')
     expect(
       (await decide('nonprod', {})).rules.find((r) => r.id === 'migration.execution-role-parity')
+        ?.result,
+    ).toBe('not_applicable')
+  })
+})
+
+describe('procedural SQL (OD-55 (c) and (d))', () => {
+  const person = { kind: 'human' as const, identityId: 'idn_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z' }
+  const agents: PolicyRequest['principal'][] = [
+    { ...person, client: 'mcp' },
+    { ...person, client: 'rest' },
+    { kind: 'service', identityId: null, client: 'ci' },
+  ]
+  const rule = (d: Awaited<ReturnType<typeof decide>>, id: string) =>
+    d.rules.find((r) => r.id === id)
+
+  it('requires a person for an agent plan with procedural SQL on every tier, nonprod included', async () => {
+    for (const tier of ['nonprod', 'prod'] as const) {
+      for (const principal of agents) {
+        for (const kind of ['migration.apply', 'migration.rollback', 'migration.resume']) {
+          const d = await decide(
+            tier,
+            {
+              procedural: true,
+              proceduralReasons: ['do_block', 'dynamic_sql'],
+              ...(kind === 'migration.resume' ? { nontransactional: false } : {}),
+            },
+            principal,
+            undefined,
+            kind,
+          )
+          const label = `${tier} ${principal.client} ${kind}`
+          expect(d.decision, label).toBe('require')
+          expect(d.requirements, label).toContainEqual({
+            kind: 'approval',
+            count: 1,
+            permission: 'plans.approve',
+          })
+          expect(rule(d, 'migration.agent-procedural'), label).toMatchObject({
+            result: 'fail',
+            severity: 'require',
+            overridableByBreakGlass: false,
+            facts: { reasons: ['do_block', 'dynamic_sql'] },
+          })
+        }
+      }
+    }
+  })
+
+  it('lets an agent plan without procedural SQL through on nonprod, and a person plan with it', async () => {
+    const agent = await decide('nonprod', { procedural: false }, agents[0])
+    expect(agent.decision).toBe('allow')
+    expect(rule(agent, 'migration.agent-procedural')?.result).toBe('pass')
+    for (const client of ['web', 'cli'] as const) {
+      const d = await decide('nonprod', { procedural: true }, { ...person, client })
+      expect(d.decision, client).toBe('allow')
+      expect(rule(d, 'migration.agent-procedural')?.result, client).toBe('not_applicable')
+    }
+  })
+
+  it('counts a plan without the classification, or a malformed one, as procedural (fail closed)', async () => {
+    for (const procedural of [undefined, 'yes', null]) {
+      const d = await engine.evaluate({
+        request: {
+          kind: 'migration.apply',
+          principal: agents[0] as PolicyRequest['principal'],
+          subject: { tier: 'nonprod' },
+          content: {
+            facts: {
+              ...CLEAN,
+              evidence: 'not_required',
+              lineage: 'not_required',
+              procedural: procedural as never,
+            } as unknown as JsonObject,
+          },
+        },
+        settings: [],
+      })
+      expect(d.decision, String(procedural)).toBe('require')
+      expect(rule(d, 'migration.agent-procedural')).toMatchObject({
+        result: 'fail',
+        facts: { reasons: ['unclassified'] },
+      })
+    }
+    // A legacy replay carries no classification: an agent's replay always needs a person.
+    const replay = await engine.evaluate({
+      request: {
+        kind: 'migration.import.replay',
+        principal: agents[0] as PolicyRequest['principal'],
+        subject: { tier: 'nonprod' },
+        content: { executionRoleCheck: { role: 'app_owner', problem: null } },
+      },
+      settings: [],
+    })
+    expect(rule(replay, 'migration.agent-procedural')?.result).toBe('fail')
+    expect(replay.decision).toBe('require')
+  })
+
+  it('denies procedural SQL in a non-transactional bundle for every principal, never overridable', async () => {
+    for (const principal of [{ ...person, client: 'cli' as const }, agents[0]]) {
+      for (const kind of ['migration.apply', 'migration.resume']) {
+        const d = await decide(
+          'nonprod',
+          { nontransactional: true, procedural: true, proceduralReasons: ['do_block'] },
+          principal,
+          {
+            grantId: 'brk_01M4A000000000000000000001',
+            rules: ['migration.procedural-nontransactional'],
+          },
+          kind,
+        )
+        expect(d.decision, kind).toBe('deny')
+        expect(rule(d, 'migration.procedural-nontransactional')).toMatchObject({
+          result: 'fail',
+          severity: 'deny',
+        })
+        expect(d.overriddenRules).toEqual([])
+      }
+    }
+    // Without the classification it counts as procedural; without procedural SQL it passes.
+    expect(
+      (await decide('nonprod', { nontransactional: true, procedural: undefined as never }))
+        .decision,
+    ).toBe('deny')
+    const plain = await decide('nonprod', { nontransactional: true, procedural: false })
+    expect(plain.decision).toBe('allow')
+    expect(rule(plain, 'migration.procedural-nontransactional')?.result).toBe('pass')
+    expect(
+      rule(await decide('nonprod', { procedural: true }), 'migration.procedural-nontransactional')
         ?.result,
     ).toBe('not_applicable')
   })

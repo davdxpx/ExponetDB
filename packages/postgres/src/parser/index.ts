@@ -93,6 +93,12 @@ export {
   walk,
 } from './parse.ts'
 export {
+  mergeProceduralReasons,
+  PROCEDURAL_REASONS,
+  type ProceduralReason,
+  proceduralReasons,
+} from './procedural.ts'
+export {
   DEFAULT_MAX_LENGTH,
   MCP_MAX_LENGTH,
   type RedactedStatement,

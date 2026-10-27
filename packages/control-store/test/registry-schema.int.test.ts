@@ -789,6 +789,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M5X840BK55NGFGQ5G3Z1C5NH',
         // OD-54 (a), Wave 9 Part B order (2026-10-26): an external cluster adopted by the node agent.
         '01M5X840BMQPER7PK6WH64NR2J',
+        // OD-56 (a), Wave 9 Part B order (2026-10-26): keyed digests of excused values.
+        '01M5X840BP8JXGEQGS0PHPTB58',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

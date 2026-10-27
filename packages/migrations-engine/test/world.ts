@@ -135,6 +135,7 @@ export async function migrationWorld(label: string, server: TestServer): Promise
       }),
       ...migrationKinds({
         store: h.worker,
+        keyring: h.keyring,
         clock: systemClock,
         connector,
         installationId: h.db.installationId,

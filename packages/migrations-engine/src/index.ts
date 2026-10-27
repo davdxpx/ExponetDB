@@ -16,7 +16,12 @@ export {
   evidenceTargetOf,
   readEvidenceTarget,
 } from './evidence.ts'
-export { runTransactional, type StepResult, statementsOf } from './executor.ts'
+export {
+  DEFERRED_TRIGGER_ROUNDS,
+  runTransactional,
+  type StepResult,
+  statementsOf,
+} from './executor.ts'
 export { aggregate, MigrationApplyKind, stateChanges } from './kind.ts'
 export { migrationKinds } from './kinds.ts'
 export {

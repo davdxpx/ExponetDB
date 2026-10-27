@@ -26,6 +26,7 @@ import {
   type CompatibilityClass,
   loadParser,
   mostSevere,
+  proceduralReasons,
   worstSeverity,
 } from '@exponetdb/postgres/parser'
 import {
@@ -253,6 +254,9 @@ export async function planMigrationRollback(
     legacyProject: state.meta.baselineId !== null,
     executionRoleExceptions: roleCheck.binding === null ? 0 : 1,
     executionRoleParity: 'not_required',
+    // OD-55 (c): down.sql is SQL the plan runs like up.sql.
+    procedural: proceduralReasons(analysis.statements).length > 0,
+    proceduralReasons: proceduralReasons(analysis.statements),
   }
   const content: RollbackContent = {
     projectId: target.projectId,

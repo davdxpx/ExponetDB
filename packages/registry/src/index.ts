@@ -1,3 +1,5 @@
+/** The keyring type the connector and the excused-value key take (from the secrets package). */
+export type { Keyring } from '@exponetdb/secrets'
 export {
   applyRegistryPlan,
   type RegistryAcceptContext,
@@ -52,6 +54,11 @@ export {
   RegistryError,
   registrationRefused,
 } from './errors.ts'
+export {
+  EXCUSED_VALUE_KEY_PURPOSE,
+  type ExcusedValueKey,
+  excusedValueKey,
+} from './excused-value-key.ts'
 export {
   activeExceptions,
   ExecutionRoleBindingSetKind,
