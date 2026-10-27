@@ -48,6 +48,19 @@ export interface BackupPlanContext {
 
 const nowOf = (c: BackupPlanContext) => c.policy.clock.nowMs()
 
+/**
+ * The tier a backup plan records and the activation gate reads (review finding F-2): production
+ * when the cluster's targets or its declaration say so, nonprod when they say nonprod, unknown
+ * (treated as production) otherwise.
+ */
+function clusterTier(cluster: {
+  readonly derivedTier: 'prod' | 'nonprod' | null
+  readonly declaredTier: 'prod' | 'nonprod' | null
+}): 'prod' | 'nonprod' | undefined {
+  if (cluster.derivedTier === 'prod' || cluster.declaredTier === 'prod') return 'prod'
+  return cluster.derivedTier ?? cluster.declaredTier ?? undefined
+}
+
 /** A pgBackRest backup label as the node takes it (`NodeCapBackupVerifyArgs`, `NodeRestoreTarget`). */
 export const PGBACKREST_LABEL = /^[0-9]{8}-[0-9]{6}F(_[0-9]{8}-[0-9]{6}[DI])?$/
 /** A restic snapshot id as the node takes it. */
@@ -147,7 +160,7 @@ export async function planRepositoryAdopt(
   )
   if (rows.length > 0) throw conflict('repository_location_taken')
   const repositoryId = newId('bkr', nowOf(context))
-  const tier = cluster.derivedTier ?? undefined
+  const tier = clusterTier(cluster)
   return storeRegistryPlan(tx, context, actor, {
     kind: 'backup.repository.adopt',
     actionClass: 'standard',
@@ -201,7 +214,7 @@ export async function planRepositoryOwnership(
   }
   if (r.ownership !== 'adopted_observed') throw conflict('repository_not_adopted_observed')
   const cluster = await liveCluster(tx, r.clusterId)
-  const tier = cluster.derivedTier ?? undefined
+  const tier = clusterTier(cluster)
   return storeRegistryPlan(tx, context, actor, {
     kind: 'backup.repository.ownership',
     actionClass: 'high',
@@ -236,7 +249,7 @@ export async function planRepositoryRetire(
   if ((row?.int('runs') ?? 1) > 0 || (row?.int('restores') ?? 1) > 0)
     throw conflict('repository_in_use')
   const cluster = await getCluster(tx, r.clusterId)
-  const tier = cluster?.derivedTier ?? undefined
+  const tier = cluster === undefined ? undefined : clusterTier(cluster)
   return storeRegistryPlan(tx, context, actor, {
     kind: 'backup.repository.retire',
     actionClass: 'high',
@@ -277,7 +290,7 @@ export async function planPolicySet(
   }
   const current = await activePolicy(tx, clusterId)
   const revision = (current?.revision ?? 0) + 1
-  const tier = cluster.derivedTier ?? undefined
+  const tier = clusterTier(cluster)
   return storeRegistryPlan(tx, context, actor, {
     kind: 'backup.policy.set',
     actionClass: 'high',
@@ -313,9 +326,12 @@ export async function planBackupRun(
   const r = await getRepository(tx, input.repositoryId)
   if (r === undefined || r.clusterId !== clusterId) throw new BackupError('NOT_FOUND')
   if (r.state === 'retired') throw conflict('repository_retired')
+  // Each run writes new encrypted material: never with an engine below the advisory floor
+  // (pgBackRest 2.59.3, review finding A-10).
+  if (r.engineAdvisory === 'below_floor') throw conflict('repository_engine_below_floor')
   if ((input.kind === 'logical') !== (r.engine !== 'pgbackrest'))
     throw new BackupError('VALIDATION_FAILED')
-  const tier = cluster.derivedTier ?? undefined
+  const tier = clusterTier(cluster)
   requireBackupExecution(context.execution, tier)
   const { mapping, node } = await nodeFor(
     tx,
@@ -417,6 +433,28 @@ async function selectable(tx: Tx, repositoryId: string): Promise<SelectableBacku
   }))
 }
 
+/** The target's current placement on the cluster, or a refusal when it is not placed there. */
+async function currentPlacement(
+  tx: Tx,
+  targetId: string,
+  clusterId: string,
+): Promise<{ readonly generation: number; readonly placementId: string }> {
+  const { rows } = await tx.query(
+    'backups.plans.placement',
+    `SELECT t.generation, p.placement_id, d.cluster_id
+       FROM registry.targets t
+       JOIN registry.placements p ON p.target_id = t.target_id AND p.valid_to IS NULL
+       JOIN registry.databases d ON d.database_id = p.database_id
+      WHERE t.target_id = $1`,
+    [targetId],
+  )
+  const row = rows[0]
+  if (row === undefined || row.text('cluster_id') !== clusterId) {
+    throw new BackupError('REGISTRY_CONFLICT', { reason: 'target_state' })
+  }
+  return { generation: row.int('generation'), placementId: row.text('placement_id') }
+}
+
 interface RestoreDraft {
   readonly purpose: 'drill' | 'recovery'
   readonly clusterId: string
@@ -463,7 +501,8 @@ async function planRestoreLike(
   if (s.systemIdentifier !== null && s.systemIdentifier !== mapping.systemIdentifier) {
     throw new BackupError('RESTORE_TARGET_MISMATCH')
   }
-  const tier = cluster.derivedTier ?? undefined
+  const tier = clusterTier(cluster)
+  const placement = d.targetId === null ? null : await currentPlacement(tx, d.targetId, d.clusterId)
   const restoreId = newId('rst', nowOf(context))
   const runId = newId('run', nowOf(context))
   const content: JsonObject = {
@@ -516,6 +555,10 @@ async function planRestoreLike(
       nodeId: node.nodeId,
       localName: mapping.localName,
       systemIdentifier: mapping.systemIdentifier,
+      // A recovery is planned for the target as placed now (review finding C-9).
+      ...(placement === null
+        ? {}
+        : { targetGeneration: placement.generation, placementId: placement.placementId }),
     },
     analysis: {
       effect:
@@ -604,7 +647,7 @@ export async function planRestoreDiscard(
     throw conflict('restore_not_discardable')
   }
   const cluster = await getCluster(tx, clusterId)
-  const tier = cluster?.derivedTier ?? undefined
+  const tier = cluster === undefined ? undefined : clusterTier(cluster)
   const purpose = row.text('purpose') === 'drill' ? 'drill' : 'recovery'
   // Discarding a recovered cluster is a recovery-level action: its activation and a higher class.
   requireRestoreExecution(context.execution, purpose)
@@ -650,7 +693,7 @@ export async function planCatalogRefresh(
     nowOf(context),
     RUN_CAPABILITIES['backup.catalog.refresh'] ?? [],
   )
-  const tier = cluster.derivedTier ?? undefined
+  const tier = clusterTier(cluster)
   return storeRegistryPlan(tx, context, actor, {
     kind: 'backup.catalog.refresh',
     actionClass: 'low',
@@ -690,7 +733,7 @@ export async function planBackupVerify(
   if (row.text('divergence') !== 'none' || row.text('state') !== 'succeeded') {
     throw conflict('backup_not_found')
   }
-  const tier = cluster.derivedTier ?? undefined
+  const tier = clusterTier(cluster)
   requireBackupExecution(context.execution, tier)
   const r = await getRepository(tx, row.text('repository_id'))
   if (r === undefined) throw new BackupError('NOT_FOUND')

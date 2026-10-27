@@ -17,6 +17,9 @@ import { type JsonObject, newId } from '@exponetdb/kernel'
 /** pgBackRest releases before this one may hold weak encryption subkeys (2026-10-04 advisory, ADR-0036 §5). */
 export const PGBACKREST_FLOOR = '2.59.3'
 
+/** How far an observed time may lie in the future (clock skew) before it is not believed. */
+const FUTURE_TOLERANCE_MS = 5 * 60_000
+
 export interface ListedBackup {
   readonly label: string
   readonly kind: 'full' | 'differential' | 'incremental' | 'logical'
@@ -345,17 +348,19 @@ export async function reconcileCatalog(tx: Tx, input: ReconcileInput): Promise<R
     const timeline = segmentTimeline(a.min) ?? segmentTimeline(a.max)
     if (timeline === null || !/^[0-9]{1,2}-[0-9]{1,5}$/.test(a.id)) continue
     const max = a.max !== null && SEGMENT.test(a.max) ? a.max : null
-    // The time of the newest segment is known only when the archiver's last
-    // archived segment is that one (or a later one of the same timeline).
+    // The time of the newest segment is known only when the archiver's last archived segment is
+    // exactly that one: a later one says nothing about when this repository got its newest
+    // segment (a lagging copy, or archive-push moved to another repository: review findings
+    // C-3/A-3). A time later than now (plus the tolerated skew) is not believed.
     const archived = input.archive
+    const archivedAtMs =
+      archived?.lastArchivedAt == null ? Number.NaN : Date.parse(archived.lastArchivedAt)
     const maxArchivedAt =
-      archived?.lastArchivedAt !== null &&
-      archived?.lastArchivedWal !== null &&
       archived !== null &&
       max !== null &&
-      SEGMENT.test(archived.lastArchivedWal ?? '') &&
-      (archived.lastArchivedWal ?? '') >= max &&
-      (archived.lastArchivedWal ?? '').slice(0, 8) === max.slice(0, 8)
+      archived.lastArchivedWal === max &&
+      Number.isFinite(archivedAtMs) &&
+      archivedAtMs <= nowMs + FUTURE_TOLERANCE_MS
         ? archived.lastArchivedAt
         : null
     await tx.query(

@@ -130,7 +130,9 @@ export function selectSource(
         : { ok: true, source: resolved(b, coverageFor(b, coverage), null) }
     }
     case 'backup': {
-      const b = backups.find((x) => x.view.id === request.backupId)
+      // Only a base that can be restored: succeeded, still listed by the engine, physical
+      // (review finding C-7). An entry missing in the engine is not offered by name either.
+      const b = bases.find((x) => x.view.id === request.backupId)
       if (b === undefined) return { ok: false, reason: 'backup_not_found' }
       return { ok: true, source: resolved(b, coverageFor(b, coverage), null) }
     }

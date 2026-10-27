@@ -72,10 +72,10 @@ const base = (over: Partial<ProtectionInput> = {}): ProtectionInput => ({
 })
 
 describe('backup protection (architecture.md §4, ADR-0038 §5)', () => {
-  it('is protected only when everything is measured, proven and within the objectives', () => {
+  it('measures the RPO from the archive but never calls the WAL range proven (review finding A-4)', () => {
     const p = computeProtection(base())
-    expect(p.state).toBe('protected')
-    expect(p.reasons).toEqual([])
+    expect(p.state).toBe('unproven')
+    expect(p.reasons).toEqual(['wal_continuity_unproven'])
     expect(p.rpo.basis).toBe('wal_archive')
     expect(p.rpo.achievableSeconds).toBe(120)
     expect(p.rto.measuredSeconds).toBe(1800)
@@ -83,6 +83,33 @@ describe('backup protection (architecture.md §4, ADR-0038 §5)', () => {
       from: new Date(NOW - DAY).toISOString(),
       to: new Date(NOW - 2 * MIN).toISOString(),
     })
+  })
+
+  it('is protected only when everything is measured, proven and within the objectives', () => {
+    // A verified backup within the objective, no WAL claim, a drill in cadence.
+    const p = computeProtection(
+      base({
+        wal: [],
+        backups: [full({ finishedAtMs: NOW - 10 * MIN })],
+        policy: { rpoObjectiveSeconds: 3600, rtoObjectiveSeconds: 4 * 3600, drillCadenceDays: 30 },
+      }),
+    )
+    expect(p.state).toBe('protected')
+    expect(p.reasons).toEqual([])
+    expect(p.rpo.basis).toBe('verified_backup')
+  })
+
+  it('treats a truncated listing as stale, never as fresh (review finding A-5)', () => {
+    const p = computeProtection(
+      base({ repositories: [repo({ reconciliationOutcome: 'partial' })] }),
+    )
+    expect(p.state).not.toBe('protected')
+    expect(p.reasons).toContain('catalog_stale')
+  })
+
+  it('does not believe an archive time in the future (review finding A-3)', () => {
+    const p = computeProtection(base({ wal: [wal({ maxArchivedAtMs: NOW + 60 * MIN })] }))
+    expect(p.rpo.basis).not.toBe('wal_archive')
   })
 
   it('is unknown, never empty or green, without a repository', () => {

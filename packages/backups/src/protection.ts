@@ -12,6 +12,8 @@ import type { BackupProtection } from '@exponetdb/contracts'
 /** A catalog older than this is stale for display (the mirror is refreshed every 10 minutes). */
 export const CATALOG_STALE_AFTER_MS = 30 * 60_000
 /** A WAL archive observation older than this does not prove the archive works now. */
+/** How far an observed time may lie in the future (clock skew) before it is not believed. */
+export const FUTURE_TOLERANCE_MS = 5 * 60_000
 export const ARCHIVE_STALE_AFTER_MS = 10 * 60_000
 
 export interface RepositoryFact {
@@ -89,11 +91,15 @@ type Reason = BackupProtection['reasons'][number]
 const iso = (ms: number) => new Date(ms).toISOString()
 const seconds = (ms: number) => Math.max(0, Math.floor(ms / 1000))
 
-/** A repository whose catalog may be relied on now. */
+/**
+ * A repository whose catalog may be relied on now: reconciled completely and recently. A
+ * truncated listing (`partial`) cannot mark what the engine no longer lists, so it is stale
+ * (review finding A-5).
+ */
 function fresh(r: RepositoryFact, nowMs: number): boolean {
   return (
     r.reconciledAtMs !== null &&
-    r.reconciliationOutcome !== 'failed' &&
+    r.reconciliationOutcome === 'ok' &&
     nowMs - r.reconciledAtMs <= CATALOG_STALE_AFTER_MS
   )
 }
@@ -189,12 +195,17 @@ export function computeProtection(input: ProtectionInput): BackupProtection {
   const walNewest = wal.reduce<WalFact | undefined>(
     (best, w) =>
       w.maxArchivedAtMs !== null &&
+      // A time in the future is not a fresh archive (it would read as an RPO of zero).
+      w.maxArchivedAtMs <= nowMs + FUTURE_TOLERANCE_MS &&
       (best === undefined || w.maxArchivedAtMs > (best.maxArchivedAtMs ?? 0))
         ? w
         : best,
     undefined,
   )
   if (archiveOk && walNewest?.maxArchivedAtMs != null && pitr !== undefined) {
+    // The engine lists the oldest and newest segment of an archive, not every segment between:
+    // a hole inside the range is found only by a verify run or a restore (review finding A-4).
+    reasons.add('wal_continuity_unproven')
     const age = nowMs - walNewest.maxArchivedAtMs
     const uncertainty = Math.max(skew ?? 0, seconds(nowMs - walNewest.observedAtMs))
     rpo = {
@@ -286,7 +297,7 @@ export function computeProtection(input: ProtectionInput): BackupProtection {
     has('catalog_stale')
   ) {
     state = 'at_risk'
-  } else if (drillState !== 'passed_in_cadence') {
+  } else if (drillState !== 'passed_in_cadence' || has('wal_continuity_unproven')) {
     state = 'unproven'
   } else {
     state = 'protected'

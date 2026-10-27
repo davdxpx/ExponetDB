@@ -56,6 +56,8 @@ export interface RepositoryRecord {
   readonly offlineCopyConfirmedAt: Date | null
   readonly pinnedEngineVersion: string | null
   readonly observedEngineVersion: string | null
+  /** The cipher the engine reported for the stanza at the last reconciliation, when it said. */
+  readonly observedCipher: 'aes-256-cbc' | 'none' | null
   readonly engineAdvisory: RepositoryFact['engineAdvisory']
   readonly state: RepositoryFact['state']
   readonly revision: number
@@ -69,7 +71,12 @@ export interface RepositoryRecord {
 const REPOSITORY_COLUMNS = `repository_id, cluster_id, layer, engine, provider, endpoint_host, region, bucket, prefix,
   stanza, repo_index, priority, purpose, ownership, lock_mode, lock_capability, lock_retention_days, cipher,
   offline_copy_confirmed_at, pinned_engine_version, observed_engine_version, engine_advisory, state, revision,
-  reconciled_at, reconciliation_outcome, reconciliation_error, created_at, retired_at`
+  reconciled_at, reconciliation_outcome, reconciliation_error, created_at, retired_at,
+  observed -> 'stanza' ->> 'cipher' AS observed_cipher`
+
+function observedCipherOf(value: string | null): RepositoryRecord['observedCipher'] {
+  return value === 'aes-256-cbc' || value === 'none' ? value : null
+}
 
 function repositoryOf(row: Row): RepositoryRecord {
   return {
@@ -94,6 +101,7 @@ function repositoryOf(row: Row): RepositoryRecord {
     offlineCopyConfirmedAt: row.dateOrNull('offline_copy_confirmed_at'),
     pinnedEngineVersion: row.textOrNull('pinned_engine_version'),
     observedEngineVersion: row.textOrNull('observed_engine_version'),
+    observedCipher: observedCipherOf(row.textOrNull('observed_cipher')),
     engineAdvisory: row.text('engine_advisory') as RepositoryRecord['engineAdvisory'],
     state: row.text('state') as RepositoryRecord['state'],
     revision: row.int('revision'),
@@ -637,7 +645,8 @@ export async function protectionFacts(
       state: r.state,
       ownership: r.ownership,
       lockCapability: r.lockCapability,
-      cipher: r.cipher,
+      // What the engine said wins over what a person declared at adoption (review finding A-8).
+      cipher: r.observedCipher ?? r.cipher,
       offlineCopyConfirmed: r.offlineCopyConfirmedAt !== null,
       engineAdvisory: r.engineAdvisory,
       reconciledAtMs: r.reconciledAt?.getTime() ?? null,

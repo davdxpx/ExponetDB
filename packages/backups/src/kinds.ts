@@ -34,7 +34,7 @@ import {
 import { BackupError } from './errors.ts'
 import { PGBACKREST_LABEL, RUN_CAPABILITIES } from './plans.ts'
 import { type ListResult, latestArchive, reconcileCatalog } from './reconcile.ts'
-import { getRepository } from './records.ts'
+import { getRepository, segmentLsn } from './records.ts'
 
 /**
  * Operation kinds of the backup domain ([operations-engine.md §2](../../../exponetdb-docs/02-control-plane/operations-engine.md#2-operation-kinds)).
@@ -629,38 +629,51 @@ abstract class RunKind implements OperationKind {
     let pause = this.d.statusPollMs ?? 30_000
     for (;;) {
       if (ctx.signal.aborted) return 'aborted'
-      const end = await this.job(ctx, 'run.status@1', { runId, startJobId, startArgsHash })
-      if (end.end === 'succeeded') {
-        const status = end.result
-        const state = String(status['state'])
-        await this.d.store.query(
-          'backups.kind.run.status',
-          `UPDATE backups.runs
-              SET state = CASE WHEN $2 IN ('succeeded', 'failed', 'canceled', 'lost') THEN $2
-                               WHEN $2 = 'not_found' THEN 'lost' ELSE 'running' END,
-                  finished_at = CASE WHEN $2 IN ('succeeded', 'failed', 'canceled', 'lost', 'not_found')
-                                     THEN coalesce($3::timestamptz, clock_timestamp()) END,
-                  last_status_at = clock_timestamp(), exit_code = $4, progress = $5, outcome = $6
-            WHERE run_id = $1 AND state IN ('starting', 'running', 'unknown')`,
-          [
-            runId,
-            state,
-            typeof status['finishedAt'] === 'string' ? status['finishedAt'] : null,
-            typeof status['exitCode'] === 'number' ? status['exitCode'] : null,
-            status['progress'] === null || status['progress'] === undefined
-              ? null
-              : JSON.stringify(status['progress']),
-            status['outcome'] === null || status['outcome'] === undefined
-              ? null
-              : JSON.stringify(status['outcome']),
-          ],
-        )
-        if (TERMINAL.has(state)) return status
-      }
+      const status = await this.statusOnce(ctx, runId, startJobId, startArgsHash)
+      if (status !== undefined && TERMINAL.has(String(status['state']))) return status
       if (this.d.clock.nowMs() - startedAt > limit) return 'gone'
       await sleep(pause, ctx.signal)
       pause = Math.min(pause * 2, 5 * 60_000)
     }
+  }
+
+  /**
+   * One `run.status@1` read, recorded in the run row (node-signed): the run's state, its exit
+   * code, progress and outcome. Undefined when the node could not be asked.
+   */
+  protected async statusOnce(
+    ctx: ExecutionContext,
+    runId: string,
+    startJobId: string,
+    startArgsHash: string,
+  ): Promise<JsonObject | undefined> {
+    const end = await this.job(ctx, 'run.status@1', { runId, startJobId, startArgsHash })
+    if (end.end !== 'succeeded') return undefined
+    const status = end.result
+    const state = String(status['state'])
+    await this.d.store.query(
+      'backups.kind.run.status',
+      `UPDATE backups.runs
+          SET state = CASE WHEN $2 IN ('succeeded', 'failed', 'canceled', 'lost') THEN $2
+                           WHEN $2 = 'not_found' THEN 'lost' ELSE 'running' END,
+              finished_at = CASE WHEN $2 IN ('succeeded', 'failed', 'canceled', 'lost', 'not_found')
+                                 THEN coalesce($3::timestamptz, clock_timestamp()) END,
+              last_status_at = clock_timestamp(), exit_code = $4, progress = $5, outcome = $6
+        WHERE run_id = $1 AND state IN ('starting', 'running', 'unknown')`,
+      [
+        runId,
+        state,
+        typeof status['finishedAt'] === 'string' ? status['finishedAt'] : null,
+        typeof status['exitCode'] === 'number' ? status['exitCode'] : null,
+        status['progress'] === null || status['progress'] === undefined
+          ? null
+          : JSON.stringify(status['progress']),
+        status['outcome'] === null || status['outcome'] === undefined
+          ? null
+          : JSON.stringify(status['outcome']),
+      ],
+    )
+    return status
   }
 
   abstract verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'>
@@ -672,17 +685,66 @@ abstract class RunKind implements OperationKind {
    */
   async reconcile(ctx: ExecutionContext): Promise<'applied' | 'not_applied' | 'unknown'> {
     const { capability } = this.start()
+    const runId = Body.content(ctx.plan).text('runId')
     const { rows } = await this.d.store.query(
       'backups.kind.run.own_job',
-      `SELECT job_id FROM nodes.jobs WHERE operation_id = $1 AND capability = $2 ORDER BY created_at DESC LIMIT 1`,
+      `SELECT job_id, args_hash FROM nodes.jobs WHERE operation_id = $1 AND capability = $2
+        ORDER BY created_at DESC LIMIT 1`,
       [ctx.operationId, capability],
     )
-    const jobId = rows[0]?.text('job_id')
-    if (jobId === undefined) return 'not_applied'
+    const job = rows[0]
+    if (job === undefined) {
+      // No start job was ever created: the run never started, and its row must not stay open
+      // (one open run blocks every later run of the cluster: review finding C-4).
+      await this.settleRow(runId, 'failed', 'NOT_STARTED')
+      await this.failed(Body.content(ctx.plan), 'not_applied')
+      return 'not_applied'
+    }
+    const jobId = job.text('job_id')
+    const argsHash = job.text('args_hash')
+    // Bind the row to its start job, so status reads find the run on the node.
+    await this.d.store.query(
+      'backups.kind.run.bind_start',
+      `UPDATE backups.runs SET start_job_id = coalesce(start_job_id, $2), start_args_hash = coalesce(start_args_hash, $3)
+        WHERE run_id = $1 AND state IN ('starting', 'unknown')`,
+      [runId, jobId, argsHash],
+    )
     const end = await settleJob(this.d, jobId, capability, ctx.signal)
     if (ctx.signal.aborted) return 'unknown'
-    if (end.end === 'succeeded') return 'applied'
-    return outcomeOf(end, capability) === 'unknown' ? 'unknown' : 'not_applied'
+    if (end.end === 'succeeded') {
+      await this.d.store.query(
+        'backups.kind.run.reconciled_started',
+        `UPDATE backups.runs SET state = 'running',
+                started_at = coalesce(started_at, $2::timestamptz, clock_timestamp()), last_status_at = clock_timestamp()
+          WHERE run_id = $1 AND state IN ('starting', 'unknown')`,
+        [runId, typeof end.result['startedAt'] === 'string' ? end.result['startedAt'] : null],
+      )
+      return 'applied'
+    }
+    const outcome = outcomeOf(end, capability)
+    if (outcome !== 'unknown') {
+      await this.settleRow(runId, 'failed', 'NODE_CAPABILITY_FAILED')
+      await this.failed(Body.content(ctx.plan), 'not_applied')
+      return 'not_applied'
+    }
+    // The start's own statement is lost: the node's run record decides (never a second start).
+    const status = await this.statusOnce(ctx, runId, jobId, argsHash)
+    if (status === undefined) return 'unknown'
+    if (status['state'] === 'not_found') {
+      await this.failed(Body.content(ctx.plan), 'not_applied')
+      return 'not_applied'
+    }
+    return 'applied'
+  }
+
+  /** Ends a run row that never started or whose start was refused. */
+  protected async settleRow(runId: string, state: 'failed', errorCode: string): Promise<void> {
+    await this.d.store.query(
+      'backups.kind.run.settle',
+      `UPDATE backups.runs SET state = $2, finished_at = clock_timestamp(), error_code = $3
+        WHERE run_id = $1 AND state IN ('starting', 'unknown')`,
+      [runId, state, errorCode],
+    )
   }
 }
 
@@ -1064,9 +1126,58 @@ abstract class RestoreRunKind extends RunKind {
     const b = rows[0]
     if (b === undefined || b.text('divergence') !== 'none')
       changed.push({ binding: 'backup', actual: 'missing' })
-    else if (
-      b.text('verification_state') !== e.text('verification') ||
-      (b.dateOrNull('verified_at')?.toISOString() ?? null) !== e.textOrNull('verificationAt')
+    // The WAL the plan counted on must still be listed (review finding C-6): the coverage of the
+    // source's timeline in this repository reaches the bound end, and a point in time is still
+    // inside the archived window.
+    const source = obj(c.raw('source'))
+    const walTo = typeof source['walTo'] === 'string' ? source['walTo'] : null
+    if (walTo !== null) {
+      const { rows: cov } = await this.d.store.query(
+        'backups.kind.restore.coverage',
+        `SELECT max_segment, max_archived_at FROM backups.wal_coverage
+          WHERE repository_id = $1 AND timeline = $2 ORDER BY max_segment DESC NULLS LAST LIMIT 1`,
+        [c.text('repositoryId'), typeof source['timeline'] === 'number' ? source['timeline'] : 1],
+      )
+      const max = cov[0]?.textOrNull('max_segment') ?? null
+      if (max === null || lsnValue(segmentLsn(max)) < lsnValue(walTo)) {
+        changed.push({
+          binding: 'walTo',
+          expected: walTo,
+          actual: max === null ? null : segmentLsn(max),
+        })
+      }
+      const pit =
+        typeof source['pointInTime'] === 'string' ? Date.parse(source['pointInTime']) : null
+      const archivedAt = cov[0]?.dateOrNull('max_archived_at')?.getTime() ?? null
+      if (pit !== null && (archivedAt === null || archivedAt < pit)) {
+        changed.push({ binding: 'pointInTime', actual: 'outside_window' })
+      }
+    }
+    // A recovery is bound to the target's placement and generation at planning (review C-9).
+    const targetId = c.textOrNull('targetId')
+    if (targetId !== null && e.raw('targetGeneration') !== undefined) {
+      const { rows: t } = await this.d.store.query(
+        'backups.kind.restore.placement',
+        `SELECT t.generation, p.placement_id FROM registry.targets t
+           LEFT JOIN registry.placements p ON p.target_id = t.target_id AND p.valid_to IS NULL
+          WHERE t.target_id = $1`,
+        [targetId],
+      )
+      if (
+        t[0]?.int('generation') !== e.int('targetGeneration') ||
+        t[0]?.textOrNull('placement_id') !== e.text('placementId')
+      ) {
+        changed.push({
+          binding: 'targetPlacement',
+          actual: t[0]?.textOrNull('placement_id') ?? null,
+        })
+      }
+    }
+    if (
+      b !== undefined &&
+      b.text('divergence') === 'none' &&
+      (b.text('verification_state') !== e.text('verification') ||
+        (b.dateOrNull('verified_at')?.toISOString() ?? null) !== e.textOrNull('verificationAt'))
     ) {
       changed.push({
         binding: 'verification',
@@ -1239,8 +1350,18 @@ abstract class RestoreRunKind extends RunKind {
     const phases = (Array.isArray(out['phases']) ? out['phases'] : []).filter(isJsonObject)
     const succeeded = status !== 'gone' && status['state'] === 'succeeded'
     const configured = ((c.raw('checks') as JsonValue[] | undefined) ?? []).map(String)
+    // A restore to the end of the archive stops early, silently, at a hole in the WAL: the replay
+    // must reach the end of the WAL the plan counted on (review finding A-4).
+    const source = obj(c.raw('source'))
+    const walTo = typeof source['walTo'] === 'string' ? source['walTo'] : null
+    const reached = typeof out['recoveryReachedLsn'] === 'string' ? out['recoveryReachedLsn'] : null
+    const replayShort =
+      source['pointInTime'] == null &&
+      walTo !== null &&
+      (reached === null || lsnValue(reached) < lsnValue(walTo))
     const allPassed =
       succeeded &&
+      !replayShort &&
       configured.every((name) =>
         nodeChecks.some((k) => k['check'] === name && k['outcome'] === 'passed'),
       )
@@ -1248,8 +1369,11 @@ abstract class RestoreRunKind extends RunKind {
     const checks = [
       ...nodeChecks.map((k) => ({
         check: k['check'],
-        outcome: k['outcome'],
-        detail: k['detail'] ?? null,
+        outcome: replayShort && k['check'] === 'recovery_target_reached' ? 'failed' : k['outcome'],
+        detail:
+          replayShort && k['check'] === 'recovery_target_reached'
+            ? `replay reached ${reached ?? 'unknown'}, the archive the plan counted on ends at ${walTo}`
+            : (k['detail'] ?? null),
       })),
       {
         check: 'fingerprint',
@@ -1351,6 +1475,15 @@ export class RestoreExecuteKind extends RestoreRunKind {
   protected purpose() {
     return 'recovery' as const
   }
+
+  /** The cluster's engine activity and, as the action declares, the target's maintenance (review C-11). */
+  override exclusivity(plan: PlanRecord): readonly string[] {
+    const targetId = Body.content(plan).textOrNull('targetId')
+    return [
+      ...super.exclusivity(plan),
+      ...(targetId === null ? [] : [`target:${targetId}:maintenance`]),
+    ]
+  }
 }
 
 /** `restore.discard`: stops a scratch cluster and removes its directory. */
@@ -1451,3 +1584,10 @@ export function backupRunKinds(deps: BackupRunKindDeps): OperationKind[] {
 }
 
 export { settleJob }
+
+/** An LSN (`X/Y`) as a number for comparison; an invalid one is 0 (it never satisfies a bound). */
+function lsnValue(lsn: string): bigint {
+  const m = /^([0-9A-Fa-f]{1,8})\/([0-9A-Fa-f]{1,8})$/.exec(lsn)
+  if (m === null) return 0n
+  return (BigInt(`0x${m[1]}`) << 32n) + BigInt(`0x${m[2]}`)
+}

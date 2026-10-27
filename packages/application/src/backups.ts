@@ -366,33 +366,13 @@ export class BackupUseCases {
     repositoryId: string,
   ): Promise<RestoreRunbook> {
     await this.#cluster('restore.runbook.get', caller, clusterId)
+    // The script names the repository's location, which only who may manage the registry sees
+    // (review findings F-3/A-11): the same check as the repository list.
+    if (!(await this.#seesLocation(caller, clusterId))) throw new BackupError('PERMISSION_DENIED')
     return this.#h.store.transaction('application.backups.runbook', async (tx) => {
       const r = await getRepository(tx, repositoryId)
       if (r === undefined || r.clusterId !== clusterId) throw new BackupError('NOT_FOUND')
-      const postgresMajor = await majorOf(tx, clusterId)
-      let book: ReturnType<typeof generateRunbook>
-      try {
-        book = generateRunbook({
-          repositoryId: r.repositoryId,
-          revision: r.revision,
-          clusterId,
-          engine: r.engine,
-          provider: r.provider,
-          endpointHost: r.endpointHost,
-          region: r.region,
-          bucket: r.bucket,
-          prefix: r.prefix,
-          stanza: r.stanza,
-          repoIndex: r.repoIndex,
-          cipher: r.cipher,
-          pinnedEngineVersion: r.pinnedEngineVersion,
-          postgresMajor,
-        })
-      } catch (error) {
-        // A recorded value the script cannot carry safely: no script rather than an unsafe one.
-        if (error instanceof RunbookRefused) throw new BackupError('CAPABILITY_UNAVAILABLE')
-        throw error
-      }
+      const book = await runbookOf(tx, r)
       const actor = registryActor(this.#h.planActor(caller))
       await appendAuditEvent(
         tx,
@@ -614,6 +594,18 @@ export class BackupUseCases {
     return this.#h.store.transaction('application.backups.offline_drill', async (tx) => {
       const r = await getRepository(tx, request.repositoryId)
       if (r === undefined || r.clusterId !== clusterId) throw new BackupError('NOT_FOUND')
+      // The attestation names the runbook it ran: the repository's current one (review C-10).
+      if (request.runbookDigest !== (await runbookOf(tx, r)).digest) {
+        throw new BackupError('VALIDATION_FAILED', {
+          errors: [
+            {
+              path: '/runbookDigest',
+              code: 'invalid',
+              message: "The digest is not the one of the repository's current runbook.",
+            },
+          ],
+        })
+      }
       const actor = registryActor(this.#h.planActor(caller))
       const drillId = newId('drl', this.#h.clock.nowMs())
       const outcome = request.outcome === 'passed' ? 'attested' : 'failed'
@@ -674,6 +666,36 @@ export class BackupUseCases {
         finishedAt: request.restoredAt,
       }
     })
+  }
+}
+
+/** The repository's runbook as generated now (deterministic for one record revision). */
+async function runbookOf(
+  q: Queryable,
+  r: NonNullable<Awaited<ReturnType<typeof getRepository>>>,
+): Promise<ReturnType<typeof generateRunbook>> {
+  const postgresMajor = await majorOf(q, r.clusterId)
+  try {
+    return generateRunbook({
+      repositoryId: r.repositoryId,
+      revision: r.revision,
+      clusterId: r.clusterId,
+      engine: r.engine,
+      provider: r.provider,
+      endpointHost: r.endpointHost,
+      region: r.region,
+      bucket: r.bucket,
+      prefix: r.prefix,
+      stanza: r.stanza,
+      repoIndex: r.repoIndex,
+      cipher: r.cipher,
+      pinnedEngineVersion: r.pinnedEngineVersion,
+      postgresMajor,
+    })
+  } catch (error) {
+    // A recorded value the script cannot carry safely: no script rather than an unsafe one.
+    if (error instanceof RunbookRefused) throw new BackupError('CAPABILITY_UNAVAILABLE')
+    throw error
   }
 }
 

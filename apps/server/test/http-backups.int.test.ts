@@ -9,6 +9,7 @@ import {
   KindRegistry,
   type OperationKind,
   processNextOperation,
+  readPlan,
 } from '@exponetdb/operations'
 import {
   generateKeyringText,
@@ -508,6 +509,52 @@ describe('backups through REST, the worker and a simulated node', () => {
     await node.stop()
   })
 
+  it('a lost worker never leaves a run row open: no start job means the run is failed (review C-4)', async () => {
+    const { w, node } = await setup('nonprod')
+    const repositoryId = await adopt(w)
+    await refresh(w)
+    await planAndApply(`/api/v1/backup-repositories/${repositoryId}/ownership`, {
+      to: 'adopted_runs',
+      acknowledge: { hostConfigurationUnchanged: true },
+    })
+    const planned = await owner.browser.call(
+      'POST',
+      `/api/v1/clusters/${w.clusterId}/backup-runs`,
+      {
+        repositoryId,
+        kind: 'incremental',
+      },
+    )
+    await owner.reauth()
+    const applied = await owner.browser.call('POST', `/api/v1/plans/${planned.body.id}/apply`, {})
+    expect(applied.status).toBe(202)
+    const worker = storeOf(db, 'exdb_worker')
+    const plan = await readPlan(worker, planned.body.id)
+    if (plan === undefined) throw new Error('plan')
+    const runId = String((plan.body['content'] as Record<string, unknown>)['runId'])
+    // The worker inserted the run row and died before it created the start job.
+    await worker.query(
+      'test.run_row',
+      `INSERT INTO backups.runs (run_id, cluster_id, repository_id, node_id, purpose, kind, operation_id, state)
+       VALUES ($1, $2, $3, $4, 'backup', 'incremental', $5, 'starting')`,
+      [runId, w.clusterId, repositoryId, node.nodeId, applied.body.id],
+    )
+    const kind = registry.get('backup.run')
+    if (kind === undefined) throw new Error('kind')
+    const outcome = await kind.reconcile({
+      plan,
+      operationId: applied.body.id,
+      signal: new AbortController().signal,
+      leaseOwner: newId('prc', Date.now()),
+    } as never)
+    expect(outcome).toBe('not_applied')
+    const row = await db.asSuperuser((c) =>
+      c.query('SELECT state, error_code FROM backups.runs WHERE run_id = $1', [runId]),
+    )
+    expect(row.rows[0]).toMatchObject({ state: 'failed', error_code: 'NOT_STARTED' })
+    await node.stop()
+  })
+
   it('refuses a production backup run while only nonprod runs are activated', async () => {
     const { w, node } = await setup('prod')
     const repositoryId = await adopt(w)
@@ -642,5 +689,42 @@ describe('backups through REST, the worker and a simulated node', () => {
     )
     expect(Number(audit.rows[0]?.n)).toBeGreaterThan(0)
     await node.stop()
+  })
+})
+
+describe("the worker's dispatch re-check", () => {
+  it('stops a verification, a catalog refresh and an agent adoption whose authority is gone (review F-6)', async () => {
+    const w = await registryWorld(db)
+    await placeTarget(db, w, 'nonprod')
+    // A person who holds nothing (a revoked grant): the covered kinds are refused before they start.
+    const actor = {
+      kind: 'human',
+      identityId: newId('idn', Date.now()),
+      client: 'web',
+      clientId: null,
+    }
+    const decide = (kind: string) =>
+      storeOf(db, 'exdb_worker').transaction('test.dispatch_admission', (tx) =>
+        admit(
+          tx,
+          {
+            planId: newId('pln', Date.now()),
+            kind,
+            actionClass: 'low',
+            actor,
+            body: { subject: { clusterId: w.clusterId, tier: 'nonprod' } },
+          } as never,
+          { operationId: newId('op', Date.now()) } as never,
+        ),
+      )
+    for (const kind of [
+      'backup.verify',
+      'backup.catalog.refresh',
+      'registry.cluster.adopt_agent',
+    ]) {
+      expect(await decide(kind), kind).toEqual([{ binding: 'authorization', actual: 'revoked' }])
+    }
+    // A kind outside the list is not re-checked here (its own apply checks hold).
+    expect(await decide('registry.test')).toEqual([])
   })
 })
