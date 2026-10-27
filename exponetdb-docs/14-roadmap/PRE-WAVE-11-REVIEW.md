@@ -410,8 +410,9 @@ owner decision or infrastructure) and **OWNER REVIEW REQUIRED**.
 | OD-8 legal review | **EXTERNAL LEGAL REVIEW, NOT PROVEN** | blocks productive use with personal data, not development; nothing claims "permanent is always lawful" | same |
 | OD-53 | **DECIDED** (a), fail closed | an approval per production plan with an owner-name lineage mismatch | OD-53 |
 | OD-54 | **DECIDED** (a), `registry.cluster.adopt_agent` | the only path from `external` to `agent`; B4 | OD-54 |
-| OD-55 | **DECIDED** (c) + (d) | approval on every tier for procedural agent plans; ledger/marker before/after guard; cross-project reach a residual | OD-55 |
-| OD-56 | **DECIDED** (a), HMAC | changed excused values fail closed | OD-56 |
+| OD-55 | **DECIDED** (c) + (d) | approval on every tier for procedural agent plans; ledger/marker before/after guard; cross-project reach a residual; built in `9274d50` | OD-55 |
+| OD-56 | **DECIDED** (a), HMAC | changed excused values fail closed; built in `9274d50` | OD-56 |
+| OD-57 | **OPEN** (added 2026-10-27, review F-4) | `advisors_run` records a run under a read scope; the annotation stays read-only until decided (R-MCP-1) | [OD-57](../00-product/open-decisions.md#od-57-advisors_run-records-a-run-but-its-scope-is-a-read-scope) |
 | **OD-4-storage** | **OPEN — BLOCKS G9 FULL ACCEPTANCE** | provider-neutral model built; no repository activated productively; choice after W9-03 | OD-4, [ADR-0036](../01-architecture/adr/0036-backup-repositories-and-providers.md) |
 | OD-21 | open | break-glass activation stays refused; no notification shortcut | OD-21 |
 | OD-10, OD-12, OD-27, OD-29, OD-41 to OD-50 | open, unchanged | OD-29 (c): no MCP node planning, no MCP restore apply | open-decisions |
@@ -541,7 +542,8 @@ expected results in W9-02 T-S3-1 to T-S3-8):
 #### Security review findings (B5)
 
 Six independent adversarial reviews by fresh reviewers, at `cb11137`
-(reviews a to d and f) and after the OD-55/56 work (review e): (a)
+(reviews a to d and f) and on the OD-55/56 work before its commit
+`9274d50` (review e): (a)
 encrypted backups and the immutable object store, (b) long-run node
 capabilities, (c) restore identity and recovery, (d) session cancel and
 terminate and the advisor SQL, (e) cross-role migration escape and the
@@ -564,12 +566,12 @@ says what it does not prove. `pglab` tests need root and real pgBackRest
 | A-3 / C-3 | Medium (reproduced) | a lagging repository took the archiver's newest time; the RPO and PITR window looked fresher than the repository | protection, `restore.plan` (PITR) | `c2eed29`: time only for exactly the repository's newest segment; future times refused | `reconcile.int.test.ts` "archive times of a repository"; `protection.test.ts` (A-3) | per-repository segment times from the node remain a later capability |
 | A-4 | Medium (traced) | WAL gaps were never recorded, so continuity was assumed | protection, `restore.source-verified` | `c2eed29`: a WAL basis carries `wal_continuity_unproven` (at most `unproven`); a restore to the archive end fails `recovery_target_reached` if replay stops short | `protection.test.ts` (A-4) | gaps are still not listed segment by segment (R-BKP-1) |
 | A-5 | Medium (traced) | a truncated listing disabled `missing_in_engine` and still counted as fresh | protection, restore sources | `c2eed29`: `partial` reconciliation is stale | `protection.test.ts` (A-5) | missing entries inside the listed window are not marked yet (R-BKP-7) |
-| A-6 | Medium (reproduced) | bundle guards let the worker set `passed` from a failed run, flip a result under one run id, reuse an ownership operation for two repositories, and clear the advisory | Control Store guards (`backups` bundle) | see W9-09 (fix agent commit) | `packages/backups/test/backups.int.test.ts` (guards) | a direct write by a role with table ownership is out of scope (bundle owner) |
+| A-6 | Medium (reproduced) | bundle guards let the worker set `passed` from a failed run, flip a result under one run id, reuse an ownership operation for two repositories, and clear the advisory | Control Store guards (`backup-catalog` bundle) | `685bd52`: guards bound to new verify runs, one operation per repository change, declared facts fixed, no future drill times | `packages/backups/test/backups.int.test.ts` "bundle guards" (6 refusals as `exdb_worker`) | the worker is the reconciler: a forged observation that moves `reconciled_at` forward still passes (R-BKP-9) |
 | A-7 / B-7 | Medium / Low (traced) | restic "verification" checked a 1/10 repository subset, not the named snapshot | `backup.verify` (restic, pg_dump) | `ac40e8b`: refused with `CAPABILITY_UNAVAILABLE` until a snapshot-scoped check exists | `http-backups.int.test.ts` | logical-backup verification does not exist (residual R-BKP-8) |
 | C-4 | Medium (traced) | a lost worker left a run `starting` or `unknown` forever and blocked the cluster | `backup.run`, `restore.*` reconciliation | `c2eed29`: reconciliation binds the run row to its start job, fails a run never started, asks the node for a start whose statement was lost | `http-backups.int.test.ts` (C-4) | none beyond the simulated node |
 | C-5 | Medium (traced) | the runbook could not start a Debian-style data directory | offline restore (C-35) | `0928c31`: own `postgresql.conf`, hba and ident files, every safety setting on the command line | `runbook.lab.test.ts` (config outside the data directory) | M-9 |
-| D-1 | Medium (reproduced) | a healthy `COPY FROM STDIN` matched the `stalled` terminate condition | `connections.terminate` (condition `stalled`), health `stalled_sessions` | see W9-09 (fix agent commit) | `packages/diagnostics/test/performance.int.test.ts` | a COPY from a client that really stalls mid-stream is no longer `stalled` (fails safe) |
-| D-2 | Medium (reproduced) | advisor `message` and `remediation` carried raw catalog names but were not marked untrusted | `advisor.run`, MCP `advisors_run` | see W9-09 (fix agent commit) | `packages/diagnostics/test/advisors.test.ts` | none |
+| D-1 | Medium (reproduced) | a healthy `COPY FROM STDIN` matched the `stalled` terminate condition | `connections.terminate` (condition `stalled`), health `stalled_sessions` | `685bd52`: a pid with a `COPY FROM` progress row is not stalled | `packages/diagnostics/test/performance.int.test.ts` | a COPY from a client that really stalls mid-stream is no longer `stalled` (fails safe) |
+| D-2 | Medium (reproduced) | advisor `message` and `remediation` carried raw catalog names but were not marked untrusted | `advisor.run`, MCP `advisors_run` | `685bd52`: fields untrusted, names quoted, server prose message | `packages/diagnostics/test/advisors.test.ts` (a hostile column name) | none |
 | F-1 | Medium (engine-level) | plan views showed the repository location to holders of `backups.read` | `plan.get`, `operation.list` (REST, MCP) | `c2eed29`: `backup.*` plan content without location fields | regression test pending | `registry.endpoint.add` plans readable with `nodes.read` predate Wave 9 (R-VIEW-1) |
 | F-2 | Medium (engine-level) | the cluster tier ignored a declared `prod` | every backup and restore action on a cluster subject | `c2eed29`: prod if either derived or declared tier is prod | regression test pending | none |
 | A-8 | Low | the declared cipher overrode the observed one | protection, runbook | `c2eed29` | `reconcile.int.test.ts` "cipher of a repository" | none |
@@ -578,13 +580,18 @@ says what it does not prove. `pglab` tests need root and real pgBackRest
 | A-11 / F-3 | Low | the runbook showed the location without `registry.manage` | `restore.runbook.get` | `c2eed29`: the location permission is required | regression test pending | none |
 | B-6 | Low | engine-written `outcome.json` naming an older label passed | `backup.run` verify | `ac40e8b`: the label must be first seen after the run's row | `http-backups.int.test.ts` (B-6) | none |
 | C-6, C-7, C-9, C-10, C-11 | Low | apply re-checks missing for the WAL end and archived point, a backup chosen by id, the target's placement and generation; any runbook digest accepted; `target.maintenance` exclusivity missing | `restore.execute`, `restore.drill`, `restore.drill.offline.record` | `c2eed29` | covered by the existing drill path only; specific regression tests pending | a stale WAL end, a moved target and a wrong digest are traced, not tested |
-| C-8 | Low | discarding a recovered cluster needed no approval | `restore.discard` | see W9-09 (rule `restore.recovery-discard-approval`) | `packages/policy/test/backup-rules.test.ts` | none |
-| D-3 / F-4 | Low | `advisors_run` was annotated read-only but writes runs, findings and audit (audit in a later transaction) | `advisor.run`, MCP `advisors_run` | see W9-09 (a `record` action, `RECORDS` annotation, one transaction) | `mcp-catalog.test.ts` pins, diagnostics tests | none |
-| D-4 | Low (reproduced) | a session after `SET ROLE` to a superuser, and some backup tools, were not protected from signals | `connections.cancel`, `connections.terminate` | see W9-09 | `performance.int.test.ts` | backup tool names are best-effort (application names can be anything) |
-| D-5 | Low | a statement re-entering the top 200 put days of calls in one delta | statistics windows, regression baseline | see W9-09 | `statements.test.ts` | none |
+| C-8 | Low | discarding a recovered cluster needed no approval | `restore.discard` | `685bd52`: rule `restore.recovery-discard-approval` | `packages/policy/test/backup-rules.test.ts` | none |
+| D-3 / F-4 | Low | `advisors_run` was annotated read-only but writes runs, findings and audit (audit in a later transaction) | `advisor.run`, MCP `advisors_run` | `685bd52`, in part: the run, its findings and its audit commit in one transaction, the description says it records; the classification as a record action is [OD-57](../00-product/open-decisions.md#od-57-advisors_run-records-a-run-but-its-scope-is-a-read-scope) (the frozen G3B scope catalog stores `diagnostics.read` as a read scope) | `performance.int.test.ts` (a failing audit rolls the run back), `interfaces.test.ts` | the tool is still annotated read-only (R-MCP-1) |
+| D-4 | Low (reproduced) | a session after `SET ROLE` to a superuser, and some backup tools, were not protected from signals | `connections.cancel`, `connections.terminate` | `685bd52`: membership in a superuser role protects; `pg_probackup` added | `performance.int.test.ts` | backup tool names are best-effort (application names can be anything) |
+| D-5 | Low | a statement re-entering the top 200 put days of calls in one delta | statistics windows, regression baseline | `685bd52`: no delta across a gap over 600 s; windows bind `from_at` and the generation | `statements.test.ts` | none |
 | F-5 | Low | MCP pins broken by the advisor schema change | MCP catalog | `e05826f` | `mcp-catalog.test.ts` | none |
-| F-6 | Low | the dispatch re-check missed `registry.cluster.adopt_agent`, `backup.verify`, `backup.catalog.refresh` | worker dispatch | see W9-09 | `http-backups.int.test.ts` "the worker's dispatch re-check" | none |
-| F-7 | Low | rule and preset text said more than the code | `backup.run-agent-prod-approval`, CLI `operator:nonprod` | see W9-09 | none (text) | none |
+| F-6 | Low | the dispatch re-check missed `registry.cluster.adopt_agent`, `backup.verify`, `backup.catalog.refresh` | worker dispatch | `73d8387` | `http-backups.int.test.ts` "the worker's dispatch re-check" | none |
+| F-7 | Low | rule and preset text said more than the code | `backup.run-agent-prod-approval`, CLI `operator:nonprod` | `685bd52` | none (text) | none |
+| E-1 | Medium (mechanism reproduced) | a deferred trigger fired by `SET CONSTRAINTS ALL IMMEDIATE` could defer again and queue an event that ran at `COMMIT`, after the ledger guard's last comparison, as the migrator | `migration.apply`, `migration.rollback`, `migration.resume`, the legacy replay | `9274d50`: rounds of `SET CONSTRAINTS ALL IMMEDIATE` until one changes no row (`pg_stat_xact_all_tables`), at most 16, else fail closed | `packages/migrations-engine/test/ledger-guard.int.test.ts` (a chain of 4 that writes the ledger at its end; a chain beyond the bound), shown to fail without the fix | none known; a forged ledger row would also diverge from the Control Store mirror (C-19) |
+| E-2 | Low | `CREATE TABLE … AS`, materialized views and `REFRESH` run a query but were not procedural | OD-55 (c) classification | `9274d50` | `packages/postgres/test/procedural.test.ts` | calls of existing routines from DDL or DML expressions stay the T38 residual |
+| E-3 | Low | a rule was not procedural, unlike a trigger | OD-55 (c) classification | `9274d50` | `procedural.test.ts` | none |
+| E-4 | Low (not reachable) | an excused value that turns unreadable might stay excused | OD-56 (a) | none needed: an excusal needs the same aspects, so `unreadable` is another, unexcused failure | `verification-failures.test.ts` (pinned) | none |
+| E-5 | Informational | the HMAC input does not bind the report and item | OD-56 (a) | none: the digest rows are write-once, worker-only, never read by serve | none | defense in depth only (R-OD56-1) |
 
 #### Residuals
 
@@ -604,6 +611,9 @@ each stays until its condition is met or the owner decides.
 | R-BKP-7 | a truncated listing marks no entry `missing_in_engine`; it only makes the reconciliation stale (A-5) | marking inside the listed window needs an ordered, complete page from the node | a paged `backup.list` |
 | R-BKP-8 | logical backups (restic, pg_dump) cannot be verified: `backup.verify` refuses them (A-7/B-7), so they never reach `verified_backup` | restic cannot check one snapshot's data | a snapshot-scoped check or a restore-and-list verification |
 | R-VIEW-1 | `registry.endpoint.add` plan views show the endpoint to holders of `nodes.read` (predates Wave 9; found by F-1) | outside Wave 9 Part B's scope | the same stripping as for `backup.*` plans |
+| R-BKP-9 | the worker reconciles repositories, so a write by the worker that moves `reconciled_at` forward with forged observation columns passes the guard (A-6 residual) | the observation is the worker's own job | an observation signed by the node and checked by the guard |
+| R-MCP-1 | `advisors_run` is annotated read-only and runs under the read rate limit although it records a run and findings (F-4) | OD-57 is the owner's | OD-57 |
+| R-OD56-1 | the excused-value digest binds the failure, not the report or item it belongs to; replay is prevented by write-once storage only (E-5) | defense in depth | a digest domain v2 |
 | R-OD55 | cross-project role reach on one cluster (OD-55) | decided as a residual by the owner | the owner's later decision |
 | R-CLI-1 | `drill record-offline` needs re-authentication the CLI cannot give (step-ups bind `plan.apply` and token reveal only) | the step-up action list is a contract; extending it is a separate change | a step-up for `restore.drill.offline.record` |
 
@@ -689,3 +699,7 @@ evidence; nothing here is a claim that it passed on real infrastructure):
 | Date | Commit | Change |
 |---|---|---|
 | 2026-10-26 | (Phase 0) | section opened: decisions recorded, gap matrix, ADR-0036 to ADR-0038 proposed, storage comparison and experiment plan |
+| 2026-10-27 | `bd60378`, `0928c31`, `ac40e8b`, `c2eed29`, `73d8387`, `685bd52` | security reviews a to d and f: every Critical, High and Medium finding fixed with a regression artifact (W9-04) |
+| 2026-10-27 | `9274d50` | OD-55 (c)+(d) and OD-56 (a) built; review e: E-1 (Medium) fixed, E-2 and E-3 fixed, E-4 not reachable (pinned), E-5 a residual |
+| 2026-10-27 | `c10417a` | CI: the phone tour of the pending view (red on `main` since #42), the unserved-route example, the secret scan |
+| 2026-10-27 | (docs) | OD-57 opened (F-4) |
