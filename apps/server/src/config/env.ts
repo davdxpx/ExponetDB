@@ -74,6 +74,9 @@ const VARIABLES: Readonly<Record<string, Spec>> = {
   EXPONETDB_AUDIT_S3_OBJECT_LOCK_DAYS: { programs: ['worker'] },
   // The gateway's agent listener (Wave 5): HTTP/2 mTLS, private network.
   EXPONETDB_GATEWAY_LISTEN: { programs: ['gateway'] },
+  // Wave 9 Part B (adoption.md §5): engine runs are off until an operator turns them on.
+  EXPONETDB_BACKUP_EXECUTION: { programs: ['serve', 'worker'] },
+  EXPONETDB_RESTORE_EXECUTION: { programs: ['serve', 'worker'] },
 }
 
 /** Reserved variables, refused until the wave that implements them (none at present). */
@@ -142,6 +145,8 @@ export interface ServeConfig extends RoleConfig {
    * (oauth.md §3, owner decision 2026-10-13).
    */
   readonly clientRegistration: 'open' | 'review'
+  /** Absent: both disabled. */
+  readonly backupExecution?: BackupExecutionConfig
 }
 
 /** `exponetdb bootstrap owner` and `exponetdb auth recover-owner`: the serve login and the public URL. */
@@ -166,9 +171,21 @@ export type AuditExportConfig =
         | undefined
     }
 
+/**
+ * Whether backup and restore runs may execute (Wave 9 Part B, ADR-0037):
+ * `disabled` by default; backups `nonprod` or `all`, restores `scratch`
+ * (drills only) or `all` (also recovery into a new cluster).
+ */
+export interface BackupExecutionConfig {
+  readonly backups: 'disabled' | 'nonprod' | 'all'
+  readonly restores: 'disabled' | 'scratch' | 'all'
+}
+
 export interface WorkerConfig extends RoleConfig {
   readonly role: 'worker'
   readonly auditExport: AuditExportConfig
+  /** Absent: both disabled. */
+  readonly backupExecution?: BackupExecutionConfig
 }
 
 export interface GatewayConfig extends RoleConfig {
@@ -388,6 +405,22 @@ function rpId(r: Reader, origin: string): string | undefined {
   return value
 }
 
+/** An unknown value is refused, never read as `disabled` or as `all`. */
+function backupExecution(r: Reader): BackupExecutionConfig {
+  const backups = r.raw('EXPONETDB_BACKUP_EXECUTION') ?? 'disabled'
+  const restores = r.raw('EXPONETDB_RESTORE_EXECUTION') ?? 'disabled'
+  if (backups !== 'disabled' && backups !== 'nonprod' && backups !== 'all') {
+    r.invalid('EXPONETDB_BACKUP_EXECUTION')
+  }
+  if (restores !== 'disabled' && restores !== 'scratch' && restores !== 'all') {
+    r.invalid('EXPONETDB_RESTORE_EXECUTION')
+  }
+  return {
+    backups: backups === 'nonprod' || backups === 'all' ? backups : 'disabled',
+    restores: restores === 'scratch' || restores === 'all' ? restores : 'disabled',
+  }
+}
+
 export function serveConfig(env: Env): ServeConfig {
   const r = new Reader(env, 'serve')
   const base = present(r.done(roleBase(r, 'serve')))
@@ -444,6 +477,7 @@ export function serveConfig(env: Env): ServeConfig {
     egressAddresses: [...new Set(egress)],
     mcpAllowedOrigins: [...new Set(allowed)],
     clientRegistration: registration === 'review' ? 'review' : 'open',
+    backupExecution: backupExecution(r),
   })
 }
 
@@ -516,7 +550,13 @@ export function workerConfig(env: Env): WorkerConfig {
   const r = new Reader(env, 'worker')
   const base = roleBase(r, 'worker')
   const exportConfig = auditExport(r)
-  return { ...present(r.done(base)), role: 'worker', auditExport: exportConfig }
+  const execution = backupExecution(r)
+  return {
+    ...present(r.done(base)),
+    role: 'worker',
+    auditExport: exportConfig,
+    backupExecution: execution,
+  }
 }
 
 export function gatewayConfig(env: Env): GatewayConfig {

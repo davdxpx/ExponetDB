@@ -32,7 +32,7 @@ import {
   requireRestoreExecution,
 } from './activation.ts'
 import { BackupError } from './errors.ts'
-import { RUN_CAPABILITIES } from './plans.ts'
+import { PGBACKREST_LABEL, RUN_CAPABILITIES } from './plans.ts'
 import { type ListResult, latestArchive, reconcileCatalog } from './reconcile.ts'
 import { getRepository } from './records.ts'
 
@@ -487,10 +487,16 @@ abstract class RunKind implements OperationKind {
     )
   }
 
-  protected abstract startArgs(c: Body): JsonObject
+  /** The start job's arguments; `prepared` is what `prepare` found for this one operation. */
+  protected abstract startArgs(c: Body, prepared: JsonObject): JsonObject
 
   /** Inserts the run (and what goes with it) before the start job, in one transaction. */
-  protected async begin(_tx: Tx, _ctx: ExecutionContext, _c: Body): Promise<void> {}
+  protected async begin(
+    _tx: Tx,
+    _ctx: ExecutionContext,
+    _c: Body,
+    _prepared: JsonObject,
+  ): Promise<void> {}
 
   async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
     let c: Body
@@ -512,8 +518,9 @@ abstract class RunKind implements OperationKind {
       throw error
     }
     const { capability, purpose } = this.start()
+    // Per operation, never on the kind (one instance serves every operation of the worker).
     const prepared = await this.prepare(ctx, c)
-    if (prepared !== undefined) return prepared
+    if ('refused' in prepared) return prepared.refused
     try {
       await this.d.store.transaction(`backups.kind.${this.kind}.begin`, async (tx) => {
         await tx.query(
@@ -530,7 +537,7 @@ abstract class RunKind implements OperationKind {
             ctx.operationId,
           ],
         )
-        await this.begin(tx, ctx, c)
+        await this.begin(tx, ctx, c, prepared.facts)
       })
     } catch (error) {
       if (error instanceof ControlStoreError && error.sqlstate === '23505') {
@@ -544,7 +551,7 @@ abstract class RunKind implements OperationKind {
         return 'not_applied'
       throw error
     }
-    const args = this.startArgs(c)
+    const args = this.startArgs(c, prepared.facts)
     const end = await this.job(ctx, capability, args)
     const runId = c.text('runId')
     if (end.end === 'succeeded') {
@@ -585,9 +592,12 @@ abstract class RunKind implements OperationKind {
     return outcome
   }
 
-  /** A check before anything starts (restores: `restore.prepare@1`); an outcome refuses. */
-  protected async prepare(_ctx: ExecutionContext, _c: Body): Promise<ExecutionOutcome | undefined> {
-    return undefined
+  /** A check before anything starts (restores: `restore.prepare@1`): refused, or the facts the start needs. */
+  protected async prepare(
+    _ctx: ExecutionContext,
+    _c: Body,
+  ): Promise<{ readonly refused: ExecutionOutcome } | { readonly facts: JsonObject }> {
+    return { facts: {} }
   }
 
   /** Records what a refused or unknown start means for the kind's own rows. */
@@ -1013,12 +1023,12 @@ export class CatalogRefreshKind implements OperationKind {
 function restoreTarget(c: Body): JsonObject {
   const s = obj(c.raw('source'))
   const pit = typeof s['pointInTime'] === 'string' ? s['pointInTime'] : null
+  // The planner refuses a label the node cannot take (PGBACKREST_LABEL); a missing one here is content damage.
+  if (typeof s['label'] !== 'string' || !PGBACKREST_LABEL.test(s['label'])) {
+    throw new ContentInvalid('source.label')
+  }
   return {
-    label:
-      typeof s['label'] === 'string' &&
-      /^[0-9]{8}-[0-9]{6}F(_[0-9]{8}-[0-9]{6}[DI])?$/.test(s['label'])
-        ? s['label']
-        : null,
+    label: s['label'],
     time: pit,
     lsn: null,
     timeline: typeof s['timeline'] === 'number' ? s['timeline'] : null,
@@ -1067,23 +1077,33 @@ abstract class RestoreRunKind extends RunKind {
   protected override async prepare(
     ctx: ExecutionContext,
     c: Body,
-  ): Promise<ExecutionOutcome | undefined> {
+  ): Promise<{ readonly refused: ExecutionOutcome } | { readonly facts: JsonObject }> {
+    let target: JsonObject
+    try {
+      target = restoreTarget(c)
+    } catch (error) {
+      if (!(error instanceof ContentInvalid)) throw error
+      return { refused: { outcome: 'not_applied', errorCode: 'RESTORE_SOURCE_INVALID' } }
+    }
     const end = await this.job(ctx, 'restore.prepare@1', {
       cluster: this.cluster(c),
       repository: repositoryArg(c),
       runId: c.text('runId'),
       purpose: this.purpose(),
-      target: restoreTarget(c),
+      target,
     })
     if (end.end !== 'succeeded') {
       const o = outcomeOf(end, 'restore.prepare@1')
-      return o === undefined || o === 'unknown' || o === 'applied' || o === 'partially_applied'
-        ? {
-            outcome: 'not_applied',
-            errorCode: 'NODE_CAPABILITY_FAILED',
-            detail: { capability: 'restore.prepare@1' },
-          }
-        : o
+      return {
+        refused:
+          o === undefined || o === 'unknown' || o === 'applied' || o === 'partially_applied'
+            ? {
+                outcome: 'not_applied',
+                errorCode: 'NODE_CAPABILITY_FAILED',
+                detail: { capability: 'restore.prepare@1' },
+              }
+            : o,
+      }
     }
     const p = end.result
     const refusals = Array.isArray(p['refusals']) ? p['refusals'].map(String) : []
@@ -1094,27 +1114,33 @@ abstract class RestoreRunKind extends RunKind {
       typeof p['port'] !== 'number'
     ) {
       return {
-        outcome: 'not_applied',
-        errorCode: refusals.includes('system_identifier_mismatch')
-          ? 'RESTORE_TARGET_MISMATCH'
-          : 'RESTORE_SOURCE_INVALID',
-        detail: { refusals },
+        refused: {
+          outcome: 'not_applied',
+          errorCode: refusals.includes('system_identifier_mismatch')
+            ? 'RESTORE_TARGET_MISMATCH'
+            : 'RESTORE_SOURCE_INVALID',
+          detail: { refusals },
+        },
       }
     }
     if (p['walContinuous'] === false) {
       return {
-        outcome: 'not_applied',
-        errorCode: 'RESTORE_SOURCE_INVALID',
-        detail: { refusals: ['wal_not_continuous'] },
+        refused: {
+          outcome: 'not_applied',
+          errorCode: 'RESTORE_SOURCE_INVALID',
+          detail: { refusals: ['wal_not_continuous'] },
+        },
       }
     }
-    this.#port = p['port']
-    return undefined
+    return { facts: { port: p['port'] } }
   }
 
-  #port: number | null = null
-
-  protected override async begin(tx: Tx, ctx: ExecutionContext, c: Body): Promise<void> {
+  protected override async begin(
+    tx: Tx,
+    ctx: ExecutionContext,
+    c: Body,
+    prepared: JsonObject,
+  ): Promise<void> {
     const s = obj(c.raw('source'))
     await tx.query(
       'backups.kind.restore.insert',
@@ -1135,7 +1161,7 @@ abstract class RestoreRunKind extends RunKind {
         this.purpose() === 'drill' ? 'scratch' : 'new_cluster',
         c.text('nodeId'),
         c.text('runId'),
-        this.#port,
+        typeof prepared['port'] === 'number' ? prepared['port'] : null,
         ctx.plan.planId,
         ctx.operationId,
       ],
@@ -1171,7 +1197,7 @@ abstract class RestoreRunKind extends RunKind {
     }
   }
 
-  protected startArgs(c: Body): JsonObject {
+  protected startArgs(c: Body, prepared: JsonObject): JsonObject {
     const checks = (c.raw('checks') as JsonValue[] | undefined) ?? []
     return {
       cluster: this.cluster(c),
@@ -1179,7 +1205,8 @@ abstract class RestoreRunKind extends RunKind {
       runId: c.text('runId'),
       purpose: this.purpose(),
       target: restoreTarget(c),
-      port: this.#port ?? 55400,
+      // prepare refuses without a port, so the start always names the one the node chose.
+      port: prepared['port'] as number,
       checks: checks.filter((x) => typeof x === 'string'),
       rowCounts: [],
     }
@@ -1356,7 +1383,10 @@ export class RestoreDiscardKind implements OperationKind {
   async execute(ctx: ExecutionContext): Promise<ExecutionOutcome> {
     const c = Body.content(ctx.plan)
     try {
-      requireRestoreExecution(this.#d.execution(), 'drill')
+      requireRestoreExecution(
+        this.#d.execution(),
+        c.text('purpose') === 'drill' ? 'drill' : 'recovery',
+      )
     } catch (error) {
       if (error instanceof BackupError) return { outcome: 'not_applied', errorCode: error.code }
       throw error

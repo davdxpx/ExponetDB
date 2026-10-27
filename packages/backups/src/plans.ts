@@ -48,6 +48,11 @@ export interface BackupPlanContext {
 
 const nowOf = (c: BackupPlanContext) => c.policy.clock.nowMs()
 
+/** A pgBackRest backup label as the node takes it (`NodeCapBackupVerifyArgs`, `NodeRestoreTarget`). */
+export const PGBACKREST_LABEL = /^[0-9]{8}-[0-9]{6}F(_[0-9]{8}-[0-9]{6}[DI])?$/
+/** A restic snapshot id as the node takes it. */
+const RESTIC_SNAPSHOT = /^[0-9a-f]{8,64}$/
+
 /** The capabilities each plan needs the node to accept (checked at plan and at acceptance). */
 export const RUN_CAPABILITIES: Readonly<Record<string, readonly NodeCapabilityKey[]>> = {
   'backup.catalog.refresh': ['backup.list@1'],
@@ -453,6 +458,8 @@ async function planRestoreLike(
   )
   if (!selection.ok) throw conflict(selection.reason)
   const s = selection.source
+  // The node restores the label it is told; a label it cannot take never becomes "the engine's latest".
+  if (!PGBACKREST_LABEL.test(s.label)) throw conflict('backup_not_found')
   if (s.systemIdentifier !== null && s.systemIdentifier !== mapping.systemIdentifier) {
     throw new BackupError('RESTORE_TARGET_MISMATCH')
   }
@@ -598,7 +605,9 @@ export async function planRestoreDiscard(
   }
   const cluster = await getCluster(tx, clusterId)
   const tier = cluster?.derivedTier ?? undefined
-  requireRestoreExecution(context.execution, 'drill')
+  const purpose = row.text('purpose') === 'drill' ? 'drill' : 'recovery'
+  // Discarding a recovered cluster is a recovery-level action: its activation and a higher class.
+  requireRestoreExecution(context.execution, purpose)
   await nodeFor(
     tx,
     clusterId,
@@ -608,7 +617,7 @@ export async function planRestoreDiscard(
   )
   return storeRegistryPlan(tx, context, actor, {
     kind: 'restore.discard',
-    actionClass: 'standard',
+    actionClass: purpose === 'drill' ? 'standard' : 'high',
     subject: { clusterId, nodeId: row.text('node_id'), ...(tier === undefined ? {} : { tier }) },
     content: {
       restoreId,
@@ -621,6 +630,106 @@ export async function planRestoreDiscard(
     analysis: {
       effect:
         "The node stops the temporary cluster of this restore if it runs and removes its scratch directory (only inside the node's scratch root). The restore record stays as history.",
+    },
+  })
+}
+
+// ----- inline reads and verification -----
+
+/** `backup.catalog.refresh` (inline, low): one `backup.list@1` read per observed repository of the cluster. */
+export async function planCatalogRefresh(
+  tx: Tx,
+  context: BackupPlanContext,
+  actor: RegistryActor,
+  clusterId: string,
+): Promise<PlanRecord> {
+  const cluster = await liveCluster(tx, clusterId)
+  const { mapping, node } = await nodeFor(
+    tx,
+    clusterId,
+    nowOf(context),
+    RUN_CAPABILITIES['backup.catalog.refresh'] ?? [],
+  )
+  const tier = cluster.derivedTier ?? undefined
+  return storeRegistryPlan(tx, context, actor, {
+    kind: 'backup.catalog.refresh',
+    actionClass: 'low',
+    subject: { clusterId, nodeId: node.nodeId, ...(tier === undefined ? {} : { tier }) },
+    content: {
+      clusterId,
+      nodeId: node.nodeId,
+      localName: mapping.localName,
+      systemIdentifier: mapping.systemIdentifier,
+    },
+    expectedState: { nodeId: node.nodeId },
+    analysis: {
+      effect:
+        "The node lists each observed repository with the engine's own catalog command; nothing on the host or in storage changes.",
+    },
+  })
+}
+
+/** `backup.verify` (inline, low): the engine's verify command over one mirrored backup. */
+export async function planBackupVerify(
+  tx: Tx,
+  context: BackupPlanContext,
+  actor: RegistryActor,
+  clusterId: string,
+  backupId: string,
+): Promise<PlanRecord> {
+  const cluster = await liveCluster(tx, clusterId)
+  const { rows } = await tx.query(
+    'backups.plans.verify_source',
+    `SELECT c.repository_id, c.engine_label, c.divergence, c.state, r.cluster_id, r.state AS repository_state
+       FROM backups.catalog c JOIN backups.repositories r USING (repository_id) WHERE c.backup_id = $1`,
+    [backupId],
+  )
+  const row = rows[0]
+  if (row === undefined || row.text('cluster_id') !== clusterId) throw new BackupError('NOT_FOUND')
+  if (row.text('repository_state') === 'retired') throw conflict('repository_retired')
+  if (row.text('divergence') !== 'none' || row.text('state') !== 'succeeded') {
+    throw conflict('backup_not_found')
+  }
+  const tier = cluster.derivedTier ?? undefined
+  requireBackupExecution(context.execution, tier)
+  const r = await getRepository(tx, row.text('repository_id'))
+  if (r === undefined) throw new BackupError('NOT_FOUND')
+  const { mapping, node } = await nodeFor(
+    tx,
+    clusterId,
+    nowOf(context),
+    RUN_CAPABILITIES['backup.verify'] ?? [],
+  )
+  const pgbackrest = r.engine === 'pgbackrest'
+  // Engine text from the catalog: the node takes only its own label or snapshot form.
+  if (!(pgbackrest ? PGBACKREST_LABEL : RESTIC_SNAPSHOT).test(row.text('engine_label'))) {
+    throw conflict('backup_not_found')
+  }
+  return storeRegistryPlan(tx, context, actor, {
+    kind: 'backup.verify',
+    actionClass: 'low',
+    subject: { clusterId, nodeId: node.nodeId, ...(tier === undefined ? {} : { tier }) },
+    content: {
+      clusterId,
+      backupId,
+      repositoryId: r.repositoryId,
+      repository: repositoryRef(r),
+      runId: newId('run', nowOf(context)),
+      label: pgbackrest ? row.text('engine_label') : null,
+      snapshot: pgbackrest ? null : row.text('engine_label'),
+      nodeId: node.nodeId,
+      localName: mapping.localName,
+      systemIdentifier: mapping.systemIdentifier,
+    },
+    expectedState: {
+      nodeId: node.nodeId,
+      localName: mapping.localName,
+      systemIdentifier: mapping.systemIdentifier,
+    },
+    analysis: {
+      effect: pgbackrest
+        ? 'The node runs pgBackRest verify over this backup set (checksums of every file, read-only); the catalog records passed or failed.'
+        : 'The node runs restic check over the snapshot (read-only); the catalog records passed or failed.',
     },
   })
 }

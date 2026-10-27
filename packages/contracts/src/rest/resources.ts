@@ -2043,6 +2043,7 @@ export const InstallationSchema = z
   })
   .meta({ id: 'Installation' })
 export type Installation = z.infer<typeof InstallationSchema>
+export type BackupCatalog = z.infer<typeof BackupCatalogSchema>
 
 /** A machine reason code (`lower_snake`): never prose, never text from a database or a client. */
 const ReasonCodeSchema = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/)

@@ -69,6 +69,7 @@
         "@exponetdb/application": "workspace:*",
         "@exponetdb/audit": "workspace:*",
         "@exponetdb/auth": "workspace:*",
+        "@exponetdb/backups": "workspace:*",
         "@exponetdb/contracts": "workspace:*",
         "@exponetdb/control-store": "workspace:*",
         "@exponetdb/diagnostics": "workspace:*",
@@ -138,6 +139,7 @@
       "dependencies": {
         "@exponetdb/audit": "workspace:*",
         "@exponetdb/auth": "workspace:*",
+        "@exponetdb/backups": "workspace:*",
         "@exponetdb/contracts": "workspace:*",
         "@exponetdb/control-store": "workspace:*",
         "@exponetdb/diagnostics": "workspace:*",

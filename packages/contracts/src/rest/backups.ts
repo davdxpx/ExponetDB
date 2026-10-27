@@ -758,7 +758,21 @@ export type EngineRun = z.infer<typeof EngineRunSchema>
 export type Restore = z.infer<typeof RestoreSchema>
 export type Drill = z.infer<typeof DrillSchema>
 export type BackupOverview = z.infer<typeof BackupOverviewSchema>
-export type BackupRepositoryOwnershipRequest = z.infer<typeof BackupRepositoryOwnershipRequestSchema>
+export type BackupRepositoryOwnershipRequest = z.infer<
+  typeof BackupRepositoryOwnershipRequestSchema
+>
 export type BackupRepositoryRetireRequest = z.infer<typeof BackupRepositoryRetireRequestSchema>
 export type OfflineDrillRecordRequest = z.infer<typeof OfflineDrillRecordRequestSchema>
 export type RestoreRunbook = z.infer<typeof RestoreRunbookSchema>
+export type BackupRepositoryList = z.infer<typeof BackupRepositoryListSchema>
+export type BackupPolicyView = z.infer<typeof BackupPolicyViewSchema>
+export type EngineRunList = z.infer<typeof EngineRunListSchema>
+export type RestoreList = z.infer<typeof RestoreListSchema>
+export type DrillList = z.infer<typeof DrillListSchema>
+
+/** The body of `POST /clusters/{clusterId}/backup-runs`. */
+export const BackupRunRequestSchema = z.strictObject({
+  repositoryId: BackupRepositoryIdSchema,
+  kind: z.enum(['full', 'differential', 'incremental', 'logical']),
+})
+export type BackupRunRequest = z.infer<typeof BackupRunRequestSchema>

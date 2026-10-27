@@ -6,8 +6,10 @@ import {
   type SessionContext,
   type SubjectRef,
 } from '@exponetdb/auth'
+import { backupDependencies } from '@exponetdb/backups'
 import type {
   AccessRole,
+  BackupDependency,
   Cluster,
   ClusterBootstrapSql,
   ClusterConfirmRequest,
@@ -954,7 +956,12 @@ export class RegistryUseCases {
       backups: this.#services().backups,
     })
     if (retirement === undefined) throw new RegistryError('NOT_FOUND')
-    return this.#preflight('server', serverId, retirement)
+    return this.#preflight(
+      'server',
+      serverId,
+      retirement,
+      await this.#dependencies('server', serverId, retirement),
+    )
   }
 
   /** What a retirement of the cluster would meet now (registry.md §4.4), read live; `registry.manage`. */
@@ -964,10 +971,30 @@ export class RegistryUseCases {
       backups: this.#services().backups,
     })
     if (retirement === undefined) throw new RegistryError('NOT_FOUND')
-    return this.#preflight('cluster', clusterId, retirement)
+    return this.#preflight(
+      'cluster',
+      clusterId,
+      retirement,
+      await this.#dependencies('cluster', clusterId, retirement),
+    )
   }
 
-  #preflight(kind: 'server' | 'cluster', id: string, retirement: Retirement): RetirementPreflight {
+  /** What the backup records bind (Wave 9 Part B): listed when they block or could not be read. */
+  async #dependencies(
+    kind: 'server' | 'cluster',
+    id: string,
+    retirement: Retirement,
+  ): Promise<readonly BackupDependency[] | undefined> {
+    if (retirement.backups !== 'blocking' && retirement.backups !== 'unknown') return undefined
+    return (await backupDependencies(this.#h.store, { kind, id })).dependencies
+  }
+
+  #preflight(
+    kind: 'server' | 'cluster',
+    id: string,
+    retirement: Retirement,
+    dependencies: readonly BackupDependency[] | undefined,
+  ): RetirementPreflight {
     const groups = (list: Retirement['blockers']) =>
       list.map((group) => ({
         kind: group.kind,
@@ -991,7 +1018,13 @@ export class RegistryUseCases {
       blockers: groups(retirement.blockers),
       retiredWith: groups(retirement.retiredWith),
       kept: { retiredChildren: retirement.retiredChildren },
-      providers: [{ provider: 'backups', state: retirement.backups }],
+      providers: [
+        {
+          provider: 'backups',
+          state: retirement.backups,
+          ...(dependencies === undefined ? {} : { dependencies: [...dependencies] }),
+        },
+      ],
       source: 'live',
       observedAt: new Date(this.#h.clock.nowMs()).toISOString(),
     } as RetirementPreflight
