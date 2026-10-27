@@ -400,6 +400,8 @@ export const ProtectionReasonSchema = z
       'offline_key_unconfirmed',
       'engine_advisory',
       'not_off_host',
+      // Wave 9 Part B review (A-4): the archive's range is listed, not proven segment by segment.
+      'wal_continuity_unproven',
     ],
   })
 

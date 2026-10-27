@@ -112,6 +112,40 @@ export const restoreRecoveryApproval: Rule = {
 }
 
 /**
+ * `restore.recovery-discard-approval`: discarding a recovered cluster is a
+ * recovery-level action (its plan is `high`), so it needs what creating one
+ * needed: a human approval and a fresh re-authentication, on every tier. A
+ * drill's scratch cluster is not covered; a plan that does not say what it
+ * discards is unknown and requires the approval.
+ */
+export const restoreRecoveryDiscardApproval: Rule = {
+  id: 'restore.recovery-discard-approval',
+  version: 1,
+  description:
+    'Discarding a recovered cluster needs a human approval and a fresh re-authentication, on every tier; a drill is not covered.',
+  appliesTo: ['restore.discard'],
+  severity: 'require',
+  overridableByBreakGlass: false,
+  facts: [],
+  defaults: { approvals: 1, reauthWithinSeconds: 300 },
+  requirements: targetRegisterProdApproval.requirements,
+  evaluate({ request }) {
+    const purpose = member(content(request.content), 'purpose')
+    if (purpose === 'drill') {
+      return { result: 'not_applicable', message: "The restore is a drill's scratch cluster." }
+    }
+    if (purpose === 'recovery') {
+      return {
+        result: 'fail',
+        message: 'A recovered cluster is discarded only after a human approval.',
+        facts: { purpose },
+      }
+    }
+    return { result: 'unknown', message: 'The plan does not say what kind of restore it discards.' }
+  },
+}
+
+/**
  * `restore.source-verified`: the source backup passed its verification and
  * the WAL range is continuous on its timeline, as the planner read them;
  * the kind checks both again at apply.
@@ -258,7 +292,7 @@ export const backupRunAgentProd: Rule = {
   id: 'backup.run-agent-prod-approval',
   version: 1,
   description:
-    "An agent's backup run or verification on a production cluster needs a human approval.",
+    "An agent's backup run on a production cluster needs a human approval (a verification is a read-only engine check and is not covered).",
   appliesTo: ['backup.run'],
   severity: 'require',
   overridableByBreakGlass: false,
@@ -293,6 +327,7 @@ export const BACKUP_RULES: readonly Rule[] = [
   backupChangeProdApproval,
   restoreHumanOnly,
   restoreRecoveryApproval,
+  restoreRecoveryDiscardApproval,
   restoreSourceVerified,
   restoreTargetIdentity,
   restoreCloneRefused,

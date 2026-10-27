@@ -109,7 +109,7 @@ derived from them. Thresholds are defaults, configurable per environment.
 | `identity_mismatch` | marker differs | `suspended` (writes refused, critical finding) |
 | `connections_high` | client backends ≥ 75 % of usable slots (`max_connections − superuser_reserved_connections − reserved_connections`) | `degraded` |
 | `connections_critical` | ≥ 90 % or usable = 0 | `unhealthy` |
-| `stalled_sessions` | `state = active`, `wait_event = ClientRead`, query age ≥ 60 s | `degraded`; count shown |
+| `stalled_sessions` | `state = active`, `wait_event = ClientRead`, query age ≥ 60 s, not a `COPY FROM` | `degraded`; count shown |
 | `idle_in_transaction` | `idle in transaction` (incl. aborted) for ≥ 10 s (warning) / ≥ 300 s (critical) | `degraded` / `unhealthy` |
 | `long_running` | active, not `ClientRead`, query age ≥ 30 s (warning) / ≥ 300 s (critical) | `degraded` |
 | `lock_waits` | sessions waiting on locks ≥ 10 s; blocking tree root identified via `pg_blocking_pids` | `degraded` |
@@ -132,8 +132,16 @@ precondition, so "the page says stalled" equals "the plan will accept it"
 `packages/postgres/src/session-conditions.ts`; the activity probe's
 `is_stalled` and the terminate plan's statement both build it (`state =
 active`, `wait_event = ClientRead`, `query_start` at least 60 s before
-`clock_timestamp()`), and the plan re-checks it in the statement that
+`clock_timestamp()`, and no `pg_stat_progress_copy` row of the pid with
+`command = 'COPY FROM'`), and the plan re-checks it in the statement that
 terminates ([`performance.md` §5](./performance.md#5-actions-from-diagnostics)).
+**[DECIDED]** (review D-1, 2026-10-27) A `COPY … FROM STDIN` waits on
+`ClientRead` between the chunks the client sends while it works, so it is
+never `stalled`, and a terminate with condition `stalled` does not match it
+(`PLAN_STALE` at apply); a COPY whose client stopped sending is not told
+apart from a slow one (condition `long_running` or `any` still applies).
+`pg_stat_progress_copy` exists since PostgreSQL 14 (proven on 17 and 18,
+`packages/diagnostics/test/performance.int.test.ts`).
 
 ExponetDB **does not terminate sessions automatically** in V1 (no reaper). It
 detects, explains and offers a planned `connections.terminate` with

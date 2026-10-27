@@ -10147,7 +10147,7 @@
         "type": "object"
       },
       "group": "migrations",
-      "message": "The import report was analyzed before the failing expectations of each file were recorded, so a review decision would not say what it accepts.",
+      "message": "The import report was analyzed before the failing expectations of each file, or the keyed digests of the values they observed, were recorded, so a review decision would not say what it accepts.",
       "remediation": "Analyze the import again and record the decisions on the new report.",
       "retryable": false,
       "status": 409,
@@ -10942,6 +10942,7 @@
               "wal_not_continuous",
               "point_in_time_outside_window",
               "no_backup_selectable",
+              "repository_engine_below_floor",
               "cluster_not_external",
               "node_not_served"
             ]

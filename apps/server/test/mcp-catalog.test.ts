@@ -54,26 +54,29 @@ const SHAPES: Record<string, { scopes: Scope[]; tiers: Tier[] }> = {
 // Re-pinned 2026-10-13: drift_check, migration_verify and audit_search at toolVersion 2
 // (descriptions say what each records, enforces and audits). Re-pinned 2026-10-27
 // (Wave 9 Part B): query_stats, table_stats and advisors_run are served (diagnostics.read).
+// Re-pinned after the Wave 9 Part B reviews: advisors_run says it records its run and
+// findings (F-4) and marks message and remediation untrusted (D-2); backups_list names
+// wal_continuity_unproven (A-4). Both version-1 digests are new on this branch, not released.
 const PINNED: Record<string, { tools: number; digest: string }> = {
   'baseline, nonprod': {
     tools: 15,
-    digest: 'sha256:2c58627f5dd4a0ac072c04f62b04be61f444de3e57cbe958d19b7204abb873e2',
+    digest: 'sha256:85e86997c0f21464c661b95fc96ac93056ebe1bd71b4cece33e2e2b7c57c52f3',
   },
   'every read, nonprod': {
     tools: 19,
-    digest: 'sha256:93192f77e73359fa1bce9eb7ef2a01ff0de1b44db440cde6ecdf59b7307a0fe1',
+    digest: 'sha256:a6064f84ceaded0e8518fe4007c51e45f772ce15ac0c5b4dec57aa13b67ddbd6',
   },
   'agent, nonprod': {
     tools: 25,
-    digest: 'sha256:6f12f8ef6784cdbf054e20dd9d4efb00415880148f204f750e4f69385a155da7',
+    digest: 'sha256:86d228489c20d0c006726279545ba127b2a7169e451927c41b5e316639b36350',
   },
   'agent, both tiers': {
     tools: 26,
-    digest: 'sha256:0153296b8515a6e2b82ce0f5db98c78ed227613503fea62ff42d5465d69d54c6',
+    digest: 'sha256:057e2be516263f5219ae044f85a631cec97a365c494f6afbb14ecbee3e68d9f2',
   },
   'data reader, nonprod': {
     tools: 22,
-    digest: 'sha256:ee7649b4015084bc232b33536680218a35723c44e8f5ac851465a3c74d29d37f',
+    digest: 'sha256:3b43b1d8bd4ec528e7e9f7ca98a3d6e9359e615bd9d7bff901d46792c1718568',
   },
 }
 

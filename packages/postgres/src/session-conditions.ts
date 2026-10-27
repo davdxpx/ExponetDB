@@ -18,10 +18,18 @@ export const TERMINATE_IDLE_IN_TRANSACTION_SECONDS = 60
 /** `connections.terminate` condition `long_running`: the active query runs this long. */
 export const TERMINATE_LONG_RUNNING_SECONDS = 300
 
-/** `state = active`, `wait_event = ClientRead`, query age ≥ 60 s (health.md `stalled_sessions`). */
+/**
+ * `state = active`, `wait_event = ClientRead`, query age ≥ 60 s (health.md
+ * `stalled_sessions`), and not a `COPY FROM`: a COPY that reads its rows
+ * from the client waits on ClientRead between every chunk while it works
+ * (`pg_stat_progress_copy`, PostgreSQL 14 and later), so it is never
+ * counted as stalled nor matched by a terminate with condition `stalled`.
+ */
 export function stalledSession(row: TrustedSql): TrustedSql {
   return sql`(${row}.state = 'active' AND ${row}.wait_event = 'ClientRead'
-     AND ${row}.query_start <= pg_catalog.clock_timestamp() - interval '60 seconds')`
+     AND ${row}.query_start <= pg_catalog.clock_timestamp() - interval '60 seconds'
+     AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_stat_progress_copy cp
+                      WHERE cp.pid = ${row}.pid AND cp.command = 'COPY FROM'))`
 }
 
 /** Idle in a transaction (also aborted) for at least 60 s. */
@@ -37,20 +45,38 @@ export function longRunningSession(row: TrustedSql): TrustedSql {
 }
 
 /**
+ * Backup tools by their application name, best effort (performance.md §5):
+ * a tool that does not set it, or a client that names itself like one, is
+ * not told apart. One pattern for {@link protectedSession} and
+ * {@link protectionReason}.
+ */
+const BACKUP_APPLICATIONS = sql`'(pgbackrest|pg_basebackup|pg_dump|pg_dumpall|pg_restore|pg_probackup|barman|wal-g|walg|pg_receivewal)'`
+
+/**
+ * A superuser session: the login role is a superuser, or a member of one
+ * (directly or through other roles), so `SET ROLE` would make it one; the
+ * role the session has set now is not shown in `pg_stat_activity`.
+ */
+function superuserSession(row: TrustedSql): TrustedSql {
+  return sql`EXISTS (SELECT 1 FROM pg_catalog.pg_roles r
+                     WHERE r.rolsuper AND pg_catalog.pg_has_role(${row}.usesysid, r.oid, 'MEMBER'))`
+}
+
+/**
  * Sessions ExponetDB never signals, whoever asks (policy
  * `connections.replication-protect`, `connections.no-superuser-terminate`;
  * performance.md §5): anything that is not a client backend (walsenders,
  * autovacuum, background workers), ExponetDB's own roles and sessions,
- * superuser sessions, and backup tools by their application name. Kept as
- * one expression so planning, the policy facts and the signaling statement
- * agree.
+ * superuser sessions (also a login that may `SET ROLE` to a superuser), and
+ * backup tools by their application name. Kept as one expression so
+ * planning, the policy facts and the signaling statement agree.
  */
 export function protectedSession(row: TrustedSql): TrustedSql {
   return sql`(${row}.backend_type IS DISTINCT FROM 'client backend'
      OR ${row}.usename::text LIKE 'exponetdb\\_%'
      OR coalesce(${row}.application_name, '') LIKE 'exponetdb/%'
-     OR coalesce(${row}.application_name, '') ~* '(pgbackrest|pg_basebackup|pg_dump|pg_dumpall|pg_restore|barman|wal-g|walg|pg_receivewal)'
-     OR EXISTS (SELECT 1 FROM pg_catalog.pg_roles r WHERE r.oid = ${row}.usesysid AND r.rolsuper))`
+     OR coalesce(${row}.application_name, '') ~* ${BACKUP_APPLICATIONS}
+     OR ${superuserSession(row)})`
 }
 
 /**
@@ -61,7 +87,7 @@ export function protectionReason(row: TrustedSql): TrustedSql {
   return sql`(CASE
      WHEN ${row}.backend_type IS DISTINCT FROM 'client backend' THEN 'not_client_backend'
      WHEN ${row}.usename::text LIKE 'exponetdb\\_%' OR coalesce(${row}.application_name, '') LIKE 'exponetdb/%' THEN 'exponetdb_session'
-     WHEN coalesce(${row}.application_name, '') ~* '(pgbackrest|pg_basebackup|pg_dump|pg_dumpall|pg_restore|barman|wal-g|walg|pg_receivewal)' THEN 'backup_session'
-     WHEN EXISTS (SELECT 1 FROM pg_catalog.pg_roles r WHERE r.oid = ${row}.usesysid AND r.rolsuper) THEN 'superuser_session'
+     WHEN coalesce(${row}.application_name, '') ~* ${BACKUP_APPLICATIONS} THEN 'backup_session'
+     WHEN ${superuserSession(row)} THEN 'superuser_session'
      ELSE NULL END)`
 }

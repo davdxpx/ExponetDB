@@ -91,6 +91,31 @@ describe('deltas', () => {
     ).toBeNull()
   })
 
+  it('skips a delta whose previous value is older than a gap: the statement re-entered the top 200 (review D-5)', () => {
+    const now = { ...c(1015, 10_160), statsSinceMs: null }
+    // Two periods apart (one sample missed): still one delta.
+    expect(
+      deltaOf(latest(c(10, 100)), now, { ...ctx, sampledAtMs: T0 + STATEMENT_GAP_SECONDS * 1000 })
+        ?.calls,
+    ).toBe(1005n)
+    // Longer: the whole difference is not stamped on this sample; the interval is a gap.
+    expect(
+      deltaOf(latest(c(10, 100)), now, {
+        ...ctx,
+        sampledAtMs: T0 + STATEMENT_GAP_SECONDS * 1000 + 1,
+      }),
+    ).toBeNull()
+    expect(deltaOf(latest(c(10, 100)), now, { ...ctx, sampledAtMs: T0 + 6 * 3_600_000 })).toBeNull()
+    // After deallocations as well.
+    expect(
+      deltaOf(latest(c(10, 100)), now, {
+        ...ctx,
+        discontinuity: 'entries_deallocated',
+        sampledAtMs: T0 + 3_600_000,
+      }),
+    ).toBeNull()
+  })
+
   it('refuses a previous value of another epoch and an entry recreated after it (stats_since)', () => {
     const now = { ...c(15, 160), statsSinceMs: null }
     expect(deltaOf(latest(c(10, 100), { statsReset: 'other' }), now, ctx)).toBeNull()

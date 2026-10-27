@@ -343,7 +343,7 @@ export const plaintextClientConnections: AdvisorRule<{ remote: number; loopback:
 // ----- performance -----
 
 const FK_UNINDEXED = sql`SELECT n.nspname::text AS schema, c.relname::text AS name, con.conname::text AS constraint_name,
-       (SELECT string_agg(a.attname::text, ', ' ORDER BY k.ord)
+       (SELECT pg_catalog.jsonb_agg(a.attname::text ORDER BY k.ord)
           FROM pg_catalog.unnest(con.conkey) WITH ORDINALITY AS k(attnum, ord)
           JOIN pg_catalog.pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.attnum) AS columns
   FROM pg_catalog.pg_constraint con
@@ -358,8 +358,17 @@ const FK_UNINDEXED = sql`SELECT n.nspname::text AS schema, c.relname::text AS na
           = (SELECT array_agg(y ORDER BY y) FROM pg_catalog.unnest(con.conkey) y))
  ORDER BY 1, 2, 3 LIMIT $3`
 
+/**
+ * The columns of a foreign key as display text: each name quoted like every
+ * other identifier (`displayIdent`), so a hostile column name stays one
+ * quoted name and never reads as prose.
+ */
+export function columnList(columns: readonly string[]): string {
+  return clip(columns.map((c) => displayIdent(clip(c, 63))).join(', '), 512)
+}
+
 export const unindexedForeignKey: AdvisorRule<
-  (RelationFact & { constraint: string; columns: string })[]
+  (RelationFact & { constraint: string; columns: readonly string[] })[]
 > = {
   id: 'unindexed_foreign_key',
   category: 'performance',
@@ -373,7 +382,9 @@ export const unindexedForeignKey: AdvisorRule<
         schema: r.text('schema'),
         name: r.text('name'),
         constraint: r.text('constraint_name'),
-        columns: r.textOrNull('columns') ?? '',
+        columns: r.isNull('columns')
+          ? []
+          : r.jsonArray('columns').filter((c): c is string => typeof c === 'string'),
       }),
       RULE_FINDING_CAP,
     ),
@@ -383,9 +394,9 @@ export const unindexedForeignKey: AdvisorRule<
         unindexedForeignKey,
         'info',
         `constraint ${displayIdent(clip(f.constraint, 63))} on ${qualifiedLabel(f.schema, f.name)}`,
-        `No index starts with the columns of a foreign key (${clip(f.columns, 256)}): a delete or key change in the referenced table scans this table, and joins on it are slow.`,
-        `Create an index on ${qualifiedLabel(f.schema, f.name)} (${clip(f.columns, 512)}) through a migration (CREATE INDEX CONCURRENTLY in a non-transactional bundle).`,
-        { constraint: text(f.constraint, 63), columns: text(f.columns) },
+        'No index starts with the columns of this foreign key: a delete or key change in the referenced table scans the referencing table, and joins on it are slow.',
+        `Create an index on ${qualifiedLabel(f.schema, f.name)} (${columnList(f.columns)}) through a migration (CREATE INDEX CONCURRENTLY in a non-transactional bundle).`,
+        { constraint: text(f.constraint, 63), columns: text(columnList(f.columns)) },
         'migration_draft',
       ),
     ),

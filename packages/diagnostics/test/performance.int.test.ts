@@ -6,6 +6,7 @@ import {
   WORKER_ACTOR,
 } from '@exponetdb/operations'
 import { CONNECTION_RULES, REGISTRY_RULES, RuleRegistry } from '@exponetdb/policy'
+import { STALLED_SECONDS, sql, stalledSession } from '@exponetdb/postgres'
 import {
   applyRegistryPlan,
   findTarget,
@@ -353,6 +354,39 @@ describe('table statistics, advisors and findings (PostgreSQL 17)', () => {
     expect(runs.rows).toHaveLength(2)
   }, 60_000)
 
+  it("an advisor run's record (its audit) commits with the run and its findings, or none of them does (review F-4)", async () => {
+    const count = async () => {
+      const { rows } = await h.serve.query(
+        'test.perf.atomic',
+        `SELECT (SELECT count(*) FROM observation.advisor_runs WHERE target_id = $1)::int AS runs,
+                (SELECT coalesce(sum(occurrences), 0) FROM observation.subject_findings
+                  WHERE target_id = $1 AND kind = 'advisor')::int AS seen`,
+        [target.targetId],
+      )
+      return { runs: rows[0]?.int('runs'), seen: rows[0]?.int('seen') }
+    }
+    const before = await count()
+    let recorded: string | undefined
+    await expect(
+      runAdvisors(
+        serveDeps(),
+        target,
+        ['performance'],
+        { kind: 'identity', identityId: a.identityId },
+        Date.now(),
+        {
+          record: async (_tx, run) => {
+            recorded = run.id
+            throw new Error('audit unavailable')
+          },
+        },
+      ),
+    ).rejects.toThrow('audit unavailable')
+    expect(recorded).toMatch(/^adv_/)
+    // Nothing of the run is left: no run row, no finding counted again.
+    expect(await count()).toEqual(before)
+  }, 60_000)
+
   it('lists drift, health, advisor and statement findings as one, newest first, by kind and code', async () => {
     const all: string[] = []
     let cursor: string | undefined
@@ -406,6 +440,69 @@ async function appSession(
   const client = await loginClient(server, role, testRolePassword(role), database)
   await client.query(`SET application_name = '${applicationName}'`)
   return client
+}
+
+/**
+ * A `COPY ... FROM STDIN` the test feeds by hand, row by row, on node-postgres'
+ * submittable protocol (no copy-stream dependency): `started` settles on the
+ * server's CopyInResponse, `done` when the statement completes.
+ */
+class SlowCopy {
+  readonly started: Promise<void>
+  readonly done: Promise<void>
+  #connection: { sendCopyFromChunk(b: Buffer): void; endCopyFrom(): void } | undefined
+  #start: () => void = () => undefined
+  #resolve: () => void = () => undefined
+  #reject: (e: unknown) => void = () => undefined
+  #error: unknown
+  #ended = false
+
+  readonly text: string
+
+  constructor(text: string) {
+    this.text = text
+    this.started = new Promise((resolve) => {
+      this.#start = resolve
+    })
+    this.done = new Promise((resolve, reject) => {
+      this.#resolve = resolve
+      this.#reject = reject
+    })
+  }
+
+  submit(connection: { query(text: string): void }) {
+    connection.query(this.text)
+  }
+
+  handleCopyInResponse(connection: { sendCopyFromChunk(b: Buffer): void; endCopyFrom(): void }) {
+    this.#connection = connection
+    this.#start()
+  }
+
+  send(chunk: string) {
+    if (!this.#ended) this.#connection?.sendCopyFromChunk(Buffer.from(chunk))
+  }
+
+  end() {
+    if (this.#ended) return
+    this.#ended = true
+    this.#connection?.endCopyFrom()
+  }
+
+  handleError(error: unknown) {
+    this.#error = error
+    this.#start()
+  }
+
+  handleReadyForQuery() {
+    if (this.#error === undefined) this.#resolve()
+    else this.#reject(this.#error)
+  }
+
+  handleCommandComplete() {}
+  handleRowDescription() {}
+  handleDataRow() {}
+  handleEmptyQuery() {}
 }
 
 interface Backend {
@@ -603,6 +700,100 @@ describe.each([17, 18] as const)('cancel and terminate on PostgreSQL %i', (major
       await sleeping
     }
   }, 60_000)
+
+  it('denies a login that may SET ROLE to a superuser, and a pg_probackup session (review D-4)', async () => {
+    const member = `${role}_member`
+    const su = `${role}_su`
+    await runAsSuperuser(server, 'postgres', [
+      `CREATE ROLE ${su} SUPERUSER NOLOGIN`,
+      `CREATE ROLE ${member} LOGIN PASSWORD '${testRolePassword(member)}'`,
+      `GRANT CONNECT ON DATABASE ${databaseOf(target)} TO ${member}`,
+      `GRANT ${su} TO ${member}`,
+    ])
+    // The login role itself is not a superuser; it could SET ROLE to one.
+    const viaRole = await appSession(server, databaseOf(target), member, `perf-setrole-${major}`)
+    const sleeping = viaRole.query('SELECT pg_sleep(10)').catch(() => undefined)
+    try {
+      const b = await backendOf(server, `perf-setrole-${major}`)
+      const plan = await h.serve.transaction('test.perf.deny_member', (tx) =>
+        planCancel(tx, context(), a, target.targetId, b),
+      )
+      expect(plan).toMatchObject({ state: 'denied', decision: 'deny' })
+    } finally {
+      await viaRole.end().catch(() => undefined)
+      await sleeping
+    }
+    const backup = await appSession(server, databaseOf(target), role, 'pg_probackup')
+    const backingUp = backup.query('SELECT pg_sleep(10)').catch(() => undefined)
+    try {
+      const b = await backendOf(server, 'pg_probackup')
+      const plan = await h.serve.transaction('test.perf.deny_probackup', (tx) =>
+        planCancel(tx, context(), a, target.targetId, b),
+      )
+      expect(plan).toMatchObject({ state: 'denied', decision: 'deny' })
+    } finally {
+      await backup.end().catch(() => undefined)
+      await backingUp
+    }
+  }, 60_000)
+
+  it('a COPY FROM that keeps reading rows is never stalled, and a stalled terminate does not match it (review D-1)', async () => {
+    await runAsSuperuser(server, databaseOf(target), [`GRANT INSERT ON TABLE t TO ${role}`])
+    const application = `perf-copy-${major}`
+    const client = await appSession(server, databaseOf(target), role, application)
+    const copy = new SlowCopy('COPY t (id) FROM STDIN')
+    client.query(copy as never)
+    const opened = await h.workerConnector.forTarget(target, 'operator', 'test/copy')
+    let feeding: ReturnType<typeof setInterval> | undefined
+    try {
+      await copy.started
+      let row = 0
+      // A slow client: one row every two seconds, for longer than the stalled threshold.
+      feeding = setInterval(() => copy.send(`${++row}\n`), 2_000)
+      const b = await backendOf(server, application)
+      await new Promise((r) => setTimeout(r, (STALLED_SECONDS + 5) * 1000))
+      // Sampled while it waits on ClientRead (between two rows): the condition without the
+      // COPY exclusion holds, the shared predicate does not.
+      let seen: { waiting: boolean; old: boolean; stalled: boolean } | undefined
+      for (let i = 0; i < 40 && seen?.waiting !== true; i++) {
+        seen = await withSuperuser(server, 'postgres', async (c) => {
+          const r = await c.query(
+            `SELECT a.wait_event = 'ClientRead' AS waiting,
+                    (a.state = 'active' AND a.wait_event = 'ClientRead'
+                       AND a.query_start <= clock_timestamp() - interval '60 seconds') AS old,
+                    ${stalledSession(sql`a`).text} AS stalled
+               FROM pg_stat_activity a WHERE a.pid = $1`,
+            [b.pid],
+          )
+          return r.rows[0] as { waiting: boolean; old: boolean; stalled: boolean }
+        })
+        if (seen?.waiting !== true) await new Promise((r) => setTimeout(r, 50))
+      }
+      expect(seen).toEqual({ waiting: true, old: true, stalled: false })
+      expect(
+        await signalSession(opened.session, 'connections.terminate', {
+          ...b,
+          condition: 'stalled',
+        }),
+      ).toBe('not_matched')
+      const plan = await h.serve.transaction('test.perf.copy_stalled', (tx) =>
+        planTerminate(tx, context(), a, target.targetId, {
+          pid: b.pid,
+          backendStart: b.backendStart,
+          condition: 'stalled',
+          reason: 'test',
+        }),
+      )
+      const refused = await execute(plan)
+      expect(refused.refused).toMatchObject({ code: 'PLAN_STALE' })
+    } finally {
+      if (feeding !== undefined) clearInterval(feeding)
+      copy.end()
+      await copy.done.catch(() => undefined)
+      await opened.session.close()
+      await client.end().catch(() => undefined)
+    }
+  }, 120_000)
 })
 
 describe('a cluster without an operator credential', () => {

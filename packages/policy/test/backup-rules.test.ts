@@ -137,6 +137,52 @@ describe('restore.recovery-approval and restore.clone-masking', () => {
   })
 })
 
+describe('restore.recovery-discard-approval', () => {
+  const discard = (purpose?: string): JsonValue => ({
+    restoreId: 'rst_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z',
+    runId: 'run_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z',
+    ...(purpose === undefined ? {} : { purpose }),
+  })
+  const rule = (d: Awaited<ReturnType<typeof decide>>) =>
+    d.rules.find((r) => r.id === 'restore.recovery-discard-approval')
+
+  it('discarding a recovered cluster needs an approval and re-authentication, also on nonprod', async () => {
+    for (const tier of ['nonprod', 'prod'] as const) {
+      const d = await decide('restore.discard', { tier, content: discard('recovery') })
+      expect(d.decision, tier).toBe('require')
+      expect(rule(d)?.result).toBe('fail')
+      expect(d.requirements).toEqual(
+        expect.arrayContaining([
+          { kind: 'approval', count: 1, permission: 'plans.approve' },
+          { kind: 'reauth', withinSeconds: 300 },
+        ]),
+      )
+    }
+  })
+
+  it("a drill's scratch cluster is discarded without one", async () => {
+    const d = await decide('restore.discard', { tier: 'prod', content: discard('drill') })
+    expect(rule(d)?.result).toBe('not_applicable')
+    expect(d.decision).toBe('allow')
+  })
+
+  it('a discard that does not say what it discards is unknown and requires the approval', async () => {
+    const d = await decide('restore.discard', { tier: 'nonprod', content: discard() })
+    expect(rule(d)?.result).toBe('unknown')
+    expect(d.decision).not.toBe('allow')
+  })
+
+  it('break-glass does not lift it', () => {
+    const r = BACKUP_RULES.find((x) => x.id === 'restore.recovery-discard-approval')
+    expect(r).toMatchObject({
+      appliesTo: ['restore.discard'],
+      severity: 'require',
+      overridableByBreakGlass: false,
+      defaults: { approvals: 1, reauthWithinSeconds: 300 },
+    })
+  })
+})
+
 describe('backup.repository-runs-allowed and backup.run-agent-prod-approval', () => {
   const run = (ownership: string, kind: string): JsonValue => ({ kind, repository: { ownership } })
 

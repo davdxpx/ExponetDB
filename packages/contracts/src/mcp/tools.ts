@@ -762,7 +762,9 @@ export const MCP_TOOLS = [
     name: 'advisors_run',
     toolVersion: 1,
     title: 'Run advisors',
-    description: `Live security, performance, operations and change-safety findings with remediation; never changes anything.${UNTRUSTED_NOTE}`,
+    description:
+      "Runs the live security, performance, operations and change-safety advisors on a target and returns their findings with remediation. Changes no database; the run and its findings are recorded in ExponetDB's own store as the target's advisor history." +
+      UNTRUSTED_NOTE,
     action: 'advisor.run',
     restOperationId: 'runAdvisors',
     annotations: { ...RO_OPEN, idempotentHint: false },

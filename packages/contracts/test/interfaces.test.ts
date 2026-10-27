@@ -262,6 +262,13 @@ describe('MCP tools', () => {
     })
   })
 
+  it('say that advisors_run records its run and findings, never that it changes nothing (review F-4)', () => {
+    const advisors = MCP_TOOL_LIST.find((t) => t.name === 'advisors_run')
+    expect(advisors?.action).toBe('advisor.run')
+    expect(advisors?.description).not.toMatch(/never changes anything/)
+    expect(advisors?.description).toMatch(/recorded in ExponetDB's own store/)
+  })
+
   it('reach only actions an MCP client may call, with MCP-grantable scopes', () => {
     for (const t of MCP_TOOL_LIST) {
       const a = action(t.action)

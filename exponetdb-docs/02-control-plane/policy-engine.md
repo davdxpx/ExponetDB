@@ -150,6 +150,8 @@ grant could override.
 | `migration.import-execution-role` | `migration.import.replay` (Wave 9 Part A) | deny, not overridable | the replay's execution role, read on the scratch target for the migrator at planning, is usable exactly as for an apply (a declared exception, ADR-0034, counts as usable); the replay checks it again under the scratch target's lock ([`../04-migrations/legacy-import.md` §2.2](../04-migrations/legacy-import.md#22-wave-6-implementation)) |
 | `migration.execution-role-exception` | the SQL kinds and `migration.import.replay` (Wave 9 Part A) | warn | a plan whose execution role carries `BYPASSRLS` under a declared exception ([ADR-0034](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md) §3) shows it in every plan (`facts.executionRoleExceptions`, or the replay's role check `declared_exception`); it never blocks by itself |
 | `migration.execution-role-parity` | prod tier, every migration kind (Wave 9 Part A) | warn | the evidence environment's execution roles have the attributes and the exception status of production's (`facts.executionRoleParity` `match`); `mismatch` or `unknown` is a warning (ADR-0034 §4) |
+| `migration.agent-procedural` | **every tier**; the SQL kinds and `migration.import.replay`; principal not a person in the Web App or the CLI (OD-13 (a)) (Wave 9 Part B, [OD-55](../00-product/open-decisions.md#od-55-procedural-code-in-a-migration-session-can-act-as-any-role-the-migrator-holds) (c)) | require approval, not overridable | the plan's SQL is procedural (`facts.procedural`, reasons in `facts.proceduralReasons`: `DO` blocks, procedure calls, functions a top-level `SELECT`, `CREATE TABLE … AS` or a materialized view calls, routines, triggers or rules the bundle creates, dynamic SQL where the text shows it; [`../04-migrations/planning-and-apply.md` §2](../04-migrations/planning-and-apply.md#2-plan-content)); a plan without the fact (a legacy replay, a plan made before the rule) or with a malformed one counts as procedural (fail closed). A person's plan is `not_applicable` |
+| `migration.procedural-nontransactional` | `migration.apply` and `migration.resume` with `transactional: false`; every principal (Wave 9 Part B, OD-55 (d)) | deny, not overridable | procedural SQL in a non-transactional bundle: its statements commit one by one, so the executor's ledger guard cannot roll back what they do ([`../04-migrations/planning-and-apply.md` §4.4](../04-migrations/planning-and-apply.md#44-non-transactional-migration)); unclassified counts as procedural |
 
 **[DECIDED]** Wave 6 scope of the rules: `migration.lint-errors`,
 `migration.execution-role`, `migration.destructive-backup`,
@@ -160,6 +162,14 @@ evidence, lineage, dependency and compatibility rules to `migration.apply`
 only. **[OBSERVED]** (2026-10-13, Wave 7; G7 not yet accepted)
 `migration.agent-production` (version 2) also applies to `migration.verify`
 ([`../04-migrations/verification.md`](../04-migrations/verification.md#retrying-verification)).
+**[DECIDED]** (Wave 9 Part B, owner decision of 2026-10-26, OD-55 (c) and
+(d)) `migration.agent-procedural` asks a person for every procedural plan
+an agent initiates, on nonprod too: code a migration runs can act as any
+role the migrator holds. The executor's ledger guard
+([`../04-migrations/planning-and-apply.md` §4.3](../04-migrations/planning-and-apply.md#43-transactional-migration))
+protects the ledger and the identity marker whoever initiated the plan; the
+approval is the control for everything else such code can reach (other
+projects' roles on the cluster, the residual of threat T38).
 
 ### Connections
 
@@ -279,6 +289,7 @@ break-glass; an unknown tier counts as production.
 | `backup.run-agent-prod-approval` | `backup.run` | require approval | an agent's backup run on a production (or unknown-tier) cluster waits for a person |
 | `restore.human-only` | `restore.drill`, `restore.execute`, `restore.discard` | deny | a person in the Web App or the CLI plans and applies them; an agent's plan is stored denied and keeps its analysis. **[DECIDED]** No system-actor drill exists in this wave (no scheduler) |
 | `restore.recovery-approval` | `restore.execute` | require approval + reauth (300 s) | a recovery restore is approved by a person on every tier |
+| `restore.recovery-discard-approval` | `restore.discard` | require approval + reauth (300 s), not overridable by break-glass | discarding a recovered cluster is approved by a person on every tier, as creating it was (review C-8); a drill's scratch cluster is discarded without one; a discard that does not say what it discards is `unknown` and requires the approval |
 | `restore.source-verified` | `restore.drill`, `restore.execute` | deny | the source backup passed its verification and the WAL range is shown continuous; the kind checks both again at apply |
 | `restore.target-identity` | `restore.drill`, `restore.execute` | deny | a drill restores into scratch, a recovery into a new cluster on a bound node; never in place; the source system identifier is bound |
 | `restore.clone-masking` | `restore.execute` | deny | clones are not built in V1 (no masking profile) |

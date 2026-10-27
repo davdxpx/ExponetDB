@@ -148,54 +148,56 @@ export class PerformanceUseCases {
   ): Promise<AdvisorRun> {
     const target = await this.#target('advisor.run', caller, ref)
     const unique = [...new Set(categories)]
-    const run = await runAdvisors(
+    const parties = this.#h.parties(caller)
+    // The run, its findings and its audit event commit together (review F-4).
+    return runAdvisors(
       this.#services().observation,
       target,
       unique,
       { kind: 'identity', identityId: this.#h.identityOf(caller) },
       this.#h.clock.nowMs(),
-    )
-    const parties = this.#h.parties(caller)
-    await this.#h.store.transaction('application.advisor_run.audit', (tx) =>
-      appendAuditEvent(
-        tx,
-        {
-          action: 'advisor.run',
-          phase: 'completed',
-          actor: {
-            kind: parties.actor.kind,
-            identityId: parties.actor.identityId,
-            label: parties.actor.label as never,
-          },
-          client: {
-            clientId: parties.client.clientId as never,
-            kind: parties.client.kind,
-            grantId: parties.client.grantId as never,
-            ...(parties.client.sessionId === undefined
-              ? {}
-              : { sessionId: parties.client.sessionId as never }),
-          },
-          subject: {
-            targetId: target.targetId as never,
-            targetPath: target.path,
-            tier: target.tier,
-          },
-          ...(options.requestId === undefined
-            ? {}
-            : { request: { requestId: options.requestId as never } }),
-          changes: {
-            advisorRunId: run.id ?? null,
-            catalogVersion: run.catalogVersion ?? null,
-            categories: unique,
-            findings: run.findings.length,
-            skipped: run.skipped?.length ?? 0,
-          },
-          result: { status: 'succeeded' },
+      {
+        record: async (tx, run) => {
+          await appendAuditEvent(
+            tx,
+            {
+              action: 'advisor.run',
+              phase: 'completed',
+              actor: {
+                kind: parties.actor.kind,
+                identityId: parties.actor.identityId,
+                label: parties.actor.label as never,
+              },
+              client: {
+                clientId: parties.client.clientId as never,
+                kind: parties.client.kind,
+                grantId: parties.client.grantId as never,
+                ...(parties.client.sessionId === undefined
+                  ? {}
+                  : { sessionId: parties.client.sessionId as never }),
+              },
+              subject: {
+                targetId: target.targetId as never,
+                targetPath: target.path,
+                tier: target.tier,
+              },
+              ...(options.requestId === undefined
+                ? {}
+                : { request: { requestId: options.requestId as never } }),
+              changes: {
+                advisorRunId: run.id ?? null,
+                catalogVersion: run.catalogVersion ?? null,
+                categories: unique,
+                findings: run.findings.length,
+                skipped: run.skipped?.length ?? 0,
+              },
+              result: { status: 'succeeded' },
+            },
+            { clock: this.#h.clock },
+          )
         },
-        { clock: this.#h.clock },
-      ),
+      },
     )
-    return run
   }
 
   /** `finding.summary`: open findings over the targets the caller may read. */

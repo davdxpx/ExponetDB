@@ -501,12 +501,14 @@ interface RegressionStats {
 /**
  * The two windows of each statement ending at `toUs`: the last 24 hours and
  * the 7 days before them, from the deltas (attributed to the sample that
- * measured them). `keys` limits the statements; `minCalls24h` keeps only
- * those that ran at least that often in the last 24 hours (or `include`).
+ * measured them) of the target's current generation whose interval starts
+ * inside the windows (`from_at`). `keys` limits the statements;
+ * `minCalls24h` keeps only those that ran at least that often in the last
+ * 24 hours (or `include`).
  */
 async function regressionStats(
   q: Queryable,
-  targetId: string,
+  target: Pick<TargetRecord, 'targetId' | 'generation'>,
   toIso: string,
   filter: {
     readonly keys?: readonly string[]
@@ -523,20 +525,23 @@ async function regressionStats(
             coalesce(sum(d.calls) FILTER (WHERE d.sampled_at <= $3::timestamptz - interval '${REGRESSION.windowHours} hours'), 0)::text AS c7,
             coalesce(sum(d.total_time_ms) FILTER (WHERE d.sampled_at <= $3::timestamptz - interval '${REGRESSION.windowHours} hours'), 0)::text AS t7
        FROM observation.statement_deltas d
+       JOIN observation.statement_samples s ON s.sample_id = d.sample_id AND s.generation = $6
       WHERE d.target_id = $1
         AND ($2::text[] IS NULL OR d.statement_key = ANY($2::text[]))
         AND d.sampled_at > $3::timestamptz - interval '${REGRESSION.windowHours} hours' - interval '${REGRESSION.baselineDays} days'
+        AND d.from_at >= $3::timestamptz - interval '${REGRESSION.windowHours} hours' - interval '${REGRESSION.baselineDays} days'
         AND d.sampled_at <= $3::timestamptz
       GROUP BY d.statement_key
      HAVING $4::bigint IS NULL
          OR coalesce(sum(d.calls) FILTER (WHERE d.sampled_at > $3::timestamptz - interval '${REGRESSION.windowHours} hours'), 0) >= $4::bigint
          OR d.statement_key = ANY($5::text[])`,
     [
-      targetId,
+      target.targetId,
       filter.keys === undefined ? null : [...filter.keys],
       toIso,
       filter.minCalls24h ?? null,
       [...(filter.include ?? [])],
+      target.generation,
     ],
   )
   const out = new Map<string, RegressionStats>()
@@ -596,7 +601,7 @@ export async function evaluateRegressions(
   const open = await openSubjectFindings(store, target.targetId, 'statements', [
     REGRESSION_FINDING_CODE,
   ])
-  const stats = await regressionStats(store, target.targetId, toIso, {
+  const stats = await regressionStats(store, target, toIso, {
     minCalls24h: REGRESSION.minCalls,
     include: open.map((f) => f.dedupKey),
   })
@@ -794,16 +799,17 @@ export async function queryStats(
             (array_agg(d.database_name ORDER BY d.sampled_at DESC))[1] AS database_name,
             (array_agg(d.role_name ORDER BY d.sampled_at DESC))[1] AS role_name
        FROM observation.statement_deltas d
+       JOIN observation.statement_samples s ON s.sample_id = d.sample_id AND s.generation = $5
       WHERE d.target_id = $1 AND d.sampled_at > $2::timestamptz AND d.sampled_at <= $3::timestamptz
+        AND d.from_at >= $2::timestamptz
       GROUP BY d.statement_key
       ORDER BY ${order} DESC NULLS LAST, d.statement_key
       LIMIT $4`,
-    [target.targetId, fromIso, toIso, limit + 1],
+    [target.targetId, fromIso, toIso, limit + 1, target.generation],
   )
   const page = rows.slice(0, limit)
   const keys = page.map((r) => r.text('statement_key'))
-  const stats =
-    keys.length === 0 ? new Map() : await regressionStats(q, target.targetId, toIso, { keys })
+  const stats = keys.length === 0 ? new Map() : await regressionStats(q, target, toIso, { keys })
   const migrations = keys.length === 0 ? null : await migrationsBetween(q, target, toIso)
   const cap = request.reader === 'agent' ? MCP_MAX_LENGTH : DEFAULT_MAX_LENGTH
   const statements: QueryStats['statements'] = page.map((r) => {

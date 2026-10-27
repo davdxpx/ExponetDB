@@ -108,8 +108,11 @@ privileges) nor `pgstattuple`. `statsSince` is
   none across another `stats_reset` or server start than the previous
   value's, none for an entry whose `stats_since` is newer than the previous
   value (PostgreSQL 17+: it was evicted or reset and added again), none
-  when any counter went down, none when the statement did not run; never
-  negative. **[ASSUMPTION]** On PostgreSQL 16 an entry evicted and added
+  when any counter went down, none when the statement did not run, and
+  none when the previous value is older than a gap (more than 600 s, two
+  periods: a statement that left the top 200 and came back, or samples that
+  failed in between, would put the whole difference into one delta stamped
+  now; review D-5); never negative. **[ASSUMPTION]** On PostgreSQL 16 an entry evicted and added
   again whose new count already exceeds the old one gives a wrong positive
   delta: 1.10 has no `stats_since`, and the sample with the eviction shows
   only that some entries were deallocated.
@@ -121,7 +124,9 @@ privileges) nor `pgstattuple`. `statsSince` is
   `text_redacted`. The answer's `digest` is the `sha256` of the redacted text,
   the digest the raw statement view looks up.
 - **Reads** (`GET /targets/{id}/query-stats`, `query_stats.list`, MCP
-  `query_stats`): the deltas whose sample falls in `(from, to]` (default the
+  `query_stats`): the deltas of the target's current generation (by their
+  sample) whose interval lies in the window, sampled in `(from, to]` and
+  measured from `from` or later (`from_at`; default the
   last 24 hours, at most 7 days, `limit` at most 500), summed per statement
   and ordered by `total_time`, `mean_time`, `calls` or `io` (shared blocks
   read); the newest text, query id, database and role of each; `source:
@@ -274,9 +279,14 @@ Replication and backup sessions are never terminable (policy
 - **Protected sessions** (one SQL expression for planning, policy and the
   signaling statement): not a client backend (walsenders, autovacuum,
   background workers), `exponetdb_*` roles or `exponetdb/…` application
-  names, superuser sessions, backup tools by application name (pgBackRest,
-  pg_basebackup, pg_dump, pg_dumpall, pg_restore, barman, wal-g,
-  pg_receivewal). Policy: `connections.replication-protect` (deny,
+  names, superuser sessions (the login role is a superuser or a member of
+  one, directly or through other roles, so `SET ROLE` would make it one:
+  `pg_stat_activity` shows the login role only), backup tools by
+  application name (pgBackRest, pg_basebackup, pg_dump, pg_dumpall,
+  pg_restore, pg_probackup, barman, wal-g, pg_receivewal). **[DECIDED]**
+  (review D-4, 2026-10-27) The application-name match is best effort: a
+  backup tool that does not set its name is not recognized, and a client
+  that names itself like one is protected. Policy: `connections.replication-protect` (deny,
   break-glass) for non-client and backup sessions,
   `connections.no-superuser-terminate` (deny, not overridable) for
   superuser and ExponetDB sessions; `connections.prod-terminate-approval`

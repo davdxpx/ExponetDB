@@ -367,13 +367,26 @@ describe('dependency port (retirement)', () => {
 describe('bundle guards', () => {
   it('a lock capability is never stored as proven, and a secret source is host configuration only', async () => {
     const w = await world()
+    // The column's CHECK refuses 'proven' at adoption ...
+    await expect(
+      worker.query(
+        'test.proven_insert',
+        `INSERT INTO backups.repositories (repository_id, cluster_id, layer, engine, provider, prefix, priority,
+           purpose, ownership, secret_source, lock_mode, lock_capability, cipher, state, revision,
+           created_by_operation_id)
+         VALUES ($1, $2, 'l2_logical', 'pg_dump', 'posix', 'dumps/', 1, 'secondary', 'adopted_observed',
+           'host_config', 'none', 'proven', 'none', 'observing', 1, $3)`,
+        [newId('bkr', Date.now()), w.clusterId, await systemOperation('backup.repository.adopt')],
+      ),
+    ).rejects.toMatchObject({ sqlstate: '23514' })
+    // ... and later the guard refuses any change of the declared lock capability before the CHECK is reached.
     await expect(
       worker.query(
         'test.proven',
         `UPDATE backups.repositories SET lock_capability = 'proven' WHERE repository_id = $1`,
         [w.repositoryId],
       ),
-    ).rejects.toMatchObject({ sqlstate: '23514' })
+    ).rejects.toMatchObject({ sqlstate: 'EXB01' })
     await expect(
       db.asSuperuser((c) =>
         c.query(
@@ -397,5 +410,312 @@ describe('bundle guards', () => {
         c.query('DELETE FROM backups.reconciliations WHERE repository_id = $1', [w.repositoryId]),
       ),
     ).rejects.toBeDefined()
+  })
+
+  /** A statement as `exdb_worker` on a plain connection, for SQLSTATE assertions. */
+  function asWorker(sql: string, params: readonly unknown[] = []) {
+    return db.asRole('exdb_worker', (c) => c.query(sql, params as unknown[]))
+  }
+
+  /** An active node of the world's server (the enrollment is proven in the nodes suite). */
+  async function node(w: World): Promise<string> {
+    const nodeId = newId('nod', Date.now() + Math.floor(Math.random() * 100_000))
+    await db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query("SET LOCAL session_replication_role = 'replica'")
+      await c.query(
+        `INSERT INTO nodes.nodes (node_id, server_id, token_id, state, tls_key, node_signing_key, node_encryption_key,
+           bind_proof, bound_at, certificate, certificate_expires_at, host, agent_version, protocol_major,
+           capabilities, clusters, in_flight, heartbeat, last_hello_at, last_heartbeat_at, enrolled_at,
+           state_changed_at, trusted_job_keys)
+         VALUES ($1, $2, $3, 'active', decode(repeat('01', 32), 'hex'), $4, $5, NULL, now(), decode(repeat('ab', 100), 'hex'),
+                 now() + interval '30 days', '{}', '1.0.0', 1, '[]', '[]'::jsonb, '[]', NULL, now(), now(), now(),
+                 now(), '["k1"]')`,
+        [
+          nodeId,
+          w.serverId,
+          newId('ent', Date.now() + Math.floor(Math.random() * 100_000)),
+          Buffer.from(nodeId.slice(4, 36).padEnd(32, '0')),
+          Buffer.from(`${nodeId.slice(4, 35)}x`.padEnd(32, '1')),
+        ],
+      )
+      await c.query('COMMIT')
+    })
+    return nodeId
+  }
+
+  /** A finished verify run of the world's repository, written as the worker writes it. */
+  async function verifyRun(
+    w: World,
+    nodeId: string,
+    state: 'succeeded' | 'failed',
+    verifyErrors: number,
+  ): Promise<string> {
+    const runId = newId('run', Date.now() + Math.floor(Math.random() * 100_000))
+    await asWorker(
+      `INSERT INTO backups.runs (run_id, cluster_id, repository_id, node_id, purpose, operation_id, state)
+       VALUES ($1, $2, $3, $4, 'verify', $5, 'starting')`,
+      [runId, w.clusterId, w.repositoryId, nodeId, await systemOperation('backup.verify')],
+    )
+    await asWorker(
+      `UPDATE backups.runs SET state = $2, finished_at = clock_timestamp(), outcome = $3::jsonb WHERE run_id = $1`,
+      [runId, state, JSON.stringify({ verifyErrors })],
+    )
+    return runId
+  }
+
+  async function backupIds(w: World): Promise<string[]> {
+    await reconcile(w, listing(w))
+    const { rows } = await serve.query(
+      'test.backup_ids',
+      'SELECT backup_id FROM backups.catalog WHERE repository_id = $1 ORDER BY started_at',
+      [w.repositoryId],
+    )
+    const ids = rows.map((r) => r.text('backup_id'))
+    if (ids.length < 2) throw new Error('fixture')
+    return ids
+  }
+
+  const VERIFY = `UPDATE backups.catalog SET verification_state = $2, verified_at = clock_timestamp(),
+                         verification_run_id = $3 WHERE backup_id = $1`
+
+  it('a verification passes only from a succeeded verify run without errors (EXB04)', async () => {
+    const w = await world()
+    const nodeId = await node(w)
+    const [backupId] = await backupIds(w)
+    const failedRun = await verifyRun(w, nodeId, 'failed', 1)
+    await expect(asWorker(VERIFY, [backupId, 'passed', failedRun])).rejects.toMatchObject({
+      code: 'EXB04',
+    })
+    // A succeeded run that found errors does not make a pass either.
+    const withErrors = await verifyRun(w, nodeId, 'succeeded', 2)
+    await expect(asWorker(VERIFY, [backupId, 'passed', withErrors])).rejects.toMatchObject({
+      code: 'EXB04',
+    })
+    // The failed run records a failed verification; a new clean succeeded run records a pass.
+    await asWorker(VERIFY, [backupId, 'failed', failedRun])
+    await asWorker(VERIFY, [backupId, 'passed', await verifyRun(w, nodeId, 'succeeded', 0)])
+    const { rows } = await serve.query(
+      'test.verification',
+      'SELECT verification_state FROM backups.catalog WHERE backup_id = $1',
+      [backupId],
+    )
+    expect(rows[0]?.text('verification_state')).toBe('passed')
+  })
+
+  it('a failed verification is not flipped to passed with the same run, nor undone (EXB04)', async () => {
+    const w = await world()
+    const nodeId = await node(w)
+    const [backupId, other] = await backupIds(w)
+    const failedRun = await verifyRun(w, nodeId, 'failed', 1)
+    await asWorker(VERIFY, [backupId, 'failed', failedRun])
+    await expect(
+      asWorker(`UPDATE backups.catalog SET verification_state = 'passed' WHERE backup_id = $1`, [
+        backupId,
+      ]),
+    ).rejects.toMatchObject({ code: 'EXB04' })
+    await expect(asWorker(VERIFY, [backupId, 'passed', failedRun])).rejects.toMatchObject({
+      code: 'EXB04',
+    })
+    await expect(
+      asWorker(
+        `UPDATE backups.catalog SET verification_state = 'pending', verified_at = NULL, verification_run_id = NULL
+          WHERE backup_id = $1`,
+        [backupId],
+      ),
+    ).rejects.toMatchObject({ code: 'EXB04' })
+    // One run verifies one entry: another entry does not borrow it.
+    await expect(asWorker(VERIFY, [other, 'failed', failedRun])).rejects.toMatchObject({
+      code: 'EXB04',
+    })
+    // A new entry never arrives verified.
+    await expect(
+      asWorker(
+        `INSERT INTO backups.catalog (backup_id, repository_id, engine_label, kind, state, started_at,
+           verification_state, verified_at, verification_run_id)
+         VALUES ($1, $2, 'forged', 'full', 'succeeded', now(), 'failed', now(), $3)`,
+        [newId('bkp', Date.now()), w.repositoryId, failedRun],
+      ),
+    ).rejects.toMatchObject({ code: 'EXB04' })
+  })
+
+  it('an ownership operation changes one repository once, and only its ownership (EXB01)', async () => {
+    const a = await world()
+    const b = await world()
+    const ownership = await systemOperation('backup.repository.ownership')
+    const OWN = `UPDATE backups.repositories SET ownership = 'adopted_runs', revision = revision + 1,
+                        changed_by_operation_id = $2 WHERE repository_id = $1`
+    await asWorker(OWN, [a.repositoryId, ownership])
+    // The same operation does not change a second repository.
+    await expect(asWorker(OWN, [b.repositoryId, ownership])).rejects.toMatchObject({
+      code: 'EXB01',
+    })
+    // Declared facts are not changed by an ownership operation, new or reused.
+    for (const set of [
+      `cipher = 'none'`,
+      'offline_copy_confirmed_at = now()',
+      `lock_capability = 'unsupported'`,
+      'priority = 2',
+    ]) {
+      for (const op of [ownership, await systemOperation('backup.repository.ownership')]) {
+        await expect(
+          asWorker(
+            `UPDATE backups.repositories SET ${set}, revision = revision + 1, changed_by_operation_id = $2
+              WHERE repository_id = $1`,
+            [b.repositoryId, op],
+          ),
+        ).rejects.toMatchObject({ code: 'EXB01' })
+      }
+    }
+    // The changing operation is new on every change, and of the ownership kind.
+    await expect(
+      asWorker(
+        `UPDATE backups.repositories SET changed_by_operation_id = $2, revision = revision + 1
+          WHERE repository_id = $1`,
+        [a.repositoryId, await systemOperation('backup.repository.ownership')],
+      ),
+    ).rejects.toMatchObject({ code: 'EXB01' })
+    await expect(
+      asWorker(OWN, [b.repositoryId, await systemOperation('backup.repository.retire')]),
+    ).rejects.toMatchObject({ code: 'EXB01' })
+    // An ownership change carries no observation with it.
+    await expect(
+      asWorker(
+        `UPDATE backups.repositories SET ownership = 'adopted_runs', revision = revision + 1,
+                changed_by_operation_id = $2, engine_advisory = 'none', reconciled_at = now(),
+                reconciliation_outcome = 'ok' WHERE repository_id = $1`,
+        [b.repositoryId, await systemOperation('backup.repository.ownership')],
+      ),
+    ).rejects.toMatchObject({ code: 'EXB01' })
+    expect(await getRepository(serve, b.repositoryId)).toMatchObject({
+      ownership: 'adopted_observed',
+      revision: 1,
+    })
+  })
+
+  it('a retirement operation retires one repository, and nothing else changes with it (EXB01)', async () => {
+    const a = await world()
+    const b = await world()
+    const retire = await systemOperation('backup.repository.retire')
+    const RETIRE = `UPDATE backups.repositories SET state = 'retired', retired_at = now(), retired_by_operation_id = $2,
+                           revision = revision + 1 WHERE repository_id = $1`
+    await asWorker(RETIRE, [a.repositoryId, retire])
+    await expect(asWorker(RETIRE, [b.repositoryId, retire])).rejects.toMatchObject({
+      code: 'EXB01',
+    })
+    await expect(
+      asWorker(
+        `UPDATE backups.repositories SET state = 'retired', retired_at = now(), retired_by_operation_id = $2,
+                revision = revision + 1, engine_advisory = 'none' WHERE repository_id = $1`,
+        [b.repositoryId, await systemOperation('backup.repository.retire')],
+      ),
+    ).rejects.toMatchObject({ code: 'EXB01' })
+  })
+
+  it('the engine advisory changes only with a reconciliation that moves forward (EXB01)', async () => {
+    const w = await world()
+    await reconcile(w, listing(w))
+    expect(await getRepository(serve, w.repositoryId)).toMatchObject({
+      engineAdvisory: 'subkey_check_missing',
+    })
+    await expect(
+      asWorker(
+        `UPDATE backups.repositories SET engine_advisory = 'none' WHERE repository_id = $1`,
+        [w.repositoryId],
+      ),
+    ).rejects.toMatchObject({ code: 'EXB01' })
+    await expect(
+      asWorker(
+        `UPDATE backups.repositories SET observed_engine_version = '2.61.0' WHERE repository_id = $1`,
+        [w.repositoryId],
+      ),
+    ).rejects.toMatchObject({ code: 'EXB01' })
+    // A reconciliation time that does not move forward, or lies in the future, is refused.
+    for (const at of [
+      'reconciled_at',
+      `reconciled_at - interval '1 hour'`,
+      `now() + interval '1 day'`,
+    ]) {
+      await expect(
+        asWorker(
+          `UPDATE backups.repositories SET engine_advisory = 'none', reconciled_at = ${at}
+            WHERE repository_id = $1`,
+          [w.repositoryId],
+        ),
+      ).rejects.toMatchObject({ code: 'EXB01' })
+    }
+    // The state moves only with a reconciliation's outcome.
+    await expect(
+      asWorker(
+        `UPDATE backups.repositories SET state = 'degraded', reconciled_at = clock_timestamp()
+          WHERE repository_id = $1`,
+        [w.repositoryId],
+      ),
+    ).rejects.toMatchObject({ code: 'EXB01' })
+    expect(await getRepository(serve, w.repositoryId)).toMatchObject({
+      engineAdvisory: 'subkey_check_missing',
+      state: 'active',
+    })
+    // The worker's own refresh still records it.
+    await reconcile(w, listing(w, { engineVersion: '2.58.0' }))
+    expect(await getRepository(serve, w.repositoryId)).toMatchObject({
+      engineAdvisory: 'below_floor',
+    })
+  })
+
+  it('a drill does not finish, or start, in the future (EXB06)', async () => {
+    const w = await world()
+    const nodeId = await node(w)
+    const restoreId = newId('rst', Date.now())
+    // The restore row itself is proven by the restore kinds; here it only anchors the drill.
+    await db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query("SET LOCAL session_replication_role = 'replica'")
+      await c.query(
+        `INSERT INTO backups.restores (restore_id, cluster_id, purpose, state, repository_id, destination_kind, node_id,
+           plan_id) VALUES ($1, $2, 'drill', 'restoring', $3, 'scratch', $4, $5)`,
+        [restoreId, w.clusterId, w.repositoryId, nodeId, newId('pln', Date.now())],
+      )
+      await c.query('COMMIT')
+    })
+    const drillId = newId('drl', Date.now())
+    await asWorker(
+      `INSERT INTO backups.drills (drill_id, cluster_id, restore_id, repository_id, selection, mode, outcome, started_at)
+       VALUES ($1, $2, $3, $4, 'latest', 'control_plane', 'pending', clock_timestamp())`,
+      [drillId, w.clusterId, restoreId, w.repositoryId],
+    )
+    await expect(
+      asWorker(
+        `UPDATE backups.drills SET outcome = 'passed', measured_rto_seconds = 60,
+                finished_at = clock_timestamp() + interval '1 day' WHERE drill_id = $1`,
+        [drillId],
+      ),
+    ).rejects.toMatchObject({ code: 'EXB06' })
+    await expect(
+      asWorker(
+        `UPDATE backups.drills SET started_at = clock_timestamp() + interval '1 hour' WHERE drill_id = $1`,
+        [drillId],
+      ),
+    ).rejects.toMatchObject({ code: 'EXB06' })
+    // An offline attestation of a restore that has not happened yet is refused too.
+    await expect(
+      asWorker(
+        `INSERT INTO backups.drills (drill_id, cluster_id, repository_id, selection, mode, outcome, runbook_digest,
+           recorded_by, started_at, finished_at)
+         VALUES ($1, $2, $3, 'latest', 'offline_runbook', 'attested', $4, $5, now(), now() + interval '1 day')`,
+        [
+          newId('drl', Date.now() + 1),
+          w.clusterId,
+          w.repositoryId,
+          `sha256:${'a'.repeat(64)}`,
+          newId('idn', Date.now()),
+        ],
+      ),
+    ).rejects.toMatchObject({ code: 'EXB06' })
+    await asWorker(
+      `UPDATE backups.drills SET outcome = 'passed', measured_rto_seconds = 60, finished_at = clock_timestamp()
+        WHERE drill_id = $1`,
+      [drillId],
+    )
   })
 })

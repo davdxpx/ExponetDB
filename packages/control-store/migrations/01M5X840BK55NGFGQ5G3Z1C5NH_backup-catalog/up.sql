@@ -216,15 +216,30 @@ CREATE INDEX drills_by_cluster ON backups.drills (cluster_id, created_at DESC);
 -- ----- guards -----
 
 -- A repository is adopted by its own operation, on a cluster that is not
--- retired (the cluster row locked FOR SHARE, so a retirement waits); then
--- it changes ownership only adopted_observed -> adopted_runs by an ownership
--- operation (owned needs a capability that does not exist yet), is retired
--- once by a retirement operation, and otherwise only its observation
--- columns change. Nothing is deleted.
+-- retired (the cluster row locked FOR SHARE, so a retirement waits). After
+-- that, every UPDATE is exactly one of three changes, and its operation's
+-- kind matches what changed:
+--   * an ownership change: ownership adopted_observed -> adopted_runs and
+--     nothing else, by a backup.repository.ownership operation that is new
+--     (not the previous one, not recorded on any other repository, not
+--     finished), raising the revision (owned needs a capability that does
+--     not exist yet);
+--   * a retirement: once, by a backup.repository.retire operation recorded
+--     on no other repository, raising the revision, nothing else changing;
+--   * an observation, by the worker's catalog refresh without an operation:
+--     only the observation columns, all of them together with reconciled_at
+--     moving forward (never later than now), and state only to active on an
+--     ok reconciliation or to degraded on a failed one.
+-- The other declared facts (priority, purpose, lock, cipher, pinned engine
+-- version, offline key copy) have no operation in this bundle: they keep
+-- what the adoption recorded until a later bundle adds one. Nothing is
+-- deleted.
 CREATE FUNCTION backups.repository_guard() RETURNS trigger
   LANGUAGE plpgsql SET search_path = pg_catalog AS $fn$
 DECLARE
   cluster_state text;
+  declared_changed boolean;
+  observation_changed boolean;
 BEGIN
   IF TG_OP = 'DELETE' THEN
     RAISE EXCEPTION USING ERRCODE = 'EXB01', MESSAGE = 'a backup repository record is never deleted';
@@ -234,11 +249,14 @@ BEGIN
     IF cluster_state IS DISTINCT FROM 'active' THEN
       RAISE EXCEPTION USING ERRCODE = 'EXB01', MESSAGE = 'a repository is adopted for an active cluster';
     END IF;
-    IF NEW.ownership <> 'adopted_observed' OR NEW.state <> 'observing' OR NEW.revision <> 1 THEN
-      RAISE EXCEPTION USING ERRCODE = 'EXB01', MESSAGE = 'a repository starts adopted_observed, observing, at revision 1';
+    IF NEW.ownership <> 'adopted_observed' OR NEW.state <> 'observing' OR NEW.revision <> 1
+       OR NEW.changed_by_operation_id IS NOT NULL OR NEW.reconciled_at IS NOT NULL THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXB01',
+        MESSAGE = 'a repository starts adopted_observed, observing, unreconciled, at revision 1';
     END IF;
     IF NOT EXISTS (SELECT FROM operations.operations o
-                    WHERE o.operation_id = NEW.created_by_operation_id AND o.kind = 'backup.repository.adopt') THEN
+                    WHERE o.operation_id = NEW.created_by_operation_id AND o.kind = 'backup.repository.adopt')
+       OR EXISTS (SELECT FROM backups.repositories r WHERE r.created_by_operation_id = NEW.created_by_operation_id) THEN
       RAISE EXCEPTION USING ERRCODE = 'EXB01', MESSAGE = 'a repository is adopted by its own operation';
     END IF;
     NEW.created_at := clock_timestamp();
@@ -256,11 +274,31 @@ BEGIN
       OLD.created_by_operation_id) THEN
     RAISE EXCEPTION USING ERRCODE = 'EXB01', MESSAGE = 'a repository keeps its location and engine';
   END IF;
+  IF (NEW.priority, NEW.purpose, NEW.lock_mode, NEW.lock_capability, NEW.lock_retention_days, NEW.cipher,
+      NEW.pinned_engine_version, NEW.offline_copy_confirmed_at)
+     IS DISTINCT FROM
+     (OLD.priority, OLD.purpose, OLD.lock_mode, OLD.lock_capability, OLD.lock_retention_days, OLD.cipher,
+      OLD.pinned_engine_version, OLD.offline_copy_confirmed_at) THEN
+    RAISE EXCEPTION USING ERRCODE = 'EXB01',
+      MESSAGE = 'a repository''s declared facts change by no operation of this bundle';
+  END IF;
+  declared_changed := (NEW.ownership, NEW.changed_by_operation_id) IS DISTINCT FROM (OLD.ownership, OLD.changed_by_operation_id);
+  observation_changed := (NEW.observed, NEW.observed_at, NEW.reconciled_at, NEW.reconciliation_outcome,
+                          NEW.reconciliation_error, NEW.observed_engine_version, NEW.engine_advisory)
+                         IS DISTINCT FROM
+                         (OLD.observed, OLD.observed_at, OLD.reconciled_at, OLD.reconciliation_outcome,
+                          OLD.reconciliation_error, OLD.observed_engine_version, OLD.engine_advisory);
+
   IF NEW.state = 'retired' THEN
+    IF declared_changed OR observation_changed THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXB01', MESSAGE = 'a retirement changes nothing but the retirement';
+    END IF;
     IF NEW.revision <> OLD.revision + 1 OR NOT EXISTS (
          SELECT FROM operations.operations o
-          WHERE o.operation_id = NEW.retired_by_operation_id AND o.kind = 'backup.repository.retire') THEN
-      RAISE EXCEPTION USING ERRCODE = 'EXB01', MESSAGE = 'a repository is retired once, by its retirement operation';
+          WHERE o.operation_id = NEW.retired_by_operation_id AND o.kind = 'backup.repository.retire')
+       OR EXISTS (SELECT FROM backups.repositories r WHERE r.retired_by_operation_id = NEW.retired_by_operation_id
+                   AND r.repository_id <> OLD.repository_id) THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXB01', MESSAGE = 'a repository is retired once, by its own retirement operation';
     END IF;
     IF EXISTS (SELECT FROM backups.runs r WHERE r.repository_id = OLD.repository_id
                 AND r.state IN ('starting', 'running', 'unknown'))
@@ -272,22 +310,46 @@ BEGIN
     NEW.retired_at := clock_timestamp();
     RETURN NEW;
   END IF;
-  IF NEW.ownership IS DISTINCT FROM OLD.ownership
-     OR NEW.priority IS DISTINCT FROM OLD.priority OR NEW.purpose IS DISTINCT FROM OLD.purpose
-     OR NEW.lock_mode IS DISTINCT FROM OLD.lock_mode OR NEW.cipher IS DISTINCT FROM OLD.cipher
-     OR NEW.pinned_engine_version IS DISTINCT FROM OLD.pinned_engine_version
-     OR NEW.offline_copy_confirmed_at IS DISTINCT FROM OLD.offline_copy_confirmed_at THEN
-    IF NEW.revision <> OLD.revision + 1 OR NOT EXISTS (
-         SELECT FROM operations.operations o
-          WHERE o.operation_id = NEW.changed_by_operation_id AND o.kind = 'backup.repository.ownership') THEN
-      RAISE EXCEPTION USING ERRCODE = 'EXB01', MESSAGE = 'a repository''s declared facts change by an ownership operation, raising its revision';
+
+  IF declared_changed THEN
+    IF observation_changed OR NEW.state IS DISTINCT FROM OLD.state THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXB01', MESSAGE = 'an ownership change changes nothing but the ownership';
     END IF;
-    IF NEW.ownership IS DISTINCT FROM OLD.ownership
-       AND NOT (OLD.ownership = 'adopted_observed' AND NEW.ownership = 'adopted_runs') THEN
+    IF NOT (OLD.ownership = 'adopted_observed' AND NEW.ownership = 'adopted_runs') THEN
       RAISE EXCEPTION USING ERRCODE = 'EXB01', MESSAGE = 'ownership moves only from adopted_observed to adopted_runs';
     END IF;
-  ELSIF NEW.revision <> OLD.revision THEN
+    IF NEW.revision <> OLD.revision + 1
+       OR NEW.changed_by_operation_id IS NULL
+       OR NEW.changed_by_operation_id IS NOT DISTINCT FROM OLD.changed_by_operation_id
+       OR NOT EXISTS (SELECT FROM operations.operations o
+                       WHERE o.operation_id = NEW.changed_by_operation_id AND o.kind = 'backup.repository.ownership'
+                         AND o.state IN ('queued', 'running', 'verifying', 'needs_reconciliation', 'needs_attention'))
+       OR EXISTS (SELECT FROM backups.repositories r
+                   WHERE r.repository_id <> OLD.repository_id
+                     AND NEW.changed_by_operation_id IN (r.changed_by_operation_id, r.created_by_operation_id,
+                                                         r.retired_by_operation_id)) THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXB01',
+        MESSAGE = 'an ownership change is made by its own, new ownership operation, raising the revision';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF NEW.revision <> OLD.revision THEN
     RAISE EXCEPTION USING ERRCODE = 'EXB01', MESSAGE = 'an observation does not change the revision';
+  END IF;
+  IF observation_changed OR NEW.state IS DISTINCT FROM OLD.state THEN
+    IF NEW.reconciled_at IS NULL
+       OR NEW.reconciled_at <= coalesce(OLD.reconciled_at, '-infinity'::timestamptz)
+       OR NEW.reconciled_at > clock_timestamp() THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXB01',
+        MESSAGE = 'an observation is recorded by a reconciliation, its time moving forward and never later than now';
+    END IF;
+    IF NEW.state IS DISTINCT FROM OLD.state
+       AND NOT ((NEW.state = 'active' AND NEW.reconciliation_outcome = 'ok')
+             OR (NEW.state = 'degraded' AND NEW.reconciliation_outcome = 'failed')) THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXB01',
+        MESSAGE = 'a repository becomes active by an ok reconciliation or degraded by a failed one';
+    END IF;
   END IF;
   RETURN NEW;
 END
@@ -362,26 +424,46 @@ REVOKE ALL ON FUNCTION backups.run_guard() FROM PUBLIC;
 CREATE TRIGGER runs_guard BEFORE INSERT OR UPDATE ON backups.runs
   FOR EACH ROW EXECUTE FUNCTION backups.run_guard();
 
--- The mirror keeps what an engine listed: a verification is recorded only
--- from a succeeded verify run of the same repository, an entry is never
--- moved to another repository or renamed.
+-- The mirror keeps what an engine listed: an entry starts unverified, is
+-- never moved to another repository or renamed, and a verification is
+-- never undone. Every change of the verification (its state, run or time)
+-- names a new verify run of the entry's repository that no other entry
+-- records: passed needs a succeeded run without verify errors, failed a
+-- finished one. The verification time is the Control Store's.
 CREATE FUNCTION backups.catalog_guard() RETURNS trigger
   LANGUAGE plpgsql SET search_path = pg_catalog AS $fn$
 BEGIN
-  IF TG_OP = 'UPDATE' AND (NEW.backup_id, NEW.repository_id, NEW.engine_label, NEW.kind, NEW.started_at, NEW.first_seen_at)
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.verification_state <> 'pending' THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXB04', MESSAGE = 'a catalog entry starts unverified';
+    END IF;
+    NEW.first_seen_at := clock_timestamp();
+    NEW.last_seen_at := NEW.first_seen_at;
+    RETURN NEW;
+  END IF;
+  IF (NEW.backup_id, NEW.repository_id, NEW.engine_label, NEW.kind, NEW.started_at, NEW.first_seen_at)
      IS DISTINCT FROM (OLD.backup_id, OLD.repository_id, OLD.engine_label, OLD.kind, OLD.started_at, OLD.first_seen_at) THEN
     RAISE EXCEPTION USING ERRCODE = 'EXB04', MESSAGE = 'a catalog entry keeps its identity';
   END IF;
-  IF NEW.verification_state <> 'pending'
-     AND (TG_OP = 'INSERT' OR NEW.verification_run_id IS DISTINCT FROM OLD.verification_run_id)
-     AND NOT EXISTS (SELECT FROM backups.runs r WHERE r.run_id = NEW.verification_run_id
-                      AND r.repository_id = NEW.repository_id AND r.purpose = 'verify'
-                      AND r.state IN ('succeeded', 'failed')) THEN
-    RAISE EXCEPTION USING ERRCODE = 'EXB04', MESSAGE = 'a verification comes from a finished verify run of the repository';
-  END IF;
-  IF TG_OP = 'INSERT' THEN
-    NEW.first_seen_at := clock_timestamp();
-    NEW.last_seen_at := NEW.first_seen_at;
+  IF (NEW.verification_state, NEW.verification_run_id, NEW.verified_at)
+     IS DISTINCT FROM (OLD.verification_state, OLD.verification_run_id, OLD.verified_at) THEN
+    IF NEW.verification_state = 'pending' THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXB04', MESSAGE = 'a verification is never undone';
+    END IF;
+    IF NEW.verification_run_id IS NOT DISTINCT FROM OLD.verification_run_id
+       OR NOT EXISTS (SELECT FROM backups.runs r WHERE r.run_id = NEW.verification_run_id
+                       AND r.repository_id = NEW.repository_id AND r.purpose = 'verify'
+                       AND CASE NEW.verification_state
+                             WHEN 'passed' THEN r.state = 'succeeded'
+                                                AND r.outcome -> 'verifyErrors' = '0'::jsonb
+                             ELSE r.state IN ('succeeded', 'failed')
+                           END)
+       OR EXISTS (SELECT FROM backups.catalog c WHERE c.verification_run_id = NEW.verification_run_id
+                   AND c.backup_id <> NEW.backup_id) THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXB04',
+        MESSAGE = 'a verification comes from a new verify run of the repository: passed from a succeeded one, failed from a finished one';
+    END IF;
+    NEW.verified_at := clock_timestamp();
   END IF;
   RETURN NEW;
 END
@@ -423,10 +505,16 @@ REVOKE ALL ON FUNCTION backups.restore_guard() FROM PUBLIC;
 CREATE TRIGGER restores_guard BEFORE INSERT OR UPDATE ON backups.restores
   FOR EACH ROW EXECUTE FUNCTION backups.restore_guard();
 
--- A drill outcome is set once; an offline drill is recorded by a person (the worker writes it for them).
+-- A drill outcome is set once; an offline drill is recorded by a person (the
+-- worker writes it for them). A drill's times are never later than now: a
+-- drill does not finish, or start, in the future.
 CREATE FUNCTION backups.drill_guard() RETURNS trigger
   LANGUAGE plpgsql SET search_path = pg_catalog AS $fn$
 BEGIN
+  IF NEW.started_at > clock_timestamp() OR NEW.finished_at > clock_timestamp()
+     OR NEW.finished_at < NEW.started_at THEN
+    RAISE EXCEPTION USING ERRCODE = 'EXB06', MESSAGE = 'a drill''s times are not later than now, and it finishes after it starts';
+  END IF;
   IF TG_OP = 'INSERT' THEN
     IF NEW.mode = 'control_plane' AND NEW.outcome <> 'pending' THEN
       RAISE EXCEPTION USING ERRCODE = 'EXB06', MESSAGE = 'a drill run by ExponetDB starts pending';

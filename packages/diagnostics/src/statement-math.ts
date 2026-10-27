@@ -102,9 +102,13 @@ export interface DeltaContext {
  * may be computed: a sample across a reset or restart, no previous value,
  * a previous value of another statistics epoch, an entry (re)created after
  * the previous value was read (`stats_since`, PostgreSQL 17+), or any
- * counter that went down (the entry was reset or evicted and added again).
- * A delta is never negative. A statement that did not run in between has
- * no delta (nothing to store).
+ * counter that went down (the entry was reset or evicted and added again),
+ * or a previous value older than a gap (`STATEMENT_GAP_SECONDS`, two
+ * sampling periods): a statement that left the top 200 and came back, or a
+ * target whose samples failed in between, would otherwise put the whole
+ * difference into one delta stamped now. That interval is a gap, never one
+ * sample's work. A delta is never negative. A statement that did not run in
+ * between has no delta (nothing to store).
  */
 export function deltaOf(
   previous: LatestCounters | undefined,
@@ -115,6 +119,7 @@ export function deltaOf(
   if (previous.statsReset !== ctx.statsReset) return null
   if (previous.postmasterStart !== ctx.postmasterStart) return null
   if (previous.sampledAtMs >= ctx.sampledAtMs) return null
+  if (ctx.sampledAtMs - previous.sampledAtMs > STATEMENT_GAP_SECONDS * 1000) return null
   if (now.statsSinceMs !== null && now.statsSinceMs > previous.sampledAtMs) return null
   const calls = now.calls - previous.calls
   const rows = now.rows - previous.rows

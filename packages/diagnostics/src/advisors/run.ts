@@ -1,4 +1,4 @@
-import type { ControlStore } from '@exponetdb/control-store'
+import type { ControlStore, Tx } from '@exponetdb/control-store'
 import { newId } from '@exponetdb/kernel'
 import { TargetError } from '@exponetdb/postgres'
 import { brand, getProject, type TargetRecord } from '@exponetdb/registry'
@@ -40,6 +40,10 @@ import {
  *    again;
  * 3. a target that cannot be read at all records a `failed` run with its
  *    code, and the read's error is returned.
+ *
+ * The caller's `record` (the audit event of a requested run) is written in
+ * the transaction of step 2, so findings never change without it: if it
+ * fails, the run and its findings are not recorded either.
  *
  * Nothing on the target changes; a fix is at most a migration draft.
  */
@@ -87,6 +91,7 @@ export async function runAdvisors(
   categories: readonly AdvisorCategory[],
   requestedBy: AdvisorRequester,
   nowMs: number = Date.now(),
+  options: { readonly record?: (tx: Tx, run: AdvisorRun) => Promise<void> } = {},
 ): Promise<AdvisorRun> {
   const wanted = new Set(categories)
   const rules = ADVISOR_RULES.filter((r) => wanted.has(r.category))
@@ -211,7 +216,7 @@ export async function runAdvisors(
     for (const f of open) {
       if (!seen.has(f.dedupKey)) await resolveSubjectFinding(tx, f.findingId, 'cleared', runId)
     }
-    return {
+    const run: AdvisorRun = {
       targetId: brand('tgt', target.targetId),
       ranAt: isoOf(ranAt),
       findings,
@@ -219,5 +224,7 @@ export async function runAdvisors(
       catalogVersion: ADVISOR_CATALOG_VERSION,
       skipped: skipped.map((s) => ({ rule: s.rule, reason: apiReason(s.reason) })).slice(0, 64),
     }
+    await options.record?.(tx, run)
+    return run
   })
 }

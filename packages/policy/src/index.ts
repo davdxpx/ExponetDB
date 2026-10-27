@@ -18,6 +18,7 @@ export {
   restoreCloneRefused,
   restoreHumanOnly,
   restoreRecoveryApproval,
+  restoreRecoveryDiscardApproval,
   restoreSourceVerified,
   restoreTargetIdentity,
 } from './catalog/backups.ts'
