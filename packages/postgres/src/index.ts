@@ -188,6 +188,16 @@ export {
   TargetSession,
 } from './session.ts'
 export {
+  idleInTransactionSession,
+  longRunningSession,
+  protectedSession,
+  protectionReason,
+  STALLED_SECONDS,
+  stalledSession,
+  TERMINATE_IDLE_IN_TRANSACTION_SECONDS,
+  TERMINATE_LONG_RUNNING_SECONDS,
+} from './session-conditions.ts'
+export {
   dollarQuote,
   ident,
   identifierTooLong,

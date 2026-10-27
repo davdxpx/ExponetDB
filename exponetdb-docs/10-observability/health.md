@@ -128,6 +128,12 @@ Rules shared between display and action: the condition that marks a session as
 "stalled" in the UI is the same function the terminate plan uses as its
 precondition, so "the page says stalled" equals "the plan will accept it"
 (REOSA's `backend-rules.ts` pattern).
+**[OBSERVED]** (Wave 9 Part B) The predicate is `stalledSession` in
+`packages/postgres/src/session-conditions.ts`; the activity probe's
+`is_stalled` and the terminate plan's statement both build it (`state =
+active`, `wait_event = ClientRead`, `query_start` at least 60 s before
+`clock_timestamp()`), and the plan re-checks it in the statement that
+terminates ([`performance.md` §5](./performance.md#5-actions-from-diagnostics)).
 
 ExponetDB **does not terminate sessions automatically** in V1 (no reaper). It
 detects, explains and offers a planned `connections.terminate` with

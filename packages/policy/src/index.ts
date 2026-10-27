@@ -22,6 +22,13 @@ export {
   restoreTargetIdentity,
 } from './catalog/backups.ts'
 export {
+  CONNECTION_KINDS,
+  CONNECTION_RULES,
+  connectionsNoSuperuserTerminate,
+  connectionsProdTerminateApproval,
+  connectionsReplicationProtect,
+} from './catalog/connections.ts'
+export {
   DATA_READ_MODES,
   DATA_RULES,
   type DataReadMode,

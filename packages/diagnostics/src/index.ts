@@ -1,4 +1,54 @@
 export { listSessions, lockGraph, type SessionFilter } from './activity.ts'
+export {
+  ADVISOR_CATALOG_VERSION,
+  ADVISOR_RULES,
+  type AdvisorCategory,
+  type AdvisorFinding,
+  type AdvisorLevel,
+  type AdvisorRule,
+  RULE_FINDING_CAP,
+  type RuleEnv,
+  type SkipReason,
+  UNUSED_INDEX_MIN_DAYS,
+  XID_CRITICAL_AGE,
+  XID_WARNING_FACTOR,
+} from './advisors/catalog.ts'
+export {
+  type AdvisorDeps,
+  type AdvisorRequester,
+  advisorDedupKey,
+  apiReason,
+  runAdvisors,
+  skipReasonOf,
+} from './advisors/run.ts'
+export {
+  CANCEL_KIND,
+  CancelKind,
+  type ConnectionKindDeps,
+  type ConnectionPlanContext,
+  connectionKinds,
+  normalizedInstant,
+  planCancel,
+  planTerminate,
+  readSession,
+  type SessionBinding,
+  type SessionFacts,
+  sessionBindings,
+  signalSession,
+  TERMINATE_CONDITIONS,
+  TERMINATE_KIND,
+  type TerminateCondition,
+  TerminateKind,
+  terminateClass,
+} from './connections.ts'
+export type {
+  AdvisorRun,
+  ConnectionCancelRequest,
+  ConnectionTerminateRequest,
+  FindingSummary,
+  QueryStats,
+  TableStats,
+} from './contract-types.ts'
 export { executeDataRead, matchesColumn } from './data-read/executor.ts'
 export {
   awaitDataRead,
@@ -85,6 +135,7 @@ export {
   type FleetFindingRecord,
   findingView,
   getFinding,
+  type ListedFindingKind,
   listFindings,
   listFleetFindings,
   openFindingCount,
@@ -139,6 +190,14 @@ export {
   worstState,
 } from './health-history.ts'
 export { checkIdentity, mismatchField, requireIdentity } from './identity.ts'
+export {
+  arrayParam,
+  DIAGNOSTIC_LOCK_TIMEOUT_MS,
+  DIAGNOSTIC_STATEMENT_TIMEOUT_MS,
+  diagnosticLimits,
+  onObserver,
+  statsVisible,
+} from './live.ts'
 export { type MigrationBaselineOutcome, MigrationBaselineStore } from './migration-baselines.ts'
 export { classesOfKind, displayIdent, objectKind, objectLabel, objectRef } from './objects.ts'
 export {
@@ -203,3 +262,57 @@ export {
   type SqlClassificationResult,
   type SqlClassifyOutcome,
 } from './sql-classification.ts'
+export {
+  type Counters,
+  type Discontinuity,
+  deltaOf,
+  deltasAllowed,
+  discontinuityOf,
+  gapsOf,
+  type LatestCounters,
+  REGRESSION,
+  type Regression,
+  regressionOf,
+  type SampleMarks,
+  STATEMENT_GAP_SECONDS,
+  STATEMENT_SAMPLE_INTERVAL_SECONDS,
+  STATEMENT_TOP,
+  textReplaced,
+} from './statement-math.ts'
+export {
+  evaluateRegressions,
+  maintainStatementPartitions,
+  QUERY_STATS_DEFAULT_WINDOW_MS,
+  QUERY_STATS_MAX_LIMIT,
+  QUERY_STATS_MAX_WINDOW_MS,
+  type QueryStatsRequest,
+  queryStats,
+  REGRESSION_FINDING_CODE,
+  readStatementSample,
+  rollupStatements,
+  type SampleRead,
+  type StatementDeps,
+  type StatementSampleResult,
+  sampleStatements,
+  statementKey,
+  statementTargets,
+  storedText,
+} from './statements.ts'
+export {
+  findingSummary,
+  listClusterFindings,
+  type OpenSubjectFinding,
+  openSubjectFindings,
+  resolveSubjectFinding,
+  type SubjectFindingInput,
+  type SubjectFindingKind,
+  upsertSubjectFinding,
+} from './subject-findings.ts'
+export {
+  bloatEstimate,
+  readTableStats,
+  TABLE_STATS_DEFAULT_LIMIT,
+  TABLE_STATS_MAX_LIMIT,
+  type TableStatsRequest,
+  tableStats,
+} from './table-stats.ts'

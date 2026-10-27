@@ -113,7 +113,7 @@ export interface FleetFindingCounts {
   readonly asOf: string
 }
 
-/** Open findings by severity over the targets the caller may read (findings of a decommissioned target stay open and count). */
+/** Open findings by severity over the targets the caller may read (findings of a decommissioned target stay open and count; since Wave 9 Part B with the targets' advisor and statement findings). */
 export async function fleetFindingCounts(
   q: Queryable,
   visibility: TargetVisibility,
@@ -123,7 +123,10 @@ export async function fleetFindingCounts(
     'observation.fleet.findings',
     `SELECT f.severity, count(*)::int AS n,
             to_char(clock_timestamp() AT TIME ZONE 'UTC', ${ISO}) AS as_of
-       FROM observation.findings f
+       FROM (SELECT f.severity, f.target_id, f.state FROM observation.findings f
+             UNION ALL
+             SELECT s.severity, s.target_id, s.state FROM observation.subject_findings s
+              WHERE s.target_id IS NOT NULL) f
        JOIN registry.targets t ON t.target_id = f.target_id
        JOIN registry.projects j ON j.project_id = t.project_id
       WHERE f.state = 'open' AND ${visible.sql}

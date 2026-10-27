@@ -23,6 +23,8 @@ import {
  * bodies or settings text.
  */
 export type FindingKind = 'drift' | 'health'
+/** Kinds a findings list shows: the frozen table's and, since Wave 9 Part B, a target's subject findings. */
+export type ListedFindingKind = FindingKind | 'advisor' | 'statements'
 export type Severity = 'info' | 'warning' | 'critical'
 export type Resolution = 'cleared' | 'accepted' | 'superseded'
 
@@ -41,7 +43,7 @@ export interface FindingInput {
 export interface FindingRecord {
   readonly findingId: string
   readonly targetId: string
-  readonly kind: FindingKind
+  readonly kind: ListedFindingKind
   readonly code: string
   readonly severity: Severity
   readonly dedupKey: string
@@ -62,6 +64,30 @@ const FINDING_COLUMNS = `f.finding_id, f.target_id, f.kind, f.code, f.severity, 
   f.state, f.occurrences, ${ts('f.first_seen_at')} AS first_seen_at, ${ts('f.last_seen_at')} AS last_seen_at,
   ${ts('f.resolved_at')} AS resolved_at, f.resolution`
 
+/**
+ * The columns of a subject finding under the names of `observation.findings`
+ * (`findings.ts`), so both tables list as one: the object and the security
+ * flag ride in `details`, where the findings view reads them.
+ */
+export const SUBJECT_AS_FINDING_COLUMNS = `s.finding_id, s.target_id, s.kind, s.code, s.severity, s.dedup_key, s.summary,
+  s.details || jsonb_build_object('object', s.object, 'securityRelevant', s.security_relevant) AS details,
+  s.state, s.occurrences, ${ts('s.first_seen_at')} AS first_seen_at, ${ts('s.last_seen_at')} AS last_seen_at,
+  ${ts('s.resolved_at')} AS resolved_at, s.resolution`
+
+function listedKind(kind: string): ListedFindingKind {
+  return kind === 'health' || kind === 'advisor' || kind === 'statements' ? kind : 'drift'
+}
+
+/**
+ * The findings of both tables under one shape (Wave 9 Part B): the frozen
+ * `observation.findings` (drift, health) and a target's subject findings
+ * (advisor, statements; `subject-findings.ts`). Finding ids are ULIDs from
+ * one generator, so one descending id order is newest first across both.
+ */
+const listed = (): string => `(SELECT ${FINDING_COLUMNS} FROM observation.findings f
+   UNION ALL
+   SELECT ${SUBJECT_AS_FINDING_COLUMNS} FROM observation.subject_findings s WHERE s.target_id IS NOT NULL)`
+
 function findingFrom(row: Row): FindingRecord {
   const details = row.json('details')
   const severity = row.text('severity')
@@ -69,7 +95,7 @@ function findingFrom(row: Row): FindingRecord {
   return {
     findingId: row.text('finding_id'),
     targetId: row.text('target_id'),
-    kind: row.text('kind') === 'health' ? 'health' : 'drift',
+    kind: listedKind(row.text('kind')),
     code: row.text('code'),
     severity: severity === 'critical' || severity === 'info' ? severity : 'warning',
     dedupKey: row.text('dedup_key'),
@@ -187,7 +213,8 @@ export function securitySensitive(f: Pick<FindingRecord, 'severity' | 'details'>
 export async function openFindingCount(q: Queryable, targetId: string): Promise<number> {
   const { rows } = await q.query(
     'observation.findings.open_count',
-    `SELECT count(*)::int AS n FROM observation.findings WHERE target_id = $1 AND state = 'open'`,
+    `SELECT ((SELECT count(*) FROM observation.findings WHERE target_id = $1 AND state = 'open')
+           + (SELECT count(*) FROM observation.subject_findings WHERE target_id = $1 AND state = 'open'))::int AS n`,
     [targetId],
   )
   return rows[0]?.int('n') ?? 0
@@ -195,8 +222,9 @@ export async function openFindingCount(q: Queryable, targetId: string): Promise<
 
 export interface FindingFilter {
   readonly includeResolved?: boolean
-  readonly kind?: FindingKind
+  readonly kind?: ListedFindingKind
   readonly severity?: Severity
+  readonly code?: string
 }
 
 /** Open findings first (newest id first within each state); resolved ones only when asked. */
@@ -210,12 +238,13 @@ export async function listFindings(
   const after = decodeCursor(request.cursor)
   const { rows } = await q.query(
     'observation.findings.list',
-    `SELECT ${FINDING_COLUMNS} FROM observation.findings f
+    `SELECT f.* FROM ${listed()} f
       WHERE f.target_id = $1
         AND ($2::boolean OR f.state = 'open')
         AND ($3::text IS NULL OR f.kind = $3)
         AND ($4::text IS NULL OR f.severity = $4)
         AND ($5::text IS NULL OR f.finding_id < $5)
+        AND ($7::text IS NULL OR f.code = $7)
       ORDER BY f.finding_id DESC LIMIT $6`,
     [
       targetId,
@@ -224,6 +253,7 @@ export async function listFindings(
       filter.severity ?? null,
       after,
       limit + 1,
+      filter.code ?? null,
     ],
   )
   const items = rows.slice(0, limit).map(findingFrom)
@@ -238,7 +268,9 @@ export interface FleetFindingFilter {
   readonly severity?: Severity
   /** `open` is the default; `all` lists both. */
   readonly state?: 'open' | 'resolved' | 'all'
-  readonly kind?: FindingKind
+  readonly kind?: ListedFindingKind
+  /** One rule or condition code (Wave 9). */
+  readonly code?: string
   /** One target, already resolved and authorized by the caller of this read. */
   readonly targetId?: string
 }
@@ -266,8 +298,8 @@ export async function listFleetFindings(
   const state = filter.state ?? 'open'
   const { rows } = await q.query(
     'observation.findings.list_fleet',
-    `SELECT ${FINDING_COLUMNS}, t.path AS target_path
-       FROM observation.findings f
+    `SELECT f.*, t.path AS target_path
+       FROM ${listed()} f
        JOIN registry.targets t ON t.target_id = f.target_id
        JOIN registry.projects j ON j.project_id = t.project_id
       WHERE ${visible.sql}
@@ -276,6 +308,7 @@ export async function listFleetFindings(
         AND ($10::text IS NULL OR f.severity = $10)
         AND ($11::text IS NULL OR f.target_id = $11)
         AND ($12::text IS NULL OR f.finding_id < $12)
+        AND ($14::text IS NULL OR f.code = $14)
       ORDER BY f.finding_id DESC LIMIT $13`,
     [
       ...visible.params,
@@ -285,6 +318,7 @@ export async function listFleetFindings(
       filter.targetId ?? null,
       after,
       limit + 1,
+      filter.code ?? null,
     ],
   )
   const items = rows

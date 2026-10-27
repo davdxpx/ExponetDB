@@ -31,6 +31,7 @@ import {
   type RegistryPolicyContext,
   type TargetRecord,
 } from '@exponetdb/registry'
+import { connectionKinds } from './connections.ts'
 import { DiagnosticsError, failureCodeOf } from './errors.ts'
 import {
   type FindingRecord,
@@ -580,7 +581,10 @@ export class DriftAcceptKind implements OperationKind {
   }
 }
 
-/** The kinds this package registers with the Operations Engine (serve: acceptance checks; the worker executes). */
+/**
+ * The kinds this package registers with the Operations Engine (serve: acceptance checks; the
+ * worker executes): drift acceptance (Wave 8) and, since Wave 9 Part B, cancel and terminate.
+ */
 export function diagnosticsKinds(deps: DriftAcceptKindDeps): readonly OperationKind[] {
-  return [new DriftAcceptKind(deps)]
+  return [new DriftAcceptKind(deps), ...connectionKinds(deps)]
 }
