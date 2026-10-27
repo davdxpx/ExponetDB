@@ -88,12 +88,19 @@ export interface PlanCommandSpec<Id extends PlanOperation>
   readonly body?: (input: CommandInput) => Record<string, unknown>
   /** Whether `--file` is offered (default when the route has a body with fields). */
   readonly file?: boolean
+  /**
+   * Whether `--apply` (and the wait flags) are offered (default true). A plan
+   * a person must review before it runs (a recovery) leaves them out: it is
+   * applied with `plan apply`, the same path with its step-up.
+   */
+  readonly apply?: boolean
 }
 
 /** A command that plans one change and, with `--apply`, applies and watches it. */
 export function planCommand<Id extends PlanOperation>(spec: PlanCommandSpec<Id>): CommandSpec {
-  const { operation, params, body, file, ...rest } = spec
+  const { operation, params, body, file, apply, ...rest } = spec
   const offersFile = file !== false
+  const offersApply = apply !== false
   // With `--file` the file is the whole body: the typed flags and body
   // arguments are then optional at parse time, required without a file and
   // refused next to one (nothing is silently ignored).
@@ -121,8 +128,7 @@ export function planCommand<Id extends PlanOperation>(spec: PlanCommandSpec<Id>)
           : f,
       ),
       ...(offersFile ? [FILE_FLAG] : []),
-      APPLY_FLAG,
-      ...WAIT_FLAGS,
+      ...(offersApply ? [APPLY_FLAG, ...WAIT_FLAGS] : []),
     ],
     locality: 'remote',
     effect: 'plan',
@@ -140,7 +146,7 @@ export function planCommand<Id extends PlanOperation>(spec: PlanCommandSpec<Id>)
         } as never),
       ) as PlanView
       const name = rest.path.join(' ')
-      if (input.flags['apply'] !== true || plan.decision === 'deny')
+      if (!offersApply || input.flags['apply'] !== true || plan.decision === 'deny')
         return planResult(name, remote, plan)
       return applyPlan(ctx, remote, name, plan, input.flags)
     },

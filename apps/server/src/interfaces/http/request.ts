@@ -181,9 +181,13 @@ export function detailsOf(
     }
   }
   if (code === 'PLAN_STALE' && 'changedBindings' in error && Array.isArray(error.changedBindings)) {
-    return context.planId === undefined
+    // The route's plan, or the inline plan the refusal invalidated (Wave 9 Part B).
+    const planId =
+      context.planId ??
+      ('planId' in error && typeof error.planId === 'string' ? error.planId : undefined)
+    return planId === undefined
       ? undefined
-      : { planId: context.planId, changedBindings: error.changedBindings.slice(0, 32) }
+      : { planId, changedBindings: error.changedBindings.slice(0, 32) }
   }
   return 'details' in error ? error.details : undefined
 }

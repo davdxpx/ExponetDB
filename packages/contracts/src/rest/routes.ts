@@ -1,6 +1,8 @@
 import * as z from 'zod'
 import type { ActionId } from '../actions.ts'
 import {
+  BackupIdSchema,
+  BackupRepositoryIdSchema,
   BreakGlassGrantIdSchema,
   ClusterIdSchema,
   CursorSchema,
@@ -23,6 +25,7 @@ import {
   ProjectIdSchema,
   pageSchema,
   QueryIdSchema,
+  RestoreIdSchema,
   SavedQueryIdSchema,
   ServerIdSchema,
   SessionIdSchema,
@@ -82,6 +85,24 @@ import {
   SessionViewSchema,
 } from './access.ts'
 import {
+  BackupOverviewSchema,
+  BackupPolicyBodySchema,
+  BackupPolicyViewSchema,
+  BackupRepositoryAdoptRequestSchema,
+  BackupRepositoryListSchema,
+  BackupRepositoryOwnershipRequestSchema,
+  BackupRepositoryRetireRequestSchema,
+  BackupRunRequestSchema,
+  DrillListSchema,
+  DrillPlanRequestSchema,
+  DrillSchema,
+  EngineRunListSchema,
+  OfflineDrillRecordRequestSchema,
+  RestoreListSchema,
+  RestorePlanRequestSchema,
+  RestoreRunbookSchema,
+} from './backups.ts'
+import {
   BaselinePlanRequestSchema,
   BreakGlassActivateRequestSchema,
   BreakGlassGrantListQuerySchema,
@@ -123,6 +144,7 @@ import {
 } from './nodes.ts'
 import {
   AccessRoleSchema,
+  ClusterAgentAdoptionRequestSchema,
   ClusterBootstrapSqlQuerySchema,
   ClusterBootstrapSqlSchema,
   ClusterConfirmRequestSchema,
@@ -162,6 +184,8 @@ import {
   AuditExportQuerySchema,
   BackupCatalogSchema,
   ClusterSchema,
+  ConnectionCancelRequestSchema,
+  ConnectionTerminateRequestSchema,
   DriftCheckSchema,
   DriftCheckSummarySchema,
   EnrollmentTokenRevealSchema,
@@ -170,6 +194,7 @@ import {
   ExplainResultSchema,
   FindingListQuerySchema,
   FindingSchema,
+  FindingSummarySchema,
   FleetFindingSchema,
   FleetSchema,
   InstallationHealthSchema,
@@ -957,7 +982,10 @@ export const ROUTES = [
     summary: 'Backups, WAL window, measured RPO and last drill.',
     action: 'backup.list',
     pathParams: z.strictObject({ clusterId: ClusterIdSchema }),
-    query: z.strictObject({ limit: limitSchema(500, 50).optional() }),
+    query: z.strictObject({
+      limit: limitSchema(500, 50).optional(),
+      cursor: z.string().max(512).optional(),
+    }),
     response: { status: 200, schema: BackupCatalogSchema },
     errors: ['NOT_FOUND', 'BACKUP_REPOSITORY_UNAVAILABLE', 'NODE_OFFLINE'],
   },
@@ -1962,6 +1990,18 @@ export const REGISTRY_ROUTES = [
     errors: PLAN_ERRORS,
   },
   {
+    operationId: 'planClusterAgentAdoption',
+    method: 'post',
+    path: '/clusters/{clusterId}/agent-adoption',
+    summary:
+      "Plan the adoption of an external cluster by the node agent (OD-54, registry.md §4.5): one way, never undone; the enrolled, live node of the cluster's server must report its pinned system_identifier exactly once, checked at plan and again at apply. Targets keep their placement, generation and identity marker.",
+    action: 'registry.cluster.adopt_agent.plan',
+    pathParams: z.strictObject({ clusterId: ClusterIdSchema }),
+    body: ClusterAgentAdoptionRequestSchema,
+    response: planned,
+    errors: PLAN_ERRORS,
+  },
+  {
     operationId: 'planDatabaseRetirement',
     method: 'post',
     path: '/clusters/{clusterId}/databases/{databaseId}/retire',
@@ -2581,10 +2621,305 @@ export const STEP_UP_ROUTES = [
   },
 ] as const satisfies readonly RouteContract[]
 
+// ----- Wave 9 Part B: backups, restores, drills, diagnostics actions (ADR-0036 to ADR-0038) -----
+
+const repositoryParams = z.strictObject({ repositoryId: BackupRepositoryIdSchema })
+const BACKUP_PLAN_ERRORS: readonly ErrorCode[] = [...PLAN_ERRORS, 'VALIDATION_FAILED']
+const BACKUP_RUN_ERRORS: readonly ErrorCode[] = [
+  ...BACKUP_PLAN_ERRORS,
+  'CAPABILITY_UNAVAILABLE',
+  'NODE_OFFLINE',
+  'BACKUP_REPOSITORY_UNAVAILABLE',
+  'FEATURE_NOT_ACTIVATED',
+]
+const listQuery = z.strictObject({
+  limit: limitSchema(200, 50).optional(),
+  cursor: z.string().max(512).optional(),
+})
+
+const BACKUP_ROUTES: readonly RouteContract[] = [
+  {
+    operationId: 'getBackupOverview',
+    method: 'get',
+    path: '/backups/overview',
+    summary:
+      'Backup protection per cluster (measured RPO, last verified backup, drills), computed from the catalog mirror; counts cover every readable cluster.',
+    action: 'backup.overview',
+    pathParams: noParams,
+    query: listQuery.extend({
+      state: z.enum(['protected', 'at_risk', 'unprotected', 'unproven', 'unknown']).optional(),
+    }),
+    response: { status: 200, schema: BackupOverviewSchema },
+    errors: [],
+  },
+  {
+    operationId: 'listBackupRepositories',
+    method: 'get',
+    path: '/clusters/{clusterId}/backup-repositories',
+    summary:
+      'The backup repositories of a cluster with ownership, lock capability and reconciliation; the location only for registry.manage.',
+    action: 'backup.repository.list',
+    pathParams: clusterParams,
+    response: { status: 200, schema: BackupRepositoryListSchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'planBackupRepositoryAdoption',
+    method: 'post',
+    path: '/clusters/{clusterId}/backup-repositories',
+    summary:
+      'Plan the adoption of an existing repository: read-only observation, nothing changes on the host or in the bucket (ADR-0036 §3).',
+    action: 'backup.repository.adopt.plan',
+    pathParams: clusterParams,
+    body: BackupRepositoryAdoptRequestSchema,
+    response: planned,
+    errors: BACKUP_PLAN_ERRORS,
+  },
+  {
+    operationId: 'planBackupRepositoryOwnership',
+    method: 'post',
+    path: '/backup-repositories/{repositoryId}/ownership',
+    summary:
+      'Plan what ExponetDB may do with an adopted repository (adopted_runs); owned is refused until its capability exists.',
+    action: 'backup.repository.ownership.plan',
+    pathParams: repositoryParams,
+    body: BackupRepositoryOwnershipRequestSchema,
+    response: planned,
+    errors: BACKUP_PLAN_ERRORS,
+  },
+  {
+    operationId: 'planBackupRepositoryRetirement',
+    method: 'post',
+    path: '/backup-repositories/{repositoryId}/retire',
+    summary:
+      'Plan the retirement of a repository record: it stops being observed or used; nothing in storage is deleted.',
+    action: 'backup.repository.retire.plan',
+    pathParams: repositoryParams,
+    body: BackupRepositoryRetireRequestSchema,
+    response: planned,
+    errors: BACKUP_PLAN_ERRORS,
+  },
+  {
+    operationId: 'getBackupPolicy',
+    method: 'get',
+    path: '/clusters/{clusterId}/backup-policy',
+    summary:
+      'The active backup policy of a cluster (schedules, retention, objectives, drill cadence).',
+    action: 'backup.policy.get',
+    pathParams: clusterParams,
+    response: { status: 200, schema: BackupPolicyViewSchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'planBackupPolicy',
+    method: 'post',
+    path: '/clusters/{clusterId}/backup-policy',
+    summary: 'Plan a new revision of the backup policy (high, human, re-authentication).',
+    action: 'backup.policy.set.plan',
+    pathParams: clusterParams,
+    body: BackupPolicyBodySchema,
+    response: planned,
+    errors: BACKUP_PLAN_ERRORS,
+  },
+  {
+    operationId: 'refreshBackupCatalog',
+    method: 'post',
+    path: '/clusters/{clusterId}/backups/refresh',
+    summary:
+      'Read the engine catalog of every observed repository of the cluster through its node (backup.list@1) into the mirror.',
+    action: 'backup.catalog.refresh',
+    pathParams: clusterParams,
+    body: z.strictObject({}),
+    response: { status: 202, schema: OperationSchema },
+    errors: [
+      'CSRF_FAILED',
+      'IDEMPOTENCY_KEY_REUSED',
+      'NOT_FOUND',
+      'CAPABILITY_UNAVAILABLE',
+      'NODE_OFFLINE',
+    ],
+  },
+  {
+    operationId: 'planBackupRun',
+    method: 'post',
+    path: '/clusters/{clusterId}/backup-runs',
+    summary:
+      'Plan a backup run into one repository (ADR-0037); refused unless backup execution is activated for the tier and the repository allows runs.',
+    action: 'backup.run.plan',
+    pathParams: clusterParams,
+    body: BackupRunRequestSchema,
+    response: planned,
+    errors: BACKUP_RUN_ERRORS,
+  },
+  {
+    operationId: 'listBackupRuns',
+    method: 'get',
+    path: '/clusters/{clusterId}/backup-runs',
+    summary: 'Engine runs of the cluster (backups, verifies, expiry, restores, discards).',
+    action: 'backup.run.list',
+    pathParams: clusterParams,
+    query: listQuery,
+    response: { status: 200, schema: EngineRunListSchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'verifyBackup',
+    method: 'post',
+    path: '/clusters/{clusterId}/backups/{backupId}/verify',
+    summary:
+      "Verify one backup with the engine's verify command (inline plan, low); the backup is not counted as verified before the run passed.",
+    action: 'backup.verify',
+    pathParams: z.strictObject({ clusterId: ClusterIdSchema, backupId: BackupIdSchema }),
+    body: z.strictObject({}),
+    response: { status: 202, schema: OperationSchema },
+    errors: [...BACKUP_RUN_ERRORS.filter((c) => c !== 'REGISTRY_CONFLICT'), 'CSRF_FAILED'],
+  },
+  {
+    operationId: 'listClusterFindings',
+    method: 'get',
+    path: '/clusters/{clusterId}/findings',
+    summary: 'Open and recent findings of a cluster (backups and other cluster-level findings).',
+    action: 'cluster.finding.list',
+    pathParams: clusterParams,
+    query: listQuery.extend({ state: z.enum(['open', 'resolved', 'all']).optional() }),
+    response: { status: 200, schema: pageSchema(FindingSchema) },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'planRestore',
+    method: 'post',
+    path: '/targets/{target}/restore-plans',
+    summary:
+      'Plan a recovery of a target into a new cluster directory (never in place); every binding is checked again at apply. Agents may plan; only people execute (restore.human-only).',
+    action: 'restore.plan',
+    pathParams: targetParams,
+    body: RestorePlanRequestSchema,
+    response: planned,
+    errors: [...BACKUP_RUN_ERRORS, 'RESTORE_SOURCE_INVALID', 'RESTORE_TARGET_MISMATCH'],
+  },
+  {
+    operationId: 'planDrill',
+    method: 'post',
+    path: '/clusters/{clusterId}/drills',
+    summary:
+      'Plan a restore drill into scratch on a node: latest, older, a random point in time, or a named backup or time.',
+    action: 'restore.drill.plan',
+    pathParams: clusterParams,
+    body: DrillPlanRequestSchema,
+    response: planned,
+    errors: [...BACKUP_RUN_ERRORS, 'RESTORE_SOURCE_INVALID'],
+  },
+  {
+    operationId: 'listDrills',
+    method: 'get',
+    path: '/clusters/{clusterId}/drills',
+    summary: 'Drills of the cluster with their outcome and measured duration.',
+    action: 'restore.list',
+    pathParams: clusterParams,
+    query: listQuery,
+    response: { status: 200, schema: DrillListSchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'recordOfflineDrill',
+    method: 'post',
+    path: '/clusters/{clusterId}/drills/offline',
+    summary:
+      'Record a drill a person ran from the offline runbook with the Control Plane stopped (C-35): an attestation, shown as such (human, re-authentication).',
+    action: 'restore.drill.offline.record',
+    pathParams: clusterParams,
+    body: OfflineDrillRecordRequestSchema,
+    response: { status: 201, schema: DrillSchema },
+    errors: ['CSRF_FAILED', 'NOT_FOUND', 'VALIDATION_FAILED', 'REAUTH_REQUIRED'],
+  },
+  {
+    operationId: 'listRestores',
+    method: 'get',
+    path: '/clusters/{clusterId}/restores',
+    summary: 'Restores of the cluster (drills and recoveries) with phases and checks.',
+    action: 'restore.list',
+    pathParams: clusterParams,
+    query: listQuery,
+    response: { status: 200, schema: RestoreListSchema },
+    errors: ['NOT_FOUND'],
+  },
+  {
+    operationId: 'planRestoreDiscard',
+    method: 'post',
+    path: '/clusters/{clusterId}/restores/{restoreId}/discard',
+    summary:
+      'Plan the discard of a scratch restore: stop its temporary cluster and remove its directory on the node.',
+    action: 'restore.discard.plan',
+    pathParams: z.strictObject({ clusterId: ClusterIdSchema, restoreId: RestoreIdSchema }),
+    body: z.strictObject({}),
+    response: planned,
+    errors: BACKUP_RUN_ERRORS,
+  },
+  {
+    operationId: 'getRestoreRunbook',
+    method: 'get',
+    path: '/clusters/{clusterId}/restore-runbook',
+    summary:
+      'The offline restore runbook of a repository as plain POSIX shell, generated from its current record, with placeholders for every secret (C-35); audited.',
+    action: 'restore.runbook.get',
+    pathParams: clusterParams,
+    query: z.strictObject({ repository: BackupRepositoryIdSchema }),
+    response: { status: 200, schema: RestoreRunbookSchema },
+    errors: ['NOT_FOUND', 'VALIDATION_FAILED'],
+  },
+  {
+    operationId: 'getFindingSummary',
+    method: 'get',
+    path: '/findings/summary',
+    summary: 'Counts of the open findings the caller may read, by severity, kind and code.',
+    action: 'finding.summary',
+    pathParams: noParams,
+    response: { status: 200, schema: FindingSummarySchema },
+    errors: [],
+  },
+  {
+    operationId: 'cancelSessionQuery',
+    method: 'post',
+    path: '/targets/{target}/sessions/{pid}/cancel',
+    summary:
+      "Cancel the session's running query (inline plan, low): bound to pid, backend start and query start, re-checked in the cancelling statement; never a replication, backup or ExponetDB session.",
+    action: 'connections.cancel',
+    pathParams: z.strictObject({
+      target: TargetRefSchema,
+      pid: z.coerce.number().int().min(1).max(2147483647),
+    }),
+    body: ConnectionCancelRequestSchema,
+    response: { status: 202, schema: OperationSchema },
+    errors: [
+      ...LIVE_TARGET_ERRORS,
+      'CSRF_FAILED',
+      'IDEMPOTENCY_KEY_REUSED',
+      'PLAN_STALE',
+      'POLICY_DENIED',
+    ],
+  },
+  {
+    operationId: 'planSessionTermination',
+    method: 'post',
+    path: '/targets/{target}/sessions/{pid}/terminate',
+    summary:
+      'Plan the termination of a session: bound to pid and backend start, the condition re-checked in the terminating statement; production agent plans need a human approval.',
+    action: 'connections.terminate.plan',
+    pathParams: z.strictObject({
+      target: TargetRefSchema,
+      pid: z.coerce.number().int().min(1).max(2147483647),
+    }),
+    body: ConnectionTerminateRequestSchema,
+    response: planned,
+    errors: [...LIVE_TARGET_ERRORS, ...PLAN_ERRORS, 'PLAN_STALE'],
+  },
+]
+
 export const ROUTE_LIST: readonly RouteContract[] = [
   ...ROUTES,
   ...REGISTRY_ROUTES,
   ...NODE_ROUTES,
   ...MIGRATION_ROUTES,
   ...STEP_UP_ROUTES,
+  ...BACKUP_ROUTES,
 ]

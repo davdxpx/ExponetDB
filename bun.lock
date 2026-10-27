@@ -69,6 +69,7 @@
         "@exponetdb/application": "workspace:*",
         "@exponetdb/audit": "workspace:*",
         "@exponetdb/auth": "workspace:*",
+        "@exponetdb/backups": "workspace:*",
         "@exponetdb/contracts": "workspace:*",
         "@exponetdb/control-store": "workspace:*",
         "@exponetdb/diagnostics": "workspace:*",
@@ -138,6 +139,7 @@
       "dependencies": {
         "@exponetdb/audit": "workspace:*",
         "@exponetdb/auth": "workspace:*",
+        "@exponetdb/backups": "workspace:*",
         "@exponetdb/contracts": "workspace:*",
         "@exponetdb/control-store": "workspace:*",
         "@exponetdb/diagnostics": "workspace:*",
@@ -187,6 +189,25 @@
       "devDependencies": {
         "@types/node": "24.19.1",
         "fast-check": "4.10.2",
+      },
+    },
+    "packages/backups": {
+      "name": "@exponetdb/backups",
+      "version": "0.0.0",
+      "dependencies": {
+        "@exponetdb/audit": "workspace:*",
+        "@exponetdb/contracts": "workspace:*",
+        "@exponetdb/control-store": "workspace:*",
+        "@exponetdb/kernel": "workspace:*",
+        "@exponetdb/nodes": "workspace:*",
+        "@exponetdb/operations": "workspace:*",
+        "@exponetdb/policy": "workspace:*",
+        "@exponetdb/registry": "workspace:*",
+      },
+      "devDependencies": {
+        "@exponetdb/secrets": "workspace:*",
+        "@exponetdb/testkit": "workspace:*",
+        "@types/node": "24.19.1",
       },
     },
     "packages/contracts": {
@@ -674,6 +695,8 @@
     "@exponetdb/audit": ["@exponetdb/audit@workspace:packages/audit"],
 
     "@exponetdb/auth": ["@exponetdb/auth@workspace:packages/auth"],
+
+    "@exponetdb/backups": ["@exponetdb/backups@workspace:packages/backups"],
 
     "@exponetdb/cli": ["@exponetdb/cli@workspace:apps/cli"],
 

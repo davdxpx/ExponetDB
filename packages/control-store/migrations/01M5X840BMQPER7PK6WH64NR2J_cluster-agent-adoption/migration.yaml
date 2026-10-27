@@ -1,0 +1,31 @@
+schema: exponetdb.migration/v1
+id: 01M5X840BMQPER7PK6WH64NR2J
+name: cluster-agent-adoption
+description: |
+  How a cluster registered external gains the node agent (OD-54 option (a),
+  decided by the owner's Wave 9 Part B order of 2026-10-26; registry.md §4.5).
+  registry.clusters gains the time, the operation and the node of its
+  adoption, recorded together. The frozen registry bundle's cluster_guard is
+  replaced: every rule it held stays (id, CA bundle and creation kept, the
+  system identifier pinned once, pending → active → retired), and a cluster's
+  server and management mode now change in exactly one way: external → agent,
+  on an active cluster, by its own operation of the kind
+  registry.cluster.adopt_agent, onto the cluster's own server (or, when it
+  had none, the node's), and only while that node is enrolled and live on
+  the server (active or degraded) and its last report names the cluster's
+  pinned system identifier exactly once. The server and node rows are locked
+  FOR SHARE, so a retirement or revocation and an adoption serialize. An
+  adoption is recorded once and never undone, and one operation adopts one
+  cluster; agent → external, a second adoption and any other change of
+  server or mode are refused. Targets, placements, generations and identity
+  markers are not touched. Only the worker may write the columns. Additive:
+  no frozen bundle changes.
+dependsOn:
+  - 01M5X840BK55NGFGQ5G3Z1C5NH
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

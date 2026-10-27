@@ -32,6 +32,10 @@ const BUILT_SECTIONS: readonly string[] = [
   'activity',
   'connections',
   'locks',
+  // Wave 9 pages; their tests are in test/wave9.
+  'performance',
+  'advisors',
+  'backups',
   // Built by another change (`/t/…/compare`); its tests are in its own folder.
   'compare',
 ]
@@ -116,7 +120,7 @@ describe('a target page', () => {
     )
   })
 
-  it('lists every section in the navigation, the Wave 9 pages too, with the current one marked', async () => {
+  it('lists every section in the navigation, with the current one marked', async () => {
     mountApp('/t/shop/platform/staging/locks', worldWithProject())
     const nav = await screen.findByRole('navigation', { name: 'Target sections' })
     const links = within(nav).getAllByRole('link')
@@ -155,40 +159,20 @@ describe('a target page', () => {
   })
 
   // Built sections (Phase 10) have their own tests in test/target-overview, test/schema and test/target-pages.
-  it.each(
-    TARGET_NAV.filter(
-      (item) => !BUILT_SECTIONS.includes(item.id) && !item.requires.includes('wave9'),
-    ),
-  )('has a page for $label that says it is not built yet', async (item) => {
-    const world = worldWithProject()
-    mountApp(`/t/shop/platform/staging${item.suffix}`, world)
-    expect(await screen.findByRole('heading', { level: 1, name: item.label })).toBeInTheDocument()
-    // Pages that need the target reachable wait for its health; give it a sample.
-    expect(
-      await screen.findByRole('heading', {
-        level: 2,
-        name: `${item.label} is not available yet`,
-      }),
-    ).toBeInTheDocument()
-    expect(screen.getByText('This page of the Web App is not built yet.')).toBeInTheDocument()
-  })
-
-  it.each(TARGET_NAV.filter((item) => item.requires.includes('wave9')))(
-    'shows $label as a named "not available yet" state for Wave 9',
+  it.each(TARGET_NAV.filter((item) => !BUILT_SECTIONS.includes(item.id)))(
+    'has a page for $label that says it is not built yet',
     async (item) => {
       const world = worldWithProject()
       mountApp(`/t/shop/platform/staging${item.suffix}`, world)
       expect(await screen.findByRole('heading', { level: 1, name: item.label })).toBeInTheDocument()
+      // Pages that need the target reachable wait for its health; give it a sample.
       expect(
         await screen.findByRole('heading', {
           level: 2,
           name: `${item.label} is not available yet`,
         }),
       ).toBeInTheDocument()
-      expect(screen.getByText(/arrives with Wave 9/)).toBeInTheDocument()
-      expect(
-        screen.queryByText('This page of the Web App is not built yet.'),
-      ).not.toBeInTheDocument()
+      expect(screen.getByText('This page of the Web App is not built yet.')).toBeInTheDocument()
     },
   )
 })
@@ -455,12 +439,7 @@ describe('accessibility of the layout', () => {
     expect(await violations()).toEqual([])
   })
 
-  it('has no axe violations in the Wave 9, unreachable, cannot-tell and failed states', async () => {
-    mountApp('/t/shop/platform/staging/backups', worldWithProject())
-    await screen.findByRole('heading', { level: 2, name: 'Backups is not available yet' })
-    expect(await violations()).toEqual([])
-    cleanup()
-
+  it('has no axe violations in the unreachable, cannot-tell and failed states', async () => {
     const unreachable = worldWithProject()
     unreachable.sample('shop/platform/staging', { state: 'unreachable' })
     mountApp('/t/shop/platform/staging/locks', unreachable)

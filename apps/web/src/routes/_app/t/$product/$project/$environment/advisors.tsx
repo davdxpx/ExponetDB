@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Wave9TargetPage } from '../../../../../../features/wave9/wave9-pages.tsx'
+import { AdvisorsPage } from '../../../../../../features/wave9/advisors-page.tsx'
 
-/** `/t/<product>/<project>/<environment>/advisors`: a named "not available yet" state until Wave 9. */
+/** `/t/<product>/<project>/<environment>/advisors`: live advisors and the open advisor findings. */
 export const Route = createFileRoute('/_app/t/$product/$project/$environment/advisors')({
-  component: () => <Wave9TargetPage section="advisors" />,
+  component: AdvisorsPage,
 })

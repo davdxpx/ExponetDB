@@ -1,0 +1,24 @@
+schema: exponetdb.migration/v1
+id: 01M5X840BJSCYX2JZ3HYCMHDBT
+name: subject-findings
+description: |
+  Findings beyond drift and health (Wave 9 Part B; performance.md §4,
+  backups architecture.md §3). The frozen observation.findings allows only
+  drift and health findings of a target; observation.subject_findings holds
+  advisor, statement and backup findings whose subject is exactly one target
+  or one cluster, with the same lifecycle rules: open once per subject and
+  deduplication key, counted while open, resolved once, never deleted.
+  observation.advisor_runs records each run of the advisor catalog against a
+  target (who asked, the catalog version, the categories, what was skipped
+  and why). Both are written by serve (an on-demand advisor run) and the
+  worker (sampling and scheduled checks). Additive: no frozen bundle
+  changes.
+dependsOn:
+  - 01M5X840BFXMZ7Z6FF13AD56YJ
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

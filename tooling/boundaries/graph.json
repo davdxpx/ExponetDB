@@ -158,8 +158,34 @@
       ]
     },
     "backups": {
-      "path": "^packages/backups/",
-      "allowed": ["operations", "nodes", "postgres"]
+      "path": "^packages/backups/src/",
+      "allowed": [
+        "operations",
+        "nodes",
+        "postgres",
+        "registry",
+        "control-store",
+        "audit",
+        "policy",
+        "secrets"
+      ]
+    },
+    "backups/test": {
+      "path": "^packages/backups/test/",
+      "allowed": [
+        "backups",
+        "nodes",
+        "registry",
+        "registry/test",
+        "contracts",
+        "control-store",
+        "secrets",
+        "audit",
+        "postgres",
+        "operations",
+        "policy",
+        "testkit"
+      ]
     },
     "diagnostics/test": {
       "path": "^packages/diagnostics/test/",
@@ -232,6 +258,7 @@
         "postgres",
         "registry",
         "nodes",
+        "backups",
         "diagnostics",
         "migrations/engine"
       ]
@@ -275,6 +302,7 @@
         "postgres",
         "registry",
         "diagnostics",
+        "backups",
         "nodes",
         "sdk",
         "testkit",

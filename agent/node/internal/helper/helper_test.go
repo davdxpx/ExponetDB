@@ -898,6 +898,15 @@ func TestCommandLimitsFitTheContractsSettleTime(t *testing.T) {
 		"postgres.hba.apply@2":    runTimeout,
 		"postgres.tls.rotate@1":   runTimeout,
 		"config.update@1":         runTimeout,
+		// Wave 9 Part B: a start ends within its budget (the unit runs on
+		// under systemd, outside the helper); a discard within its own.
+		"backup.run@1":      startBudget,
+		"backup.verify@1":   startBudget,
+		"backup.expire@1":   startBudget,
+		"restore.execute@1": startBudget,
+		"restore.verify@1":  startBudget,
+		"run.cancel@1":      runTimeout,
+		"restore.discard@1": discardBudget,
 	} {
 		run, settle := v.Limits(key)
 		if QueueWait+limit+killDelay > settle {
@@ -906,6 +915,11 @@ func TestCommandLimitsFitTheContractsSettleTime(t *testing.T) {
 		if run < limit {
 			t.Errorf("%s: the agent stops at %v, before the helper's command limit %v", key, run, limit)
 		}
+	}
+	// A start's own commands stay within a minute; systemd-run is bounded by
+	// the start budget.
+	if startBudget > time.Minute || runTimeout > time.Minute {
+		t.Errorf("a start may take %v", startBudget)
 	}
 }
 

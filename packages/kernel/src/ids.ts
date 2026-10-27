@@ -52,6 +52,10 @@ export const ID_PREFIXES = {
   sqy: 'Saved query (a named SQL text of a person, personal or shared in its scope)',
   rvf: 'Role verifier (a sealed SCRAM verifier submitted for one role of a cluster)',
   rxe: 'Execution-role exception (a declared, revocable BYPASSRLS exception of one role, ADR-0034)',
+  bpl: 'Backup policy (one revision of the backup schedule, retention and objectives of a cluster, ADR-0036)',
+  run: 'Engine run (one supervised backup or restore engine execution on a node, ADR-0037)',
+  drl: 'Restore drill (a restore into scratch with its selection, verification and measured duration, ADR-0038)',
+  adv: 'Advisor run (one evaluation of the advisor catalog against a target)',
   req: 'Request (correlation id, not a stored entity)',
 } as const
 
@@ -113,6 +117,10 @@ export type ImportReportId = EntityId<'imr'>
 export type VerificationRunId = EntityId<'vfy'>
 export type RoleVerifierId = EntityId<'rvf'>
 export type ExecutionRoleExceptionId = EntityId<'rxe'>
+export type BackupPolicyId = EntityId<'bpl'>
+export type EngineRunId = EntityId<'run'>
+export type DrillId = EntityId<'drl'>
+export type AdvisorRunId = EntityId<'adv'>
 export type QueryId = EntityId<'qry'>
 export type SavedQueryId = EntityId<'sqy'>
 export type RequestId = EntityId<'req'>

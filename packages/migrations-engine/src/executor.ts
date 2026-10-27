@@ -2,18 +2,22 @@ import type { JsonObject } from '@exponetdb/kernel'
 import { normalizeSqlSource } from '@exponetdb/migrations/format'
 import {
   changedGuards,
+  changedLedgerParts,
   checkExpectations,
   type EngineGuards,
   executionRoleFacts,
   ident,
   insertLedgerRow,
   insertMigrationEvent,
+  LedgerGuardUnreadable,
+  lockLedgerForGuard,
   lockMarker,
   pinSearchPath,
   type ReviewedStatement,
   ReviewRefused,
   readEngineGuards,
   readIndexByOid,
+  readLedgerGuard,
   reviewedStatements,
   snapshotWithin,
   sql,
@@ -36,10 +40,12 @@ import type { ManagedScope } from './target.ts'
  *
  * ```text
  * BEGIN; SET LOCAL timeouts and search_path; identity marker FOR SHARE;
+ * ledger tables in SHARE mode and the ledger guard read (OD-55 (d));
  * SET LOCAL ROLE <execution role>; statement 0 … n, one message each,
- * engine guards read around each; RESET ROLE; L0 (engine catalog
- * assertions); fingerprint after (in the transaction); ledger row and
- * `applied` event; the lease checked; COMMIT
+ * engine guards read around each and the ledger guard after each (as the
+ * migrator); SET CONSTRAINTS ALL IMMEDIATE and both guards once more;
+ * RESET ROLE; L0 (engine catalog assertions); fingerprint after (in the
+ * transaction); ledger row and `applied` event; the lease checked; COMMIT
  * ```
  *
  * DDL, ledger row and event commit together. Anything before `COMMIT`
@@ -136,6 +142,81 @@ function sqlstateOf(error: unknown): string | null {
   return error instanceof TargetError && error.sqlstate !== undefined ? error.sqlstate : null
 }
 
+/**
+ * A step of the ledger guard (OD-55 (d)): its value, or the failure that
+ * ends the migration. A guard that cannot run fails closed; a lost
+ * connection or an identity refusal is the caller's (the transaction's
+ * catch); a lock that is not granted in time is a lock timeout.
+ */
+async function ledgerGuarded<T>(
+  step: () => Promise<T>,
+  statementIndex: number | null = null,
+): Promise<
+  { readonly result: 'ok'; readonly value: T } | Extract<StepResult, { result: 'failed' }>
+> {
+  try {
+    return { result: 'ok', value: await step() }
+  } catch (error) {
+    if (
+      error instanceof TargetError &&
+      (error.code === 'TARGET_UNAVAILABLE' ||
+        error.code === 'TARGET_IDENTITY_MISMATCH' ||
+        error.code === 'CLUSTER_IDENTITY_MISMATCH')
+    ) {
+      throw error
+    }
+    if (error instanceof TargetError && error.code === 'MIGRATION_LOCK_TIMEOUT') {
+      return failed('MIGRATION_LOCK_TIMEOUT', { statementIndex }) as Extract<
+        StepResult,
+        { result: 'failed' }
+      >
+    }
+    if (!(error instanceof TargetError) && !(error instanceof LedgerGuardUnreadable)) throw error
+    return failed('MIGRATION_EXECUTION_FAILED', {
+      statementIndex,
+      sqlstate: sqlstateOf(error),
+      gate: { guard: 'exponetdb_ledger', check: 'unavailable' },
+    }) as Extract<StepResult, { result: 'failed' }>
+  }
+}
+
+/** Rounds of deferred triggers before a chain counts as unbounded (review E-1). */
+export const DEFERRED_TRIGGER_ROUNDS = 16
+
+/** Rows inserted, updated or deleted in this transaction, in every table (`pg_stat_xact_all_tables`). */
+const XACT_ROW_CHANGES = sql`SELECT COALESCE(pg_catalog.sum(
+    s.n_tup_ins OPERATOR(pg_catalog.+) s.n_tup_upd OPERATOR(pg_catalog.+) s.n_tup_del), 0)::pg_catalog.text AS changes
+  FROM pg_catalog.pg_stat_xact_all_tables s`
+
+/**
+ * Fires every deferred trigger event now, as the execution role: `SET
+ * CONSTRAINTS ALL IMMEDIATE` until a round changes no row (no new event
+ * can then be queued for COMMIT), at most {@link DEFERRED_TRIGGER_ROUNDS}
+ * rounds; a longer chain, or a failing trigger, fails the migration.
+ * Null when nothing is left for COMMIT.
+ */
+async function drainDeferredTriggers(
+  session: TargetSession,
+  reader: ReturnType<TargetSession['reader']>,
+): Promise<StepResult | null> {
+  const changes = async () => (await reader.query(XACT_ROW_CHANGES))[0]?.text('changes') ?? ''
+  try {
+    let seen = await changes()
+    for (let round = 0; round < DEFERRED_TRIGGER_ROUNDS; round++) {
+      await session.query(sql`SET CONSTRAINTS ALL IMMEDIATE`)
+      const now = await changes()
+      if (now === seen && now !== '') return null
+      seen = now
+    }
+  } catch (error) {
+    if (error instanceof TargetError && error.code === 'TARGET_UNAVAILABLE') throw error
+    return failed('MIGRATION_EXECUTION_FAILED', { sqlstate: sqlstateOf(error) })
+  }
+  return failed('MIGRATION_EXECUTION_FAILED', {
+    gate: { guard: 'exponetdb_ledger', check: 'deferred_trigger_chain' },
+  })
+}
+
 export async function runTransactional(input: StepInput): Promise<StepResult> {
   const { session, item } = input
   // The worker is its own process: it loads the grammar of this server's major itself.
@@ -175,11 +256,32 @@ export async function runTransactional(input: StepInput): Promise<StepResult> {
       generation: input.content.target.generation,
       systemIdentifier: input.content.target.clusterSystemIdentifier,
     })
+    // OD-55 (d): no other writer of the ledger until COMMIT, and its state before any
+    // authored statement, read by the migrator.
+    const ledgerLock = await ledgerGuarded(() => lockLedgerForGuard(session))
+    if (ledgerLock.result === 'failed') return ledgerLock
+    const ledger = await ledgerGuarded(() => readLedgerGuard(reader))
+    if (ledger.result === 'failed') return ledger
     await pinSearchPath(reader, item.searchPath)
     await session.query(sql`SET LOCAL ROLE ${ident(item.executionRole)}`)
     const before: EngineGuards = await readEngineGuards(reader)
     if (before.currentUser !== item.executionRole) {
       return failed('MIGRATION_EXECUTION_FAILED', { gate: { guard: 'current_user' } })
+    }
+    /** The ledger and marker as before the first statement, read as the migrator; null when so. */
+    const ledgerChanged = async (statementIndex: number | null): Promise<StepResult | null> => {
+      await session.query(sql`RESET ROLE`)
+      const now = await ledgerGuarded(() => readLedgerGuard(reader), statementIndex)
+      if (now.result === 'failed') return now
+      const parts = changedLedgerParts(ledger.value, now.value)
+      if (parts.length > 0) {
+        // A change the engine did not make: the transaction rolls back (finally).
+        return failed('MIGRATION_EXECUTION_FAILED', {
+          statementIndex,
+          gate: { guard: 'exponetdb_ledger', changed: parts.join(',').slice(0, 200) },
+        })
+      }
+      return null
     }
     for (const statement of reviewed.statements) {
       try {
@@ -205,8 +307,24 @@ export async function runTransactional(input: StepInput): Promise<StepResult> {
           gate: { guard: changed.join(',').slice(0, 200) },
         })
       }
+      const forged = await ledgerChanged(statement.index)
+      if (forged !== null) return forged
+      await session.query(sql`SET LOCAL ROLE ${ident(item.executionRole)}`)
     }
-    await session.query(sql`RESET ROLE`)
+    // Deferred triggers fire now, as the execution role and under both guards, never at
+    // COMMIT after them (OD-55 (d)). A trigger fired here may defer constraints again and
+    // queue another event (review E-1); an event is only ever queued by a row change, so
+    // the round repeats until one changes no row of any table in this transaction.
+    const drained = await drainDeferredTriggers(session, reader)
+    if (drained !== null) return drained
+    const deferred = changedGuards(before, await readEngineGuards(reader))
+    if (deferred.length > 0) {
+      return failed('MIGRATION_EXECUTION_FAILED', {
+        gate: { guard: deferred.join(',').slice(0, 200) },
+      })
+    }
+    const forged = await ledgerChanged(null)
+    if (forged !== null) return forged
     // L0: engine catalog assertions in the transaction, under the migration's search path.
     if (reviewed.analysis.ok && input.replay !== true) {
       const results = await checkExpectations(

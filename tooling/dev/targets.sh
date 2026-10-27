@@ -51,7 +51,7 @@ start() {
   if [ "$tls" = "on" ]; then
     docker run -d --name "$name" -e POSTGRES_PASSWORD="$password" -v "$out:/certs:ro" \
       -p "127.0.0.1:${port}:5432" --entrypoint bash "$image" -c \
-      'cp /certs/server.crt /certs/server.key /certs/pg_hba.conf /tmp/ && chown postgres /tmp/server.crt /tmp/server.key /tmp/pg_hba.conf && chmod 600 /tmp/server.key && exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/tmp/server.crt -c ssl_key_file=/tmp/server.key -c hba_file=/tmp/pg_hba.conf -c max_connections=200' \
+      'cp /certs/server.crt /certs/server.key /certs/pg_hba.conf /tmp/ && chown postgres /tmp/server.crt /tmp/server.key /tmp/pg_hba.conf && chmod 600 /tmp/server.key && exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/tmp/server.crt -c ssl_key_file=/tmp/server.key -c hba_file=/tmp/pg_hba.conf -c max_connections=200 -c shared_preload_libraries=pg_stat_statements' \
       >/dev/null
   else
     docker run -d --name "$name" -e POSTGRES_PASSWORD="$password" \

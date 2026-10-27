@@ -60,6 +60,8 @@ describe('a partition, a lost lease and a late result (host scenario)', () => {
   })
 
   it('the worker stops while the job runs: a restarted worker takes the operation over; one job, one effect', async () => {
+    // The previous scenario stopped the gateway: the agent comes back with a back-off.
+    await w.nodeOnline()
     await w.inject(APPLY, 'executed', 'hold')
     const held = await w.configChange('8MB')
     await eventually(

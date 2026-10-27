@@ -63,6 +63,14 @@ type Helper struct {
 	// "performed": the operation returned, the response not yet sent). Only
 	// the e2e build's failure-injection seam sets it; a release build never.
 	Boundary func(op, point string)
+	// Paths are the engine run locations (DefaultPaths when unset).
+	Paths Paths
+
+	// supervisor starts and observes engine runs (systemd when nil; the lab
+	// test runs them as direct children). lookupUser names a uid (os/user
+	// when nil; tests).
+	supervisor supervisor
+	lookupUser func(uid int) (string, error)
 
 	// One request at a time: the effect admission and the file preconditions
 	// are not raced by another request.
@@ -97,6 +105,17 @@ var handlers = map[string]handler{
 	OpTrustInspect:        trustInspect,
 	OpFailedUnits:         failedUnits,
 	OpLogRead:             logRead,
+	OpBackupList:          backupList,
+	OpBackupTimers:        backupTimers,
+	OpBackupRun:           backupRun,
+	OpBackupVerify:        backupVerify,
+	OpBackupExpire:        backupExpire,
+	OpRunStatus:           runStatus,
+	OpRunCancel:           runCancel,
+	OpRestorePrepare:      restorePrepare,
+	OpRestoreExecute:      restoreExecute,
+	OpRestoreVerify:       restoreVerify,
+	OpRestoreDiscard:      restoreDiscard,
 }
 
 // QueueWait bounds how long a request waits for the one before it: an

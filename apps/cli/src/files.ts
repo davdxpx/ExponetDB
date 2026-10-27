@@ -77,12 +77,14 @@ export async function writePrivateJson(path: string, value: unknown): Promise<vo
 }
 
 /**
- * Creates `path` as a new 0600 file with `content`. Refuses an existing
- * path (file or link) and a parent directory others can write to.
+ * Creates `path` as a new 0600 file with `content` (or `mode`, e.g. 0700
+ * for a script only its owner runs). Refuses an existing path (file or
+ * link) and a parent directory others can write to.
  */
 export async function createNewPrivateFile(
   path: string,
   content: string | Uint8Array,
+  mode: 0o600 | 0o700 = 0o600,
 ): Promise<void> {
   const dir = dirname(path)
   if (POSIX) {
@@ -105,7 +107,7 @@ export async function createNewPrivateFile(
         constants.O_CREAT |
         constants.O_EXCL |
         (POSIX ? constants.O_NOFOLLOW : 0),
-      0o600,
+      mode,
     )
   } catch (error) {
     if (
@@ -118,6 +120,8 @@ export async function createNewPrivateFile(
     throw error
   }
   try {
+    // The mode exactly, whatever the umask removed (never more than asked).
+    if (POSIX && mode !== 0o600) await handle.chmod(mode)
     await handle.writeFile(content)
     await handle.sync()
   } finally {

@@ -2,6 +2,7 @@ import { isJsonArray, isJsonObject, type JsonObject } from '@exponetdb/kernel'
 import { TargetError } from './errors.ts'
 import { type MarkerState, readMarker } from './ledger.ts'
 import type { TargetSession } from './session.ts'
+import { stalledSession } from './session-conditions.ts'
 import { sql } from './sql.ts'
 
 /**
@@ -161,8 +162,9 @@ export interface ActivitySummary {
 /**
  * One parameter-free read of `pg_stat_activity` (client backends only),
  * `pg_stat_ssl` and `pg_database` (the observer has `pg_monitor`). The
- * rules here are the condition rules of health.md §3; the same function
- * decides "stalled" for display and for a later terminate plan.
+ * rules here are the condition rules of health.md §3; "stalled" is the
+ * shared predicate of `session-conditions.ts`, which the terminate plan's
+ * statement uses too.
  */
 const ACTIVITY = sql`WITH a AS (
   SELECT s.pid, s.backend_start, s.usename, s.application_name, s.state, s.wait_event_type, s.wait_event,
@@ -175,7 +177,7 @@ const ACTIVITY = sql`WITH a AS (
    WHERE s.backend_type = 'client backend' AND s.pid <> pg_catalog.pg_backend_pid()
 ), marked AS (
   SELECT a.*,
-         (a.state = 'active' AND a.wait_event = 'ClientRead' AND a.query_age >= 60) AS is_stalled,
+         ${stalledSession(sql`a`)} AS is_stalled,
          (a.state IN ('idle in transaction', 'idle in transaction (aborted)') AND a.state_age >= 10) AS is_idle_tx,
          (a.state = 'active' AND a.wait_event IS DISTINCT FROM 'ClientRead' AND a.query_age >= 30) AS is_long,
          (a.wait_event_type = 'Lock' AND a.state_age >= 10) AS is_lock_wait

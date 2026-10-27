@@ -31,6 +31,8 @@ import {
   COMPATIBILITY_ORDER,
   type CompatibilityClass,
   type LockSeverity,
+  mergeProceduralReasons,
+  proceduralReasons,
   worstSeverity,
 } from '@exponetdb/postgres/parser'
 import {
@@ -710,6 +712,11 @@ export async function planMigrationApply(
     (n, v) => n + (v.resolution?.ok === true ? v.resolution.consumer.length : 0),
     0,
   )
+  // OD-55 (c): whether the stored up.sql is procedural; a bundle without parsed statements
+  // counts as procedural.
+  const procedural = mergeProceduralReasons(
+    order.map((_, i) => proceduralReasons(report.bundles[i]?.statements ?? null)),
+  )
 
   // ----- evidence, live -----
   const evidence = await collectEvidence(
@@ -785,6 +792,8 @@ export async function planMigrationApply(
     legacyProject: state.meta.baselineId !== null,
     executionRoleExceptions: exceptionsUsed.length,
     executionRoleParity: parity,
+    procedural: procedural.length > 0,
+    proceduralReasons: procedural,
   }
   // A break-glass grant names the rules it may override; the engine decides which it does.
   let breakGlass: { readonly grantId: string; readonly rules: readonly string[] } | undefined

@@ -41,12 +41,13 @@ for arch in amd64 arm64; do
     fi
   done
 done
-mkdir -p "$out/systemd" "$out/sysusers.d" "$out/doc"
+mkdir -p "$out/systemd" "$out/sysusers.d" "$out/tmpfiles.d" "$out/doc"
 install -m 0644 packaging/systemd/exponetdb-node.service packaging/systemd/exponetdb-node-helper.service \
   packaging/systemd/exponetdb-node-helper.socket "$out/systemd/"
 install -m 0644 packaging/sysusers.d/exponetdb-node.conf "$out/sysusers.d/"
+install -m 0644 packaging/tmpfiles.d/exponetdb-node-engine.conf "$out/tmpfiles.d/"
 install -m 0644 "$runbook" "$out/doc/node-runbook.md"
 (cd "$out" && sha256sum -- *-"$version"-linux-* systemd/exponetdb-node.service \
   systemd/exponetdb-node-helper.service systemd/exponetdb-node-helper.socket \
-  sysusers.d/exponetdb-node.conf doc/node-runbook.md > "SHA256SUMS-$version")
+  sysusers.d/exponetdb-node.conf tmpfiles.d/exponetdb-node-engine.conf doc/node-runbook.md > "SHA256SUMS-$version")
 cat "$out/SHA256SUMS-$version"

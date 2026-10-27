@@ -61,3 +61,40 @@ cd agent/node && gofmt -l . && go vet ./... && go test -race -count=1 ./...
 ```
 
 Standard library only; no module downloads.
+
+## Wave 9 Part B (backups and restores)
+
+The root helper answers the eleven backup and restore capabilities
+(ADR-0036 to ADR-0038; `internal/helper/ops_backup.go`): catalog reads
+(`backup.list@1`, `backup.timers@1`, `restore.prepare@1`, `run.status@1`)
+and the starts of supervised engine runs (`backup.run@1`, `backup.verify@1`,
+`backup.expire@1`, `restore.execute@1`, `restore.verify@1`), their cancel
+(`run.cancel@1`) and the scratch discard (`restore.discard@1`). A run is a
+transient systemd unit (`exponetdb-run-<runId>.service`, fixed properties,
+`systemd-run` with a fixed template) that executes
+`exponetdb-node-helper engine-run --run <runId>` as the data directory's
+owner; the run record lives under `/var/lib/exponetdb-node-engine/runs`
+(root, `tmpfiles.d`), scratch restores under `.../scratch`.
+
+Host files per repository, under `/etc/exponetdb-node/repositories/<repositoryId>/`
+(the directory and every file root-owned, writable by root only):
+
+| File | Content | Needed |
+|---|---|---|
+| `mode` | `adopted_observed`, `adopted_runs` or `owned` (absent: `adopted_observed`) | to allow runs (`adopted_runs`: incremental backups; `owned`: every kind and expiry) |
+| `pgbackrest` | exactly the lines `stanza=<name>` and `repo=<1..4>` (`#` comments allowed) | for a pgBackRest repository whose mode allows runs; when present, a job naming another stanza or repo index is refused, reads included |
+| `repository`, `password` (`0600`), `env` (`0600`, optional) | a restic repository, its password, allowlisted `AWS_*`, `B2_*` and `RESTIC_COMPRESSION`/`RESTIC_PACK_SIZE` variables | restic and pg_dump repositories |
+
+pgBackRest reads the host's own configuration (`pgbackrestConfig` in the operator
+configuration, else `/etc/pgbackrest/pgbackrest.conf`, else
+`/etc/pgbackrest.conf`); when a `conf.d` directory lies beside it, the helper
+merges it and every engine command names it (`--config-include-path`). Every
+pgBackRest run checks that the stanza's `db-system-id` is the job's cluster
+before it starts and again before the engine runs.
+
+- Unit tests: `go test ./internal/helper/` (scripted systemd and engines).
+- Lab test with the real engines (root; pgBackRest, restic and PostgreSQL 17
+  installed): `go test -tags pglab -count=1 -run TestPglab -v ./internal/helper/`.
+  It runs each engine run as a direct child instead of a transient unit:
+  the systemd side is **not proven** by it.
+

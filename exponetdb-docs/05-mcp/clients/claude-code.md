@@ -66,7 +66,9 @@ read-only tools (this list equals the tools with `readOnlyHint`, checked by
 <!-- read-only-allow-list:start -->
 ```json
 { "permissions": { "allow": [
+  "mcp__exponetdb__advisors_run",
   "mcp__exponetdb__audit_search",
+  "mcp__exponetdb__backups_list",
   "mcp__exponetdb__locks_list",
   "mcp__exponetdb__migration_lint",
   "mcp__exponetdb__migration_status",
@@ -75,6 +77,7 @@ read-only tools (this list equals the tools with `readOnlyHint`, checked by
   "mcp__exponetdb__operation_get",
   "mcp__exponetdb__operation_list",
   "mcp__exponetdb__plan_get",
+  "mcp__exponetdb__query_stats",
   "mcp__exponetdb__schema_diff",
   "mcp__exponetdb__schema_inspect",
   "mcp__exponetdb__schema_search",
@@ -82,6 +85,7 @@ read-only tools (this list equals the tools with `readOnlyHint`, checked by
   "mcp__exponetdb__sql_cancel",
   "mcp__exponetdb__sql_explain",
   "mcp__exponetdb__sql_query",
+  "mcp__exponetdb__table_stats",
   "mcp__exponetdb__target_get",
   "mcp__exponetdb__target_health",
   "mcp__exponetdb__targets_list"

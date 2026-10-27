@@ -13,7 +13,7 @@ import {
   probeTestServer,
 } from '@exponetdb/control-store/testing'
 import { newId, systemClock } from '@exponetdb/kernel'
-import { createEnrollmentToken, revealEnrollmentToken } from '@exponetdb/nodes'
+import { createEnrollmentToken, OFFLINE_AFTER_MS, revealEnrollmentToken } from '@exponetdb/nodes'
 import { createLogger, MetricsRegistry } from '@exponetdb/observability'
 import { generateKeyringText, type Keyring, parseKeyring } from '@exponetdb/secrets'
 import { afterAll, afterEach, beforeAll, expect } from 'vitest'
@@ -468,6 +468,27 @@ export class HostWorld {
       undefined,
     ])
     return applied.body.id as string
+  }
+
+  /**
+   * Waits until the node takes jobs again (bound, with a heartbeat within the offline
+   * threshold): after a gateway outage the agent reconnects with a back-off.
+   */
+  async nodeOnline(ms = 120_000): Promise<void> {
+    const node = this.requireNode()
+    await eventually(
+      'the node to be online',
+      () =>
+        this.sql(
+          `SELECT (state IN ('active', 'degraded')
+                   AND last_heartbeat_at > clock_timestamp() - make_interval(secs => $2::double precision / 1000))
+                  AS online
+             FROM nodes.nodes WHERE node_id = $1`,
+          [node.nodeId, OFFLINE_AFTER_MS],
+        ),
+      (rows) => rows[0]?.online === true,
+      ms,
+    )
   }
 
   /** A configuration change planned against a fresh basis read; returns the operation id. */

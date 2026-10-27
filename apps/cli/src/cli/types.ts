@@ -48,6 +48,7 @@ export type Group =
   | 'operation'
   | 'approval'
   | 'diagnose'
+  | 'backup'
   | 'access'
   | 'dev'
   | 'secrets'

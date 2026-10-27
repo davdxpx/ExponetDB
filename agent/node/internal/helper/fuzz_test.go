@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/davdxpx/ExponetDB/agent/node/internal/canon"
 )
 
 // FuzzHandle: any request bytes give exactly one of a result and a refusal,
@@ -24,6 +26,16 @@ func FuzzHandle(f *testing.F) {
 		f.Add(req)
 	}
 	f.Add([]byte(`{"v":"exponetdb.helper/v1","op":"hba.restore","job":{}}`))
+	// Wave 9 Part B: the run operations.
+	for op, args := range map[string]canon.Object{
+		OpBackupRun: runArgs(runA, "full", pgbrRepo()),
+		OpRunStatus: {{Name: "runId", Value: canon.String(runA)}, {Name: "startJobId", Value: canon.String("job_01M60000000000000000000003")},
+			{Name: "startArgsHash", Value: canon.String("sha256:" + strings.Repeat("a", 64))}},
+		OpRestoreDiscard: {{Name: "runId", Value: canon.String(runA)}},
+	} {
+		req, _ := json.Marshal(Request{V: Version, Op: op, Job: e.job(op, args)})
+		f.Add(req)
+	}
 	f.Fuzz(func(t *testing.T, data []byte) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -34,13 +46,16 @@ func FuzzHandle(f *testing.F) {
 		var req Request
 		if resp.Result != nil && json.Unmarshal(data, &req) == nil && operations[req.Op].effect {
 			// The fuzzer cannot sign: an effect needs the seed's own envelope.
-			restarts := 0
+			restarts, starts := 0, 0
 			for _, c := range e.runner.calls {
 				if len(c.Args) > 0 && c.Args[0] == "restart" {
 					restarts++
 				}
+				if c.Path == SystemdRun {
+					starts++
+				}
 			}
-			if restarts > 1 {
+			if restarts > 1 || starts > 0 {
 				t.Fatal("an effect ran twice")
 			}
 		}

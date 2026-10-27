@@ -22,6 +22,7 @@ import { BundleSubmissionSchema } from '../manifest/bundle.ts'
 import { ProjectDefaultsSchema } from '../manifest/project.ts'
 import { MIGRATION_REQUEST_LIMITS, SourceClaimSchema } from '../rest/migrations.ts'
 import {
+  AdvisorCategorySchema,
   AdvisorRunSchema,
   AuditEventSchema,
   BackupCatalogSchema,
@@ -733,7 +734,7 @@ export const MCP_TOOLS = [
     output: QueryStatsSchema,
     limits: { maxItems: 200, defaultItems: 50 },
     wave: '9',
-    status: 'planned',
+    status: 'served',
     rateClass: 'read',
   },
   {
@@ -754,29 +755,27 @@ export const MCP_TOOLS = [
     output: TableStatsSchema,
     limits: { maxItems: 500, defaultItems: 100 },
     wave: '9',
-    status: 'planned',
+    status: 'served',
     rateClass: 'read',
   },
   {
     name: 'advisors_run',
     toolVersion: 1,
     title: 'Run advisors',
-    description: `Live security and performance findings with remediation.${UNTRUSTED_NOTE}`,
+    description:
+      "Runs the live security, performance, operations and change-safety advisors on a target and returns their findings with remediation. Changes no database; the run and its findings are recorded in ExponetDB's own store as the target's advisor history." +
+      UNTRUSTED_NOTE,
     action: 'advisor.run',
     restOperationId: 'runAdvisors',
     annotations: { ...RO_OPEN, idempotentHint: false },
     input: z.strictObject({
       target,
-      categories: z
-        .array(z.enum(['security', 'performance']))
-        .min(1)
-        .max(2)
-        .default(['security', 'performance']),
+      categories: z.array(AdvisorCategorySchema).min(1).max(4).default(['security', 'performance']),
     }),
     output: AdvisorRunSchema,
     limits: { maxBytes: MCP_RESULT_BYTE_CAP },
     wave: '9',
-    status: 'planned',
+    status: 'served',
     rateClass: 'read',
   },
   {
@@ -784,15 +783,16 @@ export const MCP_TOOLS = [
     toolVersion: 1,
     title: 'List backups',
     description:
-      'Backups of a cluster with verification state, WAL window, measured RPO and last drill.',
+      'Backups of a cluster as its engine lists them, with verification state, WAL coverage, measured RPO and RTO, the last drill and why the cluster is not protected; no location, key or credential.' +
+      UNTRUSTED_NOTE,
     action: 'backup.list',
     restOperationId: 'listClusterBackups',
-    annotations: RO,
+    annotations: RO_OPEN,
     input: z.strictObject({ cluster: ClusterIdSchema, limit: limit(200, 50) }),
     output: BackupCatalogSchema,
     limits: { maxItems: 200, defaultItems: 50 },
     wave: '9',
-    status: 'planned',
+    status: 'served',
     rateClass: 'read',
   },
   {

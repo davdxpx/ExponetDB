@@ -274,6 +274,45 @@ read) instead of passing on the fingerprint alone.
   fingerprint of the managed scope; expectations outside that scope (roles,
   objects in other schemas) of such a file are then excused unverified, a
   residual of the reports made before this change.
+- **[DECIDED] An excused value stays the accepted value** (OD-56 (a), owner
+  decision of 2026-10-26). Matching the aspect alone let a value outside
+  the fingerprint change after the review and stay excused (a history's
+  `ALTER ROLE r CONNECTION LIMIT 5` that found 3, accepted, still passed
+  with 100). Now:
+  - **At the analysis**, every failing expectation of a value (any aspect
+    but existence: a type, a body, a comment, a role attribute, connection
+    limit, comment or setting, a membership option, a policy's roles, …)
+    carries a keyed digest of the values the check observed for its failing
+    aspects: `hmac-sha256:` + HMAC-SHA-256 under the installation's
+    excused-value key, over a fixed domain, the failure's identity (file,
+    statement, kind, object, aspects) and the observed values; never a plain
+    hash (a setting or a comment can be guessed from a small domain), never
+    the value. The digests go to `migrations.import_value_digests`, the key
+    version to `migrations.import_value_keys` (bundle
+    `01M5X840BP8JXGEQGS0PHPTB58_excused-value-digests`); both are written
+    once by the worker and guarded against change; serve reads only which
+    key a report used. The key is a worker secret of purpose
+    `migrations.excused_value_key` (256 random bits, envelope-encrypted under
+    the keyring), created on the first analysis that needs it under a lock
+    and audited as `migrations.excused_value_key.create`. An analysis that
+    finds a failure of a value without the key (no keyring, a master key the
+    keyring lacks) ends `incomplete` (`excused_value_key_unavailable`).
+  - **At every verification** of the baseline (its own and every planned
+    re-verification) a failure a decision excuses that is a failure of a
+    value is excused only when its digest, made under the same key version,
+    equals the recorded one. Another value fails the run with the extra
+    aspect `value_changed`, even with the same aspect; a missing key, a
+    rotated key (another version of the secret), or no recorded digest fails
+    it with `value_unverifiable`. A person reviews again: analyze again and
+    decide on the new report.
+  - **Never shown.** Neither a value nor a digest appears in the report, the
+    verification runs, the API, MCP output, audit or logs; the verification
+    names only the aspect codes.
+  - **Reports from before.** A report analyzed before digests were recorded
+    (no `import_value_keys` row) and with a failure of a value is refused as
+    a baseline (`LEGACY_IMPORT_ANALYSIS_OUTDATED`); a baseline already
+    recorded from such a report keeps the rule of its review (the aspect
+    alone), a documented residual of the owner's existing baseline.
 - **What failed is kept (F2).** The run stores, per layer, the failing
   expectations (file, statement, kind, object, the aspects that differ,
   `excused`; the first 200 and `failuresTotal`), `failed` (the non-excused

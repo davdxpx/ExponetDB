@@ -255,10 +255,13 @@ describe('the OpenAPI document', () => {
     expect(Object.values(r.body.paths).flatMap((p) => Object.keys(p as object)).length).toBe(
       ROUTE_LIST.length,
     )
-    // An operation that is contracted and not served yet (Wave 9) answers NOT_FOUND, as the document says.
+    // An operation that is contracted and not served yet (the ledger reconciliation plan) answers
+    // NOT_FOUND, as the document says.
     const unserved = await bearer(
       undefined,
-      '/api/v1/targets/tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/query-stats',
+      '/api/v1/targets/tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/ledger/reconcile-plans',
+      'POST',
+      {},
     )
     expect([unserved.status, unserved.body.code]).toEqual([404, 'NOT_FOUND'])
     // Only a read: nothing else answers at that path.

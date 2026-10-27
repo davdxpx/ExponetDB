@@ -1,0 +1,28 @@
+schema: exponetdb.migration/v1
+id: 01M5X840BFXMZ7Z6FF13AD56YJ
+name: statement-statistics
+description: |
+  Statement statistics of the managed targets (Wave 9 Part B; performance.md
+  §2, data-retention.md §1). The worker samples pg_stat_statements every five
+  minutes: observation.statement_samples records each attempt with its
+  outcome and the discontinuity it saw (a stats reset, a server restart,
+  deallocated entries), observation.stats_reset_events the discontinuities
+  themselves, observation.statement_latest the cumulative counters of the
+  last sample per statement (the base of the next delta), and
+  observation.statement_deltas the deltas of the top 200 statements by total
+  time in daily partitions (30 days by default, 7 to 90). A delta never
+  crosses a discontinuity, so no stored delta is negative (a CHECK says so).
+  observation.statement_daily holds daily aggregates (400 days). Statement
+  text is stored only normalized and redacted by packages/diagnostics before
+  the insert; a text that could carry a secret is replaced and marked.
+  Samples and deltas are history: never updated or deleted, except by the
+  partition functions. Additive: no frozen bundle changes.
+dependsOn:
+  - 01M5WT5NV9ZC8TYB9BMP3D0EZZ
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

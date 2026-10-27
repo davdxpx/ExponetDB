@@ -211,3 +211,13 @@ describe('the ledger against its mirror (ledger.md §5)', () => {
     expect(compareLedger([], live, new Set())?.unrecorded).toHaveLength(16)
   })
 })
+
+describe('the procedural classification on the wire (OD-55 (c))', () => {
+  it('names exactly the reasons the analyzer produces', async () => {
+    const { MigrationPlanContentSchema } = await import('@exponetdb/contracts')
+    const { PROCEDURAL_REASONS } = await import('@exponetdb/postgres/parser')
+    const facts = MigrationPlanContentSchema.shape.facts
+    const reasons = facts.shape.proceduralReasons.unwrap().element.options
+    expect([...reasons]).toEqual([...PROCEDURAL_REASONS])
+  })
+})

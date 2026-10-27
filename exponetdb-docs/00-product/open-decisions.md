@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); OD-50 added on 2026-10-21 with the CLI's scope presets; on 2026-10-21 the owner's Wave 9 order ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)) split OD-7 into OD-7a (staging: yes) and OD-7b (production: no applies before Wave 11), decided the engine part of OD-4 (pgBackRest; the storage stays open until the measured spike B0), and added OD-51 (a declared `BYPASSRLS` execution-role exception) and OD-52 (adopting a running pgBackRest setup), both decided by the order's defaults; OD-53 (fingerprint lineage across per-environment owner roles) added on 2026-10-21 by Part A (A5); OD-54 (how an external cluster gains the node agent) added on 2026-10-22 by Part A (A8); OD-55 (procedural code in a migration session can act as any role the migrator holds) added on 2026-10-22 by Part A's review round 3; OD-56 (an excused value outside the fingerprint that changes after the review) added on 2026-10-24 by the review of Part A follow-up 3; OD-8 stays open and blocks Part B of Wave 9 (see ["Decisions of the Wave 9 order"](#decisions-of-the-wave-9-order-2026-10-21)); all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); OD-50 added on 2026-10-21 with the CLI's scope presets; on 2026-10-21 the owner's Wave 9 order ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)) split OD-7 into OD-7a (staging: yes) and OD-7b (production: no applies before Wave 11), decided the engine part of OD-4 (pgBackRest; the storage stays open until the measured spike B0), and added OD-51 (a declared `BYPASSRLS` execution-role exception) and OD-52 (adopting a running pgBackRest setup), both decided by the order's defaults; OD-53 (fingerprint lineage across per-environment owner roles) added on 2026-10-21 by Part A (A5); OD-54 (how an external cluster gains the node agent) added on 2026-10-22 by Part A (A8); OD-55 (procedural code in a migration session can act as any role the migrator holds) added on 2026-10-22 by Part A's review round 3; OD-56 (an excused value outside the fingerprint that changes after the review) added on 2026-10-24 by the review of Part A follow-up 3; on 2026-10-26 the owner's Wave 9 Part B order decided OD-8 (technical default option (a); the legal review stays open as EXTERNAL LEGAL REVIEW), OD-53 (a), OD-54 (a), OD-55 (c) with (d) and OD-56 (a), and kept the storage part of OD-4 open (it blocks the full G9 acceptance; see ["Owner decisions of the Wave 9 Part B order"](#owner-decisions-of-the-wave-9-part-b-order-2026-10-26)); OD-57 (an advisor run's scope) added on 2026-10-27 by the Part B review F-4; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -23,11 +23,11 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-1 | Web App language | **resolved 2026-10-13** | option (c): English UI strings behind typed message keys from day one; German later by adding a catalog | (was Wave 8) | decided |
 | OD-2 | Node agent implementation language | **resolved 2026-10-05** | Go | (was Wave 5 and the Go golden vectors of Wave 1) | decided |
 | OD-3 | Toolchain and runtime | **resolved 2026-10-05** | Bun workspaces + Turborepo + Vitest + Biome + TypeScript; Node.js 24 LTS for production server processes | (was Waves 1, 2) | decided |
-| OD-4 | Backup engine | **engine decided 2026-10-21** (Wave 9 order default D-B1); **storage open** until the measured spike B0 | pgBackRest for L1 (version chosen and pinned per [`backup-engines.md`](../09-backups-and-restore/backup-engines.md)); storage (Hetzner Object Storage with S3 Object Lock, Cloudflare R2 with bucket lock rules, or both) decided by the owner with the spike's measurements; `pg_dump` + restic off-provider (D-B4) | Wave 9 Part B (storage) | yes (storage) |
+| OD-4 | Backup engine | **engine decided 2026-10-21**; **storage open** (`OD-4-storage`, reaffirmed open by the owner on 2026-10-26: **blocks the full G9 acceptance**) | pgBackRest for L1, `pg_dump` for L2, restic for L3; the architecture is provider-neutral with several repositories per cluster ([ADR-0036](../01-architecture/adr/0036-backup-repositories-and-providers.md)); the provisional recommendation (Hetzner Object Storage with S3 Object Lock as the L1 candidate, Cloudflare R2 as the independent L3 candidate, existing R2 repositories adopted read-only) is **not** an owner decision; the comparison and the spike are in [`PRE-WAVE-11-REVIEW.md` W9-03](../14-roadmap/PRE-WAVE-11-REVIEW.md#w9-03-storage-choice-spike) | the full G9 acceptance and any productive activation of a repository | yes (after the spike) |
 | OD-5 | MCP client registration policy | **resolved 2026-10-06, revised 2026-10-13** | revised 2026-10-13 by the owner: new CIMD and DCR clients are approved automatically by default (`EXPONETDB_OAUTH_CLIENT_REGISTRATION=open`), a person still consents, an administrator can still disable a client; `review` keeps the 2026-10-06 rule. Option (a) of 2026-10-06: pre-registered first-party clients; third-party CIMD clients only after an admin approves the exact `client_id` URL, bound to a fingerprint of its security metadata; DCR as deprecated compatibility that creates a pending public client (`none`) until approved; service-account clients pre-registered with `private_key_jwt`; no client secrets; no third-party client trusted at bootstrap | (was Wave 3B) | decided |
 | OD-6 | Verified provenance for production migrations | **resolved 2026-10-12** | not in V1; add repository integration or signed artifacts after Wave 10 | Wave 6 (production policy), later | yes |
 | OD-7 | Manage REOSA's current databases before the move | **resolved 2026-10-21** (split by the owner's Wave 9 order) | OD-7a (staging, already self-managed on `reos-db-01`): **yes**, registered, imported and migrated through ExponetDB after Part A of Wave 9; OD-7b (production, still on the hosted provider until Wave 11): **no applies before Wave 11**, at most read-only observation | (was Wave 10) | decided |
-| OD-8 | Audit retention and personal data | **open (legal)**; Wave 2 design settled 2026-10-05; still open at the start of Wave 9 (2026-10-21) | permanent audit with pseudonymous labels; erasure pseudonymizes identities; default `permanent`, never below 400 days (the Wave 9 order recommends option (a), D-B3) | Wave 9 Part B (a stop-and-ask point; Part A does not depend on it) | yes (legal) |
+| OD-8 | Audit retention and personal data | **technical default decided 2026-10-26** (option (a)); **legal review open** (EXTERNAL LEGAL REVIEW, NOT PROVEN) | option (a) as the technical default: append-only, hash-chained audit kept permanently and pseudonymously; personal data in clear text outside the chain, resolved only with permission; IP addresses as installation-keyed HMAC, no raw user agents; a configured finite period never below 400 days. This is a technical default, **not legal advice**: the data-protection and erasure review is open and must pass before productive use | productive use of the audit with personal data (not Wave 9 development) | yes (legal) |
 | OD-9 | Approval model for a one-person organization | **resolved 2026-10-05** | option (a): agent proposes, a human approves in the Web App; human-initiated plans may be self-approved with fresh re-authentication; `critical` self-approvals add an explicit acknowledgement, a 10-minute cooling period and a fresh re-authentication at apply | (was Waves 3A, 6) | decided |
 | OD-10 | Future identity architecture | open | ExponetDB stays authorization server for its resources; federates login to the Exponet identity service later | later wave | yes |
 | OD-11 | Exponet brand input for the Web App | **resolved 2026-10-13** (placeholder) | option (b) until the owner supplies a brand: neutral placeholder tokens (an indigo-blue hue near 255, clearly not Supabase green), the wordmark is the text "ExponetDB" in the UI font, Inter and Source Code Pro (OFL, self-hosted); replaceable through the token inputs only | (was Wave 8); a real brand replaces the placeholder later | yes (brand values, when they exist) |
@@ -72,10 +72,11 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-50 | What the CLI may learn about the scopes an account could hold | open | (b) a CLI read action returning the scopes the person could be granted, computed like the consent page | "could get" in `whoami` and `doctor` | yes |
 | OD-51 | An execution role with `BYPASSRLS` for adopted schemas | **resolved 2026-10-21** (Wave 9 order default D-A1; stands unless the owner overrules it) | a declared, audited, revocable exception per (project, environment, PostgreSQL role) that excuses exactly `BYPASSRLS` and nothing else; declared and revoked by people only (never MCP), production with an approval and a re-authentication; a warn rule in every plan that uses it; on production at least `high` and agent applies still need a human approval ([ADR-0034](../01-architecture/adr/0034-execution-roles-for-adopted-schemas.md)) | Wave 9 Part A (A4) | decided |
 | OD-52 | Adopting a running, hand-made pgBackRest setup | **resolved 2026-10-21** (Wave 9 order default D-B2; stands unless the owner overruled it) | adopt, then own: first observe the existing stanza, repositories and schedules without changing them, then take ownership of configuration and scheduling through a planned, verified hand-over that stays reversible until confirmed; an ADR in Wave 9 B0 | Wave 9 Part B (B0, B2) | decided |
-| OD-53 | Fingerprint lineage when environments use different owner roles | open | (a) keep it fail closed: a lineage mismatch caused by owner names needs an approval, as today; (b) compare the two stored documents with the execution roles mapped by alias (fp1 unchanged, a new lineage comparison); (c) treat a mismatch only in owners and grantees of execution roles as a warning | production plans of a non-legacy project whose environments are bound to different owner roles (ADR-0034 §5) | yes |
-| OD-54 | How an external cluster gains the node agent | open | (a) an additive, one-way operation `registry.cluster.adopt_agent` (human, production authority, re-authentication): an enrolled node on a server whose report carries the cluster's pinned `system_identifier`; the record gains the server and `management_mode = agent`, targets keep placement and generation; an additive bundle relaxes `EXG07` for exactly this transition; (b) register a second cluster record in agent mode and move each target (§3 of registry.md: new generation, marker re-stamped), then retire the external record; (c) external stays external in V1 | node capabilities (backups, roles, `pg_hba`, TLS) on a cluster first registered external, such as REOSA staging on `reos-db-01` (OD-7a) in Wave 9 Part B | yes |
-| OD-55 | Procedural code in a migration session can act as any role the migrator holds | open | (d) the executor compares the `exponetdb` schema's tables before and after each authored statement in the transaction and refuses a change it did not make, plus (c) a person approves every agent-initiated plan with procedural statements on every tier; (a) per-project migrator logins and (b) refusing role switches and dynamic `EXECUTE` in parsed PL/pgSQL bodies stay for later | agents applying bundles with `DO` blocks or routines without a person; the trust in a target's ledger and marker written in a migration's transaction | no (Part A closed its one path to superuser code) |
-| OD-56 | An excused value outside the fingerprint that changes after the review | open | (a) the checks return a keyed digest (HMAC under an installation key) of the observed value for open-domain kinds, recorded with the failure and compared at the verification; (b) drift of cluster-global state later | a baseline's verification that excuses a role setting, connection limit, comment or an object outside the managed scope | no |
+| OD-53 | Fingerprint lineage when environments use different owner roles | **resolved 2026-10-26** | option (a): fail closed; a lineage mismatch caused by owner names needs an approval (the legacy-project warning stays); fp1 unchanged; option (b) later only with an ADR and tests | nothing | decided |
+| OD-54 | How an external cluster gains the node agent | **resolved 2026-10-26** | option (a): a controlled, one-way operation `registry.cluster.adopt_agent` (human only, production authority also while the tier is unknown, fresh re-authentication, audited, idempotent; the `system_identifier` pinned at registration must be reported exactly once by an enrolled node of the same server, checked at plan and again at apply); an additive bundle allows exactly external → agent and nothing else; targets keep placement, generation and marker | node capabilities on a cluster first registered external | decided |
+| OD-55 | Procedural code in a migration session can act as any role the migrator holds | **resolved 2026-10-26** | options (c) and (d): a person approves every agent-initiated plan with procedural statements (`DO`, created and called routines, dynamic SQL where detectable) on **every** tier; the executor compares the `exponetdb` schema's ledger and marker state before and after each authored statement inside the transaction and refuses a change it did not make; fail closed where the check cannot run; cross-project role reach on one cluster stays a recorded residual risk | agent applies of procedural bundles without a person | decided |
+| OD-56 | An excused value outside the fingerprint that changes after the review | **resolved 2026-10-26** | option (a): a keyed digest (HMAC-SHA-256 under a server-side installation key, never a plain hash) of the observed value of open-domain kinds is recorded with the excused failure and compared at every later verification; a changed value fails closed even with the same aspect; a missing or rotated key fails closed; values never appear in UI, API, audit or logs | nothing | decided |
+| OD-57 | `advisors_run` records a run, but its scope `diagnostics.read` is a read scope | **open** | (a) a new additive oauth bundle makes `diagnostics.read` a write scope (consent shows it; clients that auto-approve read tools stop doing so); (b) a separate record scope for advisor runs (`diagnostics.record`), `diagnostics.read` stays read-only; (c) an advisor run over MCP records nothing (findings only from Web App, CLI and the worker) | nothing in Part B; the MCP annotation stays `readOnlyHint` until decided | open |
 
 ---
 
@@ -176,6 +177,24 @@ History:
   not replaced ([OD-52](#od-52-adopting-a-running-hand-made-pgbackrest-setup)).
 - **Source.** the owner's Wave 9 order, §3.2 D-B1, D-B4
   ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)).
+- **Status (2026-10-26, the owner's Wave 9 Part B order).** The storage
+  part (`OD-4-storage`) is **not decided** and stays `OPEN — BLOCKS G9 FULL
+  ACCEPTANCE`. The owner wants to understand what each choice means in
+  operation before choosing between Hetzner Object Storage and Cloudflare R2
+  as the primary target. Part B therefore builds a provider-neutral
+  architecture with several repositories per cluster
+  ([ADR-0036](../01-architecture/adr/0036-backup-repositories-and-providers.md)):
+  existing repositories (the owner's R2 repository on `reos-db-01`) are
+  first adopted read-only, nothing is migrated between buckets, and no lock
+  capability is assumed from a provider label. **Provisional recommendation
+  of the implementing session, not an owner decision:** for new managed
+  installations Hetzner Object Storage with S3 Object Lock as the L1
+  candidate and Cloudflare R2 as the independent L3 candidate; for the
+  existing installation R2 adopted read-only with its PITR chain untouched.
+  Both are unproven until the restore and lock experiments of
+  [`PRE-WAVE-11-REVIEW.md` W9-03](../14-roadmap/PRE-WAVE-11-REVIEW.md#w9-03-storage-choice-spike)
+  ran on disposable buckets. Nothing in the repository says the owner
+  decided Hetzner (or R2).
 
 History:
 
@@ -386,6 +405,21 @@ History:
   stop-and-ask point: Part B of Wave 9 (backups, restores, retention of the
   new records) does not start before the owner decides it. Part A (the
   migration engine for imported schemas) does not depend on it.
+- **Status (2026-10-26, the owner's Wave 9 Part B order).** **Technical
+  default decided: option (a).** The append-only, hash-chained audit is
+  kept long-term (default `permanent`) and pseudonymously; personal data in
+  clear text lives outside the hash chain and is resolved only for a reader
+  with the permission; IP addresses are stored as installation-keyed HMAC
+  values, raw user agents are not stored; a configured finite period is
+  never below 400 days. This settles the setting Wave 9 builds against
+  (retention of the new backup, restore and statistics records follows
+  [`../02-control-plane/data-retention.md`](../02-control-plane/data-retention.md)).
+  **It is not a legal decision and not legal advice.** Whether permanent
+  pseudonymous retention is lawful for the owner's processing, and how
+  erasure requests are answered, is an **EXTERNAL LEGAL REVIEW** that is
+  `NOT PROVEN` and must pass before productive use with personal data
+  ([`PRE-WAVE-11-REVIEW.md` W9-00](../14-roadmap/PRE-WAVE-11-REVIEW.md#w9-00-decision-registry)).
+  Nothing in ExponetDB claims that permanent retention is always lawful.
 
 ## OD-9. Approval model for a one-person organization
 
@@ -1530,7 +1564,16 @@ History:
 
 ## OD-53. Fingerprint lineage when environments use different owner roles
 
-- **Status.** OPEN (found in Wave 9 Part A, A5, 2026-10-21)
+- **Status.** RESOLVED (found in Wave 9 Part A, A5, 2026-10-21)
+- **Decision date.** 2026-10-26
+- **Decision.** Option (a): the lineage check stays fail closed; a
+  production plan whose fingerprint differs from its evidence environment
+  only by owner or grantee names still needs an approval; the imported
+  legacy project's warning rule is unchanged; fp1 stays frozen. Option (b)
+  may come later, only with an ADR and tests. Consequence: production plans
+  of a non-legacy project with per-environment owner roles need an approval
+  each.
+- **Source.** the owner's Wave 9 Part B order (2026-10-26), §1 item 2.
 - **Question.** Should a production plan count as following its evidence
   environment when the only difference between the two schemas is which
   execution role owns the objects?
@@ -1556,7 +1599,22 @@ History:
 
 ## OD-54. How an external cluster gains the node agent
 
-- **Status.** OPEN (found in Wave 9 Part A, A8, 2026-10-22)
+- **Status.** RESOLVED (found in Wave 9 Part A, A8, 2026-10-22)
+- **Decision date.** 2026-10-26
+- **Decision.** Option (a): a new, controlled operation
+  `registry.cluster.adopt_agent`. Human only, with production authority
+  (also while the cluster's tier is undeclared or unknown), a fresh
+  re-authentication, audited and idempotent. The plan binds the cluster's
+  pinned `system_identifier`, its server, the node and the node's latest
+  report; the apply checks all of them again under the row lock. The node
+  must be enrolled, served and on the cluster's server (or the cluster has
+  no server yet and the node's server becomes it), and its report must name
+  the pinned `system_identifier` exactly once; anything else fails closed.
+  An additive Control Store bundle allows exactly the transition
+  `external → agent` by this operation and nothing else; targets keep their
+  placement, generation and identity marker, and the cluster keeps its id
+  and history. Never an uncontrolled change from `external` to `agent`.
+- **Source.** the owner's Wave 9 Part B order (2026-10-26), §1 item 3.
 - **Question.** When a cluster that was registered as external (no agent)
   later runs on a host with an enrolled node agent, how does its registry
   record become agent-managed?
@@ -1594,8 +1652,32 @@ History:
 
 ## OD-55. Procedural code in a migration session can act as any role the migrator holds
 
-- **Status.** OPEN (found in Wave 9 Part A, review round 3, 2026-10-22;
+- **Status.** RESOLVED (found in Wave 9 Part A, review round 3, 2026-10-22;
   the engine has worked this way since Wave 6)
+- **Decision date.** 2026-10-26
+- **Decision.** Options (c) and (d) together. (c) A person approves every
+  agent-initiated migration plan whose bundle contains procedural
+  constructs (`DO` blocks, routines the bundle creates and calls, dynamic
+  SQL where it can be detected) on **every** tier, nonprod included; a
+  plan whose procedural content cannot be classified counts as procedural.
+  (d) The executor protects the `exponetdb` ledger and identity-marker
+  tables by a transactional before/after comparison around each authored
+  statement, instead of trusting the session's current role, and refuses
+  and rolls back a change it did not make itself. Only a mechanism whose
+  behavior under concurrency, locks and TOCTOU is demonstrated is
+  acceptable; where the check cannot run, the apply fails closed and the
+  gap is a gate blocker. Existing non-procedural behavior is not forbidden.
+  Cross-project role reach inside one cluster (option (a)'s concern) stays
+  a **recorded residual risk**; nothing claims full containment.
+- **Source.** the owner's Wave 9 Part B order (2026-10-26), §1 item 4.
+- **Implementation.** **[DECIDED]** (Wave 9 Part B) (c): the plan fact
+  `facts.procedural` with `facts.proceduralReasons` and the rule
+  `migration.agent-procedural` ([`../04-migrations/planning-and-apply.md` §2](../04-migrations/planning-and-apply.md#2-plan-content),
+  [`../02-control-plane/policy-engine.md` §4](../02-control-plane/policy-engine.md#4-rule-catalog-v1));
+  (d): the executor's ledger guard and, where it cannot roll back, the deny
+  rule `migration.procedural-nontransactional`
+  ([`../04-migrations/planning-and-apply.md` §4.3, §4.4](../04-migrations/planning-and-apply.md#43-transactional-migration));
+  the residual is threat T38.
 - **Question.** How is code a migration runs kept to the project's
   execution role when that code is procedural?
 - **Why it matters.** **[OBSERVED]** (PostgreSQL 17, 2026-10-22) An
@@ -1648,8 +1730,23 @@ History:
 
 ## OD-56. An excused value outside the fingerprint that changes after the review
 
-- **Status.** OPEN (found in Wave 9 Part A, the independent review of
+- **Status.** RESOLVED (found in Wave 9 Part A, the independent review of
   follow-up 3, 2026-10-24, finding P3-1)
+- **Decision date.** 2026-10-26
+- **Decision.** Option (a): for open-domain kinds the checks return a keyed
+  digest of the observed value (HMAC-SHA-256 under a server-side
+  installation key, never a plain hash), recorded with the excused failure
+  at the analysis and compared at every later verification. A changed value
+  fails closed even when the aspect is the same; a missing, unreadable or
+  rotated key fails closed (a person reviews again). Neither values nor
+  digests appear in UI, API, MCP output, audit or logs beyond the stored
+  comparison record.
+- **Source.** the owner's Wave 9 Part B order (2026-10-26), §1 item 5.
+- **Implementation.** **[DECIDED]** (Wave 9 Part B) the installation's
+  excused-value key (a worker secret), the digests recorded at the analysis
+  and compared at every verification, `value_changed` and
+  `value_unverifiable` ([`../04-migrations/legacy-import.md` Step 7](../04-migrations/legacy-import.md#step-7-verify));
+  bundle `01M5X840BP8JXGEQGS0PHPTB58_excused-value-digests`.
 - **Question.** Must an excused failure of a baseline's verification also
   prove that the failing value is still the one the person accepted?
 - **Why it matters.** **[OBSERVED]** (PostgreSQL 17, 2026-10-24) A review
@@ -1673,6 +1770,52 @@ History:
   could reverse; (b) is useful on its own and later.
 - **Blocks.** Nothing in Part A; the reviewed baseline on `reos-db-01` is
   not affected beyond this residual.
+
+## OD-57. `advisors_run` records a run, but its scope is a read scope
+
+- **Status.** OPEN (found on 2026-10-27 by the Wave 9 Part B review F-4)
+- **Question.** How is an advisor run over MCP classified, given that it
+  writes Control Store records?
+- **Why it matters.** **[OBSERVED]** (Wave 9 Part B) `advisors_run`
+  inserts an `observation.advisor_runs` row, opens, counts and resolves
+  subject findings and appends an `advisor.run` audit event; since the
+  review fix these commit in one transaction. The tool is annotated
+  `readOnlyHint` and `advisor.run` has the effect `read`, so an MCP client
+  that auto-approves read-only tools can loop it under the read rate
+  limit, growing runs and audit and churning finding states. `drift.check`,
+  which records the same way, is a `record` action with the `RECORDS`
+  annotation. Making `advisor.run` a `record` action turns
+  `diagnostics.read` into a write scope; the frozen G3B bundle
+  `01M47XQ56MW0JQX3J715X2GDB8_oauth-delegation` stores that scope with
+  `write=false`, and `checkScopeCatalog` compares the row with the release.
+- **Options.** (a) a new additive oauth bundle makes `diagnostics.read` a
+  write scope (a consent screen change for every grant holding it); (b) a
+  separate scope for recording advisor runs, `diagnostics.read` stays
+  read-only and `advisors_run` needs the new scope; (c) an advisor run
+  through MCP evaluates without recording (findings come from the Web App,
+  the CLI and the worker only).
+- **Recommendation.** (b): the read scope keeps its meaning and an agent's
+  grant shows the record right separately.
+- **Blocks.** Nothing in Part B; the residual is listed in
+  [`../14-roadmap/PRE-WAVE-11-REVIEW.md`](../14-roadmap/PRE-WAVE-11-REVIEW.md) W9-04.
+
+## Owner decisions of the Wave 9 Part B order (2026-10-26)
+
+The owner's Wave 9 Part B implementation order of 2026-10-26 (backup,
+restore, performance, security hardening; run in parallel to the UI/UX
+session of `davdxpx/ExponetDB#42`) takes these decisions after an explicit
+discussion with the owner. **[DECIDED]** 2026-10-26, source: that order §1.
+They change no other DECIDED rule.
+
+| # | Topic | Decision | Consequence |
+|---|---|---|---|
+| P1 | OD-8 | technical default option (a); the legal review is open (EXTERNAL LEGAL REVIEW, `NOT PROVEN`) | Wave 9 records follow the retention rules; productive use with personal data waits for the legal review |
+| P2 | OD-53 | option (a), fail closed | an approval per production plan with an owner-name lineage mismatch |
+| P3 | OD-54 | option (a), `registry.cluster.adopt_agent` | the only path from `external` to `agent` |
+| P4 | OD-55 | options (c) and (d) | procedural agent plans need a person on every tier; ledger and marker protected transactionally; cross-project reach a residual |
+| P5 | OD-56 | option (a), HMAC under a server-side key | changed excused values fail closed |
+| P6 | OD-4 storage | **not decided**: `OPEN — BLOCKS G9 FULL ACCEPTANCE`; provider-neutral, several repositories per cluster, adopt read-only first | the provisional recommendation is not a decision |
+| P7 | Not closed silently | OD-10, OD-12, OD-21, OD-27, OD-29, OD-41 to OD-50 stay as they are | features that depend on them fail closed |
 
 ## Decisions of the Wave 9 order (2026-10-21)
 

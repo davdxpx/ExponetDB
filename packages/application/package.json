@@ -24,6 +24,7 @@
   "dependencies": {
     "@exponetdb/audit": "workspace:*",
     "@exponetdb/auth": "workspace:*",
+    "@exponetdb/backups": "workspace:*",
     "@exponetdb/contracts": "workspace:*",
     "@exponetdb/control-store": "workspace:*",
     "@exponetdb/diagnostics": "workspace:*",

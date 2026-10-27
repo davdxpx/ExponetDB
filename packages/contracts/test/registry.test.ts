@@ -145,6 +145,15 @@ describe('Wave 4 registry contracts', () => {
     expect(by('placement')).toEqual(['target.register', 'target.register.plan'])
     // A cluster: prod unless declared nonprod and hosting no production target.
     expect(by('cluster_registry')).toEqual([
+      // Wave 9 Part B (ADR-0036): repositories and policies are registry changes of the cluster.
+      'backup.policy.set',
+      'backup.policy.set.plan',
+      'backup.repository.adopt',
+      'backup.repository.adopt.plan',
+      'backup.repository.ownership',
+      'backup.repository.ownership.plan',
+      'backup.repository.retire',
+      'backup.repository.retire.plan',
       'cluster.bootstrap_sql.get',
       'credential.list',
       'credential.rotate',
@@ -195,6 +204,9 @@ describe('Wave 4 registry contracts', () => {
       'node.enrollment_token.reveal',
       'node.revoke',
       'node.revoke.plan',
+      // OD-54 (a): adopting an external cluster by the node agent, whatever its tier.
+      'registry.cluster.adopt_agent',
+      'registry.cluster.adopt_agent.plan',
       'registry.cluster.declare_tier',
       'registry.cluster.declare_tier.plan',
       'registry.cluster.register',

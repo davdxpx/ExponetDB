@@ -12,12 +12,12 @@ import type { Person } from './support/node-world.ts'
  * App with `diagnostics.read_sensitive`, re-authenticated within 15
  * minutes; one audit event per view without the text; nothing persisted.
  *
- * What the disposable test servers cannot show: none of them preloads
- * `pg_stat_statements` (`shared_preload_libraries` is empty on 16, 17 and
- * 18), so the aggregated-statistics source is proven here only up to
- * `extension_missing` (not installed, and installed but not loaded:
- * SQLSTATE 55000); its matching is the same digest function as the
- * session source.
+ * The disposable test servers preload `pg_stat_statements` since Wave 9
+ * Part B (the statement sampler needs it; `tooling/dev/targets.sh`): an
+ * installed extension is then searched, and an unknown digest is
+ * `not_held`. On a server that does not preload it, the same step proves
+ * "installed but not loaded" (SQLSTATE 55000) is `extension_missing`; the
+ * test reads the server's setting and checks the case it is.
  */
 const pg17 = serverFor(17)
 // Markers no code path of ours produces; the text must never be stored or logged.
@@ -188,13 +188,16 @@ describe('the raw statement view', () => {
     // Anywhere on the target: not in pg_stat_activity, and no pg_stat_statements to search.
     const unknown = await w.owner.browser.call('GET', path(`sha256:${'0'.repeat(64)}`))
     expect([unknown.status, unknown.body.details]).toEqual([404, { reason: 'extension_missing' }])
-    // Installed but not in shared_preload_libraries (55000): still not searchable.
+    // Installed: searched when it is loaded (an unknown digest is not held there);
+    // not in shared_preload_libraries (55000): still not searchable.
+    const preload = await held.query(
+      "SELECT current_setting('shared_preload_libraries') ~ 'pg_stat_statements' AS loaded",
+    )
+    const loaded = preload.rows[0]?.loaded === true
+    const installedReason = loaded ? 'not_held' : 'extension_missing'
     await held.query('CREATE EXTENSION IF NOT EXISTS pg_stat_statements')
-    const notLoaded = await w.owner.browser.call('GET', path(`sha256:${'0'.repeat(64)}`))
-    expect([notLoaded.status, notLoaded.body.details]).toEqual([
-      404,
-      { reason: 'extension_missing' },
-    ])
+    const installed = await w.owner.browser.call('GET', path(`sha256:${'0'.repeat(64)}`))
+    expect([installed.status, installed.body.details]).toEqual([404, { reason: installedReason }])
     await held.query('DROP EXTENSION pg_stat_statements')
     // A digest that is not one is a validation failure, not a lookup.
     const bad = await w.owner.browser.call('GET', path('sha256:abc'))
@@ -209,7 +212,7 @@ describe('the raw statement view', () => {
       'digest_mismatch',
       'not_held',
       'extension_missing',
-      'extension_missing',
+      installedReason,
     ])
     expect(failed[0]).toMatchObject({
       result: { status: 'failed', errorCode: 'STATEMENT_NOT_AVAILABLE' },

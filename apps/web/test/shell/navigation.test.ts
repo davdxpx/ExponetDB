@@ -68,13 +68,14 @@ describe('the navigation model', () => {
     }
   })
 
-  it('marks the Wave 9 pages and the OD-21 page with their named requirement', () => {
-    expect(GLOBAL_NAV.filter((i) => i.wave === '9').map((i) => i.id)).toEqual(['backups'])
-    expect(TARGET_NAV.filter((i) => i.wave === '9').map((i) => i.id)).toEqual([
-      'performance',
-      'advisors',
-      'backups',
-    ])
+  it('has no page waiting for Wave 9 any more, and marks the OD-21 page with its requirement', () => {
+    expect(GLOBAL_NAV.filter((i) => i.wave === '9').map((i) => i.id)).toEqual([])
+    expect(TARGET_NAV.filter((i) => i.wave === '9').map((i) => i.id)).toEqual([])
+    expect([...GLOBAL_NAV, ...TARGET_NAV].some((i) => i.requires.includes('wave9'))).toBe(false)
+    // Advisors read the target live; backups and the sampled statement history do not.
+    expect(TARGET_NAV.find((i) => i.id === 'advisors')?.requires).toEqual(['target.reachable'])
+    expect(TARGET_NAV.find((i) => i.id === 'performance')?.requires).toEqual([])
+    expect(TARGET_NAV.find((i) => i.id === 'backups')?.requires).toEqual([])
     expect(GLOBAL_NAV.find((i) => i.id === 'notifications')?.requires).toEqual(['od21'])
   })
 

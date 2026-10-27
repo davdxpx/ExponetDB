@@ -303,7 +303,10 @@ func TestCatalogCoversTheContract(t *testing.T) {
 		"postgres.roles.inspect@2", "postgres.roles.plan@2", "postgres.roles.apply@2", "postgres.extensions.inspect@1",
 		"postgres.extensions.apply@1", "system.health@1", "system.reboot_required@1", "disk.stats@1", "memory.stats@1",
 		"cpu.stats@1", "service.status@1", "log.inspect@2", "wal.status@1", "wal.archive_status@1", "packages.audit@1",
-		"packages.plan_update@1"} {
+		"packages.plan_update@1",
+		// Wave 9 Part B (ADR-0037).
+		"backup.list@1", "backup.timers@1", "backup.run@1", "backup.verify@1", "backup.expire@1", "run.status@1",
+		"run.cancel@1", "restore.prepare@1", "restore.execute@1", "restore.verify@1", "restore.discard@1"} {
 		if !have[key] {
 			t.Errorf("%s is not implemented", key)
 		}

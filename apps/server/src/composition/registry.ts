@@ -1,11 +1,21 @@
+import {
+  backupBindings,
+  backupRecordKinds,
+  backupRunKinds,
+  type ExecutionSettings,
+} from '@exponetdb/backups'
 import type { ControlStore } from '@exponetdb/control-store'
 import {
   dueDriftTargets,
   maintainSamplePartitions,
+  maintainStatementPartitions,
   RegistrationSnapshotStore,
   recordDriftFailure,
+  rollupStatements,
   runDriftCheck,
+  sampleStatements,
   sampleTarget,
+  statementTargets,
   targetsToSample,
 } from '@exponetdb/diagnostics'
 import type { Clock } from '@exponetdb/kernel'
@@ -18,7 +28,6 @@ import {
   type BackupBindingsPort,
   Connector,
   findTarget,
-  noBackupEngine,
   type RegistryAcceptContext,
   type RegistryPolicyContext,
   registryKinds,
@@ -98,10 +107,50 @@ export function connectorFor(
 
 /**
  * The backup engine's bindings of a server or cluster for retirements (registry.md §4.4): the one
- * instance every process gives the retirement preflight, the planners and the registry kinds. No
- * backup engine exists before Wave 9 Part B, which replaces this value.
+ * instance every process gives the retirement preflight, the planners and the registry kinds.
+ * Wave 9 Part B: the backup records of the Control Store (`unknown` when they cannot be read,
+ * which blocks like `blocking`).
  */
-export const BACKUP_BINDINGS: BackupBindingsPort = noBackupEngine
+export const BACKUP_BINDINGS: BackupBindingsPort = backupBindings
+
+/** Both disabled: the default of an installation that did not turn engine runs on. */
+const EXECUTION_OFF: ExecutionSettings = { backups: 'disabled', restores: 'disabled' }
+
+/**
+ * The backup kinds of a process (Wave 9 Part B, ADR-0036 to ADR-0038): the
+ * record kinds with the registry's dependencies, and the run kinds that
+ * start and observe engine runs on a node. serve uses them for acceptance
+ * checks only; the worker executes.
+ */
+export function backupKindsFor(
+  rt: RegistryRuntime,
+  connector: Connector,
+  execution: ExecutionSettings | undefined,
+): readonly OperationKind[] {
+  const settings = execution ?? EXECUTION_OFF
+  return [
+    ...backupRecordKinds({
+      store: rt.store,
+      clock: rt.clock,
+      connector,
+      installationId: rt.installationId,
+      controlStoreSystemIdentifier: controlStoreSystemIdentifier(rt.store),
+      snapshots: new RegistrationSnapshotStore({
+        store: rt.store,
+        connector,
+        installationId: rt.installationId,
+      }),
+      backupBindings: BACKUP_BINDINGS,
+    }),
+    ...backupRunKinds({
+      store: rt.store,
+      keyring: rt.keyring,
+      clock: rt.clock,
+      installationId: rt.installationId,
+      execution: () => settings,
+    }),
+  ]
+}
 
 /** The registry kinds of a process (serve: acceptance checks only; the worker executes). */
 export function registryKindsFor(
@@ -145,6 +194,12 @@ export interface ObservationTasks {
   checkDrift(): Promise<string | undefined>
   /** Health sample partitions ahead and expired ones dropped. */
   partitions(): Promise<string | undefined>
+  /** Wave 9 Part B: one statement sample of every active or suspended target (performance.md §2). */
+  sampleStatements(): Promise<string | undefined>
+  /** The daily statement aggregates of the finished days. */
+  rollupStatements(): Promise<string | undefined>
+  /** Statement delta partitions ahead and expired ones dropped (30 days by default, 7 to 90). */
+  statementPartitions(): Promise<string | undefined>
 }
 
 /**
@@ -176,7 +231,11 @@ export function observationTasks(
   rt: RegistryRuntime,
   accept: RegistryAcceptContext,
   logger: Pick<Logger, 'warn'>,
-  options: { readonly sampleConcurrency?: number; readonly retentionDays?: number } = {},
+  options: {
+    readonly sampleConcurrency?: number
+    readonly retentionDays?: number
+    readonly statementRetentionDays?: number
+  } = {},
 ): ObservationTasks {
   const operations = connectorFor(rt, 'worker', { breaker: true })
   const probes = connectorFor(rt, 'worker', { breaker: false })
@@ -241,6 +300,39 @@ export function observationTasks(
     },
     async partitions() {
       await maintainSamplePartitions(rt.store, options.retentionDays ?? 14)
+      return undefined
+    },
+    async sampleStatements() {
+      const ids = await statementTargets(rt.store)
+      // Today's and tomorrow's delta partitions exist before any sample writes into them.
+      await maintainStatementPartitions(rt.store, options.statementRetentionDays ?? 30)
+      const limit = Math.max(1, Math.min(4, options.sampleConcurrency ?? 4))
+      let next = 0
+      let failed = 0
+      const worker = async () => {
+        for (;;) {
+          const id = ids[next++]
+          if (id === undefined) return
+          const target = await findTarget(rt.store, id)
+          if (target === undefined) continue
+          // A target that cannot be read is recorded as a failed sample; only a failure to
+          // record is an error here, and it never stops the other targets.
+          await sampleStatements(deps, target).catch((error: unknown) => {
+            failed++
+            logger.warn('statements.sample_failed', { targetId: id, ...describeError(error) })
+          })
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(limit, ids.length) }, worker))
+      if (failed > 0) throw new TaskFailure('statement_samples_unrecorded')
+      return ids.length === 0 ? 'no_targets' : undefined
+    },
+    async rollupStatements() {
+      await rollupStatements(rt.store, 3)
+      return undefined
+    },
+    async statementPartitions() {
+      await maintainStatementPartitions(rt.store, options.statementRetentionDays ?? 30)
       return undefined
     },
   }

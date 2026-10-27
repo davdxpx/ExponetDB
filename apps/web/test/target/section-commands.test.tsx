@@ -63,7 +63,7 @@ describe('the commands for the sections of a database', () => {
     expect(names).toContain('Draft a change')
   })
 
-  it('marks the pages that wait for Wave 9, and only those', () => {
+  it('marks the pages that wait for a later wave, and only those (none since Wave 9)', () => {
     const commands = buildSectionCommands(TARGET)
     const marked = commands.filter((command) => command.badge !== undefined).map((c) => c.id)
     expect(marked.sort()).toEqual(
@@ -129,18 +129,18 @@ describe('the commands in the command menu', () => {
     await waitFor(() => expect(document.querySelector('[data-mode="draft"]')).not.toBeNull())
   })
 
-  it('opens a Wave 9 page on its named state, and says so in the list', async () => {
+  it('opens the performance page without a "not available yet" badge', async () => {
     const user = userEvent.setup()
     const { router } = mountApp('/t/shop/platform/staging', worldWithProject())
     const dialog = await openPalette(user)
     const option = await within(dialog).findByRole('option', { name: /Go to performance/ })
-    expect(option).toHaveTextContent('Not available yet')
+    expect(option).not.toHaveTextContent('Not available yet')
     await user.click(option)
     await waitFor(() =>
       expect(router.state.location.pathname).toBe('/t/shop/platform/staging/performance'),
     )
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Performance is not available yet' }),
+      await screen.findByRole('heading', { level: 1, name: 'Performance' }),
     ).toBeInTheDocument()
   })
 

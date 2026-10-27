@@ -203,10 +203,14 @@ describe('live, pause and refresh', () => {
     expect(reads(w, '/sessions')).toBe(sessions + 1)
   })
 
-  it('adds no cancel or terminate control', async () => {
+  it('offers cancel and terminate only as the session actions, disabled without the permission', async () => {
     mountDiagnostics(CONNECTIONS, world())
     await screen.findAllByText('shop-api')
-    expect(screen.queryByRole('button', { name: /terminate|cancel|kill/i })).toBeNull()
+    // Wave 9: the actions live in their own panel (test/wave9/session-actions.test.tsx).
+    for (const button of screen.queryAllByRole('button', { name: /terminate|cancel|kill/i })) {
+      expect(button.closest('[data-slot="session-actions"]')).not.toBeNull()
+      expect(button).toBeDisabled()
+    }
   })
 
   it('has no accessibility violations, live or paused', async () => {

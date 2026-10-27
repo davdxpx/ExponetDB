@@ -149,7 +149,7 @@ distinct states (§6); a failed read is never an empty list.
 | `/infrastructure/clusters`, `/clusters/$clusterId` | `features/infrastructure/` | PostgreSQL clusters with management mode, declared tier, placements, desired roles; role-verifier hand-off (the browser computes a SCRAM-SHA-256 verifier, never sends a password) |
 | `/infrastructure/nodes`, `/nodes/$nodeId` | `features/infrastructure/` | Node agents, capabilities, jobs (never the job envelope), enrollment with a reveal-once token |
 | `/infrastructure/certificates` | `features/infrastructure/certificates-page.tsx` | Certificate authorities of the agent PKI and the PostgreSQL CA with expiry |
-| `/backups` | `features/wave9/` | Named "not available yet" state (Wave 9) |
+| `/backups` | `features/wave9/` | **[OBSERVED]** (Wave 9 Part B) protection counts per state from `getBackupOverview`, each a link to the filtered list (`?state=`, contract values only), and a paged cluster list |
 | `/t/<product>/<project>/<environment>` | `features/target-overview/` | Target overview: health in incident order, health history, migration head against the other environments, recent operations, open findings; each block reads and fails on its own |
 | `…/schema`, `…/schema/$kind` | `features/schema/` | Schema browser (status, fingerprint, object lists by kind from `GET /targets/{id}/schema/objects` with an optional name filter, detail, a read-only row browser, visualizer with a table alternative; §2.4) |
 | `…/migrations` | `features/migrations/` | Ledger from the target, timeline across environments, plans, drift summary, legacy import; no "run now" |
@@ -157,8 +157,8 @@ distinct states (§6); a failed read is never an empty list.
 | `…/drift`, `…/findings` | `features/drift/`, `features/findings/` | Drift: the last recorded check (`GET /targets/{id}/drift-checks`: who or the schedule, status, counts, fingerprints), stored findings, then the result of a check run from the page (expected and actual side by side); "Accept drift" only creates a plan. Findings: filters from the address, keyset "load more" |
 | `…/compare?to=<environment>` | `features/compare/` | Two environments of the project compared by schema (`POST /schema-diffs`), read-only, with named states for a fingerprint mismatch, a stale sample and environments that cannot be compared (§2.4) |
 | `/findings` | `features/global-findings/` | Findings across every target the person may see (`GET /findings`), keyset paging, validated filters; under Overview (§2.4) |
-| `…/performance`, `…/advisors`, `…/backups` | `features/wave9/` | Named "not available yet" states (Wave 9) |
-| `…/connections`, `…/locks` | `features/connections/` | Sessions grouped by role and application, blockers, endpoints with probe results; the lock graph as tree and table; cancel and terminate are not controls (Wave 9); the raw statement view is human only and re-authenticated |
+| `…/performance`, `…/advisors`, `…/backups` | `features/wave9/` | **[OBSERVED]** (Wave 9 Part B) performance: sampled statement statistics (window, order, limit; regressions with a time coincidence, never a cause; resets and gaps) and live table and index statistics; advisors: a run per chosen category, skipped rules listed as not a pass, open advisor findings; backups: protection (RPO with basis and uncertainty, RTO only from a passed drill, PITR window, WAL coverage), repositories (lock green only when proven), policy, paged backups, drills (offline ones labeled attestations), restores, runs and cluster findings, and the actions refresh and verify (inline), run, drill, recovery, discard and policy (plans), the runbook download checked against its sha256 and the offline drill record; a refused activation stays disabled with the server's reason |
+| `…/connections`, `…/locks` | `features/connections/` | Sessions grouped by role and application, blockers, endpoints with probe results; the lock graph as tree and table; cancel query (inline, bound to backend and query start) and terminate session (a plan with a condition) for a chosen pid, disabled for sessions of an ExponetDB operation and without `connections.operate` (Wave 9 Part B); the raw statement view is human only and re-authenticated |
 | `…/configuration` | `features/configuration/` | Registry facts with copy actions, the data-read policy that applies, PostgreSQL settings as a named state, the cluster's roles; for registry administrators a Connect panel without secrets and the target's lifecycle (suspend, resume, decommission) as plans (§2.4) |
 | `…/activity` | `features/activity/` | Operations and audit events of the target (`audit.read`) |
 | `/settings/*`, `/access/*`, `/audit`, `/account/*` | see the paragraphs above | Settings, access, audit and the account tabs |
@@ -390,7 +390,7 @@ frame surrounds its pages (the reserved frame marks plans, design-system.md
 §4). `ContentWrapper` renders the first
 state that holds: the target read loading or failed; a suspended or
 decommissioned target for pages that show live target data (pages of stored
-data stay readable under a notice); Wave 9 and OD-21 pages "not available
+data stay readable under a notice); OD-21 pages "not available
 yet"; a permission the person lacks; target unreachable or "cannot tell"; node
 offline, absent or "cannot tell". Target, health and environments are read
 every 30 seconds; the target outlet is keyed by the target id.

@@ -153,6 +153,28 @@ requirements:                            # from policy
   compatibility, lock severity, non-transactional, blocking findings,
   consumer code, unmet requirements (PostgreSQL version, extensions,
   execution role), evidence, lineage, verified dependencies, legacy project.
+- **[DECIDED]** (OD-55 (c), owner decision of 2026-10-26)
+  `content.facts.procedural` says whether the SQL the plan runs is
+  procedural, and `content.facts.proceduralReasons` why, as fixed codes:
+  `do_block`, `call` (a procedure), `function_call` (a top-level
+  `SELECT`, `CREATE TABLE … AS`, `CREATE MATERIALIZED VIEW` or `REFRESH
+  MATERIALIZED VIEW`: each runs a query, which can call any function),
+  `routine_created` (any `CREATE
+  FUNCTION` or `CREATE PROCEDURE`: whether a later statement, a default, an
+  index expression or a trigger calls it cannot be decided from the text),
+  `trigger_created` (a trigger, an event trigger or a rule, which rewrites a
+  later statement into its actions), `dynamic_sql` (`EXECUTE` in a `DO` block or a routine
+  body, or a built-in that runs SQL text such as `query_to_xml` or
+  `dblink_exec`) and `unclassified` (a bundle without parsed statements; it
+  counts as procedural, C-30). An apply classifies every bundle's `up.sql`,
+  a rollback its `down.sql`, a resume the whole bundle. A plan without the
+  fact (made before this decision) counts as procedural. The rules
+  `migration.agent-procedural` (a person approves an agent's procedural
+  plan on every tier) and `migration.procedural-nontransactional` (§4.4)
+  read it ([`policy-engine.md` §4](../02-control-plane/policy-engine.md#4-rule-catalog-v1)).
+  Calls of routines that existed before the migration from DDL or DML
+  expressions are not classified as procedural; the ledger guard (§4.3)
+  covers what they do to the ledger.
 
 ## 3. Planning algorithm
 
@@ -240,9 +262,15 @@ BEGIN ISOLATION LEVEL READ COMMITTED;
   SET LOCAL statement_timeout = '<manifest>';
   SET LOCAL search_path = <manifest searchPath>;
   SELECT … FROM exponetdb.target_identity FOR SHARE;      -- identity bound inside the tx
+  LOCK TABLE exponetdb.<ledger tables> IN SHARE MODE;     -- as the ledger owner (OD-55 (d))
+  <ledger guard read>                                     -- rows and shape of schema exponetdb
   SET LOCAL ROLE <execution role>;                        -- e.g. reosa_owner
-    <statement 0> … <statement n>                         -- one protocol message per statement
-  RESET ROLE;
+    <statement 0> … <statement n>                         -- one protocol message per statement;
+                                                          -- after each: RESET ROLE, ledger guard
+                                                          -- compared, SET LOCAL ROLE again
+  SET CONSTRAINTS ALL IMMEDIATE;                          -- deferred triggers fire now, guarded;
+                                                          -- again until a round changes no row
+  RESET ROLE;                                             -- ledger guard compared once more
   <pre-commit structural gate>                            -- engine-generated catalog assertions
   <fingerprint after (computed in-transaction)>
   INSERT INTO exponetdb.schema_migrations (…);
@@ -258,6 +286,72 @@ COMMIT;
   statements (for example "index X exists", "column Y has type Z"). It never
   runs `verify.sql` (reviewed bundle content that runs post-commit on its own
   connection in a read-only transaction, see [`verification.md`](./verification.md#4-runtime-verification-verifysql)).
+- **[DECIDED] The ledger guard** (OD-55 (d), owner decision of 2026-10-26;
+  threat [T38](../08-auth-and-security/threat-model.md)). Procedural code an
+  authored statement runs (a `DO` block, a routine, a trigger, dynamic SQL)
+  can switch to any role the migrator holds (the migrator itself, the
+  ledger owner) and back before the statement ends, unseen by the
+  `current_user` guard. The executor therefore compares, inside the
+  migration's transaction, the state of the `exponetdb` schema before the
+  first authored statement with the state after each one, read as the
+  migrator, and refuses a change it did not make itself:
+  - **What is compared.** Per ledger table (`target_identity`,
+    `ledger_meta`, `schema_migrations`, `migration_verifications`,
+    `migration_events`) the row count and a SHA-256 over every row's `xmin`
+    and text in primary-key order; and one SHA-256 over the schema's
+    catalog shape: the namespace (owner, ACL), its relations (owner, ACL,
+    file node, row security, rules, triggers), their columns, defaults,
+    constraints, indexes, triggers and whether they are enabled, rules,
+    policies, inheritance, and the routines of the schema and of the
+    relations' triggers (owner, ACL, security, settings, an MD5 of the
+    body). `xmin` changes with every new row version, so an update that
+    writes the same values, a delete and re-insert, a `TRUNCATE` (a new
+    file node), a trigger disabled and enabled again all differ. Every
+    name in the guard query is schema-qualified and every operator is
+    `OPERATOR(pg_catalog.…)`, so nothing a migration puts on its
+    `search_path` runs as the migrator.
+  - **Concurrency.** Before the first read the executor takes `SHARE` on
+    the five ledger tables for the rest of the transaction (as the ledger
+    owner, the only role that may; `RESET ROLE` follows at once). A
+    concurrent writer (a `migration.verify` recording a verification run,
+    which holds no schema lock) waits for the migration's `COMMIT` instead
+    of changing the state between two reads; the migration's own writes
+    are not blocked by its own lock. A lock not granted within the
+    migration's `lockTimeout` is `MIGRATION_LOCK_TIMEOUT` (not applied).
+    DDL on the schema needs locks that conflict with `SHARE`.
+  - **Commit time.** Deferred constraint triggers would otherwise run at
+    `COMMIT`, after every check, as the migrator. `SET CONSTRAINTS ALL
+    IMMEDIATE` after the last statement fires them as the execution role,
+    and the engine guards and the ledger guard are compared once more. A
+    trigger fired then can defer constraints again and queue another event
+    (review E-1 of Wave 9 Part B); an event is only ever queued by a row
+    change, so the engine repeats the round until one changes no row of any
+    table in the transaction (`pg_stat_xact_all_tables`), at most 16 rounds;
+    a longer chain fails closed with `{check: "deferred_trigger_chain"}`.
+    After a round without a row change nothing is left to run at `COMMIT`
+    but the engine's own ledger rows.
+  - **Refusal.** A difference is `MIGRATION_EXECUTION_FAILED` with the
+    statement index (none for the commit-time check) and the gate
+    `{guard: "exponetdb_ledger", changed: "<tables>|shape"}`; the
+    transaction rolls back (`not_applied`), the target is as before. A
+    guard that cannot be read (a privilege the migrator lost, a missing
+    table) fails closed the same way with `{check: "unavailable"}`.
+  - **Scope.** Transactional migrations, explicit rollbacks (`down.sql`)
+    and the legacy replay's transactional files on the scratch target.
+    Measured on PostgreSQL 16, 17 and 18 (`ledger-guard.int.test.ts`): a
+    `DO` block that resets to the migrator and appends an event, dynamic
+    `EXECUTE` that forges an applied row and renames the marker, a
+    `SECURITY DEFINER` function of the ledger owner called by a later
+    statement, a ledger trigger disabled and enabled again, a deferred
+    trigger that writes at commit time, one that defers again to reach
+    `COMMIT`, a chain longer than the bound; a normal procedural bundle still
+    applies; a concurrent verification insert waits for the `COMMIT`.
+  - **Not covered (residual, T38).** What procedural code does outside
+    the `exponetdb` schema as another role the migrator holds, for
+    example another project's execution role on the same cluster: the
+    guard protects the ledger and the marker, not other projects. A
+    non-transactional bundle commits each statement on its own, so a
+    change cannot be rolled back; see §4.4.
 - If the connection fails **after `COMMIT` was sent and before the reply**, the
   outcome is unknown: the operation enters `needs_reconciliation`. Reconciliation
   opens a new connection and looks for the ledger row with this `operation_id`.
@@ -287,6 +381,17 @@ semantics must stay comprehensible.
 
 Non-transactional bundles on prod tier always require approval and
 re-authentication (policy rule `migration.nontransactional`).
+
+**[DECIDED]** (OD-55 (d), 2026-10-26) The ledger guard of §4.3 cannot roll
+back a statement that committed on its own. A non-transactional plan whose
+SQL is procedural (the plan's `facts.procedural`, §2) is therefore refused
+for every principal by the deny rule `migration.procedural-nontransactional`
+(no break-glass override); the procedural statements belong in a
+transactional bundle of their own. An autocommit statement that calls an
+existing routine (an index expression, for example) is not classified as
+procedural; what such a routine does to the ledger is not guarded here and
+stays a residual (T38), bounded by the Control Store mirror (a forged
+ledger row diverges from it, C-19).
 
 ### 4.5 Wave 6 implementation notes
 

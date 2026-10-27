@@ -1,5 +1,11 @@
 import type { VerificationFailure } from '@exponetdb/contracts'
-import type { ClusterGlobalResult, ExpectationResult } from '@exponetdb/postgres'
+import { sha256Hex } from '@exponetdb/kernel/hash'
+import type {
+  CheckOptions,
+  ClusterGlobalResult,
+  ClusterGlobalValueDigest,
+  ExpectationResult,
+} from '@exponetdb/postgres'
 import type { ClusterGlobalExpectation } from '@exponetdb/postgres/parser'
 
 /**
@@ -46,20 +52,26 @@ export function excusedBy(
 
 const cut = (text: string, max: number) => (text.length <= max ? text : text.slice(0, max))
 
+/** A structural result that did not hold, as a failure (names only). */
+function structuralFailure(
+  file: string | null,
+  r: Pick<ExpectationResult, 'statement' | 'kind' | 'description' | 'failed'>,
+): ExpectationFailure {
+  return {
+    file,
+    statement: r.statement,
+    kind: r.kind,
+    object: cut(r.description, 300),
+    failed: [...(r.failed ?? ['missing'])].slice(0, 16),
+  }
+}
+
 /** The structural results of one file that did not hold. */
 export function structuralFailures(
   file: string | null,
   results: readonly ExpectationResult[],
 ): ExpectationFailure[] {
-  return results
-    .filter((r) => !r.ok)
-    .map((r) => ({
-      file,
-      statement: r.statement,
-      kind: r.kind,
-      object: cut(r.description, 300),
-      failed: [...(r.failed ?? ['missing'])].slice(0, 16),
-    }))
+  return results.filter((r) => !r.ok).map((r) => structuralFailure(file, r))
 }
 
 /** What a cluster-global expectation states, by role names (never a setting's value). */
@@ -82,6 +94,21 @@ export function describeClusterGlobal(e: ClusterGlobalExpectation): string {
   }
 }
 
+/** A cluster-global expectation that does not hold, as a failure (role names only). */
+function clusterGlobalFailure(
+  file: string | null,
+  e: ClusterGlobalExpectation,
+): ExpectationFailure {
+  const existence = e.kind === 'role' || e.kind === 'membership'
+  return {
+    file,
+    statement: null,
+    kind: e.kind,
+    object: cut(describeClusterGlobal(e), 300),
+    failed: [existence ? (e.exists ? 'missing' : 'present') : 'value'],
+  }
+}
+
 /** The cluster-global results of one file that apply on the target and do not hold. */
 export function clusterGlobalFailures(
   file: string | null,
@@ -89,17 +116,110 @@ export function clusterGlobalFailures(
 ): ExpectationFailure[] {
   return results
     .filter((r) => r.applies && !r.ok)
-    .map((r) => {
-      const e = r.expectation
-      const existence = e.kind === 'role' || e.kind === 'membership'
-      return {
-        file,
-        statement: null,
-        kind: e.kind,
-        object: cut(describeClusterGlobal(e), 300),
-        failed: [existence ? (e.exists ? 'missing' : 'present') : 'value'],
-      }
-    })
+    .map((r) => clusterGlobalFailure(file, r.expectation))
+}
+
+// ----- excused values (OD-56 (a)) -----
+
+/** Aspects that state existence, or that a value could not be read: no value is compared. */
+const NO_VALUE: ReadonlySet<string> = new Set(['missing', 'present', 'unreadable', 'changed'])
+
+/**
+ * A failure of a value (OD-56 (a)): an aspect other than existence differs
+ * (a type, a body, a comment, a role setting, …). Excusing it excuses the
+ * value the analysis observed, compared by a keyed digest.
+ */
+export function isValueFailure(f: Pick<ExpectationFailure, 'failed'>): boolean {
+  return f.failed.some((a) => !NO_VALUE.has(a))
+}
+
+/** The identity of a failure of a value: SHA-256 of its file, statement, kind, object and aspects. */
+export function valueKeyOf(f: ExpectationFailure): string {
+  return sha256Hex(`${failureKey(f)}\u0000${[...f.failed].sort().join(',')}`)
+}
+
+/** Makes the keyed digest of an observed value, bound to the failure's identity. */
+export type ValueDigester = (input: string) => string
+
+/** The structural check option that keys what a failing check of `file` observed. */
+export function structuralValueDigest(file: string | null, digest: ValueDigester): CheckOptions {
+  return {
+    valueDigest: (failure, observation) =>
+      digest(`${valueKeyOf(structuralFailure(file, failure))}\n${observation}`),
+  }
+}
+
+/** The cluster-global check option that keys what a failing check of `file` observed. */
+export function clusterGlobalValueDigest(
+  file: string | null,
+  digest: ValueDigester,
+): { readonly valueDigest: ClusterGlobalValueDigest } {
+  return {
+    valueDigest: (e, observation) =>
+      digest(`${valueKeyOf(clusterGlobalFailure(file, e))}\n${observation}`),
+  }
+}
+
+/** The observed digests of a file's failing structural results, by failure identity. */
+export function structuralDigests(
+  file: string | null,
+  results: readonly ExpectationResult[],
+): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const r of results) {
+    if (r.ok || r.observedDigest === undefined) continue
+    out.set(valueKeyOf(structuralFailure(file, r)), r.observedDigest)
+  }
+  return out
+}
+
+/** The observed digests of a file's failing cluster-global results, by failure identity. */
+export function clusterGlobalDigests(
+  file: string | null,
+  results: readonly ClusterGlobalResult[],
+): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const r of results) {
+    if (!r.applies || r.ok || r.observedDigest === undefined) continue
+    out.set(valueKeyOf(clusterGlobalFailure(file, r.expectation)), r.observedDigest)
+  }
+  return out
+}
+
+/** What the analysis recorded for a report's values: the key version and the digests. */
+export interface RecordedValues {
+  /** `null`: the report was analyzed before digests were recorded (the legacy rule applies). */
+  readonly keyRef: string | null | undefined
+  /** By item id, by failure identity. */
+  readonly digests: ReadonlyMap<number, ReadonlyMap<string, string>>
+}
+
+/**
+ * Whether an excused failure of a value still holds the value the person
+ * accepted (OD-56 (a)): the same key version as the analysis, a recorded
+ * digest for this failure, and the same digest now. Anything else fails
+ * closed: `value_changed` (another value), `value_unverifiable` (no key, a
+ * rotated key, nothing recorded). A report without digests (`keyRef`
+ * undefined: analyzed before them) keeps the rule of its baseline.
+ */
+export function excusedValue(
+  recorded: RecordedValues,
+  itemId: number,
+  f: ExpectationFailure,
+  current: { readonly keyRef: string | null; readonly digest: string | undefined },
+): 'held' | 'value_changed' | 'value_unverifiable' {
+  if (!isValueFailure(f) || recorded.keyRef === undefined) return 'held'
+  const was = recorded.digests.get(itemId)?.get(valueKeyOf(f))
+  if (
+    recorded.keyRef === null ||
+    was === undefined ||
+    current.keyRef === null ||
+    current.keyRef !== recorded.keyRef ||
+    current.digest === undefined
+  ) {
+    return 'value_unverifiable'
+  }
+  return was === current.digest ? 'held' : 'value_changed'
 }
 
 /**

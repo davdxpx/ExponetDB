@@ -96,3 +96,58 @@ export function listingFailure<T>(
     ...(e.requestId === null ? {} : { requestId: e.requestId }),
   }
 }
+
+type ResponseOf<Id extends keyof Operations> = Operations[Id]['response']
+
+/** The fields of a response that hold a list. */
+export type ArrayField<R> = {
+  [K in keyof R]: R[K] extends ReadonlyArray<unknown> ? K : never
+}[keyof R] &
+  string
+
+export type ElementOf<R, K extends keyof R> = R[K] extends ReadonlyArray<infer T> ? T : never
+
+/**
+ * A paged listing whose items are in a named field (`clusters`, `backups`,
+ * `runs`, …) next to facts of the whole answer (protection, counts, source
+ * and time): the items of every page asked for, with the facts of the
+ * first page. The same bounds and partial reporting as `collect`.
+ */
+export async function collectField<
+  Id extends keyof Operations,
+  K extends ArrayField<ResponseOf<Id>>,
+>(
+  remote: Remote,
+  id: Id,
+  params: Operations[Id]['params'] | undefined,
+  query: Readonly<Record<string, unknown>>,
+  flags: Readonly<Record<string, unknown>>,
+  field: K,
+  pageMax = 200,
+): Promise<Listing<ElementOf<ResponseOf<Id>, K>> & { readonly first: ResponseOf<Id> | undefined }> {
+  type Item = ElementOf<ResponseOf<Id>, K>
+  const max =
+    flags['all'] === true ? 10_000 : Math.min(10_000, Math.max(1, Number(flags['limit'] ?? 50)))
+  const cursor = typeof flags['cursor'] === 'string' ? flags['cursor'] : undefined
+  const items: Item[] = []
+  let first: ResponseOf<Id> | undefined
+  let nextCursor: string | null = null
+  const q = {
+    ...query,
+    limit: Math.min(pageMax, max),
+    ...(cursor === undefined ? {} : { cursor }),
+  } as unknown as Operations[Id]['query']
+  for await (const page of remote.sdk.pages(id, params, q)) {
+    if (!page.ok) {
+      return { items, partial: items.length > 0, error: page.error, nextCursor, first }
+    }
+    const value = page.value as ResponseOf<Id>
+    first ??= value
+    for (const item of value[field] as unknown as readonly Item[]) {
+      if (items.length < max) items.push(item)
+    }
+    nextCursor = (value as { readonly nextCursor?: string | null }).nextCursor ?? null
+    if (items.length >= max) break
+  }
+  return { items, partial: false, nextCursor: items.length >= max ? nextCursor : null, first }
+}

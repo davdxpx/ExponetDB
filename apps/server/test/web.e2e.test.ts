@@ -715,7 +715,8 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
       '/connect',
       '/access/oauth-clients',
       '/t/shop/platform/staging',
-      '/t/shop/platform/staging/migrations',
+      // The pending bundles are their own view of the migration centre (since #42).
+      '/t/shop/platform/staging/migrations?view=pending',
       '/t/shop/platform/staging/activity',
       '/t/shop/platform/production',
     ]
@@ -725,7 +726,7 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
         await page.goto(`${origin}${path}`)
         await page.waitForSelector('header button[aria-label="Account"]')
         if (path.startsWith('/t/')) await page.waitForSelector('[data-slot="target-context-bar"]')
-        if (path.endsWith('/migrations')) await page.waitForSelector('[data-pending]')
+        if (path.endsWith('/migrations?view=pending')) await page.waitForSelector('[data-pending]')
         if (path.endsWith('/activity')) await page.waitForSelector('[data-audit]')
         const result = await page.evaluate<{
           readonly scrollWidth: number

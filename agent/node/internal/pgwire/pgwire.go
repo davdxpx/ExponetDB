@@ -56,6 +56,10 @@ type Options struct {
 	Database        string
 	// StatementTimeout bounds every statement on the server (0: 60 s).
 	StatementTimeout time.Duration
+	// Settings are further fixed name=value startup settings compiled into
+	// the node (a scratch restore's check sessions); never a value from a
+	// job. A value holds no space or backslash.
+	Settings []string
 }
 
 // Conn is one session. It is not safe for concurrent use.
@@ -123,7 +127,7 @@ func (c *Conn) startup() error {
 		// Literals are quoted for standard_conforming_strings, whatever the
 		// cluster's configuration says.
 		"options", "-c search_path=pg_catalog -c standard_conforming_strings=on -c statement_timeout=" +
-			strconv.FormatInt(c.o.StatementTimeout.Milliseconds(), 10),
+			strconv.FormatInt(c.o.StatementTimeout.Milliseconds(), 10) + extraSettings(c.o.Settings),
 	}
 	body := make([]byte, 0, 256)
 	body = binary.BigEndian.AppendUint32(body, protocolVersion)
@@ -171,6 +175,17 @@ func (c *Conn) startup() error {
 			return fmt.Errorf("pgwire: unexpected message %q during startup", t)
 		}
 	}
+}
+
+func extraSettings(settings []string) string {
+	var b strings.Builder
+	for _, s := range settings {
+		if strings.ContainsAny(s, " \t\\\x00") || !strings.Contains(s, "=") {
+			continue
+		}
+		b.WriteString(" -c " + s)
+	}
+	return b.String()
 }
 
 // Parameter returns a server parameter reported at startup or since
@@ -418,6 +433,73 @@ func (c *Conn) Query(ctx context.Context, sql string, args ...any) (*Rows, error
 				return nil, err
 			}
 			rows.Columns = cols
+		case 'D':
+			vals, err := dataRow(data)
+			if err != nil {
+				c.broken = err
+				return nil, err
+			}
+			rows.Values = append(rows.Values, vals)
+		case 'C':
+			rows.Command, _ = cstring(data)
+		case 'E':
+			failure = parseError(data)
+		case 'Z':
+			if len(data) > 0 {
+				c.txStatus = data[0]
+			}
+			if failure != nil {
+				return nil, failure
+			}
+			return rows, nil
+		default:
+			c.broken = fmt.Errorf("pgwire: unexpected message %q", t)
+			return nil, c.broken
+		}
+	}
+}
+
+// SimpleQuery runs one fixed statement over the simple query protocol (no
+// parameters; only SQL compiled into the node, such as a restore probe) and
+// returns the rows of its last result.
+func (c *Conn) SimpleQuery(ctx context.Context, sql string) (*Rows, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.broken != nil {
+		return nil, c.broken
+	}
+	if strings.IndexByte(sql, 0) >= 0 {
+		return nil, errors.New("pgwire: the statement contains NUL")
+	}
+	stop := c.watch(ctx)
+	defer stop()
+	if _, err := c.c.Write(message('Q', append([]byte(sql), 0))); err != nil {
+		c.broken = err
+		return nil, err
+	}
+	rows := &Rows{}
+	var failure error
+	for {
+		t, data, err := c.read()
+		if err != nil {
+			c.broken = err
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, err
+		}
+		switch t {
+		case 'I', 'N':
+		case 'S':
+			k, v := cstrings2(data)
+			c.params[k] = v
+		case 'T':
+			cols, err := rowDescription(data)
+			if err != nil {
+				c.broken = err
+				return nil, err
+			}
+			rows = &Rows{Columns: cols}
 		case 'D':
 			vals, err := dataRow(data)
 			if err != nil {

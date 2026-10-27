@@ -40,6 +40,10 @@ func TestParseValid(t *testing.T) {
 	withHelper := strings.Replace(strings.Replace(valid, `"schema"`, `"agentUser": "exponetdb", "schema"`, 1),
 		`"managedInclude"`, `"tlsCertificateFile": "/etc/postgresql/17/main/server.crt", `+
 			`"tlsKeyFile": "/etc/postgresql/17/main/server.key", "managedInclude"`, 1)
+	if c, err := Parse([]byte(strings.Replace(valid, `"schema"`, `"pgbackrestConfig": "/etc/pgbackrest/pgbackrest.conf", "schema"`, 1))); err != nil ||
+		c.PgBackRestConfig != "/etc/pgbackrest/pgbackrest.conf" {
+		t.Fatalf("pgbackrestConfig %v", err)
+	}
 	c, err = Parse([]byte(withHelper))
 	if err != nil || c.AgentUser != "exponetdb" || c.Instances[0].TLSKeyFile != "/etc/postgresql/17/main/server.key" {
 		t.Fatalf("helper settings %+v %v", c, err)
@@ -63,6 +67,8 @@ func TestParseRefuses(t *testing.T) {
 		"agent user path":  {`"schema"`, `"agentUser": "../root", "schema"`},
 		"tls cert only": {`"managedInclude"`,
 			`"tlsCertificateFile": "/etc/postgresql/17/main/server.crt", "managedInclude"`},
+		"relative pgbackrest config": {`"schema"`, `"pgbackrestConfig": "pgbackrest.conf", "schema"`},
+		"unclean pgbackrest config":  {`"schema"`, `"pgbackrestConfig": "/etc/pgbackrest/../x.conf", "schema"`},
 		"tls relative": {`"managedInclude"`,
 			`"tlsCertificateFile": "server.crt", "tlsKeyFile": "/etc/postgresql/17/main/server.key", "managedInclude"`},
 	} {

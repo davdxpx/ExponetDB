@@ -56,7 +56,7 @@ export const SCOPE_PRESETS = {
   },
   'operator:nonprod': {
     summary:
-      'developer:nonprod, plus data reads, connections, backups and nodes outside production.',
+      'developer:nonprod, plus data reads, connections and nodes outside production, and backup runs and restore plans on every tier (those two scopes carry no tier).',
     scopes: OPERATOR_NONPROD,
   },
   'operator:prod': {

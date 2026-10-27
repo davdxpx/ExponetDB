@@ -39,6 +39,33 @@ designed here for Wave 9 and have no contract yet (they are added to the
 catalog additively). The column **Wave** of every table below shows this:
 `7, served`, `9, planned`, `9, no contract yet`, or `not offered`.
 
+**[OBSERVED]** (2026-10-27, Wave 9 Part B) `query_stats`, `table_stats` and
+`advisors_run` are `served` (toolVersion 1, pinned in
+`packages/contracts/mcp-tool-versions.json`): each calls the use case of its
+REST route (`apps/server/src/interfaces/mcp/registry.ts`,
+`packages/application/src/performance.ts`), with `diagnostics.read` at the
+target. `query_stats` reads the sampled deltas (never the target live) and
+gives an MCP caller at most 500 characters of each redacted statement;
+`table_stats` and `advisors_run` read the target live on the observer path
+(statement timeout 5 s, lock timeout 1 s). `advisors_run` records its
+findings (`observation.subject_findings`) and the run
+(`observation.advisor_runs`) and is audited (`advisor.run`), the run, its
+findings and the audit event in one transaction; it changes nothing on the
+target ([`../10-observability/performance.md`](../10-observability/performance.md)).
+Its description says so (review F-4, 2026-10-27; its version-1 digest was
+replaced in place: the tool is new on this branch, not released). Its
+`message` and `remediation` are marked untrusted: server prose that quotes
+catalog names (review D-2).
+**[OPEN: OD-57]** (review F-4) The tool keeps `readOnlyHint` and `advisor.run` the
+effect `read`, although the run writes Control Store records like
+`drift_check`: a `control_record` effect would make `diagnostics.read` a
+write scope, which the frozen `oauth.scopes` catalog (G3B) stores as a read
+scope; that change needs an owner decision and a new bundle
+([OD-57](../00-product/open-decisions.md#od-57-advisors_run-records-a-run-but-its-scope-is-a-read-scope)).
+`backups_list` is `served` as well (`backups.read` at the cluster; the backup catalog of `packages/application/src/backups.ts`, repository summaries without location or secret). The cancel and terminate actions are REST
+only (`POST /targets/{t}/sessions/{pid}/cancel` and `/terminate`); no MCP
+tool offers them.
+
 Annotations: **RO** = `readOnlyHint: true`; **D** = `destructiveHint: true`;
 **I** = `idempotentHint: true` (shown only for tools that are not RO, where MCP
 gives it meaning); **—** = none of them. `openWorldHint` is true exactly for
@@ -171,15 +198,15 @@ of one person through one client wait for an approval at a time; a further
 
 | Tool | Scope | Ann. | Input | Output | REST | Wave |
 |---|---|---|---|---|---|---|
-| `query_stats` | `diagnostics.read` | RO | `target`, window, order (total time, mean, calls, I/O), limit | normalized statements with metrics and deltas; `CAPABILITY_UNAVAILABLE` if `pg_stat_statements` is absent | `GET /targets/{id}/query-stats` | 9, planned |
-| `table_stats` | `diagnostics.read` | RO | `target`, filters | table and index sizes, scans, dead tuples, last (auto)vacuum/analyze, bloat estimate, unused/duplicate/invalid indexes, xid age | `GET /targets/{id}/table-stats` | 9, planned |
-| `advisors_run` | `diagnostics.read` | RO | `target`, categories | live findings (security, performance) with remediation | `POST /targets/{id}/advisor-runs` | 9, planned |
+| `query_stats` | `diagnostics.read` | RO | `target`, window, order (total time, mean, calls, I/O), limit | normalized statements with metrics and deltas; `CAPABILITY_UNAVAILABLE` if `pg_stat_statements` is absent | `GET /targets/{id}/query-stats` | 9, served |
+| `table_stats` | `diagnostics.read` | RO | `target`, filters | table and index sizes, scans, dead tuples, last (auto)vacuum/analyze, bloat estimate, unused/duplicate/invalid indexes, xid age | `GET /targets/{id}/table-stats` | 9, served |
+| `advisors_run` | `diagnostics.read` | RO | `target`, categories | live findings (security, performance, operations, change safety; default security and performance) with remediation, evidence, the recorded finding id and the skipped rules with their reason | `POST /targets/{id}/advisor-runs` | 9, served |
 
 ## 8. Backups and restore
 
 | Tool | Scope | Ann. | Input | Output | REST | Wave |
 |---|---|---|---|---|---|---|
-| `backups_list` | `backups.read` | RO | `target` or cluster | backups, verification state, WAL/PITR window, RPO status, last drill | `GET /clusters/{id}/backups` | 9, planned |
+| `backups_list` | `backups.read` | RO | `target` or cluster | backups, verification state, WAL/PITR window, RPO status, last drill | `GET /clusters/{id}/backups` | 9, served |
 | `backup_run` | `backups.run` | I | cluster or target, kind | operation | `POST /clusters/{id}/backups` | 9, no contract yet |
 | `restore_plan` | `restore.plan` | — | source (backup id or point in time), destination (target path, must be explicit) | restore plan; **execution is human-only in V1** (the plan is stored with decision `deny` by rule `restore.human-only`; `plan_apply` returns `PLAN_DENIED`; a human re-plans it in the Web App) | `POST /restores/plans` | 9, no contract yet |
 

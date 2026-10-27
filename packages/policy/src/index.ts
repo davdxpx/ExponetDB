@@ -9,6 +9,27 @@ export {
   lowersSafety,
 } from './catalog/access.ts'
 export {
+  BACKUP_CHANGE_KINDS,
+  BACKUP_RULES,
+  backupChangeProdApproval,
+  backupRunAgentProd,
+  backupRunsAllowed,
+  RESTORE_KINDS,
+  restoreCloneRefused,
+  restoreHumanOnly,
+  restoreRecoveryApproval,
+  restoreRecoveryDiscardApproval,
+  restoreSourceVerified,
+  restoreTargetIdentity,
+} from './catalog/backups.ts'
+export {
+  CONNECTION_KINDS,
+  CONNECTION_RULES,
+  connectionsNoSuperuserTerminate,
+  connectionsProdTerminateApproval,
+  connectionsReplicationProtect,
+} from './catalog/connections.ts'
+export {
   DATA_READ_MODES,
   DATA_RULES,
   type DataReadMode,
@@ -29,6 +50,7 @@ export {
 } from './catalog/migrations.ts'
 export { NODE_APPLY_KINDS, NODE_RULES, nodeProdApplyApproval } from './catalog/nodes.ts'
 export {
+  clusterAdoptAgentApproval,
   driftAcceptProd,
   REGISTRY_RULES,
   targetRegisterProdApproval,

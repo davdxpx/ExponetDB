@@ -1520,6 +1520,17 @@ export const ACTIONS = {
         "The owner's UI/UX order of 2026-10-26 §8A: remove a cluster from ExponetDB bottom-up, never by cascade (registry.md §4.4)",
     },
   ),
+  // OD-54 (a): production authority whatever the cluster's tier, an undeclared one included.
+  'registry.cluster.adopt_agent.plan': registryPlan(
+    'Plan the adoption of an external cluster by the node agent (OD-54; one way)',
+    'cluster',
+    {
+      tierSemantics: 'production',
+      wave: '9',
+      basis:
+        "OD-54 option (a), the owner's Wave 9 Part B order of 2026-10-26 §1 item 3 (registry.md §4.5)",
+    },
+  ),
   // A cluster being registered has no declared tier yet: production authority (fail closed).
   'registry.cluster.register.plan': registryPlan(
     'Plan the registration of an external cluster',
@@ -1579,6 +1590,18 @@ export const ACTIONS = {
     fixed('high'),
     'cluster',
     { ...REAUTH, wave: '9', basis: "The owner's UI/UX order of 2026-10-26 §8A" },
+  ),
+  'registry.cluster.adopt_agent': registryKind(
+    'Adopt an external cluster by the node agent: management mode external → agent, once and never back; targets keep placement, generation and identity marker',
+    fixed('high'),
+    'cluster',
+    {
+      ...REAUTH,
+      tierSemantics: 'production',
+      wave: '9',
+      basis:
+        "OD-54 option (a), the owner's Wave 9 Part B order of 2026-10-26: human only, production authority also while the tier is unknown, fresh re-authentication, audited, idempotent; the enrolled node of the cluster's server reports its pinned system_identifier exactly once (registry.md §4.5)",
+    },
   ),
   'registry.cluster.register': registryKind(
     'Register an external cluster (pending, CA bundle and endpoints)',
@@ -2055,6 +2078,222 @@ export const ACTIONS = {
       wave: '8',
       basis:
         'credentials-and-roles.md §4; control-plane.md §9.3, §9.6 (one set_password step of postgres.roles.apply@2); owner decision S3 (2026-10-13)',
+    },
+  ),
+  // ----- Wave 9 Part B (the owner's order of 2026-10-26; ADR-0036 to ADR-0038) -----
+  'backup.overview': read(
+    'Backup protection of every cluster the caller may read',
+    'cluster',
+    'backups.read',
+    {
+      clientKinds: REST_ONLY,
+      wave: '9',
+      basis: 'architecture.md §4 (09-backups-and-restore); ADR-0036',
+    },
+  ),
+  'backup.repository.list': read(
+    'List the backup repositories of a cluster',
+    'cluster',
+    'backups.read',
+    {
+      clientKinds: REST_ONLY,
+      wave: '9',
+      basis: 'ADR-0036 §1; location withheld without registry.manage',
+    },
+  ),
+  'backup.policy.get': read('Get the backup policy of a cluster', 'cluster', 'backups.read', {
+    clientKinds: REST_ONLY,
+    wave: '9',
+    basis: 'architecture.md §3 (09-backups-and-restore)',
+  }),
+  'backup.run.list': read('List the engine runs of a cluster', 'cluster', 'backups.read', {
+    clientKinds: REST_ONLY,
+    wave: '9',
+    basis: 'ADR-0037',
+  }),
+  'restore.list': read('List the restores and drills of a cluster', 'cluster', 'backups.read', {
+    clientKinds: REST_ONLY,
+    wave: '9',
+    basis: 'restore.md §3, §6; ADR-0038',
+  }),
+  'restore.runbook.get': read(
+    'The generated offline restore runbook of a repository (no secrets)',
+    'cluster',
+    'restore.plan',
+    {
+      clientKinds: HUMAN,
+      humanOnly: true,
+      scope: scopeNamed('restore.plan'),
+      wave: '9',
+      basis: 'C-35; ADR-0038 §6: generated without secrets, audited when downloaded',
+    },
+  ),
+  'cluster.finding.list': read(
+    'List the findings of a cluster (backups)',
+    'cluster',
+    'backups.read',
+    {
+      clientKinds: REST_ONLY,
+      wave: '9',
+      basis: 'performance.md §4; architecture.md §3 (backup_catalog_divergence)',
+    },
+  ),
+  'finding.summary': read(
+    'Counts of the open findings across targets',
+    'target',
+    'diagnostics.read',
+    {
+      clientKinds: REST_ONLY,
+      wave: '9',
+      basis: 'PRE-WAVE-11-REVIEW U8; visibility as finding.list',
+    },
+  ),
+  'backup.repository.adopt.plan': registryPlan(
+    'Plan the adoption of an existing backup repository',
+    'cluster',
+    {
+      wave: '9',
+      basis:
+        'ADR-0036 §3 (OD-52): adopt, observe, then hand over; adoption changes nothing on the host',
+    },
+  ),
+  'backup.repository.adopt': registryKind(
+    'Adopt an existing backup repository for read-only observation',
+    fixed('standard'),
+    'cluster',
+    { ...REAUTH, wave: '9', basis: 'ADR-0036 §3' },
+  ),
+  'backup.repository.ownership.plan': registryPlan(
+    'Plan a change of what ExponetDB may do with an adopted repository',
+    'cluster',
+    {
+      wave: '9',
+      basis:
+        'ADR-0036 §3: adopted_observed to adopted_runs; owned is refused until its capability exists',
+    },
+  ),
+  'backup.repository.ownership': registryKind(
+    'Change what ExponetDB may do with an adopted repository',
+    fixed('high'),
+    'cluster',
+    { ...REAUTH, wave: '9', basis: 'ADR-0036 §3' },
+  ),
+  'backup.repository.retire.plan': registryPlan(
+    'Plan the retirement of a backup repository record',
+    'cluster',
+    {
+      wave: '9',
+      basis: 'ADR-0036; registry.md §4.4: nothing in the bucket or on the host is deleted',
+    },
+  ),
+  'backup.repository.retire': registryKind(
+    'Retire a backup repository record (nothing in storage is deleted)',
+    fixed('high'),
+    'cluster',
+    { ...REAUTH, wave: '9', basis: 'ADR-0036; registry.md §4.4' },
+  ),
+  'backup.policy.set.plan': registryPlan('Plan a backup policy for a cluster', 'cluster', {
+    wave: '9',
+    basis: 'architecture.md §5 (09-backups-and-restore): repository or policy change, high, human',
+  }),
+  'backup.policy.set': registryKind(
+    'Set the backup policy of a cluster',
+    fixed('high'),
+    'cluster',
+    {
+      ...REAUTH,
+      wave: '9',
+      basis: 'architecture.md §5 (09-backups-and-restore)',
+    },
+  ),
+  'backup.catalog.refresh': operation(
+    'Read the backup catalog of a cluster from its engine',
+    fixed('low'),
+    'cluster',
+    'backups.run',
+    scopeOf('backups.run'),
+    {
+      tierSemantics: 'subject_max',
+      wave: '9',
+      basis: 'architecture.md §3: the mirror is refreshed by backup.list@1',
+    },
+  ),
+  'backup.run.plan': record(
+    'Plan a backup run',
+    'cluster',
+    perm('backups.run'),
+    scopeOf('backups.run'),
+    {
+      tierSemantics: 'subject_max',
+      wave: '9',
+      basis: 'architecture.md §5 (09-backups-and-restore); ADR-0037',
+    },
+  ),
+  'restore.drill.plan': record(
+    'Plan a restore drill into scratch',
+    'cluster',
+    perm('restore.plan'),
+    scopeOf('restore.plan'),
+    {
+      tierSemantics: 'subject_max',
+      wave: '9',
+      basis: 'restore.md §6; ADR-0038 §4: agents may plan drills; only people execute them',
+    },
+  ),
+  'restore.drill': adminOperation(
+    'Run a restore drill into scratch',
+    fixed('standard'),
+    'cluster',
+    'restore.execute',
+    {
+      exclusivity: ['cluster.backup'],
+      reauthentication: true,
+      reauthWithinSeconds: 300,
+      tierSemantics: 'subject_max',
+      wave: '9',
+      basis: 'restore.md §1 (drill: standard, scratch only); ADR-0038',
+    },
+  ),
+  'restore.discard.plan': record(
+    'Plan the discard of a scratch restore',
+    'cluster',
+    perm('restore.execute'),
+    scopeNamed('restore.execute'),
+    {
+      clientKinds: HUMAN,
+      humanOnly: true,
+      tierSemantics: 'subject_max',
+      wave: '9',
+      basis: 'restore.md §6: a scratch cluster is discarded by restore.discard',
+    },
+  ),
+  'restore.discard': adminOperation(
+    'Discard a scratch restore (stop its temporary cluster, remove its directory)',
+    fixed('standard'),
+    'cluster',
+    'restore.execute',
+    {
+      exclusivity: ['cluster.backup'],
+      reauthentication: true,
+      reauthWithinSeconds: 300,
+      tierSemantics: 'subject_max',
+      wave: '9',
+      basis: 'restore.md §6; ADR-0038',
+    },
+  ),
+  'restore.drill.offline.record': record(
+    'Record a drill run from the offline runbook with the Control Plane stopped (an attestation)',
+    'cluster',
+    perm('restore.execute'),
+    scopeNamed('restore.execute'),
+    {
+      clientKinds: HUMAN,
+      humanOnly: true,
+      reauthentication: true,
+      reauthWithinSeconds: 300,
+      tierSemantics: 'subject_max',
+      wave: '9',
+      basis: 'restore.md §6 (C-35: recorded afterwards); ADR-0038 §6',
     },
   ),
 } as const satisfies Record<string, ActionDefinition>

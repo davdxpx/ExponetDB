@@ -57,6 +57,15 @@ export interface MigrationFacts {
   readonly executionRoleExceptions?: number
   /** Production: the evidence environment's execution roles compared with production's (ADR-0034 §4). */
   readonly executionRoleParity?: 'match' | 'mismatch' | 'unknown' | 'not_required'
+  /**
+   * Whether the SQL the plan runs is procedural (OD-55 (c)): `DO` blocks,
+   * procedure calls, functions a top-level `SELECT` calls, routines or
+   * triggers the bundle creates, dynamic SQL where the text shows it; a
+   * statement list that is not known counts as procedural.
+   */
+  readonly procedural?: boolean
+  /** Why, as fixed codes (`do_block`, `call`, `function_call`, `routine_created`, …). */
+  readonly proceduralReasons?: readonly string[]
 }
 
 const EVIDENCE = new Set([
@@ -652,6 +661,92 @@ export const migrationExecutionRoleParity: Rule = {
   },
 }
 
+/** Kinds an agent can plan whose SQL may be procedural: the SQL kinds and the legacy replay. */
+const PROCEDURAL_KINDS = [...SQL_KINDS, 'migration.import.replay'] as const
+
+/**
+ * The procedural classification a plan carries (`content.facts.procedural`):
+ * `true` or `false`, or `unclassified` when the plan carries none or a
+ * malformed one, which counts as procedural (OD-55 (c): fail closed).
+ */
+function proceduralOf(content: JsonValue | undefined): {
+  readonly procedural: boolean | 'unclassified'
+  readonly reasons: readonly string[]
+} {
+  const facts = isJsonObject(content) ? content['facts'] : undefined
+  const value = isJsonObject(facts) ? facts['procedural'] : undefined
+  const reasons = isJsonObject(facts) ? facts['proceduralReasons'] : undefined
+  const list =
+    isJsonArray(reasons) && reasons.every((r) => typeof r === 'string')
+      ? (reasons as string[]).slice(0, 8)
+      : []
+  return typeof value === 'boolean'
+    ? { procedural: value, reasons: list }
+    : { procedural: 'unclassified', reasons: ['unclassified'] }
+}
+
+export const migrationAgentProcedural: Rule = {
+  id: 'migration.agent-procedural',
+  version: 1,
+  description:
+    'A migration plan an AI agent client initiates whose SQL is procedural (DO blocks, called or created routines, triggers, dynamic SQL; unclassified counts as procedural) needs a human approval on every tier (OD-55 (c)).',
+  appliesTo: PROCEDURAL_KINDS,
+  severity: 'require',
+  overridableByBreakGlass: false,
+  facts: [],
+  defaults: { approvals: 1 },
+  requirements: (params) => approvals(params),
+  evaluate({ request }) {
+    const p = request.principal
+    if (p.kind === 'human' && (p.client === 'web' || p.client === 'cli')) {
+      return { result: 'not_applicable', message: 'A person initiated it.' }
+    }
+    const { procedural, reasons } = proceduralOf(request.content)
+    return procedural === false
+      ? { result: 'pass', message: 'No procedural statement.' }
+      : {
+          result: 'fail',
+          message:
+            procedural === true
+              ? 'The SQL is procedural: code it runs can act as any role the migrator holds; a person approves it.'
+              : 'The plan carries no procedural classification; it counts as procedural.',
+          facts: { client: p.client, kind: p.kind, reasons: [...reasons] },
+          remediation: 'Ask a person to review and approve the plan.',
+        }
+  },
+}
+
+export const migrationProceduralNontransactional: Rule = {
+  id: 'migration.procedural-nontransactional',
+  version: 1,
+  description:
+    'Procedural SQL in a non-transactional bundle is refused for every principal: its statements commit one by one, so the ledger guard cannot roll back what they do (OD-55 (d)).',
+  appliesTo: AUTOCOMMIT_KINDS,
+  severity: 'deny',
+  overridableByBreakGlass: false,
+  facts: [],
+  defaults: {},
+  requirements: () => [],
+  evaluate({ request }) {
+    const f = migrationFacts(request.content)
+    if (f === undefined) return UNKNOWN
+    if (!f.nontransactional) {
+      return { result: 'not_applicable', message: 'Transactional: the ledger guard applies.' }
+    }
+    const { procedural, reasons } = proceduralOf(request.content)
+    return procedural === false
+      ? { result: 'pass', message: 'No procedural statement.' }
+      : {
+          result: 'fail',
+          message:
+            'A non-transactional bundle runs procedural SQL the ledger guard cannot roll back.',
+          facts: { reasons: [...reasons] },
+          remediation:
+            'Move the procedural statements into a transactional bundle; keep only the statement that needs autocommit here.',
+        }
+  },
+}
+
 export const MIGRATION_RULES: readonly Rule[] = [
   migrationLintErrors,
   migrationPgVersion,
@@ -673,4 +768,6 @@ export const MIGRATION_RULES: readonly Rule[] = [
   migrationImportExecutionRole,
   migrationExecutionRoleException,
   migrationExecutionRoleParity,
+  migrationAgentProcedural,
+  migrationProceduralNontransactional,
 ]

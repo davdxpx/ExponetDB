@@ -6,9 +6,12 @@ import {
   type SessionContext,
   type SubjectRef,
 } from '@exponetdb/auth'
+import { backupDependencies } from '@exponetdb/backups'
 import type {
   AccessRole,
+  BackupDependency,
   Cluster,
+  ClusterAgentAdoptionRequest,
   ClusterBootstrapSql,
   ClusterConfirmRequest,
   ClusterDeclaredTierRequest,
@@ -135,6 +138,7 @@ import {
   type OrganizationVisibility,
   type Page,
   type PageRequest,
+  planClusterAdoptAgent,
   planClusterConfirm,
   planClusterDeclareTier,
   planClusterRegister,
@@ -954,7 +958,12 @@ export class RegistryUseCases {
       backups: this.#services().backups,
     })
     if (retirement === undefined) throw new RegistryError('NOT_FOUND')
-    return this.#preflight('server', serverId, retirement)
+    return this.#preflight(
+      'server',
+      serverId,
+      retirement,
+      await this.#dependencies('server', serverId, retirement),
+    )
   }
 
   /** What a retirement of the cluster would meet now (registry.md §4.4), read live; `registry.manage`. */
@@ -964,10 +973,30 @@ export class RegistryUseCases {
       backups: this.#services().backups,
     })
     if (retirement === undefined) throw new RegistryError('NOT_FOUND')
-    return this.#preflight('cluster', clusterId, retirement)
+    return this.#preflight(
+      'cluster',
+      clusterId,
+      retirement,
+      await this.#dependencies('cluster', clusterId, retirement),
+    )
   }
 
-  #preflight(kind: 'server' | 'cluster', id: string, retirement: Retirement): RetirementPreflight {
+  /** What the backup records bind (Wave 9 Part B): listed when they block or could not be read. */
+  async #dependencies(
+    kind: 'server' | 'cluster',
+    id: string,
+    retirement: Retirement,
+  ): Promise<readonly BackupDependency[] | undefined> {
+    if (retirement.backups !== 'blocking' && retirement.backups !== 'unknown') return undefined
+    return (await backupDependencies(this.#h.store, { kind, id })).dependencies
+  }
+
+  #preflight(
+    kind: 'server' | 'cluster',
+    id: string,
+    retirement: Retirement,
+    dependencies: readonly BackupDependency[] | undefined,
+  ): RetirementPreflight {
     const groups = (list: Retirement['blockers']) =>
       list.map((group) => ({
         kind: group.kind,
@@ -991,7 +1020,13 @@ export class RegistryUseCases {
       blockers: groups(retirement.blockers),
       retiredWith: groups(retirement.retiredWith),
       kept: { retiredChildren: retirement.retiredChildren },
-      providers: [{ provider: 'backups', state: retirement.backups }],
+      providers: [
+        {
+          provider: 'backups',
+          state: retirement.backups,
+          ...(dependencies === undefined ? {} : { dependencies: [...dependencies] }),
+        },
+      ],
       source: 'live',
       observedAt: new Date(this.#h.clock.nowMs()).toISOString(),
     } as RetirementPreflight
@@ -1024,6 +1059,27 @@ export class RegistryUseCases {
       idem,
       { kind: 'cluster', clusterId },
       (tx, c, a) => planClusterRetire(tx, c, a, clusterId, body.reason, this.#services().backups),
+    )
+  }
+
+  /**
+   * Adopts an external cluster by the node agent (OD-54 option (a), registry.md
+   * §4.5): one way, applied through `plan.apply`; production authority whatever
+   * the cluster's tier (`registry.cluster.adopt_agent.plan` has the registry tier
+   * `production`), and an approval unless the cluster is declared nonprod.
+   */
+  planClusterAgentAdoption(
+    caller: CallerLike,
+    clusterId: string,
+    body: ClusterAgentAdoptionRequest,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.cluster.adopt_agent.plan',
+      idem,
+      { kind: 'cluster', clusterId },
+      (tx, c, a) => planClusterAdoptAgent(tx, c, a, clusterId, body),
     )
   }
 

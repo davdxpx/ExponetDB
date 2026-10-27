@@ -1,4 +1,4 @@
-import type { Tx } from '@exponetdb/control-store'
+import type { Queryable, Tx } from '@exponetdb/control-store'
 import type {
   ChangedBinding,
   ExecutionContext,
@@ -15,7 +15,7 @@ import {
 } from './execution-roles.ts'
 import { inspectDatabase } from './inspect.ts'
 import { RegistryKind, type RegistryKindDeps, refusalOf } from './kind-base.ts'
-import { observeClusterIdentity } from './plans.ts'
+import { type AdoptionNode, adoptionNode, observeClusterIdentity } from './plans.ts'
 import {
   activeEndpointAt,
   clusterBySystemIdentifier,
@@ -679,6 +679,171 @@ export class ClusterDeclareTierKind extends RegistryKind {
   }
 }
 
+/**
+ * Adopts an external cluster by the node agent (OD-54 option (a), registry.md
+ * §4.5): `management_mode` external → agent, once, and the node's server when
+ * the cluster had none. Bound to the cluster's mode, state, pinned system
+ * identifier and server, and to the node, its server and the local instance
+ * that reports the cluster; re-checked at acceptance, at the start and again
+ * under the row locks (cluster FOR UPDATE, node FOR SHARE), where a change is
+ * `PLAN_STALE`. The Control Store guard admits the write only from an
+ * operation of this kind and checks the node's report itself. Nothing else is
+ * written: targets keep their placement, generation and identity marker.
+ * Idempotent: a re-run of the same operation after its commit writes nothing.
+ */
+export class ClusterAdoptAgentKind extends RegistryKind {
+  readonly kind = 'registry.cluster.adopt_agent'
+  readonly actionClass = 'high'
+
+  async bindings(_plan: PlanRecord, c: Body, expected: Body) {
+    const cluster = await getCluster(this.deps.store, c.text('clusterId'))
+    if (cluster === undefined) {
+      return [{ binding: 'clusterState', expected: expected.text('clusterState'), actual: null }]
+    }
+    const changed: ChangedBinding[] = []
+    const facts: [string, string | null, string | null][] = [
+      ['managementMode', expected.text('managementMode'), cluster.managementMode],
+      ['clusterState', expected.text('clusterState'), cluster.state],
+      ['systemIdentifier', expected.text('systemIdentifier'), cluster.systemIdentifier],
+      ['clusterServerId', expected.textOrNull('clusterServerId'), cluster.serverId],
+    ]
+    for (const [binding, want, actual] of facts) {
+      if (want !== actual) changed.push({ binding, expected: want, actual })
+    }
+    if (changed.length > 0) return changed
+    return this.#nodeBindings(expected, await this.#node(this.deps.store, c, cluster))
+  }
+
+  /** The node as it is now, or the refusal that says why none qualifies. */
+  async #node(
+    q: Queryable,
+    c: Body,
+    cluster: Parameters<typeof adoptionNode>[1],
+    lock = false,
+  ): Promise<AdoptionNode | string> {
+    try {
+      return await adoptionNode(q, cluster, c.text('nodeId'), this.deps.clock.nowMs(), { lock })
+    } catch (error) {
+      if (error instanceof RegistryError) {
+        const reason = error.details?.['reason']
+        return typeof reason === 'string' ? reason : error.code
+      }
+      throw error
+    }
+  }
+
+  #nodeBindings(expected: Body, node: AdoptionNode | string): ChangedBinding[] {
+    if (typeof node === 'string') {
+      return [{ binding: 'nodeReport', expected: 'reported_once', actual: node }]
+    }
+    const changed: ChangedBinding[] = []
+    const facts: [string, string, string][] = [
+      ['nodeId', expected.text('nodeId'), node.nodeId],
+      ['nodeServerId', expected.text('nodeServerId'), node.serverId],
+      ['localName', expected.text('localName'), node.localName],
+    ]
+    for (const [binding, want, actual] of facts) {
+      if (want !== actual) changed.push({ binding, expected: want, actual })
+    }
+    return changed
+  }
+
+  async run(ctx: ExecutionContext, c: Body) {
+    const clusterId = c.id('cls', 'clusterId')
+    const nodeId = c.id('nod', 'nodeId')
+    const serverId = c.id('srv', 'serverId')
+    const clusterServerId = c.idOrNull('srv', 'clusterServerId')
+    const systemIdentifier = c.text('systemIdentifier')
+    const expected = Body.expected(ctx.plan)
+    let stale: ChangedBinding[] = []
+    const outcome = await this.effect(async (tx) => {
+      const { rows } = await tx.query(
+        'registry.kind.cluster.adoption_before',
+        `SELECT management_mode, state, system_identifier, server_id, adopted_by_operation_id
+           FROM registry.clusters WHERE cluster_id = $1 FOR UPDATE`,
+        [clusterId],
+      )
+      const before = rows[0]
+      if (before === undefined) return false
+      // A re-run of this operation after its commit: nothing is written twice.
+      if (before.textOrNull('adopted_by_operation_id') === ctx.operationId) return true
+      const cluster = {
+        serverId: before.textOrNull('server_id'),
+        systemIdentifier: before.textOrNull('system_identifier'),
+      }
+      const facts: [string, string | null, string | null][] = [
+        ['managementMode', 'external', before.text('management_mode')],
+        ['clusterState', 'active', before.text('state')],
+        ['systemIdentifier', systemIdentifier, cluster.systemIdentifier],
+        ['clusterServerId', clusterServerId, cluster.serverId],
+      ]
+      for (const [binding, want, actual] of facts) {
+        if (want !== actual) stale.push({ binding, expected: want, actual })
+      }
+      if (stale.length > 0) return false
+      stale = this.#nodeBindings(expected, await this.#node(tx, c, cluster, true))
+      if (stale.length > 0) return false
+      const { rowCount } = await tx.query(
+        'registry.kind.cluster.adopt_agent',
+        `UPDATE registry.clusters
+            SET management_mode = 'agent', server_id = $2, adopted_at = clock_timestamp(),
+                adopted_by_operation_id = $3, adopted_node_id = $4
+          WHERE cluster_id = $1 AND management_mode = 'external' AND state = 'active'
+            AND system_identifier = $5 AND server_id IS NOT DISTINCT FROM $6::text`,
+        [clusterId, serverId, ctx.operationId, nodeId, systemIdentifier, clusterServerId],
+      )
+      if (rowCount !== 1) return false
+      await this.audit(
+        tx,
+        ctx,
+        {
+          clusterId,
+          nodeId,
+          serverId,
+          localName: c.text('localName'),
+          systemIdentifier,
+          before: { managementMode: 'external', serverId: clusterServerId },
+          after: { managementMode: 'agent', serverId },
+        },
+        { clusterId, serverId },
+      )
+      return true
+    })
+    if (outcome === 'not_applied' && stale.length > 0) {
+      return {
+        outcome: 'not_applied' as const,
+        errorCode: 'PLAN_STALE',
+        detail: { changedBindings: stale.map((b) => b.binding).slice(0, 32) },
+      }
+    }
+    return outcome
+  }
+
+  check(ctx: ExecutionContext, c: Body) {
+    return this.exists(
+      'registry.kind.cluster_adopt_agent.verify',
+      `SELECT 1 FROM registry.clusters
+        WHERE cluster_id = $1 AND management_mode = 'agent' AND server_id = $2
+          AND system_identifier = $3 AND adopted_by_operation_id = $4 AND adopted_node_id = $5`,
+      [
+        c.text('clusterId'),
+        c.text('serverId'),
+        c.text('systemIdentifier'),
+        ctx.operationId,
+        c.text('nodeId'),
+      ],
+    )
+  }
+
+  applied(ctx: ExecutionContext, c: Body) {
+    return this.exists(
+      'registry.kind.cluster_adopt_agent.reconcile',
+      'SELECT 1 FROM registry.clusters WHERE cluster_id = $1 AND adopted_by_operation_id = $2',
+      [c.text('clusterId'), ctx.operationId],
+    )
+  }
+}
+
 export class EndpointAddKind extends RegistryKind {
   readonly kind = 'registry.endpoint.add'
   readonly actionClass = 'high'
@@ -1280,6 +1445,7 @@ export function registryKinds(deps: RegistryKindDeps): readonly OperationKind[] 
     new ClusterRegisterKind(deps),
     new ClusterConfirmKind(deps),
     new ClusterDeclareTierKind(deps),
+    new ClusterAdoptAgentKind(deps),
     new EndpointAddKind(deps),
     new EndpointRetireKind(deps),
     new DatabaseRetireKind(deps),

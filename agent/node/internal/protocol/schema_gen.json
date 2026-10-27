@@ -33,6 +33,53 @@
       ],
       "description": "Any JSON value."
     },
+    "NodeBackupRepositoryRef": {
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "enum": [
+            "pgbackrest",
+            "pg_dump",
+            "restic"
+          ],
+          "type": "string"
+        },
+        "repoIndex": {
+          "anyOf": [
+            {
+              "maximum": 4,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "repositoryId": {
+          "pattern": "^bkr_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "stanza": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "repositoryId",
+        "engine",
+        "stanza",
+        "repoIndex"
+      ],
+      "type": "object"
+    },
     "NodeCapAgentDiagnosticsArgs": {
       "additionalProperties": false,
       "properties": {},
@@ -155,6 +202,534 @@
         "jobKeys",
         "helperJobKeys",
         "gatewayUrl"
+      ],
+      "type": "object"
+    },
+    "NodeCapBackupExpireArgs": {
+      "additionalProperties": false,
+      "description": "Only on repositories whose host mode is owned.",
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        },
+        "keepLabels": {
+          "description": "Backups the Control Plane proved restorable last and that must survive (the node refuses a retention that would remove one).",
+          "items": {
+            "pattern": "^[0-9]{8}-[0-9]{6}F(_[0-9]{8}-[0-9]{6}[DI])?$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "repository": {
+          "$ref": "#/$defs/NodeBackupRepositoryRef"
+        },
+        "retention": {
+          "additionalProperties": false,
+          "properties": {
+            "differentialCount": {
+              "anyOf": [
+                {
+                  "maximum": 100,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "fullCount": {
+              "anyOf": [
+                {
+                  "maximum": 100,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "logicalDays": {
+              "anyOf": [
+                {
+                  "maximum": 3650,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "fullCount",
+            "differentialCount",
+            "logicalDays"
+          ],
+          "type": "object"
+        },
+        "runId": {
+          "pattern": "^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cluster",
+        "repository",
+        "runId",
+        "retention",
+        "keepLabels"
+      ],
+      "type": "object"
+    },
+    "NodeCapBackupListArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        },
+        "repository": {
+          "$ref": "#/$defs/NodeBackupRepositoryRef"
+        }
+      },
+      "required": [
+        "cluster",
+        "repository"
+      ],
+      "type": "object"
+    },
+    "NodeCapBackupListResult": {
+      "additionalProperties": false,
+      "properties": {
+        "archive": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "description": "Archive id (major-version and history id).",
+                "maxLength": 32,
+                "type": "string",
+                "untrusted": true
+              },
+              "max": {
+                "anyOf": [
+                  {
+                    "description": "Newest WAL segment.",
+                    "maxLength": 24,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "min": {
+                "anyOf": [
+                  {
+                    "description": "Oldest WAL segment.",
+                    "maxLength": 24,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "min",
+              "max"
+            ],
+            "type": "object"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "backups": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "error": {
+                "type": "boolean"
+              },
+              "finishedAt": {
+                "anyOf": [
+                  {
+                    "description": "RFC 3339 UTC timestamp ending in Z.",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "kind": {
+                "enum": [
+                  "full",
+                  "differential",
+                  "incremental",
+                  "logical"
+                ],
+                "type": "string"
+              },
+              "label": {
+                "description": "pgBackRest label or restic snapshot id.",
+                "maxLength": 128,
+                "type": "string",
+                "untrusted": true
+              },
+              "lsnStart": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9A-F]{1,8}\\/[0-9A-F]{1,8}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "lsnStop": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9A-F]{1,8}\\/[0-9A-F]{1,8}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "postgresMajor": {
+                "anyOf": [
+                  {
+                    "maximum": 99,
+                    "minimum": 9,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "repositorySizeBytes": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sizeBytes": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "startedAt": {
+                "description": "RFC 3339 UTC timestamp ending in Z.",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "walStart": {
+                "anyOf": [
+                  {
+                    "description": "First WAL segment.",
+                    "maxLength": 24,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "label",
+              "kind",
+              "startedAt",
+              "finishedAt",
+              "lsnStart",
+              "lsnStop",
+              "walStart",
+              "sizeBytes",
+              "repositorySizeBytes",
+              "postgresMajor",
+              "error"
+            ],
+            "type": "object"
+          },
+          "maxItems": 1000,
+          "type": "array"
+        },
+        "engineVersion": {
+          "anyOf": [
+            {
+              "description": "Engine version of the node.",
+              "maxLength": 32,
+              "type": "string",
+              "untrusted": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stanza": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "cipher": {
+                  "enum": [
+                    "aes-256-cbc",
+                    "none",
+                    "unknown"
+                  ],
+                  "type": "string"
+                },
+                "message": {
+                  "description": "The engine status text (redacted on the host).",
+                  "maxLength": 256,
+                  "type": "string",
+                  "untrusted": true
+                },
+                "status": {
+                  "enum": [
+                    "ok",
+                    "missing",
+                    "error"
+                  ],
+                  "type": "string"
+                },
+                "systemIdentifier": {
+                  "anyOf": [
+                    {
+                      "description": "PostgreSQL system_identifier (uint64 as decimal text).",
+                      "pattern": "^[0-9]{1,20}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "status",
+                "message",
+                "systemIdentifier",
+                "cipher"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "pgBackRest only."
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "engineVersion",
+        "stanza",
+        "backups",
+        "archive",
+        "truncated"
+      ],
+      "type": "object"
+    },
+    "NodeCapBackupRunArgs": {
+      "additionalProperties": false,
+      "description": "Starts an engine run. pgBackRest runs with --no-expire-auto (expiry is its own run); the node refuses any run on a repository whose host directory does not allow runs (mode adopted_runs or owned), and a full or differential backup on adopted_runs.",
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        },
+        "databases": {
+          "description": "logical only: the databases to dump; empty for physical kinds.",
+          "items": {
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_$-]{0,62}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "kind": {
+          "enum": [
+            "full",
+            "differential",
+            "incremental",
+            "logical"
+          ],
+          "type": "string"
+        },
+        "repository": {
+          "$ref": "#/$defs/NodeBackupRepositoryRef"
+        },
+        "runId": {
+          "pattern": "^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cluster",
+        "repository",
+        "runId",
+        "kind",
+        "databases"
+      ],
+      "type": "object"
+    },
+    "NodeCapBackupTimersArgs": {
+      "additionalProperties": false,
+      "properties": {},
+      "type": "object"
+    },
+    "NodeCapBackupTimersResult": {
+      "additionalProperties": false,
+      "description": "Timers whose unit or activated unit names pgbackrest, restic or backup: discovered, never changed (ADR-0036 §3).",
+      "properties": {
+        "timers": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "activates": {
+                "description": "The unit it starts (host text).",
+                "maxLength": 256,
+                "type": "string",
+                "untrusted": true
+              },
+              "lastAt": {
+                "anyOf": [
+                  {
+                    "description": "RFC 3339 UTC timestamp ending in Z.",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "lastResult": {
+                "anyOf": [
+                  {
+                    "description": "Result of the last run of the activated unit.",
+                    "maxLength": 64,
+                    "type": "string",
+                    "untrusted": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "nextAt": {
+                "anyOf": [
+                  {
+                    "description": "RFC 3339 UTC timestamp ending in Z.",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "unit": {
+                "description": "Timer unit name (host text).",
+                "maxLength": 256,
+                "type": "string",
+                "untrusted": true
+              }
+            },
+            "required": [
+              "unit",
+              "activates",
+              "nextAt",
+              "lastAt",
+              "lastResult"
+            ],
+            "type": "object"
+          },
+          "maxItems": 64,
+          "type": "array"
+        }
+      },
+      "required": [
+        "timers"
+      ],
+      "type": "object"
+    },
+    "NodeCapBackupVerifyArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]{8}-[0-9]{6}F(_[0-9]{8}-[0-9]{6}[DI])?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null: the whole repository."
+        },
+        "repository": {
+          "$ref": "#/$defs/NodeBackupRepositoryRef"
+        },
+        "runId": {
+          "pattern": "^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "snapshot": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{8,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "cluster",
+        "repository",
+        "runId",
+        "label",
+        "snapshot"
       ],
       "type": "object"
     },
@@ -2183,6 +2758,289 @@
       ],
       "type": "object"
     },
+    "NodeCapRestoreDiscardArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "runId": {
+          "pattern": "^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runId"
+      ],
+      "type": "object"
+    },
+    "NodeCapRestoreDiscardResult": {
+      "additionalProperties": false,
+      "properties": {
+        "removed": {
+          "type": "boolean"
+        },
+        "runId": {
+          "pattern": "^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "wasRunning": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "runId",
+        "removed",
+        "wasRunning"
+      ],
+      "type": "object"
+    },
+    "NodeCapRestoreExecuteArgs": {
+      "additionalProperties": false,
+      "description": "Restores into the node-chosen scratch directory of the run and starts a temporary cluster on the given localhost port; never over the data directory of any instance (ADR-0038 §3).",
+      "properties": {
+        "checks": {
+          "items": {
+            "enum": [
+              "recovery_target_reached",
+              "probe_simple",
+              "probe_extended",
+              "amcheck",
+              "row_counts"
+            ],
+            "type": "string"
+          },
+          "maxItems": 8,
+          "type": "array"
+        },
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef",
+          "description": "The source cluster: its system identifier must equal the stanza's."
+        },
+        "port": {
+          "maximum": 55499,
+          "minimum": 55400,
+          "type": "integer"
+        },
+        "purpose": {
+          "enum": [
+            "drill",
+            "recovery"
+          ],
+          "type": "string"
+        },
+        "repository": {
+          "$ref": "#/$defs/NodeBackupRepositoryRef"
+        },
+        "rowCounts": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "database": {
+                "pattern": "^[A-Za-z0-9_][A-Za-z0-9_$-]{0,62}$",
+                "type": "string"
+              },
+              "max": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "min": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "schema": {
+                "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+                "type": "string"
+              },
+              "table": {
+                "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "database",
+              "schema",
+              "table",
+              "min",
+              "max"
+            ],
+            "type": "object"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "runId": {
+          "pattern": "^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/NodeRestoreTarget"
+        }
+      },
+      "required": [
+        "cluster",
+        "repository",
+        "runId",
+        "purpose",
+        "target",
+        "port",
+        "checks",
+        "rowCounts"
+      ],
+      "type": "object"
+    },
+    "NodeCapRestorePrepareArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "$ref": "#/$defs/NodeClusterRef"
+        },
+        "purpose": {
+          "enum": [
+            "drill",
+            "recovery"
+          ],
+          "type": "string"
+        },
+        "repository": {
+          "$ref": "#/$defs/NodeBackupRepositoryRef"
+        },
+        "runId": {
+          "pattern": "^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/NodeRestoreTarget"
+        }
+      },
+      "required": [
+        "cluster",
+        "repository",
+        "runId",
+        "purpose",
+        "target"
+      ],
+      "type": "object"
+    },
+    "NodeCapRestorePrepareResult": {
+      "additionalProperties": false,
+      "properties": {
+        "engineCanRead": {
+          "type": "boolean"
+        },
+        "port": {
+          "anyOf": [
+            {
+              "maximum": 55499,
+              "minimum": 55400,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "refusals": {
+          "items": {
+            "enum": [
+              "scratch_exists",
+              "space_insufficient",
+              "engine_cannot_read",
+              "label_not_found",
+              "target_outside_window",
+              "system_identifier_mismatch",
+              "no_free_port",
+              "repository_not_configured"
+            ],
+            "type": "string"
+          },
+          "maxItems": 8,
+          "type": "array"
+        },
+        "runId": {
+          "pattern": "^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "scratchFree": {
+          "description": "The node-chosen scratch directory for this run does not exist yet and lies outside every data, WAL and tablespace directory of the host.",
+          "type": "boolean"
+        },
+        "spaceAvailableBytes": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "spaceRequiredBytes": {
+          "anyOf": [
+            {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "walContinuous": {
+          "description": "null when the engine cannot tell.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "runId",
+        "scratchFree",
+        "port",
+        "spaceAvailableBytes",
+        "spaceRequiredBytes",
+        "engineCanRead",
+        "walContinuous",
+        "refusals"
+      ],
+      "type": "object"
+    },
+    "NodeCapRestoreVerifyArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "checks": {
+          "items": {
+            "enum": [
+              "probe_simple",
+              "probe_extended",
+              "amcheck",
+              "row_counts"
+            ],
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array"
+        },
+        "port": {
+          "maximum": 55499,
+          "minimum": 55400,
+          "type": "integer"
+        },
+        "runId": {
+          "description": "The restore run whose scratch cluster is verified again.",
+          "pattern": "^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "verifyRunId": {
+          "pattern": "^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runId",
+        "verifyRunId",
+        "port",
+        "checks"
+      ],
+      "type": "object"
+    },
     "NodeCapRolesApplyArgs2": {
       "additionalProperties": false,
       "properties": {
@@ -2692,6 +3550,449 @@
         "rolesDigest",
         "changes",
         "unmanaged"
+      ],
+      "type": "object"
+    },
+    "NodeCapRunCancelArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "runId": {
+          "pattern": "^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runId"
+      ],
+      "type": "object"
+    },
+    "NodeCapRunCancelResult": {
+      "additionalProperties": false,
+      "properties": {
+        "runId": {
+          "pattern": "^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "stopping",
+            "already_finished",
+            "not_found"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "runId",
+        "state"
+      ],
+      "type": "object"
+    },
+    "NodeCapRunStartedResult": {
+      "additionalProperties": false,
+      "properties": {
+        "runId": {
+          "pattern": "^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "startedAt": {
+          "description": "RFC 3339 UTC timestamp ending in Z.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+          "type": "string"
+        },
+        "unit": {
+          "pattern": "^exponetdb-run-run_[0-7][0-9A-HJKMNP-TV-Z]{25}\\.service$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runId",
+        "unit",
+        "startedAt"
+      ],
+      "type": "object"
+    },
+    "NodeCapRunStatusArgs": {
+      "additionalProperties": false,
+      "properties": {
+        "runId": {
+          "pattern": "^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "startArgsHash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "startJobId": {
+          "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "runId",
+        "startJobId",
+        "startArgsHash"
+      ],
+      "type": "object"
+    },
+    "NodeCapRunStatusResult": {
+      "additionalProperties": false,
+      "description": "The run as the node knows it, bound to the job that started it (ADR-0037 §1); the terminal outcome is node-signed in this statement.",
+      "properties": {
+        "excerpt": {
+          "description": "The engine output, redacted on the host, last lines only.",
+          "maxLength": 2048,
+          "type": "string",
+          "untrusted": true
+        },
+        "exitCode": {
+          "anyOf": [
+            {
+              "maximum": 255,
+              "minimum": -1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finishedAt": {
+          "anyOf": [
+            {
+              "description": "RFC 3339 UTC timestamp ending in Z.",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "found": {
+          "type": "boolean"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "checks": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "check": {
+                        "enum": [
+                          "recovery_target_reached",
+                          "probe_simple",
+                          "probe_extended",
+                          "amcheck",
+                          "row_counts",
+                          "fingerprint_inputs"
+                        ],
+                        "type": "string"
+                      },
+                      "detail": {
+                        "anyOf": [
+                          {
+                            "description": "Redacted detail.",
+                            "maxLength": 512,
+                            "type": "string",
+                            "untrusted": true
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "outcome": {
+                        "enum": [
+                          "passed",
+                          "failed",
+                          "not_run",
+                          "error"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "check",
+                      "outcome",
+                      "detail"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 16,
+                  "type": "array"
+                },
+                "label": {
+                  "anyOf": [
+                    {
+                      "description": "The backup label or snapshot the run produced.",
+                      "maxLength": 128,
+                      "type": "string",
+                      "untrusted": true
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "phases": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "finishedAt": {
+                        "anyOf": [
+                          {
+                            "description": "RFC 3339 UTC timestamp ending in Z.",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "name": {
+                        "enum": [
+                          "restore",
+                          "recover",
+                          "verify",
+                          "stop"
+                        ],
+                        "type": "string"
+                      },
+                      "outcome": {
+                        "enum": [
+                          "running",
+                          "passed",
+                          "failed"
+                        ],
+                        "type": "string"
+                      },
+                      "startedAt": {
+                        "description": "RFC 3339 UTC timestamp ending in Z.",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "startedAt",
+                      "finishedAt",
+                      "outcome"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 8,
+                  "type": "array"
+                },
+                "port": {
+                  "anyOf": [
+                    {
+                      "maximum": 55499,
+                      "minimum": 55400,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "recoveryReachedAt": {
+                  "anyOf": [
+                    {
+                      "description": "RFC 3339 UTC timestamp ending in Z.",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "recoveryReachedLsn": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[0-9A-F]{1,8}\\/[0-9A-F]{1,8}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "timeline": {
+                  "anyOf": [
+                    {
+                      "maximum": 9007199254740991,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "verifyErrors": {
+                  "anyOf": [
+                    {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "label",
+                "verifyErrors",
+                "recoveryReachedLsn",
+                "recoveryReachedAt",
+                "timeline",
+                "port",
+                "checks",
+                "phases"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "bytes": {
+                  "anyOf": [
+                    {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "percent": {
+                  "anyOf": [
+                    {
+                      "maximum": 100,
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "percent",
+                "bytes"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "purpose": {
+          "anyOf": [
+            {
+              "enum": [
+                "backup",
+                "verify",
+                "expire",
+                "restore",
+                "reverify"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "runId": {
+          "pattern": "^run_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+          "type": "string"
+        },
+        "startArgsHash": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "startJobId": {
+          "anyOf": [
+            {
+              "pattern": "^job_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "startedAt": {
+          "anyOf": [
+            {
+              "description": "RFC 3339 UTC timestamp ending in Z.",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "enum": [
+            "starting",
+            "running",
+            "succeeded",
+            "failed",
+            "canceled",
+            "lost",
+            "not_found"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "runId",
+        "found",
+        "startJobId",
+        "startArgsHash",
+        "purpose",
+        "state",
+        "startedAt",
+        "finishedAt",
+        "exitCode",
+        "progress",
+        "excerpt",
+        "outcome"
       ],
       "type": "object"
     },
@@ -4678,6 +5979,65 @@
       ],
       "type": "object"
     },
+    "NodeRestoreTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]{8}-[0-9]{6}F(_[0-9]{8}-[0-9]{6}[DI])?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lsn": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9A-F]{1,8}\\/[0-9A-F]{1,8}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "time": {
+          "anyOf": [
+            {
+              "description": "RFC 3339 UTC timestamp ending in Z.",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "maximum": 1000000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "time",
+        "lsn",
+        "timeline"
+      ],
+      "type": "object"
+    },
     "NodeRoleAttributes": {
       "additionalProperties": false,
       "description": "null leaves an attribute as it is. SUPERUSER is never set by a capability.",
@@ -4985,6 +6345,96 @@
         "$ref": "#/$defs/NodeCapAgentDiagnosticsResult"
       },
       "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
+    },
+    "backup.expire@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapBackupExpireArgs"
+      },
+      "effectStep": "start_run",
+      "kind": "apply",
+      "major": 1,
+      "name": "backup.expire",
+      "path": "helper",
+      "reconcile": "idempotent",
+      "reloadStep": null,
+      "result": {
+        "$ref": "#/$defs/NodeCapRunStartedResult"
+      },
+      "runSeconds": 120,
+      "sealedFields": [],
+      "settleSeconds": 95
+    },
+    "backup.list@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapBackupListArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "backup.list",
+      "path": "helper",
+      "reconcile": "none",
+      "reloadStep": null,
+      "result": {
+        "$ref": "#/$defs/NodeCapBackupListResult"
+      },
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
+    },
+    "backup.run@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapBackupRunArgs"
+      },
+      "effectStep": "start_run",
+      "kind": "apply",
+      "major": 1,
+      "name": "backup.run",
+      "path": "helper",
+      "reconcile": "observable",
+      "reloadStep": null,
+      "result": {
+        "$ref": "#/$defs/NodeCapRunStartedResult"
+      },
+      "runSeconds": 120,
+      "sealedFields": [],
+      "settleSeconds": 95
+    },
+    "backup.timers@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapBackupTimersArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "backup.timers",
+      "path": "helper",
+      "reconcile": "none",
+      "reloadStep": null,
+      "result": {
+        "$ref": "#/$defs/NodeCapBackupTimersResult"
+      },
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
+    },
+    "backup.verify@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapBackupVerifyArgs"
+      },
+      "effectStep": "start_run",
+      "kind": "apply",
+      "major": 1,
+      "name": "backup.verify",
+      "path": "helper",
+      "reconcile": "idempotent",
+      "reloadStep": null,
+      "result": {
+        "$ref": "#/$defs/NodeCapRunStartedResult"
+      },
+      "runSeconds": 120,
       "sealedFields": [],
       "settleSeconds": 95
     },
@@ -5420,6 +6870,114 @@
       "reloadStep": null,
       "result": {
         "$ref": "#/$defs/NodeCapTlsRotateResult"
+      },
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
+    },
+    "restore.discard@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapRestoreDiscardArgs"
+      },
+      "effectStep": "remove_scratch",
+      "kind": "apply",
+      "major": 1,
+      "name": "restore.discard",
+      "path": "helper",
+      "reconcile": "idempotent",
+      "reloadStep": null,
+      "result": {
+        "$ref": "#/$defs/NodeCapRestoreDiscardResult"
+      },
+      "runSeconds": 720,
+      "sealedFields": [],
+      "settleSeconds": 635
+    },
+    "restore.execute@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapRestoreExecuteArgs"
+      },
+      "effectStep": "start_run",
+      "kind": "apply",
+      "major": 1,
+      "name": "restore.execute",
+      "path": "helper",
+      "reconcile": "observable",
+      "reloadStep": null,
+      "result": {
+        "$ref": "#/$defs/NodeCapRunStartedResult"
+      },
+      "runSeconds": 120,
+      "sealedFields": [],
+      "settleSeconds": 95
+    },
+    "restore.prepare@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapRestorePrepareArgs"
+      },
+      "effectStep": null,
+      "kind": "plan",
+      "major": 1,
+      "name": "restore.prepare",
+      "path": "helper",
+      "reconcile": "none",
+      "reloadStep": null,
+      "result": {
+        "$ref": "#/$defs/NodeCapRestorePrepareResult"
+      },
+      "runSeconds": 300,
+      "sealedFields": [],
+      "settleSeconds": 95
+    },
+    "restore.verify@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapRestoreVerifyArgs"
+      },
+      "effectStep": "start_run",
+      "kind": "apply",
+      "major": 1,
+      "name": "restore.verify",
+      "path": "helper",
+      "reconcile": "idempotent",
+      "reloadStep": null,
+      "result": {
+        "$ref": "#/$defs/NodeCapRunStartedResult"
+      },
+      "runSeconds": 120,
+      "sealedFields": [],
+      "settleSeconds": 95
+    },
+    "run.cancel@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapRunCancelArgs"
+      },
+      "effectStep": "stop_run",
+      "kind": "apply",
+      "major": 1,
+      "name": "run.cancel",
+      "path": "helper",
+      "reconcile": "observable",
+      "reloadStep": null,
+      "result": {
+        "$ref": "#/$defs/NodeCapRunCancelResult"
+      },
+      "runSeconds": 120,
+      "sealedFields": [],
+      "settleSeconds": 95
+    },
+    "run.status@1": {
+      "args": {
+        "$ref": "#/$defs/NodeCapRunStatusArgs"
+      },
+      "effectStep": null,
+      "kind": "read",
+      "major": 1,
+      "name": "run.status",
+      "path": "helper",
+      "reconcile": "none",
+      "reloadStep": null,
+      "result": {
+        "$ref": "#/$defs/NodeCapRunStatusResult"
       },
       "runSeconds": 300,
       "sealedFields": [],

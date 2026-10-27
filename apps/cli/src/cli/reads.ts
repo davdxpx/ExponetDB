@@ -1,7 +1,15 @@
 import type { OperationId, Operations } from '@exponetdb/sdk'
 import { countLine, header } from '../output/format.ts'
 import { type Block, type Column, type CommandResult, result } from '../output/model.ts'
-import { collect, LIST_FLAGS, type ListId, listingFailure } from './lists.ts'
+import {
+  type ArrayField,
+  collect,
+  collectField,
+  type ElementOf,
+  LIST_FLAGS,
+  type ListId,
+  listingFailure,
+} from './lists.ts'
 import { must } from './remote.ts'
 import type { CommandInput, CommandSpec, FlagSpec, Remote } from './types.ts'
 
@@ -68,6 +76,107 @@ export function listCommand<Id extends ListId>(spec: ListSpec<Id>): CommandSpec 
           blocks,
           next:
             listing.nextCursor === null ? [] : [`exponetdb ${name} --cursor ${listing.nextCursor}`],
+        })
+      )
+    },
+  }
+}
+
+/**
+ * A paged read whose items are in a named field next to facts of the whole
+ * answer (`clusters` of the backup overview, `backups` of a cluster's
+ * catalog, `runs`, `drills`, `restores`): the facts of the first page come
+ * before the table, the JSON output carries them with every item asked for.
+ */
+export interface FieldListSpec<
+  Id extends keyof Operations,
+  K extends ArrayField<Operations[Id]['response']>,
+> extends ReadBase {
+  readonly operation: Id
+  readonly field: K
+  readonly noun: string
+  readonly params?: (input: CommandInput) => Operations[Id]['params']
+  readonly query?: (input: CommandInput) => Record<string, unknown>
+  readonly columns: readonly Column[]
+  readonly row: (item: ElementOf<Operations[Id]['response'], K>, now: number) => readonly string[]
+  readonly empty?: string
+  /** The largest page the route serves (default 200). */
+  readonly pageMax?: number
+  /** Blocks from the first page's facts, shown before the table. */
+  readonly facts?: (first: Operations[Id]['response'], now: number) => readonly Block[]
+}
+
+export function fieldListCommand<
+  Id extends keyof Operations,
+  K extends ArrayField<Operations[Id]['response']>,
+>(spec: FieldListSpec<Id, K>): CommandSpec {
+  const {
+    operation,
+    field,
+    noun,
+    params,
+    query,
+    columns,
+    row,
+    empty,
+    pageMax,
+    facts,
+    title,
+    ...rest
+  } = spec
+  return {
+    ...rest,
+    flags: [...(rest.flags ?? []), ...LIST_FLAGS],
+    locality: 'remote',
+    effect: 'read',
+    async run(ctx, input): Promise<CommandResult> {
+      const remote = await ctx.remote()
+      const listing = await collectField(
+        remote,
+        operation,
+        params?.(input),
+        query?.(input) ?? {},
+        input.flags,
+        field,
+        pageMax,
+      )
+      const now = ctx.io.now()
+      const name = rest.path.join(' ')
+      const blocks: Block[] = [
+        header(title, remote.context),
+        ...(listing.first === undefined || facts === undefined ? [] : facts(listing.first, now)),
+        {
+          kind: 'table',
+          columns,
+          rows: listing.items.map((i) => row(i, now)),
+          empty: empty ?? `No ${noun}s you may read.`,
+        },
+        countLine(listing.items.length, noun, listing.partial),
+      ]
+      const data =
+        listing.first === undefined
+          ? undefined
+          : {
+              ...(listing.first as object),
+              [field]: listing.items,
+              nextCursor: listing.nextCursor,
+              ...(listing.partial ? { partial: true } : {}),
+            }
+      const words = (rest.args ?? []).flatMap((a) => {
+        const v = input.args[a.name]
+        return typeof v === 'string' ? [v] : []
+      })
+      return (
+        listingFailure(name, listing, { blocks, ...(data === undefined ? {} : { data }) }) ??
+        result({
+          command: name,
+          items: listing.items,
+          ...(data === undefined ? {} : { data }),
+          blocks,
+          next:
+            listing.nextCursor === null
+              ? []
+              : [`exponetdb ${[name, ...words].join(' ')} --cursor ${listing.nextCursor}`],
         })
       )
     },

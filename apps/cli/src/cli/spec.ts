@@ -20,6 +20,7 @@ export const GROUP_TITLES: Record<Group, string> = {
   operation: 'Operations',
   approval: 'Approvals',
   diagnose: 'Diagnostics',
+  backup: 'Backups and restores',
   access: 'Access and audit',
   dev: 'Local test lab',
   secrets: 'Local secret utilities',

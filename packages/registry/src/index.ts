@@ -1,3 +1,5 @@
+/** The keyring type the connector and the excused-value key take (from the secrets package). */
+export type { Keyring } from '@exponetdb/secrets'
 export {
   applyRegistryPlan,
   type RegistryAcceptContext,
@@ -53,6 +55,11 @@ export {
   registrationRefused,
 } from './errors.ts'
 export {
+  EXCUSED_VALUE_KEY_PURPOSE,
+  type ExcusedValueKey,
+  excusedValueKey,
+} from './excused-value-key.ts'
+export {
   activeExceptions,
   ExecutionRoleBindingSetKind,
   ExecutionRoleExceptionDeclareKind,
@@ -76,6 +83,7 @@ export {
   refusalOf,
 } from './kind-base.ts'
 export {
+  ClusterAdoptAgentKind,
   ClusterConfirmKind,
   ClusterDeclareTierKind,
   ClusterRegisterKind,
@@ -95,7 +103,10 @@ export {
   TargetStateKind,
 } from './kinds.ts'
 export {
+  type AdoptionNode,
+  adoptionNode,
   observeClusterIdentity,
+  planClusterAdoptAgent,
   planClusterConfirm,
   planClusterDeclareTier,
   planClusterRegister,
@@ -115,6 +126,7 @@ export {
   planTargetRegister,
   planTargetStateChange,
   type RegistryPlanContext,
+  storeRegistryPlan,
 } from './plans.ts'
 export {
   evaluateRegistryPolicy,

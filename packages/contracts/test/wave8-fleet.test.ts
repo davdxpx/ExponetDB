@@ -153,7 +153,12 @@ describe('the findings across targets', () => {
     expect(ok({ target: 'acme/platform/staging' })).toBe(true)
     expect(ok({ severity: 'fatal' })).toBe(false)
     expect(ok({ state: 'closed' })).toBe(false)
-    expect(ok({ kind: 'advisor' })).toBe(false)
+    // Wave 9 Part B, additive: the advisor and statement findings join the list; others stay refused.
+    expect(ok({ kind: 'advisor' })).toBe(true)
+    expect(ok({ kind: 'statements', code: 'statement_regression' })).toBe(true)
+    expect(ok({ kind: 'backup' })).toBe(false)
+    expect(ok({ kind: 'certificate' })).toBe(false)
+    expect(ok({ code: 'Not A Code' })).toBe(false)
     expect(ok({ limit: 201 })).toBe(false)
     expect(ok({ limit: 0 })).toBe(false)
     expect(ok({ includeResolved: true })).toBe(false)

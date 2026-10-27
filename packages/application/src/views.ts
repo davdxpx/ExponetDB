@@ -42,6 +42,20 @@ function cls(value: string): ActionClass {
   throw new ViewError('action class')
 }
 
+/**
+ * A backup plan's content without the repository's location (endpoint, region, bucket, prefix):
+ * a plan is readable by more people than may see where the backups are (`registry.manage`).
+ */
+const LOCATION_MEMBERS = new Set(['endpointHost', 'region', 'bucket', 'prefix', 'location'])
+function withoutLocation(content: JsonValue): JsonValue {
+  if (!isJsonObject(content)) return content
+  return Object.fromEntries(
+    Object.entries(content)
+      .filter(([key]) => !LOCATION_MEMBERS.has(key))
+      .map(([key, value]) => [key, isJsonObject(value) ? withoutLocation(value) : value]),
+  )
+}
+
 export function requirementsOf(plan: PlanRecord): PlanView['requirements'] {
   const policy = plan.body['policy']
   const list = isJsonObject(policy) ? policy['requirements'] : undefined
@@ -151,9 +165,18 @@ export async function planView(q: Queryable, plan: PlanRecord): Promise<PlanView
       // Wave 8: a drift acceptance names finding ids, fingerprints and the person's reason, never catalog text.
       kind.startsWith('drift.') ||
       // The role and the stored verifier's id, never the verifier (owner decision S3).
-      kind === 'postgres.roles.verifier.set') &&
+      kind === 'postgres.roles.verifier.set' ||
+      // Wave 9 Part B: ids, labels and the data-loss window; the repository's location is
+      // withheld here as in every read (review finding F-1), never a credential.
+      kind.startsWith('backup.') ||
+      kind.startsWith('restore.')) &&
     content !== undefined
-      ? { change: { content, analysis: analysis ?? null } }
+      ? {
+          change: {
+            content: kind.startsWith('backup.') ? withoutLocation(content) : content,
+            analysis: analysis ?? null,
+          },
+        }
       : {}),
     ...(kind.startsWith('migration.') || kind.startsWith('drift.')
       ? { policyRules: policyRulesOf(policy) }

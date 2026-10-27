@@ -133,6 +133,12 @@ func Refine(key string, args canon.Object) error {
 				return fail("/steps/"+strconv.Itoa(i), "create needs a schema; update takes none")
 			}
 		}
+	case "restore.prepare@1", "restore.execute@1":
+		// RestoreTargetSchema: at most one of time and lsn.
+		target, _ := args.Get("target")
+		if t, ok := target.(canon.Object); ok && present(t, "time") && present(t, "lsn") {
+			return fail("/target", "at most one of time and lsn")
+		}
 	case "log.inspect@2":
 		if (str(args, "source") == "postgresql") != present(args, "cluster") {
 			return fail("/cluster", "postgresql logs need a cluster; agent and helper logs take none")

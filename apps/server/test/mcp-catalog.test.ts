@@ -52,27 +52,31 @@ const SHAPES: Record<string, { scopes: Scope[]; tiers: Tier[] }> = {
 // its six types, the portability findings of Inspector 2.10.1 `--strict`. Re-pinned
 // after the Wave 7 review: output maxLength relaxed: escaping can lengthen a value.
 // Re-pinned 2026-10-13: drift_check, migration_verify and audit_search at toolVersion 2
-// (descriptions say what each records, enforces and audits).
+// (descriptions say what each records, enforces and audits). Re-pinned 2026-10-27
+// (Wave 9 Part B): query_stats, table_stats and advisors_run are served (diagnostics.read).
+// Re-pinned after the Wave 9 Part B reviews: advisors_run says it records its run and
+// findings (F-4) and marks message and remediation untrusted (D-2); backups_list names
+// wal_continuity_unproven (A-4). Both version-1 digests are new on this branch, not released.
 const PINNED: Record<string, { tools: number; digest: string }> = {
   'baseline, nonprod': {
-    tools: 12,
-    digest: 'sha256:e6bd6ded2baaa9f01fcbff015be3e83d01d89578585f1cfc189aa0b0fd04aaca',
+    tools: 15,
+    digest: 'sha256:85e86997c0f21464c661b95fc96ac93056ebe1bd71b4cece33e2e2b7c57c52f3',
   },
   'every read, nonprod': {
-    tools: 16,
-    digest: 'sha256:fc23ce07625017afeb9457f81612409cb282963cf459f6c80bb6b27b9545cf2c',
+    tools: 19,
+    digest: 'sha256:a6064f84ceaded0e8518fe4007c51e45f772ce15ac0c5b4dec57aa13b67ddbd6',
   },
   'agent, nonprod': {
-    tools: 22,
-    digest: 'sha256:ab335193f6508b14aee2fe19797899044bd44e7dd8e8578f05d38f3cdf8144cb',
+    tools: 25,
+    digest: 'sha256:86d228489c20d0c006726279545ba127b2a7169e451927c41b5e316639b36350',
   },
   'agent, both tiers': {
-    tools: 23,
-    digest: 'sha256:1baddcf9cfd0163d9e3d67397f7a46401091d6563a805c97bb76c6583bf3c5cc',
+    tools: 26,
+    digest: 'sha256:057e2be516263f5219ae044f85a631cec97a365c494f6afbb14ecbee3e68d9f2',
   },
   'data reader, nonprod': {
-    tools: 19,
-    digest: 'sha256:b18128f749e46965fcf0e961d461a468b298af8ad6d7174704f75073b5813e83',
+    tools: 22,
+    digest: 'sha256:3b43b1d8bd4ec528e7e9f7ca98a3d6e9359e615bd9d7bff901d46792c1718568',
   },
 }
 

@@ -115,7 +115,7 @@ export function runWorker(config: WorkerConfig, hooks: Hooks = {}): Promise<numb
       return workerChecks(ctx)
     },
     loops: async (services, runtime) => {
-      const kinds = workerKinds(services, runtime, config.installationId)
+      const kinds = workerKinds(services, runtime, config.installationId, config.backupExecution)
       const observation = workerObservation(
         {
           store: services.store,

@@ -706,6 +706,26 @@ the server providers of the contract": every contract value is accepted, a
 near miss such as `hetzner`, `linode` or `Hetzner_Cloud` is `23514`, and
 `serve` cannot insert; and the upgrade through every bundle).
 
+**[DECIDED]** (OD-56 (a), Wave 9 Part B order of 2026-10-26; bundle
+`01M5X840BP8JXGEQGS0PHPTB58_excused-value-digests`, depending on
+`cluster-agent-adoption`, additive, transactional, not frozen) Keyed digests
+of excused values ([`../04-migrations/legacy-import.md` Step 7](../04-migrations/legacy-import.md#step-7-verify)):
+`migrations.excused_value_key` (one row: the `sec_…` id of the
+installation's excused-value key, a worker secret of purpose
+`migrations.excused_value_key`), `migrations.import_value_keys` (per import
+report analyzed with digests, the key version `<secret id>:<version>` it
+used, NULL when no failure of a value needed one) and
+`migrations.import_value_digests` (per report, item and failure identity, a
+SHA-256 of file, statement, kind, object and aspects, the `hmac-sha256:`
+digest of the observed value). No value and no key material is stored. A
+trigger (`EXO12`) refuses every change and delete. Rights: `exdb_worker`
+`SELECT` and `INSERT` on the three; `exdb_serve` `SELECT` on
+`import_value_keys` only (planning a baseline asks whether a report has
+digests), never a digest or the key's secret id. Tests:
+`packages/migrations-engine/test/legacy-baseline-verify.int.test.ts`
+("excused values (OD-56 (a))"), `packages/control-store/test/registry-schema.int.test.ts`
+(the upgrade through every bundle).
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

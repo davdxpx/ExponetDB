@@ -93,10 +93,11 @@ A8). The walkthrough with commands and expected outputs is
    as in §2.1, minus node capabilities (every node capability on an
    external cluster is `CAPABILITY_UNAVAILABLE`).
 
-**[OPEN: OD-54]** How a cluster registered external later gains the node
-agent ([open-decisions.md](../00-product/open-decisions.md#od-54-how-an-external-cluster-gains-the-node-agent)).
-As built, an enrolled node on the same host does not change the record:
-node capabilities stay unavailable for it.
+**[DECIDED]** (OD-54 option (a), the owner's Wave 9 Part B order of
+2026-10-26) A cluster registered external later gains the node agent only
+through the one-way operation `registry.cluster.adopt_agent` (§4.5). An
+enrolled node on the same host does not change the record by itself: until
+the adoption is applied, node capabilities stay unavailable for it.
 
 ### 2.3 Implementation (Wave 4)
 
@@ -415,6 +416,64 @@ would be its own hosting operation and is not part of ExponetDB.
   (confirmation refuses its system identifier), so no target, database or
   backup of it is ever managed; retiring a pending registration that
   points at it changes nothing outside the registry.
+
+### 4.5 Adopting an external cluster by the node agent
+
+**[DECIDED]** (OD-54 option (a), the owner's Wave 9 Part B order of
+2026-10-26, §1 item 3; [open-decisions.md](../00-product/open-decisions.md#od-54-how-an-external-cluster-gains-the-node-agent))
+The only state change of a cluster's `management_mode`: `external → agent`,
+once, never back. The walkthrough is
+[`onboard-external-cluster.md` §7](../12-operations/onboard-external-cluster.md#7-adopting-the-cluster-by-the-node-agent).
+
+- **The operation.** `registry.cluster.adopt_agent` (plan
+  `POST /clusters/{id}/agent-adoption`, CLI none yet, no MCP tool), class
+  `high`, human only, `registry.manage` at the **production** registry tier
+  whatever the cluster's tier (an undeclared cluster included), a fresh
+  re-authentication at apply, audited (`registry.cluster.adopt_agent` with
+  the node, the server, the local instance and the mode and server before
+  and after). The rule `registry.cluster-adopt-agent-approval` adds a human
+  approval unless the cluster is declared `nonprod` and hosts no production
+  target (an undeclared cluster's tier is unknown and needs it). The
+  request carries `acknowledgeOneWay: true` and, optionally, the node.
+- **Preconditions** (checked at plan, at acceptance, at the start and again
+  under the row locks; the plan fails `PLAN_STALE` when any of them moved).
+  The cluster is `active` and `external` (`cluster_not_external`,
+  `cluster_not_confirmed`, `cluster_retired`). The node is enrolled and live:
+  `active` or `degraded` with a heartbeat within four intervals
+  (`node_not_served`); it is the node of the cluster's server, or, for a
+  cluster registered without a server, the one live node that reports the
+  cluster, whose server becomes the cluster's (`cluster_unmapped` for a node
+  of another server or none). Its last report (`hello`) names the cluster's
+  `system_identifier`, pinned at confirmation, **exactly once**
+  (`cluster_unmapped` for none, `cluster_ambiguous` for more: a standby or a
+  copied data directory on the host, or two hosts that claim the cluster).
+- **Bindings.** The plan binds the cluster's mode, state, pinned
+  `system_identifier` and server, and the node, its server and the reporting
+  local instance (`localName`). The apply locks the cluster row `FOR UPDATE`
+  and the node row `FOR SHARE` before it checks them again.
+- **The write.** `management_mode = agent`, the server (kept, or the node's
+  when the cluster had none), `adopted_at` (database clock),
+  `adopted_by_operation_id` and `adopted_node_id`. Nothing else: the cluster
+  keeps its id, CA bundle, endpoints, credentials, databases and history,
+  and every target keeps its placement, generation and identity marker
+  (asserted by the integration test). Active plans of the cluster's targets
+  stay valid; node capability plans become possible.
+- **Idempotent.** Applying the plan again returns the same operation; a
+  re-run of that operation after its commit writes nothing; a new plan on
+  the adopted cluster is `cluster_not_external`.
+- **The Control Store guard.** Bundle
+  `01M5X840BMQPER7PK6WH64NR2J_cluster-agent-adoption` (additive) replaces
+  the frozen registry bundle's `cluster_guard` with the same rules plus the
+  one admitted change of server and mode: `external → agent` on an active
+  cluster, by an operation of the kind `registry.cluster.adopt_agent` (one
+  operation adopts one cluster), onto the cluster's own server or, when it
+  had none, the node's, with the server active and the node enrolled, live
+  on that server and reporting the pinned `system_identifier` exactly once
+  (server and node rows locked `FOR SHARE`). `agent → external`, a second
+  adoption, a server change and any direct update are refused (`EXG07`);
+  only `exdb_worker` may write the columns.
+- Tests: `packages/registry/test/cluster-adopt-agent.int.test.ts` (real
+  PostgreSQL), `packages/policy/test/registry-rules.test.ts`.
 
 ## 5. Registry and REOSA's infrastructure register
 

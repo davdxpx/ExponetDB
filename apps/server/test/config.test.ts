@@ -130,6 +130,26 @@ describe('Wave 3A authentication configuration', () => {
     ).toEqual([{ variable: 'EXPONETDB_OAUTH_CLIENT_REGISTRATION', reason: 'invalid' }])
   })
 
+  it('keeps backup and restore runs off unless turned on, and refuses an unknown value (Wave 9 Part B)', () => {
+    expect(serveConfig(serveBase).backupExecution).toEqual({
+      backups: 'disabled',
+      restores: 'disabled',
+    })
+    expect(
+      serveConfig({
+        ...serveBase,
+        EXPONETDB_BACKUP_EXECUTION: 'nonprod',
+        EXPONETDB_RESTORE_EXECUTION: 'scratch',
+      }).backupExecution,
+    ).toEqual({ backups: 'nonprod', restores: 'scratch' })
+    expect(
+      problems(() => serveConfig({ ...serveBase, EXPONETDB_BACKUP_EXECUTION: 'yes' })),
+    ).toEqual([{ variable: 'EXPONETDB_BACKUP_EXECUTION', reason: 'invalid' }])
+    expect(
+      problems(() => serveConfig({ ...serveBase, EXPONETDB_RESTORE_EXECUTION: 'everything' })),
+    ).toEqual([{ variable: 'EXPONETDB_RESTORE_EXECUTION', reason: 'invalid' }])
+  })
+
   it('the auth operator commands use the serve login and the public origin', () => {
     expect(
       authOperatorConfig({

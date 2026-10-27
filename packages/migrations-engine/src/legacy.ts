@@ -46,7 +46,9 @@ import {
   survivingExpectations,
 } from '@exponetdb/postgres/parser'
 import {
+  type ExcusedValueKey,
   evaluateRegistryPolicy,
+  excusedValueKey,
   findTarget,
   operationActor,
   type RegistryActor,
@@ -83,12 +85,20 @@ import { revisionsOf, type StoredRevision } from './store.ts'
 import { ledgerHashOf, type ManagedScope } from './target.ts'
 import { keptFailures, type Layer, type VerificationRun } from './verification.ts'
 import {
+  clusterGlobalDigests,
   clusterGlobalFailures,
+  clusterGlobalValueDigest,
   type ExpectationFailure,
   excusedBy,
+  excusedValue,
   failuresOf,
+  isValueFailure,
+  type RecordedValues,
+  structuralDigests,
   structuralFailures,
+  structuralValueDigest,
   unreadableFailure,
+  valueKeyOf,
 } from './verification-failures.ts'
 
 /**
@@ -311,6 +321,40 @@ interface ItemRecord {
     readonly decidedAt: string
     readonly decidedBy: string
   } | null
+}
+
+/**
+ * What the analysis recorded for a report's values (OD-56 (a)): the key
+ * version (`undefined`: analyzed before digests were recorded) and, with
+ * `digests`, the digests themselves (the worker only; serve never reads one).
+ */
+async function readRecordedValues(
+  q: Queryable,
+  reportId: string,
+  options: { readonly digests: boolean },
+): Promise<RecordedValues> {
+  const key = await q.query(
+    'migrations.import.value_key.read',
+    'SELECT key_ref FROM migrations.import_value_keys WHERE report_id = $1',
+    [reportId],
+  )
+  const row = key.rows[0]
+  if (row === undefined) return { keyRef: undefined, digests: new Map() }
+  const digests = new Map<number, Map<string, string>>()
+  if (options.digests) {
+    const { rows } = await q.query(
+      'migrations.import.value_digests.read',
+      'SELECT item_id, failure, digest FROM migrations.import_value_digests WHERE report_id = $1',
+      [reportId],
+    )
+    for (const r of rows) {
+      const item = r.int('item_id')
+      const byItem = digests.get(item) ?? new Map<string, string>()
+      byItem.set(r.text('failure'), r.text('digest'))
+      digests.set(item, byItem)
+    }
+  }
+  return { keyRef: row.textOrNull('key_ref'), digests }
 }
 
 async function readItems(q: Queryable, reportId: string): Promise<ItemRecord[]> {
@@ -960,6 +1004,11 @@ interface Classified {
   readonly strength: EvidenceStrength | null
   /** The surviving expectations that did not hold (files; `null` for other items). */
   readonly failing: readonly ExpectationFailure[] | null
+  /**
+   * OD-56 (a): per failure of a value (its identity), the keyed digest of
+   * the value observed; never shown, written to `migrations.import_value_digests`.
+   */
+  readonly valueDigests?: ReadonlyMap<string, string>
 }
 
 /** How many of an item's failing expectations the report shows (all are kept). */
@@ -1194,6 +1243,8 @@ async function classify(
   unreadable: readonly string[],
   hints: Hints,
   searchPath: readonly string[],
+  /** OD-56 (a): the excused-value key; without it no value is digested (the caller fails closed). */
+  key: ExcusedValueKey | undefined,
 ): Promise<Classified[]> {
   const out: Classified[] = []
   const { related, used, contested, contradicted, namesOther } = relateLedger(chain, ledger, hints)
@@ -1234,6 +1285,7 @@ async function classify(
     // cluster-global (legacy-import.md §2.4).
     let state: ImportItemState
     const failing: ExpectationFailure[] = []
+    const valueDigests = new Map<string, string>()
     if (a.noStatements) {
       evidence.push('no_statements')
       state = recorded ? 'recorded_present' : 'unrecorded_present'
@@ -1250,7 +1302,11 @@ async function classify(
       if (a.surviving.length > 0) {
         const results = await guarded(reader, async () => {
           await pinSearchPath(reader, searchPath)
-          return checkExpectations(reader, a.surviving)
+          return checkExpectations(
+            reader,
+            a.surviving,
+            key === undefined ? {} : structuralValueDigest(stem, key.digest),
+          )
         })
         if (results === undefined) {
           evidence.push('expectations_unreadable')
@@ -1260,6 +1316,7 @@ async function classify(
           const ok = results.filter((r) => r.ok).length
           evidence.push(`expectations_held:${ok}/${results.length}`)
           failing.push(...structuralFailures(stem, results))
+          for (const [k, v] of structuralDigests(stem, results)) valueDigests.set(k, v)
           held += ok
           total += results.length
         }
@@ -1267,7 +1324,11 @@ async function classify(
       let globalsHold = true
       if (a.survivingGlobals.length > 0) {
         const results = await guarded(reader, () =>
-          checkClusterGlobalExpectations(reader, a.survivingGlobals),
+          checkClusterGlobalExpectations(
+            reader,
+            a.survivingGlobals,
+            key === undefined ? {} : clusterGlobalValueDigest(stem, key.digest),
+          ),
         )
         if (results === undefined) {
           evidence.push('cluster_global_unreadable')
@@ -1282,6 +1343,7 @@ async function classify(
           const ok = applied.filter((r) => r.ok).length
           if (applied.length > 0) evidence.push(`cluster_global_held:${ok}/${applied.length}`)
           failing.push(...clusterGlobalFailures(stem, results))
+          for (const [k, v] of clusterGlobalDigests(stem, results)) valueDigests.set(k, v)
           globalsHold = ok === applied.length
           held += ok
           total += applied.length
@@ -1344,6 +1406,7 @@ async function classify(
       evidence: cappedEvidence(evidence),
       strength,
       failing,
+      ...(valueDigests.size === 0 ? {} : { valueDigests }),
     })
   }
   for (const e of ledger) {
@@ -1502,6 +1565,8 @@ export class ImportReplayKind implements OperationKind {
           readonly items: readonly Classified[]
           readonly driftTotal: number
           readonly driftHeld: number
+          /** OD-56 (a): the key version of the digests; null when no value needed one. */
+          readonly keyRef: string | null
         },
     operationId: string,
   ): Promise<void> {
@@ -1539,6 +1604,22 @@ export class ImportReplayKind implements OperationKind {
             item.failing === null ? null : JSON.stringify(item.failing),
           ],
         )
+      }
+      // OD-56 (a): the report was analyzed with digests, under this key version.
+      await tx.query(
+        'migrations.import.value_key',
+        'INSERT INTO migrations.import_value_keys (report_id, key_ref) VALUES ($1, $2)',
+        [reportId, result.keyRef],
+      )
+      for (const [i, item] of result.items.entries()) {
+        for (const [failure, digest] of item.valueDigests ?? []) {
+          await tx.query(
+            'migrations.import.value_digest',
+            `INSERT INTO migrations.import_value_digests (report_id, item_id, failure, digest)
+             VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+            [reportId, i + 1, failure, digest],
+          )
+        }
       }
       await tx.query(
         'migrations.import.open',
@@ -1735,6 +1816,16 @@ export class ImportReplayKind implements OperationKind {
         }
       }
       const replay = await session.readOnly((rtx) => snapshotWithin(rtx, scopeOf(scope)))
+      // OD-56 (a): the excused-value key (created on first use); without it, a failure of a
+      // value cannot be bound to what the analysis saw, and the report stays incomplete.
+      const valueKey = await excusedValueKey(
+        this.#deps.store,
+        this.#deps.keyring,
+        this.#deps.clock,
+        {
+          create: true,
+        },
+      )
       try {
         // The imported target is only read.
         const observed = await this.#deps.connector.forTarget(
@@ -1756,6 +1847,7 @@ export class ImportReplayKind implements OperationKind {
                 ledgers.unreadable,
                 c.hints,
                 c.searchPath,
+                valueKey,
               )
               // In file order: the skipped files as not applicable, then the ledger entries.
               const byStem = new Map(
@@ -1790,6 +1882,21 @@ export class ImportReplayKind implements OperationKind {
             )
             return 'applied'
           }
+          const unkeyed = result.items.some((i) =>
+            (i.failing ?? []).some(
+              (f) => isValueFailure(f) && !(i.valueDigests?.has(valueKeyOf(f)) ?? false),
+            ),
+          )
+          if (unkeyed) {
+            await this.#finish(
+              fence,
+              c.reportId,
+              { state: 'incomplete', reason: 'excused_value_key_unavailable' },
+              ctx.operationId,
+            )
+            return 'applied'
+          }
+          const keyed = result.items.some((i) => (i.valueDigests?.size ?? 0) > 0)
           const drift = driftItems(replay.document, result.snapshot.document)
           await this.#finish(
             fence,
@@ -1801,6 +1908,7 @@ export class ImportReplayKind implements OperationKind {
               items: [...result.items, ...drift.items],
               driftTotal: drift.total,
               driftHeld: drift.items.length,
+              keyRef: keyed ? (valueKey?.keyRef ?? null) : null,
             },
             ctx.operationId,
           )
@@ -1997,6 +2105,15 @@ export async function planBaseline(
   ).length
   if (unrecorded > 0) {
     throw new MigrationError('LEGACY_IMPORT_ANALYSIS_OUTDATED', { items: unrecorded })
+  }
+  // OD-56 (a): a report analyzed before the values of its failures were digested: accepting
+  // a failure of a value would excuse whatever value it holds later. Only a baseline recorded
+  // before keeps that rule.
+  if ((await readRecordedValues(tx, reportId, { digests: false })).keyRef === undefined) {
+    const undigested = items.filter((i) => (i.failing ?? []).some(isValueFailure)).length
+    if (undigested > 0) {
+      throw new MigrationError('LEGACY_IMPORT_ANALYSIS_OUTDATED', { items: undigested })
+    }
   }
   const unresolved = unresolvedOf(items)
   if (unresolved.length > 0) {
@@ -2318,6 +2435,13 @@ export async function verifyBaseline(
   const reviewed = reportDigest(files, items) === c.reportDigest
   const byStem = new Map(items.filter((i) => i.kind === 'file').map((i) => [i.name, i]))
   const imported = new Set(c.rows.map((r) => r.name))
+  // OD-56 (a): the digests of the values the analysis saw, and the key to compare them with;
+  // no key (or another version of it) excuses no failure of a value.
+  const recorded = await readRecordedValues(deps.store, c.reportId, { digests: true })
+  const valueKey =
+    recorded.keyRef === undefined || recorded.keyRef === null
+      ? undefined
+      : await excusedValueKey(deps.store, deps.keyring, deps.clock, { create: false })
   const startedAt = new Date().toISOString()
   const opened = await deps.connector.forTarget(target, 'observer', `verify/${operationId}`)
   let fingerprint: string
@@ -2385,37 +2509,66 @@ export async function verifyBaseline(
         // Each file's checks on their own, as in the analysis: a check that raises (a schema
         // the observer may not use) is that file's failure, never the run's error.
         const found: ExpectationFailure[] = []
+        const observed = new Map<string, string>()
+        const stem = a.file.stem
         if (a.surviving.length > 0) {
           const structural = await guarded(rtx, async () => {
             await pinSearchPath(rtx, c.searchPath)
-            return checkExpectations(rtx, a.surviving)
+            return checkExpectations(
+              rtx,
+              a.surviving,
+              valueKey === undefined ? {} : structuralValueDigest(stem, valueKey.digest),
+            )
           })
           if (structural === undefined) {
             checked += 1
-            found.push(unreadableFailure(a.file.stem, 'structural'))
+            found.push(unreadableFailure(stem, 'structural'))
           } else {
             checked += structural.length
-            found.push(...structuralFailures(a.file.stem, structural))
+            found.push(...structuralFailures(stem, structural))
+            for (const [k, v] of structuralDigests(stem, structural)) observed.set(k, v)
           }
         }
         if (a.survivingGlobals.length > 0) {
           const globals = await guarded(rtx, () =>
-            checkClusterGlobalExpectations(rtx, a.survivingGlobals),
+            checkClusterGlobalExpectations(
+              rtx,
+              a.survivingGlobals,
+              valueKey === undefined ? {} : clusterGlobalValueDigest(stem, valueKey.digest),
+            ),
           )
           if (globals === undefined) {
             checked += 1
-            found.push(unreadableFailure(a.file.stem, 'cluster_global'))
+            found.push(unreadableFailure(stem, 'cluster_global'))
           } else {
             const applied = globals.filter((r) => r.applies)
             checked += applied.length
-            found.push(...clusterGlobalFailures(a.file.stem, applied))
+            found.push(...clusterGlobalFailures(stem, applied))
+            for (const [k, v] of clusterGlobalDigests(stem, applied)) observed.set(k, v)
           }
         }
         const decision = {
           accepted: item.decision !== null && APPLIED.has(item.decision.state),
           recorded: item.failing,
         }
-        for (const f of found) failures.push({ ...f, excused: excusedBy(decision, f) })
+        for (const f of found) {
+          if (!excusedBy(decision, f)) {
+            failures.push({ ...f, excused: false })
+            continue
+          }
+          // OD-56 (a): an excused failure of a value is excused while it holds the value the
+          // person accepted; another value, another key or no digest fails closed. The aspect
+          // says which, never the value.
+          const held = excusedValue(recorded, item.itemId, f, {
+            keyRef: valueKey?.keyRef ?? null,
+            digest: observed.get(valueKeyOf(f)),
+          })
+          failures.push(
+            held === 'held'
+              ? { ...f, excused: true }
+              : { ...f, failed: [...f.failed, held].slice(0, 16), excused: false },
+          )
+        }
       }
       return { fingerprint: snapshot.fingerprint, unparsed: null }
     }))

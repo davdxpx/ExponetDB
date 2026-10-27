@@ -185,11 +185,11 @@ later without changes).
 | `VERIFICATION_FAILED` | 200 in operation / 409 on sync calls | no | Verification ran and failed; `details.checks[]`. |
 | `VERIFICATION_ERROR` | 409 | yes | Verification could not run (timeout, unreachable). |
 | `SCHEMA_FINGERPRINT_MISMATCH` | 409 | no | Fingerprint differs from expectation outside plan context (drift checks, lineage). Inside plans it surfaces as `PLAN_STALE`. |
-| `LEDGER_DIVERGENCE` | 409 | no | Target ledger and Control Store mirror disagree; schema changes blocked. |
+| `LEDGER_DIVERGENCE` | 409 | no | Target ledger and Control Store mirror disagree; schema changes blocked. **[DECIDED]** (OD-55 (d)) Not the code of the executor's ledger guard: a change an authored statement made to the `exponetdb` schema inside the migration's transaction is rolled back, so nothing diverges; it is `MIGRATION_EXECUTION_FAILED` with the gate `exponetdb_ledger` ([`../04-migrations/planning-and-apply.md` §4.3](../04-migrations/planning-and-apply.md#43-transactional-migration)). |
 | `LEDGER_NOT_INITIALIZED` | 409 | no | Target has no `exponetdb` schema / baseline yet. |
 | `LEGACY_IMPORT_AMBIGUOUS` | 409 | no | Import cannot proceed without human resolution of `details.items[]`. |
 | `LEGACY_IMPORT_TRUNCATED` | 409 | no | The import report holds fewer global drift items than exist (`details.driftTotal`, `details.held`); it never becomes a baseline. Narrow the scope or fix the inputs and analyze again (Wave 9 Part A). |
-| `LEGACY_IMPORT_ANALYSIS_OUTDATED` | 409 | no | The import report was analyzed before the failing expectations of each file were recorded (`details.items`: the file items without them); its decisions would excuse every failure of an accepted file, so it never becomes a baseline. Analyze again (Wave 9 Part A, follow-up 3 review). A baseline already recorded from such a report keeps the legacy rule of [`legacy-import.md` Step 7](../04-migrations/legacy-import.md#step-7-verify). |
+| `LEGACY_IMPORT_ANALYSIS_OUTDATED` | 409 | no | The import report was analyzed before the failing expectations of each file were recorded (`details.items`: the file items without them); its decisions would excuse every failure of an accepted file, so it never becomes a baseline. Analyze again (Wave 9 Part A, follow-up 3 review). A baseline already recorded from such a report keeps the legacy rule of [`legacy-import.md` Step 7](../04-migrations/legacy-import.md#step-7-verify). **[DECIDED]** (OD-56 (a), 2026-10-26) Also for a report analyzed before the keyed digests of its values were recorded, when a file item has a failure of a value (`details.items`: those items). |
 
 ### Evidence and policy
 
@@ -271,6 +271,7 @@ later without changes).
 | `RESTORE_TARGET_MISMATCH` | 409 | no | Destination is not the target named in the plan, or its identity/tier differs. |
 | `RESTORE_SOURCE_INVALID` | 409 | no | Backup missing, incomplete, or WAL range insufficient for the requested point in time. |
 | `RESTORE_FAILED` | 422 | no | |
+| `FEATURE_NOT_ACTIVATED` | 409 | no | Wave 9: backup runs or restores are not activated on this installation for the tier (ADR-0037, ADR-0038); details name the setting and its value |
 
 ### Queries and diagnostics
 

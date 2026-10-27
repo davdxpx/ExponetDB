@@ -149,14 +149,14 @@ describe('the fleet overview', () => {
     }
   })
 
-  it('names backup health as not observed yet in its own small slot, with no number', async () => {
+  it('shows backup health in its own small slot; a failed read is named, with no number', async () => {
     mountApp('/', new World())
     const slot = (await screen.findByRole('heading', { name: 'Backups' })).closest(
       '[data-slot="fleet-backups"]',
     ) as HTMLElement
-    expect(within(slot).getByText('Backup health is not observed yet')).toBeInTheDocument()
-    expect(slot.textContent).toMatch(/Backup health arrives with Wave 9/)
-    expect(slot.textContent).not.toMatch(/[0-9]+ (backups?|at risk)/)
+    // This fake server has no backup overview: the slot says the read failed (test/wave9 covers the rest).
+    expect(await within(slot).findByText('Could not read backup protection')).toBeInTheDocument()
+    expect(slot.querySelector('[data-count]')).toBeNull()
   })
 
   it('shows a part counted long ago as stale, on that card only', async () => {

@@ -124,17 +124,46 @@ describe('served routes (Wave 2 and 4 to 9)', () => {
       .map(({ route }) => route.operationId)
       .sort()
     expect(served).toEqual([
+      // Part B (performance.md, ADR-0036 to ADR-0038): sessions, statistics, advisors, findings, backups and restores.
+      'cancelSessionQuery',
       'checkScratchTarget',
       'checkScratchTargetForFiles',
+      'getBackupOverview',
+      'getBackupPolicy',
       'getClusterRetirement',
+      'getFindingSummary',
       'getProjectExecutionRoles',
+      'getQueryStats',
+      'getRestoreRunbook',
       'getServerRetirement',
+      'getTableStats',
+      'listBackupRepositories',
+      'listBackupRuns',
+      'listClusterBackups',
+      'listClusterFindings',
+      'listDrills',
+      'listRestores',
+      'planBackupPolicy',
+      'planBackupRepositoryAdoption',
+      'planBackupRepositoryOwnership',
+      'planBackupRepositoryRetirement',
+      'planBackupRun',
+      // OD-54 (a): adopting an external cluster by the node agent.
+      'planClusterAgentAdoption',
       'planClusterRetirement',
       'planDatabaseRetirement',
+      'planDrill',
       'planExecutionRoleBindings',
       'planExecutionRoleException',
       'planExecutionRoleExceptionRevocation',
+      'planRestore',
+      'planRestoreDiscard',
       'planServerRetirement',
+      'planSessionTermination',
+      'recordOfflineDrill',
+      'refreshBackupCatalog',
+      'runAdvisors',
+      'verifyBackup',
     ])
     for (const id of served) expect(HANDLERS[id], id).toBeDefined()
   })
@@ -223,11 +252,8 @@ describe('served routes (Wave 2 and 4 to 9)', () => {
         .map((r) => r.operationId)
         .sort(),
     ).toEqual([
-      'getQueryStats',
-      'getTableStats',
-      'listClusterBackups',
+      // Wave 9 follow-up: the ledger reconciliation plan is contracted, not served.
       'planLedgerReconcile',
-      'runAdvisors',
     ])
   })
 })

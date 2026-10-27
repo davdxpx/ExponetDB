@@ -364,6 +364,11 @@ graph TD
   backups --> operations
   backups --> nodes
   backups --> postgres
+  backups --> registry
+  backups --> controlstore
+  backups --> audit
+  backups --> policy
+  backups --> secrets
   diagnostics --> registry
   diagnostics --> postgres
   diagnostics --> nodes
@@ -396,6 +401,14 @@ graph TD
   ui --> icons
   ds[apps/design-system] --> uidata
 ```
+
+**[DECIDED]** (Wave 9 Part B, 2026-10-26) `backups` depends on what `nodes`
+depends on (`registry`, `control-store`, `audit`, `policy`, `secrets`) in
+addition to `operations`, `nodes` and `postgres`: its repositories and
+policies are registry changes of a cluster planned and executed like
+registry kinds, its runs are node jobs, and its records live in the Control
+Store schema `backups`. Nothing depends on `backups` but `application` and
+the server composition.
 
 **[DECIDED]** (Wave 4, recorded as deviation D2 in the
 [G4 gate record](../14-roadmap/gates/4.md)) Four arrows were added when the

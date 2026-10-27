@@ -254,27 +254,21 @@ describe('every read state of the sessions', () => {
 })
 
 describe('cancel and terminate', () => {
-  it('are not buttons; the page names the Wave 9 state', async () => {
+  it('are offered for a picked session, and nothing is sent before a confirmation', async () => {
     const w = world()
     w.sessions = sessionList([
       session({
         pid: 7,
         state: 'active',
+        queryStart: '2026-10-13T08:10:00.000Z',
         statement: { digest: DIGEST, redacted: 'select 1', truncated: false },
       }),
     ])
     mountDiagnostics(PATH, w)
-    expect(
-      await screen.findByRole('heading', {
-        name: 'Session cancel and terminate is not available yet',
-      }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText('Cancel and terminate come as planned operations in Wave 9.'),
-    ).toBeInTheDocument()
     await screen.findAllByText('shop-api')
-    expect(screen.queryByRole('button', { name: /terminate|cancel|kill/i })).toBeNull()
-    expect(screen.queryByRole('link', { name: /terminate|cancel|kill/i })).toBeNull()
+    expect(await screen.findByRole('button', { name: 'Cancel query' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Terminate session' })).toBeInTheDocument()
+    expect(screen.queryByText(/not available yet/)).toBeNull()
     expect(w.requests.filter((r) => /terminate|cancel/.test(r))).toEqual([])
   })
 })

@@ -12,11 +12,11 @@ credential. What ExponetDB needs is five login roles it can verify over TLS,
 the right to `SET ROLE` into the project's execution roles, and the
 registry records that tie a database to a project environment.
 
-**[OBSERVED]** `cluster register` always creates an **external** cluster,
-and the record keeps its management mode for good; node capabilities
-(backups through the agent, role and `pg_hba` desired state) stay
-unavailable for it until [OD-54](../00-product/open-decisions.md#od-54-how-an-external-cluster-gains-the-node-agent)
-is decided.
+**[OBSERVED]** `cluster register` always creates an **external** cluster.
+Node capabilities (backups through the agent, role and `pg_hba` desired
+state) stay unavailable for it until the cluster is adopted by the node
+agent, the one-way operation of §7 (**[DECIDED]**, [OD-54](../00-product/open-decisions.md#od-54-how-an-external-cluster-gains-the-node-agent)
+option (a)).
 
 ## 0. Before you start
 
@@ -196,3 +196,51 @@ schema-only copies the scratch target still needs (`auth`, for example).
 | `scratch-check` passed, but the analysis ends `incomplete` with `replay_failed:<file>:…:3F000` (or `42883`, `42P01`, `42704`) | a legacy file names a schema, function, table or type outside the managed scope that the scratch target lacks (a policy calling `auth.uid()`); the imported target's current schema no longer depends on it, so `outside_scope` could not see it | run `scratch-check` in the project directory (it sends the legacy files: `legacy_references` names each object), then `migration import scratch-copy-commands --target … --scratch …`, run the printed commands with `IMPORTED_URL` and `SCRATCH_URL` set (install missing extensions first: the items name an extension's members with their extension), reset the scratch target (if the reset names the history's own triggers or policies on the copies, drop them there first) and analyze again |
 | `scratch-reset-sql`'s script refuses: `objects outside the managed scope depend on it and would be dropped` | an object outside the scope depends on one inside it; a release before follow-up 2 also counted the casts and access methods of an extension in the scope (`vector` in `public`) | upgrade; otherwise drop or move the named objects (each is listed) and run the script again |
 | `migration import analyze` answers `RESPONSE_INVALID`, then `TRANSPORT_FAILED`, and `serve` has restarted | the process was killed for memory while it parsed the history: a role started without `--liftoff-only`, or a limit below the measured need ([deployment.md §2a](./deployment.md#2a-memory)) | the entrypoint with `--liftoff-only` (Coolify: Custom Docker Options), memory and swap limits of at least 512 MiB set together; the startup log names a missing flag (`process.wasm_tier_up_enabled`) |
+
+## 7. Adopting the cluster by the node agent
+
+**[DECIDED]** (OD-54 option (a), the owner's Wave 9 Part B order of
+2026-10-26; [registry.md §4.5](../02-control-plane/registry.md#45-adopting-an-external-cluster-by-the-node-agent))
+When the cluster's host later runs an enrolled node agent, the cluster
+record becomes agent-managed through one controlled operation,
+`registry.cluster.adopt_agent`. It is one way: there is no path back to
+`external`. The cluster keeps its id, CA bundle, endpoints, credentials,
+databases and history; every target keeps its placement, generation and
+identity marker, so active plans of the targets stay valid.
+
+Before you plan it:
+
+- The cluster is confirmed (`active`) and still `external`.
+- The host's node is enrolled and connected: `node show` reads `active` or
+  `degraded` with a recent heartbeat, and its last report lists the
+  cluster's `system_identifier` (the one `cluster confirm` pinned) exactly
+  once. A standby or a copied data directory on the same host reporting the
+  same identifier makes the adoption refuse (`cluster_ambiguous`).
+- The node is on the cluster's server. A cluster registered without a server
+  takes the node's server; name the node when more than one host reports the
+  cluster.
+- You hold `registry.manage` at the production tier (whatever the cluster's
+  tier) and re-authenticate at apply. A cluster that is not declared
+  `nonprod` (an undeclared one included) also needs a second person's
+  approval (`registry.cluster-adopt-agent-approval`).
+
+[PLANNED] No CLI command yet; plan it over REST and apply the plan with the
+CLI:
+
+```bash
+curl -sS -X POST "$EXPONETDB_URL/api/v1/clusters/cls_…/agent-adoption" \
+  -H "Authorization: Bearer $EXPONETDB_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"acknowledgeOneWay": true, "nodeId": "nod_…"}'   # 201: the plan (pln_…)
+exponetdb plan show pln_…     # before/after: mode and server, the node, the local instance
+exponetdb plan apply pln_…    # re-authentication; an approval unless declared nonprod
+exponetdb cluster show cls_…  # mode agent
+```
+
+| Refusal | Meaning | Next step |
+|---|---|---|
+| `REGISTRY_CONFLICT` `cluster_not_external` | the cluster is already agent-managed | nothing to do |
+| `REGISTRY_CONFLICT` `cluster_not_confirmed` | the cluster is still pending | `cluster confirm` first |
+| `REGISTRY_CONFLICT` `cluster_unmapped` | no node of the cluster's server reports its `system_identifier`, or the named node is on another server | check `node show`: is the agent on this host and does its report list the cluster? |
+| `REGISTRY_CONFLICT` `cluster_ambiguous` | the identifier is reported more than once (a standby, a copied data directory, two hosts) | remove the duplicate instance from the agent's configuration, or name the node |
+| `REGISTRY_CONFLICT` `node_not_served` | the node is revoked, not bound or without a heartbeat for four intervals | bring the agent back, then plan again |
+| `PLAN_STALE` | the cluster or the node's report changed between plan and apply | plan again |

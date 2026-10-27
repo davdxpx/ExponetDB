@@ -638,10 +638,10 @@ export const ERRORS = {
     retryable: false,
     title: 'Legacy import analyzed before failures were recorded',
     message:
-      'The import report was analyzed before the failing expectations of each file were recorded, so a review decision would not say what it accepts.',
+      'The import report was analyzed before the failing expectations of each file, or the keyed digests of the values they observed, were recorded, so a review decision would not say what it accepts.',
     remediation: 'Analyze the import again and record the decisions on the new report.',
     details: z.strictObject({
-      // How many file items of the report have no recorded failures.
+      // How many file items of the report have no recorded failures (or no digests of their values).
       items: z.int().min(1),
     }),
   },
@@ -1075,6 +1075,26 @@ export const ERRORS = {
             // target's current schema could not be read completely.
             'finding_resolved',
             'snapshot_incomplete',
+            // Wave 9 Part B, backups and restores (ADR-0036 to ADR-0038).
+            'repository_location_taken',
+            'repository_retired',
+            'repository_not_adopted_observed',
+            'repository_other_cluster',
+            'repository_runs_not_allowed',
+            'repository_in_use',
+            'run_active',
+            'restore_not_discardable',
+            'policy_repository_unknown',
+            'backup_not_found',
+            'backup_not_verified',
+            'wal_not_continuous',
+            'point_in_time_outside_window',
+            'no_backup_selectable',
+            'repository_engine_below_floor',
+            // OD-54 (a), registry.cluster.adopt_agent: only an external cluster is adopted, by
+            // an enrolled node that is live (active or degraded, with a recent heartbeat).
+            'cluster_not_external',
+            'node_not_served',
           ],
         }),
     }),
@@ -1208,6 +1228,20 @@ export const ERRORS = {
     retryable: false,
     title: 'Restore failed',
     message: 'The restore failed.',
+  },
+  FEATURE_NOT_ACTIVATED: {
+    group: 'backup_and_restore',
+    status: 409,
+    retryable: false,
+    title: 'Not activated on this installation',
+    message:
+      'This installation has not activated the action for this tier: backup runs and restores stay off until the evidence they need exists.',
+    remediation:
+      'An operator activates it with EXPONETDB_BACKUP_EXECUTION or EXPONETDB_RESTORE_EXECUTION after the pre-Wave-11 drills passed; until then plan it only.',
+    details: z.strictObject({
+      setting: z.enum(['EXPONETDB_BACKUP_EXECUTION', 'EXPONETDB_RESTORE_EXECUTION']),
+      current: z.enum(['disabled', 'nonprod', 'scratch', 'all']),
+    }),
   },
   // ----- Queries and diagnostics -----
   QUERY_NOT_READ_ONLY: {

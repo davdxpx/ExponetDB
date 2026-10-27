@@ -133,12 +133,14 @@ export function registryChains(q: Queryable): RegistryChains {
         [clusterId],
       )
       const row = rows[0]
-      return row === undefined
-        ? undefined
-        : tiered(
-            { cluster: { declaredTier: tierOf(row.textOrNull('declared_tier')) } },
-            row.textOrNull('derived_tier'),
-          )
+      if (row === undefined) return undefined
+      const derived = row.textOrNull('derived_tier')
+      const declared = row.textOrNull('declared_tier')
+      // A cluster is production when either its targets or its declaration say so (Wave 9 Part B
+      // review F-2): a nonprod grant never reaches a cluster declared prod that hosts only
+      // staging targets yet. Otherwise the derived tier, else the declared one.
+      const effective = derived === 'prod' || declared === 'prod' ? 'prod' : (derived ?? declared)
+      return tiered({ cluster: { declaredTier: tierOf(declared) } }, effective)
     },
     async server(serverId) {
       const { rows } = await q.query(

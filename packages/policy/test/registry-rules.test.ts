@@ -109,3 +109,59 @@ describe('drift.accept-prod', () => {
     expect((await decide('drift.check', 'prod')).decision).toBe('allow')
   })
 })
+
+/** `registry.cluster-adopt-agent-approval` (OD-54 (a)): production and undeclared clusters need an approval. */
+describe('registry.cluster-adopt-agent-approval', () => {
+  const ID = 'registry.cluster-adopt-agent-approval'
+
+  it('allows adopting a cluster declared nonprod without approval', async () => {
+    const d = await decide('registry.cluster.adopt_agent', 'nonprod')
+    expect(d.decision).toBe('allow')
+    expect(d.requirements).toEqual([])
+    expect(d.rules.map((r) => [r.id, r.result])).toEqual([[ID, 'not_applicable']])
+  })
+
+  it('requires one approval and a 300-second re-authentication for a production cluster', async () => {
+    const d = await decide('registry.cluster.adopt_agent', 'prod')
+    expect(d.decision).toBe('require')
+    expect(d.requirements).toEqual(
+      expect.arrayContaining([
+        { kind: 'approval', count: 1, permission: 'plans.approve' },
+        { kind: 'reauth', withinSeconds: 300 },
+      ]),
+    )
+    expect(d.rules.map((r) => [r.id, r.result])).toEqual([[ID, 'fail']])
+  })
+
+  it('treats an undeclared cluster (no tier) like production (fail closed)', async () => {
+    const d = await decide('registry.cluster.adopt_agent')
+    expect(d.decision).toBe('require')
+    expect(d.requirements).toEqual(
+      expect.arrayContaining([
+        { kind: 'approval', count: 1, permission: 'plans.approve' },
+        { kind: 'reauth', withinSeconds: 300 },
+      ]),
+    )
+    expect(d.rules.map((r) => [r.id, r.result])).toEqual([[ID, 'unknown']])
+  })
+
+  it('applies to the adoption only, and no other registry rule to it', async () => {
+    const d = await decide('registry.cluster.adopt_agent', 'prod')
+    expect(d.rules.map((r) => r.id)).toEqual([ID])
+    for (const kind of [
+      'registry.cluster.confirm',
+      'registry.cluster.declare_tier',
+      'node.enroll',
+    ]) {
+      expect(
+        (await decide(kind, 'prod')).rules.some((r) => r.id === ID),
+        kind,
+      ).toBe(false)
+    }
+  })
+
+  it('cannot be overridden by break-glass', () => {
+    const rule = REGISTRY_RULES.find((r) => r.id === ID)
+    expect(rule).toMatchObject({ overridableByBreakGlass: false, severity: 'require', version: 1 })
+  })
+})

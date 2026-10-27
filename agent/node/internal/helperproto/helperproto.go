@@ -34,6 +34,19 @@ const (
 	OpTrustInspect        = "trust.inspect"
 	OpFailedUnits         = "system.failed_units"
 	OpLogRead             = "log.read"
+	// Wave 9 Part B (ADR-0037): engine catalog reads, engine runs and
+	// scratch restores, one operation per capability.
+	OpBackupList     = "backup.list"
+	OpBackupTimers   = "backup.timers"
+	OpBackupRun      = "backup.run"
+	OpBackupVerify   = "backup.verify"
+	OpBackupExpire   = "backup.expire"
+	OpRunStatus      = "run.status"
+	OpRunCancel      = "run.cancel"
+	OpRestorePrepare = "restore.prepare"
+	OpRestoreExecute = "restore.execute"
+	OpRestoreVerify  = "restore.verify"
+	OpRestoreDiscard = "restore.discard"
 )
 
 // Request is one call: an operation and the signed job envelope it serves.

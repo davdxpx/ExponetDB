@@ -1,0 +1,40 @@
+{
+  "name": "@exponetdb/backups",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Backups proven by restores (Wave 9 Part B): provider-neutral repositories, adopt-observe-hand-over, the catalog mirror, measured RPO and RTO, engine runs on nodes, restore plans and drills, the offline runbook.",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@exponetdb/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@exponetdb/audit": "workspace:*",
+    "@exponetdb/contracts": "workspace:*",
+    "@exponetdb/control-store": "workspace:*",
+    "@exponetdb/kernel": "workspace:*",
+    "@exponetdb/nodes": "workspace:*",
+    "@exponetdb/operations": "workspace:*",
+    "@exponetdb/policy": "workspace:*",
+    "@exponetdb/registry": "workspace:*"
+  },
+  "devDependencies": {
+    "@exponetdb/secrets": "workspace:*",
+    "@exponetdb/testkit": "workspace:*",
+    "@types/node": "24.19.1"
+  }
+}

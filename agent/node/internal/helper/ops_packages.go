@@ -17,6 +17,8 @@ var Packages = []string{
 	"postgresql-client-16", "postgresql-client-17", "postgresql-client-18",
 	"postgresql-16-pgvector", "postgresql-17-pgvector", "postgresql-18-pgvector",
 	"exponetdb-node",
+	// The backup engines (Wave 9 Part B, ADR-0036 §5: pinned per installation).
+	"pgbackrest", "restic",
 }
 
 func allowlisted(name string) bool {

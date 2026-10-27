@@ -50,6 +50,7 @@ export const plansMessages = {
   'plans.title.backup.run': 'Back up cluster {subject}',
   'plans.title.registry.cluster.confirm': 'Confirm cluster {subject}',
   'plans.title.registry.cluster.declare_tier': 'Declare the tier of cluster {subject}',
+  'plans.title.registry.cluster.adopt_agent': 'Hand cluster {subject} to the node agent',
   'plans.title.registry.endpoint.add': 'Add an endpoint to cluster {subject}',
   'plans.title.registry.endpoint.retire': 'Retire an endpoint of cluster {subject}',
   'plans.title.registry.database.register': 'Register a database on cluster {subject}',
@@ -85,6 +86,15 @@ export const plansMessages = {
   'plans.title.registry.server.create': 'Create a server record',
   'plans.title.registry.server.retire': 'Remove server {subject} from ExponetDB',
   'plans.title.registry.cluster.retire': 'Remove cluster {subject} from ExponetDB',
+  'plans.title.backup.repository.adopt':
+    'Adopt a backup repository of cluster {subject} (read only)',
+  'plans.title.backup.repository.ownership':
+    'Let ExponetDB run backups in a repository of cluster {subject}',
+  'plans.title.backup.repository.retire':
+    'Remove a backup repository of cluster {subject} from ExponetDB',
+  'plans.title.backup.policy.set': 'Set the backup policy of cluster {subject}',
+  'plans.title.restore.drill': 'Run a restore drill of cluster {subject} into scratch',
+  'plans.title.restore.discard': 'Discard a scratch restore of cluster {subject}',
   'plans.title.registry.cluster.register': 'Register an external cluster',
   'plans.title.other': 'Run {kind} on {subject}',
   'plans.title.otherBare': 'Run {kind}',

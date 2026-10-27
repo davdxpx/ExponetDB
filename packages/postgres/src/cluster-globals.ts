@@ -17,7 +17,20 @@ export interface ClusterGlobalResult {
    */
   readonly applies: boolean
   readonly ok: boolean
+  /**
+   * OD-56 (a): when it applies and does not hold, the keyed digest of the
+   * value observed for a value kind (a role attribute, connection limit,
+   * comment, membership option or setting; `null` when the role or the
+   * membership is missing). Only with a digest function; never the value.
+   */
+  readonly observedDigest?: string
 }
+
+/** Keys what a failing cluster-global check observed (the expectation, and the value's canonical text). */
+export type ClusterGlobalValueDigest = (
+  expectation: ClusterGlobalExpectation,
+  observation: string,
+) => string
 
 const ROLES = sql`SELECT r.rolname::text AS role, r.rolcanlogin AS login, r.rolsuper AS superuser,
        r.rolcreatedb AS createdb, r.rolcreaterole AS createrole, r.rolreplication AS replication,
@@ -48,6 +61,7 @@ const pair = (role: string, member: string) => `${role}\u0000${member}`
 export async function checkClusterGlobalExpectations(
   reader: CatalogReader,
   expectations: readonly ClusterGlobalExpectation[],
+  options: { readonly valueDigest?: ClusterGlobalValueDigest } = {},
 ): Promise<ClusterGlobalResult[]> {
   if (expectations.length === 0) return []
   const names = new Set<string>()
@@ -81,8 +95,38 @@ export async function checkClusterGlobalExpectations(
   }
   return expectations.map((e) => {
     const applies = (e.when ?? []).every(holds)
-    return { expectation: e, applies, ok: applies && holds(e) }
+    const ok = applies && holds(e)
+    const value = applies && !ok ? observed(e) : undefined
+    const digest =
+      value === undefined || options.valueDigest === undefined
+        ? undefined
+        : options.valueDigest(e, JSON.stringify({ value }))
+    return {
+      expectation: e,
+      applies,
+      ok,
+      ...(digest === undefined ? {} : { observedDigest: digest }),
+    }
   })
+
+  /** What a value kind observed (OD-56 (a)); `undefined` for an existence kind. */
+  function observed(e: ClusterGlobalExpectation): string | number | boolean | null | undefined {
+    switch (e.kind) {
+      case 'role':
+      case 'membership':
+        return undefined
+      case 'role_attribute':
+        return roles.get(e.role)?.bool(e.attribute) ?? null
+      case 'role_connection_limit':
+        return roles.get(e.role)?.int('connection_limit') ?? null
+      case 'role_comment':
+        return roles.get(e.role)?.textOrNull('comment') ?? null
+      case 'membership_option':
+        return members.get(pair(e.role, e.member))?.boolOrNull(e.option) ?? null
+      case 'role_setting':
+        return settings.get(pair(e.role ?? '', e.database ?? ''))?.get(e.name.toLowerCase()) ?? null
+    }
+  }
 
   function holds(e: ClusterGlobalExpectation | ClusterGlobalCondition): boolean {
     switch (e.kind) {
