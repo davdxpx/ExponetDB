@@ -734,7 +734,7 @@ export const MCP_TOOLS = [
     output: QueryStatsSchema,
     limits: { maxItems: 200, defaultItems: 50 },
     wave: '9',
-    status: 'planned',
+    status: 'served',
     rateClass: 'read',
   },
   {
@@ -755,7 +755,7 @@ export const MCP_TOOLS = [
     output: TableStatsSchema,
     limits: { maxItems: 500, defaultItems: 100 },
     wave: '9',
-    status: 'planned',
+    status: 'served',
     rateClass: 'read',
   },
   {
@@ -773,7 +773,7 @@ export const MCP_TOOLS = [
     output: AdvisorRunSchema,
     limits: { maxBytes: MCP_RESULT_BYTE_CAP },
     wave: '9',
-    status: 'planned',
+    status: 'served',
     rateClass: 'read',
   },
   {
@@ -790,7 +790,7 @@ export const MCP_TOOLS = [
     output: BackupCatalogSchema,
     limits: { maxItems: 200, defaultItems: 50 },
     wave: '9',
-    status: 'planned',
+    status: 'served',
     rateClass: 'read',
   },
   {

@@ -281,6 +281,20 @@ export const BINDINGS: { readonly [N in ToolName]?: Binding<N> } = {
       limit: a.limit,
     }),
   locks_list: (app, caller, a) => app.registry.locks(caller, a.target),
+  // Wave 9 Part B: the performance reads (the REST routes' use cases).
+  query_stats: (app, caller, a) =>
+    app.performance.queryStats(caller, a.target, {
+      from: a.from,
+      to: a.to,
+      order: a.order,
+      limit: a.limit,
+    }),
+  table_stats: (app, caller, a) =>
+    app.performance.tableStats(caller, a.target, { schema: a.schema, limit: a.limit }),
+  advisors_run: (app, caller, a, ctx) =>
+    app.performance.runAdvisors(caller, a.target, a.categories, { requestId: ctx.requestId }),
+  // Wave 9 Part B: the backup catalog of a cluster (the REST route's use case).
+  backups_list: (app, caller, a) => app.backups.catalog(caller, a.cluster, { limit: a.limit }),
   nodes_list: (app, caller, a) => app.nodes.nodes(caller, page(a)),
   node_status: (app, caller, a) => app.nodes.node(caller, a.node),
   audit_search: (app, caller, a) =>

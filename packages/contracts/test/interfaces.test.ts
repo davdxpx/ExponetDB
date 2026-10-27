@@ -337,10 +337,11 @@ describe('MCP tools', () => {
     expect(sql?.limits.maxRows).toBe(500)
   })
 
-  it('serve the Wave 7 part only: Wave 9 tools stay planned, and node planning is not a tool (OD-29)', () => {
+  it('serve the Wave 7 part and the Wave 9 performance and backup reads only (the other Wave 9 tools stay planned), and node planning is not a tool (OD-29)', () => {
+    const served9 = ['advisors_run', 'backups_list', 'query_stats', 'table_stats']
     for (const t of MCP_TOOL_LIST) {
       if (t.wave === '9') {
-        expect(t.status, t.name).toBe('planned')
+        expect(t.status, t.name).toBe(served9.includes(t.name) ? 'served' : 'planned')
       }
     }
     expect(MCP_TOOL_LIST.map((t) => t.name)).not.toContain('node_plan')

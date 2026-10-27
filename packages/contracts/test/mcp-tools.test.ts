@@ -164,7 +164,10 @@ describe('MCP tool definitions on the wire', () => {
   it('fit the whole Wave 7 list into one page under the token budget', () => {
     const wave7 = MCP_TOOL_LIST.filter((t) => t.wave === '7').map(mcpToolDefinition)
     expect(wave7.length).toBeLessThanOrEqual(40)
-    expect(MCP_SERVED_TOOL_LIST.length).toBeLessThanOrEqual(wave7.length)
+    // Served: the Wave 7 tools and, since Wave 9 Part B, query_stats, table_stats, advisors_run and backups_list.
+    const served9 = MCP_SERVED_TOOL_LIST.filter((t) => t.wave === '9').map((t) => t.name)
+    expect(served9.sort()).toEqual(['advisors_run', 'backups_list', 'query_stats', 'table_stats'])
+    expect(MCP_SERVED_TOOL_LIST.length).toBeLessThanOrEqual(wave7.length + served9.length)
     // Budget: 150 000 characters, about 37 500 tokens at four characters per token
     // (measured 2026-10-12: 136 540 for the 25 Wave 7 tools before sql_cancel).
     expect(JSON.stringify(wave7).length).toBeLessThan(150_000)

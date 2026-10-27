@@ -269,6 +269,22 @@ export const WORKER_TASKS: readonly TaskDefinition[] = [
     intervalSeconds: 6 * HOUR,
     run: (ctx) => ctx.observation?.partitions() ?? Promise.resolve('observation_off'),
   },
+  // ----- Wave 9 Part B: statement statistics (performance.md §2) -----
+  {
+    name: 'statements.sample',
+    intervalSeconds: 5 * MINUTE,
+    run: (ctx) => ctx.observation?.sampleStatements() ?? Promise.resolve('observation_off'),
+  },
+  {
+    name: 'statements.rollup',
+    intervalSeconds: 24 * HOUR,
+    run: (ctx) => ctx.observation?.rollupStatements() ?? Promise.resolve('observation_off'),
+  },
+  {
+    name: 'statements.partitions',
+    intervalSeconds: 6 * HOUR,
+    run: (ctx) => ctx.observation?.statementPartitions() ?? Promise.resolve('observation_off'),
+  },
   // ----- Wave 5: the node agent's control plane (control-plane.md §6) -----
   {
     name: 'nodes.bind',

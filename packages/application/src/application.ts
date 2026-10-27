@@ -65,6 +65,7 @@ import {
   unrestricted,
   withPolicy,
 } from '@exponetdb/auth'
+import { EXECUTION_DISABLED, type ExecutionSettings } from '@exponetdb/backups'
 import {
   type ActionId,
   type ApiKeyView,
@@ -162,10 +163,12 @@ import {
 } from '@exponetdb/registry'
 import { AuditChainReader } from './audit-chain.ts'
 import { type AuditExportQuery, auditExportNdjson, readAuditExport } from './audit-export.ts'
+import { BackupUseCases } from './backups.ts'
 import { BreakGlassUseCases } from './breakglass.ts'
 import { type InstallationHealthSources, readInstallationHealth } from './installation-health.ts'
 import { MigrationUseCases } from './migrations.ts'
 import { NodeUseCases } from './nodes.ts'
+import { PerformanceUseCases } from './performance.ts'
 import { ProfileUseCases, profileView, readProfiles } from './profiles.ts'
 import { QueryUseCases, type ReadParties } from './queries.ts'
 import { RawStatementUseCases } from './raw-statements.ts'
@@ -222,6 +225,12 @@ export interface ApplicationDeps {
    * answers `CONTROL_PLANE_DEGRADED`: nothing is invented.
    */
   readonly health?: InstallationHealthSources
+  /**
+   * Wave 9 Part B: whether backup and restore runs may execute
+   * (`EXPONETDB_BACKUP_EXECUTION`, `EXPONETDB_RESTORE_EXECUTION`); read at
+   * each plan. Absent: both disabled.
+   */
+  readonly backupExecution?: () => ExecutionSettings
   /** The running release (`GET /installation`). */
   readonly installation: {
     readonly version: string
@@ -539,6 +548,8 @@ export class Application {
   readonly registry: RegistryUseCases
   /** The Wave 5 node use cases (enrollment, revocation, decommissioning, reads). */
   readonly nodes: NodeUseCases
+  /** Wave 9 Part B: backup repositories, policies, the catalog mirror, runs, restores and drills. */
+  readonly backups: BackupUseCases
   /** The Wave 6 migration use cases (bundles, lint, plans, live reads). */
   readonly migrations: MigrationUseCases
   readonly breakGlass: BreakGlassUseCases
@@ -548,6 +559,8 @@ export class Application {
   readonly savedQueries: SavedQueryUseCases
   /** The raw statement view (Wave 8, owner decision S2): live, secrets removed, audited. */
   readonly rawStatements: RawStatementUseCases
+  /** Wave 9 Part B: statement and table statistics, advisors, finding summary, cancel and terminate. */
+  readonly performance: PerformanceUseCases
   /** The own profile, a display name and a picture (Wave 8, owner decision S10). */
   readonly profiles: ProfileUseCases
   /** The audit chain read with its bounded verification (Wave 8). */
@@ -596,6 +609,9 @@ export class Application {
     }
     this.registry = new RegistryUseCases(host)
     this.nodes = new NodeUseCases(host)
+    this.backups = new BackupUseCases(host, {
+      execution: deps.backupExecution ?? (() => EXECUTION_DISABLED),
+    })
     this.migrations = new MigrationUseCases(host)
     this.queries = new QueryUseCases({
       store: deps.auth.store,
@@ -631,6 +647,10 @@ export class Application {
       observation: () => deps.registry?.observation,
       authorize: host.authorize,
       admit: host.admit,
+      parties: (caller) => readParties(caller as Caller),
+    })
+    this.performance = new PerformanceUseCases({
+      ...host,
       parties: (caller) => readParties(caller as Caller),
     })
     this.breakGlass = new BreakGlassUseCases(host, {
@@ -2218,6 +2238,8 @@ export class Application {
             key: idempotency.key,
           })
         }
+        // The plan an inline refusal invalidated: `PLAN_STALE` names it in its details.
+        Object.defineProperty(result.error, 'planId', { value: plan.planId, enumerable: false })
         return { error: result.error }
       }
       const view = await operationView(tx, result.operation.operationId, this.publicOrigin)

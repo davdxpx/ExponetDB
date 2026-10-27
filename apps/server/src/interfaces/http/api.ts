@@ -19,6 +19,7 @@ import {
 } from '@exponetdb/auth'
 import {
   AccessRoleSchema,
+  AdvisorRunRequestSchema,
   ApiKeyCreateRequestSchema,
   ApiKeyIdSchema,
   ApprovalDecisionRequestSchema,
@@ -29,6 +30,13 @@ import {
   AuthFactorIdSchema,
   AuthorizationRequestHandleSchema,
   actionDefinition,
+  BackupIdSchema,
+  BackupPolicyBodySchema,
+  BackupRepositoryAdoptRequestSchema,
+  BackupRepositoryIdSchema,
+  BackupRepositoryOwnershipRequestSchema,
+  BackupRepositoryRetireRequestSchema,
+  BackupRunRequestSchema,
   BaselinePlanRequestSchema,
   BreakGlassActivateRequestSchema,
   BreakGlassGrantIdSchema,
@@ -45,6 +53,8 @@ import {
   ClusterIdSchema,
   ClusterRegisterRequestSchema,
   ClusterRetireRequestSchema,
+  ConnectionCancelRequestSchema,
+  ConnectionTerminateRequestSchema,
   ConsentDecisionRequestSchema,
   CredentialSubmissionSchema,
   DatabaseIdSchema,
@@ -54,6 +64,7 @@ import {
   DeviceDecisionRequestSchema,
   DisableIdentityRequestSchema,
   DriftAcceptRequestSchema,
+  DrillPlanRequestSchema,
   decodeQuery,
   EmailSchema,
   EndpointIdSchema,
@@ -91,6 +102,7 @@ import {
   NodeObservationQuerySchema,
   NodePlanRequestSchema,
   OAuthClientIdSchema,
+  OfflineDrillRecordRequestSchema,
   OperationIdSchema,
   OperationStateSchema,
   PasswordInputSchema,
@@ -107,6 +119,8 @@ import {
   REST_API_BASE_PATH,
   RecoveryCodeInputSchema,
   RegistrationCredentialSchema,
+  RestoreIdSchema,
+  RestorePlanRequestSchema,
   RevokeRequestSchema,
   ROUTE_LIST,
   RoleBindingIdSchema,
@@ -1087,7 +1101,12 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
             ? { severity }
             : {}),
           ...(state === 'open' || state === 'resolved' || state === 'all' ? { state } : {}),
-          ...(kind === 'drift' || kind === 'health' ? { kind } : {}),
+          ...(kind === 'drift' || kind === 'health' || kind === 'advisor' || kind === 'statements'
+            ? { kind }
+            : {}),
+          ...(typeof field(call.query, 'code') === 'string'
+            ? { code: String(field(call.query, 'code')) }
+            : {}),
         },
         pageOf(call.query),
       ),
@@ -1592,6 +1611,129 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         idempotency(call),
       ),
     ),
+  // ----- Wave 9 Part B: backups, restores and drills (ADR-0036 to ADR-0038) -----
+  getBackupOverview: async (app, call) => {
+    const state = optionalText(call.query, 'state')
+    return value(
+      await app.backups.overview(caller(call), {
+        ...pageOf(call.query),
+        ...(state === undefined ? {} : { state }),
+      }),
+    )
+  },
+  listClusterBackups: async (app, call) =>
+    value(await app.backups.catalog(caller(call), clusterId(call), pageOf(call.query))),
+  listBackupRepositories: async (app, call) =>
+    value(await app.backups.repositories(caller(call), clusterId(call))),
+  planBackupRepositoryAdoption: async (app, call) =>
+    value(
+      await app.backups.planAdoption(
+        caller(call),
+        clusterId(call),
+        BackupRepositoryAdoptRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planBackupRepositoryOwnership: async (app, call) =>
+    value(
+      await app.backups.planOwnership(
+        caller(call),
+        BackupRepositoryIdSchema.parse(field(call.params, 'repositoryId')),
+        BackupRepositoryOwnershipRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planBackupRepositoryRetirement: async (app, call) =>
+    value(
+      await app.backups.planRetirement(
+        caller(call),
+        BackupRepositoryIdSchema.parse(field(call.params, 'repositoryId')),
+        BackupRepositoryRetireRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  getBackupPolicy: async (app, call) =>
+    value(await app.backups.policy(caller(call), clusterId(call))),
+  planBackupPolicy: async (app, call) =>
+    value(
+      await app.backups.planPolicy(
+        caller(call),
+        clusterId(call),
+        BackupPolicyBodySchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  refreshBackupCatalog: async (app, call) =>
+    value(await app.backups.refresh(caller(call), clusterId(call), idempotency(call))),
+  planBackupRun: async (app, call) =>
+    value(
+      await app.backups.planRun(
+        caller(call),
+        clusterId(call),
+        BackupRunRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  listBackupRuns: async (app, call) =>
+    value(await app.backups.runs(caller(call), clusterId(call), pageOf(call.query))),
+  verifyBackup: async (app, call) =>
+    value(
+      await app.backups.verify(
+        caller(call),
+        clusterId(call),
+        BackupIdSchema.parse(field(call.params, 'backupId')),
+        idempotency(call),
+      ),
+    ),
+  planRestore: async (app, call) =>
+    value(
+      await app.backups.planRecovery(
+        caller(call),
+        target(call),
+        RestorePlanRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planDrill: async (app, call) =>
+    value(
+      await app.backups.planDrill(
+        caller(call),
+        clusterId(call),
+        DrillPlanRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  listDrills: async (app, call) =>
+    value(await app.backups.drills(caller(call), clusterId(call), pageOf(call.query))),
+  recordOfflineDrill: async (app, call) =>
+    value(
+      await app.backups.recordOfflineDrill(
+        call.meta.requestId,
+        caller(call),
+        clusterId(call),
+        OfflineDrillRecordRequestSchema.parse(call.body),
+      ),
+    ),
+  listRestores: async (app, call) =>
+    value(await app.backups.restores(caller(call), clusterId(call), pageOf(call.query))),
+  planRestoreDiscard: async (app, call) =>
+    value(
+      await app.backups.planDiscard(
+        caller(call),
+        clusterId(call),
+        RestoreIdSchema.parse(field(call.params, 'restoreId')),
+        idempotency(call),
+      ),
+    ),
+  getRestoreRunbook: async (app, call) =>
+    value(
+      await app.backups.runbook(
+        call.meta.requestId,
+        caller(call),
+        clusterId(call),
+        BackupRepositoryIdSchema.parse(field(call.query, 'repository')),
+      ),
+    ),
   listNodeObservations: async (app, call) => {
     const query = NodeObservationQuerySchema.parse(call.query)
     return value(
@@ -1759,6 +1901,71 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     )
   },
   getLockGraph: async (app, call) => value(await app.registry.locks(caller(call), target(call))),
+  // ----- Wave 9 Part B: statement and table statistics, advisors, findings, session actions -----
+  getQueryStats: async (app, call) => {
+    const order = field(call.query, 'order')
+    const limit = field(call.query, 'limit')
+    return value(
+      await app.performance.queryStats(caller(call), target(call), {
+        from: optionalText(call.query, 'from'),
+        to: optionalText(call.query, 'to'),
+        ...(order === 'total_time' || order === 'mean_time' || order === 'calls' || order === 'io'
+          ? { order }
+          : {}),
+        limit: typeof limit === 'number' ? limit : undefined,
+      }),
+    )
+  },
+  getTableStats: async (app, call) => {
+    const limit = field(call.query, 'limit')
+    return value(
+      await app.performance.tableStats(caller(call), target(call), {
+        schema: optionalText(call.query, 'schema'),
+        limit: typeof limit === 'number' ? limit : undefined,
+      }),
+    )
+  },
+  runAdvisors: async (app, call) =>
+    value(
+      await app.performance.runAdvisors(
+        caller(call),
+        target(call),
+        AdvisorRunRequestSchema.parse(call.body ?? {}).categories,
+        { requestId: call.meta.requestId },
+      ),
+    ),
+  getFindingSummary: async (app, call) => value(await app.performance.findingSummary(caller(call))),
+  listClusterFindings: async (app, call) => {
+    const state = field(call.query, 'state')
+    return value(
+      await app.performance.clusterFindings(
+        caller(call),
+        clusterId(call),
+        state === 'resolved' || state === 'all' ? state : 'open',
+        pageOf(call.query),
+      ),
+    )
+  },
+  cancelSessionQuery: async (app, call) =>
+    value(
+      await app.performance.cancel(
+        caller(call),
+        target(call),
+        Number(field(call.params, 'pid')),
+        ConnectionCancelRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planSessionTermination: async (app, call) =>
+    value(
+      await app.performance.planTermination(
+        caller(call),
+        target(call),
+        Number(field(call.params, 'pid')),
+        ConnectionTerminateRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
   getRawStatement: async (app, call) => {
     const pid = field(call.query, 'pid')
     return value(

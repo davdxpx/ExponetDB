@@ -52,27 +52,28 @@ const SHAPES: Record<string, { scopes: Scope[]; tiers: Tier[] }> = {
 // its six types, the portability findings of Inspector 2.10.1 `--strict`. Re-pinned
 // after the Wave 7 review: output maxLength relaxed: escaping can lengthen a value.
 // Re-pinned 2026-10-13: drift_check, migration_verify and audit_search at toolVersion 2
-// (descriptions say what each records, enforces and audits).
+// (descriptions say what each records, enforces and audits). Re-pinned 2026-10-27
+// (Wave 9 Part B): query_stats, table_stats and advisors_run are served (diagnostics.read).
 const PINNED: Record<string, { tools: number; digest: string }> = {
   'baseline, nonprod': {
-    tools: 12,
-    digest: 'sha256:e6bd6ded2baaa9f01fcbff015be3e83d01d89578585f1cfc189aa0b0fd04aaca',
+    tools: 15,
+    digest: 'sha256:ffadc97440a5ce747b611ea40d0584c5addd6ad25ef69d1693b6e7e4ae31c6ad',
   },
   'every read, nonprod': {
-    tools: 16,
-    digest: 'sha256:fc23ce07625017afeb9457f81612409cb282963cf459f6c80bb6b27b9545cf2c',
+    tools: 19,
+    digest: 'sha256:0b6162671893516aa9a6f1943755d72afdd03b87aab9f2a9e0f43c1889c0753b',
   },
   'agent, nonprod': {
-    tools: 22,
-    digest: 'sha256:ab335193f6508b14aee2fe19797899044bd44e7dd8e8578f05d38f3cdf8144cb',
+    tools: 25,
+    digest: 'sha256:e36800dabcfdf3c8a1ea1f2bab14652d939abd82d0461d2ba31c0bb20f7e022d',
   },
   'agent, both tiers': {
-    tools: 23,
-    digest: 'sha256:1baddcf9cfd0163d9e3d67397f7a46401091d6563a805c97bb76c6583bf3c5cc',
+    tools: 26,
+    digest: 'sha256:17be934378f9fc00003e95f8160a9e8b292556ee22bf6c5ccf7d770f463d3fb3',
   },
   'data reader, nonprod': {
-    tools: 19,
-    digest: 'sha256:b18128f749e46965fcf0e961d461a468b298af8ad6d7174704f75073b5813e83',
+    tools: 22,
+    digest: 'sha256:34a8085c1f6eb5c0e75a6755f6a98e4371789264cadd55553513a31f07275acf',
   },
 }
 

@@ -8,9 +8,11 @@ export {
   sessionCaller,
 } from './application.ts'
 export { type AvatarCheck, type AvatarRefusal, checkAvatarImage } from './avatar-image.ts'
+export { type BackupHostOptions, BackupUseCases } from './backups.ts'
 export { nodeDispatchAdmission } from './dispatch.ts'
 export type { InstallationHealthSources, ReadinessCheck } from './installation-health.ts'
 export { NodeUseCases } from './nodes.ts'
+export { type PerformanceHost, PerformanceUseCases } from './performance.ts'
 export {
   type AvatarContent,
   type ProfileHost,

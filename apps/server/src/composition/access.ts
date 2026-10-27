@@ -40,10 +40,15 @@ import {
 } from '@exponetdb/operations'
 import {
   ACCESS_RULES,
+  BACKUP_CHANGE_KINDS,
+  BACKUP_RULES,
+  CONNECTION_KINDS,
+  CONNECTION_RULES,
   DATA_RULES,
   MIGRATION_RULES,
   NODE_RULES,
   REGISTRY_RULES,
+  RESTORE_KINDS,
   RuleRegistry,
   SQL_KINDS,
   VERIFYING_KINDS,
@@ -54,6 +59,7 @@ import { BUILD } from '../config/build-info.ts'
 import type { AuthOperatorConfig, ServeConfig } from '../config/env.ts'
 import {
   BACKUP_BINDINGS,
+  backupKindsFor,
   connectorFor,
   controlStoreSystemIdentifier,
   registryKindsFor,
@@ -76,6 +82,10 @@ export const POLICY_RULES = [
   ...MIGRATION_RULES,
   // Wave 7 (ADR-0028 §3): who reads rows, per target.
   ...DATA_RULES,
+  // Wave 9 Part B (performance.md §5): which sessions may be signaled, production terminations by agents.
+  ...CONNECTION_RULES,
+  // Wave 9 Part B (policy-engine.md §4, backups and restore): human-only restores, verified sources.
+  ...BACKUP_RULES,
 ]
 
 /** Features this release serves (`GET /installation`); a feature is listed only when it works. */
@@ -142,6 +152,8 @@ export function composeAccess(
       installationId: config.installationId,
       clock: runtime.clock,
     }),
+    // Wave 9 Part B: backup records and engine runs (acceptance checks only; serve signs no job).
+    ...backupKindsFor(rt, connector, config.backupExecution),
   ])
   const policy = registryPolicy(rules, codeVersion(), runtime.clock)
   const authConfig = parseAuthConfig({
@@ -197,6 +209,8 @@ export function composeAccess(
       installationId: config.installationId,
       oauthClientRegistration: config.clientRegistration,
     },
+    // Wave 9 Part B: whether planned backup and restore runs may execute (read at each plan).
+    backupExecution: () => config.backupExecution ?? { backups: 'disabled', restores: 'disabled' },
     // Client metadata documents go through the hardened fetcher only (oauth.md §7).
     oauth: { network: oauth.systemNetwork() },
     // A denial's audit event is written after the denial (audit.md §2); a failure is logged.
@@ -244,6 +258,11 @@ export function workerKinds(
   services: Pick<RoleServices, 'store' | 'keyring'>,
   runtime: Pick<Runtime, 'clock'>,
   installationId: string,
+  /** Wave 9 Part B: the worker's activation of engine runs (absent: both disabled). */
+  backupExecution?: {
+    readonly backups: 'disabled' | 'nonprod' | 'all'
+    readonly restores: 'disabled' | 'scratch' | 'all'
+  },
 ) {
   const rt = {
     store: services.store,
@@ -270,6 +289,8 @@ export function workerKinds(
     }),
     // Wave 8: the worker records an accepted drift as the target's baseline.
     ...diagnosticsKinds({ store: services.store, connector, installationId, clock: runtime.clock }),
+    // Wave 9 Part B: backup records and engine runs; activation is read again when a run would start.
+    ...backupKindsFor(rt, connector, backupExecution),
   ]
 }
 
@@ -292,7 +313,18 @@ export function workerDispatchAdmission(
     },
     // Migrations as well: an approval revoked or a tier changed after acceptance stops them here;
     // and a drift acceptance (Wave 8), whose production approval must still hold when it starts.
-    [...NODE_OPERATION_KINDS, ...SQL_KINDS, ...VERIFYING_KINDS, DRIFT_ACCEPT_KIND],
+    // A session cancel or termination (Wave 9 Part B) as well: its denial or approval must still hold.
+    // Backup changes, runs and restores (Wave 9 Part B): their approvals and tier must still hold too.
+    [
+      ...NODE_OPERATION_KINDS,
+      ...SQL_KINDS,
+      ...VERIFYING_KINDS,
+      DRIFT_ACCEPT_KIND,
+      ...CONNECTION_KINDS,
+      ...BACKUP_CHANGE_KINDS,
+      ...RESTORE_KINDS,
+      'backup.run',
+    ],
     // The plan's subject as serve's authorizer resolves it, read in the dispatch transaction.
     (q) => new ControlPlaneSubjectResolver(registryChains(q)),
   )

@@ -9769,7 +9769,7 @@
         },
         "rateClass": "read",
         "restOperationId": "getQueryStats",
-        "status": "planned",
+        "status": "served",
         "wave": "9"
       }
     },
@@ -10080,7 +10080,7 @@
         },
         "rateClass": "read",
         "restOperationId": "getTableStats",
-        "status": "planned",
+        "status": "served",
         "wave": "9"
       }
     },
@@ -10303,7 +10303,7 @@
         },
         "rateClass": "read",
         "restOperationId": "runAdvisors",
-        "status": "planned",
+        "status": "served",
         "wave": "9"
       }
     },
@@ -11124,7 +11124,7 @@
         },
         "rateClass": "read",
         "restOperationId": "listClusterBackups",
-        "status": "planned",
+        "status": "served",
         "wave": "9"
       }
     },

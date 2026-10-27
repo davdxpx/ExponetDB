@@ -566,7 +566,9 @@ describe('GET /findings', () => {
     for (const query of [
       '?severity=fatal',
       '?state=closed',
-      '?kind=advisor',
+      // advisor and statements are kinds since Wave 9 Part B; backup findings belong to clusters.
+      '?kind=backup',
+      '?code=Not-A-Code',
       '?limit=201',
       '?limit=0',
       '?limit=abc',
