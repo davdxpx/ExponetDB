@@ -158,12 +158,19 @@ describe('the three roles from one build', () => {
         expect.objectContaining({ name: 'workers', status: 'warn', reason: 'no_live_worker' }),
       ]),
     )
-    // A route of a later wave is not served; a Wave 4 or 5 route needs a credential.
-    const later = await get(
+    // A route that is contracted and not served (the ledger reconciliation plan) answers
+    // NOT_FOUND; a served route (Wave 4, 5 and 9 alike) needs a credential.
+    const unserved = await fetch(
+      `http://127.0.0.1:${serve.ports.public}/api/v1/targets/tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/ledger/reconcile-plans`,
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+    )
+    expect(unserved.status).toBe(404)
+    expect(JSON.parse(await unserved.text())).toMatchObject({ code: 'NOT_FOUND' })
+    const backups = await get(
       serve.ports.public,
       '/api/v1/clusters/cls_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/backups',
     )
-    expect(later).toMatchObject({ status: 404, body: { code: 'NOT_FOUND' } })
+    expect(backups).toMatchObject({ status: 401, body: { code: 'UNAUTHENTICATED' } })
     const nodes = await get(serve.ports.public, '/api/v1/nodes')
     expect(nodes).toMatchObject({ status: 401, body: { code: 'UNAUTHENTICATED' } })
     const api = await get(serve.ports.public, '/api/v1/targets')
