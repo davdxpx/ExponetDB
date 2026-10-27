@@ -12,12 +12,8 @@ const engine = new PolicyEngine({
 
 type Principal = PolicyRequest['principal']
 const PERSON: Principal = { kind: 'human', identityId: 'idn_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z', client: 'web' }
-const AGENT: Principal = {
-  kind: 'agent',
-  identityId: 'idn_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z',
-  client: 'mcp',
-  clientId: 'cli_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z',
-} as Principal
+/** An agent (OD-13 (a)): a person's grant used through MCP. */
+const AGENT: Principal = { kind: 'human', identityId: 'idn_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z', client: 'mcp' }
 
 const decide = (
   kind: string,
