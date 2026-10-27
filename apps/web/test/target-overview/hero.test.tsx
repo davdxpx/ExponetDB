@@ -34,8 +34,9 @@ describe('the top of a target overview', () => {
       'href',
       '/t/shop/platform/staging/findings',
     )
-    // Backups are not observed before Wave 9: never a green or a number.
-    expect(block).toHaveTextContent('Not observed yet')
+    // The backup fact reads the cluster's protection; a read that fails says so with its code,
+    // never a state (test/wave9 covers the read that succeeds).
+    expect(await within(block).findByText(/Could not read \(NOT_FOUND\)/)).toBeInTheDocument()
   })
 
   it('draws where it runs as the recorded layers and links the cluster, nothing invented', async () => {

@@ -133,6 +133,13 @@ export const COVERAGE: Record<string, Coverage> = {
   'src/features/findings/findings-page.tsx': {
     tests: ['target-pages/findings.test.tsx', TARGET_PAGES],
   },
+  'src/features/wave9/performance-page.tsx': { tests: ['wave9/performance.test.tsx'] },
+  'src/features/wave9/advisors-page.tsx': { tests: ['wave9/advisors.test.tsx'] },
+  'src/features/wave9/backups-page.tsx': { tests: ['wave9/backups.test.tsx'] },
+  'src/features/wave9/backup-actions.tsx': { tests: ['wave9/backups.test.tsx'] },
+  'src/features/wave9/global-backups-page.tsx': { tests: ['wave9/global-backups.test.tsx'] },
+  'src/features/wave9/fleet-backup-health.tsx': { tests: ['wave9/global-backups.test.tsx'] },
+  'src/features/wave9/target-backup-fact.tsx': { tests: ['wave9/global-backups.test.tsx'] },
   'src/features/fleet/attention.tsx': { tests: ['fleet/attention.test.tsx'] },
   'src/features/connect/target-connect-sheet.tsx': {
     tests: ['connect/target-connect-sheet.test.tsx'],

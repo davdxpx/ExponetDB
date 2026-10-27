@@ -1,16 +1,12 @@
 import { Button } from '@exponetdb/ui'
-import {
-  NotAvailableYetState,
-  readableValue,
-  StateMessage,
-  useNavigate,
-} from '@exponetdb/ui-patterns'
+import { readableValue, StateMessage, useNavigate } from '@exponetdb/ui-patterns'
 import { type ReactNode, useCallback, useMemo, useState } from 'react'
 import { t } from '../../lib/i18n/i18n.ts'
 import { nounPhrase } from '../target/phrases.ts'
 import { useTargetHealth } from '../target/queries.ts'
 import { useTargetScope } from '../target/scope.tsx'
 import { useTargetHref } from '../target-ops/links.ts'
+import { SessionActions } from '../wave9/session-actions.tsx'
 import { AttentionStrip } from './attention-strip.tsx'
 import { EndpointsSection } from './endpoints-view.tsx'
 import { LiveControls } from './live-controls.tsx'
@@ -50,8 +46,9 @@ const LOCAL_FILTER_NAMES = {
  * their states and filters, who blocks whom, and the endpoints with their
  * probe results. The frame renders the unreachable and "cannot tell" states
  * before any of this (the page needs the target reachable); each read below
- * renders its own truthful state. Cancel and terminate are not controls:
- * they come as planned operations in Wave 9, and the page names that state.
+ * renders its own truthful state. Cancel (an inline operation bound to the
+ * query the person saw) and terminate (a plan) act on one session of the
+ * list, picked by its process id (`SessionActions`, Wave 9).
  */
 export function ConnectionsPage({ search }: { readonly search: ConnectionsSearch }): ReactNode {
   return (
@@ -287,11 +284,13 @@ function ConnectionsBody({ search }: { readonly search: ConnectionsSearch }): Re
             }
           />
         )}
-        <NotAvailableYetState
-          what={t('connections.operate.what')}
-          reason={t('connections.operate.reason')}
-          headingLevel={3}
-        />
+        {list === undefined ? null : (
+          <SessionActions
+            sessions={rendered}
+            targetPath={path}
+            tier={target?.tier === 'prod' ? 'prod' : 'nonprod'}
+          />
+        )}
       </section>
       <section aria-labelledby="blocking-title" className="flex flex-col gap-3">
         <h2 id="blocking-title" className="text-base font-medium text-foreground">

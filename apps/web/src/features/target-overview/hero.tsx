@@ -15,6 +15,7 @@ import { clusterPath } from '../infrastructure/model.ts'
 import { lifecycleLabelKey } from '../target/environments.ts'
 import type { TargetRoute } from '../target/params.ts'
 import { useTargetHref } from '../target-ops/links.ts'
+import { TargetBackupFact } from '../wave9/target-backup-fact.tsx'
 
 /**
  * The top of a target's overview, as Studio's project home has one but in ExponetDB's model:
@@ -22,8 +23,8 @@ import { useTargetHref } from '../target-ops/links.ts'
  * first, each a link where it has a page (migrations, findings); on the right where it runs,
  * drawn as the layers the registry records (server, cluster, this database) and a link to the
  * cluster. Only recorded facts are drawn: no region, size or capacity the registry does not
- * hold, and a placement that is not recorded says so instead of a picture of one. Backups say
- * "not observed yet" until Wave 9 reads them; unknown is not safe.
+ * hold, and a placement that is not recorded says so instead of a picture of one. Backups show
+ * the cluster's protection state from Wave 9 (`TargetBackupFact`); unknown is not safe.
  */
 export function TargetHero({
   target,
@@ -98,7 +99,7 @@ function Facts({ target }: { readonly target: Target }): ReactNode {
         </Link>
       </Fact>
       <Fact label={t('overview.hero.backups')}>
-        <span className="text-foreground-light">{t('overview.hero.backups.state')}</span>
+        <TargetBackupFact clusterId={target.placement?.clusterId} href={href('/backups')} />
       </Fact>
     </dl>
   )
