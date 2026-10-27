@@ -6,6 +6,7 @@
 //	                                                copy a freshly enrolled agent's trust
 //	exponetdb-node-helper trust --show              print the helper's trust
 //	exponetdb-node-helper ledger init               create the effect ledger of a helper that never performed an effect
+//	exponetdb-node-helper engine-run --run RUN_ID   execute an engine run (only inside its transient unit)
 //	exponetdb-node-helper version                   print the version
 //
 // It runs as root, accepts only the agent user's uid, and performs a fixed
@@ -98,7 +99,7 @@ func listen(path string, gid, ownerUID int) (*net.UnixListener, error) {
 	return helper.Listen(path, gid, ownerUID)
 }
 
-const usage = "usage: exponetdb-node-helper serve|trust|ledger init|version"
+const usage = "usage: exponetdb-node-helper serve|trust|ledger init|engine-run|version"
 
 // ledgerInitHelp is what `exponetdb-node-helper ledger init` is for
 // (node-runbook.md).
@@ -141,6 +142,7 @@ func run(ctx context.Context, args []string, d deps) int {
 	stateDir := fs.String("state-dir", helper.DefaultStateDirectory, "helper state: effect ledger and staged keys")
 	agentState := fs.String("agent-state", "", "trust: the enrolled agent's state directory")
 	show := fs.Bool("show", false, "trust: print the helper's trust")
+	runID := fs.String("run", "", "engine-run: the run id")
 	var expect multiFlag
 	fs.Var(&expect, "expect-key", "trust: a job key fingerprint the agent's state must hold (repeatable)")
 	if err := fs.Parse(rest); err != nil {
@@ -157,6 +159,8 @@ func run(ctx context.Context, args []string, d deps) int {
 		return trustCommand(*agentState, *trustPath, expect, d)
 	case "ledger init":
 		return ledgerInitCommand(*stateDir, *trustPath, d)
+	case "engine-run":
+		return engineRun(ctx, *runID, d)
 	case "serve":
 		if err := serve(ctx, *configPath, *trustPath, *stateDir, d); err != nil {
 			fmt.Fprintln(d.stderr, "exponetdb-node-helper:", err)
@@ -190,6 +194,26 @@ func ledgerInitCommand(stateDir, trustPath string, d deps) int {
 	}
 	fmt.Fprintf(d.stdout, "effect ledger initialized: %s (recorded in %s)\n",
 		filepath.Join(stateDir, helper.LedgerFile), helper.LedgerRecordPath(trustPath))
+	return 0
+}
+
+// engineRun executes one engine run (ADR-0037 §2): the helper starts it as
+// a transient unit running as the PostgreSQL server's user, with the run id
+// as its only argument; everything else comes from the root-written run
+// record. It never runs as root.
+func engineRun(ctx context.Context, runID string, d deps) int {
+	if os.Geteuid() == 0 {
+		fmt.Fprintln(d.stderr, "engine-run: never runs as root; it runs in its transient unit as the engine user")
+		return 2
+	}
+	if !helper.ValidRunID(runID) {
+		fmt.Fprintln(d.stderr, "engine-run: --run names no run id")
+		return 2
+	}
+	if err := helper.EngineRun(ctx, helper.EngineOptions{RunsRoot: helper.DefaultPaths.Engine + "/runs", RunID: runID}); err != nil {
+		fmt.Fprintln(d.stderr, "engine-run: the run's outcome could not be recorded")
+		return 1
+	}
 	return 0
 }
 

@@ -13,6 +13,15 @@ func All(e *Env) []agent.Capability {
 	f := func(key, effect string) fixed { return fixed{key: key, effect: effect, env: e} }
 	c := func(key, effect string) clusterBound { return clusterBound{f(key, effect)} }
 	u := func(key string) unbound { return unbound{f(key, "")} }
+	m := func(key, effect string) mapped { return mapped{f(key, effect)} }
+	// effect: an apply the helper performs, with its precondition.
+	effect := func(key, step string, cluster bool, op string) helperEffect {
+		pre := unbound{}.Precondition
+		if cluster {
+			pre = m(key, step).Precondition
+		}
+		return helperEffect{precondition: pre, f: f(key, step), op: op}
+	}
 	return []agent.Capability{
 		postgresStatus{f("postgres.status@1", "")},
 		postgresReload{c("postgres.reload@2", "reload")},
@@ -42,5 +51,18 @@ func All(e *Env) []agent.Capability {
 		walArchiveStatus{c("wal.archive_status@1", "")},
 		forwarded{u("packages.audit@1"), helperproto.OpPackagesAudit},
 		forwarded{u("packages.plan_update@1"), helperproto.OpPackagesPlanUpdate},
+		// Wave 9 Part B (ADR-0037): the helper answers every backup and
+		// restore capability; starts, cancels and discards are effects.
+		mappedForward{m("backup.list@1", ""), helperproto.OpBackupList},
+		forwarded{u("backup.timers@1"), helperproto.OpBackupTimers},
+		effect("backup.run@1", "start_run", true, helperproto.OpBackupRun),
+		effect("backup.verify@1", "start_run", true, helperproto.OpBackupVerify),
+		effect("backup.expire@1", "start_run", true, helperproto.OpBackupExpire),
+		forwarded{u("run.status@1"), helperproto.OpRunStatus},
+		effect("run.cancel@1", "stop_run", false, helperproto.OpRunCancel),
+		mappedForward{m("restore.prepare@1", ""), helperproto.OpRestorePrepare},
+		effect("restore.execute@1", "start_run", true, helperproto.OpRestoreExecute),
+		effect("restore.verify@1", "start_run", false, helperproto.OpRestoreVerify),
+		effect("restore.discard@1", "remove_scratch", false, helperproto.OpRestoreDiscard),
 	}
 }

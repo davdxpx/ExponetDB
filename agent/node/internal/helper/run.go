@@ -25,7 +25,12 @@ const (
 	maxTimeout     = 15 * time.Minute
 )
 
-var binaries = map[string]bool{Systemctl: true, Dpkg: true, DpkgQuery: true, Journalctl: true, AptCache: true, AptGet: true}
+// systemd-run starts engine runs and the engine user's catalog reads with
+// fixed templates (runs.go); pgbackrest and restic run only their version
+// command as root (every other engine command runs as the engine user in a
+// transient unit).
+var binaries = map[string]bool{Systemctl: true, Dpkg: true, DpkgQuery: true, Journalctl: true, AptCache: true, AptGet: true,
+	SystemdRun: true, PgBackRest: true, Restic: true}
 
 // Command is one execution: a fixed binary and an argv the helper built.
 type Command struct {

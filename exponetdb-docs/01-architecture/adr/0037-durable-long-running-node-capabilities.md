@@ -69,17 +69,36 @@ before the end returns `running` and changes nothing.
 - The run therefore survives a restart of the helper or the agent; it does
   not survive a reboot (systemd stops transient units), which a status read
   then reports as `lost` (the unit is gone without a recorded result).
-- **Run record**: `/var/lib/exponetdb-node/runs/<runId>/record.json`
-  (root-owned, `0600`, written with `fsafe` before the unit starts; never a
-  path from the Control Plane), holding the start job id, `argsHash`,
-  operation id, capability, cluster `system_identifier`, repository id,
-  start time and the unit name; `result.json` is written by the helper when
-  it collects the unit's exit status and the engine's output. Secrets the
-  run needs (cipher passphrase, storage credential) arrive sealed (`ns1`),
-  are opened by the helper and written to `secrets/` in the run directory
-  (`0600`, owned by the engine user), and are removed when the run ends;
-  they are never in argv, the environment of `systemd-run`, the unit's
-  properties, the journal or any result.
+- **Run record**: `/var/lib/exponetdb-node-engine/runs/<runId>/record.json`
+  (written with `fsafe` before the unit starts; never a path from the
+  Control Plane), holding the start job id, `argsHash`, operation id,
+  capability, cluster `system_identifier`, repository id, start time and
+  the unit name; `result.json` (root only, `0600`) is written by the helper
+  when it collects the unit's exit status and the engine's outcome, which
+  it treats as untrusted, bounds field by field and validates against the
+  `run.status@1` schema. **[DECIDED]** (as built, 2026-10-27) The engine
+  directory is `/var/lib/exponetdb-node-engine/{runs,scratch,reads}` (root,
+  `0711`, created by `packaging/tmpfiles.d/exponetdb-node-engine.conf`), not
+  the agent's own state directory (`/var/lib/exponetdb-node`, owned by the
+  agent user, `0700`): root's run records must not have a less trusted
+  parent, and the engine user must reach its run directory. A run directory
+  is `root:<engine group>` `0750`; `record.json` is `0640` (the engine
+  program reads it); `work/` belongs to the engine user (`0700`).
+- **Secrets** stay in the host configuration in this wave (ADR-0036,
+  "Implementation in Wave 9 Part B"): pgBackRest reads its own
+  configuration; for restic the repository and password files are copied
+  into `work/secrets` (engine user, `0600`) and the allowlisted storage
+  credentials go into a root-only `0600` file passed as the unit's
+  `EnvironmentFile=`. They are never in argv, `--setenv`, unit properties,
+  the journal or any result, and `secrets/` is removed when the run ends.
+- **Engines run as the engine user** (`postgres`), never as root; reads use
+  `systemd-run --wait --pipe --collect` with the same hardening. A scratch
+  PostgreSQL is started directly (not `pg_ctl start`, which uses a shell)
+  with fixed `-c` overrides that the restored `postgresql.auto.conf` cannot
+  change: `archive_mode=off`, no TCP listener (`listen_addresses` empty),
+  its socket in the scratch directory, its own `pg_hba` and `pg_ident`,
+  `ssl=off`, `hot_standby=off`; the restore passes `--archive-mode=off` and
+  maps every tablespace into the scratch directory.
 - **Argument templates** are per capability and engine version and contain
   only values validated by the contract (enums, ULIDs, LSNs, timestamps,
   stanza and repo index, the agent-chosen path). No argument, path or

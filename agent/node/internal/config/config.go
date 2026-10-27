@@ -53,6 +53,11 @@ type Config struct {
 	// Instances maps each local PostgreSQL instance the agent may act on to
 	// its unit and files, as confirmed by the operator (G5 record C9).
 	Instances []Instance `json:"instances"`
+	// PgBackRestConfig is the host's pgBackRest configuration file the
+	// backup capabilities name to the engine (ADR-0036 §4, host
+	// configuration). Unset: /etc/pgbackrest/pgbackrest.conf, else the
+	// engine's older default /etc/pgbackrest.conf.
+	PgBackRestConfig string `json:"pgbackrestConfig,omitempty"`
 }
 
 // Instance is one operator-confirmed local PostgreSQL instance.
@@ -145,6 +150,11 @@ func (c *Config) validate() error {
 	}
 	if c.AgentUser != "" && !userRE.MatchString(c.AgentUser) {
 		return fmt.Errorf("agentUser %q is not a system user name", c.AgentUser)
+	}
+	if c.PgBackRestConfig != "" {
+		if err := absolute("pgbackrestConfig", c.PgBackRestConfig); err != nil {
+			return err
+		}
 	}
 	if r := c.RestartIntervalSeconds; r != nil && (*r < 0 || *r > 86400) {
 		return fmt.Errorf("restartIntervalSeconds %d is not between 0 and 86400", *r)

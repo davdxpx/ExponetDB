@@ -63,6 +63,23 @@ func TestVersionAndUsage(t *testing.T) {
 	}
 }
 
+// TestEngineRunRefusesRootAndNoRun: engine-run never runs as root, and
+// names a run only by its id (everything else comes from the run record).
+func TestEngineRunRefusesRootAndNoRun(t *testing.T) {
+	var out, errs bytes.Buffer
+	d := testDeps(&out, &errs, os.Geteuid()+1)
+	if code := run(context.Background(), []string{"engine-run", "--run", "../../etc/passwd"}, d); code != 2 {
+		t.Fatalf("a path as run id: %d", code)
+	}
+	if os.Geteuid() == 0 && !strings.Contains(errs.String(), "never runs as root") {
+		t.Fatalf("as root: %q", errs.String())
+	}
+	errs.Reset()
+	if code := run(context.Background(), []string{"engine-run", "--run", "run_01M60000000000000000000002", "--config", "/x"}, d); code == 0 {
+		t.Fatal("engine-run ran outside its unit")
+	}
+}
+
 func TestTrustFromAgentState(t *testing.T) {
 	dir := t.TempDir()
 	agentState := filepath.Join(dir, "agent")

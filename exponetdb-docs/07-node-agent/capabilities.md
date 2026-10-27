@@ -119,6 +119,41 @@ the chosen backup engine package, `libpq5`. Anything else is outside scope (C-3)
 Promoting a restored scratch cluster to serve a target is a **placement move**
 (registry operation), not a node capability.
 
+**[DECIDED]** (as built, Wave 9 Part B, 2026-10-27) The host side of these
+capabilities:
+
+- **Repositories are host configuration.** A pgBackRest repository is a
+  stanza and `repoN` of the host's own configuration
+  (`/etc/pgbackrest/pgbackrest.conf` or `/etc/pgbackrest.conf` and their
+  `conf.d`, or the operator configuration's optional `pgbackrestConfig`
+  path); a restic repository (engines `restic` and `pg_dump`: logical dumps
+  stored by restic) is the directory the operator provisions under
+  `/etc/exponetdb-node/repositories/<repositoryId>/` with `repository`,
+  `password` (`0600`) and an optional `env` (allowlisted `KEY=VALUE` lines).
+  The node never takes a location, key or credential from the Control Plane.
+- **Host mode file** `/etc/exponetdb-node/repositories/<repositoryId>/mode`
+  (owner `root`, not group- or world-writable; absent means
+  `adopted_observed`): runs only with `adopted_runs` (incremental only) or
+  `owned`; an unsafe file refuses every job on the repository.
+- **Engine directory** `/var/lib/exponetdb-node-engine/{runs,scratch,reads}`
+  (root, `0711`, from `packaging/tmpfiles.d/exponetdb-node-engine.conf`);
+  engines run as the engine user, never as root (ADR-0037 §2).
+- **Expiry** keeps every label in `keepLabels` or refuses before the engine
+  runs (a conservative survivor check); restic expiry needs `logicalDays`
+  and is refused with a non-empty `keepLabels` (restic snapshots cannot be
+  named there yet: a `keepSnapshots` field is **[PLANNED]**).
+  `backup.verify@1` with a `snapshot` checks the whole restic repository
+  (restic 0.16 `check` cannot limit itself to one snapshot).
+- **`walContinuous`** from `restore.prepare@1` is `false` only when missing
+  coverage is shown, otherwise `null`; the node never claims continuity.
+- **Output** is redacted on the host and capped; an excerpt is untrusted text.
+- **NOT PROVEN** on a real systemd host: the transient units, `--wait` and
+  `--pipe` from the helper's sandbox, `EnvironmentFile=`, surviving helper
+  and agent restarts, and `lost` after a reboot (`PRE-WAVE-11-REVIEW.md`
+  T-NODE-1, T-NODE-2). The real-engine lab test
+  (`internal/helper/pglab_test.go`, build tag `pglab`) runs the engines as
+  direct children.
+
 ### Agent self-management
 
 | Capability | Kind | Notes |

@@ -9,8 +9,9 @@ nothing else. No Docker, Node.js or Bun on a database host.
 | `exponetdb-node-helper-<version>-linux-<arch>` | `/usr/sbin/exponetdb-node-helper` | the root helper; socket-activated |
 | `systemd/exponetdb-node.service` | `/etc/systemd/system/` | no capabilities, `ProtectSystem=strict`, state in `/var/lib/exponetdb-node` |
 | `systemd/exponetdb-node-helper.socket` | `/etc/systemd/system/` | `/run/exponetdb-node/helper.sock`, mode `0660`, group `exponetdb-node` |
-| `systemd/exponetdb-node-helper.service` | `/etc/systemd/system/` | `CAP_CHOWN CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER` only, no network, writes under `/etc/postgresql` and `/etc/exponetdb-node` only |
+| `systemd/exponetdb-node-helper.service` | `/etc/systemd/system/` | `CAP_CHOWN CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_FOWNER` only, no network, writes under `/etc/postgresql`, `/etc/exponetdb-node` and `/var/lib/exponetdb-node-engine` only |
 | `sysusers.d/exponetdb-node.conf` | `/usr/lib/sysusers.d/` | the agent's user, no login shell |
+| `tmpfiles.d/exponetdb-node-engine.conf` | `/usr/lib/tmpfiles.d/` | `/var/lib/exponetdb-node-engine/{runs,scratch,reads}`, root, `0711`: the backup and restore runs (ADR-0037), which the helper starts as transient units through `systemd-run` |
 
 - `build.sh <version> [dir]` builds both binaries for linux/amd64 and
   linux/arm64 from a clean commit (`-trimpath`, no build ID, version and

@@ -61,3 +61,24 @@ cd agent/node && gofmt -l . && go vet ./... && go test -race -count=1 ./...
 ```
 
 Standard library only; no module downloads.
+
+## Wave 9 Part B (backups and restores)
+
+The root helper answers the eleven backup and restore capabilities
+(ADR-0036 to ADR-0038; `internal/helper/ops_backup.go`): catalog reads
+(`backup.list@1`, `backup.timers@1`, `restore.prepare@1`, `run.status@1`)
+and the starts of supervised engine runs (`backup.run@1`, `backup.verify@1`,
+`backup.expire@1`, `restore.execute@1`, `restore.verify@1`), their cancel
+(`run.cancel@1`) and the scratch discard (`restore.discard@1`). A run is a
+transient systemd unit (`exponetdb-run-<runId>.service`, fixed properties,
+`systemd-run` with a fixed template) that executes
+`exponetdb-node-helper engine-run --run <runId>` as the data directory's
+owner; the run record lives under `/var/lib/exponetdb-node-engine/runs`
+(root, `tmpfiles.d`), scratch restores under `.../scratch`.
+
+- Unit tests: `go test ./internal/helper/` (scripted systemd and engines).
+- Lab test with the real engines (root; pgBackRest, restic and PostgreSQL 17
+  installed): `go test -tags pglab -count=1 -run TestPglab -v ./internal/helper/`.
+  It runs each engine run as a direct child instead of a transient unit:
+  the systemd side is **not proven** by it.
+

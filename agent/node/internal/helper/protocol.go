@@ -23,6 +23,17 @@ const (
 	OpTrustInspect        = helperproto.OpTrustInspect
 	OpFailedUnits         = helperproto.OpFailedUnits
 	OpLogRead             = helperproto.OpLogRead
+	OpBackupList          = helperproto.OpBackupList
+	OpBackupTimers        = helperproto.OpBackupTimers
+	OpBackupRun           = helperproto.OpBackupRun
+	OpBackupVerify        = helperproto.OpBackupVerify
+	OpBackupExpire        = helperproto.OpBackupExpire
+	OpRunStatus           = helperproto.OpRunStatus
+	OpRunCancel           = helperproto.OpRunCancel
+	OpRestorePrepare      = helperproto.OpRestorePrepare
+	OpRestoreExecute      = helperproto.OpRestoreExecute
+	OpRestoreVerify       = helperproto.OpRestoreVerify
+	OpRestoreDiscard      = helperproto.OpRestoreDiscard
 
 	CodeRequestInvalid     = helperproto.CodeRequestInvalid
 	CodeJobInvalid         = helperproto.CodeJobInvalid
@@ -83,6 +94,20 @@ var operations = map[string]operation{
 	OpTrustInspect: {"agent.diagnostics@2", false, nil},
 	OpFailedUnits:  {"system.health@1", false, nil},
 	OpLogRead:      {"log.inspect@2", false, nil},
+	// Wave 9 Part B (ADR-0037): a start records its run and starts the unit
+	// (one effect per job); run.status writes only the helper's own result
+	// record of a run it observed ending.
+	OpBackupList:     {"backup.list@1", false, nil},
+	OpBackupTimers:   {"backup.timers@1", false, nil},
+	OpBackupRun:      {"backup.run@1", true, nil},
+	OpBackupVerify:   {"backup.verify@1", true, nil},
+	OpBackupExpire:   {"backup.expire@1", true, nil},
+	OpRunStatus:      {"run.status@1", false, nil},
+	OpRunCancel:      {"run.cancel@1", true, nil},
+	OpRestorePrepare: {"restore.prepare@1", false, nil},
+	OpRestoreExecute: {"restore.execute@1", true, nil},
+	OpRestoreVerify:  {"restore.verify@1", true, nil},
+	OpRestoreDiscard: {"restore.discard@1", true, nil},
 }
 
 // Capability names the capability whose job authorizes op ("" if unknown).

@@ -444,6 +444,73 @@ func (c *Conn) Query(ctx context.Context, sql string, args ...any) (*Rows, error
 	}
 }
 
+// SimpleQuery runs one fixed statement over the simple query protocol (no
+// parameters; only SQL compiled into the node, such as a restore probe) and
+// returns the rows of its last result.
+func (c *Conn) SimpleQuery(ctx context.Context, sql string) (*Rows, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.broken != nil {
+		return nil, c.broken
+	}
+	if strings.IndexByte(sql, 0) >= 0 {
+		return nil, errors.New("pgwire: the statement contains NUL")
+	}
+	stop := c.watch(ctx)
+	defer stop()
+	if _, err := c.c.Write(message('Q', append([]byte(sql), 0))); err != nil {
+		c.broken = err
+		return nil, err
+	}
+	rows := &Rows{}
+	var failure error
+	for {
+		t, data, err := c.read()
+		if err != nil {
+			c.broken = err
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, err
+		}
+		switch t {
+		case 'I', 'N':
+		case 'S':
+			k, v := cstrings2(data)
+			c.params[k] = v
+		case 'T':
+			cols, err := rowDescription(data)
+			if err != nil {
+				c.broken = err
+				return nil, err
+			}
+			rows = &Rows{Columns: cols}
+		case 'D':
+			vals, err := dataRow(data)
+			if err != nil {
+				c.broken = err
+				return nil, err
+			}
+			rows.Values = append(rows.Values, vals)
+		case 'C':
+			rows.Command, _ = cstring(data)
+		case 'E':
+			failure = parseError(data)
+		case 'Z':
+			if len(data) > 0 {
+				c.txStatus = data[0]
+			}
+			if failure != nil {
+				return nil, failure
+			}
+			return rows, nil
+		default:
+			c.broken = fmt.Errorf("pgwire: unexpected message %q", t)
+			return nil, c.broken
+		}
+	}
+}
+
 // Exec runs one statement and discards its rows.
 func (c *Conn) Exec(ctx context.Context, sql string, args ...any) error {
 	_, err := c.Query(ctx, sql, args...)
