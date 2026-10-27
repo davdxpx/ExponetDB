@@ -201,3 +201,25 @@ external ──adopt (plan, human)──▶ adopted_observed ──handover (pla
 - **Re-create every setup under ExponetDB**: rejected (OD-52).
 - **Wait for the storage decision before building**: rejected by the
   owner's order; the architecture does not depend on the choice.
+
+## Implementation in Wave 9 Part B (2026-10-26)
+
+**[DECIDED]** What the code of this wave builds differs from the decision
+above in the following points. Each one is stricter than the decision or
+leaves a part refused; none relaxes it. The decision text above stays the
+target.
+
+| Decision | As built | Why |
+|---|---|---|
+| §3 three ownership states | four: `external`, `adopted_observed`, **`adopted_runs`**, `owned`. `adopted_runs` lets ExponetDB start **incremental** pgBackRest backups only, always with `--no-expire-auto` (a full or differential backup would shorten the host's retention); the policy rule `backup.repository-runs-allowed` and the node both check it | the owner's existing chain keeps its own schedule and expiry; ExponetDB can prove a run without taking it over |
+| §3 hand-over kinds `backup.repository.handover` and `handover_confirm` | one kind, `backup.repository.ownership` (`adopted_observed` ⇄ `adopted_runs`); a change to `owned` is refused with `CAPABILITY_UNAVAILABLE` at planning; no confirm or rollback kind yet **[PLANNED]** | writing a repository configuration needs a capability that does not exist (§3, last item) |
+| §3 two parties | the node reads a **host mode file** `/etc/exponetdb-node/repositories/<repositoryId>/mode` (owner `root`, not group- or world-writable) and refuses a run unless it says `adopted_runs` or `owned`; a missing file means `adopted_observed` | a Control Store record alone can never widen what the host allows (a compromised Control Plane cannot start runs on an observed repository) |
+| §1 provider fields and the storage host allowlist | the node never takes a location, key or credential from the Control Plane: a pgBackRest repository is the stanza and `repoN` of the host's own configuration, a restic repository is the directory the operator provisioned; the recorded endpoint, bucket and prefix are descriptive (listing, runbook) and only refused against reserved suffixes | the node opens no connection to a recorded endpoint, so a record cannot point it anywhere (no SSRF through a record) |
+| §4 sealed key delivery (`keyRef`, `credentialRef`) | not built: `secret_source` is `host_config` only (a CHECK of bundle `backup-catalog`); passphrases and storage keys stay in the host configuration and never pass through the Control Plane | sealed delivery would put repository keys in the Control Store, which this wave does not need |
+| §1 `adminSeparation`, `lockProofRef` | not stored; without a proof, `lockCapability` is at most `unproven`, and the bundle refuses `proven` (no operation records the experiment yet) | §2: a lock is never shown as protecting anything until proven |
+| §5 subkey check recorded | the check is the owner's, on the host ([`adoption.md` §3](../../09-backups-and-restore/adoption.md#3-encryption-and-the-2026-10-04-advisory)); ExponetDB does not read subkeys and keeps `backup_engine_advisory` open for an encrypted stanza until the check is recorded **[PLANNED]** | the subkeys are key material |
+
+Execution is behind installation settings that default to off:
+`EXPONETDB_BACKUP_EXECUTION` (`disabled`, `nonprod`, `all`) and
+`EXPONETDB_RESTORE_EXECUTION` (`disabled`, `scratch`, `all`); a refused run
+answers `FEATURE_NOT_ACTIVATED` with the setting's name.

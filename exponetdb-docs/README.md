@@ -141,7 +141,7 @@ task in order. "Must" means the implementation will be reviewed against it.
 | **Node agent** | [`07-node-agent/architecture.md`](./07-node-agent/architecture.md), [`07-node-agent/protocol.md`](./07-node-agent/protocol.md), [`07-node-agent/capabilities.md`](./07-node-agent/capabilities.md), [`07-node-agent/security.md`](./07-node-agent/security.md) | [`07-node-agent/enrollment.md`](./07-node-agent/enrollment.md), [`12-operations/node-runbook.md`](./12-operations/node-runbook.md) |
 | **Auth, OAuth, RBAC** | [`08-auth-and-security/identity.md`](./08-auth-and-security/identity.md), [`08-auth-and-security/authorization.md`](./08-auth-and-security/authorization.md), [`05-mcp/oauth.md`](./05-mcp/oauth.md) | [`08-auth-and-security/federation.md`](./08-auth-and-security/federation.md) |
 | Security review of anything | [`08-auth-and-security/threat-model.md`](./08-auth-and-security/threat-model.md), [`08-auth-and-security/ai-agent-safety.md`](./08-auth-and-security/ai-agent-safety.md) | [`01-architecture/failure-model.md`](./01-architecture/failure-model.md) |
-| **Backups and restore** | [`09-backups-and-restore/architecture.md`](./09-backups-and-restore/architecture.md), [`09-backups-and-restore/backup-engines.md`](./09-backups-and-restore/backup-engines.md), [`09-backups-and-restore/restore.md`](./09-backups-and-restore/restore.md) | [`07-node-agent/capabilities.md`](./07-node-agent/capabilities.md) |
+| **Backups and restore** | [`09-backups-and-restore/architecture.md`](./09-backups-and-restore/architecture.md), [`09-backups-and-restore/backup-engines.md`](./09-backups-and-restore/backup-engines.md), [`09-backups-and-restore/restore.md`](./09-backups-and-restore/restore.md), [`09-backups-and-restore/adoption.md`](./09-backups-and-restore/adoption.md), [`12-operations/backup-runbooks.md`](./12-operations/backup-runbooks.md) | [`07-node-agent/capabilities.md`](./07-node-agent/capabilities.md) |
 | Health, diagnostics, performance | [`10-observability/health.md`](./10-observability/health.md), [`10-observability/performance.md`](./10-observability/performance.md), [`03-database-model/statement-redaction.md`](./03-database-model/statement-redaction.md) | [`11-ui/supabase-reference-audit.md`](./11-ui/supabase-reference-audit.md) |
 | ExponetDB's own logs, metrics, tracing | [`10-observability/self-observability.md`](./10-observability/self-observability.md) | [`12-operations/incident-model.md`](./12-operations/incident-model.md) |
 | **Web App, design system** | [`11-ui/information-architecture.md`](./11-ui/information-architecture.md), [`11-ui/design-system.md`](./11-ui/design-system.md), [`11-ui/supabase-reference-audit.md`](./11-ui/supabase-reference-audit.md), [`01-architecture/adr/0030-supabase-ui-source-adoption.md`](./01-architecture/adr/0030-supabase-ui-source-adoption.md), [`11-ui/third-party-register.md`](./11-ui/third-party-register.md) (before copying any file), [`11-ui/studio-parity.md`](./11-ui/studio-parity.md) | [`06-rest-api/resources.md`](./06-rest-api/resources.md), [`14-roadmap/orders/wave-8-order.md`](./14-roadmap/orders/wave-8-order.md), [`14-roadmap/gates/8.md`](./14-roadmap/gates/8.md) |
@@ -228,6 +228,7 @@ task in order. "Must" means the implementation will be reviewed against it.
 - [`architecture.md`](./09-backups-and-restore/architecture.md): layers, catalog, policies
 - [`backup-engines.md`](./09-backups-and-restore/backup-engines.md): engine options and V1 recommendation
 - [`restore.md`](./09-backups-and-restore/restore.md): restore planning, execution, drills
+- [`adoption.md`](./09-backups-and-restore/adoption.md): adopting an existing repository, ownership modes, the encryption advisory, locks
 
 ### 10-observability
 - [`health.md`](./10-observability/health.md): health state model for targets, nodes, the Control Plane
@@ -246,6 +247,7 @@ task in order. "Must" means the implementation will be reviewed against it.
 - [`bootstrap.md`](./12-operations/bootstrap.md): from nothing to the first managed target
 - [`control-store-runbook.md`](./12-operations/control-store-runbook.md): first rollout on Coolify, Control Store backups, RB-10
 - [`node-runbook.md`](./12-operations/node-runbook.md): node agent host installation, enrollment, RB-13
+- [`backup-runbooks.md`](./12-operations/backup-runbooks.md): RB-06 WAL archive failing, RB-07 disk high, RB-08 recovery from backup
 - [`onboard-external-cluster.md`](./12-operations/onboard-external-cluster.md): an existing self-managed cluster without the agent, from `server create` to an active target (Wave 9, A8)
 - [`local-development.md`](./12-operations/local-development.md): developer environment
 - [`upgrades.md`](./12-operations/upgrades.md): upgrading ExponetDB, the agent, PostgreSQL
