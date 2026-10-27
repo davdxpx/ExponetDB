@@ -384,7 +384,9 @@ behind the Web App's start page.
   reads the newest 500 operations in these states; when more exist the part says
   `lowerBound: true` with `lowerBoundReason: "scan_limit"`, because the count
   covers the newest 500 only. A caller who may read none of them sees zeros: for
-  operations the visible set is the answer, as in the list.
+  operations the visible set is the answer, as in the list. A stored plan body
+  that holds an escaped NUL (`\u0000`, valid JSON that `jsonb` refuses) is read
+  with U+FFFD in its place and never makes the read fail.
 - **Truthful reads.** Every part carries `source` (`live`: read from the Control
   Store in this request), `observedAt`, `lowerBound` and `lowerBoundReason`. A
   failed read makes the whole request an error (`500`/`503` as for any read); no

@@ -1092,9 +1092,11 @@ export class Application {
     const counts = { running: 0, needs_attention: 0, awaiting_approval: 0 }
     let capped = false
     await this.#d.auth.store.transaction('application.fleet.operations', async (tx) => {
+      // An escaped NUL (`\u0000`, valid JSON that jsonb refuses) is read as U+FFFD, so no stored body can fail the read.
       const { rows } = await tx.query(
         'application.fleet.operations',
-        `SELECT o.operation_id, o.kind, o.state, o.plan_id, b.body::jsonb -> 'subject' AS subject
+        `SELECT o.operation_id, o.kind, o.state, o.plan_id,
+                replace(b.body, '\\u0000', '\\ufffd')::jsonb -> 'subject' AS subject
            FROM operations.operations o
            LEFT JOIN operations.plan_bodies b ON b.plan_id = o.plan_id
           WHERE o.state = ANY($1::text[])

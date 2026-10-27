@@ -40,11 +40,12 @@ BEGIN
                 AND j.state IN ('pending', 'dispatched', 'running')) THEN
     RAISE EXCEPTION 'od28: a job of a retired major is still open; let the worker settle it, then run again';
   END IF;
-  -- Only the kinds whose bodies are scrubbed (below) hold the scrub up.
+  -- Only the kinds whose bodies are scrubbed (below) hold the scrub up. Here and below an escaped
+  -- NUL (\u0000, valid JSON that jsonb refuses) is read as U+FFFD; the digest is of the stored text.
   IF EXISTS (SELECT FROM operations.plan_bodies b JOIN operations.plans p USING (plan_id)
               WHERE p.kind IN ('postgres.config.apply', 'postgres.hba.apply', 'postgres.roles.apply', 'postgres.restart',
                                'postgres.reload')
-                AND b.body::jsonb -> 'content' -> 'basis' ->> 'capability' = ANY (string_to_array(current_setting('od28.retired'), ','))
+                AND replace(b.body, '\u0000', '\ufffd')::jsonb -> 'content' -> 'basis' ->> 'capability' = ANY (string_to_array(current_setting('od28.retired'), ','))
                 AND (p.state = 'active' AND p.expires_at > clock_timestamp()
                      OR EXISTS (SELECT FROM operations.operations o
                                  WHERE o.plan_id = p.plan_id
@@ -86,7 +87,7 @@ UPDATE operations.plan_bodies b
  WHERE p.plan_id = b.plan_id
    AND p.kind IN ('postgres.config.apply', 'postgres.hba.apply', 'postgres.roles.apply', 'postgres.restart',
                   'postgres.reload')
-   AND b.body::jsonb -> 'content' -> 'basis' ->> 'capability' = ANY (string_to_array(current_setting('od28.retired'), ','));
+   AND replace(b.body, '\u0000', '\ufffd')::jsonb -> 'content' -> 'basis' ->> 'capability' = ANY (string_to_array(current_setting('od28.retired'), ','));
 
 ALTER TABLE nodes.jobs ENABLE TRIGGER USER;
 ALTER TABLE nodes.observations ENABLE TRIGGER USER;
