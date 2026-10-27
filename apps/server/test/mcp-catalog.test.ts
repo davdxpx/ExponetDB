@@ -57,23 +57,23 @@ const SHAPES: Record<string, { scopes: Scope[]; tiers: Tier[] }> = {
 const PINNED: Record<string, { tools: number; digest: string }> = {
   'baseline, nonprod': {
     tools: 15,
-    digest: 'sha256:ffadc97440a5ce747b611ea40d0584c5addd6ad25ef69d1693b6e7e4ae31c6ad',
+    digest: 'sha256:2c58627f5dd4a0ac072c04f62b04be61f444de3e57cbe958d19b7204abb873e2',
   },
   'every read, nonprod': {
     tools: 19,
-    digest: 'sha256:0b6162671893516aa9a6f1943755d72afdd03b87aab9f2a9e0f43c1889c0753b',
+    digest: 'sha256:93192f77e73359fa1bce9eb7ef2a01ff0de1b44db440cde6ecdf59b7307a0fe1',
   },
   'agent, nonprod': {
     tools: 25,
-    digest: 'sha256:e36800dabcfdf3c8a1ea1f2bab14652d939abd82d0461d2ba31c0bb20f7e022d',
+    digest: 'sha256:6f12f8ef6784cdbf054e20dd9d4efb00415880148f204f750e4f69385a155da7',
   },
   'agent, both tiers': {
     tools: 26,
-    digest: 'sha256:17be934378f9fc00003e95f8160a9e8b292556ee22bf6c5ccf7d770f463d3fb3',
+    digest: 'sha256:0153296b8515a6e2b82ce0f5db98c78ed227613503fea62ff42d5465d69d54c6',
   },
   'data reader, nonprod': {
     tools: 22,
-    digest: 'sha256:34a8085c1f6eb5c0e75a6755f6a98e4371789264cadd55553513a31f07275acf',
+    digest: 'sha256:ee7649b4015084bc232b33536680218a35723c44e8f5ac851465a3c74d29d37f',
   },
 }
 

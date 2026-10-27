@@ -10267,7 +10267,8 @@
                     "version_unsupported",
                     "not_permitted",
                     "timeout",
-                    "error"
+                    "error",
+                    "stats_window_short"
                   ],
                   "type": "string"
                 },

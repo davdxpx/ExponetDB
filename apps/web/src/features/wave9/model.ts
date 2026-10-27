@@ -153,6 +153,7 @@ export const SKIP_KEYS: Readonly<Record<AdvisorSkip['reason'], MessageKey>> = {
   not_permitted: 'wave9.advisors.skip.notPermitted',
   timeout: 'wave9.advisors.skip.timeout',
   error: 'wave9.advisors.skip.error',
+  stats_window_short: 'wave9.advisors.skip.statsWindowShort',
 }
 
 /** Evidence values as text; a `null` is said as "none", never left blank. */

@@ -173,6 +173,7 @@ export const wave9Messages = {
   'wave9.advisors.skip.notPermitted': 'The observer role may not read what it needs',
   'wave9.advisors.skip.timeout': 'Timed out',
   'wave9.advisors.skip.error': 'Failed with an error',
+  'wave9.advisors.skip.statsWindowShort': 'The statistics cover too short a time for this rule',
   'wave9.advisors.open.title': 'Open advisor findings',
   'wave9.advisors.open.description':
     'What earlier advisor runs recorded and is still open, newest first.',

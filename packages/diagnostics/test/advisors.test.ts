@@ -172,7 +172,7 @@ describe('the advisor catalog', () => {
       skipReasonOf(new TargetError('TARGET_SQL_ERROR', 'protocol', { sqlstate: '42501' })),
     ).toBe('not_permitted')
     expect(skipReasonOf(new Error('x'))).toBe('error')
-    expect(apiReason('stats_window_short')).toBe('error')
+    expect(apiReason('stats_window_short')).toBe('stats_window_short')
     expect(apiReason('timeout')).toBe('timeout')
   })
 })

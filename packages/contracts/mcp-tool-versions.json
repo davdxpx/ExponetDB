@@ -3,7 +3,7 @@
   "notes": "Append-only: per served MCP tool, each toolVersion names exactly one digest of its announced definition (mcpToolDigest). A changed definition needs a higher toolVersion and a new entry; an entry is never changed or removed (bun run golden:history). Owner decision 2026-10-13; versioning.md \u00a76.",
   "tools": {
     "advisors_run": {
-      "1": "sha256:55a20424480d2b80bd3fe1dcaa426b963015a3eba1c8c71c42b4e634897149bc"
+      "1": "sha256:a64176605178eb6b58eedc0084ff57aa3b1d1bdb3e97dc8ae32a92f41f9b5032"
     },
     "audit_search": {
       "1": "sha256:018af9c3e3cffff21891cde7a71828a199af995020930cbd1354fb12f759cbd8",

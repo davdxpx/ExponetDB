@@ -59,10 +59,8 @@ interface RuleOutcome {
 }
 
 /** The contract's reason for a recorded skip (see `SkipReason`). */
-export function apiReason(
-  reason: SkipReason,
-): 'needs_node' | 'version_unsupported' | 'not_permitted' | 'timeout' | 'error' {
-  return reason === 'stats_window_short' ? 'error' : reason
+export function apiReason(reason: SkipReason): SkipReason {
+  return reason
 }
 
 /** The skip reason of a failed fact read. */

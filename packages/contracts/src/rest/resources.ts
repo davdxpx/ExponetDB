@@ -1756,6 +1756,8 @@ export const AdvisorRunSchema = z
             'not_permitted',
             'timeout',
             'error',
+            // The statistics have been collected for less time than the rule needs (unused indexes).
+            'stats_window_short',
           ]),
         }),
       )
