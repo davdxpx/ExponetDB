@@ -49,6 +49,7 @@ export {
 } from './catalog/migrations.ts'
 export { NODE_APPLY_KINDS, NODE_RULES, nodeProdApplyApproval } from './catalog/nodes.ts'
 export {
+  clusterAdoptAgentApproval,
   driftAcceptProd,
   REGISTRY_RULES,
   targetRegisterProdApproval,

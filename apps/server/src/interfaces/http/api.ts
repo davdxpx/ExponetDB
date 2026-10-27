@@ -47,6 +47,7 @@ import {
   CLIENT_STATES,
   ClientApprovalRequestSchema,
   ClientDecisionReasonSchema,
+  ClusterAgentAdoptionRequestSchema,
   ClusterBootstrapSqlQuerySchema,
   ClusterConfirmRequestSchema,
   ClusterDeclaredTierRequestSchema,
@@ -1296,6 +1297,15 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         caller(call),
         clusterId(call),
         ClusterRetireRequestSchema.parse(call.body ?? {}),
+        idempotency(call),
+      ),
+    ),
+  planClusterAgentAdoption: async (app, call) =>
+    value(
+      await app.registry.planClusterAgentAdoption(
+        caller(call),
+        clusterId(call),
+        ClusterAgentAdoptionRequestSchema.parse(call.body),
         idempotency(call),
       ),
     ),

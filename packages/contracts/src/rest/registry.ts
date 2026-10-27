@@ -7,6 +7,7 @@ import {
   EnvironmentIdSchema,
   ExecutionRoleExceptionIdSchema,
   IdentityIdSchema,
+  NodeIdSchema,
   ProjectIdSchema,
   ServerIdSchema,
   SlugSchema,
@@ -299,6 +300,25 @@ export const DatabaseRetireRequestSchema = z
 export const ClusterRetireRequestSchema = z
   .strictObject({ reason: ReasonSchema.optional() })
   .meta({ id: 'ClusterRetireRequest' })
+
+/**
+ * The adoption of an external cluster by the node agent (OD-54 option (a),
+ * registry.md §4.5): one way, never undone. The person acknowledges that;
+ * the node is the enrolled, live node of the cluster's server whose last
+ * report names the cluster's pinned system identifier exactly once (named
+ * here to pin it, or found by the planner).
+ */
+export const ClusterAgentAdoptionRequestSchema = z
+  .strictObject({
+    acknowledgeOneWay: z.literal(true).meta({
+      description: 'The cluster becomes agent-managed for good: there is no way back to external.',
+    }),
+    nodeId: NodeIdSchema.optional().meta({
+      description:
+        "The node to adopt the cluster with; it must serve the cluster's server (or, for a cluster without a server, its own server becomes the cluster's).",
+    }),
+  })
+  .meta({ id: 'ClusterAgentAdoptionRequest' })
 
 export const ServerRetireRequestSchema = z
   .strictObject({ reason: ReasonSchema.optional() })
@@ -728,6 +748,7 @@ export type ClusterDeclaredTierRequest = z.infer<typeof ClusterDeclaredTierReque
 export type DatabaseRegisterRequest = z.infer<typeof DatabaseRegisterRequestSchema>
 export type DatabaseRetireRequest = z.infer<typeof DatabaseRetireRequestSchema>
 export type ClusterRetireRequest = z.infer<typeof ClusterRetireRequestSchema>
+export type ClusterAgentAdoptionRequest = z.infer<typeof ClusterAgentAdoptionRequestSchema>
 export type ServerRetireRequest = z.infer<typeof ServerRetireRequestSchema>
 export type RetirementPreflight = z.infer<typeof RetirementPreflightSchema>
 export type RetirementGroup = z.infer<typeof RetirementGroupSchema>

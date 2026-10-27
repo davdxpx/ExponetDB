@@ -250,6 +250,7 @@ is not in Wave 5. The other node rules of the table above are
 | `target.register-prod-approval` | require approval + reauth | registering a prod-tier target (identity stamp and ledger initialization) |
 | `drift.accept-prod` | require approval + reauth | accepting drift on a prod-tier target (`drift.accept`); security-relevant drift classes also require a reason |
 | `registry.execution-role-exception-production` | require approval + reauth (300 s) | declaring or revoking an execution-role exception for a prod-tier environment (`registry.execution_role_exception.declare`, `.revoke`; Wave 9, ADR-0034 §2); `nonprod` is not applicable, an unknown tier requires the same |
+| `registry.cluster-adopt-agent-approval` | require approval + reauth (300 s) | **[DECIDED]** (Wave 9 Part B order, OD-54 option (a)) adopting an external cluster by the node agent (`registry.cluster.adopt_agent`, [registry.md §4.5](./registry.md#45-adopting-an-external-cluster-by-the-node-agent)); the subject tier is the cluster's registry tier: `nonprod` (declared `nonprod`, no production target) is not applicable, `prod` fails, an undeclared cluster has no tier and requires the same; not overridable by break-glass. Authority is production whatever the tier (the action's registry tier is `production`) |
 
 **[DECIDED]** (Wave 8, `packages/policy/src/catalog/registry.ts`)
 `drift.accept-prod` as implemented: severity `require`, not overridable,

@@ -11,6 +11,7 @@ import type {
   AccessRole,
   BackupDependency,
   Cluster,
+  ClusterAgentAdoptionRequest,
   ClusterBootstrapSql,
   ClusterConfirmRequest,
   ClusterDeclaredTierRequest,
@@ -137,6 +138,7 @@ import {
   type OrganizationVisibility,
   type Page,
   type PageRequest,
+  planClusterAdoptAgent,
   planClusterConfirm,
   planClusterDeclareTier,
   planClusterRegister,
@@ -1057,6 +1059,27 @@ export class RegistryUseCases {
       idem,
       { kind: 'cluster', clusterId },
       (tx, c, a) => planClusterRetire(tx, c, a, clusterId, body.reason, this.#services().backups),
+    )
+  }
+
+  /**
+   * Adopts an external cluster by the node agent (OD-54 option (a), registry.md
+   * §4.5): one way, applied through `plan.apply`; production authority whatever
+   * the cluster's tier (`registry.cluster.adopt_agent.plan` has the registry tier
+   * `production`), and an approval unless the cluster is declared nonprod.
+   */
+  planClusterAgentAdoption(
+    caller: CallerLike,
+    clusterId: string,
+    body: ClusterAgentAdoptionRequest,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.cluster.adopt_agent.plan',
+      idem,
+      { kind: 'cluster', clusterId },
+      (tx, c, a) => planClusterAdoptAgent(tx, c, a, clusterId, body),
     )
   }
 

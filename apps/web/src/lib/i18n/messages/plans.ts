@@ -50,6 +50,7 @@ export const plansMessages = {
   'plans.title.backup.run': 'Back up cluster {subject}',
   'plans.title.registry.cluster.confirm': 'Confirm cluster {subject}',
   'plans.title.registry.cluster.declare_tier': 'Declare the tier of cluster {subject}',
+  'plans.title.registry.cluster.adopt_agent': 'Hand cluster {subject} to the node agent',
   'plans.title.registry.endpoint.add': 'Add an endpoint to cluster {subject}',
   'plans.title.registry.endpoint.retire': 'Retire an endpoint of cluster {subject}',
   'plans.title.registry.database.register': 'Register a database on cluster {subject}',

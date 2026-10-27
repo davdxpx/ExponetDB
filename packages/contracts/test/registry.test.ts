@@ -204,6 +204,9 @@ describe('Wave 4 registry contracts', () => {
       'node.enrollment_token.reveal',
       'node.revoke',
       'node.revoke.plan',
+      // OD-54 (a): adopting an external cluster by the node agent, whatever its tier.
+      'registry.cluster.adopt_agent',
+      'registry.cluster.adopt_agent.plan',
       'registry.cluster.declare_tier',
       'registry.cluster.declare_tier.plan',
       'registry.cluster.register',

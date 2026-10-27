@@ -1520,6 +1520,17 @@ export const ACTIONS = {
         "The owner's UI/UX order of 2026-10-26 §8A: remove a cluster from ExponetDB bottom-up, never by cascade (registry.md §4.4)",
     },
   ),
+  // OD-54 (a): production authority whatever the cluster's tier, an undeclared one included.
+  'registry.cluster.adopt_agent.plan': registryPlan(
+    'Plan the adoption of an external cluster by the node agent (OD-54; one way)',
+    'cluster',
+    {
+      tierSemantics: 'production',
+      wave: '9',
+      basis:
+        "OD-54 option (a), the owner's Wave 9 Part B order of 2026-10-26 §1 item 3 (registry.md §4.5)",
+    },
+  ),
   // A cluster being registered has no declared tier yet: production authority (fail closed).
   'registry.cluster.register.plan': registryPlan(
     'Plan the registration of an external cluster',
@@ -1579,6 +1590,18 @@ export const ACTIONS = {
     fixed('high'),
     'cluster',
     { ...REAUTH, wave: '9', basis: "The owner's UI/UX order of 2026-10-26 §8A" },
+  ),
+  'registry.cluster.adopt_agent': registryKind(
+    'Adopt an external cluster by the node agent: management mode external → agent, once and never back; targets keep placement, generation and identity marker',
+    fixed('high'),
+    'cluster',
+    {
+      ...REAUTH,
+      tierSemantics: 'production',
+      wave: '9',
+      basis:
+        "OD-54 option (a), the owner's Wave 9 Part B order of 2026-10-26: human only, production authority also while the tier is unknown, fresh re-authentication, audited, idempotent; the enrolled node of the cluster's server reports its pinned system_identifier exactly once (registry.md §4.5)",
+    },
   ),
   'registry.cluster.register': registryKind(
     'Register an external cluster (pending, CA bundle and endpoints)',

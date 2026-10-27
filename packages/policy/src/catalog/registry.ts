@@ -124,8 +124,45 @@ export const executionRoleExceptionProduction: Rule = {
   },
 }
 
+/**
+ * `registry.cluster-adopt-agent-approval` (Wave 9 Part B, OD-54 option (a)):
+ * adopting an external cluster by the node agent hands its host to node
+ * capabilities for good, so on a production cluster it needs a human
+ * approval and a fresh re-authentication. The subject tier is the cluster's
+ * registry tier, resolved by the planner: `nonprod` only when the cluster is
+ * declared `nonprod` and hosts no production target; an undeclared cluster
+ * has no tier (`unknown`) and requires what production requires.
+ */
+export const clusterAdoptAgentApproval: Rule = {
+  id: 'registry.cluster-adopt-agent-approval',
+  version: 1,
+  description:
+    'Adopting a production or undeclared external cluster by the node agent needs a human approval and a fresh re-authentication.',
+  appliesTo: ['registry.cluster.adopt_agent'],
+  severity: 'require',
+  overridableByBreakGlass: false,
+  facts: [],
+  defaults: { approvals: 1, reauthWithinSeconds: 300 },
+  requirements: targetRegisterProdApproval.requirements,
+  evaluate({ request }) {
+    const tier = request.subject.tier
+    if (tier === 'nonprod') {
+      return { result: 'not_applicable', message: 'The cluster is declared nonprod.' }
+    }
+    if (tier === 'prod') {
+      return {
+        result: 'fail',
+        message: 'A production cluster is adopted by the node agent only after a human approval.',
+        facts: { tier },
+      }
+    }
+    return { result: 'unknown', message: 'The tier of the cluster is not declared.' }
+  },
+}
+
 export const REGISTRY_RULES: readonly Rule[] = [
   targetRegisterProdApproval,
   driftAcceptProd,
   executionRoleExceptionProduction,
+  clusterAdoptAgentApproval,
 ]

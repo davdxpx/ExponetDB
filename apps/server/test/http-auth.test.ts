@@ -148,6 +148,8 @@ describe('served routes (Wave 2 and 4 to 9)', () => {
       'planBackupRepositoryOwnership',
       'planBackupRepositoryRetirement',
       'planBackupRun',
+      // OD-54 (a): adopting an external cluster by the node agent.
+      'planClusterAgentAdoption',
       'planClusterRetirement',
       'planDatabaseRetirement',
       'planDrill',

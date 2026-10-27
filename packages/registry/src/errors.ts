@@ -44,6 +44,10 @@ export type ConflictReason =
   | 'credential_missing'
   | 'exception_active'
   | 'exception_not_active'
+  | 'cluster_not_external'
+  | 'cluster_unmapped'
+  | 'cluster_ambiguous'
+  | 'node_not_served'
 
 export function conflict(reason: ConflictReason): RegistryError {
   return new RegistryError('REGISTRY_CONFLICT', { reason })

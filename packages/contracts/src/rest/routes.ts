@@ -144,6 +144,7 @@ import {
 } from './nodes.ts'
 import {
   AccessRoleSchema,
+  ClusterAgentAdoptionRequestSchema,
   ClusterBootstrapSqlQuerySchema,
   ClusterBootstrapSqlSchema,
   ClusterConfirmRequestSchema,
@@ -1985,6 +1986,18 @@ export const REGISTRY_ROUTES = [
     action: 'registry.cluster.retire.plan',
     pathParams: z.strictObject({ clusterId: ClusterIdSchema }),
     body: ClusterRetireRequestSchema,
+    response: planned,
+    errors: PLAN_ERRORS,
+  },
+  {
+    operationId: 'planClusterAgentAdoption',
+    method: 'post',
+    path: '/clusters/{clusterId}/agent-adoption',
+    summary:
+      "Plan the adoption of an external cluster by the node agent (OD-54, registry.md §4.5): one way, never undone; the enrolled, live node of the cluster's server must report its pinned system_identifier exactly once, checked at plan and again at apply. Targets keep their placement, generation and identity marker.",
+    action: 'registry.cluster.adopt_agent.plan',
+    pathParams: z.strictObject({ clusterId: ClusterIdSchema }),
+    body: ClusterAgentAdoptionRequestSchema,
     response: planned,
     errors: PLAN_ERRORS,
   },

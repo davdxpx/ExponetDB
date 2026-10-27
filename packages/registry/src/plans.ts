@@ -1,17 +1,19 @@
-import type {
-  ClusterConfirmRequest,
-  ClusterDeclaredTierRequest,
-  ClusterRegisterRequest,
-  DatabaseRegisterRequest,
-  EndpointRequest,
-  EnvironmentChangeRequest,
-  EnvironmentCreateRequest,
-  ProductCreateRequest,
-  ProjectChangeRequest,
-  ProjectCreateRequest,
-  ServerCreateRequest,
-  TargetRegisterRequest,
-  TargetStateChangeRequest,
+import {
+  type ClusterAgentAdoptionRequest,
+  type ClusterConfirmRequest,
+  type ClusterDeclaredTierRequest,
+  type ClusterRegisterRequest,
+  type DatabaseRegisterRequest,
+  type EndpointRequest,
+  type EnvironmentChangeRequest,
+  type EnvironmentCreateRequest,
+  NODE_PROTOCOL_LIMITS,
+  type ProductCreateRequest,
+  type ProjectChangeRequest,
+  type ProjectCreateRequest,
+  type ServerCreateRequest,
+  type TargetRegisterRequest,
+  type TargetStateChangeRequest,
 } from '@exponetdb/contracts'
 import type { Queryable, Tx } from '@exponetdb/control-store'
 import { type JsonObject, type JsonValue, newId } from '@exponetdb/kernel'
@@ -52,7 +54,7 @@ import {
   productBySlug,
   registeredDatabaseNamed,
 } from './reads.ts'
-import type { EnvironmentRecord, TargetRecord } from './records.ts'
+import type { ClusterRecord, EnvironmentRecord, TargetRecord } from './records.ts'
 import {
   type BackupBindingsPort,
   clusterRetirement,
@@ -728,6 +730,194 @@ export async function planClusterDeclareTier(
       before: cluster.declaredTier,
       after: input.declaredTier,
       derivedTier: cluster.derivedTier,
+      authority: 'registry.manage at the production registry tier',
+    },
+  })
+}
+
+// ----- adoption of an external cluster by the node agent (OD-54 option (a)) -----
+
+/** Four missed heartbeats read offline (the nodes package's `OFFLINE_AFTER_MS`). */
+const ADOPTION_OFFLINE_AFTER_MS = 4 * NODE_PROTOCOL_LIMITS.heartbeatIntervalSeconds * 1000
+
+/** The node an adoption binds: its server, and the local instance that reports the cluster. */
+export interface AdoptionNode {
+  readonly nodeId: string
+  readonly serverId: string
+  readonly localName: string
+  readonly lastHelloAt: string | null
+}
+
+/** The local names of a node's last report (hello) that name this system identifier. */
+function reportedAs(report: unknown, systemIdentifier: string): (string | null)[] {
+  if (!Array.isArray(report)) return []
+  return report.flatMap((entry: unknown) => {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return []
+    const e = entry as Record<string, unknown>
+    if (e['systemIdentifier'] !== systemIdentifier) return []
+    return [typeof e['localName'] === 'string' ? e['localName'] : null]
+  })
+}
+
+/**
+ * The enrolled, live node that may adopt a cluster (registry.md §4.5): the
+ * named node, else the live node of the cluster's server, else (a cluster
+ * without a server) the one live node registry-wide that reports the
+ * cluster. It must be active or degraded with a heartbeat within four
+ * intervals (`node_not_served`), on the cluster's server when the cluster has
+ * one (`cluster_unmapped`), and its last report must name the cluster's
+ * pinned system identifier exactly once (`cluster_unmapped` for none,
+ * `cluster_ambiguous` for more: a standby or a copied data directory on the
+ * same host, or two hosts claiming one cluster). `lock` takes the node row
+ * FOR SHARE (the kind, under its transaction). The planner, the kind's
+ * bindings and its apply all read through this.
+ */
+export async function adoptionNode(
+  q: Queryable,
+  cluster: Pick<ClusterRecord, 'serverId' | 'systemIdentifier'>,
+  nodeId: string | null,
+  nowMs: number,
+  options: { readonly lock?: boolean } = {},
+): Promise<AdoptionNode> {
+  const systemIdentifier = cluster.systemIdentifier
+  if (systemIdentifier === null) throw conflict('cluster_not_confirmed')
+  const columns = 'node_id, server_id, state, clusters, last_heartbeat_at, last_hello_at'
+  const lock = options.lock === true ? ' FOR SHARE' : ''
+  const { rows } =
+    nodeId !== null
+      ? await q.query(
+          'registry.adoption.node',
+          `SELECT ${columns} FROM nodes.nodes WHERE node_id = $1${lock}`,
+          [nodeId],
+        )
+      : cluster.serverId !== null
+        ? await q.query(
+            'registry.adoption.server_node',
+            `SELECT ${columns} FROM nodes.nodes
+              WHERE server_id = $1 AND state IN ('pending_binding', 'active', 'degraded')${lock}`,
+            [cluster.serverId],
+          )
+        : await q.query(
+            'registry.adoption.reporting_nodes',
+            `SELECT ${columns} FROM nodes.nodes n
+              WHERE n.state IN ('active', 'degraded')
+                AND EXISTS (SELECT FROM jsonb_array_elements(n.clusters) r
+                             WHERE jsonb_typeof(r) = 'object' AND r ->> 'systemIdentifier' = $1)
+              ORDER BY n.node_id${lock}`,
+            [systemIdentifier],
+          )
+  const row = rows[0]
+  if (row === undefined) throw conflict('cluster_unmapped')
+  if (rows.length > 1) throw conflict('cluster_ambiguous')
+  const state = row.text('state')
+  const heartbeat = row.dateOrNull('last_heartbeat_at')
+  if (
+    (state !== 'active' && state !== 'degraded') ||
+    heartbeat === null ||
+    nowMs - heartbeat.getTime() > ADOPTION_OFFLINE_AFTER_MS
+  ) {
+    throw conflict('node_not_served')
+  }
+  const serverId = row.text('server_id')
+  if (cluster.serverId !== null && serverId !== cluster.serverId) {
+    throw conflict('cluster_unmapped')
+  }
+  const reported = reportedAs(row.json('clusters'), systemIdentifier)
+  if (reported.length > 1) throw conflict('cluster_ambiguous')
+  const localName = reported[0]
+  if (localName === undefined || localName === null) throw conflict('cluster_unmapped')
+  return {
+    nodeId: row.text('node_id'),
+    serverId,
+    localName,
+    lastHelloAt: row.dateOrNull('last_hello_at')?.toISOString() ?? null,
+  }
+}
+
+/**
+ * The registry tier of a cluster for the adoption's approval rule
+ * (`registry.cluster-adopt-agent-approval`): `nonprod` only when declared
+ * `nonprod` and hosting no production target; `prod` when declared `prod` or
+ * hosting one; none (unknown, which requires what production requires) while
+ * undeclared otherwise. Authority is production whatever this says.
+ */
+function adoptionTier(cluster: ClusterRecord): 'prod' | 'nonprod' | undefined {
+  if (cluster.derivedTier === 'prod' || cluster.declaredTier === 'prod') return 'prod'
+  return cluster.declaredTier === 'nonprod' ? 'nonprod' : undefined
+}
+
+/**
+ * `registry.cluster.adopt_agent.plan` (OD-54 option (a), the owner's Wave 9
+ * Part B order of 2026-10-26): the one path from `external` to `agent`. Only
+ * an active external cluster (`cluster_not_external`, `cluster_not_confirmed`,
+ * `cluster_retired`) with an enrolled, live node that reports its pinned
+ * system identifier exactly once (`adoptionNode`). The plan binds the
+ * cluster's mode, state, pinned identifier and server, the node, its server
+ * and the reporting local instance; the kind checks them again at acceptance,
+ * at the start and under the row locks (`PLAN_STALE`), and the Control Store
+ * guard admits nothing else. Targets, placements, generations and identity
+ * markers are not part of the change.
+ */
+export async function planClusterAdoptAgent(
+  tx: Tx,
+  context: RegistryPlanContext,
+  actor: RegistryActor,
+  clusterId: string,
+  input: ClusterAgentAdoptionRequest,
+): Promise<PlanRecord> {
+  if (input.acknowledgeOneWay !== true) {
+    throw invalid(
+      'acknowledgeOneWay',
+      'required',
+      'The adoption is one way and must be acknowledged.',
+    )
+  }
+  const cluster = await getCluster(tx, clusterId)
+  if (cluster === undefined) {
+    throw new RegistryError('NOT_FOUND')
+  }
+  if (cluster.state === 'retired') {
+    throw conflict('cluster_retired')
+  }
+  if (cluster.managementMode !== 'external') {
+    throw conflict('cluster_not_external')
+  }
+  if (cluster.state !== 'active' || cluster.systemIdentifier === null) {
+    throw conflict('cluster_not_confirmed')
+  }
+  const node = await adoptionNode(tx, cluster, input.nodeId ?? null, now(context))
+  const tier = adoptionTier(cluster)
+  return store(tx, context, actor, {
+    kind: 'registry.cluster.adopt_agent',
+    actionClass: 'high',
+    subject: { clusterId, ...(tier === undefined ? {} : { tier }) },
+    content: {
+      clusterId,
+      nodeId: node.nodeId,
+      serverId: node.serverId,
+      clusterServerId: cluster.serverId,
+      systemIdentifier: cluster.systemIdentifier,
+      localName: node.localName,
+    },
+    expectedState: {
+      managementMode: 'external',
+      clusterState: 'active',
+      systemIdentifier: cluster.systemIdentifier,
+      clusterServerId: cluster.serverId,
+      nodeId: node.nodeId,
+      nodeServerId: node.serverId,
+      localName: node.localName,
+    },
+    analysis: {
+      before: { managementMode: 'external', serverId: cluster.serverId },
+      after: { managementMode: 'agent', serverId: node.serverId },
+      serverAssigned: cluster.serverId === null,
+      node: { nodeId: node.nodeId, localName: node.localName, reportedAt: node.lastHelloAt },
+      systemIdentifier: cluster.systemIdentifier,
+      declaredTier: cluster.declaredTier,
+      derivedTier: cluster.derivedTier,
+      oneWay: true,
+      targets: 'unchanged: placement, generation and identity marker stay',
       authority: 'registry.manage at the production registry tier',
     },
   })

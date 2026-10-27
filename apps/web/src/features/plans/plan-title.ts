@@ -55,6 +55,7 @@ export const KIND_TITLES: Readonly<Record<string, KindTitle>> = {
   'backup.run': cluster('plans.title.backup.run'),
   'registry.cluster.confirm': cluster('plans.title.registry.cluster.confirm'),
   'registry.cluster.declare_tier': cluster('plans.title.registry.cluster.declare_tier'),
+  'registry.cluster.adopt_agent': cluster('plans.title.registry.cluster.adopt_agent'),
   'registry.endpoint.add': cluster('plans.title.registry.endpoint.add'),
   'registry.endpoint.retire': cluster('plans.title.registry.endpoint.retire'),
   'registry.database.register': cluster('plans.title.registry.database.register'),

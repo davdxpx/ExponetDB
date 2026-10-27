@@ -219,7 +219,8 @@
                     "version_unsupported",
                     "not_permitted",
                     "timeout",
-                    "error"
+                    "error",
+                    "stats_window_short"
                   ],
                   "type": "string"
                 },
@@ -780,6 +781,7 @@
               "registry.server.create.plan",
               "registry.server.retire.plan",
               "registry.cluster.retire.plan",
+              "registry.cluster.adopt_agent.plan",
               "registry.cluster.register.plan",
               "registry.cluster.confirm.plan",
               "registry.endpoint.add.plan",
@@ -797,6 +799,7 @@
               "registry.server.create",
               "registry.server.retire",
               "registry.cluster.retire",
+              "registry.cluster.adopt_agent",
               "registry.cluster.register",
               "registry.cluster.confirm",
               "registry.endpoint.add",
@@ -4986,6 +4989,25 @@
           "systemIdentifier",
           "derivedTier",
           "health"
+        ],
+        "type": "object"
+      },
+      "ClusterAgentAdoptionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledgeOneWay": {
+            "const": true,
+            "description": "The cluster becomes agent-managed for good: there is no way back to external.",
+            "type": "boolean"
+          },
+          "nodeId": {
+            "description": "The node to adopt the cluster with; it must serve the cluster's server (or, for a cluster without a server, its own server becomes the cluster's).",
+            "pattern": "^nod_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "acknowledgeOneWay"
         ],
         "type": "object"
       },
@@ -14030,6 +14052,7 @@
               "registry.server.create.plan",
               "registry.server.retire.plan",
               "registry.cluster.retire.plan",
+              "registry.cluster.adopt_agent.plan",
               "registry.cluster.register.plan",
               "registry.cluster.confirm.plan",
               "registry.endpoint.add.plan",
@@ -14047,6 +14070,7 @@
               "registry.server.create",
               "registry.server.retire",
               "registry.cluster.retire",
+              "registry.cluster.adopt_agent",
               "registry.cluster.register",
               "registry.cluster.confirm",
               "registry.endpoint.add",
@@ -14880,6 +14904,7 @@
               "registry.server.create.plan",
               "registry.server.retire.plan",
               "registry.cluster.retire.plan",
+              "registry.cluster.adopt_agent.plan",
               "registry.cluster.register.plan",
               "registry.cluster.confirm.plan",
               "registry.endpoint.add.plan",
@@ -14897,6 +14922,7 @@
               "registry.server.create",
               "registry.server.retire",
               "registry.cluster.retire",
+              "registry.cluster.adopt_agent",
               "registry.cluster.register",
               "registry.cluster.confirm",
               "registry.endpoint.add",
@@ -15786,6 +15812,7 @@
               "registry.server.create.plan",
               "registry.server.retire.plan",
               "registry.cluster.retire.plan",
+              "registry.cluster.adopt_agent.plan",
               "registry.cluster.register.plan",
               "registry.cluster.confirm.plan",
               "registry.endpoint.add.plan",
@@ -15803,6 +15830,7 @@
               "registry.server.create",
               "registry.server.retire",
               "registry.cluster.retire",
+              "registry.cluster.adopt_agent",
               "registry.cluster.register",
               "registry.cluster.confirm",
               "registry.endpoint.add",
@@ -16227,6 +16255,7 @@
               "registry.server.create.plan",
               "registry.server.retire.plan",
               "registry.cluster.retire.plan",
+              "registry.cluster.adopt_agent.plan",
               "registry.cluster.register.plan",
               "registry.cluster.confirm.plan",
               "registry.endpoint.add.plan",
@@ -16244,6 +16273,7 @@
               "registry.server.create",
               "registry.server.retire",
               "registry.cluster.retire",
+              "registry.cluster.adopt_agent",
               "registry.cluster.register",
               "registry.cluster.confirm",
               "registry.endpoint.add",
@@ -25205,6 +25235,109 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "4"
+      }
+    },
+    "/clusters/{clusterId}/agent-adoption": {
+      "post": {
+        "operationId": "planClusterAgentAdoption",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClusterAgentAdoptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan the adoption of an external cluster by the node agent (OD-54, registry.md §4.5): one way, never undone; the enrolled, live node of the cluster's server must report its pinned system_identifier exactly once, checked at plan and again at apply. Targets keep their placement, generation and identity marker.",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "registry.cluster.adopt_agent.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
       }
     },
     "/clusters/{clusterId}/backup-policy": {

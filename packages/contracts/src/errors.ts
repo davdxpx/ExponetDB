@@ -1090,6 +1090,10 @@ export const ERRORS = {
             'wal_not_continuous',
             'point_in_time_outside_window',
             'no_backup_selectable',
+            // OD-54 (a), registry.cluster.adopt_agent: only an external cluster is adopted, by
+            // an enrolled node that is live (active or degraded, with a recent heartbeat).
+            'cluster_not_external',
+            'node_not_served',
           ],
         }),
     }),

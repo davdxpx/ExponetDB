@@ -4994,6 +4994,37 @@
       "wave": "9"
     },
     {
+      "basis": "OD-54 option (a), the owner's Wave 9 Part B order of 2026-10-26 §1 item 3 (registry.md §4.5)",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.cluster.adopt_agent.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "production",
+      "title": "Plan the adoption of an external cluster by the node agent (OD-54; one way)",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
       "basis": "resources.md (Registry): registry changes create a plan",
       "class": {
         "class": "read",
@@ -5528,6 +5559,38 @@
       "subject": "cluster",
       "tierSemantics": "cluster_registry",
       "title": "Retire a cluster record with its endpoints and credentials (final; nothing changes on the cluster)",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "OD-54 option (a), the owner's Wave 9 Part B order of 2026-10-26: human only, production authority also while the tier is unknown, fresh re-authentication, audited, idempotent; the enrolled node of the cluster's server reports its pinned system_identifier exactly once (registry.md §4.5)",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.cluster.adopt_agent",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "production",
+      "title": "Adopt an external cluster by the node agent: management mode external → agent, once and never back; targets keep placement, generation and identity marker",
       "verification": "required",
       "wave": "9"
     },
@@ -10878,7 +10941,9 @@
               "backup_not_verified",
               "wal_not_continuous",
               "point_in_time_outside_window",
-              "no_backup_selectable"
+              "no_backup_selectable",
+              "cluster_not_external",
+              "node_not_served"
             ]
           }
         },

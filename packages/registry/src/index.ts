@@ -76,6 +76,7 @@ export {
   refusalOf,
 } from './kind-base.ts'
 export {
+  ClusterAdoptAgentKind,
   ClusterConfirmKind,
   ClusterDeclareTierKind,
   ClusterRegisterKind,
@@ -95,7 +96,10 @@ export {
   TargetStateKind,
 } from './kinds.ts'
 export {
+  type AdoptionNode,
+  adoptionNode,
   observeClusterIdentity,
+  planClusterAdoptAgent,
   planClusterConfirm,
   planClusterDeclareTier,
   planClusterRegister,
