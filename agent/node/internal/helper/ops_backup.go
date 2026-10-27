@@ -327,6 +327,7 @@ func (h *Helper) collect(rec *runRecord, runDir *fsafe.Dir, st unitState) canon.
 }
 
 func (h *Helper) removeSecrets(runDir *fsafe.Dir) {
+	_, _ = runDir.RemoveAll(context.Background(), "private")
 	work, err := runDir.OpenDir("work")
 	if err != nil {
 		return
@@ -566,7 +567,7 @@ func (h *Helper) startRun(ctx context.Context, job *verify.Job, p startPlan) (ca
 		spec.ReadWrite = append(spec.ReadWrite, scratchPath)
 	}
 	if p.repo != nil && p.repo.ref.Engine == "pgbackrest" {
-		rec.PgBackRest = &recordPgbr{Config: h.path(p.repo.pgbrConfig), Stanza: p.repo.stanza(), Repo: p.repo.repoIndex()}
+		rec.PgBackRest = &recordPgbr{Config: h.path(p.repo.pgbrConfig), Include: includeOf(h, p.repo), Stanza: p.repo.stanza(), Repo: p.repo.repoIndex()}
 		spec.Optional, spec.Bind = pgbrWritable(p.repo.pgbrPaths)
 	}
 	data, err := json.Marshal(rec)
@@ -594,7 +595,7 @@ func (h *Helper) startRun(ctx context.Context, job *verify.Job, p startPlan) (ca
 		return fail("the run's work directory could not be created")
 	}
 	if p.repo != nil && p.repo.logical() {
-		env, err := h.writeResticSecrets(runDir, rec.WorkDirectory, p.repo, p.user)
+		env, err := h.writeResticSecrets(runDir, runPath, p.repo, p.user)
 		if err != nil {
 			return fail("the run's repository files could not be prepared")
 		}
@@ -627,6 +628,9 @@ func (h *Helper) startRun(ctx context.Context, job *verify.Job, p startPlan) (ca
 // private /tmp when it lies there, so the engine's own lock is the host's).
 func pgbrWritable(p pgbrPaths) (optional, bind []string) {
 	optional = []string{p.log, p.spool}
+	if p.repo != "" {
+		optional = append(optional, p.repo)
+	}
 	if within(p.lock, "/tmp") || within(p.lock, "/var/tmp") {
 		bind = []string{p.lock}
 	} else {
@@ -639,20 +643,40 @@ func pgbrWritable(p pgbrPaths) (optional, bind []string) {
 // the run's secrets directory (owned by the engine user, 0600) and writes
 // the environment file systemd reads for the unit (root, 0600). It returns
 // the environment file's path.
-func (h *Helper) writeResticSecrets(runDir *fsafe.Dir, workPath string, repo *repository, u engineUser) (string, error) {
+func (h *Helper) writeResticSecrets(runDir *fsafe.Dir, runPath string, repo *repository, u engineUser) (string, error) {
 	work, err := runDir.OpenDir("work")
 	if err != nil {
 		return "", err
 	}
 	defer work.Close()
-	return h.resticSecretsIn(work, workPath, repo, u)
-}
-
-func (h *Helper) resticSecretsIn(parent *fsafe.Dir, parentPath string, repo *repository, u engineUser) (string, error) {
-	if err := parent.Mkdir("secrets", fsafe.Owner{UID: u.UID, GID: u.GID, Mode: 0o700}); err != nil {
+	private, err := h.privateDir(runDir)
+	if err != nil {
 		return "", err
 	}
-	sec, err := parent.OpenDir("secrets")
+	defer private.Close()
+	return h.resticSecretsIn(work, runPath+"/work", private, runPath+"/private", repo, u)
+}
+
+// privateDir creates <dir>/private, root's and 0700: the environment file
+// systemd reads as root never lies in a directory the engine user owns,
+// where it could swap the entry before systemd reads it (review finding
+// B-5).
+func (h *Helper) privateDir(dir *fsafe.Dir) (*fsafe.Dir, error) {
+	if err := dir.Mkdir("private", h.rootOwner(0o700)); err != nil {
+		return nil, err
+	}
+	return dir.OpenDir("private")
+}
+
+// resticSecretsIn copies the repository and password files into
+// secParent/secrets (the engine user's, 0600: restic reads them) and writes
+// the environment file into private (root's, 0600). It returns the
+// environment file's path.
+func (h *Helper) resticSecretsIn(secParent *fsafe.Dir, secParentPath string, private *fsafe.Dir, privatePath string, repo *repository, u engineUser) (string, error) {
+	if err := secParent.Mkdir("secrets", fsafe.Owner{UID: u.UID, GID: u.GID, Mode: 0o700}); err != nil {
+		return "", err
+	}
+	sec, err := secParent.OpenDir("secrets")
 	if err != nil {
 		return "", err
 	}
@@ -664,13 +688,13 @@ func (h *Helper) resticSecretsIn(parent *fsafe.Dir, parentPath string, repo *rep
 	if err := sec.Create("password", repo.resticPassword, owner); err != nil {
 		return "", err
 	}
-	secPath := parentPath + "/secrets"
+	secPath := secParentPath + "/secrets"
 	env := append([]string{}, repo.resticEnv...)
 	env = append(env, "RESTIC_REPOSITORY_FILE="+secPath+"/repository", "RESTIC_PASSWORD_FILE="+secPath+"/password")
-	if err := sec.Create("env", []byte(strings.Join(env, "\n")+"\n"), h.rootOwner(0o600)); err != nil {
+	if err := private.Create("env", []byte(strings.Join(env, "\n")+"\n"), h.rootOwner(0o600)); err != nil {
 		return "", err
 	}
-	return secPath + "/env", nil
+	return privatePath + "/env", nil
 }
 
 func bytesTrim(b []byte) []byte { return []byte(strings.TrimSpace(string(b))) }
@@ -696,7 +720,7 @@ type backupArgs struct {
 // clusterRun resolves what every cluster-bound run needs: the instance (its
 // system identifier read from pg_control), its major, the engine user (the
 // data directory's owner) and the repository.
-func (h *Helper) clusterRun(ref clusterRef, repoRef repositoryRef) (startPlan, *Refusal) {
+func (h *Helper) clusterRun(ctx context.Context, ref clusterRef, repoRef repositoryRef) (startPlan, *Refusal) {
 	in, r := h.instance(ref)
 	if r != nil {
 		return startPlan{}, r
@@ -721,6 +745,16 @@ func (h *Helper) clusterRun(ref clusterRef, repoRef repositoryRef) (startPlan, *
 		if r := h.checkBinary(PgBackRest); r != nil {
 			return startPlan{}, r
 		}
+		// The stanza must be this cluster's (review finding B-2): a run on
+		// cluster A's identity with cluster B's stanza would file B's
+		// backups under A and escape the per-cluster run lock.
+		s, r := h.pgbrInfo(ctx, repo, u)
+		if r != nil {
+			return startPlan{}, r
+		}
+		if id := s.systemID(); id == "" || id != ref.SystemIdentifier {
+			return startPlan{}, refuse(CodePreconditionFailed, "the stanza does not belong to cluster %s (system identifier)", ref.LocalName)
+		}
 	} else if r := h.checkBinary(Restic); r != nil {
 		return startPlan{}, r
 	}
@@ -731,11 +765,14 @@ func (h *Helper) clusterRun(ref clusterRef, repoRef repositoryRef) (startPlan, *
 }
 
 func backupRun(ctx context.Context, h *Helper, job *verify.Job) (canon.Object, *Refusal) {
+	// One budget for the checks and the start (settleSeconds).
+	ctx, cancel := context.WithTimeout(ctx, startBudget)
+	defer cancel()
 	var args backupArgs
 	if r := decodeArgs(job, &args); r != nil {
 		return nil, r
 	}
-	p, r := h.clusterRun(args.Cluster, args.Repository)
+	p, r := h.clusterRun(ctx, args.Cluster, args.Repository)
 	if r != nil {
 		return nil, r
 	}
@@ -768,11 +805,14 @@ func backupRun(ctx context.Context, h *Helper, job *verify.Job) (canon.Object, *
 }
 
 func backupVerify(ctx context.Context, h *Helper, job *verify.Job) (canon.Object, *Refusal) {
+	// One budget for the checks and the start (settleSeconds).
+	ctx, cancel := context.WithTimeout(ctx, startBudget)
+	defer cancel()
 	var args backupArgs
 	if r := decodeArgs(job, &args); r != nil {
 		return nil, r
 	}
-	p, r := h.clusterRun(args.Cluster, args.Repository)
+	p, r := h.clusterRun(ctx, args.Cluster, args.Repository)
 	if r != nil {
 		return nil, r
 	}
@@ -784,11 +824,14 @@ func backupVerify(ctx context.Context, h *Helper, job *verify.Job) (canon.Object
 }
 
 func backupExpire(ctx context.Context, h *Helper, job *verify.Job) (canon.Object, *Refusal) {
+	// One budget for the checks and the start (settleSeconds).
+	ctx, cancel := context.WithTimeout(ctx, startBudget)
+	defer cancel()
 	var args backupArgs
 	if r := decodeArgs(job, &args); r != nil {
 		return nil, r
 	}
-	p, r := h.clusterRun(args.Cluster, args.Repository)
+	p, r := h.clusterRun(ctx, args.Cluster, args.Repository)
 	if r != nil {
 		return nil, r
 	}
@@ -831,6 +874,9 @@ type restoreArgs struct {
 }
 
 func restoreExecute(ctx context.Context, h *Helper, job *verify.Job) (canon.Object, *Refusal) {
+	// One budget for the checks and the start (settleSeconds).
+	ctx, cancel := context.WithTimeout(ctx, startBudget)
+	defer cancel()
 	var args restoreArgs
 	if r := decodeArgs(job, &args); r != nil {
 		return nil, r
@@ -843,7 +889,7 @@ func restoreExecute(ctx context.Context, h *Helper, job *verify.Job) (canon.Obje
 			return nil, refuse(CodeJobInvalid, "a row count range is empty")
 		}
 	}
-	p, r := h.clusterRun(args.Cluster, args.Repository)
+	p, r := h.clusterRun(ctx, args.Cluster, args.Repository)
 	if r != nil {
 		return nil, r
 	}
@@ -858,6 +904,8 @@ func restoreExecute(ctx context.Context, h *Helper, job *verify.Job) (canon.Obje
 }
 
 func restoreVerify(ctx context.Context, h *Helper, job *verify.Job) (canon.Object, *Refusal) {
+	ctx, cancel := context.WithTimeout(ctx, startBudget)
+	defer cancel()
 	var args struct {
 		RunID       string   `json:"runId"`
 		VerifyRunID string   `json:"verifyRunId"`
@@ -1336,10 +1384,26 @@ func parseLsn(s string) (uint64, bool) {
 
 // ----- backup.list -----
 
+func includeOf(h *Helper, repo *repository) string {
+	if repo.pgbrInclude == "" {
+		return ""
+	}
+	return h.path(repo.pgbrInclude)
+}
+
+// pgbrBase names the configuration exactly as the helper read it: the
+// file, and the conf.d directory it merged.
+func pgbrBase(config, include, stanza string, repo int) []string {
+	args := []string{"--config=" + config}
+	if include != "" {
+		args = append(args, "--config-include-path="+include)
+	}
+	return append(args, "--stanza="+stanza, "--repo="+strconv.Itoa(repo))
+}
+
 // pgbrInfoArgs is the fixed argv of pgBackRest's catalog read.
-func pgbrInfoArgs(config, stanza string, repo int, set string) []string {
-	args := []string{"--config=" + config, "--stanza=" + stanza, "--repo=" + strconv.Itoa(repo), "--output=json",
-		"--log-level-console=off", "--log-level-stderr=off"}
+func pgbrInfoArgs(config, include, stanza string, repo int, set string) []string {
+	args := append(pgbrBase(config, include, stanza, repo), "--output=json", "--log-level-console=off", "--log-level-stderr=off")
 	if set != "" {
 		args = append(args, "--set="+set)
 	}
@@ -1349,7 +1413,7 @@ func pgbrInfoArgs(config, stanza string, repo int, set string) []string {
 func (h *Helper) pgbrInfo(ctx context.Context, repo *repository, u engineUser) (*pgbrStanza, *Refusal) {
 	optional, bind := pgbrWritable(repo.pgbrPaths)
 	out, err := h.sup().runAs(ctx, execSpec{UID: u.UID, GID: u.GID, Path: PgBackRest,
-		Args: pgbrInfoArgs(h.path(repo.pgbrConfig), repo.stanza(), repo.repoIndex(), ""), Optional: optional, Bind: bind, Timeout: 50 * time.Second})
+		Args: pgbrInfoArgs(h.path(repo.pgbrConfig), includeOf(h, repo), repo.stanza(), repo.repoIndex(), ""), Optional: optional, Bind: bind, Timeout: 30 * time.Second})
 	if err != nil || out.ExitCode != 0 {
 		return nil, refuse(CodeFailed, "pgBackRest could not read the repository")
 	}
@@ -1425,7 +1489,7 @@ func (h *Helper) resticRead(ctx context.Context, repo *repository, u engineUser,
 	}
 	defer reads.Close()
 	name := "read-" + strconv.FormatInt(time.Now().UnixNano(), 36)
-	if err := reads.Mkdir(name, fsafe.Owner{UID: u.UID, GID: u.GID, Mode: 0o700}); err != nil {
+	if err := reads.Mkdir(name, h.rootOwner(0o711)); err != nil {
 		return nil, refuse(CodeFailed, "a private directory for the read could not be created")
 	}
 	defer func() { _, _ = reads.RemoveAll(context.Background(), name) }()
@@ -1434,7 +1498,12 @@ func (h *Helper) resticRead(ctx context.Context, repo *repository, u engineUser,
 		return nil, refuse(CodeFailed, "a private directory for the read could not be opened")
 	}
 	defer dir.Close()
-	env, err := h.resticSecretsIn(dir, reads.Path()+"/"+name, repo, u)
+	private, err := h.privateDir(dir)
+	if err != nil {
+		return nil, refuse(CodeFailed, "a private directory for the read could not be created")
+	}
+	defer private.Close()
+	env, err := h.resticSecretsIn(dir, reads.Path()+"/"+name, private, reads.Path()+"/"+name+"/private", repo, u)
 	if err != nil {
 		return nil, refuse(CodeFailed, "the repository files could not be prepared")
 	}

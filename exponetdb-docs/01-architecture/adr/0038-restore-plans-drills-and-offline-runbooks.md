@@ -119,6 +119,44 @@ storage key pair likewise). It:
 The C-35 drill itself (Control Plane stopped, offline keys, a disposable
 host) is the owner's test T-C35-1; until it ran, C-35 is `NOT PROVEN`.
 
+## Implementation and review (Wave 9 Part B, 2026-10-27)
+
+**[DECIDED]** (as built after the security reviews C-1 to C-11 and B-4)
+
+- **A restored server runs no restored code.** The node and the C-35
+  runbook start a restored cluster with command-line settings, the only
+  place that wins over the restored `postgresql.auto.conf`. They allow no
+  preloaded library, no logical replication or other background worker, no
+  WAL sender, no archiving, no TCP listener beyond localhost (the node: a
+  socket only), and no hot standby (PostgreSQL then does not compare these
+  settings with the source's). A restored subscription therefore never
+  reaches its publisher. This was reproduced in review: before the fix, a
+  drill advanced a real publisher's slot.
+- **Limit:** the scratch postmaster keeps network access, because its
+  `restore_command` fetches WAL in the same process tree.
+- **The runbook waits for the end of recovery.** It keeps its
+  configuration beside the cluster (`TARGET_DIR.exponetdb`), because the
+  restored server names it in `restore_command` until recovery has ended.
+  It then prints the replayed position. Reproduced in review: a temporary
+  configuration removed on exit cut recovery short and lost data with exit
+  code 0.
+- **The replay must reach the WAL the plan counted on.** A restore to the
+  end of the archive whose replay stops before the plan's bound WAL end
+  fails `recovery_target_reached`.
+- **Apply re-checks the WAL range.** The bound WAL end must still be
+  listed, and a point in time must still lie in the window.
+- **A recovery is bound to the target.** The plan binds the target's
+  placement and generation. A recovery also holds the target's
+  `maintenance` domain beside `cluster:<id>:backup`.
+- **A lost worker never leaves a run open.** Reconciliation binds the run
+  row to its start job, ends a run that never started, and asks the node
+  for a start whose statement was lost.
+- **Discarding a recovered cluster** is `high` and needs a person's
+  approval (`restore.recovery-discard-approval`).
+- **An offline attestation** must name the digest of the repository's
+  current runbook. The runbook itself needs the location permission
+  (`registry.manage`), like the repository list.
+
 ## Consequences
 
 - A restore cannot silently use another backup, timeline, node or path than

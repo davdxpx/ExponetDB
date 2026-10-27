@@ -131,6 +131,12 @@ capabilities:
   `/etc/exponetdb-node/repositories/<repositoryId>/` with `repository`,
   `password` (`0600`) and an optional `env` (allowlisted `KEY=VALUE` lines).
   The node never takes a location, key or credential from the Control Plane.
+- **Repository binding file** `/etc/exponetdb-node/repositories/<repositoryId>/pgbackrest`
+  (owner `root`, `stanza=<name>` and `repo=<1..4>`): required when the mode
+  allows runs; a job naming another stanza or repo index is refused. Every
+  run and restore first checks that the stanza's `db-system-id` is the
+  job's cluster. A merged `conf.d` is named to every engine command
+  (`--config-include-path`); it must be root-owned.
 - **Host mode file** `/etc/exponetdb-node/repositories/<repositoryId>/mode`
   (owner `root`, not group- or world-writable; absent means
   `adopted_observed`): runs only with `adopted_runs` (incremental only) or
@@ -139,11 +145,25 @@ capabilities:
   (root, `0711`, from `packaging/tmpfiles.d/exponetdb-node-engine.conf`);
   engines run as the engine user, never as root (ADR-0037 §2).
 - **Expiry** keeps every label in `keepLabels` or refuses before the engine
-  runs (a conservative survivor check); restic expiry needs `logicalDays`
+  runs (a conservative survivor check, then pgBackRest's own
+  `expire --dry-run`), and reads the catalog again afterwards: a kept label
+  gone (a backup that completed meanwhile shifted the retention) fails the
+  run for a person to reconcile; the race is narrowed, not closed; restic expiry needs `logicalDays`
   and is refused with a non-empty `keepLabels` (restic snapshots cannot be
   named there yet: a `keepSnapshots` field is **[PLANNED]**).
   `backup.verify@1` with a `snapshot` checks the whole restic repository
   (restic 0.16 `check` cannot limit itself to one snapshot).
+- **Scratch restores run no restored code** (security review C-2, B-4): the
+  restored `postgresql.auto.conf` is kept aside as evidence and replaced by
+  the recovery target lines; the postmaster's command line disables
+  preloaded libraries, logical replication and other background workers,
+  WAL senders, JIT, autovacuum, recovery commands and primary connection
+  settings (and event triggers on 17+); after promotion and before any
+  check the run fails unless no subscription or background worker runs;
+  check sessions are read-only with `search_path=pg_catalog`. **Limit:**
+  the scratch postmaster keeps network access (its `restore_command`
+  fetches WAL over the network in the same process tree); the overrides,
+  no TCP listener and the worker check are the barrier.
 - **`walContinuous`** from `restore.prepare@1` is `false` only when missing
   coverage is shown, otherwise `null`; the node never claims continuity.
 - **Output** is redacted on the host and capped; an excerpt is untrusted text.

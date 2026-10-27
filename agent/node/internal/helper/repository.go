@@ -64,8 +64,11 @@ type repository struct {
 	// pgBackRest: the configuration file and the paths its engine writes
 	// besides the repository (log, lock, spool), from that file.
 	pgbrConfig string
-	pgbrCipher string
-	pgbrPaths  pgbrPaths
+	// pgbrInclude is the conf.d directory the helper merged ("" when none):
+	// every engine command names it.
+	pgbrInclude string
+	pgbrCipher  string
+	pgbrPaths   pgbrPaths
 	// restic: the provisioned files (content read by the helper only to copy
 	// them into a run's private directory; never logged or returned).
 	resticRepository []byte
@@ -90,7 +93,9 @@ func (r *repository) repoIndex() int {
 func (r *repository) logical() bool { return r.ref.Engine == "restic" || r.ref.Engine == "pg_dump" }
 
 type pgbrPaths struct {
-	log, lock, spool string
+	// repo is the repository's local path (posix and cifs repositories
+	// only; empty for object storage).
+	log, lock, spool, repo string
 }
 
 // trustedFile reads a host configuration file: no symlink on its path, a
@@ -192,6 +197,9 @@ func (h *Helper) resolveRepository(ref repositoryRef, engineUID int) (*repositor
 		if ref.Stanza == nil || !stanzaRE.MatchString(*ref.Stanza) || ref.RepoIndex == nil || *ref.RepoIndex < 1 || *ref.RepoIndex > 4 {
 			return nil, refuse(CodePreconditionFailed, "a pgBackRest repository needs its stanza and repo index")
 		}
+		if r := h.pgbackrestBinding(dir, repo); r != nil {
+			return nil, r
+		}
 		if r := h.pgbackrestConfig(repo, engineUID); r != nil {
 			return nil, r
 		}
@@ -209,6 +217,67 @@ func (h *Helper) resolveRepository(ref repositoryRef, engineUID int) (*repositor
 		return nil, refuse(CodeJobInvalid, "the repository engine is unknown")
 	}
 	return repo, nil
+}
+
+// pgbackrestBinding binds a repository id to one stanza and repoN of the
+// host's pgBackRest configuration (review finding B-1): the host's file
+// <repositoryId>/pgbackrest holds exactly the lines stanza=<name> and
+// repo=<n> (root-owned, writable by root only). A mode that allows runs
+// (adopted_runs, owned) needs it; whenever it exists, a job naming another
+// stanza or repo index is refused. Without it, an owned repository id could
+// carry the stanza and repo index of a repository the host only allowed to
+// observe.
+func (h *Helper) pgbackrestBinding(dir *fsafe.Dir, repo *repository) *Refusal {
+	runs := repo.mode == ModeAdoptedRuns || repo.mode == ModeOwned
+	if dir == nil {
+		if runs {
+			return refuse(CodePreconditionFailed, "the repository allows runs but binds no stanza")
+		}
+		return nil
+	}
+	data, st, err := dir.ReadFile("pgbackrest", 4096)
+	if errors.Is(err, fsafe.ErrNotExist) {
+		if runs {
+			return refuse(CodePreconditionFailed, "the repository's mode allows runs, but the host binds it to no stanza and repo (file pgbackrest)")
+		}
+		return nil
+	}
+	if err != nil || st.UID != h.rootUID() || st.Mode&0o022 != 0 {
+		return refuse(CodePreconditionFailed, "the repository's pgbackrest file has an unsafe owner or mode")
+	}
+	stanza, index, ok := parseBinding(data)
+	if !ok {
+		return refuse(CodePreconditionFailed, "the repository's pgbackrest file is not exactly stanza=<name> and repo=<n>")
+	}
+	if stanza != repo.stanza() || index != repo.repoIndex() {
+		return refuse(CodePreconditionFailed, "the job names another stanza or repo index than the host binds to this repository")
+	}
+	return nil
+}
+
+// parseBinding reads the lines stanza=<name> and repo=<1..4>, each exactly
+// once (blank lines and # comments skipped, nothing else).
+func parseBinding(data []byte) (string, int, bool) {
+	stanza, index := "", 0
+	for _, raw := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, found := strings.Cut(line, "=")
+		k, v = strings.TrimSpace(k), strings.TrimSpace(v)
+		switch {
+		case !found:
+			return "", 0, false
+		case k == "stanza" && stanza == "" && stanzaRE.MatchString(v):
+			stanza = v
+		case k == "repo" && index == 0 && len(v) == 1 && v[0] >= '1' && v[0] <= '4':
+			index = int(v[0] - '0')
+		default:
+			return "", 0, false
+		}
+	}
+	return stanza, index, stanza != "" && index != 0
 }
 
 func (h *Helper) resticFiles(dir *fsafe.Dir, repo *repository) *Refusal {
@@ -303,10 +372,22 @@ func (h *Helper) pgbackrestConfig(repo *repository, engineUID int) *Refusal {
 		return refuse(CodePreconditionFailed, "the node has no pgBackRest configuration")
 	}
 	sections := parseINI(data)
-	// conf.d beside the file (the engine's default include path).
+	// conf.d beside the file (the engine's default include path). The engine
+	// reads it only when it is named (--config-include-path; with --config
+	// pgBackRest ignores its default include path, review finding A-9), so
+	// the helper names exactly the directory it read and merged, and the
+	// helper and the engine see the same configuration.
 	if dir, err := fsafe.OpenDir(h.path(filepath.Dir(path) + "/conf.d")); err == nil {
-		files, _ := dir.Files()
+		if r := h.trustedDir(dir); r != nil {
+			dir.Close()
+			return r
+		}
+		files, err := dir.Files()
 		dir.Close()
+		if err != nil {
+			return refuse(CodePreconditionFailed, "the host's pgBackRest conf.d cannot be listed")
+		}
+		repo.pgbrInclude = filepath.Dir(path) + "/conf.d"
 		sort.Slice(files, func(i, j int) bool { return files[i].Name < files[j].Name })
 		for _, f := range files {
 			if !strings.HasSuffix(f.Name, ".conf") {
@@ -349,8 +430,17 @@ func (h *Helper) pgbackrestConfig(repo *repository, engineUID int) *Refusal {
 		repo.pgbrCipher = c
 	}
 	repo.pgbrPaths = pgbrPaths{log: "/var/log/pgbackrest", lock: "/tmp/pgbackrest", spool: "/var/spool/pgbackrest"}
-	for key, into := range map[string]*string{"log-path": &repo.pgbrPaths.log, "lock-path": &repo.pgbrPaths.lock, "spool-path": &repo.pgbrPaths.spool} {
-		if v := get(key); v != "" {
+	// A repository on a local file system (posix, cifs) is a path the
+	// engine writes: the run's unit may write it, nothing else of the host.
+	if t := get("repo" + n + "-type"); t == "" || t == "posix" || t == "cifs" {
+		repo.pgbrPaths.repo = "/var/lib/pgbackrest"
+		if v := get("repo" + n + "-path"); v != "" {
+			repo.pgbrPaths.repo = v
+		}
+	}
+	for key, into := range map[string]*string{"log-path": &repo.pgbrPaths.log, "lock-path": &repo.pgbrPaths.lock, "spool-path": &repo.pgbrPaths.spool,
+		"repo" + n + "-path": &repo.pgbrPaths.repo} {
+		if v := get(key); v != "" && *into != "" {
 			if !filepath.IsAbs(v) || filepath.Clean(v) != v || v == "/" || strings.ContainsAny(v, " \t\"'\\\x00") {
 				return refuse(CodePreconditionFailed, "the host's pgBackRest configuration names an unsafe %s", key)
 			}

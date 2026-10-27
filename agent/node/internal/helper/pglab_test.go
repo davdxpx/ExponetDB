@@ -51,6 +51,7 @@ const (
 	childEnvRuns = "EXDB_PGLAB_ENGINE_RUNS"
 	childEnvRun  = "EXDB_PGLAB_ENGINE_RUN"
 	labPort      = 55390
+	pubPort      = 55391
 	labRepo      = "bkr_01M70000000000000000000001"
 	labRestic    = "bkr_01M70000000000000000000002"
 )
@@ -226,7 +227,12 @@ func (l *lab) mkdir(path string, mode os.FileMode, uid, gid int) {
 
 func (l *lab) sql(db, q string) string {
 	l.t.Helper()
-	c, err := pgwire.Connect(context.Background(), pgwire.Options{SocketDirectory: l.sock, Port: labPort, User: "postgres", Database: db})
+	return l.sqlAt(l.sock, labPort, db, q)
+}
+
+func (l *lab) sqlAt(sock string, port int, db, q string) string {
+	l.t.Helper()
+	c, err := pgwire.Connect(context.Background(), pgwire.Options{SocketDirectory: sock, Port: port, User: "postgres", Database: db})
 	if err != nil {
 		l.t.Fatal(err)
 	}
@@ -331,6 +337,12 @@ func (l *lab) mode(repo, m string) {
 	if err := os.WriteFile(dir+"/mode", []byte(m+"\n"), 0o644); err != nil {
 		l.t.Fatal(err)
 	}
+	if repo == labRepo {
+		// The host binds the repository id to its stanza and repo (B-1).
+		if err := os.WriteFile(dir+"/pgbackrest", []byte("stanza=lab\nrepo=1\n"), 0o644); err != nil {
+			l.t.Fatal(err)
+		}
+	}
 }
 
 // wait polls run.status until the run ends and returns the final status.
@@ -407,6 +419,7 @@ func TestPglab(t *testing.T) {
 		conf: dir + "/etc/pgbackrest.conf"}
 	t.Cleanup(func() {
 		_ = exec.Command(l.pgBin+"/pg_ctl", "-D", l.data, "-m", "immediate", "stop").Run()
+		_ = exec.Command(l.pgBin+"/pg_ctl", "-D", dir+"/pub/data", "-m", "immediate", "stop").Run()
 		_ = os.RemoveAll(dir)
 	})
 	l.mkdir(dir, 0o711, 0, 0)
@@ -451,6 +464,27 @@ func TestPglab(t *testing.T) {
 	l.sql("app", "CREATE EXTENSION amcheck")
 	l.sql("app", "CREATE TABLE public.accounts (id int PRIMARY KEY, name text); CREATE INDEX ON public.accounts (name)")
 	l.sql("app", "INSERT INTO public.accounts SELECT g, 'a' || g FROM generate_series(1, 100) g")
+
+	// A publisher on this host and an enabled subscription to it in the
+	// source (C-2): a restored copy must never connect to the publisher.
+	pubSock := dir + "/pub/sock"
+	l.mkdir(dir+"/pub", 0o750, uid, gid)
+	l.mkdir(pubSock, 0o750, uid, gid)
+	l.as(l.pgBin+"/initdb", "-D", dir+"/pub/data", "-A", "trust", "-U", "postgres")
+	pf, _ := os.OpenFile(dir+"/pub/data/postgresql.conf", os.O_APPEND|os.O_WRONLY, 0)
+	fmt.Fprintf(pf, "port = %d\nlisten_addresses = ''\nunix_socket_directories = '%s'\nwal_level = logical\n", pubPort, pubSock)
+	pf.Close()
+	l.as(l.pgBin+"/pg_ctl", "-D", dir+"/pub/data", "-l", dir+"/pub/server.log", "-w", "start")
+	l.sqlAt(pubSock, pubPort, "postgres", "CREATE TABLE public.items (id int PRIMARY KEY); CREATE PUBLICATION p FOR TABLE public.items")
+	l.sqlAt(pubSock, pubPort, "postgres", "INSERT INTO public.items SELECT generate_series(1, 10)")
+	l.sql("app", "CREATE TABLE public.items (id int PRIMARY KEY)")
+	l.sql("app", fmt.Sprintf("CREATE SUBSCRIPTION s CONNECTION 'host=%s port=%d dbname=postgres user=postgres' PUBLICATION p", pubSock, pubPort))
+	for i := 0; l.sql("app", "SELECT count(*) FROM public.items") != "10"; i++ {
+		if i > 100 {
+			t.Fatal("the subscription did not sync")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
 
 	// The helper over the lab: real files and engines, the direct supervisor.
 	l.clk = &clock.Fixed{T: time.Now().UTC(), Synced: true}
@@ -535,6 +569,17 @@ func TestPglab(t *testing.T) {
 	target := time.Now().UTC().Truncate(time.Second)
 	time.Sleep(1100 * time.Millisecond)
 	l.sql("app", "INSERT INTO public.accounts SELECT g, 'd' || g FROM generate_series(161, 200) g")
+	// The real subscriber stops after the target: the restored copy holds the
+	// subscription enabled. Changes then wait on the publisher's slot.
+	l.sql("app", "ALTER SUBSCRIPTION s DISABLE")
+	for i := 0; l.sqlAt(pubSock, pubPort, "postgres", "SELECT count(*) FROM pg_replication_slots WHERE slot_name = 's' AND NOT active") != "1"; i++ {
+		if i > 100 {
+			t.Fatal("the subscription's slot stays active")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	l.sqlAt(pubSock, pubPort, "postgres", "INSERT INTO public.items SELECT generate_series(11, 1000)")
+	slotBefore := l.sqlAt(pubSock, pubPort, "postgres", "SELECT confirmed_flush_lsn::text FROM pg_replication_slots WHERE slot_name = 's'")
 	l.sql("postgres", "SELECT pg_switch_wal()")
 	l.sql("postgres", "SELECT pg_switch_wal()")
 	// The archive holds the WAL past the target.
@@ -591,6 +636,20 @@ func TestPglab(t *testing.T) {
 		t.Fatalf("reverify: %v", st)
 	}
 
+	// C-2: the drill and its reverification never reached the publisher.
+	time.Sleep(2 * time.Second)
+	if after := l.sqlAt(pubSock, pubPort, "postgres", "SELECT confirmed_flush_lsn::text FROM pg_replication_slots WHERE slot_name = 's'"); after != slotBefore {
+		t.Fatalf("the publisher's slot moved from %s to %s", slotBefore, after)
+	}
+	if n := l.sqlAt(pubSock, pubPort, "postgres", "SELECT count(*) FROM pg_stat_replication"); n != "0" {
+		t.Fatalf("%s replication connections on the publisher", n)
+	}
+	if n := l.sql("app", "SELECT count(*) FROM public.items"); n != "10" {
+		t.Fatalf("the subscriber holds %s rows", n)
+	}
+	t.Logf("publisher slot confirmed_flush_lsn before and after the drill: %s", slotBefore)
+	fmt.Fprintf(&l.log, "C-2: publisher slot confirmed_flush_lsn %s unchanged, 0 replication connections\n", slotBefore)
+
 	// 7. Expiry: owned only; a retention that would drop a kept label is
 	// refused before the engine runs; a safe one runs.
 	l.mode(labRepo, ModeOwned)
@@ -606,6 +665,20 @@ func TestPglab(t *testing.T) {
 	st = l.wait(runExp1, l.must(OpBackupExpire, "backup.expire", expire(runExp1, full)), 5*time.Minute)
 	if str(st, "state") != "failed" || !strings.Contains(str(st, "excerpt"), "refused") {
 		t.Fatalf("unsafe expiry: %v", st)
+	}
+	// The engine's dry-run lines, as engine-run parses them (B-3).
+	dry := l.as("/usr/bin/pgbackrest", "--config="+l.conf, "--stanza=lab", "--repo=1", "--repo1-retention-full-type=count",
+		"--repo1-retention-full=1", "--dry-run", "--log-level-console=info", "expire")
+	var planned []string
+	for _, line := range strings.Split(dry, "\n") {
+		if expireLineRE.MatchString(line) {
+			planned = append(planned, labelTokenRE.FindAllString(line, -1)...)
+		}
+	}
+	t.Logf("dry run plans to expire %v", planned)
+	fmt.Fprintf(&l.log, "B-3 dry run plans %v\n", planned)
+	if !contains(planned, full) || contains(planned, full2) {
+		t.Fatalf("dry run %v:\n%s", planned, dry)
 	}
 	runExp2 := "run_01M70000000000000000000E02"
 	st = l.wait(runExp2, l.must(OpBackupExpire, "backup.expire", expire(runExp2, full2)), 5*time.Minute)

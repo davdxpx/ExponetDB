@@ -25,6 +25,12 @@ nothing else. No Docker, Node.js or Bun on a database host.
   behavior under systemd is tested by the host test
   (`apps/server/test/agent-capabilities.host.test.ts`, CI job `node-pg`),
   which runs the agent and the helper from these unit files.
+- Backup repositories are bound on the host (ADR-0036 §4): for each
+  repository id the operator creates `/etc/exponetdb-node/repositories/<id>/`
+  (root, `0755`) with a `mode` file (`adopted_observed`, `adopted_runs`,
+  `owned`) and, for a pgBackRest repository that may run, a `pgbackrest` file
+  of the two lines `stanza=<name>` and `repo=<n>`; without it no run starts
+  (`agent/node/README.md`, Wave 9 Part B).
 - The managed PostgreSQL files (configuration fragment, `pg_hba.conf`, TLS
   files) must lie under `/etc/postgresql` (the Debian layout); elsewhere the
   helper's `ReadWritePaths` must be extended by a drop-in.

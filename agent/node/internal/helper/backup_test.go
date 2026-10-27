@@ -131,6 +131,7 @@ func (b *benv) mode(m string) {
 		return
 	}
 	writeFile(b.t, b.root+"/etc/exponetdb-node/repositories/"+repoID+"/mode", m+"\n", 0o644)
+	writeFile(b.t, b.root+"/etc/exponetdb-node/repositories/"+repoID+"/pgbackrest", "# bound by the operator\nstanza=main\nrepo=1\n", 0o644)
 }
 
 // answer is the scripted host: systemctl show reports the units of b.units,
@@ -167,6 +168,16 @@ func (b *benv) answer(c Command) (Output, error) {
 			case strings.HasPrefix(inner, PgBackRest) && strings.HasSuffix(inner, " info"):
 				return Output{Stdout: []byte(b.info)}, nil
 			case strings.HasPrefix(inner, Restic+" snapshots"):
+				// B-5: the environment file systemd reads lies in root's
+				// private directory, never in the engine user's.
+				for _, a := range c.Args {
+					if env, ok := strings.CutPrefix(a, "--property=EnvironmentFile="); ok {
+						info, err := os.Lstat(filepath.Dir(env))
+						if err != nil || filepath.Base(filepath.Dir(env)) != "private" || info.Mode().Perm() != 0o700 || ownerOf(info) != b.h.rootUID() {
+							return Output{ExitCode: 99}, nil
+						}
+					}
+				}
 				return Output{Stdout: []byte(`[{"time":"2026-10-26T12:00:00.123+02:00","id":"` + strings.Repeat("ab", 32) + `","tags":["exponetdb"]}]`)}, nil
 			case strings.Contains(inner, "pg_ctl status"):
 				return Output{ExitCode: 3}, nil
@@ -297,6 +308,7 @@ func TestBackupRunStartsAFixedUnit(t *testing.T) {
 		"--property=RestrictSUIDSGID=yes", "--property=LimitCORE=0", "--property=UMask=0077", "--property=KillMode=control-group",
 		"--property=CPUWeight=50", "--property=IOWeight=50", "--property=TasksMax=256",
 		"--property=ReadWritePaths=" + work, "--property=ReadWritePaths=-/var/log/pgbackrest", "--property=ReadWritePaths=-/var/spool/pgbackrest",
+		"--property=ReadWritePaths=-/var/lib/pgbackrest",
 		"--property=BindPaths=-/tmp/pgbackrest",
 		"--property=MemoryMax=2G", "--property=RuntimeMaxSec=43200", "--property=TimeoutStopSec=90", "--property=Restart=no",
 		"--property=StandardOutput=null", "--property=StandardError=null",
@@ -798,8 +810,13 @@ func TestLogicalBackupSecretsStayInFiles(t *testing.T) {
 	b.mustCall(OpBackupRun, b.job("backup.run", runArgs(runA, "logical", resticRepo(), "app", "other_db")))
 	noSecrets(t, "argv", b.allArgv())
 	sec := b.runsRoot() + "/" + runA + "/work/secrets"
+	private := b.runsRoot() + "/" + runA + "/private"
 	for name, want := range map[string]os.FileMode{"password": 0o600, "repository": 0o600, "env": 0o600} {
-		info, err := os.Lstat(sec + "/" + name)
+		path := sec + "/" + name
+		if name == "env" {
+			path = private + "/env"
+		}
+		info, err := os.Lstat(path)
 		if err != nil || info.Mode().Perm() != want {
 			t.Fatalf("%s: %v %v", name, info, err)
 		}
@@ -812,7 +829,15 @@ func TestLogicalBackupSecretsStayInFiles(t *testing.T) {
 		}
 	}
 	start := strings.Join(b.run.find(SystemdRun, "--unit=")[0].Args, " ")
-	if !strings.Contains(start, "--property=EnvironmentFile="+sec+"/env") {
+	// The environment file lies in root's private directory, never in one
+	// the engine user owns (B-5).
+	if info, err := os.Lstat(private); err != nil || info.Mode().Perm() != 0o700 || ownerOf(info) != b.h.rootUID() {
+		t.Fatalf("private %v %v", info, err)
+	}
+	if _, err := os.Lstat(sec + "/env"); !os.IsNotExist(err) {
+		t.Fatal("an environment file in the engine user's directory")
+	}
+	if !strings.Contains(start, "--property=EnvironmentFile="+private+"/env") {
 		t.Fatalf("%s", start)
 	}
 	// engine-run: pg_dump per database, pg_restore --list, the globals, then
@@ -921,16 +946,21 @@ func TestEngineRunPgBackRestBackup(t *testing.T) {
 	b.mode(ModeAdoptedRuns)
 	b.mustCall(OpBackupRun, b.job("backup.run", runArgs(runA, "incremental", pgbrRepo())))
 	fx := &fakeExec{fn: func(c engineCmd) (int, string) {
+		if strings.HasSuffix(strings.Join(c.Args, " "), " info") {
+			return 0, pgbrInfoFixture(sysid)
+		}
 		return 0, "INFO: backup command begin 2.60.0: --repo1-cipher-pass=" + cipherPass + " --stanza=main\n" +
 			"INFO: new backup label = 20261007-010000F_20261007-120000I\nINFO: backup command end: completed successfully\n"
 	}}
 	b.engine(runA, fx, context.Background())
 	conf := b.root + "/etc/pgbackrest/pgbackrest.conf"
-	if got := fx.argv(); len(got) != 1 || got[0] != PgBackRest+" --config="+conf+" --stanza=main --repo=1 --no-expire-auto --type=incr --log-level-console=info backup" {
+	// First the stanza's identity (B-2), then the backup.
+	if got := fx.argv(); len(got) != 2 || !strings.HasSuffix(got[0], " info") ||
+		got[1] != PgBackRest+" --config="+conf+" --stanza=main --repo=1 --no-expire-auto --type=incr --log-level-console=info backup" {
 		t.Fatalf("%v", got)
 	}
-	if len(fx.cmds[0].Env) != 0 {
-		t.Fatalf("pgBackRest got an environment: %v", fx.cmds[0].Env)
+	if len(fx.cmds[1].Env) != 0 {
+		t.Fatalf("pgBackRest got an environment: %v", fx.cmds[1].Env)
 	}
 	st := b.status(b.record(runA))
 	out, _ := canon.Canonicalize(st)
@@ -986,8 +1016,73 @@ func TestEngineRunExpireKeepsLabels(t *testing.T) {
 	fx = &fakeExec{fn: info}
 	b.engine(runC, fx, context.Background())
 	got := fx.argv()
-	if len(got) != 2 || !strings.HasSuffix(got[1], "--repo1-retention-full-type=count --repo1-retention-full=1 --repo1-retention-diff=1 --log-level-console=info expire") {
+	if len(got) != 4 || !strings.HasSuffix(got[1], "--repo1-retention-diff=1 --dry-run --log-level-console=info expire") ||
+		!strings.HasSuffix(got[2], "--repo1-retention-full-type=count --repo1-retention-full=1 --repo1-retention-diff=1 --log-level-console=info expire") ||
+		!strings.HasSuffix(got[3], " info") {
 		t.Fatalf("%v", got)
+	}
+	b.setUnit(UnitName(runC), "")
+	if st := b.status(b.record(runC)); str(st, "state") != "succeeded" {
+		t.Fatalf("%v", st)
+	}
+}
+
+// TestEngineRunExpireRace (B-3): the engine's dry run names a kept label:
+// refused before anything changes; a kept label gone after the expiry (a
+// backup completed meanwhile): failed, with the reason.
+func TestEngineRunExpireRace(t *testing.T) {
+	b := newBackupEnv(t)
+	b.mode(ModeOwned)
+	expire := func(run string, keep string) {
+		b.mustCall(OpBackupExpire, b.job("backup.expire", canon.Object{{Name: "cluster", Value: cluster()}, {Name: "repository", Value: pgbrRepo()},
+			{Name: "runId", Value: canon.String(run)},
+			{Name: "retention", Value: canon.Object{{Name: "fullCount", Value: canon.Number(2)}, {Name: "differentialCount", Value: canon.Null{}}, {Name: "logicalDays", Value: canon.Null{}}}},
+			{Name: "keepLabels", Value: canon.Array{canon.String(keep)}}}))
+	}
+	expire(runA, "20261005-010000F")
+	fx := &fakeExec{fn: func(c engineCmd) (int, string) {
+		args := strings.Join(c.Args, " ")
+		switch {
+		case strings.HasSuffix(args, " info"):
+			return 0, pgbrInfoFixture(sysid)
+		case strings.Contains(args, "--dry-run"):
+			return 0, "INFO: [DRY-RUN] repo1: expire full backup set 20261005-010000F, 20261005-010000F_20261005-020000I\n"
+		}
+		return 0, ""
+	}}
+	b.engine(runA, fx, context.Background())
+	if len(fx.cmds) != 2 {
+		t.Fatalf("the expiry ran: %v", fx.argv())
+	}
+	b.setUnit(UnitName(runA), "")
+	if st := b.status(b.record(runA)); str(st, "state") != "failed" || !strings.Contains(str(st, "excerpt"), "would expire kept backup") {
+		t.Fatalf("%v", st)
+	}
+	// An incremental of a kept full in the dry run is not the full.
+	expire(runB, "20261006-010000F")
+	infos := 0
+	fx = &fakeExec{fn: func(c engineCmd) (int, string) {
+		args := strings.Join(c.Args, " ")
+		switch {
+		case strings.HasSuffix(args, " info"):
+			infos++
+			if infos == 2 {
+				// A newer full pushed the kept one out meanwhile.
+				return 0, strings.Replace(pgbrInfoFixture(sysid), `"label":"20261006-010000F"`, `"label":"20261007-010000F"`, 1)
+			}
+			return 0, pgbrInfoFixture(sysid)
+		case strings.Contains(args, "--dry-run"):
+			return 0, "INFO: [DRY-RUN] repo1: expire diff backup set 20261006-010000F_20261006-020000D\n"
+		}
+		return 0, "INFO: expire command end: completed successfully\n"
+	}}
+	b.engine(runB, fx, context.Background())
+	if len(fx.cmds) != 4 {
+		t.Fatalf("%v", fx.argv())
+	}
+	b.setUnit(UnitName(runB), "")
+	if st := b.status(b.record(runB)); str(st, "state") != "failed" || !strings.Contains(str(st, "excerpt"), "is gone after the expiry") {
+		t.Fatalf("%v", st)
 	}
 }
 
@@ -1009,7 +1104,14 @@ func TestEngineRunCancelBeforeAndAfterTheEffect(t *testing.T) {
 	// Stopped while the backup runs: failed, never canceled.
 	b.mustCall(OpBackupRun, b.job("backup.run", runArgs(runB, "full", pgbrRepo())))
 	ctx, cancel = context.WithCancel(context.Background())
-	fx = &fakeExec{block: func(c engineCmd) bool { cancel(); return true }}
+	fx = &fakeExec{fn: func(engineCmd) (int, string) { return 0, pgbrInfoFixture(sysid) },
+		block: func(c engineCmd) bool {
+			if c.Args[len(c.Args)-1] != "backup" {
+				return false
+			}
+			cancel()
+			return true
+		}}
 	b.engine(runB, fx, ctx)
 	b.setUnit(UnitName(runB), "")
 	if st := b.status(b.record(runB)); str(st, "state") != "failed" || !strings.Contains(str(st, "excerpt"), "after the engine began") {
@@ -1192,4 +1294,196 @@ func FuzzEngineOutputs(f *testing.F) {
 			t.Fatalf("run.status: %v", err)
 		}
 	})
+}
+
+// TestRepositoryBinding (B-1): a repository id whose mode allows runs is
+// bound by the host to one stanza and repo index; a job naming another one,
+// or a repository without the binding, is refused before anything runs.
+func TestRepositoryBinding(t *testing.T) {
+	b := newBackupEnv(t)
+	dir := b.root + "/etc/exponetdb-node/repositories/" + repoID
+	b.mode(ModeOwned)
+	other := pgbrRepo()
+	other[3].Value = canon.Number(2)
+	writeFile(t, b.root+"/etc/pgbackrest/pgbackrest.conf", "[global]\nrepo1-path=/var/lib/pgbackrest\nrepo2-path=/srv/observed\n\n[main]\npg1-path=/x\n", 0o640)
+	// Another repo index of the same stanza: refused, whatever the mode says.
+	b.mustRefuse(OpBackupRun, b.job("backup.run", runArgs(runA, "full", other)), CodePreconditionFailed)
+	expire := canon.Object{{Name: "cluster", Value: cluster()}, {Name: "repository", Value: other}, {Name: "runId", Value: canon.String(runA)},
+		{Name: "retention", Value: canon.Object{{Name: "fullCount", Value: canon.Number(1)}, {Name: "differentialCount", Value: canon.Null{}}, {Name: "logicalDays", Value: canon.Null{}}}},
+		{Name: "keepLabels", Value: canon.Array{}}}
+	b.mustRefuse(OpBackupExpire, b.job("backup.expire", expire), CodePreconditionFailed)
+	otherStanza := pgbrRepo()
+	otherStanza[2].Value = canon.String("other")
+	b.mustRefuse(OpBackupRun, b.job("backup.run", runArgs(runA, "full", otherStanza)), CodePreconditionFailed)
+	// No binding file while the mode allows runs: refused.
+	_ = os.Remove(dir + "/pgbackrest")
+	b.mustRefuse(OpBackupRun, b.job("backup.run", runArgs(runA, "full", pgbrRepo())), CodePreconditionFailed)
+	// A malformed, duplicated or writable binding: refused.
+	for _, bad := range []string{"stanza=main\n", "stanza=main\nrepo=1\nrepo=1\n", "stanza=main\nrepo=1\npath=/x\n", "stanza=main\nrepo=9\n", "stanza=ma in\nrepo=1\n"} {
+		writeFile(t, dir+"/pgbackrest", bad, 0o644)
+		b.mustRefuse(OpBackupRun, b.job("backup.run", runArgs(runA, "full", pgbrRepo())), CodePreconditionFailed)
+	}
+	writeFile(t, dir+"/pgbackrest", "stanza=main\nrepo=1\n", 0o666)
+	b.mustRefuse(OpBackupRun, b.job("backup.run", runArgs(runA, "full", pgbrRepo())), CodePreconditionFailed)
+	if len(b.run.find(SystemdRun, "--unit=")) != 0 {
+		t.Fatal("a run started")
+	}
+	// The bound repository runs.
+	writeFile(t, dir+"/pgbackrest", "# bound\nstanza = main\nrepo = 1\n", 0o644)
+	b.mustCall(OpBackupRun, b.job("backup.run", runArgs(runA, "full", pgbrRepo())))
+	// Observation needs no binding: no directory at all, or adopted_observed.
+	_ = os.RemoveAll(dir)
+	listArgs := canon.Object{{Name: "cluster", Value: cluster()}, {Name: "repository", Value: other}}
+	b.mustCall(OpBackupList, b.job("backup.list", listArgs))
+	b.mode(ModeAdoptedObserved)
+	_ = os.Remove(dir + "/pgbackrest")
+	b.mustCall(OpBackupList, b.job("backup.list", listArgs))
+	// A binding that exists binds observation too.
+	writeFile(t, dir+"/pgbackrest", "stanza=main\nrepo=1\n", 0o644)
+	b.mustRefuse(OpBackupList, b.job("backup.list", listArgs), CodePreconditionFailed)
+}
+
+// TestStartsCheckTheStanzasCluster (B-2): every pgBackRest run checks the
+// stanza's system identifier before it starts, and engine-run again before
+// the engine runs.
+func TestStartsCheckTheStanzasCluster(t *testing.T) {
+	b := newBackupEnv(t)
+	b.mode(ModeOwned)
+	b.info = pgbrInfoFixture("42")
+	b.mustRefuse(OpBackupRun, b.job("backup.run", runArgs(runA, "full", pgbrRepo())), CodePreconditionFailed)
+	b.mustRefuse(OpBackupVerify, b.job("backup.verify", canon.Object{{Name: "cluster", Value: cluster()}, {Name: "repository", Value: pgbrRepo()},
+		{Name: "runId", Value: canon.String(runA)}, {Name: "label", Value: canon.Null{}}, {Name: "snapshot", Value: canon.Null{}}}), CodePreconditionFailed)
+	b.mustRefuse(OpBackupExpire, b.job("backup.expire", canon.Object{{Name: "cluster", Value: cluster()}, {Name: "repository", Value: pgbrRepo()},
+		{Name: "runId", Value: canon.String(runA)},
+		{Name: "retention", Value: canon.Object{{Name: "fullCount", Value: canon.Number(1)}, {Name: "differentialCount", Value: canon.Null{}}, {Name: "logicalDays", Value: canon.Null{}}}},
+		{Name: "keepLabels", Value: canon.Array{}}}), CodePreconditionFailed)
+	b.mustRefuse(OpRestoreExecute, b.job("restore.execute", restoreJobArgs(runA, 55402)), CodePreconditionFailed)
+	// A stanza without a database (never created): refused too.
+	b.info = `[{"name":"main","status":{"code":1,"message":"missing stanza path"},"db":[],"backup":[],"archive":[]}]`
+	b.mustRefuse(OpBackupRun, b.job("backup.run", runArgs(runA, "full", pgbrRepo())), CodePreconditionFailed)
+	if len(b.run.find(SystemdRun, "--unit=")) != 0 {
+		t.Fatal("a run started")
+	}
+	// The stanza changed between the start and the run: engine-run refuses.
+	b.info = pgbrInfoFixture(sysid)
+	b.mustCall(OpBackupRun, b.job("backup.run", runArgs(runA, "full", pgbrRepo())))
+	fx := &fakeExec{fn: func(c engineCmd) (int, string) { return 0, pgbrInfoFixture("42") }}
+	b.engine(runA, fx, context.Background())
+	if len(fx.cmds) != 1 {
+		t.Fatalf("backed up another cluster's stanza: %v", fx.argv())
+	}
+	b.setUnit(UnitName(runA), "")
+	if st := b.status(b.record(runA)); str(st, "state") == "succeeded" || !strings.Contains(str(st, "excerpt"), "another cluster") {
+		t.Fatalf("%v", st)
+	}
+}
+
+// TestConfDIsNamedToTheEngine (A-9): the conf.d directory the helper read
+// is the one every engine command names; one others can write is refused.
+func TestConfDIsNamedToTheEngine(t *testing.T) {
+	b := newBackupEnv(t)
+	b.mode(ModeOwned)
+	confd := b.root + "/etc/pgbackrest/conf.d"
+	writeFile(t, confd+"/10-lock.conf", "[global]\nlock-path=/run/pgbackrest-lock\n", 0o640)
+	b.mustCall(OpBackupRun, b.job("backup.run", runArgs(runA, "full", pgbrRepo())))
+	read := strings.Join(b.run.find(SystemdRun, "--wait")[0].Args, " ")
+	if !strings.Contains(read, "--config="+b.root+"/etc/pgbackrest/pgbackrest.conf --config-include-path="+confd+" --stanza=main") {
+		t.Fatalf("%s", read)
+	}
+	start := strings.Join(b.run.find(SystemdRun, "--unit=")[0].Args, " ")
+	if !strings.Contains(start, "--property=ReadWritePaths=-/run/pgbackrest-lock") || strings.Contains(start, "BindPaths=-/tmp/pgbackrest") {
+		t.Fatalf("the conf.d lock path is not the unit's: %s", start)
+	}
+	if rec := b.record(runA); rec.PgBackRest.Include != confd {
+		t.Fatalf("%+v", rec.PgBackRest)
+	}
+	fx := &fakeExec{fn: func(c engineCmd) (int, string) {
+		if strings.HasSuffix(strings.Join(c.Args, " "), " info") {
+			return 0, pgbrInfoFixture(sysid)
+		}
+		return 0, ""
+	}}
+	b.engine(runA, fx, context.Background())
+	for _, a := range fx.argv() {
+		if !strings.Contains(a, "--config-include-path="+confd+" ") {
+			t.Fatalf("an engine command without the include path: %s", a)
+		}
+	}
+	// A conf.d others can write: refused.
+	b.setUnit(UnitName(runA), "")
+	if err := os.Chmod(confd, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	b.mustRefuse(OpBackupRun, b.job("backup.run", runArgs(runB, "full", pgbrRepo())), CodePreconditionFailed)
+}
+
+// TestScratchStartNeutralizesTheRestoredServer (B-4, C-2): the restored
+// postgresql.auto.conf is moved aside, only the recovery target is kept,
+// and the postmaster's command line turns off libraries, workers,
+// replication and the restored shell commands.
+func TestScratchStartNeutralizesTheRestoredServer(t *testing.T) {
+	b := newBackupEnv(t)
+	b.mustCall(OpRestoreExecute, b.job("restore.execute", restoreJobArgs(runA, 55402)))
+	scratch := b.root + "/var/lib/exponetdb-node-engine/scratch/" + runA
+	restored := "shared_preload_libraries = 'evil'\nsession_preload_libraries = 'evil'\narchive_command = 'curl evil'\n" +
+		"restore_command = 'curl evil'\nrecovery_target_time = '2026-10-06 02:30:00+00'\nrecovery_target_action = 'promote'\n" +
+		"recovery_target_time = 'x'' ; include ''/etc/x'\ninclude '/tmp/evil.conf'\n"
+	fx := &fakeExec{fn: func(c engineCmd) (int, string) {
+		args := strings.Join(c.Args, " ")
+		switch {
+		case strings.HasSuffix(args, " info"):
+			return 0, pgbrInfoFixture(sysid)
+		case strings.HasSuffix(args, " restore"):
+			writeFile(t, scratch+"/PG_VERSION", "17\n", 0o600)
+			writeFile(t, scratch+"/postgresql.auto.conf", restored, 0o600)
+		}
+		return 0, ""
+	}}
+	b.engine(runA, fx, context.Background())
+	auto, err := os.ReadFile(scratch + "/postgresql.auto.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"evil", "archive_command", "restore_command", "\ninclude"} {
+		if strings.Contains(string(auto), bad) {
+			t.Fatalf("the restored %q survived: %s", bad, auto)
+		}
+	}
+	if !strings.Contains(string(auto), "recovery_target_time = '2026-10-06 02:30:00+00'") || !strings.Contains(string(auto), "recovery_target_action = 'promote'") {
+		t.Fatalf("%s", auto)
+	}
+	if kept, _ := os.ReadFile(scratch + "/exponetdb-restored-postgresql.auto.conf"); string(kept) != restored {
+		t.Fatal("the restored file was not kept as evidence")
+	}
+	var postmaster string
+	for _, a := range fx.argv() {
+		if strings.Contains(a, "/bin/postgres ") {
+			postmaster = a
+		}
+	}
+	conf := b.root + "/etc/pgbackrest/pgbackrest.conf"
+	for _, want := range []string{"-c shared_preload_libraries= ", "-c session_preload_libraries= ", "-c local_preload_libraries= ",
+		"-c dynamic_library_path=$libdir ", "-c max_logical_replication_workers=0 ", "-c max_worker_processes=0 ", "-c max_wal_senders=0 ",
+		"-c autovacuum=off ", "-c event_triggers=off", "-c recovery_end_command= ", "-c archive_cleanup_command= ", "-c primary_conninfo= ",
+		"-c listen_addresses= ", "-c archive_mode=off ", "-c hot_standby=off",
+		"-c restore_command=" + PgBackRest + " --config=" + conf + " --stanza=main --repo=1 --pg1-path=" + scratch + " archive-get %f \"%p\""} {
+		if !strings.Contains(postmaster+" ", want) {
+			t.Fatalf("postmaster lacks %q: %s", want, postmaster)
+		}
+	}
+	// A reverification fetches no WAL.
+	e := &engineRun{rec: &runRecord{Purpose: "reverify", PostgresMajor: 16, PgBackRest: &recordPgbr{Config: conf, Stanza: "main", Repo: 1}}}
+	if e.restoreCommand() != "" || strings.Contains(strings.Join(e.neutralizing(), " "), "event_triggers") {
+		t.Fatalf("%v", e.neutralizing())
+	}
+	// A configuration path a shell would split is never put into the command.
+	e = &engineRun{rec: &runRecord{Purpose: "restore", PostgresMajor: 17, PgBackRest: &recordPgbr{Config: "/etc/pg br/x.conf", Stanza: "main", Repo: 1}}}
+	if e.restoreCommand() != "" {
+		t.Fatal(e.restoreCommand())
+	}
+	// The check sessions load nothing and read only.
+	if got := strings.Join((&engineRun{rec: &runRecord{PostgresMajor: 17}}).checkSettings(), " "); got !=
+		"session_preload_libraries= local_preload_libraries= jit=off default_transaction_read_only=on event_triggers=off" {
+		t.Fatal(got)
+	}
 }

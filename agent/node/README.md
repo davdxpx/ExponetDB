@@ -76,6 +76,22 @@ transient systemd unit (`exponetdb-run-<runId>.service`, fixed properties,
 owner; the run record lives under `/var/lib/exponetdb-node-engine/runs`
 (root, `tmpfiles.d`), scratch restores under `.../scratch`.
 
+Host files per repository, under `/etc/exponetdb-node/repositories/<repositoryId>/`
+(the directory and every file root-owned, writable by root only):
+
+| File | Content | Needed |
+|---|---|---|
+| `mode` | `adopted_observed`, `adopted_runs` or `owned` (absent: `adopted_observed`) | to allow runs (`adopted_runs`: incremental backups; `owned`: every kind and expiry) |
+| `pgbackrest` | exactly the lines `stanza=<name>` and `repo=<1..4>` (`#` comments allowed) | for a pgBackRest repository whose mode allows runs; when present, a job naming another stanza or repo index is refused, reads included |
+| `repository`, `password` (`0600`), `env` (`0600`, optional) | a restic repository, its password, allowlisted `AWS_*`, `B2_*` and `RESTIC_COMPRESSION`/`RESTIC_PACK_SIZE` variables | restic and pg_dump repositories |
+
+pgBackRest reads the host's own configuration (`pgbackrestConfig` in the operator
+configuration, else `/etc/pgbackrest/pgbackrest.conf`, else
+`/etc/pgbackrest.conf`); when a `conf.d` directory lies beside it, the helper
+merges it and every engine command names it (`--config-include-path`). Every
+pgBackRest run checks that the stanza's `db-system-id` is the job's cluster
+before it starts and again before the engine runs.
+
 - Unit tests: `go test ./internal/helper/` (scripted systemd and engines).
 - Lab test with the real engines (root; pgBackRest, restic and PostgreSQL 17
   installed): `go test -tags pglab -count=1 -run TestPglab -v ./internal/helper/`.

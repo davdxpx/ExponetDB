@@ -124,8 +124,10 @@ type recordInstance struct {
 
 type recordPgbr struct {
 	Config string `json:"config"`
-	Stanza string `json:"stanza"`
-	Repo   int    `json:"repo"`
+	// Include is the conf.d directory the helper read ("" when none).
+	Include string `json:"include"`
+	Stanza  string `json:"stanza"`
+	Repo    int    `json:"repo"`
 }
 
 type rowCount struct {

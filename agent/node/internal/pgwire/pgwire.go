@@ -56,6 +56,10 @@ type Options struct {
 	Database        string
 	// StatementTimeout bounds every statement on the server (0: 60 s).
 	StatementTimeout time.Duration
+	// Settings are further fixed name=value startup settings compiled into
+	// the node (a scratch restore's check sessions); never a value from a
+	// job. A value holds no space or backslash.
+	Settings []string
 }
 
 // Conn is one session. It is not safe for concurrent use.
@@ -123,7 +127,7 @@ func (c *Conn) startup() error {
 		// Literals are quoted for standard_conforming_strings, whatever the
 		// cluster's configuration says.
 		"options", "-c search_path=pg_catalog -c standard_conforming_strings=on -c statement_timeout=" +
-			strconv.FormatInt(c.o.StatementTimeout.Milliseconds(), 10),
+			strconv.FormatInt(c.o.StatementTimeout.Milliseconds(), 10) + extraSettings(c.o.Settings),
 	}
 	body := make([]byte, 0, 256)
 	body = binary.BigEndian.AppendUint32(body, protocolVersion)
@@ -171,6 +175,17 @@ func (c *Conn) startup() error {
 			return fmt.Errorf("pgwire: unexpected message %q during startup", t)
 		}
 	}
+}
+
+func extraSettings(settings []string) string {
+	var b strings.Builder
+	for _, s := range settings {
+		if strings.ContainsAny(s, " \t\\\x00") || !strings.Contains(s, "=") {
+			continue
+		}
+		b.WriteString(" -c " + s)
+	}
+	return b.String()
 }
 
 // Parameter returns a server parameter reported at startup or since

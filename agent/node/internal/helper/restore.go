@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -126,13 +127,7 @@ func (e *engineRun) restore(ctx context.Context) {
 	e.outcome.Port = &port
 	done := e.phase("restore")
 	// The stanza must be the source cluster's (ADR-0038 §1).
-	s, ok := e.pgbrInfo(ctx)
-	if !ok {
-		done(false)
-		return
-	}
-	if s.systemID() != e.rec.SystemIdentifier {
-		e.note("refused: the stanza belongs to another cluster (system identifier mismatch)")
+	if _, ok := e.ownStanza(ctx); !ok {
 		done(false)
 		return
 	}
@@ -175,6 +170,11 @@ func (e *engineRun) restore(ctx context.Context) {
 		done(false)
 		return
 	}
+	if r := e.sanitizeAutoConf(); r != "" {
+		e.note("%s", r)
+		done(false)
+		return
+	}
 	done(true)
 	recovered := e.phase("recover")
 	proc, log, err := e.startScratch(port)
@@ -199,9 +199,14 @@ func (e *engineRun) restore(ctx context.Context) {
 		recovered(false)
 		return
 	}
+	if err := e.noWorkers(ctx, port); err != nil {
+		e.note("refused to verify: %v", err)
+		recovered(false)
+		return
+	}
 	recovered(true)
 	verified := e.phase("verify")
-	ok = e.runChecks(ctx, port, e.requestedChecks(), &t)
+	ok := e.runChecks(ctx, port, e.requestedChecks(), &t)
 	verified(ok)
 	stop()
 	if ok && e.outcome.Phases[len(e.outcome.Phases)-1].Outcome == "passed" {
@@ -226,6 +231,13 @@ func (e *engineRun) reverify(ctx context.Context) {
 	if err := e.waitPromoted(ctx, proc, port); err != nil {
 		e.note("the scratch cluster is not ready: %v", err)
 		e.note("%s", log.String())
+		verified(false)
+		end := e.phase("stop")
+		end(e.stopScratch(proc))
+		return
+	}
+	if err := e.noWorkers(ctx, port); err != nil {
+		e.note("refused to verify: %v", err)
 		verified(false)
 		end := e.phase("stop")
 		end(e.stopScratch(proc))
@@ -308,19 +320,142 @@ func (e *engineRun) startScratch(port int) (engineProc, *tail, error) {
 		"-c", "port=" + strconv.Itoa(port),
 		"-c", "listen_addresses=",
 		"-c", "unix_socket_directories=" + s,
+		"-c", "unix_socket_permissions=0700",
 		"-c", "archive_mode=off",
 		"-c", "ssl=off",
 		"-c", "logging_collector=off",
 		"-c", "hot_standby=off",
 	}
+	args = append(args, e.neutralizing()...)
 	log := &tail{n: 8 * 1024}
 	p, err := e.o.exec.start(engineCmd{Path: bin, Args: args, Out: &lockedWriter{w: log}})
 	return p, log, err
 }
 
+// neutralizing are the command-line settings that keep the restored
+// server's code and connections from running (review findings B-4, C-2).
+// The command line outranks every configuration file, and the restored
+// postgresql.auto.conf is moved aside anyway (sanitizeAutoConf):
+//   - no library is loaded: shared, session and local preload lists empty,
+//     libraries only from the binaries' own $libdir, no JIT provider;
+//   - no background worker runs: no logical replication worker (a restored
+//     enabled subscription would connect to its real publisher and advance
+//     its slot), no worker processes at all, no WAL sender, no autovacuum
+//     (ANALYZE evaluates expression indexes, which can call restored
+//     functions), no login event trigger (PostgreSQL 17 and later);
+//   - no shell command of the restored configuration: restore_command is
+//     the node's own (the restore) or none (a reverification), no
+//     recovery_end_command, no archive_cleanup_command, no primary_conninfo.
+func (e *engineRun) neutralizing() []string {
+	set := []string{
+		"shared_preload_libraries=", "session_preload_libraries=", "local_preload_libraries=",
+		"dynamic_library_path=$libdir", "jit=off",
+		"max_logical_replication_workers=0", "max_worker_processes=0", "max_parallel_workers=0",
+		"max_wal_senders=0", "autovacuum=off",
+		"recovery_end_command=", "archive_cleanup_command=", "primary_conninfo=", "primary_slot_name=",
+		"restore_command=" + e.restoreCommand(),
+	}
+	if e.rec.PostgresMajor >= 17 {
+		set = append(set, "event_triggers=off", "sync_replication_slots=off")
+	}
+	var args []string
+	for _, kv := range set {
+		args = append(args, "-c", kv)
+	}
+	return args
+}
+
+var shellSafeRE = regexp.MustCompile(`^[A-Za-z0-9/._-]+$`)
+
+// restoreCommand is the node's own WAL fetch for a restore's recovery:
+// PostgreSQL runs it through a shell, so it holds only the fixed binary,
+// the checked configuration paths, the stanza and the repo index. A
+// reverification fetches nothing.
+func (e *engineRun) restoreCommand() string {
+	p := e.rec.PgBackRest
+	if e.rec.Purpose != "restore" || p == nil || !shellSafeRE.MatchString(p.Config) || (p.Include != "" && !shellSafeRE.MatchString(p.Include)) ||
+		!shellSafeRE.MatchString(e.rec.ScratchDirectory) {
+		return ""
+	}
+	// archive-get checks that the server's directory is pg1-path.
+	args := append([]string{PgBackRest}, pgbrBase(p.Config, p.Include, p.Stanza, p.Repo)...)
+	return strings.Join(append(args, "--pg1-path="+e.rec.ScratchDirectory), " ") + ` archive-get %f "%p"`
+}
+
+// checkSettings are the fixed settings of every check session: no library
+// loaded into it, no JIT, read-only transactions, and (17 and later) no
+// login event trigger.
+func (e *engineRun) checkSettings() []string {
+	set := []string{"session_preload_libraries=", "local_preload_libraries=", "jit=off", "default_transaction_read_only=on"}
+	if e.rec.PostgresMajor >= 17 {
+		set = append(set, "event_triggers=off")
+	}
+	return set
+}
+
 func (e *engineRun) connect(ctx context.Context, port int, db string) (*pgwire.Conn, error) {
 	return pgwire.Connect(ctx, pgwire.Options{SocketDirectory: e.rec.ScratchDirectory, Port: port, User: e.rec.EngineUser.Name,
-		Database: db, StatementTimeout: 10 * time.Minute})
+		Database: db, StatementTimeout: 10 * time.Minute, Settings: e.checkSettings()})
+}
+
+// recoverySettings are the postgresql.auto.conf lines a scratch restore
+// keeps: the recovery target pgBackRest wrote for this run.
+var recoverySettingRE = regexp.MustCompile(`^\s*(recovery_target|recovery_target_name|recovery_target_time|recovery_target_xid|recovery_target_lsn|recovery_target_inclusive|recovery_target_timeline|recovery_target_action)\s*=\s*'(?:[^'\\]|'')*'\s*$`)
+
+// sanitizeAutoConf moves the restored postgresql.auto.conf aside (kept as
+// evidence, never read) and writes one with only the recovery target lines
+// (review finding B-4): ALTER SYSTEM settings of the source never apply to
+// the scratch cluster.
+func (e *engineRun) sanitizeAutoConf() string {
+	dir, err := e.scratchDir()
+	if err != nil {
+		return "the scratch directory cannot be opened after the restore"
+	}
+	defer dir.Close()
+	data, _, err := dir.ReadFile("postgresql.auto.conf", 1<<20)
+	if err != nil && !errors.Is(err, fsafe.ErrNotExist) {
+		return "the restored postgresql.auto.conf cannot be read safely"
+	}
+	o := fsafe.Owner{UID: os.Geteuid(), GID: os.Getegid(), Mode: 0o600}
+	if err == nil {
+		if err := dir.Create("exponetdb-restored-postgresql.auto.conf", data, o); err != nil {
+			return "the restored postgresql.auto.conf could not be kept aside"
+		}
+	}
+	kept := []string{"# Written by the ExponetDB node: the recovery target of this scratch restore only."}
+	for _, line := range strings.Split(string(data), "\n") {
+		if recoverySettingRE.MatchString(line) {
+			kept = append(kept, strings.TrimSpace(line))
+		}
+	}
+	if err := dir.Install("postgresql.auto.conf", []byte(strings.Join(kept, "\n")+"\n"), o); err != nil {
+		return "postgresql.auto.conf could not be replaced"
+	}
+	return ""
+}
+
+// noWorkers asserts that no replication or background worker of the
+// restored catalog runs (review finding C-2): a scratch cluster with one is
+// stopped at once and the run fails.
+func (e *engineRun) noWorkers(ctx context.Context, port int) error {
+	c, err := e.connect(ctx, port, "postgres")
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	rows, err := c.Query(ctx, `SELECT (SELECT count(*) FROM pg_catalog.pg_stat_subscription WHERE pid IS NOT NULL) AS subs,
+		(SELECT count(*) FROM pg_catalog.pg_stat_activity WHERE backend_type IN ('logical replication launcher',
+			'logical replication worker', 'logical replication apply worker', 'logical replication tablesync worker',
+			'logical replication parallel worker', 'parallel worker', 'walsender', 'autovacuum worker', 'background worker',
+			'slotsync worker')) AS workers`)
+	if err != nil || len(rows.Each()) != 1 {
+		return errors.New("the workers of the scratch cluster cannot be read")
+	}
+	r := rows.Each()[0]
+	if r.Int("subs") != 0 || r.Int("workers") != 0 {
+		return fmt.Errorf("the scratch cluster runs %d subscription and %d other workers", r.Int("subs"), r.Int("workers"))
+	}
+	return nil
 }
 
 // waitPromoted waits until the scratch cluster accepts connections and is
@@ -534,6 +669,19 @@ func (e *engineRun) amcheck(ctx context.Context, port int) (string, string) {
 			continue
 		}
 		nsp := quoteIdentifier(ext.Each()[0].Text("nspname"))
+		// The function called is the extension's own C function from the
+		// binaries' $libdir, never a restored function of that name (review
+		// finding B-4); it is called with its exact signature (regclass).
+		own, err := c.Query(ctx, `SELECT count(*) AS n FROM pg_catalog.pg_proc p
+			JOIN pg_catalog.pg_depend d ON d.classid = 'pg_catalog.pg_proc'::pg_catalog.regclass AND d.objid = p.oid AND d.deptype = 'e'
+			JOIN pg_catalog.pg_extension x ON x.oid = d.refobjid AND x.extname = 'amcheck'
+			JOIN pg_catalog.pg_language l ON l.oid = p.prolang
+			WHERE p.proname = 'bt_index_check' AND p.pronamespace = x.extnamespace AND l.lanname = 'c'
+			  AND p.probin = '$libdir/amcheck' AND p.proargtypes = '2205'::pg_catalog.oidvector`)
+		if err != nil || len(own.Each()) != 1 || own.Each()[0].Int("n") != 1 {
+			_ = c.Close()
+			return "error", "bt_index_check is not the amcheck extension's C function"
+		}
 		idx, err := c.Query(ctx, `SELECT c.oid::int8 AS oid FROM pg_catalog.pg_index i
 			JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
 			JOIN pg_catalog.pg_am am ON am.oid = c.relam
@@ -544,7 +692,7 @@ func (e *engineRun) amcheck(ctx context.Context, port int) (string, string) {
 			return "error", "the indexes cannot be listed"
 		}
 		for _, r := range idx.Each() {
-			if _, err := c.Query(ctx, `SELECT `+nsp+`.bt_index_check($1::pg_catalog.oid)`, r.Text("oid")); err != nil {
+			if _, err := c.Query(ctx, `SELECT `+nsp+`.bt_index_check($1::pg_catalog.oid::pg_catalog.regclass)`, r.Text("oid")); err != nil {
 				var pe *pgwire.Error
 				if !errors.As(err, &pe) {
 					_ = c.Close()
@@ -581,7 +729,25 @@ func (e *engineRun) rowCounts(ctx context.Context, port int) (string, string) {
 		if err != nil {
 			return "error", "database " + rc.Database + " cannot be reached"
 		}
-		rows, err := c.Query(ctx, `SELECT count(*) AS n FROM `+quoteIdentifier(rc.Schema)+`.`+quoteIdentifier(rc.Table))
+		// Only a plain or partitioned table without foreign partitions is
+		// counted, a plain one without its inheritance children (ONLY): a
+		// view would run restored code, a foreign table would reach its
+		// server (review findings B-4, C-2).
+		kind, err := c.Query(ctx, `SELECT c.relkind::text AS k, c.oid::int8 AS oid,
+			(c.relkind = 'p' AND EXISTS (SELECT 1 FROM pg_catalog.pg_partition_tree(c.oid) t
+				JOIN pg_catalog.pg_class f ON f.oid = t.relid WHERE f.relkind = 'f')) AS foreign_part
+			FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+			WHERE n.nspname = $1 AND c.relname = $2`, rc.Schema, rc.Table)
+		if err != nil || len(kind.Each()) != 1 || kind.Each()[0].Bool("foreign_part") ||
+			(kind.Each()[0].Text("k") != "r" && kind.Each()[0].Text("k") != "p") {
+			_ = c.Close()
+			return "error", "table " + rc.Schema + "." + rc.Table + " is not a local table"
+		}
+		only := "ONLY "
+		if kind.Each()[0].Text("k") == "p" {
+			only = ""
+		}
+		rows, err := c.Query(ctx, `SELECT count(*) AS n FROM `+only+quoteIdentifier(rc.Schema)+`.`+quoteIdentifier(rc.Table))
 		_ = c.Close()
 		if err != nil || len(rows.Each()) != 1 {
 			return "error", "table " + rc.Schema + "." + rc.Table + " cannot be counted"

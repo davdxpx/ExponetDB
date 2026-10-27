@@ -29,6 +29,10 @@ mode file must both allow it.
   --to adopted_runs --host-configuration-unchanged` (`backup.repository.ownership`;
   human approval and re-authentication on production, rule
   `backup.change-prod-approval`).
+- For a pgBackRest repository the host also binds the id to its location:
+  `/etc/exponetdb-node/repositories/<repositoryId>/pgbackrest` (owner `root`)
+  with `stanza=<name>` and `repo=<n>`. It is required before the mode may
+  allow runs; a job naming another stanza or repository is refused.
 - The host side is the file `/etc/exponetdb-node/repositories/<repositoryId>/mode`,
   owned by `root`, not writable by group or others, containing one word:
   `adopted_observed`, `adopted_runs` or `owned`. A missing file means

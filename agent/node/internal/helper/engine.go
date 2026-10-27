@@ -279,6 +279,10 @@ func (e *engineRun) validate() string {
 			return "the run has no scratch directory"
 		}
 	}
+	if p := e.rec.PgBackRest; p != nil && (!stanzaRE.MatchString(p.Stanza) || p.Repo < 1 || p.Repo > 4 ||
+		(p.Include != "" && p.Include != filepath.Dir(p.Config)+"/conf.d")) {
+		return "the run's pgBackRest configuration is not the helper's"
+	}
 	if m := postgresBinRE.FindStringSubmatch(e.rec.PostgresBin + "/postgres"); m == nil || m[1] != strconv.Itoa(e.rec.PostgresMajor) {
 		return "the PostgreSQL binaries are not the run's major"
 	}
@@ -410,7 +414,7 @@ func (e *engineRun) finishExit(code int, err error) {
 
 func (e *engineRun) pgbr(args ...string) []string {
 	p := e.rec.PgBackRest
-	return append([]string{"--config=" + p.Config, "--stanza=" + p.Stanza, "--repo=" + strconv.Itoa(p.Repo)}, args...)
+	return append(pgbrBase(p.Config, p.Include, p.Stanza, p.Repo), args...)
 }
 
 var newLabelRE = regexp.MustCompile(`new backup label = ([0-9]{8}-[0-9]{6}F(?:_[0-9]{8}-[0-9]{6}[DI])?)`)
@@ -423,6 +427,9 @@ func (e *engineRun) pgbrBackup(ctx context.Context) {
 	kind := map[string]string{"full": "full", "differential": "diff", "incremental": "incr"}[e.str("kind")]
 	if kind == "" {
 		e.note("the backup kind is not a pgBackRest kind")
+		return
+	}
+	if _, ok := e.ownStanza(ctx); !ok {
 		return
 	}
 	var label string
@@ -441,6 +448,9 @@ func (e *engineRun) pgbrBackup(ctx context.Context) {
 func (e *engineRun) pgbrVerify(ctx context.Context) {
 	if e.rec.PgBackRest == nil {
 		e.note("the run has no pgBackRest repository")
+		return
+	}
+	if _, ok := e.ownStanza(ctx); !ok {
 		return
 	}
 	args := []string{"--log-level-console=info", "--output=text"}
@@ -463,7 +473,7 @@ func (e *engineRun) pgbrInfo(ctx context.Context) (*pgbrStanza, bool) {
 		e.note("pgbackrest: %v", err)
 		return nil, false
 	}
-	code, err := e.o.exec.run(ctx, engineCmd{Path: PgBackRest, Args: pgbrInfoArgs(p.Config, p.Stanza, p.Repo, ""), Out: w})
+	code, err := e.o.exec.run(ctx, engineCmd{Path: PgBackRest, Args: pgbrInfoArgs(p.Config, p.Include, p.Stanza, p.Repo, ""), Out: w})
 	if err != nil || code != 0 {
 		e.note("pgBackRest could not read the repository (exit %d)", code)
 		return nil, false
@@ -499,14 +509,16 @@ func (e *engineRun) pgbrExpire(ctx context.Context) {
 	}
 	// First the catalog: the expiry is refused unless every kept label
 	// certainly survives the retention (ADR-0036; capabilities.md §1).
-	s, ok := e.pgbrInfo(ctx)
+	s, ok := e.ownStanza(ctx)
 	if !ok {
 		return
 	}
 	survivors := pgbrSurvivors(s, *full, diff)
 	keep, _ := e.args.Get("keepLabels")
+	var kept []string
 	for _, v := range keep.(canon.Array) {
 		label := string(v.(canon.String))
+		kept = append(kept, label)
 		if !survivors[label] {
 			e.note("refused: the retention would remove, or cannot be shown to keep, backup %s", label)
 			return
@@ -517,9 +529,69 @@ func (e *engineRun) pgbrExpire(ctx context.Context) {
 	if diff != nil {
 		args = append(args, "--repo"+n+"-retention-diff="+strconv.Itoa(*diff))
 	}
+	// Then the engine's own decision, without changing anything (review
+	// finding B-3): `expire --dry-run` lists what it would remove; a kept
+	// label among it refuses the expiry.
+	var planned []string
+	code, err := e.exec(ctx, PgBackRest, e.pgbr(append(append([]string{}, args...), "--dry-run", "--log-level-console=info", "expire")...), nil, func(line string) {
+		if expireLineRE.MatchString(line) {
+			planned = append(planned, labelTokenRE.FindAllString(line, -1)...)
+		}
+	})
+	if err != nil || code != 0 {
+		e.note("refused: pgBackRest's dry run of the expiry failed (exit %d)", code)
+		return
+	}
+	for _, label := range kept {
+		for _, p := range planned {
+			if p == label {
+				e.note("refused: pgBackRest would expire kept backup %s", label)
+				return
+			}
+		}
+	}
 	e.effect = true
-	code, err := e.exec(ctx, PgBackRest, e.pgbr(append(args, "--log-level-console=info", "expire")...), nil, nil)
+	code, err = e.exec(ctx, PgBackRest, e.pgbr(append(args, "--log-level-console=info", "expire")...), nil, nil)
 	e.finishExit(code, err)
+	// A backup that ended between the checks and the expiry can still push a
+	// kept backup out (the node cannot hold pgBackRest's lock across two
+	// commands): the catalog is read again, and a kept label that is gone
+	// makes the run failed, whatever the engine's exit.
+	after, ok := e.pgbrInfo(context.WithoutCancel(ctx))
+	if !ok {
+		e.outcome.State = "failed"
+		e.note("the catalog could not be read after the expiry; the kept backups are not confirmed")
+		return
+	}
+	present := map[string]bool{}
+	for _, b := range after.Backup {
+		present[b.Label] = true
+	}
+	for _, label := range kept {
+		if !present[label] {
+			e.outcome.State = "failed"
+			e.note("kept backup %s is gone after the expiry (a backup that completed meanwhile can shift the retention); a person reconciles", label)
+		}
+	}
+}
+
+var (
+	expireLineRE = regexp.MustCompile(`expire (full|diff|incr)[a-z ]* backup|remove expired backup`)
+	labelTokenRE = regexp.MustCompile(`[0-9]{8}-[0-9]{6}F(?:_[0-9]{8}-[0-9]{6}[DI])?`)
+)
+
+// ownStanza reads the stanza's catalog and refuses a run whose stanza is
+// another cluster's (review finding B-2), right before the engine runs.
+func (e *engineRun) ownStanza(ctx context.Context) (*pgbrStanza, bool) {
+	s, ok := e.pgbrInfo(ctx)
+	if !ok {
+		return nil, false
+	}
+	if id := s.systemID(); id == "" || id != e.rec.SystemIdentifier {
+		e.note("refused: the stanza belongs to another cluster (system identifier mismatch)")
+		return nil, false
+	}
+	return s, true
 }
 
 // ----- restic and pg_dump -----
