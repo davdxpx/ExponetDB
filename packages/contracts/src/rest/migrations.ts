@@ -646,6 +646,22 @@ export const MigrationDetailSchema = z
   })
   .meta({ id: 'MigrationDetail' })
 
+/**
+ * The failing L0 gate of a migration (verification.md §2): counts and the first failing
+ * assertion by object name, never a row or any other target data.
+ */
+export const MigrationGateSchema = z
+  .object({
+    layer: z.literal('L0'),
+    checks: z.int().min(0).meta({ description: 'Assertions the gate ran.' }),
+    failed: z.int().min(1).meta({ description: 'Assertions that failed.' }),
+    first: untrustedText(
+      200,
+      'The first failing assertion, described by object names from the migration and the catalog.',
+    ),
+  })
+  .meta({ id: 'MigrationGate' })
+
 /** Per-migration progress of a migration operation (on the operation view). */
 export const MigrationProgressSchema = z
   .object({
@@ -669,6 +685,10 @@ export const MigrationProgressSchema = z
       .string()
       .regex(/^[A-Z][A-Z0-9_]{1,63}$/)
       .nullable(),
+    gate: MigrationGateSchema.optional().meta({
+      description:
+        'Additive: what the pre-commit gate (L0) found when it rolled the migration back with VERIFICATION_FAILED. Absent when no L0 failure was recorded.',
+    }),
   })
   .meta({ id: 'MigrationProgress' })
 

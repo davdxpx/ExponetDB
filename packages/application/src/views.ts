@@ -616,11 +616,36 @@ function contractLayer(layer: Layer): VerificationLayer {
   }
 }
 
+const GATE_FIRST_MAX = 200
+
+/**
+ * The failing L0 gate the engine recorded (counts and the first failing object by name, never
+ * target data). The `gate` column also holds the summaries of guard failures, which are not
+ * shown; a row that says L0 but is not shaped like one is a stored row the view cannot vouch for.
+ */
+function l0Gate(value: unknown) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const { layer, checks, failed, first } = value as Record<string, unknown>
+  if (layer !== 'L0') return undefined
+  if (
+    typeof checks !== 'number' ||
+    !Number.isInteger(checks) ||
+    checks < 0 ||
+    typeof failed !== 'number' ||
+    !Number.isInteger(failed) ||
+    failed < 1 ||
+    typeof first !== 'string'
+  ) {
+    throw new ViewError('operation')
+  }
+  return { layer: 'L0' as const, checks, failed, first: first.slice(0, GATE_FIRST_MAX) }
+}
+
 /** The per-migration progress of a migration operation (Wave 6; the engine's own rows). */
 async function migrationProgress(q: Queryable, operationId: string) {
   const { rows } = await q.query(
     'application.operation.migrations',
-    `SELECT migration_id, name, apply_outcome, verification_outcome, statement_index, sqlstate, error_code
+    `SELECT migration_id, name, apply_outcome, verification_outcome, statement_index, sqlstate, error_code, gate
        FROM migrations.operation_migrations WHERE operation_id = $1 ORDER BY position`,
     [operationId],
   )
@@ -633,6 +658,7 @@ async function migrationProgress(q: Queryable, operationId: string) {
     if (!MIGRATION_ID.test(migrationId) || apply === undefined || verification === undefined) {
       throw new ViewError('operation')
     }
+    const gate = l0Gate(r.json('gate'))
     return [
       {
         migrationId: migrationId as never,
@@ -643,6 +669,7 @@ async function migrationProgress(q: Queryable, operationId: string) {
         sqlstate: sqlstate !== null && /^[0-9A-Z]{5}$/.test(sqlstate) ? sqlstate : null,
         errorCode:
           errorCode !== null && /^[A-Z][A-Z0-9_]{1,63}$/.test(errorCode) ? errorCode : null,
+        ...(gate === undefined ? {} : { gate }),
       },
     ]
   })

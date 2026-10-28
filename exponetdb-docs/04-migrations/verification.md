@@ -86,6 +86,24 @@ data), the `migration.failed` audit event, and the operation itself
 did something else" cases (a conditional `DO` block that took the wrong branch,
 `IF NOT EXISTS` skipping a table that existed with a different shape).
 
+**[DECIDED]** (2026-10-28) What the gate recorded is part of the operation read,
+so a caller does not need the Control Store to learn why a migration was rolled
+back. The entry of the migration in `migrations[]` carries `gate`:
+`{ layer: "L0", checks, failed, first }` (assertions run, assertions failed, and
+the first failing one described by object names, for example `constraint "k" on
+"public"."t"`; at most 200 characters, never a row or a value). `GET /operations/{id}` and `GET /operations`, the MCP tools that
+return an operation (`operation_get`, `operation_list`, `operation_cancel`,
+`plan_apply`, `migration_verify`) and `exponetdb operation show` (a line per gate
+below the migrations table; `--json` has the object) show it. `first` is
+`untrusted` text, because the names come from the bundle and the catalog; the
+MCP tools say so and are `openWorldHint: true`. The Web App does not show the
+gate yet. Only the first failing assertion
+is recorded, not the others. The `gate` column also holds the summaries of
+guard failures (`MIGRATION_EXECUTION_FAILED`, which guard changed); those are
+not shown. **[OBSERVED]** Before this change a caller saw only
+`VERIFICATION_FAILED`: which assertion failed was visible only in the Control
+Store (two REOSA staging applies, 2026-10-28).
+
 **[OBSERVED]** This addresses a measured REOSA hazard: re-running "idempotent"
 files against a newer schema silently re-created seven tables that a later
 migration had renamed away (`REOSA` audit 2026-10-04, migration `0045`); and
@@ -142,7 +160,7 @@ with a boolean result and a description. Coverage is reported per statement.
 | `ALTER DEFAULT PRIVILEGES …` | matching `pg_default_acl` entry |
 | `CREATE [UNIQUE] INDEX [CONCURRENTLY] i ON t …` | index exists on t; unique flag; access method; `indisvalid` and `indisready` true; key columns/expressions; predicate present if partial |
 | `DROP INDEX` | index absent |
-| `ALTER TABLE t ADD CONSTRAINT c … [NOT VALID]` | constraint exists, type, `convalidated` as stated |
+| `ALTER TABLE t ADD CONSTRAINT c … [NOT VALID]` | constraint exists, `contype` equals the `pg_constraint` code of the stated kind (`c` check, `f` foreign key, `p` primary key, `u` unique, `x` exclusion; any other kind is not compared), `convalidated` as stated |
 | `ALTER TABLE t VALIDATE CONSTRAINT c` | `convalidated = true` |
 | `CREATE [OR REPLACE] FUNCTION f(args)` | function with identity args exists; return type; language; volatility; `prosecdef`; `proconfig` contains `search_path` if specified; body digest equals the statement's body |
 | `CREATE TRIGGER` | trigger exists on table with timing/events/level; function; enabled state |

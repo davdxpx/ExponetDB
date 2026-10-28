@@ -62,6 +62,14 @@ effect `read`, although the run writes Control Store records like
 write scope, which the frozen `oauth.scopes` catalog (G3B) stores as a read
 scope; that change needs an owner decision and a new bundle
 ([OD-57](../00-product/open-decisions.md#od-57-advisors_run-records-a-run-but-its-scope-is-a-read-scope)).
+**[OBSERVED]** (2026-10-28) The tools that return an operation carry the L0
+`gate` of a rolled-back migration (`migrations[].gate`, see
+[`verification.md` §2](../04-migrations/verification.md#l0-pre-commit-structural-gate-transactional-bundles-only)).
+Its `first` is marked untrusted (object names from the bundle and the catalog),
+so `operation_get`, `operation_list`, `operation_cancel`, `plan_apply` and
+`migration_verify` are `openWorldHint: true` and say so in their descriptions;
+their definitions changed, so their `toolVersion` is raised (`migration_verify`
+3, the others 2) and the new digests are pinned.
 `backups_list` is `served` as well (`backups.read` at the cluster; the backup catalog of `packages/application/src/backups.ts`, repository summaries without location or secret). The cancel and terminate actions are REST
 only (`POST /targets/{t}/sessions/{pid}/cancel` and `/terminate`); no MCP
 tool offers them.
@@ -161,7 +169,7 @@ cancels one by the `queryId` the agent chose. Every read is audited as
 | `plan_get` | the read scope of the plan's kind at a scope covering its subject (OD-26 (c); `plans.approve` admits only a Web App session, never an MCP token) | RO | `planId` | plan body, decision, state, requirements, approval status | `GET /plans/{id}` | 7, served |
 | `plan_apply` | depends on plan kind and tier: `migrations.apply:nonprod` / `migrations.apply:prod` for the plans of `migration_plan` and `migration_rollback_plan`, the only plans an MCP client creates (a plan is bound to its creator and client; no node plans, OD-29) | D, I | `planId` | operation handle: state (`queued`, `awaiting_approval` + `approvalUrl`, …) | `POST /plans/{id}/apply` | 7, served |
 | `plan_withdraw` | the identity and client that created the plan, with the plan kind's permission | I | `planId` | withdrawn plan | `POST /plans/{id}/withdraw` | 7, served |
-| `operation_get` | read scope of the kind | RO | `operationId` | state, per-step outcomes (apply/verification), events | `GET /operations/{id}` | 7, served |
+| `operation_get` | read scope of the kind | RO | `operationId` | state, per-step outcomes (apply/verification), per-migration outcomes (with the L0 `gate` of a migration the pre-commit gate rolled back), events | `GET /operations/{id}` | 7, served |
 | `operation_list` | read scope | RO | filters: target, kind, state, actor (`self` or `any`; absent = any, as REST) | the operations this grant can see, each decided by the engine | `GET /operations` | 7, served |
 | `operation_cancel` | the identity that applied the plan, through the same client kind and the same registered client (another client of the same person is `PLAN_BINDING_ACTOR`), with the plan kind's apply permission (as REST) | I | `operationId` | canceled operation, or the refusal for one that started | `POST /operations/{id}/cancel` | 7, served |
 

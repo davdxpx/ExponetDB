@@ -10602,6 +10602,39 @@
         ],
         "type": "object"
       },
+      "MigrationGate": {
+        "properties": {
+          "checks": {
+            "description": "Assertions the gate ran.",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failed": {
+            "description": "Assertions that failed.",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "first": {
+            "description": "The first failing assertion, described by object names from the migration and the catalog.",
+            "maxLength": 200,
+            "type": "string",
+            "x-untrusted": true
+          },
+          "layer": {
+            "const": "L0",
+            "type": "string"
+          }
+        },
+        "required": [
+          "layer",
+          "checks",
+          "failed",
+          "first"
+        ],
+        "type": "object"
+      },
       "MigrationLintRequest": {
         "additionalProperties": false,
         "properties": {
@@ -10918,6 +10951,10 @@
                 "type": "null"
               }
             ]
+          },
+          "gate": {
+            "$ref": "#/components/schemas/MigrationGate",
+            "description": "Additive: what the pre-commit gate (L0) found when it rolled the migration back with VERIFICATION_FAILED. Absent when no L0 failure was recorded."
           },
           "migrationId": {
             "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",

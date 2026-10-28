@@ -340,6 +340,20 @@ describe('structural expectations (verification.md §3)', () => {
     })
   })
 
+  it('derives the pg_constraint.contype letter of a named ADD CONSTRAINT, not the parser enum name', () => {
+    // The L0 check compares this value with `pg_constraint.contype::text`.
+    const contype = (sql: string) =>
+      (one(sql).expectations[0] as Extract<Expectation, { kind: 'constraint' }>).contype
+    const add = (body: string) => `ALTER TABLE public.t ADD CONSTRAINT k ${body}`
+    expect(contype(add('CHECK (x IS NULL OR x IN (1, 2))'))).toBe('c')
+    expect(contype(add('FOREIGN KEY (a) REFERENCES public.u (id)'))).toBe('f')
+    expect(contype(add('PRIMARY KEY (a)'))).toBe('p')
+    expect(contype(add('UNIQUE (a)'))).toBe('u')
+    expect(contype(add('EXCLUDE USING gist (a WITH =)'))).toBe('x')
+    // NOT VALID changes `validated`, not the kind.
+    expect(contype(add('CHECK (x > 0) NOT VALID'))).toBe('c')
+  })
+
   it('derives indexes, constraints, policies, grants, functions, enums and drops', () => {
     const kinds = (sql: string) => one(sql).expectations.map((e: Expectation) => e.kind)
     expect(kinds('CREATE UNIQUE INDEX i ON public.t USING btree (a, b) WHERE c')).toEqual(['index'])
