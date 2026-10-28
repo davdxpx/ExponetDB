@@ -1,0 +1,5 @@
+DESC="REFRESH MATERIALIZED VIEW vs REFRESH ... CONCURRENTLY (10% of the workload reads the matview)"
+HAZARD=( "tx|REFRESH MATERIALIZED VIEW public.order_totals;" )
+SAFE=( "tx|REFRESH MATERIALIZED VIEW CONCURRENTLY public.order_totals;" )
+CLEANUP=""
+FIXTURES="h40 / s29"

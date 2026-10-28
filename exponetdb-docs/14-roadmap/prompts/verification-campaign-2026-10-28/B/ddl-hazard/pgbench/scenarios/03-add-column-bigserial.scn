@@ -1,0 +1,7 @@
+DESC="ADD COLUMN bigserial (a rewrite the lint does not see) vs bigint + sequence default"
+HAZARD=( "tx|ALTER TABLE public.orders ADD COLUMN seq bigserial;" )
+SAFE=( "tx|ALTER TABLE public.orders ADD COLUMN seq bigint;"
+       "tx|CREATE SEQUENCE public.orders_seq_seq OWNED BY public.orders.seq;"
+       "tx|ALTER TABLE public.orders ALTER COLUMN seq SET DEFAULT nextval('public.orders_seq_seq');" )
+CLEANUP="ALTER TABLE public.orders DROP COLUMN IF EXISTS seq; DROP SEQUENCE IF EXISTS public.orders_seq_seq;"
+FIXTURES="h08"

@@ -43,7 +43,9 @@ await prepareLint(major)
 console.error = original
 
 const project = await currentProject(dir)
-const config = { ...project.config, lintProfile: profile }
+// LINT_RULES='{"unsafe_not_null":"info"}' lowers rules the way a project's `lint.rules` does.
+const lowered = process.env['LINT_RULES'] === undefined ? {} : { lint: { rules: JSON.parse(process.env['LINT_RULES']) } }
+const config = { ...project.config, lintProfile: profile, ...lowered }
 const bundles = await readBundles(project)
 const inputs = bundles.map((b: { input: { files: Map<string, Uint8Array> } }) => {
   if (noCovers) {
@@ -116,6 +118,8 @@ for (const b of report.bundles) {
     lineage: 'match',
     dependenciesVerified: true,
     legacyProject: false,
+    executionRoleExceptions: 0,
+    executionRoleParity: 'not_required',
     procedural: false,
     proceduralReasons: [],
   }
@@ -142,7 +146,11 @@ void rank
 void worstSeverity
 
 const result = { profile, mode, major, noCovers, graphValid: report.graph.valid, bundles: rows }
-if (outFile !== '') await writeFile(outFile, `${JSON.stringify(result, null, 1)}\n`)
+// One bundle per line: the files stay small enough to commit and still diff well.
+if (outFile !== '') {
+  const { bundles, ...head } = result
+  await writeFile(outFile, `${JSON.stringify(head).slice(0, -1)},"bundles":[\n${bundles.map((b) => JSON.stringify(b)).join(',\n')}\n]}\n`)
+}
 
 // Compact table on stdout.
 const pad = (s: string, n: number) => (s.length >= n ? s.slice(0, n) : s + ' '.repeat(n - s.length))

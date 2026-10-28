@@ -1,0 +1,5 @@
+DESC="VACUUM FULL vs plain VACUUM (ANALYZE) (not equivalent: the safe form does not return space to the OS)"
+HAZARD=( "nt|VACUUM FULL public.orders;" )
+SAFE=( "nt|VACUUM (ANALYZE) public.orders;" )
+CLEANUP=""
+FIXTURES="h35 / s25"

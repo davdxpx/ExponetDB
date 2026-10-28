@@ -1,0 +1,6 @@
+DESC="DROP INDEX vs DROP INDEX CONCURRENTLY"
+PREPARE="CREATE INDEX IF NOT EXISTS idx_orders_tmp ON public.orders (ref);"
+HAZARD=( "tx|DROP INDEX public.idx_orders_tmp;" )
+SAFE=( "nt|DROP INDEX CONCURRENTLY IF EXISTS public.idx_orders_tmp;" )
+CLEANUP="DROP INDEX IF EXISTS public.idx_orders_tmp;"
+FIXTURES="h33 / s23"

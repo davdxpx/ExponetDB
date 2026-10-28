@@ -1,0 +1,7 @@
+DESC="ADD COLUMN uuid DEFAULT gen_random_uuid() vs nullable column then SET DEFAULT"
+HAZARD=( "tx|ALTER TABLE public.orders ADD COLUMN public_id uuid NOT NULL DEFAULT gen_random_uuid();" )
+SAFE=( "tx|ALTER TABLE public.orders ADD COLUMN public_id uuid;"
+       "tx|ALTER TABLE public.orders ALTER COLUMN public_id SET DEFAULT gen_random_uuid();" )
+CLEANUP="ALTER TABLE public.orders DROP COLUMN IF EXISTS public_id;"
+SAFE_NOTE="old rows stay NULL; the backfill is the batched job of scenario 15"
+FIXTURES="h04 / s02,s03"

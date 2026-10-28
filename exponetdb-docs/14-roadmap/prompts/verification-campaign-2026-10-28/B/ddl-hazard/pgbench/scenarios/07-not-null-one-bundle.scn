@@ -1,0 +1,10 @@
+DESC="The NOT NULL recipe in ONE transactional bundle (ACCESS EXCLUSIVE held through the validating scan) vs three bundles"
+HAZARD=( "tx|ALTER TABLE public.orders ADD CONSTRAINT orders_customer_nn CHECK (customer_id IS NOT NULL) NOT VALID;
+ALTER TABLE public.orders VALIDATE CONSTRAINT orders_customer_nn;
+ALTER TABLE public.orders ALTER COLUMN customer_id SET NOT NULL;
+ALTER TABLE public.orders DROP CONSTRAINT orders_customer_nn;" )
+SAFE=( "tx|ALTER TABLE public.orders ADD CONSTRAINT orders_customer_nn CHECK (customer_id IS NOT NULL) NOT VALID;"
+       "tx|ALTER TABLE public.orders VALIDATE CONSTRAINT orders_customer_nn;"
+       "tx|ALTER TABLE public.orders ALTER COLUMN customer_id SET NOT NULL; ALTER TABLE public.orders DROP CONSTRAINT orders_customer_nn;" )
+CLEANUP="ALTER TABLE public.orders ALTER COLUMN customer_id DROP NOT NULL; ALTER TABLE public.orders DROP CONSTRAINT IF EXISTS orders_customer_nn;"
+FIXTURES="h42 / s06,s07,s08"

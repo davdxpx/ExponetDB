@@ -19,7 +19,7 @@ checkout="$(cd "$checkout" && pwd)"
 dest="$checkout/packages/b2-conformance"
 mkdir -p "$dest"
 rsync -a --delete --exclude node_modules --exclude RESULTS.md --exclude README.md --exclude run.sh \
-  --exclude 'out/' "$here/" "$dest/"
+  --exclude 'out/' --exclude exploratory "$here/" "$dest/"
 if [ ! -d "$dest/node_modules/@exponetdb" ]; then
   (cd "$checkout" && bun install)
 fi

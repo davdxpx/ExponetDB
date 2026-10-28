@@ -1,0 +1,6 @@
+DESC="ALTER COLUMN TYPE integer -> numeric(12,2) vs the expand step (new column)"
+HAZARD=( "tx|ALTER TABLE public.orders ALTER COLUMN amount TYPE numeric(12,2);" )
+SAFE=( "tx|ALTER TABLE public.orders ADD COLUMN amount_num numeric(12,2);" )
+CLEANUP="ALTER TABLE public.orders DROP COLUMN IF EXISTS amount_num; ALTER TABLE public.orders ALTER COLUMN amount TYPE integer USING amount::integer;"
+SAFE_NOTE="copy, switch reads and contract are separate later steps (not measured)"
+FIXTURES="h11 / s05"

@@ -16,6 +16,7 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { AstIndex, type AuthCall } from './lib-ast.ts'
 import { CREDENTIAL_CLASSES, expectString, type OracleRow, type Variant } from './lib-oracle.ts'
+import { sample } from './lib-sample.ts'
 
 const here = dirname(new URL(import.meta.url).pathname)
 const arg = (name: string): string | undefined => {
@@ -95,7 +96,7 @@ function scopeOf(a: any): { np: string; p: string; fixed: string } {
 }
 const classOf = (a: any): string =>
   a.class.kind === 'fixed' ? a.class.class : a.class.kind === 'by_tier' ? `${a.class.nonprod}/${a.class.prod}` : 'by_plan'
-const callers = (a: any): string => ['web', 'cli', 'mcp', 'ci'].map((k) => (a.clientKinds.includes(k) ? k[0]!.toUpperCase().replace('M', 'M') : '.')).join('')
+const callers = (a: any): string => (['web', 'cli', 'mcp', 'ci'] as const).map((k, i) => (a.clientKinds.includes(k) ? 'WCMS'[i] : '.')).join('')
 const ID_NAME = /(Id|target|pid|cluster|node|plan|operation|backup|restore|repository|project|product|environment|server|grant|client|identity|finding|bundle|migration|session|query|digest|file)$/i
 function idParams(route: any): string[] {
   const out: string[] = []
@@ -403,7 +404,57 @@ for (const [op, feats] of webOps) {
   if (!r.ev.served) add('web-calls-unserved', op, `Web App (${[...feats].join(',')}) names ${op}; no handler`)
 }
 
+// valid-shaped request samples for run-matrix.ts (ids are placeholders `@id:xxx`)
+const js = (z: any) => (z === undefined ? undefined : c.contractJsonSchema(z, { io: 'input' }))
+const samples = {
+  schema: 'exponetdb.authz-samples/v1',
+  rest: Object.fromEntries(rest.map((r) => [r.operationId, {
+    method: r.method.toUpperCase(), path: `${r.base}${r.path}`, action: r.action,
+    params: sample(js(r.pathParams)) ?? null,
+    query: r.query === undefined ? {} : (sample(js(r.query)) ?? null),
+    body: r.rawBody !== undefined ? 'raw' : r.body === undefined ? undefined : (sample(js(r.body)) ?? null),
+  }])),
+  mcp: Object.fromEntries(mcp.map((m) => [m.t.name, { action: m.t.action, args: sample(js(m.t.input)) ?? null }])),
+}
+writeFileSync(join(OUT, 'authz-samples.json'), JSON.stringify(samples))
+const sampled = Object.values(samples.rest).filter((x: any) => x.params !== null && x.query !== null && x.body !== null).length
+
 // ---------------------------------------------------------------- output
+
+// MCP output text: which string fields are marked untrusted, which free strings are not
+function textFields(schema: any): { marked: string[]; unmarked: string[] } {
+  const out = { marked: [] as string[], unmarked: [] as string[] }
+  const defs = schema.$defs ?? {}
+  const walk = (s: any, path: string, stack: string[], depth: number): void => {
+    if (!s || typeof s !== 'object' || depth > 14) return
+    if (s.untrusted === true) {
+      out.marked.push(path)
+      return
+    }
+    if (s.$ref) {
+      const n = String(s.$ref).replace('#/$defs/', '')
+      if (!stack.includes(n)) walk(defs[n], path, [...stack, n], depth + 1)
+      return
+    }
+    if (s.type === 'string' || (Array.isArray(s.type) && s.type.includes('string'))) {
+      const free = !s.enum && !s.const && !s.pattern && !(s.format && s.format !== 'uri-reference')
+      if (s.untrusted === true) out.marked.push(path)
+      else if (free) out.unmarked.push(path)
+    }
+    for (const [k, v] of Object.entries<any>(s.properties ?? {})) walk(v, `${path}.${k}`, stack, depth + 1)
+    if (s.items) walk(s.items, `${path}[]`, stack, depth + 1)
+    for (const k of ['anyOf', 'oneOf', 'allOf']) for (const x of s[k] ?? []) walk(x, path, stack, depth + 1)
+    if (s.additionalProperties && typeof s.additionalProperties === 'object') walk(s.additionalProperties, `${path}{}`, stack, depth + 1)
+  }
+  walk(schema, '', [], 0)
+  return out
+}
+const mcpText = mcp.map((m) => ({ tool: m.t.name, ...textFields(c.contractJsonSchema(m.t.output, { io: 'output' })), openWorld: m.t.annotations.openWorldHint }))
+for (const x of mcpText) {
+  const nonSystem = x.unmarked.filter((p) => !/\.(state|waitEvent\.type|waitEvent\.event|lockMode|nextCursor|lsn|fromLsn|toLsn|actor\.label)$|\.lsn$|Lsn$/.test(p))
+  if (nonSystem.length > 0) add('mcp-unmarked-free-text', `mcp:${x.tool}`, `openWorldHint=${x.openWorld}; free strings not marked untrusted: ${nonSystem.slice(0, 8).join(' ')}${nonSystem.length > 8 ? ' ...' : ''}`)
+}
+
 const counts: Record<string, number> = {}
 for (const d of D) counts[d.kind] = (counts[d.kind] ?? 0) + 1
 const restServed = rest.filter((r) => r.ev.served)
@@ -415,6 +466,7 @@ const summary = {
   authCeremonyRoutes: rest.filter((r) => r.base === '/auth').length,
   mcpTools: mcp.length,
   mcpServed: mcp.filter((m) => m.ev.served).length,
+  samplesComplete: `${sampled}/${rest.length}`,
   cliCommands: cmds.length,
   cliRemote: cmds.filter((x) => x.locality === 'remote').length,
   webPages,
@@ -437,7 +489,7 @@ const json = {
   discrepancies: D,
   agentReachable: agentProd,
 }
-writeFileSync(join(OUT, 'authz-matrix.json'), JSON.stringify(json))
+writeFileSync(join(OUT, 'authz-matrix.json'), JSON.stringify(json, (_k, v) => (Array.isArray(v) && v.length === 0) || v === false || v === null || v === '' ? undefined : v))
 
 const md: string[] = []
 const P = (s = '') => md.push(s)
@@ -514,6 +566,18 @@ for (const e of [
   ['GET /healthz/detail, /metrics (internal listener)', 'unauthenticated; internal listener only (network placement is the control)', 'interfaces/http/app.ts'],
   ['GET /assets/*, SPA pages', 'static', 'interfaces/http/web.ts'],
 ]) P(`| ${e[0]} | ${e[1]} | ${e[2]} |`)
+P()
+P('## 8. MCP tools: foreign text in results (agent safety, see agent-safety.md)')
+P()
+P('`untrusted` = string fields the output schema marks untrusted (database, catalog or caller text); `unmarked` = free strings (no enum/pattern/format) it does not mark; `OW` = openWorldHint. Server-made prose (rule messages) is listed as unmarked on purpose: the question is whether a field can quote foreign text.')
+P()
+P('| Tool | v | Action | Eff | Scope np/p | Rate | OW | untrusted | unmarked free strings |')
+P('|---|---|---|---|---|---|---|---:|---|')
+for (const m of mcp) {
+  const tf = mcpText.find((x) => x.tool === m.t.name)!
+  const sc = scopeOf(m.a)
+  P(`| ${m.t.name} | ${m.t.toolVersion} | ${m.t.action} | ${m.a.effect[0]} | ${sc.np === sc.p ? sc.np : `${sc.np.replace(/^.*:/, '')}/${sc.p.replace(/^.*:/, '')} ${sc.np.replace(/:.*$/, '')}`} | ${m.t.rateClass} | ${m.t.annotations.openWorldHint ? 'Y' : ''} | ${tf.marked.length} | ${tf.unmarked.slice(0, 6).join(' ')}${tf.unmarked.length > 6 ? ' ...' : ''} |`)
+}
 writeFileSync(join(OUT, 'authz-matrix.md'), md.join('\n') + '\n')
 console.log(JSON.stringify(summary, null, 1))
 console.log(`wrote ${md.length} lines of authz-matrix.md`)

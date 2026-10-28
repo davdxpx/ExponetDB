@@ -18,6 +18,7 @@ for (const major of [16, 17, 18]) {
   if (!existsSync(f)) continue
   for (const l of readFileSync(f, 'utf8').split('\n').filter(Boolean)) {
     const r = JSON.parse(l)
+    r.expected = corpus.get(r.id)?.expected ?? r.expected
     byId.set(r.id, [...(byId.get(r.id) ?? []), r])
   }
 }

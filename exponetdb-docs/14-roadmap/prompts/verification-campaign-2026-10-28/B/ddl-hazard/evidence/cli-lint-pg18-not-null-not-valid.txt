@@ -1,0 +1,16 @@
+# up.sql: ALTER TABLE public.orders ADD CONSTRAINT orders_customer_nn NOT NULL customer_id NOT VALID; ... VALIDATE CONSTRAINT orders_customer_nn;
+== --postgres 17
+1 bundles · PostgreSQL 17 grammar · prod rules · offline facts
+
+LEVEL  RULE                   MIGRATION                   WHERE           MESSAGE
+error  parse_error            01M622R3QGBQKBDQNR14K0KMNF  up.sql line 1   up.sql does not parse with the PostgreSQL 17 …
+warn   compatibility_unknown  01M622R3QGBQKBDQNR14K0KMNF  migration.yaml  At least one statement is not classified: the…
+
+BLOCKED  2 findings, 1 blocking
+Error MIGRATION_LINT_BLOCKED: 1 blocking finding.
+== --postgres 18
+1 bundles · PostgreSQL 18 grammar · prod rules · offline facts
+
+No findings.
+
+OK  0 findings, 0 blocking

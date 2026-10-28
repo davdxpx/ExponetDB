@@ -1,0 +1,6 @@
+DESC="Control: varchar(200) -> varchar(500) needs no rewrite although lint warns (same statement both forms)"
+PREPARE="ALTER TABLE public.orders ALTER COLUMN note TYPE varchar(200);"
+HAZARD=( "tx|ALTER TABLE public.orders ALTER COLUMN note TYPE varchar(500);" )
+SAFE=( "tx|ALTER TABLE public.orders ALTER COLUMN note TYPE varchar(500);" )
+CLEANUP="ALTER TABLE public.orders ALTER COLUMN note TYPE varchar(200);"
+FIXTURES="h12 / s30"

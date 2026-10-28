@@ -62,13 +62,13 @@ q -c "DROP TABLE public.slow_probe" >/dev/null
 
 echo "### lock queue: DDL waits behind a reader, a later plain SELECT queues behind the DDL (lock_timeout = engine default 5s)"
 base=$(now); q -c "SELECT count(*) FROM public.orders WHERE id = 1" >/dev/null; t=$(now)
-printf 'baseline SELECT: %.3f s\n' "$(echo "$t - $base" | bc -l)"
+awk -v a="$base" -v b="$t" 'BEGIN { printf "baseline SELECT: %.3f s\n", b - a }'
 ( q -c "BEGIN; SELECT count(*) FROM public.orders; SELECT pg_sleep(9); COMMIT;" >/dev/null ) &
 sleep 1
 ( q -c "SET lock_timeout='5s'; ALTER TABLE public.orders ADD COLUMN q1 int;" | sed 's/^/DDL session: /' ) &
 sleep 1
 s=$(now); q -c "SELECT count(*) FROM public.orders WHERE id = 1" >/dev/null; e=$(now)
-printf 'SELECT issued 1 s after the DDL started waiting: %.3f s (the reader holds the table for 9 s, the DDL gives up after 5 s)\n' "$(echo "$e - $s" | bc -l)"
+awk -v a="$s" -v b="$e" 'BEGIN { printf "SELECT issued 1 s after the DDL started waiting: %.3f s (the reader holds the table for 9 s, the DDL gives up after 5 s)\n", b - a }'
 wait
 q -c "SELECT 'column q1 exists after the timeout: ' || exists(SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='q1')"
 

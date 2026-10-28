@@ -77,6 +77,9 @@ describe(`R1 backups through the Control Plane (${TAG})`, () => {
 
   it('TC-009/010: drills latest, older, pitr_random end passed with a measured RTO (amcheck exists in app only)', async () => {
     const results: Record<string, unknown> = {}
+    await sh('runuser -u postgres -- psql -X -q -p 55417 -d app -c "SELECT pg_switch_wal()"; sleep 2; runuser -u postgres -- pgbackrest --stanza=exdbnode check')
+    ev('wal.archive_status before the drills', await w.inspect('wal.archive_status@1'))
+    ev('refresh before the drills', await refresh())
     for (const kind of ['latest', 'older', 'pitr_random']) {
       const t0 = Date.now()
       const r = await planApply(`/api/v1/clusters/${cid()}/drills`, { repositoryId, selection: { kind } })
@@ -97,11 +100,12 @@ describe(`R1 backups through the Control Plane (${TAG})`, () => {
     }
   })
 
-  it('TC-011: a corrupt WAL segment of the archive fails the backup verification', async () => {
+  it('TC-011: a corrupt WAL segment inside the newest backup\'s own range fails its (label-scoped) verification', async () => {
     await sh('runuser -u postgres -- psql -X -q -p 55417 -d app -c "INSERT INTO public.accounts SELECT g, \'cp\'||g FROM generate_series(7001,7010) g" -c "SELECT pg_switch_wal()"; sleep 1; runuser -u postgres -- psql -X -q -p 55417 -d app -c "INSERT INTO public.accounts SELECT g, \'cq\'||g FROM generate_series(7101,7110) g" -c "SELECT pg_switch_wal()" -c "SELECT pg_switch_wal()"; for i in 1 2 3 4 5; do runuser -u postgres -- pgbackrest --stanza=exdbnode check && break; sleep 2; done')
     await refresh()
-    const segs = readdirSync(ARC).filter((f) => /^0000000100000000000000[0-9A-F]{2}-/.test(f)).sort()
-    const seg = segs[segs.length - 3]!
+    const stop = (await sh("runuser -u postgres -- pgbackrest --stanza=exdbnode info --output=json | jq -r '.[0].backup | sort_by(.label) | last | .archive.stop'")).trim()
+    const seg = readdirSync(ARC).filter((f) => f.startsWith(stop)).sort()[0]!
+    ev('corrupting the stop segment of the newest backup', { stop, seg })
     copyFileSync(`${ARC}/${seg}`, `/root/lab/walsave/cp-${TAG}-${seg}`)
     const size = statSync(`${ARC}/${seg}`).size
     await sh(`printf '\\xde\\xad\\xbe\\xef\\xde\\xad\\xbe\\xef\\xde\\xad\\xbe\\xef' | dd of=${ARC}/${seg} bs=1 seek=${Math.floor(size / 2)} conv=notrunc 2>/dev/null`)

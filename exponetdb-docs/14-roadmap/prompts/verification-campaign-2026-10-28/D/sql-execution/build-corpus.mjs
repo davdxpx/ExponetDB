@@ -142,6 +142,8 @@ const groups = {
     ['   ', R],
     ['-- only a comment', R],
     ['/* only a comment */', R],
+    ["SELECT '\ud800'", OK],
+    ["SELECT E'\\ud800'", SR],
   ],
 
   // COPY and server-side file / program access
@@ -548,6 +550,26 @@ const groups = {
     ['SELECT * FROM pg_catalog.pg_policies', OK],
     ['SELECT * FROM pg_catalog.pg_matviews', OK],
     ['SELECT * FROM pg_catalog.pg_views', OK],
+    ['SELECT * FROM U&"pg_\\0061uthid"', R],
+    ['SELECT * FROM pg_catalog.U&"pg_auth\\0069d"', R],
+    ['SELECT * FROM pg_catalog . pg_authid', R],
+    ['SELECT * FROM pg_catalog/**/.pg_authid', R],
+    ['SELECT * FROM ONLY pg_catalog.pg_authid', R],
+    ['SELECT * FROM pg_catalog.pg_authid AS a', R],
+    ['SELECT * FROM (SELECT 1) x, LATERAL (SELECT * FROM pg_catalog.pg_authid) q', R],
+    ['SELECT a FROM pg_catalog.pg_authid a', R],
+    ['SELECT 1 WHERE EXISTS (SELECT 1 FROM pg_catalog.pg_authid)', R],
+    ['SELECT * FROM postgres.pg_catalog.pg_authid', R],
+    ['SELECT * FROM pg_toast.pg_toast_1260', R],
+    ['SELECT * FROM pg_toast.pg_toast_2619', R],
+    ['SELECT (SELECT string_agg(x::text, \',\') FROM (SELECT * FROM pg_catalog.pg_authid) x)', R],
+    ['SELECT * FROM public.pg_authid', R],
+    ['SELECT * FROM pg_catalog.pg_class c WHERE c.oid = 1260', OK],
+    ["SELECT relname FROM pg_catalog.pg_class WHERE relname LIKE 'pg\\_auth%'", OK],
+    ["SELECT 'pg_authid'::regclass", OK],
+    ['SELECT * FROM pg_catalog.pg_stat_user_tables', OK],
+    ['SELECT * FROM information_schema.role_table_grants', OK],
+    ['SELECT * FROM information_schema.routines', OK],
   ],
 
   // resource limits (run with a short timeout; the product's caps must bound them)
@@ -603,10 +625,42 @@ const explain = [
   ['CREATE MATERIALIZED VIEW public.d2_mv2 AS SELECT 1', R],
 ]
 
+// Expectations the first run showed to be wrong (my assumption, not the product): corrected here, with the reason.
+const corrected = {
+  'enc-004': [R, 'the parser rejects E\'\\x00\' (a NUL escape)'],
+  'enc-010': [SR, 'a lone surrogate as a bare word is an identifier: column does not exist'],
+  'enc-011': [SR, 'a column reference without a relation: the server errors'],
+  'enc-025': [OK, 'U+202E is a legal identifier character: a plain read'],
+  'enc-028': [SR, 'more than 1664 columns: the server refuses'],
+  'enc-029': [OK, 'deeply nested parentheses are one plain read'],
+  'file-053': [SR, 'a role name, not a relation: the server errors'],
+  'func-049': [SR, 'a column reference into a subselect is a column, not a function call: 42703'],
+  'func-050': [SR, 'same'],
+  'func-051': [SR, 'same'],
+  'func-052': [SR, 'pg_node_tree argument: the server refuses'],
+  'func-067': [SR, 'log_directory is superuser-only: 42501'],
+  'func-069': [OK, 'ssl_key_file is readable by any role in PostgreSQL (a path): information disclosure, see README'],
+  'func-070': [OK, 'archive_command is readable by any role in PostgreSQL: information disclosure, see README'],
+  'func-072': [SR, 'shared_preload_libraries is superuser-only: 42501'],
+  'func-074': [SR, 'the guard admits pg_file_settings; the reader lacks EXECUTE on pg_show_all_file_settings'],
+  'func-075': [SR, 'same for pg_hba_file_rules'],
+  'func-076': [SR, 'same for pg_ident_file_mappings'],
+  'func-077': [SR, 'same for pg_config'],
+  'func-078': [SR, 'same for pg_shmem_allocations'],
+  'func-079': [SR, 'same for pg_backend_memory_contexts'],
+  'func-085': [OK, 'pg_foreign_server is world-readable in PostgreSQL (options without user mappings)'],
+  'func-086': [OK, 'same'],
+  'func-087': [OK, 'same'],
+  'secret-002': [SR, 'pg_stat_statements is an extension view, not in pg_catalog'],
+  'secret-007': [SR, 'EXECUTE on pg_show_replication_origin_status is revoked'],
+  'shadow-020': [SR, 'a collation that does not exist: the server errors'],
+}
 const out = []
 for (const [cls, items] of Object.entries(groups)) {
   items.forEach(([sql, expected, extra], i) => {
-    out.push({ id: `${cls}-${String(i + 1).padStart(3, '0')}`, class: cls, kind: 'query', sql, expected, ...(extra ?? {}) })
+    const id = `${cls}-${String(i + 1).padStart(3, '0')}`
+    const fix = corrected[id]
+    out.push({ id, class: cls, kind: 'query', sql, expected: fix ? fix[0] : expected, ...(fix ? { note: fix[1] } : {}), ...(extra ?? {}) })
   })
 }
 // sql_explain: agent without analyze, agent with analyze, human with analyze

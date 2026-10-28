@@ -1,0 +1,6 @@
+DESC="CREATE TRIGGER (SHARE ROW EXCLUSIVE; per-row cost afterwards), engine lock_timeout vs 2 s"
+HAZARD=( "tx|CREATE TRIGGER orders_audit AFTER INSERT OR UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION public.audit_row();" )
+SAFE=( "tx;lt=2000|CREATE TRIGGER orders_audit AFTER INSERT OR UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION public.audit_row();" )
+CLEANUP="DROP TRIGGER IF EXISTS orders_audit ON public.orders;"
+SAFE_NOTE="there is no lock-free form; the safe form only shortens the queue it can cause"
+FIXTURES="h28 / s27"

@@ -139,4 +139,17 @@ describe(`R1 node plans from the CLI (${TAG})`, () => {
     ev('plan show per kind', report)
     for (const [kind, r] of Object.entries(report)) expect((r as any).hasChange, `${kind}: ${JSON.stringify(r)}`).toBe(true)
   }, 600_000)
+
+  it('neighbour: cluster credential rotate and node job-keys from the CLI without a hand-made inspection', async () => {
+    const rotate = await cli(['cluster', 'credential', 'rotate', cluster, 'observer', '--output', 'json'], work)
+    const j = json(rotate)
+    ev('credential rotate plan', { code: rotate.code, errorCode: j?.error?.code, message: String(j?.error?.message ?? '').slice(0, 300), id: j?.data?.id ?? j?.planId })
+  }, 300_000)
+
+  it('E7: --no-inspect without any observation: what the person reads (text mode and json)', async () => {
+    const text = await cli(['node', 'postgres', 'config', node, '--cluster', cluster, '--set', 'work_mem=9MB', '--no-inspect', '--no-wait'], work)
+    const jsn = await cli(['node', 'postgres', 'config', node, '--cluster', cluster, '--set', 'work_mem=9MB', '--no-inspect', '--no-wait', '--output', 'json'], work)
+    ev('E7 text mode', { code: text.code, stderr: text.stderr.slice(0, 600), stdout: text.stdout.slice(0, 300) })
+    ev('E7 json mode', { code: jsn.code, error: json(jsn)?.error })
+  }, 300_000)
 })
