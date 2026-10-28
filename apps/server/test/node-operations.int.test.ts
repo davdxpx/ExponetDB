@@ -541,6 +541,22 @@ describe('production approval of node operations (F2)', () => {
     await node.stop()
   })
 
+  it('states the tier, the impact and the re-authentication of a node revocation (TC-019)', async () => {
+    for (const tier of ['nonprod', 'prod'] as const) {
+      const { node } = await setup(tier)
+      const planned = await owner.browser.call('POST', `/api/v1/nodes/${node.nodeId}/revoke`, {})
+      expect([planned.status, planned.body?.code], tier).toEqual([201, undefined])
+      expect(planned.body.subject, tier).toMatchObject({ tier })
+      expect(planned.body.requirements, tier).toContainEqual({ kind: 'reauth', withinSeconds: 300 })
+      expect(planned.body.change.analysis.impact, tier).toMatchObject({
+        waitingJobs: 0,
+        runningJobs: 0,
+        openOperations: 0,
+      })
+      await node.stop()
+    }
+  })
+
   it('makes a plan stale when its cluster became production before apply', async () => {
     const { w, node } = await setup('nonprod')
     const plan = await planReload(w, node)

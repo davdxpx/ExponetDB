@@ -1,12 +1,18 @@
 import type { Queryable, Tx } from '@exponetdb/control-store'
 import { type JsonObject, newId } from '@exponetdb/kernel'
-import { createPlan, type PlanRecord, type PlanSubject } from '@exponetdb/operations'
+import {
+  createPlan,
+  type PlanRecord,
+  type PlanSubject,
+  TERMINAL_STATES,
+} from '@exponetdb/operations'
 import {
   evaluateRegistryPolicy,
   operationActor,
   type RegistryActor,
   type RegistryPolicyContext,
 } from '@exponetdb/registry'
+import { nodePolicySubject } from './capability-plans.ts'
 import { NodeError } from './errors.ts'
 
 /**
@@ -35,12 +41,16 @@ async function store(
     readonly subject: PlanSubject
     readonly content: JsonObject
     readonly expectedState: JsonObject
+    /** What the plan does and what depends on it, shown with the plan. */
+    readonly analysis?: JsonObject
+    /** The derived tier of the node's server, when it has one (the rules read it). */
+    readonly tier?: 'prod' | 'nonprod'
   },
 ): Promise<PlanRecord> {
   const policy = await evaluateRegistryPolicy(tx, context.policy, {
     kind: draft.kind,
     actor,
-    subject: {},
+    subject: draft.tier === undefined ? {} : { tier: draft.tier },
     content: draft.content,
   })
   return createPlan(
@@ -50,9 +60,10 @@ async function store(
       kindVersion: 1,
       actionClass: 'high',
       actor: operationActor(actor),
-      subject: draft.subject,
+      subject: draft.tier === undefined ? draft.subject : { ...draft.subject, tier: draft.tier },
       content: draft.content,
       expectedState: draft.expectedState,
+      ...(draft.analysis === undefined ? {} : { analysis: draft.analysis }),
       policy,
     },
     { clock: context.policy.clock },
@@ -140,12 +151,62 @@ async function planStateChange(
   if (!from.includes(node.state)) {
     throw new NodeError('CONFLICT')
   }
+  const { tier } = await nodePolicySubject(tx, { serverId: node.serverId })
   return store(tx, context, actor, {
     kind,
     subject: { serverId: node.serverId, nodeId },
-    content: { nodeId },
+    // The kind is part of the content, so a revocation and a decommissioning of one node do
+    // not share a content checksum (TC-019).
+    content: { nodeId, action: kind === 'node.revoke' ? 'revoke' : 'decommission' },
     expectedState: { state: node.state },
+    analysis: {
+      effect:
+        kind === 'node.revoke'
+          ? 'The gateway refuses the node at its next request and its waiting jobs are canceled; a running job is left to its lease as outcome unknown. ExponetDB can no longer manage the server through the node.'
+          : 'As a revocation, and the node leaves for good: its server may enroll a new node. ExponetDB can no longer manage the server through the node.',
+      impact: await nodeImpact(tx, nodeId),
+    },
+    ...(tier === undefined ? {} : { tier }),
   })
+}
+
+/** What depends on a node, counted when the plan is made (informational; the apply re-checks the state). */
+async function nodeImpact(q: Queryable, nodeId: string): Promise<JsonObject> {
+  const jobs = await q.query(
+    'nodes.plan.impact_jobs',
+    `SELECT count(*) FILTER (WHERE state IN ('pending', 'dispatched'))::int AS waiting,
+            count(*) FILTER (WHERE state = 'running')::int AS running
+       FROM nodes.jobs WHERE node_id = $1`,
+    [nodeId],
+  )
+  const operations = await q.query(
+    'nodes.plan.impact_operations',
+    `SELECT count(DISTINCT o.operation_id)::int AS n
+       FROM nodes.jobs j JOIN operations.operations o ON o.operation_id = j.operation_id
+      WHERE j.node_id = $1 AND NOT (o.state = ANY($2::text[]))`,
+    [nodeId, [...TERMINAL_STATES]],
+  )
+  const plans = await q.query(
+    'nodes.plan.impact_plans',
+    `SELECT count(*)::int AS n
+       FROM operations.plans p JOIN operations.plan_bodies b ON b.plan_id = p.plan_id
+      WHERE p.state = 'active' AND p.expires_at > clock_timestamp()
+        AND b.body::jsonb -> 'subject' ->> 'nodeId' = $1`,
+    [nodeId],
+  )
+  const clusters = await q.query(
+    'nodes.plan.impact_clusters',
+    'SELECT clusters FROM nodes.nodes WHERE node_id = $1',
+    [nodeId],
+  )
+  const reported = clusters.rows[0]?.json('clusters')
+  return {
+    servedClusters: Array.isArray(reported) ? reported.length : 0,
+    waitingJobs: jobs.rows[0]?.int('waiting') ?? 0,
+    runningJobs: jobs.rows[0]?.int('running') ?? 0,
+    openOperations: operations.rows[0]?.int('n') ?? 0,
+    activePlans: plans.rows[0]?.int('n') ?? 0,
+  }
 }
 
 /** `node.revoke`: the node is refused at its next request; pending jobs are canceled. */

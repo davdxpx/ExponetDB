@@ -226,6 +226,7 @@ before they are returned ([`../03-database-model/sql-execution-security.md`](../
 | `node.packages-postgres-major` | deny | package plans never change the PostgreSQL major version (major upgrade is its own future kind) |
 | `node.agent-version` | deny | capability requires a newer agent than enrolled |
 | `node.prod-apply-approval` | require approval | every node or cluster apply on a prod-tier node or cluster (configuration, roles, `pg_hba`, TLS, extensions, packages); reload-only configuration changes are class `standard` but still need this approval on prod tier |
+| `node.lifecycle-reauth` | require re-authentication | **[DECIDED]** (test campaign TC-019) `node.revoke` and `node.decommission`, on every tier: the plan lists the fresh re-authentication (`reauth`, default 300 s) that its apply asks for; before this the plan read `decision: allow`, `requirements: []` and the apply answered `REAUTH_REQUIRED`. Not overridable; parameter `reauthWithinSeconds` (1 to 900) |
 | `node.packages-soak` | require (break-glass) | a PostgreSQL minor version or extension package version must have run on the evidence environment's cluster for at least 3 days before a prod-tier update; security releases go through break-glass |
 
 **[DECIDED]** (Wave 5 correction F2, `packages/policy/src/catalog/nodes.ts`)

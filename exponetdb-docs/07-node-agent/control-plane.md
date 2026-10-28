@@ -177,6 +177,16 @@ source, never deciding an operation.
   canceled; a running job can no longer be reported or asked to stop, so it
   turns `outcome_unknown` when its lease ends and is reconciled from the
   host, never assumed undone; the audit event counts such jobs.
+  **[DECIDED]** (test campaign TC-019) The plans say what they do and need: the
+  subject carries the derived tier of the node's server (absent when it has
+  none); the content names the `action` (`revoke` or `decommission`), so the two
+  kinds never share a content checksum; the analysis states the `effect` and the
+  `impact` counted when the plan is made (`servedClusters` the node reported,
+  `waitingJobs`, `runningJobs`, `openOperations` with a job on the node, and
+  `activePlans` naming the node); and the policy rule `node.lifecycle-reauth`
+  ([policy-engine.md §4](../02-control-plane/policy-engine.md)) lists the fresh
+  re-authentication in `requirements`. Before this the plans read `analysis: null`,
+  "Tier: unknown", `requirements: []` and one shared checksum.
 - **Job-key rotation:** `node.config.update` signs a `config.update@1` job
   with the active key, which the node trusts (§9.8).
 
