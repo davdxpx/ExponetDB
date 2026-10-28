@@ -270,7 +270,16 @@ describe('the OpenAPI document', () => {
       'POST',
       {},
     )
-    expect([reconcile.status, reconcile.body.code]).toEqual([401, 'UNAUTHENTICATED'])
+    // Served now: it answers as every served mutating route does without a session (the CSRF check
+    // comes before the credential), not as a path nobody serves.
+    const served = await bearer(
+      undefined,
+      '/api/v1/targets/tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/migrations/baseline-plans',
+      'POST',
+      {},
+    )
+    expect([reconcile.status, reconcile.body.code]).toEqual([served.status, served.body.code])
+    expect([reconcile.status, reconcile.body.code]).toEqual([403, 'CSRF_FAILED'])
     // Only a read: nothing else answers at that path.
     expect((await bearer(undefined, '/api/v1/openapi.json', 'POST', {})).status).toBe(404)
   })

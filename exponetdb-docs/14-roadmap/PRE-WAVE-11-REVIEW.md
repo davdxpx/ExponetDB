@@ -776,7 +776,7 @@ finding is wrong. Owner decisions are in [`open-decisions.md`](../00-product/ope
 | TC-034 an erase operation stays `awaiting_approval` | **OWNER DECISION** (OD-64) and an operation for the owner to look at | the deadline of an approval is a product rule; the live operation is the owner's |
 | TC-037 the "Critical findings" headline | waits for OD-61 | same recording and aggregation decision as TC-017 |
 | TC-053 two step-up receipts to enroll a node | **OWNER DECISION** (OD-67) | one combined step-up or longer receipts |
-| TC-063 G10.3 against OD-7b | **OWNER DECISION** (OD-66); the row now says the wording is open | gate wording |
+| TC-063 G10.3 against OD-7b; other gate-row gaps | **OWNER DECISION** (OD-66) for the wording, which the row now flags as open; one other gap is **done**: the root `test:e2e` script builds the design-system app that `csp-ui-surface.e2e` and `visual-regression.e2e` need (a full `verify` failed both files without it) | the other gaps (the scheduler `nextRun` never called, the axe test without `/t/**` pages and eight routes, the bare `/infrastructure` redirect, the stale SDK namespaces and G7 doc rot) are not started |
 | TC-025 the ledger comparison is shallow | not started | engine work (`ledger.reconcile` makes the recovery possible; the comparison depth is separate) |
 | TC-027 regression artifacts for the W9-04 rows | not started (TC-028 added the selection tests) | the named negative tests for the runbook permission, the stale WAL end, the moved target, the digest of another repository and the restic verify refusal |
 | TC-040 an older CLI answers `RESPONSE_INVALID` against a newer server | not started | version negotiation is a design change |
