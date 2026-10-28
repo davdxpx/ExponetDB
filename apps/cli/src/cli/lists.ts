@@ -72,7 +72,12 @@ export async function collect<Id extends ListId>(
   return { items, partial: false, nextCursor: items.length >= max ? nextCursor : null }
 }
 
-/** A listing's failure as a result (partial or not), keeping the items that arrived. */
+/**
+ * A listing's failure as a result. A listing that failed after some pages arrived keeps the
+ * items that did and is marked partial; one that failed before any item arrived is the typed
+ * error alone, with no table, no count and no `data` (an empty list would read as "none",
+ * TC-030).
+ */
 export function listingFailure<T>(
   command: string,
   listing: Listing<T>,
@@ -80,13 +85,15 @@ export function listingFailure<T>(
 ): CommandResult | undefined {
   if (listing.error === undefined) return undefined
   const e = listing.error
+  const kept =
+    listing.items.length === 0
+      ? { blocks: [] }
+      : { ...fallback, partial: listing.partial, items: listing.items }
   return {
-    ...fallback,
+    ...kept,
     command,
     status: 'error',
     exitCode: exitFor(e.code),
-    partial: listing.partial,
-    items: listing.items,
     error: {
       code: e.code,
       message: e.message ?? 'The server refused the request.',

@@ -202,7 +202,11 @@ when known. **NDJSON** (`--output ndjson`) prints one typed record per line:
 `{"type":"result",…}` or `{"type":"error",…}` record with the same fields as
 the JSON document. A paged listing that fails part-way ends with an
 `error` record (`"partial": true`) and a non-zero exit; items printed before
-it are never a complete list. Dates are ISO 8601 UTC; ids are never
+it are never a complete list. **[DECIDED]** (test campaign TC-030, principle 5)
+A list that fails before any item arrived is the typed error alone: nothing on
+stdout (no table, no count, no "No backups …" text) and no `data` key in the JSON
+document, so a script that ignores the exit code cannot read "none" from a failed
+read. Dates are ISO 8601 UTC; ids are never
 shortened; absent values are omitted, unknown values are `null` with a
 reason field where the contract has one. Neither format carries a token, a
 credential, a banner, a hint, color or progress noise; human hints go to

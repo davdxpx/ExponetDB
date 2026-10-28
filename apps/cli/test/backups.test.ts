@@ -1407,3 +1407,77 @@ describe('node plans create their own basis observation (TC-002)', () => {
     expect(sent('POST', `/nodes/${NOD}/inspections`)).toEqual([])
   })
 })
+
+describe('a failed list read (TC-030, principle 5)', () => {
+  // Every paged list the CLI has, with the positional arguments it needs.
+  const LISTS: readonly (readonly string[])[] = [
+    ['product', 'list'],
+    ['environment', 'list', id('prd', 10)],
+    ['project', 'list'],
+    ['target', 'list'],
+    ['server', 'list'],
+    ['cluster', 'list'],
+    ['node', 'list'],
+    ['plan', 'list'],
+    ['operation', 'list'],
+    ['approval', 'list'],
+    ['finding', 'list'],
+    ['cluster', 'findings', CLS],
+    ['schema', 'search', TGT, 'lead'],
+    ['backup', 'overview'],
+    ['backup', 'list', CLS],
+    ['backup', 'runs', CLS],
+    ['restore', 'list', CLS],
+    ['drill', 'list', CLS],
+    ['audit', 'list'],
+    ['access', 'identities'],
+    ['access', 'bindings'],
+    ['access', 'clients'],
+  ]
+
+  const NAMED = LISTS.map((argv) => [argv.slice(0, 2).join(' '), argv] as const)
+
+  // Every route answers a missing scope; only the installation read succeeds.
+  const denyAll: typeof fetch = async (input, init) => {
+    const url = new URL(
+      typeof input === 'string' ? input : input instanceof URL ? input : input.url,
+    )
+    if (url.pathname.replace(/^\/api\/v1/, '') === '/installation') return fakeFetch(input, init)
+    const [status, body] = refusal(403, 'INSUFFICIENT_SCOPE', {
+      details: { requiredScope: 'backups.read' },
+    })
+    return Response.json(body, { status })
+  }
+
+  it.each(NAMED)(
+    '%s: no table, no count and no empty-state text on stdout',
+    async (_name, argv) => {
+      const out = await cli(argv, { fetch: denyAll })
+      expect(out.code).toBe(EXIT.auth)
+      expect(out.stdout).toBe('')
+      expect(out.stderr).toContain('INSUFFICIENT_SCOPE')
+    },
+  )
+
+  it.each(NAMED)('%s: the JSON error envelope has no data', async (_name, argv) => {
+    const out = await cli([...argv, '--output', 'json'], { fetch: denyAll })
+    expect(out.code).toBe(EXIT.auth)
+    const doc = JSON.parse(out.stdout)
+    expect(doc.status).toBe('error')
+    expect(doc.error.code).toBe('INSUFFICIENT_SCOPE')
+    expect(doc).not.toHaveProperty('data')
+  })
+
+  it('keeps the items that arrived when a later page fails, and says the list is partial', async () => {
+    on('GET', `/clusters/${CLS}/backups`, (req) =>
+      req.query.get('cursor') === null
+        ? catalog([backupEntry(1)], 'c2')
+        : refusal(503, 'DEPENDENCY_UNAVAILABLE'),
+    )
+    const out = await json(['backup', 'list', CLS, '--all'])
+    expect(out.code).not.toBe(0)
+    expect(out.doc.status).toBe('error')
+    expect(out.doc.data.partial).toBe(true)
+    expect(out.doc.data.backups).toHaveLength(1)
+  })
+})
