@@ -537,13 +537,12 @@ export const MCP_TOOLS = [
   },
   {
     name: 'migration_verify',
-    toolVersion: 2,
+    toolVersion: 3,
     title: 'Verify a migration again',
-    description:
-      'Runs the verify.sql of an applied migration on a target again and returns the operation; observe it with operation_get. The checks run in a READ ONLY transaction that is always rolled back, and only allowlisted built-in functions are accepted, so it changes no data.',
+    description: `Runs the verify.sql of an applied migration on a target again and returns the operation; observe it with operation_get. The checks run in a READ ONLY transaction that is always rolled back, and only allowlisted built-in functions are accepted, so it changes no data.${UNTRUSTED_NOTE}`,
     action: 'migration.verify',
     restOperationId: 'verifyMigration',
-    annotations: SETTLES,
+    annotations: { ...SETTLES, openWorldHint: true },
     input: z.strictObject({
       target,
       migrationId,
@@ -574,17 +573,16 @@ export const MCP_TOOLS = [
   },
   {
     name: 'plan_apply',
-    toolVersion: 1,
+    toolVersion: 2,
     title: 'Apply a plan',
-    description:
-      'Applies a plan from migration_plan or migration_rollback_plan and returns the operation at once; it never waits for the outcome. Takes only the plan id: what runs is fixed by the plan. A plan that needs a human approval returns the operation awaiting_approval with an approvalUrl to give to the human; production plans may require it. Observe the operation with operation_get.',
+    description: `Applies a plan from migration_plan or migration_rollback_plan and returns the operation at once; it never waits for the outcome. Takes only the plan id: what runs is fixed by the plan. A plan that needs a human approval returns the operation awaiting_approval with an approvalUrl to give to the human; production plans may require it. Observe the operation with operation_get.${UNTRUSTED_NOTE}`,
     action: 'plan.apply',
     restOperationId: 'applyPlan',
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     },
     input: z.strictObject({ planId: PlanIdSchema }),
     output: McpOperationSchema,
@@ -611,13 +609,12 @@ export const MCP_TOOLS = [
   },
   {
     name: 'operation_get',
-    toolVersion: 1,
+    toolVersion: 2,
     title: 'Get operation',
-    description:
-      'Operation state with the apply outcome and the verification outcome as separate fields, per-migration outcomes, steps and the next action. Applied is not verified. With waitSeconds it answers at the next change of state, at the latest after that many seconds; poll again until the state is final.',
+    description: `Operation state with the apply outcome and the verification outcome as separate fields, per-migration outcomes (a migration the pre-commit gate rolled back carries gate: the assertions run and failed, and the first failing object), steps and the next action. Applied is not verified. With waitSeconds it answers at the next change of state, at the latest after that many seconds; poll again until the state is final.${UNTRUSTED_NOTE}`,
     action: 'operation.get',
     restOperationId: 'getOperation',
-    annotations: RO,
+    annotations: RO_OPEN,
     input: z.strictObject({
       operationId: OperationIdSchema,
       waitSeconds: z
@@ -637,13 +634,12 @@ export const MCP_TOOLS = [
   },
   {
     name: 'operation_list',
-    toolVersion: 1,
+    toolVersion: 2,
     title: 'List operations',
-    description:
-      'Operations this grant can see, newest first, filtered by target, kind, state or actor (self: the operations of the identity behind this grant).',
+    description: `Operations this grant can see, newest first, filtered by target, kind, state or actor (self: the operations of the identity behind this grant).${UNTRUSTED_NOTE}`,
     action: 'operation.list',
     restOperationId: 'listOperations',
-    annotations: RO,
+    annotations: RO_OPEN,
     input: z.strictObject({
       target: target.optional(),
       kind: z.string().max(64).optional(),
@@ -660,13 +656,12 @@ export const MCP_TOOLS = [
   },
   {
     name: 'operation_cancel',
-    toolVersion: 1,
+    toolVersion: 2,
     title: 'Cancel an operation',
-    description:
-      'Cancels an operation that has not started (queued or awaiting approval). Only the identity and client that applied its plan may cancel it; a running or finished operation is not changed.',
+    description: `Cancels an operation that has not started (queued or awaiting approval). Only the identity and client that applied its plan may cancel it; a running or finished operation is not changed.${UNTRUSTED_NOTE}`,
     action: 'operation.cancel',
     restOperationId: 'cancelOperation',
-    annotations: SETTLES,
+    annotations: { ...SETTLES, openWorldHint: true },
     input: z.strictObject({ operationId: OperationIdSchema }),
     output: McpOperationSchema,
     limits: {},

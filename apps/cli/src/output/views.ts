@@ -239,6 +239,14 @@ export function operationBlocks(o: Operation): Block[] {
         m.errorCode ?? m.sqlstate ?? '-',
       ]),
     })
+    const gates = o.migrations.flatMap((m) =>
+      m.gate === undefined
+        ? []
+        : [
+            `${m.migrationId}: the ${m.gate.layer} gate failed ${m.gate.failed} of ${m.gate.checks} assertions; first: ${m.gate.first}`,
+          ],
+    )
+    if (gates.length > 0) blocks.push({ kind: 'text', lines: gates, tone: 'warn' })
   }
   blocks.push(...verificationFailureBlocks(o.verifications ?? []))
   const notes = operationNotes(o)

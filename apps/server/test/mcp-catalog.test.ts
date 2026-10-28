@@ -57,26 +57,28 @@ const SHAPES: Record<string, { scopes: Scope[]; tiers: Tier[] }> = {
 // Re-pinned after the Wave 9 Part B reviews: advisors_run says it records its run and
 // findings (F-4) and marks message and remediation untrusted (D-2); backups_list names
 // wal_continuity_unproven (A-4). Both version-1 digests are new on this branch, not released.
+// Re-pinned 2026-10-28: the tools that return an operation carry the L0 gate of a rolled-back
+// migration (untrusted `first`, so openWorldHint and a description note); toolVersion raised.
 const PINNED: Record<string, { tools: number; digest: string }> = {
   'baseline, nonprod': {
     tools: 15,
-    digest: 'sha256:85e86997c0f21464c661b95fc96ac93056ebe1bd71b4cece33e2e2b7c57c52f3',
+    digest: 'sha256:3a5b38649e740cee5a3b9b1e431520f9f3350ad54f01705763d8eee4aa353864',
   },
   'every read, nonprod': {
     tools: 19,
-    digest: 'sha256:a6064f84ceaded0e8518fe4007c51e45f772ce15ac0c5b4dec57aa13b67ddbd6',
+    digest: 'sha256:380a65e3227ab600eb215d8f2f74bbcbd4cecb0c44e144d057f9783be51af44d',
   },
   'agent, nonprod': {
     tools: 25,
-    digest: 'sha256:86d228489c20d0c006726279545ba127b2a7169e451927c41b5e316639b36350',
+    digest: 'sha256:7c1abc03daf20e80afab888464040e896108fbe047b56d3b7a124e5939466601',
   },
   'agent, both tiers': {
     tools: 26,
-    digest: 'sha256:057e2be516263f5219ae044f85a631cec97a365c494f6afbb14ecbee3e68d9f2',
+    digest: 'sha256:cddf547fd65c783be5e8275a37e0aba57e61dfe5a9be03aadb2cc310b4efc91a',
   },
   'data reader, nonprod': {
     tools: 22,
-    digest: 'sha256:3b43b1d8bd4ec528e7e9f7ca98a3d6e9359e615bd9d7bff901d46792c1718568',
+    digest: 'sha256:92dc94f80336cc11fc5fb46124d3c66a1bae8b0a654689890e97491f2e8e1421',
   },
 }
 

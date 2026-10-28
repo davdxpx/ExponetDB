@@ -622,6 +622,56 @@ describe('migrations over REST', () => {
       verificationOutcome: 'passed',
     })
   })
+
+  it('shows what the L0 gate found on the operation: the layer, the counts and the first failing object, no values', async () => {
+    const dbs = await owner.browser.call('GET', `/api/v1/clusters/${ids.cluster}/databases`)
+    const stagingName = dbs.body.items.find(
+      (d: { placement: { targetId: string } | null }) =>
+        d.placement?.targetId === ids.stagingTarget,
+    ).name
+    // IF NOT EXISTS meets a table of another shape: the statement succeeds, L0 does not.
+    await runAsSuperuser(pg17, stagingName, [
+      'CREATE TABLE public.contacts (id bigint, other text)',
+      `ALTER TABLE public.contacts OWNER TO ${OWNER_ROLE}`,
+    ])
+    try {
+      const { operation: op } = await planAndApply(
+        `/api/v1/targets/${ids.stagingTarget}/migrations/plans`,
+        {
+          bundles: [
+            bundle({
+              id: ulid(),
+              name: 'contacts',
+              up: 'CREATE TABLE IF NOT EXISTS public.contacts (id bigint, email text NOT NULL);\n',
+              dependsOn: [first],
+            }),
+          ],
+          defaults: DEFAULTS,
+        },
+      )
+      const failed = await operation(op.id)
+      expect(failed).toMatchObject({
+        applyOutcome: 'not_applied',
+        errorCode: 'VERIFICATION_FAILED',
+      })
+      expect(failed.migrations).toEqual([
+        expect.objectContaining({
+          applyOutcome: 'not_applied',
+          verificationOutcome: 'failed',
+          errorCode: 'VERIFICATION_FAILED',
+          // The missing column, then the exact column list: names only, no values.
+          gate: {
+            layer: 'L0',
+            checks: 4,
+            failed: 2,
+            first: 'column "public"."contacts"."email"',
+          },
+        }),
+      ])
+    } finally {
+      await runAsSuperuser(pg17, stagingName, ['DROP TABLE public.contacts'])
+    }
+  })
 })
 
 let waiting = ''

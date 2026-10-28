@@ -1578,6 +1578,13 @@ export type MigrationDetail = {
   readonly verifications: readonly MigrationVerificationRun[]
 }
 
+export type MigrationGate = {
+  readonly checks: number
+  readonly failed: number
+  readonly first: string
+  readonly layer: "L0"
+}
+
 export type MigrationLintRequest = {
   readonly bundles: readonly MigrationBundleSubmission[]
   readonly defaults?: {
@@ -1629,6 +1636,7 @@ export type MigrationPlanRequest = {
 export type MigrationProgress = {
   readonly applyOutcome: "not_started" | "applied" | "not_applied" | "partially_applied" | "unknown"
   readonly errorCode: string | null
+  readonly gate?: MigrationGate
   readonly migrationId: string
   readonly name: string
   readonly sqlstate: string | null
