@@ -557,6 +557,32 @@ export const migrationBaselineProduction: Rule = {
   },
 }
 
+/**
+ * `migration.ledger-reconcile-production` (TC-007, MIG-03): `ledger.reconcile` adopts the target's
+ * ledger as the truth (ledger.md §5), after a restore or a hand change, and so unblocks schema
+ * plans on a ledger ExponetDB did not write. It reads only the tier the planner resolved (the
+ * plan carries no migration facts): on production, a human approval and a fresh re-authentication;
+ * an unknown tier requires the same, and no break-glass grant overrides it.
+ */
+export const migrationLedgerReconcileProduction: Rule = {
+  id: 'migration.ledger-reconcile-production',
+  version: 1,
+  description:
+    'Adopting a production target ledger as the truth (after a restore or a hand change) needs a human approval and a fresh re-authentication.',
+  appliesTo: ['ledger.reconcile'],
+  severity: 'require',
+  overridableByBreakGlass: false,
+  facts: [],
+  defaults: { approvals: 1, reauthWithinSeconds: 300 },
+  requirements: (params) => approvals(params, 'reauth'),
+  evaluate({ request }) {
+    return prodOnly(request.subject.tier, () => ({
+      result: 'fail',
+      message: 'A production ledger is adopted as the truth only after a human approval.',
+    }))
+  },
+}
+
 /** The execution role facts a legacy replay plan binds (`content.executionRoleCheck`). */
 function replayRoleCheck(
   content: JsonValue | undefined,
@@ -765,6 +791,7 @@ export const MIGRATION_RULES: readonly Rule[] = [
   migrationVerifyConsumerCode,
   migrationRollbackProduction,
   migrationBaselineProduction,
+  migrationLedgerReconcileProduction,
   migrationImportExecutionRole,
   migrationExecutionRoleException,
   migrationExecutionRoleParity,

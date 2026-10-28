@@ -1090,3 +1090,57 @@ describe('session actions', () => {
     })
   })
 })
+
+describe('ledger reconcile (TC-007)', () => {
+  const NOTE = 'Restored to the backup of Monday, before the second migration.'
+
+  it('plans adopting the target ledger with a note, and applies nothing without --apply', async () => {
+    on(
+      'POST',
+      `/targets/${TGT}/ledger/reconcile-plans`,
+      plan('planLedgerReconcile', 'ledger.reconcile'),
+    )
+    // The note is the person's reason and is required; nothing is sent without it.
+    const bare = await cli(['migration', 'ledger', 'reconcile', '--target', TGT])
+    expect(bare.code).toBe(EXIT.usage)
+    expect(sent('POST', `/targets/${TGT}/ledger/reconcile-plans`)).toEqual([])
+    const out = await cli(['migration', 'ledger', 'reconcile', '--target', TGT, '--note', NOTE])
+    expect(out.code, out.stderr).toBe(0)
+    expect(sent('POST', `/targets/${TGT}/ledger/reconcile-plans`)[0]?.body).toEqual({
+      decision: 'adopt_target',
+      note: NOTE,
+    })
+    expect(out.stdout).toContain('ledger.reconcile')
+    expect(requests.filter((r) => r.path.endsWith('/apply'))).toEqual([])
+  })
+
+  it('shows the server’s refusal when the ledger agrees with the mirror', async () => {
+    on(
+      'POST',
+      `/targets/${TGT}/ledger/reconcile-plans`,
+      refusal(422, 'VALIDATION_FAILED', {
+        details: {
+          errors: [
+            {
+              path: '/decision',
+              code: 'nothing_to_reconcile',
+              message: 'The ledger of the target agrees with the mirror.',
+            },
+          ],
+        },
+      }),
+    )
+    const out = await cli(['migration', 'ledger', 'reconcile', '--target', TGT, '--note', NOTE])
+    expect(out.code).toBe(EXIT.usage)
+    expect(out.stderr).toContain('/decision: The ledger of the target agrees with the mirror.')
+  })
+
+  it('is catalogued as a human-only plan with the scope of the action', () => {
+    const command = COMMANDS.find((c) => c.path.join(' ') === 'migration ledger reconcile')
+    expect(command).toMatchObject({
+      effect: 'plan',
+      action: 'ledger.reconcile.plan',
+      scopes: ['migrations.import'],
+    })
+  })
+})

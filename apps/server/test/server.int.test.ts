@@ -158,14 +158,23 @@ describe('the three roles from one build', () => {
         expect.objectContaining({ name: 'workers', status: 'warn', reason: 'no_live_worker' }),
       ]),
     )
-    // A route that is contracted and not served (the ledger reconciliation plan) answers
-    // NOT_FOUND; a served route (Wave 4, 5 and 9 alike) needs a credential.
-    const unserved = await fetch(
-      `http://127.0.0.1:${serve.ports.public}/api/v1/targets/tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/ledger/reconcile-plans`,
-      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
-    )
+    // A path nobody serves answers NOT_FOUND; a served route (Wave 4, 5 and 9 alike, and since
+    // TC-007 the ledger reconciliation plan, the last contracted route that was not) wants a credential.
+    const post = (path: string) =>
+      fetch(`http://127.0.0.1:${serve.ports.public}${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      })
+    const unserved = await post('/api/v1/targets/tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/ledger/not-a-route')
     expect(unserved.status).toBe(404)
     expect(JSON.parse(await unserved.text())).toMatchObject({ code: 'NOT_FOUND' })
+    const reconcile = await post(
+      '/api/v1/targets/tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/ledger/reconcile-plans',
+    )
+    // Served: a mutation without a session fails the CSRF check before anything else (never 404).
+    expect(reconcile.status).toBe(403)
+    expect(JSON.parse(await reconcile.text())).toMatchObject({ code: 'CSRF_FAILED' })
     const backups = await get(
       serve.ports.public,
       '/api/v1/clusters/cls_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/backups',

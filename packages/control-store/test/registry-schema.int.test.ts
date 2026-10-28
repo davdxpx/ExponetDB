@@ -793,6 +793,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M5X840BP8JXGEQGS0PHPTB58',
         // Test campaign TC-005 (2026-10-28): a recovery plan closes the needs_attention operation it names.
         '01M61AGQKSBZ9VN71DHYFVCQHT',
+        // Test campaign TC-007 (2026-10-28): ledger.reconcile moves mirror rows to a history.
+        '01M61C90YHV706H2B8EW39TBAF',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

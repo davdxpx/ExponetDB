@@ -23,11 +23,13 @@ import {
   type ImportItemState,
   importReportView,
   ingestBundles,
+  type LedgerReconcileRequest,
   lintProject,
   migrationDetail,
   migrationStatus,
   planBaseline,
   planImportAnalysis,
+  planLedgerReconcile,
   planMigrationApply,
   planMigrationResume,
   planMigrationRollback,
@@ -347,6 +349,26 @@ export class MigrationUseCases {
       async () => ({ kind: 'target', targetId: target.targetId }),
       (tx, actor) =>
         planBaseline(tx, this.#context(), actor, target.targetId, request.importReportId),
+    )
+  }
+
+  /**
+   * `ledger.reconcile.plan` (TC-007, E25): after a restore or a hand change, a person adopts the
+   * target's ledger as the truth; `plan.apply` moves the mirror rows that differ to the history.
+   */
+  async planLedgerReconcile(
+    caller: CallerLike,
+    ref: string,
+    request: LedgerReconcileRequest,
+    idem?: Idempotency,
+  ): Promise<PlanView> {
+    const target = await this.#target('ledger.reconcile.plan', caller, ref)
+    return this.#h.plan(
+      caller,
+      'ledger.reconcile.plan',
+      idem,
+      async () => ({ kind: 'target', targetId: target.targetId }),
+      (tx, actor) => planLedgerReconcile(tx, this.#context(), actor, target.targetId, request),
     )
   }
 

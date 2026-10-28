@@ -78,6 +78,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-56 | An excused value outside the fingerprint that changes after the review | **resolved 2026-10-26** | option (a): a keyed digest (HMAC-SHA-256 under a server-side installation key, never a plain hash) of the observed value of open-domain kinds is recorded with the excused failure and compared at every later verification; a changed value fails closed even with the same aspect; a missing or rotated key fails closed; values never appear in UI, API, audit or logs | nothing | decided |
 | OD-57 | `advisors_run` records a run, but its scope `diagnostics.read` is a read scope | **open** | (a) a new additive oauth bundle makes `diagnostics.read` a write scope (consent shows it; clients that auto-approve read tools stop doing so); (b) a separate record scope for advisor runs (`diagnostics.record`), `diagnostics.read` stays read-only; (c) an advisor run over MCP records nothing (findings only from Web App, CLI and the worker) | nothing in Part B; the MCP annotation stays `readOnlyHint` until decided | open |
 | OD-58 | How an operation in `needs_attention` is closed | **open** (built with option (a) by the test campaign fixes) | (a) the recovery plan that names it closes it as `verification_failed`, `unknown` becomes `partially_applied`; (b) (a) plus the planned `operation.force_release` for operations no recovery plan covers; (c) (a) with `verification_failed` admitting an `unknown` apply outcome | option (a) is in the code on the branch; the owner confirms or changes it | open |
+| OD-59 | Flagging ledger rows as untrusted (`ledger.reconcile` with `flag_untrusted`) | **open** | (a) leave it unbuilt: `adopt_target` is the only decision, `flag_untrusted` is refused as `not_built`; (b) record the decision and a finding while the divergence keeps refusing plans; (c) remove it from the contract | (a) is in the code on the branch; the owner decides | open |
 
 ---
 
@@ -1828,6 +1829,30 @@ History:
 - **Recommendation.** (a) now, as built; (b) before Wave 11 if a kind other
   than the migration kinds can end in `needs_attention` on a real target;
   (c) only with a review of the readers.
+- **Blocks.** Nothing.
+
+## OD-59. Flagging ledger rows as untrusted
+
+- **Status.** OPEN (found on 2026-10-28 while building `ledger.reconcile`,
+  TC-007; built with option (a), for the owner to confirm)
+- **Question.** The contract of `ledger.reconcile.plan` takes a decision of
+  `adopt_target` or `flag_untrusted`
+  ([`../04-migrations/ledger.md` §5](../04-migrations/ledger.md#5-mirror-and-reconciliation)
+  says the operator "records the decision (adopt target as truth, or flag
+  rows as untrusted)"). Only the first is built. What should the second do?
+- **Why it matters.** `adopt_target` is the recovery of a restore (E25). A
+  decision that the target's rows are untrusted keeps the divergence in
+  place by definition (plans stay refused), so on its own it only leaves a
+  record; whether that record is worth a plan, an audit event and a finding
+  depends on how the owner wants a tampered ledger handled.
+- **Options.** (a) built: `flag_untrusted` is refused at planning as
+  `VALIDATION_FAILED` (`/decision`, `not_built`), the contract keeps the
+  value. (b) build it: the plan records the decision and the note, raises a
+  critical finding for the listed ids, changes no mirror row, and the
+  divergence keeps refusing schema plans until it is undone or adopted.
+  (c) remove the value from the contract (a contract change, generated
+  files).
+- **Recommendation.** (a) until a real tampered ledger needs it; then (b).
 - **Blocks.** Nothing.
 
 ## Owner decisions of the Wave 9 Part B order (2026-10-26)

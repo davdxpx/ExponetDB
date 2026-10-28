@@ -121,6 +121,45 @@ export async function readProgress(q: Queryable, operationId: string): Promise<P
   })
 }
 
+/** Writes one ledger row to the mirror; a mirrored row only has its revert recorded again. */
+export async function insertMirrorRow(
+  tx: Tx,
+  targetId: string,
+  generation: number,
+  r: LedgerRecord,
+): Promise<void> {
+  await tx.query(
+    'migrations.mirror.upsert',
+    `INSERT INTO migrations.ledger_mirror
+       (target_id, generation, migration_id, origin, name, checksum, verify_digest, rollback_digest,
+        applied_seq, applied_at, operation_id, plan_id, fingerprint_before, fingerprint_after,
+        reverted_at, reverted_by_op)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::bigint, $10::timestamptz, $11, $12, $13, $14,
+             $15::timestamptz, $16)
+     ON CONFLICT (target_id, generation, migration_id) DO UPDATE SET
+       reverted_at = EXCLUDED.reverted_at, reverted_by_op = EXCLUDED.reverted_by_op,
+       mirrored_at = clock_timestamp()`,
+    [
+      targetId,
+      generation,
+      r.migrationId,
+      r.origin,
+      r.name.slice(0, 200),
+      r.checksum.slice(0, 200),
+      r.verifyDigest,
+      r.rollbackDigest,
+      r.appliedSeq,
+      r.appliedAt,
+      r.operationId,
+      r.planId,
+      r.fingerprintBefore,
+      r.fingerprintAfter,
+      r.revertedAt,
+      r.revertedByOp,
+    ],
+  )
+}
+
 /**
  * Mirrors the target's ledger rows of one generation and its state hash
  * (ledger.md §5). Only rows an operation of this target wrote are added; a
@@ -148,36 +187,7 @@ export async function writeMirror(
   const divergence = compareLedger(mirror, input.rows, known)
   for (const r of input.rows) {
     if (!mirrored.has(r.migrationId) && !known.has(r.operationId)) continue
-    await tx.query(
-      'migrations.mirror.upsert',
-      `INSERT INTO migrations.ledger_mirror
-         (target_id, generation, migration_id, origin, name, checksum, verify_digest, rollback_digest,
-          applied_seq, applied_at, operation_id, plan_id, fingerprint_before, fingerprint_after,
-          reverted_at, reverted_by_op)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::bigint, $10::timestamptz, $11, $12, $13, $14,
-               $15::timestamptz, $16)
-       ON CONFLICT (target_id, generation, migration_id) DO UPDATE SET
-         reverted_at = EXCLUDED.reverted_at, reverted_by_op = EXCLUDED.reverted_by_op,
-         mirrored_at = clock_timestamp()`,
-      [
-        input.targetId,
-        input.generation,
-        r.migrationId,
-        r.origin,
-        r.name.slice(0, 200),
-        r.checksum.slice(0, 200),
-        r.verifyDigest,
-        r.rollbackDigest,
-        r.appliedSeq,
-        r.appliedAt,
-        r.operationId,
-        r.planId,
-        r.fingerprintBefore,
-        r.fingerprintAfter,
-        r.revertedAt,
-        r.revertedByOp,
-      ],
-    )
+    await insertMirrorRow(tx, input.targetId, input.generation, r)
   }
   await tx.query(
     'migrations.mirror.state',

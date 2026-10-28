@@ -162,6 +162,8 @@ export async function planView(q: Queryable, plan: PlanRecord): Promise<PlanView
       kind.startsWith('target.') ||
       kind.startsWith('node.') ||
       kind.startsWith('migration.') ||
+      // TC-007: the ids a ledger reconciliation moves and the person's note, never a row.
+      kind === 'ledger.reconcile' ||
       // Wave 8: a drift acceptance names finding ids, fingerprints and the person's reason, never catalog text.
       kind.startsWith('drift.') ||
       // The role and the stored verifier's id, never the verifier (owner decision S3).

@@ -116,6 +116,7 @@ exit codes are in [`README.md`](./README.md).
 | [`migration import report`](#migration-import-report) | remote | read | An import report: every legacy file’s classification and the decisions so far. |
 | [`migration import resolve`](#migration-import-resolve) | remote | mutation | Record your decision for one item of an import report (with a note). |
 | [`migration import baseline`](#migration-import-baseline) | remote | plan | Plan the baseline of a resolved import report (records the legacy ledger; changes no schema). |
+| [`migration ledger reconcile`](#migration-ledger-reconcile) | remote | plan | Plan adopting the target’s ledger as the truth after a restore or a hand change; the mirror rows that differ move to a history, no row is deleted. |
 | [`plan show`](#plan-show) | remote | read | Show a plan: subject, decision, requirements, content and analysis. |
 | [`plan list`](#plan-list) | remote | read | List plans you may read, newest first (filter by target, kind, state). |
 | [`plan export`](#plan-export) | remote | read | Write a plan as JSON (to stdout, or to a new private file with --file). |
@@ -2048,6 +2049,25 @@ Runs: against the server; effect: plan; action: `migration.baseline.plan`; scope
 |---|---|
 | `report` (required) | The import report id. |
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
+| `--apply` | Apply at once and wait. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### migration ledger reconcile
+
+Plan adopting the target’s ledger as the truth after a restore or a hand change; the mirror rows that differ move to a history, no row is deleted.
+
+```text
+exponetdb migration ledger reconcile [flags]
+```
+
+Runs: against the server; effect: plan; action: `ledger.reconcile.plan`; scopes: `migrations.import`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
+| `--note <text>` | Why: what happened to the target (kept with the plan, 1 to 1000 characters). (required) |
 | `--apply` | Apply at once and wait. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |

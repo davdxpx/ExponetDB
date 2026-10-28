@@ -740,6 +740,22 @@ pairs) are untouched. Tests: `packages/operations/test/engine.int.test.ts`
 `packages/operations/test/driver.int.test.ts`,
 `packages/migrations-engine/test/recovery.int.test.ts`.
 
+**[DECIDED]** (test campaign TC-007; bundle
+`01M61C90YHV706H2B8EW39TBAF_ledger-reconcile`, depending on
+`operation-supersession`, additive, transactional, not frozen) The history of
+the mirror rows `ledger.reconcile` moves
+([`../04-migrations/ledger.md` §5](../04-migrations/ledger.md#5-mirror-and-reconciliation)):
+`migrations.ledger_mirror_history` (per row: target, generation, migration id,
+the reason `missing` or `differs`, the row as it was as `jsonb`, the operation;
+append-only, `EXA01` on any change; `exdb_serve` and `exdb_worker` may read it)
+and `migrations.archive_mirror_rows(operation, target, generation, ids, reason)`,
+a `SECURITY DEFINER` function (`search_path` pinned) that moves the named
+mirror rows to the history in one statement and answers `EXM01` unless the
+operation is a running `ledger.reconcile` whose plan is for that target.
+`exdb_worker` may execute it and still has no `DELETE` on
+`migrations.ledger_mirror`. Test:
+`packages/migrations-engine/test/reconcile.int.test.ts`.
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

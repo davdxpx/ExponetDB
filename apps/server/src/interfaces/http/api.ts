@@ -89,6 +89,7 @@ import {
   ImportReportIdSchema,
   InviteIdentityRequestSchema,
   isScope,
+  LedgerReconcileRequestSchema,
   LinkTokenSchema,
   MachineGrantRequestSchema,
   MigrationIdSchema,
@@ -1544,6 +1545,15 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         caller(call),
         target(call),
         BaselinePlanRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planLedgerReconcile: async (app, call) =>
+    value(
+      await app.migrations.planLedgerReconcile(
+        caller(call),
+        target(call),
+        LedgerReconcileRequestSchema.parse(call.body),
         idempotency(call),
       ),
     ),

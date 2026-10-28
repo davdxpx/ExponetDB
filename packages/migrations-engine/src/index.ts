@@ -47,6 +47,11 @@ export {
   type ReviewFile,
   reviewFiles,
 } from './reads.ts'
+export {
+  LedgerReconcileKind,
+  type LedgerReconcileRequest,
+  planLedgerReconcile,
+} from './reconcile.ts'
 export { type Progress, readProgress } from './records.ts'
 export {
   planMigrationResume,

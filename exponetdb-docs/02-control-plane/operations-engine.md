@@ -88,7 +88,7 @@ Initial kinds (owning wave in brackets):
 | `node.enroll`, `node.revoke` | high | 5 |
 | `access.*` (role bindings, clients, keys) | standard / high | 3 |
 | `ledger.initialize` (part of `target.register`) | standard / high | 4 |
-| `ledger.reconcile` | high | 6 |
+| `ledger.reconcile` (adopt the target's ledger as the truth after a restore or a hand change; built by the test campaign fixes, TC-007) | high | 6 |
 | `migration.resume` (continue or clean up an incomplete non-transactional bundle) | high | 6 |
 | `migration.rebaseline` (legacy import correction) | high | 6 |
 | `drift.accept` (adopt the target's current schema as its baseline; resolves the covered drift findings `accepted`; no DDL) | standard / high | 8 |

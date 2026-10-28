@@ -255,15 +255,22 @@ describe('the OpenAPI document', () => {
     expect(Object.values(r.body.paths).flatMap((p) => Object.keys(p as object)).length).toBe(
       ROUTE_LIST.length,
     )
-    // An operation that is contracted and not served yet (the ledger reconciliation plan) answers
-    // NOT_FOUND, as the document says.
+    // A path nobody serves answers NOT_FOUND, as the document says; every contracted operation is
+    // served now (the ledger reconciliation plan, TC-007, was the last one that was not).
     const unserved = await bearer(
+      undefined,
+      '/api/v1/targets/tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/ledger/not-a-route',
+      'POST',
+      {},
+    )
+    expect([unserved.status, unserved.body.code]).toEqual([404, 'NOT_FOUND'])
+    const reconcile = await bearer(
       undefined,
       '/api/v1/targets/tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/ledger/reconcile-plans',
       'POST',
       {},
     )
-    expect([unserved.status, unserved.body.code]).toEqual([404, 'NOT_FOUND'])
+    expect([reconcile.status, reconcile.body.code]).toEqual([401, 'UNAUTHENTICATED'])
     // Only a read: nothing else answers at that path.
     expect((await bearer(undefined, '/api/v1/openapi.json', 'POST', {})).status).toBe(404)
   })

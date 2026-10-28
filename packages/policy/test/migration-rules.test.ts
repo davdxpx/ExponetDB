@@ -202,6 +202,40 @@ describe('migration rules', () => {
     ).toBe('deny')
   })
 
+  it('adopts a target ledger as the truth (ledger.reconcile, TC-007) on production only after an approval and a re-authentication', async () => {
+    const rule = (d: Awaited<ReturnType<typeof decide>>, id: string) =>
+      d.rules.find((r) => r.id === id)
+    // The plan carries no migration facts: the rule reads only the tier the planner resolved.
+    const nonprod = await decide('nonprod', null, undefined, undefined, 'ledger.reconcile')
+    expect(nonprod.decision).toBe('allow')
+    expect(rule(nonprod, 'migration.ledger-reconcile-production')?.result).toBe('not_applicable')
+    const prod = await decide('prod', null, undefined, undefined, 'ledger.reconcile')
+    expect(prod.decision).toBe('require')
+    expect(rule(prod, 'migration.ledger-reconcile-production')).toMatchObject({ result: 'fail' })
+    expect(prod.requirements).toContainEqual({ kind: 'reauth', withinSeconds: 300 })
+    expect(prod.requirements).toContainEqual({
+      kind: 'approval',
+      count: 1,
+      permission: 'plans.approve',
+    })
+    // An unknown tier requires what production requires, and no break-glass grant overrides it.
+    const unknown = await decide(undefined, null, undefined, undefined, 'ledger.reconcile')
+    expect(unknown.decision).toBe('require')
+    const granted = await decide(
+      'prod',
+      null,
+      undefined,
+      {
+        grantId: 'brk_01M4A000000000000000000001',
+        rules: ['migration.ledger-reconcile-production'],
+      },
+      'ledger.reconcile',
+    )
+    expect(granted.decision).toBe('require')
+    // It is not part of the decision of any migration kind.
+    expect(rule(await decide('prod', {}), 'migration.ledger-reconcile-production')).toBeUndefined()
+  })
+
   it('re-verifies freely, unless verify.sql calls consumer code', async () => {
     const facts = { evidence: 'not_required', lineage: 'not_required' } as const
     expect((await decide('prod', facts, undefined, undefined, 'migration.verify')).decision).toBe(

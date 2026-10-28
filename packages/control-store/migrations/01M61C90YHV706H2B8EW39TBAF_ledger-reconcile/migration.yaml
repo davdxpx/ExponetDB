@@ -1,0 +1,25 @@
+schema: exponetdb.migration/v1
+id: 01M61C90YHV706H2B8EW39TBAF
+name: ledger-reconcile
+description: |
+  Test campaign TC-007 (MIG-03, failure case E25): a target restored to a
+  point older than the Control Store's mirror (or a ledger changed by hand)
+  refuses every schema plan, and nothing could unblock it. ledger.reconcile,
+  the operator's explicit decision to adopt the target's ledger as the truth,
+  moves the mirror rows that differ out of migrations.ledger_mirror and mirrors
+  the live rows. The mirror is insert-and-revert-only for the worker and
+  ledger.md promises that a reconciliation deletes no row anywhere, so the
+  rows go to migrations.ledger_mirror_history (append-only, one row per
+  mirror row, with the reason and the operation) in the same statement, and
+  only through migrations.archive_mirror_rows, a SECURITY DEFINER function the
+  worker may call for a running ledger.reconcile operation of that target and
+  no other. Additive: the worker gains no right on migrations.ledger_mirror.
+dependsOn:
+  - 01M61AGQKSBZ9VN71DHYFVCQHT
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

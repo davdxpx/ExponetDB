@@ -300,8 +300,8 @@ describe('the human renderer names the data of a refusal (TC-022)', () => {
       missing: ['a\nb'],
     })
     // biome-ignore lint/suspicious/noControlCharactersInRegex: the test looks for control characters
-    for (const line of hostile)
-      expect(line).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/)
+    const controls = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/
+    for (const line of hostile) expect(line).not.toMatch(controls)
   })
 })
 
