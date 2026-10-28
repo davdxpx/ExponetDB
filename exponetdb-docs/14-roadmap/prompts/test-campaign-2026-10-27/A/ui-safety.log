@@ -1,2 +1,0 @@
-$ bun --conditions=@exponetdb/source tooling/checks/ui-safety.ts
-ui-safety holds (1087 files scanned, 1 documented exceptions)

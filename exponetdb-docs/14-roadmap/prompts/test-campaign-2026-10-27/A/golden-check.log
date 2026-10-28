@@ -1,2 +1,0 @@
-$ bun --conditions=@exponetdb/source tooling/checks/golden-lock.ts
-golden vectors intact (16 files, all locked)

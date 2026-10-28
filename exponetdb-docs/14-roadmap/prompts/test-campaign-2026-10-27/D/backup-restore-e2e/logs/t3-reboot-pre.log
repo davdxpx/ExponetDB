@@ -1,4 +1,0 @@
-{"jobId":"job_6AKA58A8121998T6ZZJNYRRCK4","result":{"runId":"run_0Z6MK1X6J58BG738B69F5G3DE2","startedAt":"2026-10-27T20:26:24Z","unit":"exponetdb-run-run_0Z6MK1X6J58BG738B69F5G3DE2.service"}}
-started 20:26:24 (record startedAt: 2026-10-27T20:26:24Z)
-unit: active; status: {"state":"running","startedAt":"2026-10-27T20:26:24Z"}
-uptime: 2026-10-27 20:03:21; rebooting at 20:26:28

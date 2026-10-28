@@ -23,6 +23,11 @@ node are therefore kept on the test lead's machine and are not part of this chan
 - `C/node-inspect/` (node capability outputs: hba, roles, configuration, logs)
 - `C/node-plans/` (node plan bodies)
 
+The raw run outputs (`*.log` and `*.txt` in `A/` to `E/`: full suite logs, CI replica
+logs, per-test outputs) are not committed either; they are about 32,700 lines and stay
+on the test lead's machine. The reports, scripts, test sources and JSON remain, and the
+verdict of each run is in the reports and in `A/README.md`.
+
 Findings that cite these paths summarize them in the reports `C/cli-read-sweep.md`,
 `C/node-plans-report.md` and `C/live-mcp-reads.md`. The public IP address of
 `reos-db-01` in the brief is replaced by a placeholder.

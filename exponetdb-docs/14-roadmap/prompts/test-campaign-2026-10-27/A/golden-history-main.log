@@ -1,2 +1,0 @@
-$ bun --conditions=@exponetdb/source tooling/checks/golden-history.ts origin/main
-golden history intact against d02295503bcf: 453 vectors in 16 files unchanged; 0 new vectors (0 new files), all locked; 21 frozen Control Store bundles byte-identical, 0 newly frozen; 34 MCP tool versions unchanged, 0 newly pinned

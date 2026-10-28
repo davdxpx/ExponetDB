@@ -1,4 +1,0 @@
-db=
-psql: error: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "-At" does not exist
----JOBS
-psql: error: connection to server at "127.0.0.1", port 5432 failed: FATAL:  database "-At" does not exist
