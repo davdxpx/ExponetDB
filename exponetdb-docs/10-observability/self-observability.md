@@ -131,7 +131,12 @@ and the composition root of [`apps/server`](../../apps/server/README.md):
   2026-10-20) its repetitions are bounded so that it runs in linear time on
   long adversarial text (`redaction.test.ts`, "redaction stays linear"). Errors become class, code (ExponetDB
   code or SQLSTATE) and cause code; messages, PostgreSQL `DETAIL`/`WHERE`
-  and stacks are never logged. The redaction corpus
+  and stacks are never logged. **[DECIDED]** (test campaign TC-013, D-09) Every
+request the REST API answers `500 INTERNAL` writes one `http.request_failed` line
+with the error class, its code, the cause code (a SQLSTATE such as `42501`) and the
+route template (`route` takes a path, so an operation id is dropped); before this an
+error with a code outside the catalog was answered `500` and never logged, so the
+cause of a 500 could not be found. The redaction corpus
   (`packages/observability/test/redaction.test.ts`) covers credential URLs,
   conninfo, `Authorization` and `Cookie` values, JWTs, private keys, cloud
   keys, every ExponetDB token prefix (since Wave 3A also session `exst_`,

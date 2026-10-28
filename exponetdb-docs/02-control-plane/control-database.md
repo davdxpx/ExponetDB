@@ -756,6 +756,19 @@ operation is a running `ledger.reconcile` whose plan is for that target.
 `migrations.ledger_mirror`. Test:
 `packages/migrations-engine/test/reconcile.int.test.ts`.
 
+**[DECIDED]** (test campaign TC-013; bundle
+`01M61FKAJN5VP9H2E73K74NCZ2_offline-drill-record`, depending on
+`ledger-reconcile`, additive, transactional, not frozen) The attestation of an
+offline drill ([`../09-backups-and-restore/restore.md` §6](../09-backups-and-restore/restore.md)):
+`backups.record_offline_drill(...)`, a `SECURITY DEFINER` function
+(`search_path` pinned, `EXECUTE` revoked from `PUBLIC` and granted to
+`exdb_serve`) that inserts one `backups.drills` row with mode `offline_runbook`
+and no restore id, and answers `EXB06` for an outcome other than `attested` or
+`failed`. `exdb_serve` still has no `INSERT` on `backups.drills` (the frozen
+backup-catalog bundle grants it to `exdb_worker` only and its `verify.sql` states
+that serve only reads); the function is the single write the serve role gained.
+Test: `apps/server/test/http-backups.int.test.ts` (the real role set).
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

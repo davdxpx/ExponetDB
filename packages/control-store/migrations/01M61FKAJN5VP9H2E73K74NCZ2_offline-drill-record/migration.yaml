@@ -1,0 +1,22 @@
+schema: exponetdb.migration/v1
+id: 01M61FKAJN5VP9H2E73K74NCZ2
+name: offline-drill-record
+description: |
+  Test campaign TC-013 (D-09): POST /clusters/{id}/drills/offline records the
+  attestation of an offline drill (C-35) with the server's connection, and the
+  backup-catalog bundle grants INSERT on backups.drills to the worker only
+  (its verify.sql asserts that serve only reads), so every attestation was a
+  500 INTERNAL; the CLI and Web tests mocked the call. This bundle adds
+  backups.record_offline_drill, a SECURITY DEFINER function that inserts one
+  row of mode offline_runbook and nothing else, executable by exdb_serve.
+  serve still has no right on the table. The table's CHECKs tie an offline
+  drill to a digest and a recorder and its guard trigger still runs. Additive.
+dependsOn:
+  - 01M61C90YHV706H2B8EW39TBAF
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

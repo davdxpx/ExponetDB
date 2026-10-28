@@ -168,6 +168,16 @@ execution and measurement.
 | Findings | drill overdue (warning at cadence, critical at 2× cadence), drill failed, drill never run |
 | Without ExponetDB | once per quarter (and in the Wave 9 gate) the drill is run from the generated shell runbook with offline keys and the Control Plane stopped; the result is recorded afterwards (C-35) |
 
+**[DECIDED]** (test campaign TC-013, D-09) The result of a drill run from the shell
+runbook is recorded with `POST /api/v1/clusters/{clusterId}/drills/offline`
+(`exponetdb drill record-offline`): the request names the runbook digest, which must
+be the current one (`422` otherwise), and an outcome of `attested` or `failed`.
+The serve process writes the row through `backups.record_offline_drill(...)`
+([`control-database.md`](../02-control-plane/control-database.md)), not through a
+table grant, and the action is audited (`restore.drill.offline.recorded`). Before
+this the insert ran as `exdb_serve`, which holds no `INSERT` on `backups.drills`,
+and every valid request answered `500 INTERNAL`.
+
 A drill that leaves a scratch cluster behind is not `passed` until
 `restore.discard@1` has run; a scratch cluster older than 24 hours is a finding.
 

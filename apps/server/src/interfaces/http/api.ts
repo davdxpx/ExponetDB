@@ -164,6 +164,7 @@ import type { HttpEnv } from './env.ts'
 import {
   clearCookie,
   clientAddress,
+  errorCodeOf,
   HttpRefusal,
   parseCookies,
   problemResponse,
@@ -2351,11 +2352,14 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
           headers,
         })
       } catch (error) {
-        const known = error instanceof Error && 'code' in error && typeof error.code === 'string'
-        if (!known || error.code === 'INTERNAL') {
+        // Whatever the answer will be INTERNAL for is logged: an error with a code outside the
+        // catalog (a Control Store permission, a driver error) used to be answered 500 and
+        // never logged, so the cause of a 500 could not be found (TC-013, D-09).
+        if (errorCodeOf(error) === 'INTERNAL') {
           deps.logger.error('http.request_failed', {
             ...describeError(error),
-            route: route.operationId,
+            // The route template: the logger's allowlist keeps only a path here.
+            route: route.path,
           })
         }
         // A target outside a restricted delegation answers like an unknown one; why is
