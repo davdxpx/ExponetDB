@@ -1,0 +1,14 @@
+schema: exponetdb.migration/v1
+id: 01M622JN2NJB0Z8MMYKJF9WY6H
+name: s02-add-column-nullable
+description: |
+  Public id as a nullable column without default: metadata only. Backfill runs outside the engine in batches.
+dependsOn:
+  - 01M622JMN4WW89HRB85EW6P25B
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

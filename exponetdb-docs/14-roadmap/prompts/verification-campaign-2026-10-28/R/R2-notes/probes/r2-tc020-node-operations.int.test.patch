@@ -1,0 +1,55 @@
+--- a/apps/server/test/node-operations.int.test.ts
++++ b/apps/server/test/node-operations.int.test.ts (R2 probe r2-tc020-node-operations.int.test.ts)
+@@ -557,6 +557,52 @@
+     }
+   })
+ 
++  it('R2 PROBE TC-020: a CLI grant with nodes.plan and without nodes.operate withdraws its own node plan', async () => {
++    const { w, node } = await setup('nonprod')
++    const { rows } = await db.asSuperuser((c) =>
++      c.query('SELECT label_number FROM auth.identities WHERE identity_id = $1', [owner.identityId]),
++    )
++    const callerWith = async (scopes: readonly string[]): Promise<Caller> => ({
++      kind: 'bearer',
++      principal: {
++        kind: 'delegated',
++        identityId: owner.identityId as IdentityId,
++        identityKind: 'human',
++        label: `human #${rows[0]?.label_number}`,
++        client: 'cli',
++        delegation: {
++          credential: {
++            type: 'access_token',
++            grantId: await cliGrant(scopes),
++            clientId: FIRST_PARTY_CLI as OAuthClientId,
++            grantKind: 'delegated',
++          },
++          resource: 'api',
++          scopes: new Set(scopes) as never,
++          restrictions: { targets: { kind: 'all' }, tiers: ['prod', 'nonprod'] },
++        },
++      },
++      resource: 'api',
++    })
++    const planner = await callerWith(['nodes.read', 'nodes.plan'])
++    const plan = await application.nodes.planOperation(planner, node.nodeId, {
++      clusterId: w.clusterId,
++      change: { kind: 'postgres.reload' },
++    })
++    const outcome = await application.withdraw(planner, plan.id).then(
++      (v) => `withdrawn (state ${v.state})`,
++      (e: { code?: string; message?: string }) => `refused ${e.code}`,
++    )
++    console.log('R2-TC020 own postgres.reload plan, scopes nodes.read+nodes.plan:', outcome)
++    const operator = await callerWith(['nodes.read', 'nodes.plan', 'nodes.operate:nonprod'])
++    const outcome2 = await application.withdraw(operator, plan.id).then(
++      (v) => `withdrawn (state ${v.state})`,
++      (e: { code?: string }) => `refused ${e.code}`,
++    )
++    console.log('R2-TC020 same plan, scopes nodes.read+nodes.plan+nodes.operate:nonprod:', outcome2)
++    await node.stop()
++  })
++
+   it('makes a plan stale when its cluster became production before apply', async () => {
+     const { w, node } = await setup('nonprod')
+     const plan = await planReload(w, node)

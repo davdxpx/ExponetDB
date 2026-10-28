@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622J6BK7BP26AQZ33EXB79Q
+name: h18-enum-add-value-and-use
+description: |
+  Add the refunded status and use it in the same bundle (PostgreSQL refuses the use before commit).
+dependsOn:
+  - 01M622J5WK27Q1PEY2C504WVW8
+execution:
+  transactional: true
+compatibility:
+  declared: data_rewrite
+  notes: h18 is data_rewrite by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

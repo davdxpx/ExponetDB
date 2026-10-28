@@ -1,0 +1,12 @@
+schema: exponetdb.project/v1
+project: demo/hazard
+layout: bundles
+defaults:
+  role: owner
+  searchPath: ["public"]
+executionRoles:
+  owner: shop_owner
+managedScope:
+  includeSchemas: ["public"]
+  excludeSchemas: []
+lintProfile: strict

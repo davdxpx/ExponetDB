@@ -1,0 +1,1 @@
+ALTER TABLE public.events ATTACH PARTITION public.events_2026_11 FOR VALUES FROM ('2026-11-01') TO ('2026-12-01');

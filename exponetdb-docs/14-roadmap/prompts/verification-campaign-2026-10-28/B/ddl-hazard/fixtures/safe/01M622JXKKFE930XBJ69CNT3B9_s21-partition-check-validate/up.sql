@@ -1,0 +1,1 @@
+ALTER TABLE public.events_2026_11 VALIDATE CONSTRAINT events_2026_11_bounds;

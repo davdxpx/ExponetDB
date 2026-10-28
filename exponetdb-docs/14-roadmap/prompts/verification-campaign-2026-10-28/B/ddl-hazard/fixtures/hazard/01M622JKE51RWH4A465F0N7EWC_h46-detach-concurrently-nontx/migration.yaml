@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622JKE51RWH4A465F0N7EWC
+name: h46-detach-concurrently-nontx
+description: |
+  The same detach in a non-transactional bundle, which PostgreSQL requires for CONCURRENTLY.
+dependsOn:
+  - 01M622JJZ34EH5RTXTWY98KJQE
+execution:
+  transactional: false
+compatibility:
+  declared: destructive
+  notes: h46 is destructive by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

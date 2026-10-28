@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622JCBZ6A146MCPGWCV6WG3
+name: h31-alter-extension-update
+description: |
+  Update pg_trgm to the newest installed version.
+dependsOn:
+  - 01M622JBTZB5AZQGDFEHZHFXBX
+execution:
+  transactional: true
+compatibility:
+  declared: data_rewrite
+  notes: h31 is data_rewrite by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622J02APCZ3Y4ZGB95G5PZW
+name: h04-add-column-volatile-uuid
+description: |
+  Public id for the orders: gen_random_uuid() is volatile, so every row is rewritten.
+dependsOn:
+  - 01M622HZKE0Y0HZ85Q9ERPBMV4
+execution:
+  transactional: true
+compatibility:
+  declared: data_rewrite
+  notes: h04 is data_rewrite by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

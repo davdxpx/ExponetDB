@@ -1,0 +1,16 @@
+schema: exponetdb.migration/v1
+id: 01M622JW96B0VV1J3PZWC8RFFP
+name: s18-drop-column-contract
+description: |
+  Contract step: drop legacy_ref after the deployed build stopped reading it.
+dependsOn:
+  - 01M622JVTY3DMAE0KHDXH8ZSCP
+execution:
+  transactional: true
+  lockTimeout: 2s
+compatibility:
+  declared: destructive
+  notes: s18 is destructive by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

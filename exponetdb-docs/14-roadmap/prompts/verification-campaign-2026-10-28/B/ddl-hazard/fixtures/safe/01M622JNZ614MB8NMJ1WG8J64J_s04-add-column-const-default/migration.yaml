@@ -1,0 +1,14 @@
+schema: exponetdb.migration/v1
+id: 01M622JNZ614MB8NMJ1WG8J64J
+name: s04-add-column-const-default
+description: |
+  Archived flag with a constant default: PostgreSQL 11 and later add it without a rewrite.
+dependsOn:
+  - 01M622JNHG1WFFYW2C598GMDEK
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

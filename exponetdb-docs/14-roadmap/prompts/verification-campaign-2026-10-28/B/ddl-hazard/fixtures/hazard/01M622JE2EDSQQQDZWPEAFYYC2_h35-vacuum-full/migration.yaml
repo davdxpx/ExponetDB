@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622JE2EDSQQQDZWPEAFYYC2
+name: h35-vacuum-full
+description: |
+  Reclaim space with VACUUM FULL: rewrites the table under ACCESS EXCLUSIVE.
+dependsOn:
+  - 01M622JDMNWS011K77D8QDE4BV
+execution:
+  transactional: false
+compatibility:
+  declared: data_rewrite
+  notes: h35 is data_rewrite by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

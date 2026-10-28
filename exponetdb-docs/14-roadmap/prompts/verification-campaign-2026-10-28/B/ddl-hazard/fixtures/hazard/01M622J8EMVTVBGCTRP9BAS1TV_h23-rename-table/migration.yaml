@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622J8EMVTVBGCTRP9BAS1TV
+name: h23-rename-table
+description: |
+  Rename order_items to order_lines in place.
+dependsOn:
+  - 01M622J80HK6HQJB7TA476R1JP
+execution:
+  transactional: true
+compatibility:
+  declared: potentially_breaking
+  notes: h23 is potentially_breaking by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

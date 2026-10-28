@@ -1,0 +1,14 @@
+schema: exponetdb.migration/v1
+id: 01M622HYK4WNP6B985S47W1ST7
+name: h01-create-index-plain
+description: |
+  Index the orders by customer. Plain CREATE INDEX: SHARE lock for the whole build.
+dependsOn:
+  - 01M622HY2Y403ZKJJJ38ZKKEK5
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

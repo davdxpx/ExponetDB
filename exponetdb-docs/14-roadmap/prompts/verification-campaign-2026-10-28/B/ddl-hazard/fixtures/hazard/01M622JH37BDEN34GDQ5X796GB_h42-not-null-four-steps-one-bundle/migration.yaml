@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622JH37BDEN34GDQ5X796GB
+name: h42-not-null-four-steps-one-bundle
+description: |
+  The documented NOT NULL recipe in one transactional bundle: the lock of the first statement is held through the validating scan.
+dependsOn:
+  - 01M622JGHJE9Y29WTEH1Z5XD1F
+execution:
+  transactional: true
+compatibility:
+  declared: potentially_breaking
+  notes: h42 is potentially_breaking by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

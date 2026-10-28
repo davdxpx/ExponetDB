@@ -1,0 +1,14 @@
+schema: exponetdb.migration/v1
+id: 01M622JVDXV7R7CAHN5MVBMXD2
+name: s16-enum-add-value-alone
+description: |
+  Add the refunded status; the value is used by a later migration.
+dependsOn:
+  - 01M622JV11SRK09SE5DP4QXH88
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

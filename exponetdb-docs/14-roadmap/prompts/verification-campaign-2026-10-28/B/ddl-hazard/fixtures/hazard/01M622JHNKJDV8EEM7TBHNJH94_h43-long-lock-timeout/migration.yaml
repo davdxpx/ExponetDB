@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622JHNKJDV8EEM7TBHNJH94
+name: h43-long-lock-timeout
+description: |
+  A two hour lock_timeout on a cheap statement (the docs say 60 s is the maximum without an acknowledgement).
+dependsOn:
+  - 01M622JH37BDEN34GDQ5X796GB
+execution:
+  transactional: true
+  lockTimeout: 2h
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

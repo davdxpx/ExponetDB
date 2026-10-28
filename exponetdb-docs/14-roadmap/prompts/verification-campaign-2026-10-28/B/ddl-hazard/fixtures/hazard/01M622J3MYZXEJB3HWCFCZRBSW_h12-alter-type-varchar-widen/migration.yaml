@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622J3MYZXEJB3HWCFCZRBSW
+name: h12-alter-type-varchar-widen
+description: |
+  Note grows from varchar(200) to varchar(500): widening a varchar needs no rewrite.
+dependsOn:
+  - 01M622J37JJSKCFFZVFWH3SQPX
+execution:
+  transactional: true
+compatibility:
+  declared: data_rewrite
+  notes: h12 is data_rewrite by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

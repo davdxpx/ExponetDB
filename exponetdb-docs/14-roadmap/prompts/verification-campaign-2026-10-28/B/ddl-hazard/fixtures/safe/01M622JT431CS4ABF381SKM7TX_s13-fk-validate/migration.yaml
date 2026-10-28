@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622JT431CS4ABF381SKM7TX
+name: s13-fk-validate
+description: |
+  Step 2: validate the foreign key; SHARE UPDATE EXCLUSIVE on the child, writes continue.
+dependsOn:
+  - 01M622JSMKX2VSXJBFFCQ9NXYW
+execution:
+  transactional: true
+compatibility:
+  declared: potentially_breaking
+  notes: s13 is potentially_breaking by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

@@ -1,0 +1,14 @@
+schema: exponetdb.migration/v1
+id: 01M622JBABXN97MC4WCZEN7XVJ
+name: h29-create-policy
+description: |
+  Row policy on the orders for the app role.
+dependsOn:
+  - 01M622JAWDASHHETZ7EAF8YM6S
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

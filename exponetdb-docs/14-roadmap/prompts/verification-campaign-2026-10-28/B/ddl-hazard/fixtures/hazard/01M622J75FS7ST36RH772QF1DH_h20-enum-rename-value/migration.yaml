@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622J75FS7ST36RH772QF1DH
+name: h20-enum-rename-value
+description: |
+  Rename the status new to created: code that compares with the old label breaks.
+dependsOn:
+  - 01M622J6QZSC6ABFAPD8X4V41V
+execution:
+  transactional: true
+compatibility:
+  declared: potentially_breaking
+  notes: h20 is potentially_breaking by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

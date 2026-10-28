@@ -1,0 +1,16 @@
+schema: exponetdb.migration/v1
+id: 01M622K0FQ1SBV55JZJ689NDJH
+name: s27-create-trigger-short-lock
+description: |
+  Audit trigger on the orders with a 2 s lock timeout so it never queues the application for long.
+dependsOn:
+  - 01M622JZXQ09J0MCAT64FXFB9R
+execution:
+  transactional: true
+  lockTimeout: 2s
+compatibility:
+  declared: potentially_breaking
+  notes: s27 is potentially_breaking by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

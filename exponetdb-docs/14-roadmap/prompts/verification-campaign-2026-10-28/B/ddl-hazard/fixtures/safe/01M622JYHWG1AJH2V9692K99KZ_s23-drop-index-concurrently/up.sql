@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS public.idx_orders_old;

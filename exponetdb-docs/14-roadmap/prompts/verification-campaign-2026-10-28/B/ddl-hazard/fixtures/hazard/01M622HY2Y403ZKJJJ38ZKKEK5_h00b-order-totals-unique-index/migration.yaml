@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622HY2Y403ZKJJJ38ZKKEK5
+name: h00b-order-totals-unique-index
+description: |
+  Unique index on the order totals so REFRESH ... CONCURRENTLY works; built concurrently like any index.
+dependsOn:
+  - 01M622HXN2C4RCJSGXZJKVBN7D
+execution:
+  transactional: false
+compatibility:
+  declared: potentially_breaking
+  notes: h00b is potentially_breaking by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

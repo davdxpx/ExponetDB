@@ -1,0 +1,25 @@
+### h31 ALTER EXTENSION ... UPDATE inside a transaction (pg_trgm 1.5 -> newest)
+before: 1.5
+after:  1.6
+relation locks: -
+### h35 VACUUM FULL: rewrite and lock conflict with a plain reader (lock_timeout 500ms)
+ERROR:  canceling statement due to lock timeout
+relfilenode changed by VACUUM FULL: true
+### h41 CREATE INDEX CONCURRENTLY failure leaves an INVALID index; the same statement with IF NOT EXISTS skips it
+ERROR:  could not create unique index "dup_probe_v"
+DETAIL:  Key (v)=(1) is duplicated.
+after failure: dup_probe_v indisvalid=false indisready=false
+NOTICE:  relation "dup_probe_v" already exists, skipping
+after the retry: dup_probe_v indisvalid=false
+### locks of concurrent builds, sampled from a second session while a slow index expression keeps them open
+CREATE INDEX slow_plain ON public.slow_probe ((chk.slow(id)))  ->  slow_probe:ShareLock
+CREATE INDEX CONCURRENTLY slow_conc ON public.slow_probe ((chk.slow(id)))  ->  slow_probe:ShareUpdateExclusiveLock
+REINDEX TABLE CONCURRENTLY  ->  slow_probe:ShareUpdateExclusiveLock
+### lock queue: DDL waits behind a reader, a later plain SELECT queues behind the DDL (lock_timeout = engine default 5s)
+baseline SELECT: 0.085 s
+DDL session: ERROR:  canceling statement due to lock timeout
+SELECT issued 1 s after the DDL started waiting: 4.097 s (the reader holds the table for 9 s, the DDL gives up after 5 s)
+column q1 exists after the timeout: false
+### h45 DETACH PARTITION CONCURRENTLY only works in autocommit (then re-attach to restore)
+autocommit detach: ok
+re-attached

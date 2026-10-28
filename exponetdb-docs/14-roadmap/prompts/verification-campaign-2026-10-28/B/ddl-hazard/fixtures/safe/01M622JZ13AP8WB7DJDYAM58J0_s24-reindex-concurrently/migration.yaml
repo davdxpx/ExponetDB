@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622JZ13AP8WB7DJDYAM58J0
+name: s24-reindex-concurrently
+description: |
+  Rebuild the indexes of the orders without blocking writes.
+dependsOn:
+  - 01M622JYHWG1AJH2V9692K99KZ
+execution:
+  transactional: false
+  statementTimeout: 1h
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

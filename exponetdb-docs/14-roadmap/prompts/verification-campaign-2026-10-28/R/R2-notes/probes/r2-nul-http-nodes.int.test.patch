@@ -1,0 +1,34 @@
+--- a/apps/server/test/http-nodes.int.test.ts
++++ b/apps/server/test/http-nodes.int.test.ts (R2 probe r2-nul-http-nodes.int.test.ts)
+@@ -454,6 +454,31 @@
+     expect(refused.body).toMatchObject({ code: 'NODE_ALREADY_ENROLLED' })
+ 
+     // Revocation, then decommissioning, both re-authenticated at apply.
++    // R2 PROBE (TC-019 neighbour): an ACTIVE, unexpired plan whose stored body holds an escaped NUL (valid JSON text that
++    // jsonb refuses, 22P05; the class fixed for GET /fleet in #44). The impact count of the new revoke plan
++    // casts every plan body to jsonb.
++    await db.asSuperuser(async (c) => {
++      const pid = newId('pln', Date.now())
++      const body = JSON.stringify({ nonce: pid, subject: { tier: 'nonprod' }, reason: 'nul \u0000 inside' })
++      await c.query('BEGIN')
++      await c.query("SET LOCAL session_replication_role = 'replica'")
++      await c.query(
++        `INSERT INTO operations.plans (plan_id, kind, kind_version, action_class, state, decision, plan_hash,
++           content_checksum, policy_version, actor_kind, client_kind, created_at, expires_at)
++         VALUES ($1, 'migration.apply', 1, 'standard', 'active', 'allow',
++           'sha256:' || encode(sha256(convert_to($2::text, 'UTF8')), 'hex'),
++           'sha256:' || repeat('a', 64), 'sha256:pv1:' || repeat('b', 64), 'system', 'system',
++           now(), now() + interval '30 minutes')`,
++        [pid, body],
++      )
++      await c.query('INSERT INTO operations.plan_bodies (plan_id, body) VALUES ($1, $2)', [pid, body])
++      await c.query('COMMIT')
++    })
++    // Can a NUL reach a stored plan body through the API itself? (displayName with an escaped NUL)
++    const viaApi = await owner.browser.call('POST', '/api/v1/products', { slug: 'r2nulprobe', displayName: 'a\u0000b' })
++    console.log('R2-PROBE-NUL product plan with \\u0000 in displayName via REST: status', viaApi.status, String(viaApi.body?.code ?? viaApi.body?.state ?? ''), 'plan id present', Boolean(viaApi.body?.id))
++    const probe = await owner.browser.call('POST', `/api/v1/nodes/${enrolled.nodeId}/revoke`, {})
++    console.log('R2-PROBE-NUL revoke plan with an escaped-NUL body stored: status', probe.status, JSON.stringify(probe.body).slice(0, 200))
+     const revoke = await plan(`/api/v1/nodes/${enrolled.nodeId}/revoke`)
+     // The plan says what it does and what it needs (TC-019): the effect, what depends on the
+     // node, and the fresh re-authentication that the apply will ask for.

@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622JAWDASHHETZ7EAF8YM6S
+name: h28-create-trigger
+description: |
+  Audit trigger on the hot orders table: SHARE ROW EXCLUSIVE, then a function call per row.
+dependsOn:
+  - 01M622JACJD2X8190X9G7WNJR2
+execution:
+  transactional: true
+compatibility:
+  declared: potentially_breaking
+  notes: h28 is potentially_breaking by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

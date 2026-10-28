@@ -1,0 +1,14 @@
+schema: exponetdb.migration/v1
+id: 01M622JWQXH9HACYA9B29HWDPK
+name: s19-rename-expand-memo
+description: |
+  Expand step of a rename: a new memo column next to note; dual-write, copy, then contract.
+dependsOn:
+  - 01M622JW96B0VV1J3PZWC8RFFP
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

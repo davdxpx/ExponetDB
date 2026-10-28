@@ -1,0 +1,16 @@
+schema: exponetdb.migration/v1
+id: 01M622JTJVMBRZN9YR9MYK5R2F
+name: s14-unique-index-concurrently
+description: |
+  Order refs must be unique, step 1: build the unique index concurrently.
+dependsOn:
+  - 01M622JT431CS4ABF381SKM7TX
+execution:
+  transactional: false
+  statementTimeout: 1h
+compatibility:
+  declared: potentially_breaking
+  notes: s14 is potentially_breaking by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

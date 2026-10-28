@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622J9CW6RB3M5EB8JFYS82G
+name: h25-update-no-where
+description: |
+  Normalize notes with one UPDATE over the whole table.
+dependsOn:
+  - 01M622J8XRQAH6BCH6ZCD6MVWY
+execution:
+  transactional: true
+compatibility:
+  declared: data_rewrite
+  notes: h25 is data_rewrite by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

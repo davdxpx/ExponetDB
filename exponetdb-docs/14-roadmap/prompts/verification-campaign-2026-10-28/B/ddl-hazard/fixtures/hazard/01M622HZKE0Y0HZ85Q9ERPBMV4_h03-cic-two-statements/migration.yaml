@@ -1,0 +1,14 @@
+schema: exponetdb.migration/v1
+id: 01M622HZKE0Y0HZ85Q9ERPBMV4
+name: h03-cic-two-statements
+description: |
+  Two concurrent index builds in one non-transactional bundle (a failure leaves a half-done state).
+dependsOn:
+  - 01M622HZ3CA4BTDHEY4B0S12JX
+execution:
+  transactional: false
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

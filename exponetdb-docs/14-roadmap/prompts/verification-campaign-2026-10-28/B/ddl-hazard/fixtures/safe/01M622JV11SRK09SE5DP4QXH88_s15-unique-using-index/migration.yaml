@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622JV11SRK09SE5DP4QXH88
+name: s15-unique-using-index
+description: |
+  Step 2: attach the finished index as the constraint; no scan, no rebuild.
+dependsOn:
+  - 01M622JTJVMBRZN9YR9MYK5R2F
+execution:
+  transactional: true
+compatibility:
+  declared: potentially_breaking
+  notes: s15 is potentially_breaking by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

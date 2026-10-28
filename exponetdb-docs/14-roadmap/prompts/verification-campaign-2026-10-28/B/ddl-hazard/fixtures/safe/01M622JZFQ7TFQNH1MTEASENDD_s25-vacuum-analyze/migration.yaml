@@ -1,0 +1,14 @@
+schema: exponetdb.migration/v1
+id: 01M622JZFQ7TFQNH1MTEASENDD
+name: s25-vacuum-analyze
+description: |
+  Plain VACUUM (ANALYZE) instead of VACUUM FULL: no rewrite, SHARE UPDATE EXCLUSIVE.
+dependsOn:
+  - 01M622JZ13AP8WB7DJDYAM58J0
+execution:
+  transactional: false
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

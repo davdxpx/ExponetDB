@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622J2T01NWD4EXD9CVR8ZA9
+name: h10-add-column-generated-stored
+description: |
+  Cents as a stored generated column: computed for every row, a full rewrite.
+dependsOn:
+  - 01M622J2C3TPB48J2F9QYMFAJV
+execution:
+  transactional: true
+compatibility:
+  declared: data_rewrite
+  notes: h10 is data_rewrite by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

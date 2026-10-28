@@ -1,0 +1,1 @@
+ALTER TABLE public.events DETACH PARTITION public.events_2026_10 CONCURRENTLY;

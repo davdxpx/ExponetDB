@@ -1,0 +1,13 @@
+schema: exponetdb.migration/v1
+id: 01M622HXN2C4RCJSGXZJKVBN7D
+name: h00-base-shop-schema
+description: |
+  The shop schema every other fixture changes: orders, order_items, events, a view and a materialized view.
+dependsOn: []
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

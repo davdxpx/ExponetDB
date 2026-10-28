@@ -1,0 +1,27 @@
+--- a/apps/server/test/http-drift-accept.int.test.ts
++++ b/apps/server/test/http-drift-accept.int.test.ts (R2 probe r2-tc034-http-drift-accept.int.test.ts)
+@@ -640,6 +640,24 @@
+     // Nothing runs while the approval is missing.
+     await drive()
+     expect((await operation(applied.body.id)).state).toBe('awaiting_approval')
++    // R2 PROBE (TC-034): the plan of the awaiting operation expires before anyone approves.
++    await db.asSuperuser(async (c) => {
++      await c.query('BEGIN')
++      await c.query("SET LOCAL session_replication_role = 'replica'")
++      await c.query("UPDATE operations.plans SET expires_at = now() - interval '2 hours', created_at = now() - interval '3 hours' WHERE plan_id = $1", [planned.body.id])
++      await c.query('COMMIT')
++    })
++    await drive()
++    const afterExpiry = await operation(applied.body.id)
++    console.log('R2-TC034 operation state after its plan expired and the worker ran:', afterExpiry.state, 'nextAction', JSON.stringify(afterExpiry.nextAction ?? null), 'approvalUrl present', Boolean(afterExpiry.approvalUrl))
++    const planRow = await rows<{ state: string }>('SELECT state FROM operations.plans WHERE plan_id = $1', [planned.body.id])
++    console.log('R2-TC034 plan row state', JSON.stringify(planRow))
++    await owner.reauth()
++    const late = await owner.browser.call('POST', `/api/v1/approvals/${applied.body.id}/approve`, { planHash: planned.body.planHash, acknowledgeSelfApproval: true })
++    console.log('R2-TC034 approve after expiry ->', late.status, String(late.body?.code ?? ''), String(late.body?.state ?? ''))
++    await drive()
++    console.log('R2-TC034 operation state after the late approval:', (await operation(applied.body.id)).state)
++    return
+     await owner.reauth()
+     expect(
+       (

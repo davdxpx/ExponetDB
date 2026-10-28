@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622JY2SEFTEK46ADMEVDFGG
+name: s22-partition-attach
+description: |
+  Step 3: attach (the validated CHECK replaces the partition scan) and drop the helper CHECK.
+dependsOn:
+  - 01M622JXKKFE930XBJ69CNT3B9
+execution:
+  transactional: true
+compatibility:
+  declared: potentially_breaking
+  notes: s22 is potentially_breaking by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

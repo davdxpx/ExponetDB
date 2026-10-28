@@ -1,0 +1,47 @@
+--- a/apps/server/test/http-nodes.int.test.ts
++++ b/apps/server/test/http-nodes.int.test.ts (R2 probe r2-nul-bulk-http-nodes.int.test.ts)
+@@ -454,6 +454,44 @@
+     expect(refused.body).toMatchObject({ code: 'NODE_ALREADY_ENROLLED' })
+ 
+     // Revocation, then decommissioning, both re-authenticated at apply.
++    // R2 PROBE (TC-019 neighbour): an CONSUMED plan (bulk variant) whose stored body holds an escaped NUL (valid JSON text that
++    // jsonb refuses, 22P05; the class fixed for GET /fleet in #44). The impact count of the new revoke plan
++    // casts every plan body to jsonb.
++    await db.asSuperuser(async (c) => {
++      // R2: a realistic history of consumed plans first, then ANALYZE, so the planner may scan plan_bodies whole
++      await c.query('BEGIN')
++      await c.query("SET LOCAL session_replication_role = 'replica'")
++      await c.query(`INSERT INTO operations.plans (plan_id, kind, kind_version, action_class, state, decision, plan_hash,
++           content_checksum, policy_version, actor_kind, client_kind, created_at, expires_at)
++         SELECT 'pln_01M6' || lpad(g::text, 22, '0'), 'migration.apply', 1, 'standard', 'consumed', 'allow',
++           'sha256:' || md5(g::text) || md5((g+1)::text), 'sha256:' || repeat('a', 64), 'sha256:pv1:' || repeat('b', 64), 'system', 'system',
++           now() - interval '2 hour', now() - interval '1 hour' FROM generate_series(1, 20000) g`)
++      await c.query(`INSERT INTO operations.plan_bodies (plan_id, body)
++         SELECT 'pln_01M6' || lpad(g::text, 22, '0'), '{"nonce":"' || g || '","subject":{"tier":"nonprod"}}' FROM generate_series(1, 20000) g`)
++      await c.query('COMMIT')
++      await c.query('ANALYZE operations.plans')
++      await c.query('ANALYZE operations.plan_bodies')
++      const pid = newId('pln', Date.now())
++      const body = JSON.stringify({ nonce: pid, subject: { tier: 'nonprod' }, reason: 'nul \u0000 inside' })
++      await c.query('BEGIN')
++      await c.query("SET LOCAL session_replication_role = 'replica'")
++      await c.query(
++        `INSERT INTO operations.plans (plan_id, kind, kind_version, action_class, state, decision, plan_hash,
++           content_checksum, policy_version, actor_kind, client_kind, created_at, expires_at)
++         VALUES ($1, 'migration.apply', 1, 'standard', 'consumed', 'allow',
++           'sha256:' || encode(sha256(convert_to($2::text, 'UTF8')), 'hex'),
++           'sha256:' || repeat('a', 64), 'sha256:pv1:' || repeat('b', 64), 'system', 'system',
++           now() - interval '2 hour', now() - interval '1 hour')`,
++        [pid, body],
++      )
++      await c.query('INSERT INTO operations.plan_bodies (plan_id, body) VALUES ($1, $2)', [pid, body])
++      await c.query('COMMIT')
++    })
++    // Can a NUL reach a stored plan body through the API itself? (displayName with an escaped NUL)
++    const viaApi = await owner.browser.call('POST', '/api/v1/products', { slug: 'r2nulprobe', displayName: 'a\u0000b' })
++    console.log('R2-PROBE-NUL product plan with \\u0000 in displayName via REST: status', viaApi.status, String(viaApi.body?.code ?? viaApi.body?.state ?? ''), 'plan id present', Boolean(viaApi.body?.id))
++    const probe = await owner.browser.call('POST', `/api/v1/nodes/${enrolled.nodeId}/revoke`, {})
++    console.log('R2-PROBE-NUL-BULK revoke plan, ONE CONSUMED plan body with an escaped NUL among 20,000 analysed ones: status', probe.status, JSON.stringify(probe.body).slice(0, 200))
+     const revoke = await plan(`/api/v1/nodes/${enrolled.nodeId}/revoke`)
+     // The plan says what it does and what it needs (TC-019): the effect, what depends on the
+     // node, and the fresh re-authentication that the apply will ask for.

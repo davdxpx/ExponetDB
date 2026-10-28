@@ -1,0 +1,14 @@
+schema: exponetdb.migration/v1
+id: 01M622J1CYFNX5DC3F14RT4BQA
+name: h07-add-column-immutable-fn
+description: |
+  Slug column with an immutable function default: no rewrite, the value is computed once.
+dependsOn:
+  - 01M622J0YZJ6JZRG1V26GRPX5K
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

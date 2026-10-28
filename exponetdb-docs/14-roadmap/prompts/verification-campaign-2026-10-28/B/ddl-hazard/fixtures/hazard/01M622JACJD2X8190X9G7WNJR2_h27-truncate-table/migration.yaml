@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622JACJD2X8190X9G7WNJR2
+name: h27-truncate-table
+description: |
+  Empty the audit log with TRUNCATE (ACCESS EXCLUSIVE, no row-level undo).
+dependsOn:
+  - 01M622J9WR139E269TK50EVBBQ
+execution:
+  transactional: true
+compatibility:
+  declared: destructive
+  notes: h27 is destructive by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

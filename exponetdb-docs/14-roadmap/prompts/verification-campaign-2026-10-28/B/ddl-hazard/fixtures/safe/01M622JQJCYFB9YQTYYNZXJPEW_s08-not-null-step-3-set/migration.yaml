@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622JQJCYFB9YQTYYNZXJPEW
+name: s08-not-null-step-3-set
+description: |
+  Step 3 and 4: SET NOT NULL uses the validated CHECK (no scan), then the CHECK is dropped.
+dependsOn:
+  - 01M622JQ5YQSE3FGWNZDNEA4DJ
+execution:
+  transactional: true
+compatibility:
+  declared: potentially_breaking
+  notes: s08 is potentially_breaking by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

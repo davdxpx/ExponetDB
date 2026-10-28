@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622K29EQFHREP7DNJ2S7RTA
+name: s30-varchar-widen-no-rewrite
+description: |
+  Note grows to varchar(500): no rewrite in PostgreSQL, same statement as the hazard fixture.
+dependsOn:
+  - 01M622K1NDBHZA354DN3WB2RVC
+execution:
+  transactional: true
+compatibility:
+  declared: data_rewrite
+  notes: s30 is data_rewrite by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

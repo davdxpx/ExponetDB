@@ -1,0 +1,16 @@
+schema: exponetdb.migration/v1
+id: 01M622JZXQ09J0MCAT64FXFB9R
+name: s26-enable-rls-with-policy
+description: |
+  Enable row level security together with the policy in one transaction: no window without a policy.
+dependsOn:
+  - 01M622JZFQ7TFQNH1MTEASENDD
+execution:
+  transactional: true
+  lockTimeout: 2s
+compatibility:
+  declared: potentially_breaking
+  notes: s26 is potentially_breaking by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

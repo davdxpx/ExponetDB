@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622JS2ANB5KR7S16XA9QBTN
+name: s11-fk-index-concurrently
+description: |
+  Index the foreign key column of the child before the constraint exists.
+dependsOn:
+  - 01M622JRH4RZHQ8BYT725WZQC0
+execution:
+  transactional: false
+  statementTimeout: 1h
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

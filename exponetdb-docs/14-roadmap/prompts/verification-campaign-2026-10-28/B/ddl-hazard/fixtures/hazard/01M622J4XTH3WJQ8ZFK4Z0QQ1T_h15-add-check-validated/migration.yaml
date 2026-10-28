@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622J4XTH3WJQ8ZFK4Z0QQ1T
+name: h15-add-check-validated
+description: |
+  Amounts must not be negative: a validated CHECK scans the table under ACCESS EXCLUSIVE.
+dependsOn:
+  - 01M622J4FTVGD76EJZN8JPDGQM
+execution:
+  transactional: true
+compatibility:
+  declared: potentially_breaking
+  notes: h15 is potentially_breaking by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

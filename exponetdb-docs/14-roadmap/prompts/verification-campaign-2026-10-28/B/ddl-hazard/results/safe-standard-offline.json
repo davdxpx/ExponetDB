@@ -1,0 +1,1427 @@
+{
+ "profile": "standard",
+ "mode": "offline",
+ "major": 17,
+ "noCovers": false,
+ "graphValid": true,
+ "bundles": [
+  {
+   "id": "h00",
+   "name": "h00-base-shop-schema",
+   "transactional": true,
+   "declared": "additive",
+   "observed": "additive",
+   "flags": [
+    "additive"
+   ],
+   "lockSeverity": "high",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "CREATE TYPE AS ENUM",
+     "lock": null,
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    },
+    {
+     "kind": "CREATE TABLE",
+     "lock": null,
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    },
+    {
+     "kind": "CREATE TABLE",
+     "lock": null,
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    },
+    {
+     "kind": "CREATE INDEX",
+     "lock": {
+      "mode": "SHARE",
+      "severity": "high",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    },
+    {
+     "kind": "CREATE TABLE",
+     "lock": null,
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    },
+    {
+     "kind": "CREATE TABLE",
+     "lock": null,
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    },
+    {
+     "kind": "CREATE TABLE",
+     "lock": null,
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    },
+    {
+     "kind": "CREATE TABLE",
+     "lock": null,
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    },
+    {
+     "kind": "CREATE TABLE",
+     "lock": null,
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    },
+    {
+     "kind": "CREATE VIEW",
+     "lock": null,
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    },
+    {
+     "kind": "CREATE MATERIALIZED VIEW",
+     "lock": null,
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    },
+    {
+     "kind": "CREATE FUNCTION",
+     "lock": null,
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    },
+    {
+     "kind": "GRANT",
+     "lock": null,
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.execution-role-parity",
+     "migration.lock-risk"
+    ],
+    "requirements": [
+     "approval"
+    ]
+   }
+  },
+  {
+   "id": "h00b",
+   "name": "h00b-order-totals-unique-index",
+   "transactional": false,
+   "declared": "potentially_breaking",
+   "observed": "potentially_breaking",
+   "flags": [
+    "potentially_breaking"
+   ],
+   "lockSeverity": "low",
+   "autocommitStatements": 1,
+   "statements": [
+    {
+     "kind": "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS",
+     "lock": {
+      "mode": "SHARE UPDATE EXCLUSIVE",
+      "severity": "low",
+      "objects": [
+       "public.order_totals"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": false,
+     "compatibility": "potentially_breaking"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.compatibility",
+     "migration.execution-role-parity",
+     "migration.nontransactional"
+    ],
+    "requirements": [
+     "approval",
+     "reauth"
+    ]
+   }
+  },
+  {
+   "id": "s01",
+   "name": "s01-create-index-concurrently",
+   "transactional": false,
+   "declared": "additive",
+   "observed": "additive",
+   "flags": [
+    "additive"
+   ],
+   "lockSeverity": "low",
+   "autocommitStatements": 1,
+   "statements": [
+    {
+     "kind": "CREATE INDEX CONCURRENTLY IF NOT EXISTS",
+     "lock": {
+      "mode": "SHARE UPDATE EXCLUSIVE",
+      "severity": "low",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": false,
+     "compatibility": "additive"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.execution-role-parity",
+     "migration.nontransactional"
+    ],
+    "requirements": [
+     "approval",
+     "reauth"
+    ]
+   }
+  },
+  {
+   "id": "s02",
+   "name": "s02-add-column-nullable",
+   "transactional": true,
+   "declared": "additive",
+   "observed": "additive",
+   "flags": [
+    "additive"
+   ],
+   "lockSeverity": "high",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "ACCESS EXCLUSIVE",
+      "severity": "high",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.execution-role-parity",
+     "migration.lock-risk"
+    ],
+    "requirements": [
+     "approval"
+    ]
+   }
+  },
+  {
+   "id": "s03",
+   "name": "s03-set-default-new-rows",
+   "transactional": true,
+   "declared": "additive",
+   "observed": "additive",
+   "flags": [
+    "additive"
+   ],
+   "lockSeverity": "high",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "ACCESS EXCLUSIVE",
+      "severity": "high",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.execution-role-parity",
+     "migration.lock-risk"
+    ],
+    "requirements": [
+     "approval"
+    ]
+   }
+  },
+  {
+   "id": "s04",
+   "name": "s04-add-column-const-default",
+   "transactional": true,
+   "declared": "additive",
+   "observed": "additive",
+   "flags": [
+    "additive"
+   ],
+   "lockSeverity": "high",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "ACCESS EXCLUSIVE",
+      "severity": "high",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.execution-role-parity",
+     "migration.lock-risk"
+    ],
+    "requirements": [
+     "approval"
+    ]
+   }
+  },
+  {
+   "id": "s05",
+   "name": "s05-expand-numeric-amount",
+   "transactional": true,
+   "declared": "additive",
+   "observed": "additive",
+   "flags": [
+    "additive"
+   ],
+   "lockSeverity": "high",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "ACCESS EXCLUSIVE",
+      "severity": "high",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.execution-role-parity",
+     "migration.lock-risk"
+    ],
+    "requirements": [
+     "approval"
+    ]
+   }
+  },
+  {
+   "id": "s06",
+   "name": "s06-not-null-step-1-check",
+   "transactional": true,
+   "declared": "potentially_breaking",
+   "observed": "potentially_breaking",
+   "flags": [
+    "potentially_breaking"
+   ],
+   "lockSeverity": "high",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "ACCESS EXCLUSIVE",
+      "severity": "high",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "potentially_breaking"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.compatibility",
+     "migration.execution-role-parity",
+     "migration.lock-risk"
+    ],
+    "requirements": [
+     "approval"
+    ]
+   }
+  },
+  {
+   "id": "s07",
+   "name": "s07-not-null-step-2-validate",
+   "transactional": true,
+   "declared": "potentially_breaking",
+   "observed": "potentially_breaking",
+   "flags": [
+    "potentially_breaking"
+   ],
+   "lockSeverity": "low",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "SHARE UPDATE EXCLUSIVE",
+      "severity": "low",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "potentially_breaking"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.compatibility",
+     "migration.execution-role-parity"
+    ],
+    "requirements": [
+     "approval"
+    ]
+   }
+  },
+  {
+   "id": "s08",
+   "name": "s08-not-null-step-3-set",
+   "transactional": true,
+   "declared": "potentially_breaking",
+   "observed": "potentially_breaking",
+   "flags": [
+    "potentially_breaking"
+   ],
+   "lockSeverity": "critical",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "ACCESS EXCLUSIVE",
+      "severity": "critical",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "potentially_breaking"
+    },
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "ACCESS EXCLUSIVE",
+      "severity": "high",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "potentially_breaking"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [
+    {
+     "rule": "unsafe_not_null",
+     "level": "warn",
+     "blocking": true,
+     "factsUnavailable": true,
+     "message": "SET NOT NULL on customer_id scans the table under ACCESS EXCLUSIVE."
+    }
+   ],
+   "policy": {
+    "decision": "deny",
+    "failed": [
+     "migration.compatibility",
+     "migration.execution-role-parity",
+     "migration.lint-errors",
+     "migration.lock-risk"
+    ],
+    "requirements": []
+   }
+  },
+  {
+   "id": "s09",
+   "name": "s09-check-not-valid",
+   "transactional": true,
+   "declared": "potentially_breaking",
+   "observed": "potentially_breaking",
+   "flags": [
+    "potentially_breaking"
+   ],
+   "lockSeverity": "high",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "ACCESS EXCLUSIVE",
+      "severity": "high",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "potentially_breaking"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.compatibility",
+     "migration.execution-role-parity",
+     "migration.lock-risk"
+    ],
+    "requirements": [
+     "approval"
+    ]
+   }
+  },
+  {
+   "id": "s10",
+   "name": "s10-check-validate",
+   "transactional": true,
+   "declared": "potentially_breaking",
+   "observed": "potentially_breaking",
+   "flags": [
+    "potentially_breaking"
+   ],
+   "lockSeverity": "low",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "SHARE UPDATE EXCLUSIVE",
+      "severity": "low",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "potentially_breaking"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.compatibility",
+     "migration.execution-role-parity"
+    ],
+    "requirements": [
+     "approval"
+    ]
+   }
+  },
+  {
+   "id": "s11",
+   "name": "s11-fk-index-concurrently",
+   "transactional": false,
+   "declared": "additive",
+   "observed": "additive",
+   "flags": [
+    "additive"
+   ],
+   "lockSeverity": "low",
+   "autocommitStatements": 1,
+   "statements": [
+    {
+     "kind": "CREATE INDEX CONCURRENTLY IF NOT EXISTS",
+     "lock": {
+      "mode": "SHARE UPDATE EXCLUSIVE",
+      "severity": "low",
+      "objects": [
+       "public.order_items"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": false,
+     "compatibility": "additive"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.execution-role-parity",
+     "migration.nontransactional"
+    ],
+    "requirements": [
+     "approval",
+     "reauth"
+    ]
+   }
+  },
+  {
+   "id": "s12",
+   "name": "s12-fk-not-valid",
+   "transactional": true,
+   "declared": "potentially_breaking",
+   "observed": "potentially_breaking",
+   "flags": [
+    "potentially_breaking"
+   ],
+   "lockSeverity": "medium",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "SHARE ROW EXCLUSIVE",
+      "severity": "medium",
+      "objects": [
+       "public.order_items",
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "potentially_breaking"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.compatibility",
+     "migration.execution-role-parity"
+    ],
+    "requirements": [
+     "approval"
+    ]
+   }
+  },
+  {
+   "id": "s13",
+   "name": "s13-fk-validate",
+   "transactional": true,
+   "declared": "potentially_breaking",
+   "observed": "potentially_breaking",
+   "flags": [
+    "potentially_breaking"
+   ],
+   "lockSeverity": "low",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "SHARE UPDATE EXCLUSIVE",
+      "severity": "low",
+      "objects": [
+       "public.order_items"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "potentially_breaking"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.compatibility",
+     "migration.execution-role-parity"
+    ],
+    "requirements": [
+     "approval"
+    ]
+   }
+  },
+  {
+   "id": "s14",
+   "name": "s14-unique-index-concurrently",
+   "transactional": false,
+   "declared": "potentially_breaking",
+   "observed": "potentially_breaking",
+   "flags": [
+    "potentially_breaking"
+   ],
+   "lockSeverity": "low",
+   "autocommitStatements": 1,
+   "statements": [
+    {
+     "kind": "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS",
+     "lock": {
+      "mode": "SHARE UPDATE EXCLUSIVE",
+      "severity": "low",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": false,
+     "compatibility": "potentially_breaking"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.compatibility",
+     "migration.execution-role-parity",
+     "migration.nontransactional"
+    ],
+    "requirements": [
+     "approval",
+     "reauth"
+    ]
+   }
+  },
+  {
+   "id": "s15",
+   "name": "s15-unique-using-index",
+   "transactional": true,
+   "declared": "potentially_breaking",
+   "observed": "potentially_breaking",
+   "flags": [
+    "potentially_breaking"
+   ],
+   "lockSeverity": "critical",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "ACCESS EXCLUSIVE",
+      "severity": "critical",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "potentially_breaking"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [
+    {
+     "rule": "add_constraint_without_not_valid",
+     "level": "warn",
+     "blocking": true,
+     "factsUnavailable": true,
+     "message": "A validated constraint on public.orders scans it under lock."
+    }
+   ],
+   "policy": {
+    "decision": "deny",
+    "failed": [
+     "migration.compatibility",
+     "migration.execution-role-parity",
+     "migration.lint-errors",
+     "migration.lock-risk"
+    ],
+    "requirements": []
+   }
+  },
+  {
+   "id": "s16",
+   "name": "s16-enum-add-value-alone",
+   "transactional": true,
+   "declared": "additive",
+   "observed": "additive",
+   "flags": [
+    "additive"
+   ],
+   "lockSeverity": "none",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TYPE ADD VALUE",
+     "lock": null,
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "allow",
+    "failed": [
+     "migration.execution-role-parity"
+    ],
+    "requirements": []
+   }
+  },
+  {
+   "id": "s17",
+   "name": "s17-enum-use-value-later",
+   "transactional": true,
+   "declared": "data_rewrite",
+   "observed": "data_rewrite",
+   "flags": [
+    "data_rewrite"
+   ],
+   "lockSeverity": "low",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "UPDATE",
+     "lock": {
+      "mode": "ROW EXCLUSIVE",
+      "severity": "low",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "data_rewrite"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.compatibility",
+     "migration.destructive-backup",
+     "migration.execution-role-parity"
+    ],
+    "requirements": [
+     "approval",
+     "backup"
+    ]
+   }
+  },
+  {
+   "id": "s18",
+   "name": "s18-drop-column-contract",
+   "transactional": true,
+   "declared": "destructive",
+   "observed": "destructive",
+   "flags": [
+    "destructive"
+   ],
+   "lockSeverity": "high",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "ACCESS EXCLUSIVE",
+      "severity": "high",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "destructive"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [
+    {
+     "rule": "drop_without_expand_contract",
+     "level": "info",
+     "blocking": false,
+     "factsUnavailable": false,
+     "message": "ALTER TABLE: the running build may still use what is dropped."
+    }
+   ],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.compatibility",
+     "migration.destructive-backup",
+     "migration.execution-role-parity",
+     "migration.lock-risk"
+    ],
+    "requirements": [
+     "approval",
+     "backup"
+    ]
+   }
+  },
+  {
+   "id": "s19",
+   "name": "s19-rename-expand-memo",
+   "transactional": true,
+   "declared": "additive",
+   "observed": "additive",
+   "flags": [
+    "additive"
+   ],
+   "lockSeverity": "high",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "ACCESS EXCLUSIVE",
+      "severity": "high",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.execution-role-parity",
+     "migration.lock-risk"
+    ],
+    "requirements": [
+     "approval"
+    ]
+   }
+  },
+  {
+   "id": "s20",
+   "name": "s20-partition-check-not-valid",
+   "transactional": true,
+   "declared": "potentially_breaking",
+   "observed": "potentially_breaking",
+   "flags": [
+    "potentially_breaking"
+   ],
+   "lockSeverity": "high",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "ACCESS EXCLUSIVE",
+      "severity": "high",
+      "objects": [
+       "public.events_2026_11"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "potentially_breaking"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.compatibility",
+     "migration.execution-role-parity",
+     "migration.lock-risk"
+    ],
+    "requirements": [
+     "approval"
+    ]
+   }
+  },
+  {
+   "id": "s21",
+   "name": "s21-partition-check-validate",
+   "transactional": true,
+   "declared": "potentially_breaking",
+   "observed": "potentially_breaking",
+   "flags": [
+    "potentially_breaking"
+   ],
+   "lockSeverity": "low",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "SHARE UPDATE EXCLUSIVE",
+      "severity": "low",
+      "objects": [
+       "public.events_2026_11"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "potentially_breaking"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.compatibility",
+     "migration.execution-role-parity"
+    ],
+    "requirements": [
+     "approval"
+    ]
+   }
+  },
+  {
+   "id": "s22",
+   "name": "s22-partition-attach",
+   "transactional": true,
+   "declared": "potentially_breaking",
+   "observed": "potentially_breaking",
+   "flags": [
+    "potentially_breaking"
+   ],
+   "lockSeverity": "high",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "SHARE UPDATE EXCLUSIVE",
+      "severity": "high",
+      "objects": [
+       "public.events"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "potentially_breaking"
+    },
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "ACCESS EXCLUSIVE",
+      "severity": "high",
+      "objects": [
+       "public.events_2026_11"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "potentially_breaking"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.compatibility",
+     "migration.execution-role-parity",
+     "migration.lock-risk"
+    ],
+    "requirements": [
+     "approval"
+    ]
+   }
+  },
+  {
+   "id": "s23",
+   "name": "s23-drop-index-concurrently",
+   "transactional": false,
+   "declared": "potentially_breaking",
+   "observed": "potentially_breaking",
+   "flags": [
+    "potentially_breaking"
+   ],
+   "lockSeverity": "low",
+   "autocommitStatements": 1,
+   "statements": [
+    {
+     "kind": "DROP INDEX CONCURRENTLY",
+     "lock": {
+      "mode": "SHARE UPDATE EXCLUSIVE",
+      "severity": "low",
+      "objects": [
+       "table of public.idx_orders_old"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": false,
+     "compatibility": "potentially_breaking"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.compatibility",
+     "migration.execution-role-parity",
+     "migration.nontransactional"
+    ],
+    "requirements": [
+     "approval",
+     "reauth"
+    ]
+   }
+  },
+  {
+   "id": "s24",
+   "name": "s24-reindex-concurrently",
+   "transactional": false,
+   "declared": "additive",
+   "observed": "additive",
+   "flags": [
+    "additive"
+   ],
+   "lockSeverity": "low",
+   "autocommitStatements": 1,
+   "statements": [
+    {
+     "kind": "REINDEX CONCURRENTLY",
+     "lock": {
+      "mode": "SHARE UPDATE EXCLUSIVE",
+      "severity": "low",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": false,
+     "compatibility": "additive"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.execution-role-parity",
+     "migration.nontransactional"
+    ],
+    "requirements": [
+     "approval",
+     "reauth"
+    ]
+   }
+  },
+  {
+   "id": "s25",
+   "name": "s25-vacuum-analyze",
+   "transactional": false,
+   "declared": "additive",
+   "observed": "additive",
+   "flags": [
+    "additive"
+   ],
+   "lockSeverity": "low",
+   "autocommitStatements": 1,
+   "statements": [
+    {
+     "kind": "VACUUM",
+     "lock": {
+      "mode": "SHARE UPDATE EXCLUSIVE",
+      "severity": "low",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": false,
+     "compatibility": "additive"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.execution-role-parity",
+     "migration.nontransactional"
+    ],
+    "requirements": [
+     "approval",
+     "reauth"
+    ]
+   }
+  },
+  {
+   "id": "s26",
+   "name": "s26-enable-rls-with-policy",
+   "transactional": true,
+   "declared": "potentially_breaking",
+   "observed": "potentially_breaking",
+   "flags": [
+    "potentially_breaking",
+    "additive"
+   ],
+   "lockSeverity": "high",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "ACCESS EXCLUSIVE",
+      "severity": "high",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "potentially_breaking"
+    },
+    {
+     "kind": "CREATE POLICY",
+     "lock": {
+      "mode": "ACCESS EXCLUSIVE",
+      "severity": "high",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.compatibility",
+     "migration.execution-role-parity",
+     "migration.lock-risk"
+    ],
+    "requirements": [
+     "approval"
+    ]
+   }
+  },
+  {
+   "id": "s27",
+   "name": "s27-create-trigger-short-lock",
+   "transactional": true,
+   "declared": "potentially_breaking",
+   "observed": "potentially_breaking",
+   "flags": [
+    "potentially_breaking"
+   ],
+   "lockSeverity": "medium",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "CREATE TRIGGER",
+     "lock": {
+      "mode": "SHARE ROW EXCLUSIVE",
+      "severity": "medium",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "potentially_breaking"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.compatibility",
+     "migration.execution-role-parity"
+    ],
+    "requirements": [
+     "approval"
+    ]
+   }
+  },
+  {
+   "id": "s28",
+   "name": "s28-new-view-instead-of-replace",
+   "transactional": true,
+   "declared": "additive",
+   "observed": "additive",
+   "flags": [
+    "additive"
+   ],
+   "lockSeverity": "none",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "CREATE VIEW",
+     "lock": null,
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "additive"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "allow",
+    "failed": [
+     "migration.execution-role-parity"
+    ],
+    "requirements": []
+   }
+  },
+  {
+   "id": "s29",
+   "name": "s29-refresh-matview-concurrently",
+   "transactional": true,
+   "declared": "data_rewrite",
+   "observed": "data_rewrite",
+   "flags": [
+    "data_rewrite"
+   ],
+   "lockSeverity": "medium",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "REFRESH MATERIALIZED VIEW CONCURRENTLY",
+     "lock": {
+      "mode": "EXCLUSIVE",
+      "severity": "medium",
+      "objects": [
+       "public.order_totals"
+      ]
+     },
+     "rewrite": "none",
+     "transactional": true,
+     "compatibility": "data_rewrite"
+    }
+   ],
+   "rewriteRisk": [],
+   "findings": [],
+   "policy": {
+    "decision": "require",
+    "failed": [
+     "migration.compatibility",
+     "migration.destructive-backup",
+     "migration.execution-role-parity"
+    ],
+    "requirements": [
+     "approval",
+     "backup"
+    ]
+   }
+  },
+  {
+   "id": "s30",
+   "name": "s30-varchar-widen-no-rewrite",
+   "transactional": true,
+   "declared": "data_rewrite",
+   "observed": "data_rewrite",
+   "flags": [
+    "data_rewrite",
+    "potentially_breaking"
+   ],
+   "lockSeverity": "critical",
+   "autocommitStatements": 0,
+   "statements": [
+    {
+     "kind": "ALTER TABLE",
+     "lock": {
+      "mode": "ACCESS EXCLUSIVE",
+      "severity": "critical",
+      "objects": [
+       "public.orders"
+      ]
+     },
+     "rewrite": "possible",
+     "transactional": true,
+     "compatibility": "data_rewrite"
+    }
+   ],
+   "rewriteRisk": [
+    {
+     "relation": "public.orders",
+     "bytes": 81920,
+     "rows": 1000,
+     "estimate": true
+    }
+   ],
+   "findings": [
+    {
+     "rule": "type_change_rewrite",
+     "level": "warn",
+     "blocking": true,
+     "factsUnavailable": true,
+     "message": "ALTER COLUMN TYPE may rewrite the table and rebuild its indexes."
+    }
+   ],
+   "policy": {
+    "decision": "deny",
+    "failed": [
+     "migration.compatibility",
+     "migration.destructive-backup",
+     "migration.execution-role-parity",
+     "migration.lint-errors",
+     "migration.lock-risk"
+    ],
+    "requirements": []
+   }
+  }
+ ]
+}

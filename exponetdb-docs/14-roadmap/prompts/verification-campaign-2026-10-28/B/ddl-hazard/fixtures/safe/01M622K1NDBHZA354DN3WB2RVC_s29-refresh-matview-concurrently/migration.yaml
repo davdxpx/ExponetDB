@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622K1NDBHZA354DN3WB2RVC
+name: s29-refresh-matview-concurrently
+description: |
+  Refresh the order totals without blocking readers (needs the unique index order_totals_pk).
+dependsOn:
+  - 01M622K10NWT19XXTWC7CV3PJG
+execution:
+  transactional: true
+compatibility:
+  declared: data_rewrite
+  notes: s29 is data_rewrite by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

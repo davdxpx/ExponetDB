@@ -1,0 +1,28 @@
+--- a/packages/diagnostics/test/diagnostics.int.test.ts
++++ b/packages/diagnostics/test/diagnostics.int.test.ts (R2 probe r2-tc017-diagnostics.int.test.ts)
+@@ -963,3 +963,25 @@
+     throw new TargetError('TARGET_UNAVAILABLE', 'connect_refused')
+   }
+ }
++
++describe('R2 PROBE TC-017: drift against a baseline taken before 80 tables were copied in', () => {
++  it('opens one critical-or-warning finding per object', async () => {
++    const t = await registerTarget('r2probe', 'r2probe')
++    const stmts: string[] = []
++    for (let i = 0; i < 80; i++) {
++      stmts.push(
++        `CREATE TABLE public.r2_t${i} (id int PRIMARY KEY, tenant uuid)`,
++        `ALTER TABLE public.r2_t${i} ENABLE ROW LEVEL SECURITY`,
++        `CREATE POLICY r2_p${i} ON public.r2_t${i} USING (true)`,
++        `GRANT SELECT ON public.r2_t${i} TO PUBLIC`,
++      )
++    }
++    await runAsSuperuser(pg17, databaseName, stmts)
++    const r = await runDriftCheck(workerDeps(), t, 'schedule')
++    const bySeverity: Record<string, number> = {}
++    for (const i of r.items) bySeverity[`${i.item.code}/${i.item.severity}`] = (bySeverity[`${i.item.code}/${i.item.severity}`] ?? 0) + 1
++    const open = await openFindings(h.worker, t.targetId, 'drift')
++    console.log('R2-TC017 drift check:', r.check.status, 'drifted', r.check.drifted, 'opened', r.check.opened, 'open findings', open.length, JSON.stringify(bySeverity))
++    expect(open.length).toBeGreaterThan(0)
++  })
++})

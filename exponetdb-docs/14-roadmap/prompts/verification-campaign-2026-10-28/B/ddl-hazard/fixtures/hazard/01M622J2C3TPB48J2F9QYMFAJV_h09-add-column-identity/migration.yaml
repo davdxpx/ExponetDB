@@ -1,0 +1,14 @@
+schema: exponetdb.migration/v1
+id: 01M622J2C3TPB48J2F9QYMFAJV
+name: h09-add-column-identity
+description: |
+  Line number as an identity column: backed by nextval(), PostgreSQL rewrites the table.
+dependsOn:
+  - 01M622J1X60QVYVAYT4XQ8R73D
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

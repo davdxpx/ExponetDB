@@ -1,0 +1,15 @@
+schema: exponetdb.migration/v1
+id: 01M622JGHJE9Y29WTEH1Z5XD1F
+name: h40-refresh-matview
+description: |
+  Refresh the order totals: ACCESS EXCLUSIVE on the view for the whole query.
+dependsOn:
+  - 01M622JG194GJ8Z1F2MJNZ53GW
+execution:
+  transactional: true
+compatibility:
+  declared: data_rewrite
+  notes: h40 is data_rewrite by design (DDL hazard fixture).
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql
