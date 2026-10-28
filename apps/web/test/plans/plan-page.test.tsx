@@ -335,6 +335,58 @@ describe('the plan review page', () => {
     expect(change.querySelector('[data-untrusted]')?.textContent).toContain(SERVER)
   })
 
+  it('shows what the node reported next to the change of a pg_hba plan (TC-001)', async () => {
+    const world = new World()
+    world.plans.set(
+      PLAN,
+      nodeEnrollPlan({
+        kind: 'postgres.hba.apply',
+        subject: {
+          targetId: null,
+          targetPath: null,
+          clusterId: 'cls_01M5J4RDBP52B715X5HDFKDN5F',
+          nodeId: 'nod_01M5XZ84V768SYCHZKRNGJFQP2',
+          tier: 'nonprod',
+        },
+        change: {
+          content: {
+            change: {
+              managedRules: [
+                {
+                  type: 'hostssl',
+                  database: ['all'],
+                  user: ['app'],
+                  address: '10.8.0.0/16',
+                  method: 'scram-sha-256',
+                  map: null,
+                },
+              ],
+              protectedAccess: [],
+            },
+          },
+          analysis: {
+            managedBlockBefore: ['hostssl all app 10.9.0.0/16 scram-sha-256'],
+            foreignRules: 3,
+            managedRulesAfter: 1,
+          },
+        },
+      } as never),
+    )
+    mountApp(`/changes/plans/${PLAN}`, world)
+    const change = (await waitFor(() => {
+      const element = document.querySelector('details[data-plan-block="change"]')
+      if (!(element instanceof HTMLElement)) throw new Error('no stored change yet')
+      return element
+    })) as HTMLDetailsElement
+    // The closed disclosure holds the change and what the node reported, both as data.
+    expect(change.open).toBe(false)
+    const texts = [...change.querySelectorAll('[data-untrusted]')].map((e) => e.textContent ?? '')
+    expect(texts.some((t) => t.includes('10.8.0.0/16'))).toBe(true)
+    expect(texts.some((t) => t.includes('managedBlockBefore') && t.includes('10.9.0.0/16'))).toBe(
+      true,
+    )
+  })
+
   it('names the server by its id in the title when its record failed to read', async () => {
     const world = new World()
     world.plans.set(PLAN, nodeEnrollPlan())

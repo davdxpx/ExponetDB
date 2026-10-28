@@ -15,6 +15,7 @@ export const plansMessages = {
     'The stored change as data, not checked by ExponetDB. No text in it can approve anything or change what the facts above say.',
   'plans.change.none': 'This plan stores no change content that the page can show.',
   'plans.change.label': 'Stored change',
+  'plans.change.analysisLabel': 'What the node reported',
   // The title says what happens: the kind of the plan and its subject. The same words name an
   // operation of that kind. `{subject}` is the target path, or the name of the server or
   // cluster (untrusted text), or its ID when the name could not be read.

@@ -648,14 +648,30 @@ function StoredChange({ plan }: { readonly plan: PlanSource }): ReactNode {
         {plan.change === undefined ? (
           <p className="m-0 text-sm text-foreground-light">{t('plans.change.none')}</p>
         ) : (
-          <UntrustedText
-            className="change"
-            text={JSON.stringify(plan.change.content, null, 2) ?? ''}
-            mono
-            maxLines={60}
-            maxCodePoints={20_000}
-            label={t('plans.change.label')}
-          />
+          <>
+            <UntrustedText
+              className="change"
+              text={JSON.stringify(plan.change.content, null, 2) ?? ''}
+              mono
+              maxLines={60}
+              maxCodePoints={20_000}
+              label={t('plans.change.label')}
+            />
+            {plan.change.analysis === null ||
+            plan.change.analysis === undefined ||
+            Object.keys(plan.change.analysis).length === 0 ? null : (
+              // What the node reported about the cluster (a pg_hba plan's block before, a
+              // restart's connections), data like the change itself (TC-001).
+              <UntrustedText
+                className="change"
+                text={JSON.stringify(plan.change.analysis, null, 2) ?? ''}
+                mono
+                maxLines={60}
+                maxCodePoints={20_000}
+                label={t('plans.change.analysisLabel')}
+              />
+            )}
+          </>
         )}
       </div>
     </details>

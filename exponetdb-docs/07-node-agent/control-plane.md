@@ -296,6 +296,19 @@ at most 10 minutes old, otherwise `NODE_OBSERVATION_STALE`. The plan content
 is the exact change and the mapping; the expected state binds the node id
 and state, the mapping and the basis observation's digest; the analysis is
 taken from the observation, so the person approves what the node reported.
+**[DECIDED]** (test campaign TC-001) The plan view (`GET /plans/{id}`, the CLI
+`plan show`, the Web plan page) carries that content and analysis as `change`
+for the seven kinds above that are `postgres.*`, so the person sees the
+pg_hba block before and after and the protected access, the connections a
+restart would sever per role, the parameters with their effect, the role and
+extension steps and the certificate names. The host's own files and
+directories (`dataDirectory`, `hbaFile`, `sourcefile`, `file`, `path`,
+`certFile`, `keyFile`, `directory`) are left out wherever the observation
+holds them, and the node already withholds host text by export class; no
+verifier or key is in these plans at all. `credential.rotate` and
+`node.config.update` keep their content out of the view. Proven by
+`packages/application/test/views.test.ts`, `apps/cli/test/foundation.test.ts`
+and `apps/web/test/plans/plan-page.test.tsx`.
 
 | Kind | Change | Basis observation (its digest) | Analysis, refusals at plan time | Jobs at apply |
 |---|---|---|---|---|
