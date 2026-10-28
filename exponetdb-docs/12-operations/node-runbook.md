@@ -412,8 +412,21 @@ stored but not journaled is settled at the first start) or for the helper
 (a ledger without its record gets one at the first start; a helper that
 never served creates its ledger then). A node enrolled by the previous
 release that never started needs step 2. From the first job on, the
-journal is in format 2: an older agent refuses every job with
-`journal_corrupt`, so a downgrade means enrolling the host again (step 3).
+journal is in format 2: an agent of a release **before the Wave 5
+correction** (F7) refuses every job with `journal_corrupt`, so a downgrade
+below the correction means enrolling the host again (step 3).
+**[OBSERVED]** (test campaign TC-068, GAP-04) Releases 0.6.0 and 0.7.0 both
+write format 2: a node enrolled with 0.6.0, upgraded to 0.7.0 and used (12
+journal jobs), then downgraded to 0.6.0, kept its journal, nonce and effect
+ledger prefixes byte for byte and ran a job. What a downgrade does break:
+
+- **The configuration.** A `config.json` with a field the older release does
+  not know makes its agent and helper refuse to start (`configuration: json:
+  unknown field "pgbackrestConfig"`: a crash loop, the node `offline`). Remove
+  the fields added since (`pgbackrestConfig` came with 0.7.0) before the older
+  binary starts.
+- **The capabilities.** What only the newer release has (`backup.timers@1`)
+  answers `CAPABILITY_UNAVAILABLE`.
 
 **Verify:** `exponetdb-node status` prints the journal's jobs, the
 helper's log has no "lost" line, and an inspection succeeds (§4).
@@ -454,7 +467,9 @@ unclassified, and changes what counts as a node's trust in a job key.
    (`credential.rotate`, [`control-plane.md` §9.7](../07-node-agent/control-plane.md)).
 
 A downgrade below the correction is not supported (§8): enroll the host
-again instead.
+again instead. A downgrade from 0.7.0 to 0.6.0 needs no re-enrollment, but the
+configuration must lose the fields of the newer release first (§8, "Upgrade and
+downgrade").
 
 ## 10. OD-28: node exports stored before the correction (owner only)
 
