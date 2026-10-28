@@ -173,7 +173,6 @@ exit codes are in [`README.md`](./README.md).
 | [`access identities`](#access-identities) | remote | read | Identities (people and service accounts). |
 | [`access roles`](#access-roles) | remote | read | The built-in roles and their permissions. |
 | [`access bindings`](#access-bindings) | remote | read | Role bindings (who holds which role where). |
-| [`access grants`](#access-grants) | remote | read | Your own OAuth grants (applications you connected). |
 | [`access clients`](#access-clients) | remote | read | Registered OAuth clients (names are untrusted text). |
 | [`dev up`](#dev-up) | local | local | Create or start a local lab: Control Store, staging and production targets, serve, worker and gateway. |
 | [`dev status`](#dev-status) | local | read | The lab’s roles and readiness, its image against the source, the active and the last run (exit 0 only when ready). |
@@ -3126,16 +3125,6 @@ Runs: against the server; effect: read; action: `role_binding.list`; scopes: `ac
 | `--limit <number>` | Items to show (1 to 10000). (default 50) |
 | `--all` | Every page (at most 10000 items). |
 | `--cursor <cursor>` | Continue after a previous page. |
-
-### access grants
-
-Your own OAuth grants (applications you connected).
-
-```text
-exponetdb access grants
-```
-
-Runs: against the server; effect: read; action: `oauth.grant.list_own`; output: `GrantList`.
 
 ### access clients
 

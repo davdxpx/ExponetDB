@@ -1152,6 +1152,19 @@ const remoteCommands: readonly CommandSpec[] = [
       const { remote, check: r } = await runScratchCheck(ctx, input)
       return result({
         command: 'migration import scratch-check',
+        // A scratch that cannot take the replay yet is not a success (a script reads the exit code).
+        ...(r.ready
+          ? {}
+          : {
+              status: 'error' as const,
+              exitCode: EXIT.failure,
+              error: {
+                code: 'SCRATCH_NOT_READY',
+                message: 'The scratch target cannot take this target’s legacy replay yet.',
+                remediation:
+                  'Read the failed checks; the objects it lacks can be copied with migration import scratch-copy-commands.',
+              },
+            }),
         data: r,
         blocks: [header('scratch check', remote.context), ...scratchCheckView(r)],
         next: r.ready
@@ -1414,6 +1427,10 @@ async function runScratchCheck(
   const remote = await ctx.remote()
   const params = { target: String(input.flags['target']) }
   const scratchTarget = String(input.flags['scratch'])
+  // The scratch is resolved first: the server answers a scratch that does not exist with a check
+  // result (`scratch_usable` failed), which read as "nothing to copy" or "not ready" and exit 0
+  // (TC-032). A scratch that does not exist is TARGET_NOT_FOUND.
+  must(await remote.sdk.call('getTarget', { params: { target: scratchTarget } }))
   const alias = flag(input, 'role') ?? hints['role']
   const role = typeof alias === 'string' ? { role: alias } : {}
   const check =

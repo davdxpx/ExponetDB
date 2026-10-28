@@ -2,7 +2,7 @@ import { EXIT } from '../cli/exit.ts'
 import { arg, flag, listCommand } from '../cli/reads.ts'
 import { must } from '../cli/remote.ts'
 import type { CommandSpec } from '../cli/types.ts'
-import { ago, dash, header } from '../output/format.ts'
+import { dash, header } from '../output/format.ts'
 import { result } from '../output/model.ts'
 
 /**
@@ -253,45 +253,6 @@ export const accessCommands: readonly CommandSpec[] = [
     ],
     row: (b) => [b.id, b.identityId, b.roleId, JSON.stringify(b.scope), b.state],
   }),
-  {
-    path: ['access', 'grants'],
-    summary: 'Your own OAuth grants (applications you connected).',
-    group: 'access',
-    locality: 'remote',
-    effect: 'read',
-    action: 'oauth.grant.list_own',
-    output: 'GrantList',
-    async run(ctx) {
-      const remote = await ctx.remote()
-      const v = must(await remote.sdk.call('listMyGrants', {}))
-      const now = ctx.io.now()
-      return result({
-        command: 'access grants',
-        items: v.items,
-        blocks: [
-          header('grants', remote.context),
-          {
-            kind: 'table',
-            columns: [
-              { title: 'GRANT' },
-              { title: 'CLIENT', flexible: true },
-              { title: 'STATE' },
-              { title: 'SCOPES', flexible: true },
-              { title: 'LAST USED' },
-            ],
-            rows: v.items.map((g) => [
-              g.id,
-              g.client.name,
-              g.state,
-              g.scopes.join(' '),
-              ago(g.lastTokenAt, now),
-            ]),
-            empty: 'No grants.',
-          },
-        ],
-      })
-    },
-  },
   listCommand({
     path: ['access', 'clients'],
     summary: 'Registered OAuth clients (names are untrusted text).',

@@ -306,6 +306,16 @@ export const nodeCommands: readonly CommandSpec[] = [
     title: 'nodes',
     operation: 'listNodes',
     noun: 'node',
+    // The route has no server filter: an unknown server is an error (not an empty list), and the
+    // nodes of the others are left out here (TC-031).
+    params: async (input, remote) => {
+      const serverId = input.flags['server']
+      if (typeof serverId === 'string') {
+        must(await remote.sdk.call('getServer', { params: { serverId } }))
+      }
+      return undefined as never
+    },
+    keep: (n, input) => input.flags['server'] === undefined || n.serverId === input.flags['server'],
     columns: [
       { title: 'NODE' },
       { title: 'SERVER' },
@@ -695,6 +705,8 @@ export const nodeCommands: readonly CommandSpec[] = [
     async run(ctx, input) {
       const serverId = arg(input, 'server')
       const remote = await ctx.remote()
+      // An unknown server is not "no node has enrolled yet" (TC-031).
+      must(await remote.sdk.call('getServer', { params: { serverId } }))
       const until = ctx.io.now() + Number(input.flags['timeout-wait'] ?? 900_000)
       for (;;) {
         const items = []

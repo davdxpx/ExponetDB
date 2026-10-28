@@ -47,6 +47,8 @@ export async function collect<Id extends ListId>(
   query: Omit<Operations[Id]['query'], 'limit' | 'cursor'>,
   flags: Readonly<Record<string, unknown>>,
   pageMax = 200,
+  /** Keeps only these items, before the limit counts them (a filter the route does not have). */
+  keep?: (item: ItemOf<Id>) => boolean,
 ): Promise<Listing<ItemOf<Id>>> {
   const max =
     flags['all'] === true ? 10_000 : Math.min(10_000, Math.max(1, Number(flags['limit'] ?? 50)))
@@ -64,7 +66,7 @@ export async function collect<Id extends ListId>(
     }
     const value = page.value as unknown as { items: ItemOf<Id>[]; nextCursor: string | null }
     for (const item of value.items) {
-      if (items.length < max) items.push(item)
+      if (items.length < max && (keep === undefined || keep(item))) items.push(item)
     }
     nextCursor = value.nextCursor
     if (items.length >= max) break

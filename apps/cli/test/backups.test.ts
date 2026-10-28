@@ -1485,3 +1485,199 @@ describe('a failed list read (TC-030, principle 5)', () => {
     expect(out.doc.data.backups).toHaveLength(1)
   })
 })
+
+describe('node reads name their server (TC-031)', () => {
+  const SRV_A = id('srv', 20)
+  const SRV_B = id('srv', 21)
+  const SRV_NONE = id('srv', 22)
+  const nodeItem = (n: number, serverId: string) => ({
+    id: id('nod', n),
+    serverId,
+    state: 'active',
+    agentVersion: '1.0.0',
+    protocolMajor: 1,
+    lastHeartbeatAt: T,
+    clockSkewMs: 0,
+    capabilities: [],
+  })
+  const server = (serverId: string) =>
+    ok('getServer', {
+      id: serverId,
+      displayName: 'db host',
+      provider: 'other',
+      location: null,
+      derivedTier: null,
+      observedFacts: null,
+      state: 'active',
+      retiredAt: null,
+    })
+
+  beforeEach(() => {
+    on(
+      'GET',
+      '/nodes',
+      ok('listNodes', {
+        items: [nodeItem(30, SRV_A), nodeItem(31, SRV_B)],
+        nextCursor: null,
+      }),
+    )
+    on('GET', `/servers/${SRV_A}`, server(SRV_A))
+    on('GET', `/servers/${SRV_B}`, server(SRV_B))
+  })
+
+  it('lists only the nodes of the server it is given', async () => {
+    const a = await json(['node', 'list', '--server', SRV_A])
+    expect(a.code, a.stderr).toBe(0)
+    expect(a.doc.data.items.map((n: { id: string }) => n.id)).toEqual([id('nod', 30)])
+    const table = await cli(['node', 'list', '--server', SRV_B])
+    expect(table.stdout).toContain(id('nod', 31))
+    expect(table.stdout).not.toContain(id('nod', 30))
+  })
+
+  it('answers a server that does not exist with NOT_FOUND, not with a list or an empty state', async () => {
+    for (const argv of [
+      ['node', 'list', '--server', SRV_NONE],
+      ['node', 'enrollment', 'status', SRV_NONE],
+    ]) {
+      const out = await cli(argv)
+      expect(out.code, argv.join(' ')).not.toBe(0)
+      expect(out.stdout, argv.join(' ')).toBe('')
+      expect(out.stderr, argv.join(' ')).toContain('NOT_FOUND')
+    }
+  })
+
+  it('shows the nodes of a known server that has none as an empty list', async () => {
+    on('GET', '/nodes', ok('listNodes', { items: [nodeItem(30, SRV_A)], nextCursor: null }))
+    const b = await json(['node', 'list', '--server', SRV_B])
+    expect(b.code, b.stderr).toBe(0)
+    expect(b.doc.data.items).toEqual([])
+  })
+})
+
+describe('the import scratch helpers need a scratch target that exists (TC-032)', () => {
+  const SCRATCH = 'nope/nope/nope'
+  const scratchId = id('tgt', 40)
+  const importedId = id('tgt', 41)
+  const target = (targetId: string, path: string) =>
+    ok('getTarget', {
+      id: targetId,
+      path,
+      productId: id('prd', 1),
+      projectId: id('prj', 1),
+      environmentId: id('env', 1),
+      tier: 'nonprod',
+      state: 'active',
+      generation: 1,
+      health: null,
+      environment: { slug: 'scratch', tier: 'nonprod' },
+      placement: null,
+      ledger: null,
+      openFindingCount: 0,
+    })
+  const notReady = ok('checkScratchTarget', {
+    targetId: importedId,
+    scratchTargetId: scratchId,
+    ready: false,
+    checkedAt: T,
+    checks: [
+      { check: 'scratch_usable', status: 'pass', detail: null, items: [], truncated: false },
+      {
+        check: 'outside_scope',
+        status: 'fail',
+        detail: 'objects_missing',
+        items: ['auth'],
+        truncated: false,
+      },
+    ],
+    copySchemas: ['auth'],
+  })
+
+  // The targets route answers per path (a target path is URL-encoded): the scratch is unknown
+  // unless a test registers it.
+  const routed: typeof fetch = async (input, init) => {
+    const url = new URL(
+      typeof input === 'string' ? input : input instanceof URL ? input : input.url,
+    )
+    const path = decodeURIComponent(url.pathname.replace(/^\/api\/v1/, ''))
+    if (path === '/installation') return fakeFetch(input, init)
+    if (handlers.has(`${init?.method ?? 'GET'} ${path}`)) {
+      return fakeFetch(new URL(`${url.origin}/api/v1${path}${url.search}`), init)
+    }
+    return Response.json(refusal(404, 'TARGET_NOT_FOUND')[1], { status: 404 })
+  }
+
+  // What the server really answers for a scratch that does not exist: a check result that
+  // names the failure, not an error.
+  const unknownScratch = ok('checkScratchTarget', {
+    targetId: importedId,
+    scratchTargetId: null,
+    ready: false,
+    checkedAt: T,
+    checks: [
+      { check: 'scratch_usable', status: 'fail', detail: 'not_found', items: [], truncated: false },
+    ],
+  })
+
+  it.each([
+    ['scratch-check', ['migration', 'import', 'scratch-check']],
+    ['scratch-copy-commands', ['migration', 'import', 'scratch-copy-commands']],
+  ])(
+    '%s: an unknown scratch is TARGET_NOT_FOUND, with no reassurance on stdout',
+    async (_n, argv) => {
+      on('GET', '/targets/reosa/platform/staging', target(importedId, 'reosa/platform/staging'))
+      on('GET', '/targets/reosa/platform/staging/migrations/scratch-check', unknownScratch)
+      const out = await cli([...argv, '--target', 'reosa/platform/staging', '--scratch', SCRATCH], {
+        fetch: routed,
+      })
+      expect(out.code).toBe(EXIT.failure)
+      expect(out.stderr).toContain('TARGET_NOT_FOUND')
+      expect(out.stdout).toBe('')
+      expect(out.stdout).not.toContain('nothing to copy')
+    },
+  )
+
+  it('scratch-check exits non-zero while the scratch is not ready, and keeps the result', async () => {
+    on('GET', `/targets/${SCRATCH}`, target(scratchId, SCRATCH))
+    on('GET', '/targets/reosa/platform/staging/migrations/scratch-check', notReady)
+    const out = await cli(
+      [
+        'migration',
+        'import',
+        'scratch-check',
+        '--target',
+        'reosa/platform/staging',
+        '--scratch',
+        SCRATCH,
+        '--output',
+        'json',
+      ],
+      { fetch: routed },
+    )
+    expect(out.code).toBe(EXIT.failure)
+    const doc = JSON.parse(out.stdout)
+    expect(doc.status).toBe('error')
+    expect(doc.error.code).toBe('SCRATCH_NOT_READY')
+    expect(doc.data).toMatchObject({ ready: false, copySchemas: ['auth'] })
+    expect(doc.next).toEqual([expect.stringContaining('scratch-copy-commands')])
+  })
+
+  it('scratch-copy-commands stays a success: it is what a scratch that is not ready needs', async () => {
+    on('GET', `/targets/${SCRATCH}`, target(scratchId, SCRATCH))
+    on('GET', '/targets/reosa/platform/staging', target(importedId, 'reosa/platform/staging'))
+    on('GET', '/targets/reosa/platform/staging/migrations/scratch-check', notReady)
+    const out = await cli(
+      [
+        'migration',
+        'import',
+        'scratch-copy-commands',
+        '--target',
+        'reosa/platform/staging',
+        '--scratch',
+        SCRATCH,
+      ],
+      { fetch: routed },
+    )
+    expect(out.code, out.stderr).toBe(0)
+    expect(out.stdout).toContain('pg_dump')
+  })
+})

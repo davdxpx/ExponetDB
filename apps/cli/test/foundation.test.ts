@@ -1,7 +1,7 @@
 import { mkdtemp, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { SERVER_PROVIDERS } from '@exponetdb/contracts'
+import { actionDefinition, isActionId, SERVER_PROVIDERS } from '@exponetdb/contracts'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parse, parseDuration, UsageError } from '../src/cli/args.ts'
 import { EXIT, exitFor } from '../src/cli/exit.ts'
@@ -702,5 +702,21 @@ describe('exit codes', () => {
   it('exits 5 when the server cannot be reached', async () => {
     const out = await cli(['whoami', '--server', 'https://db.example.test'])
     expect(out.code).toBe(EXIT.unavailable)
+  })
+})
+
+describe('every command can be run by the CLI (TC-033)', () => {
+  it('names no action that the CLI client kind is refused', () => {
+    const refused = COMMANDS.filter((c) => {
+      const action = c.action
+      return (
+        action !== undefined &&
+        isActionId(action) &&
+        !actionDefinition(action).clientKinds.includes('cli')
+      )
+    }).map((c) => `${c.path.join(' ')} (${c.action})`)
+    // `access grants` listed an action of the browser session only: it always answered
+    // PERMISSION_DENIED and sent the owner to an administrator.
+    expect(refused).toEqual([])
   })
 })

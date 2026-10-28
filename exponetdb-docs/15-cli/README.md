@@ -206,7 +206,19 @@ it are never a complete list. **[DECIDED]** (test campaign TC-030, principle 5)
 A list that fails before any item arrived is the typed error alone: nothing on
 stdout (no table, no count, no "No backups …" text) and no `data` key in the JSON
 document, so a script that ignores the exit code cannot read "none" from a failed
-read. Dates are ISO 8601 UTC; ids are never
+read. **[DECIDED]** (test campaign TC-031 to TC-033) A name that does not exist is an
+error, never an empty answer: `node list --server <id>` lists only the nodes of that
+server (the route has no such filter, so the CLI filters every page before the limit
+counts) and answers `NOT_FOUND` for an unknown server, as does
+`node enrollment status <server>`; `migration import scratch-check` and
+`scratch-copy-commands` resolve the scratch target first (`TARGET_NOT_FOUND`), and
+`scratch-check` exits 1 with `SCRATCH_NOT_READY` (the result stays in `data`) while the
+scratch cannot take the replay, whereas `scratch-copy-commands`, which a scratch that is
+not ready needs, stays exit 0. A command may not name an action the CLI client kind is
+refused (a test checks every command): `access grants` was removed, because its action
+(`oauth.grant.list_own`) is the browser session's by design, so a delegated token never
+reaches it (it always answered `PERMISSION_DENIED`); your connected applications are in
+the Web App. Dates are ISO 8601 UTC; ids are never
 shortened; absent values are omitted, unknown values are `null` with a
 reason field where the contract has one. Neither format carries a token, a
 credential, a banner, a hint, color or progress noise; human hints go to
