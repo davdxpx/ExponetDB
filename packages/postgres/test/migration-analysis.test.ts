@@ -527,12 +527,24 @@ describe('survivingExpectations is linear and keeps its meaning', () => {
     }
   })
 
-  it('takes under a second for 30,000 statements', () => {
-    const statements = facts(30_000, 7)
-    const started = performance.now()
-    const survivors = survivingExpectations(statements)
-    const elapsed = performance.now() - started
-    expect(survivors.length).toBeGreaterThan(0)
-    expect(elapsed).toBeLessThan(1000)
+  it('grows linearly: four times the statements take about four times as long, not sixteen', () => {
+    // A machine's speed cancels out of the ratio; the old definition took 2.4 s for 30,000
+    // statements and 16 times as long as a quarter of them. The best of five runs and a floor keep a
+    // loaded machine (the workspace runs every package at once) out of the ratio.
+    const best = (statements: StatementFacts[]): number => {
+      let ms = Number.POSITIVE_INFINITY
+      for (let i = 0; i < 5; i++) {
+        const t0 = performance.now()
+        survivingExpectations(statements)
+        ms = Math.min(ms, performance.now() - t0)
+      }
+      return ms
+    }
+    const small = facts(7_500, 7)
+    const large = facts(30_000, 7)
+    expect(survivingExpectations(large).length).toBeGreaterThan(0)
+    const quarter = best(small)
+    const whole = best(large)
+    expect(whole / Math.max(quarter, 20)).toBeLessThan(8)
   })
 })
