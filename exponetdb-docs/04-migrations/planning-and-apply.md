@@ -175,6 +175,16 @@ requirements:                            # from policy
   Calls of routines that existed before the migration from DDL or DML
   expressions are not classified as procedural; the ledger guard (§4.3)
   covers what they do to the ledger.
+- **[OBSERVED]** (2026-10-28, from `packages/policy/src/catalog/migrations.ts`)
+  `migration.agent-procedural` decides on who initiated the plan, never on the
+  tier, and it is `not_applicable` for a person using the Web App or the CLI.
+  A `DO` block in a plan a person starts therefore runs on a nonprod target
+  **without an approval** (REOSA's `0485` did); only the lint `conditional_ddl`
+  (warn, a `DO` block that branches on catalog state) and, for a
+  non-transactional bundle, `migration.procedural-nontransactional` (deny) look
+  at it. A plan an AI agent client initiates needs a person's approval on every
+  tier. Whether a person's procedural plan should need one too is an owner
+  question; this document does not decide it.
 
 ## 3. Planning algorithm
 
