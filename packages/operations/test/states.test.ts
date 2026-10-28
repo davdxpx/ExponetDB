@@ -83,6 +83,7 @@ describe('operation state machine (operations-engine.md §4.1)', () => {
         fc.array(fc.nat(), { maxLength: 20 }),
         (start, choices) => {
           let state: OperationState = start
+          let previous: OperationState = start
           let verified = false
           for (const choice of choices) {
             const next = TRANSITIONS[state]
@@ -94,17 +95,32 @@ describe('operation state machine (operations-engine.md §4.1)', () => {
             if (state === 'verifying') {
               verified = true
             }
+            previous = state
             state = to
           }
           if (state === 'succeeded') {
             expect(verified).toBe(true)
           }
           if (state === 'verification_failed') {
-            expect(verified).toBe(true)
+            // After a verification, or by the one recovery edge: a recovery plan closes an operation
+            // in `needs_attention` (OD-58, TC-005), whether it got there from a verification or from
+            // a reconciliation. The property failed on a seed that took that edge.
+            expect(verified || previous === 'needs_attention').toBe(true)
           }
         },
       ),
     )
+  })
+
+  it('has exactly one way into verification_failed besides a verification: the recovery close of needs_attention (OD-58)', () => {
+    const into = OPERATION_STATES.filter((from) =>
+      TRANSITIONS[from].includes('verification_failed'),
+    )
+    expect([...into].sort()).toEqual(['needs_attention', 'verifying'])
+    // It is closed as a change that was applied or may have been: an unknown apply outcome is
+    // recorded as partially applied, never kept as unknown.
+    expect(admits('verification_failed', 'unknown', 'failed')).toBe(false)
+    expect(admits('verification_failed', 'partially_applied', 'failed')).toBe(true)
   })
 
   it('property: no transition into an initial state and none out of a terminal one', () => {

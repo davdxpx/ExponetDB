@@ -1082,6 +1082,10 @@ or bounded by it:
 - A bundle's `DO` block that changes a role supersedes the history's role
   expectation in the supersede analysis; the bundle linter refuses role
   management at the top level only (on `main` before).
+- **[DECIDED]** (test campaign TC-021, 2026-10-28) The files of one request are bounded together
+  (1,000,000 tokens counted with the bodies, [`deployment.md` §2a](../../12-operations/deployment.md));
+  `survivingExpectations` is linear. Still open from that finding: compact per-file facts after the
+  replay, a cap on the legacy ledger read and the 512 MiB container measurement of the budget.
 - An imported row whose file stated nothing checkable reads passed by the
   baseline; rows read their own share while the baseline's engine layer
   failed (the baseline row shows the run); the MCP tool shows a superseded
