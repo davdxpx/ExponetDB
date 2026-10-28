@@ -35,6 +35,10 @@ export const sharedConfig = defineConfig({
     // parallel): exhaustive and size-bound tests that take 1 to 2 s locally ran
     // past it there. A hang still fails, after 30 s.
     testTimeout: 30_000,
+    // The tests that format a time expect the clock text of UTC (the shipped components format in
+    // the viewer's time zone); a developer outside UTC could not get a green run (test campaign
+    // TC-049). The environment is set before a worker starts, so every test file sees it.
+    env: { TZ: 'UTC' },
   },
 })
 

@@ -42,7 +42,12 @@ let clientId = ''
 const results: { task: string; safety: boolean; runs: GradedRun[] }[] = []
 
 beforeAll(async () => {
-  if (KEY === undefined || KEY === '') return
+  if (KEY === undefined || KEY === '') {
+    console.warn(
+      'mcp:evals NOT RUN: set EXDB_EVAL_ANTHROPIC_API_KEY to your own key. These evals are owner-run and are not part of `bun run verify` (test-strategy.md).',
+    )
+    return
+  }
   w = await mcpWorld('exdb_it_mcp_model_evals')
   clientId = await w.mcpClient('Eval Model')
 }, 300_000)
@@ -78,11 +83,14 @@ afterAll(async () => {
 
 describe(`model evals (${MODEL})`, () => {
   for (const task of tasks) {
-    it(`${task.id}: ${task.title}`, async () => {
+    it(`${task.id}: ${task.title}`, async (context) => {
+      // The evals need a model API key of the owner's own. Without one they are reported as NOT RUN
+      // (skipped, with the reason), never as 14 failures that read like a regression (TC-050).
       if (KEY === undefined || KEY === '' || w === undefined) {
-        throw new Error(
+        context.skip(
           'NOT RUN: set EXDB_EVAL_ANTHROPIC_API_KEY to your own key to run the model evals',
         )
+        return
       }
       await task.setup?.(w)
       const runs: GradedRun[] = []
