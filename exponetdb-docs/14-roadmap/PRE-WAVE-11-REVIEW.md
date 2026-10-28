@@ -756,6 +756,50 @@ evidence; nothing here is a claim that it passed on real infrastructure):
 | TC-051 the pinned toolchain is not enforced | IMPLEMENTED, TESTED LOCALLY: `bun run toolchain` (first step of `verify`) fails naming the versions when Node or Bun is outside `engines`; a `preinstall` warns and fails only under `CI=true` (every CI job sets up Node 24.22.1 and Bun 1.4.4 before it installs; the Dockerfile uses `--ignore-scripts`). The check asks the binaries: under Bun `process.versions.node` is the emulated version (it read 26.3.0 on Node 24.22.1). Go is not checked | `tooling/test/toolchain.test.ts` (12 cases); run on the pinned PATH (exit 0) and on Node 18 / Bun 1.3.14 (exit 1, both named) | [test-strategy.md §9](./test-strategy.md) |
 | TC-054 the default visual baseline set `local` fails on any other machine | PARTLY IMPLEMENTED: a failing comparison now names the set and the fix (`EXDB_VISUAL_BASELINE_SET=ci-ubuntu-24.04` or `EXDB_UPDATE_VISUAL=1`), and `local-development.md` says the default set is machine-specific. **Not done:** failing before the pixel comparison on a platform without a recorded set: nothing records which machine made `local`, so there is no platform to compare. Not run here (needs Chromium, the built apps and PostgreSQL); the change is the failure message | `apps/server/test/visual-regression.e2e.test.ts` | [local-development.md](../12-operations/local-development.md) |
 
+### TC-1a. Findings not fixed on this branch
+
+**Status of the 75** (2026-10-28): 29 implemented and tested locally (TC-001 to TC-015, TC-018, TC-019,
+TC-022, TC-029 to TC-033, TC-035, TC-036, TC-039, TC-049 to TC-051), 7 partly (TC-016, TC-021, TC-026,
+TC-028, TC-038, TC-042, TC-054), 1 documented (TC-068), 8 waiting for an owner decision with nothing
+built (TC-017, TC-020, TC-023, TC-024, TC-034, TC-037, TC-053, TC-063) and 30 not started. None of the
+real-engine or real-host proofs was executed in this session. Every finding of the campaign is either in
+TC-1 above or here, with the reason. **Nothing here is
+done** unless a TC-1 row says so; "not started" means the session ended before it, not that the
+finding is wrong. Owner decisions are in [`open-decisions.md`](../00-product/open-decisions.md).
+
+| Finding | Status | Why / what is needed |
+|---|---|---|
+| TC-017 read-classified diagnostics persist data and flood the counters | **OWNER DECISION** (OD-57, OD-61) | nothing built; the options and the recommendation are recorded |
+| TC-020 withdrawing a node plan needs a stronger scope | **OWNER DECISION** (OD-63) | the campaign itself says "owner decision if policy wants otherwise" |
+| TC-023 E16 `hotfix_without_evidence` has no detection | **OWNER DECISION** (OD-65); waiver unchanged | whether the OD-7a import is "real data" |
+| TC-024 E18 `applied_not_in_source` has no detection | **OWNER DECISION** (OD-65); waiver unchanged | as above |
+| TC-034 an erase operation stays `awaiting_approval` | **OWNER DECISION** (OD-64) and an operation for the owner to look at | the deadline of an approval is a product rule; the live operation is the owner's |
+| TC-037 the "Critical findings" headline | waits for OD-61 | same recording and aggregation decision as TC-017 |
+| TC-053 two step-up receipts to enroll a node | **OWNER DECISION** (OD-67) | one combined step-up or longer receipts |
+| TC-063 G10.3 against OD-7b | **OWNER DECISION** (OD-66); the row now says the wording is open | gate wording |
+| TC-025 the ledger comparison is shallow | not started | engine work (`ledger.reconcile` makes the recovery possible; the comparison depth is separate) |
+| TC-027 regression artifacts for the W9-04 rows | not started (TC-028 added the selection tests) | the named negative tests for the runbook permission, the stale WAL end, the moved target, the digest of another repository and the restic verify refusal |
+| TC-040 an older CLI answers `RESPONSE_INVALID` against a newer server | not started | version negotiation is a design change |
+| TC-041 `migration lint` has no path, bundle or since filter | not started | needs a contract change (query) and CLI flags |
+| TC-043 a restore to the end of the archive reports success when the replay stops short | not started | Go (`replayShort`) and TS; needs the real engine to prove |
+| TC-044 a refused backup start is reported `OUTCOME_UNKNOWN` | not started | node job mapping |
+| TC-045 the restic runbook neither restores globals nor stops without them | not started | runbook generator |
+| TC-046 `restore.execute` does not re-check space | not started | helper re-check |
+| TC-047 M-4 and RB-06 describe flows the Control Plane cannot start | not started | documentation against the built flows |
+| TC-048 enrollment tokens cannot be listed or revoked | not started | a new read and a plan kind |
+| TC-052 CLI lint table; `project execution-roles` takes an id only | not started | CLI polish |
+| TC-055 permission-layer denial of the one allowed read-only check of the live control store | not started | an environment observation of the campaign host, no repository defect was traced |
+| TC-056 to TC-059 node plan CLI errors and polish, `--wait` wording, job-key read | not started | CLI polish batch |
+| TC-060 to TC-062 lock contention reported as `PLAN_STALE`; two events per poll; `missing_migrations` only in docs | not started | engine P3 |
+| TC-064 to TC-067 CLI and Web polish batches and coverage gaps | not started | polish; the Web coverage gaps are not defects |
+| TC-069 a refused clock reads as "job expired"; `clockSynchronized` | not started | protocol change (heartbeat) |
+| TC-070 disk full on the agent state or the helper ledger | not started | Go: helper `ftruncate` to the last good offset, a typed state-unwritable report |
+| TC-071 hba refusals carry `OUTCOME_UNKNOWN`; the empty marker pair; stale proof; cluster refresh | not started | Go and heartbeat clusters (also the open limit of TC-016) |
+| TC-072 hardening observations of the node units | not started | optional knobs; each needs a host run |
+| TC-073 `-- covers:` counts statements from 0 | not started | documentation |
+| TC-074 CLI presets and declared scopes do not match what commands need | not started | CLI polish |
+| TC-075 reboot state reporting, unit hardening, backup run polish | not started | host-only |
+
 ### TC-2. Review history (append-only)
 
 | Date | Commit | Change |
