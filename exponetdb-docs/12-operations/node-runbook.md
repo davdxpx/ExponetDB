@@ -227,7 +227,16 @@ tokens (ADR-0024 §1).
    `journalctl -u exponetdb-node -u exponetdb-node-helper --since -1h`.
 2. `sudo -u exponetdb-node exponetdb-node status`: the certificate's expiry
    (72 hours; the agent renews at two thirds), the journal (`journal_corrupt`
-   refuses every job).
+   refuses every job). **[DECIDED]** (test campaign TC-042, GAP-11) `status` prints
+   how long the certificate lasts (`certificate expires 2026-10-30T05:57:35Z (in
+   5h12m)`) or, past its end, `(EXPIRED 2h5m ago: …)`. The gateway answers an
+   expired certificate like any refused one (`403 NODE_CERTIFICATE_REFUSED`), the node
+   row stays `active` and nothing warns before the renewal window closes: an
+   agent that was down for the whole window (the last third of the 72 hours) is
+   enrolled again (RB-13 below); one that is back inside the window renews within
+   seconds. A node finding for an approaching or passed expiry and a distinct
+   refusal reason are not built; the thresholds are an owner decision
+   ([OD-62](../00-product/open-decisions.md)).
 3. `timedatectl`: an unsynchronized clock makes the agent refuse every job
    (`clock_untrusted`), not go offline; an offline node is a process,
    network or certificate problem.
