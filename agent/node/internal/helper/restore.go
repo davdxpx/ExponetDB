@@ -65,8 +65,13 @@ func (e *engineRun) target() restoreTarget {
 	return restoreTarget{Label: opt("label"), Time: opt("time"), Lsn: opt("lsn"), Timeline: e.num(t, "timeline")}
 }
 
-// restoreArgs is pgBackRest's restore argv for the target: time, lsn,
-// immediate (a label alone) or default (end of the archive).
+// restoreTypeArgs is pgBackRest's restore argv for the target: time, lsn or
+// default (replay to the end of the archive; a label chooses the backup it
+// starts from). A backup with no point in time is never "immediate": that
+// stops at the end of the backup, and a drill must reach the archive's WAL end
+// (TC-009, D-01); pgBackRest also refuses --target-timeline after it
+// (error 031). The timeline goes only with a type that takes one, and every
+// type built here does.
 func restoreTypeArgs(t restoreTarget) ([]string, error) {
 	var args []string
 	switch {
@@ -81,8 +86,6 @@ func restoreTypeArgs(t restoreTarget) ([]string, error) {
 			return nil, errors.New("the target LSN is not an LSN")
 		}
 		args = append(args, "--type=lsn", "--target="+strings.ToUpper(*t.Lsn), "--target-action=promote")
-	case t.Label != nil:
-		args = append(args, "--type=immediate", "--target-action=promote")
 	default:
 		args = append(args, "--type=default")
 	}

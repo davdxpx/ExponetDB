@@ -107,6 +107,24 @@ Verification of a restored cluster (`restore.verify@1`):
 | Data | row counts of configured tables within configured bounds; consumer-defined probe queries (read-only, reviewed like `verify.sql`) |
 | RLS posture | for consumers that require it (REOSA): number of tables with RLS enabled equals the expected number; the restore does not silently drop policies |
 
+**[DECIDED]** (test campaign TC-009, D-01) What `restore.execute@1` asks of
+pgBackRest. A plan's source is a backup label, a timeline and, for a
+point-in-time drill or recovery, a time. With a time the node builds `--type=time
+--target=… --target-action=promote`; with an LSN, `--type=lsn`; with neither, the
+backup is restored and **replayed to the end of the archive**: `--type=default
+--set=<label>`. It is never `--type=immediate`, which stops at the end of the
+backup, so a drill of the newest or an older backup could not reach the WAL end
+the Control Plane counted on (`replayShort`), and pgBackRest refuses
+`--target-timeline` after it (error 031, exit 31), which failed every such drill
+in 0.05 s. `--target-timeline` goes only with a type that takes one (`default`,
+`time`, `lsn`), and every type the node builds is one. `immediate` stays an
+explicit choice of the human offline runbook (`RESTORE_TYPE`). Proven by
+`agent/node/internal/helper` (`TestRestoreTypeArgs`: the label alone, with a
+timeline, with a time, the LSN, nothing, and that no argv holds `immediate`).
+The same argv against real pgBackRest 2.60 (the finding's `pglab` matrix) is
+NOT EXECUTED in this session, see
+[`PRE-WAVE-11-REVIEW.md`](../14-roadmap/PRE-WAVE-11-REVIEW.md#test-campaign-fixes--parallel-session).
+
 ## 4. Clones from production into nonprod
 
 **[DECIDED]** A clone of production data into a nonprod target is allowed only

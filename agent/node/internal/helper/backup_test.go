@@ -1153,22 +1153,43 @@ func TestEngineRunRestoreRefusesAnotherStanza(t *testing.T) {
 func TestRestoreTypeArgs(t *testing.T) {
 	label, at, lsn, tl := "20261006-010000F", "2026-10-06T02:30:00.5Z", "0/6000120", int64(2)
 	for _, c := range []struct {
+		name string
 		t    restoreTarget
 		want string
 	}{
-		{restoreTarget{Time: &at, Timeline: &tl}, "--type=time --target=2026-10-06 02:30:00.5+00 --target-action=promote --target-timeline=2"},
-		{restoreTarget{Lsn: &lsn}, "--type=lsn --target=0/6000120 --target-action=promote"},
-		{restoreTarget{Label: &label}, "--type=immediate --target-action=promote --set=20261006-010000F"},
-		{restoreTarget{}, "--type=default"},
+		{"time with a timeline", restoreTarget{Time: &at, Timeline: &tl}, "--type=time --target=2026-10-06 02:30:00.5+00 --target-action=promote --target-timeline=2"},
+		{"lsn", restoreTarget{Lsn: &lsn}, "--type=lsn --target=0/6000120 --target-action=promote"},
+		{"lsn with a timeline", restoreTarget{Lsn: &lsn, Timeline: &tl}, "--type=lsn --target=0/6000120 --target-action=promote --target-timeline=2"},
+		// TC-009 (D-01): a backup with no point in time restores to the end of the archive, as a drill
+		// that must reach the WAL end requires. It used to be --type=immediate, which stops at the end of
+		// the backup, and --target-timeline on it is refused by pgBackRest (error 031, exit 31).
+		{"a label alone", restoreTarget{Label: &label}, "--type=default --set=20261006-010000F"},
+		{"a label with a timeline", restoreTarget{Label: &label, Timeline: &tl}, "--type=default --set=20261006-010000F --target-timeline=2"},
+		{"a label with a time", restoreTarget{Label: &label, Time: &at}, "--type=time --target=2026-10-06 02:30:00.5+00 --target-action=promote --set=20261006-010000F"},
+		{"nothing", restoreTarget{}, "--type=default"},
+		{"nothing with a timeline", restoreTarget{Timeline: &tl}, "--type=default --target-timeline=2"},
 	} {
 		got, err := restoreTypeArgs(c.t)
 		if err != nil || strings.Join(got, " ") != c.want {
-			t.Fatalf("%v %v, want %s", got, err, c.want)
+			t.Fatalf("%s: %v %v, want %s", c.name, got, err, c.want)
+		}
+		// pgBackRest takes --target-timeline only with a type of default, time or lsn: never without one,
+		// and never after immediate (the engine refuses it, error 031).
+		joined := strings.Join(got, " ")
+		if strings.Contains(joined, "--target-timeline") && !(strings.Contains(joined, "--type=default") || strings.Contains(joined, "--type=time") || strings.Contains(joined, "--type=lsn")) {
+			t.Fatalf("%s: a timeline without a type that takes one: %s", c.name, joined)
+		}
+		if strings.Contains(joined, "immediate") {
+			t.Fatalf("%s: a restore that stops at the end of the backup: %s", c.name, joined)
 		}
 	}
 	bad := "1/x; rm -rf /"
 	if _, err := restoreTypeArgs(restoreTarget{Lsn: &bad}); err == nil {
 		t.Fatal("a bad LSN passed")
+	}
+	badLabel := "not a label"
+	if _, err := restoreTypeArgs(restoreTarget{Label: &badLabel}); err == nil {
+		t.Fatal("a bad label passed")
 	}
 }
 
