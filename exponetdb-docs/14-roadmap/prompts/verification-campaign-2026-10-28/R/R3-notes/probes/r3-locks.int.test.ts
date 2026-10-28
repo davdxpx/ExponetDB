@@ -4,7 +4,7 @@
  * `bunx vitest run --config vitest.integration.config.ts test/r3-locks.int.test.ts` with EXDB_TEST_PG_URL set.
  */
 import { type MigratedTestDatabase, migratedTestDatabase } from '@exponetdb/control-store/testing'
-import { type OperationId, systemClock } from '@exponetdb/kernel'
+import { newId, type OperationId, systemClock } from '@exponetdb/kernel'
 import { afterAll, beforeAll, describe, it } from 'vitest'
 import {
   acceptPlan,
@@ -52,7 +52,7 @@ describe('TC-061: a waiting operation and its events', () => {
     const first = await queue(slow, [`target:${tgt}:maintenance`])
     const waiting = await queue(second, [`target:${tgt}:schema`])
     const run = (kind: OperationKind) =>
-      processNextOperation(as('exdb_worker'), { workerId: WORKER_ID, kinds: new KindRegistry([kind]), clock: systemClock })
+      processNextOperation(as('exdb_worker'), { workerId: newId('prc', Date.now()), kinds: new KindRegistry([kind]), clock: systemClock })
     const running = run(slow)
     await sleep(200)
     const count = async () => {
@@ -72,4 +72,3 @@ describe('TC-061: a waiting operation and its events', () => {
   })
 })
 
-const WORKER_ID = 'prc_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z' as never
