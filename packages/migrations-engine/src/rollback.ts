@@ -693,6 +693,8 @@ export class MigrationRollbackKind implements OperationKind {
           generation: c.target.generation,
           operationId: ctx.operationId,
           fingerprint: run.fingerprint,
+          // A schema that had drifted before the rollback is not adopted with it (TC-006).
+          preFingerprint: c.expectedState.schemaFingerprint,
         })
         .catch(() => undefined)
     }

@@ -6,7 +6,7 @@ export {
   statementAnalysis,
 } from './analysis.ts'
 export { type PlanContent, PlanContentInvalid, type PlanItem, planContent } from './content.ts'
-export { type MigrationKindDeps, projectRegistry } from './deps.ts'
+export { type ExpectedSchema, type MigrationKindDeps, projectRegistry } from './deps.ts'
 export { MigrationError } from './errors.ts'
 export {
   collectEvidence,

@@ -40,7 +40,12 @@ import {
   targetDatabase,
   verifyCredentials,
 } from '../../registry/test/harness.ts'
-import { type MigrationPlanContext, migrationKinds, planMigrationApply } from '../src/index.ts'
+import {
+  type ExpectedSchema,
+  type MigrationPlanContext,
+  migrationKinds,
+  planMigrationApply,
+} from '../src/index.ts'
 
 /**
  * A registered project with migration targets on real PostgreSQL, for the
@@ -106,7 +111,12 @@ export interface BundleSpec {
   readonly down?: string
 }
 
-export async function migrationWorld(label: string, server: TestServer): Promise<World> {
+export async function migrationWorld(
+  label: string,
+  server: TestServer,
+  /** Receives the schema each verified migration left (the worker composes the baseline store). */
+  expected?: ExpectedSchema,
+): Promise<World> {
   const h = await harness(label)
   const a = actor()
   await runAsSuperuser(server, 'postgres', [
@@ -146,6 +156,7 @@ export async function migrationWorld(label: string, server: TestServer): Promise
         connector,
         installationId: h.db.installationId,
         engineVersion: '0.1.0+test',
+        ...(expected === undefined ? {} : { expected }),
       }),
     ])
   const kinds = kindsWith(h.workerConnector)

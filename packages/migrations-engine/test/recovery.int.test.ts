@@ -1,7 +1,12 @@
 import { readLedgerRows, readMigrationEvents, readVerifications } from '@exponetdb/postgres'
 import { serverFor, superuserClient } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { ingestBundles, planMigrationResume, planMigrationVerify } from '../src/index.ts'
+import {
+  ingestBundles,
+  planMigrationResume,
+  planMigrationRollback,
+  planMigrationVerify,
+} from '../src/index.ts'
 import { DEFAULTS, migrationWorld, type Target, type World } from './world.ts'
 
 /**
@@ -14,9 +19,15 @@ import { DEFAULTS, migrationWorld, type Target, type World } from './world.ts'
  */
 const pg17 = serverFor(17)
 let w: World
+/** What the worker handed the baseline store after each verified migration (TC-006). */
+const recorded: { operationId: string; fingerprint: string; preFingerprint?: string }[] = []
 
 beforeAll(async () => {
-  w = await migrationWorld('exdb_it_mig_recovery', pg17)
+  w = await migrationWorld('exdb_it_mig_recovery', pg17, {
+    record: async (input) => {
+      recorded.push(input)
+    },
+  })
 }, 240_000)
 
 afterAll(async () => {
@@ -142,6 +153,24 @@ describe('a verify.sql that errors (E10, second case)', () => {
     expect(next).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
   })
 
+  it('hands the baseline the fingerprint an apply plan started from (TC-006)', async () => {
+    const { t, base } = await targetWithBase('rec-d')
+    const plan = await w.plan(t, {
+      bundles: [
+        w.bundle({
+          name: 'pre-fp',
+          up: 'CREATE TABLE public.pre_fp (id int);\n',
+          dependsOn: [base],
+        }),
+      ],
+    })
+    const started = (planContentOf(plan)['expectedState'] as { schemaFingerprint: string })
+      .schemaFingerprint
+    const op = await w.apply(plan)
+    expect(op).toMatchObject({ state: 'succeeded' })
+    expect(recorded.find((r) => r.operationId === op.operationId)?.preFingerprint).toBe(started)
+  })
+
   it('does not close an operation about another migration', async () => {
     const { t, base } = await targetWithBase('rec-c')
     const clean = w.ulid()
@@ -197,6 +226,36 @@ describe('a verify.sql that errors (E10, second case)', () => {
   })
 })
 
+describe('the baseline after a rollback (TC-006)', () => {
+  it('is handed the fingerprint the rollback plan started from', async () => {
+    const { t, base } = await targetWithBase('rec-e')
+    const id = w.ulid()
+    expect(
+      await w.apply(
+        await w.plan(t, {
+          bundles: [
+            w.bundle({
+              id,
+              name: 'undoable',
+              up: 'CREATE TABLE public.undoable (id int);\n',
+              down: 'DROP TABLE public.undoable;\n',
+              dependsOn: [base],
+            }),
+          ],
+        }),
+      ),
+    ).toMatchObject({ state: 'succeeded' })
+    const plan = await w.h.serve.transaction('test.recovery.rollback', (tx) =>
+      planMigrationRollback(tx, w.ctx, w.a, t.record.targetId, id),
+    )
+    const started = (planContentOf(plan)['expectedState'] as { schemaFingerprint: string })
+      .schemaFingerprint
+    const op = await w.apply(plan)
+    expect(op).toMatchObject({ state: 'succeeded' })
+    expect(recorded.find((r) => r.operationId === op.operationId)?.preFingerprint).toBe(started)
+  })
+})
+
 describe('a non-transactional bundle killed mid-way (E4)', () => {
   it('is completed by migration.resume with cleanup, which closes the stuck operation', async () => {
     const { t, base } = await targetWithBase('rec-b')
@@ -244,6 +303,11 @@ describe('a non-transactional bundle killed mid-way (E4)', () => {
     )
     const resumed = await w.apply(resumePlan)
     expect(resumed).toMatchObject({ state: 'succeeded', applyOutcome: 'applied' })
+    // A resume plan's own fingerprint is the partial schema; the baseline is told where the bundle began.
+    const began = (planContentOf(resumePlan)['resume'] as { fingerprintBeforeMigration: string })
+      .fingerprintBeforeMigration
+    expect(began).toEqual(expect.stringMatching(/^fp1:/))
+    expect(recorded.find((r) => r.operationId === resumed.operationId)?.preFingerprint).toBe(began)
     expect(await w.operation(stuck.operationId)).toMatchObject({
       state: 'verification_failed',
       applyOutcome: 'partially_applied',

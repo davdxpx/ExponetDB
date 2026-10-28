@@ -51,6 +51,7 @@ import {
   listSessions,
   loadDocument,
   lockGraph,
+  MigrationBaselineStore,
   maintainSamplePartitions,
   openFindings,
   RegistrationSnapshotStore,
@@ -867,6 +868,80 @@ describe('stored documents', () => {
       (x: unknown) => x,
     )
     expect(e).toBeInstanceOf(DiagnosticsError)
+  })
+})
+
+/**
+ * A verified migration's schema becomes the target's expected state
+ * (drift-detection.md §7). A change made outside the migrations before it
+ * must not ride along: the baseline is adopted only when the schema the
+ * migration started from was the baseline (TC-006, MIG-02, which adopted
+ * a `GRANT ... TO PUBLIC` made by hand and cleared the critical finding).
+ */
+describe('the expected schema after a verified migration (TC-006, MIG-02)', () => {
+  let t: TargetRecord
+  let db = ''
+  let operationId = ''
+  const sh = (statements: readonly string[]) => runAsSuperuser(pg17, db, statements)
+  const check = async () => (await runDriftCheck(workerDeps(), t, 'schedule')).check
+  const record = (fingerprint: string, preFingerprint?: string) =>
+    new MigrationBaselineStore(workerDeps()).record({
+      targetId: t.targetId,
+      generation: t.generation,
+      operationId,
+      fingerprint,
+      ...(preFingerprint === undefined ? {} : { preFingerprint }),
+    })
+
+  beforeAll(async () => {
+    const saved = databaseName
+    t = await registerTarget('tc006', 'diag_tc006')
+    db = databaseName
+    databaseName = saved
+    const op = await h.worker.query(
+      'test.tc006.operation',
+      'SELECT operation_id FROM operations.operations ORDER BY created_at LIMIT 1',
+      [],
+    )
+    operationId = op.rows[0]?.text('operation_id') ?? ''
+  }, 120_000)
+
+  it('adopts the schema a migration left when it started from the baseline', async () => {
+    const start = await check()
+    expect(start.status).toBe('clean')
+    await sh(['CREATE TABLE public.migrated_a (id int PRIMARY KEY)'])
+    const left = await check()
+    expect(left.status).toBe('drifted')
+    expect(
+      await record(left.currentFingerprint as string, start.baselineFingerprint as string),
+    ).toBe('recorded')
+    expect(await check()).toMatchObject({
+      status: 'clean',
+      baselineFingerprint: left.currentFingerprint,
+    })
+  })
+
+  it('keeps the baseline and the open finding when a change was made outside before the migration', async () => {
+    const base = (await check()).baselineFingerprint
+    await sh(['GRANT ALL ON public.migrated_a TO PUBLIC'])
+    const outside = await check()
+    expect(outside.status).toBe('drifted')
+    // The next migration is planned on the drifted schema: that is the fingerprint it starts from.
+    await sh(['CREATE TABLE public.migrated_b (id int)'])
+    const left = await check()
+    expect(
+      await record(left.currentFingerprint as string, outside.currentFingerprint as string),
+    ).toBe('drift_open')
+    const after = await check()
+    expect(after).toMatchObject({ status: 'drifted', baselineFingerprint: base })
+    const open = await openFindings(h.worker, t.targetId, 'drift')
+    expect(open.some((f) => f.severity === 'critical')).toBe(true)
+  })
+
+  it('adopts without a starting fingerprint, as the legacy baseline does for the schema it imports', async () => {
+    const left = await check()
+    expect(await record(left.currentFingerprint as string)).toBe('recorded')
+    expect((await check()).status).toBe('clean')
   })
 })
 

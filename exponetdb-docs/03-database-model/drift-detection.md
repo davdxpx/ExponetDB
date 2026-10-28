@@ -201,6 +201,23 @@ never depends on it. Proven by `apps/server/test/http-migrations.int.test.ts`
 column, clean again once it is undone; the assertion fails without the
 baseline).
 
+**[DECIDED]** (test campaign TC-006, MIG-02) A change made outside the
+migrations before a migration is not adopted with it. The migration kinds
+(apply, resume, rollback) hand the baseline store the fingerprint their plan
+started from (a resume plan's is the original plan's, since its own is the
+partial schema). When the target's baseline is another fingerprint, the schema
+had drifted already: the baseline and the open findings stay
+(`MigrationBaselineOutcome` `drift_open`) until a person accepts the drift
+(`drift.accept`), which takes the whole current schema, and the next check
+reports the migration's own change with the rest. Before this, the next
+verified migration recorded the live schema, out-of-band `GRANT ... TO
+PUBLIC` included, as expected: the critical finding was resolved `cleared`
+with nothing accepted. A baseline that adopts a schema as it is (the legacy
+import, `baseline:<slug>`) names no starting fingerprint and is unchanged.
+Proven by `packages/diagnostics/test/diagnostics.int.test.ts` ("the expected
+schema after a verified migration") and
+`packages/migrations-engine/test/recovery.int.test.ts` (the kinds pass it).
+
 **[DECIDED]** (Wave 9 Part A, follow-up 3, F4, 2026-10-23) The baseline of a
 legacy import is recorded the same way once its verification passes, in the
 baseline operation itself or in a planned re-verification of

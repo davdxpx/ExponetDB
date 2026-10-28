@@ -816,11 +816,18 @@ export class MigrationApplyKind implements OperationKind {
       if (target === undefined) return
       const row = await this.#ledgerRow(target, last.migrationId)
       if (row?.fingerprintAfter === null || row?.fingerprintAfter === undefined) return
+      // The schema the migration started from: a resume plan's own is the partial one, so it
+      // names the original plan's. An expected state that was not the baseline's is drift.
+      const preFingerprint =
+        content.resume === undefined
+          ? content.expectedState.schemaFingerprint
+          : content.resume.fingerprintBeforeMigration
       await expected.record({
         targetId: target.targetId,
         generation: content.target.generation,
         operationId: ctx.operationId,
         fingerprint: row.fingerprintAfter,
+        ...(preFingerprint === null ? {} : { preFingerprint }),
       })
     } catch {
       // The drift check reports what the baseline does not explain.
