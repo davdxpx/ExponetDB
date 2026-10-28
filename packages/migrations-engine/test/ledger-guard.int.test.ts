@@ -378,5 +378,5 @@ END $$;`,
 }
 
 suite(17, true)
-suite(16, false)
-suite(18, false)
+suite(16, true)
+suite(18, true)
