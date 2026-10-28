@@ -39,14 +39,23 @@ As root on the host:
    install -m 0755 exponetdb-node-helper-<version>-linux-amd64 /usr/sbin/exponetdb-node-helper
    install -m 0644 sysusers.d/exponetdb-node.conf /usr/lib/sysusers.d/
    systemd-sysusers
+   install -m 0644 tmpfiles.d/exponetdb-node.conf tmpfiles.d/exponetdb-node-engine.conf \
+     /usr/lib/tmpfiles.d/
+   systemd-tmpfiles --create
+   install -d -m 0755 /etc/exponetdb-node
    install -m 0644 systemd/exponetdb-node.service systemd/exponetdb-node-helper.service \
      systemd/exponetdb-node-helper.socket /etc/systemd/system/
    install -D -m 0644 doc/node-runbook.md /usr/share/doc/exponetdb-node/node-runbook.md
    systemctl daemon-reload
    ```
 
+   `systemd-tmpfiles --create` makes the agent's state directory
+   (`/var/lib/exponetdb-node`, mode `0700`, the agent's user) and the backup
+   engine's run directories (`/var/lib/exponetdb-node-engine/…`). The state
+   directory is needed before any unit starts: §3 enrolls the node first, and
+   `enroll` on a host without it stops with `state directory … does not exist`.
    The release directory holds the binaries, `systemd/`, `sysusers.d/`,
-   `doc/` and `SHA256SUMS-<version>` over all of them
+   `tmpfiles.d/`, `doc/` and `SHA256SUMS-<version>` over all of them
    ([`agent/node/packaging/README.md`](../../agent/node/packaging/README.md)).
    `exponetdb-node version` prints the version and the commit it was built
    from.
@@ -116,9 +125,13 @@ As root on the host:
 3. Enroll as the agent's user, then remove the file:
 
    ```sh
-   sudo -u exponetdb-node exponetdb-node enroll --config /etc/exponetdb-node/config.json --token-file /root/token
+   sudo -u exponetdb-node exponetdb-node enroll --config /etc/exponetdb-node/config.json --token-file - < /root/token
    shred -u /root/token
    ```
+
+   The token is read from standard input: the agent's user cannot open a file
+   in `/root` (mode `0700`), and the redirection is made by your shell, as root,
+   before `sudo` runs (`--token-file /root/token` fails with `permission denied`).
 
    The command prints the node id. The token pins the agent PKI's root and
    the job keys; a token for another installation, an expired or a used

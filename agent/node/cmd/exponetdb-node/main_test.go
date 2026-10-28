@@ -208,3 +208,23 @@ func TestConfigOwnedByAnotherUserIsRefused(t *testing.T) {
 		t.Fatalf("%d %q", code, errs.String())
 	}
 }
+
+// Test campaign TC-039 (E1): enrolling on a fresh host, before the state directory exists, says
+// what to do instead of `lstat ...: no such file or directory`.
+func TestEnrollMissingStateDirectoryExplainsFix(t *testing.T) {
+	configPath, stateDir := setup(t)
+	if err := os.Remove(stateDir); err != nil {
+		t.Fatal(err)
+	}
+	var out, errs bytes.Buffer
+	d := deps{stdin: strings.NewReader("x\n"), stdout: &out, stderr: &errs, configOwnerUID: os.Getuid(),
+		clock: &clock.Fixed{T: time.Now().UTC(), Synced: true}, host: fakeHost{}}
+	if code := run(context.Background(), []string{"enroll", "--config", configPath, "--token-file", "-"}, d); code != 1 {
+		t.Fatalf("exit %d, want 1", code)
+	}
+	for _, want := range []string{"does not exist", "node-runbook.md"} {
+		if !strings.Contains(errs.String(), want) {
+			t.Errorf("stderr lacks %q: %s", want, errs.String())
+		}
+	}
+}
