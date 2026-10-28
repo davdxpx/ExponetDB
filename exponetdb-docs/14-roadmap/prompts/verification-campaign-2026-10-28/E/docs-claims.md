@@ -22,6 +22,8 @@ beyond the package install. Commands: `exponetdb init|migration new|migration li
 in a throwaway project; two probe scripts (`verificationRetryable`, `isErrorCode`, `renderHuman`,
 `ledgerStateHash`).
 
+Scripts (re-runnable, read only): `E/scripts/cmdcheck.py <docs-root> <dirs…>` (command and flag existence), `E/scripts/catalog-audit.py <tree>` (error catalog statistics), `E/scripts/probe1.ts`…`probe4.ts` (replace `<TREE>` with a copy of the tree whose dependencies are installed; run with `bun --conditions=@exponetdb/source`).
+
 The CLI-and-flag check of the runbooks (every `exponetdb ...` mention in `04-migrations`, `12-operations`,
 `09-backups-and-restore`, `02-control-plane`, `08-auth-and-security`, `07-node-agent`) was automated:
 **166 mentions: 120 resolve to a command of `15-cli/reference.md` with all flags present, 36 are server

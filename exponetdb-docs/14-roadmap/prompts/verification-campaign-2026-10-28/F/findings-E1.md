@@ -1,11 +1,3 @@
-# Findings of tester E1 (Block E, static structure review)
-
-Tree `d51da5d0`. All paths in **Evidence** are relative to the campaign folder
-(`exponetdb-docs/14-roadmap/prompts/verification-campaign-2026-10-28/`). "static" means the finding was
-established by reading code with file:line, plus a pure-code probe where stated; E1 ran no stack, so the stack
-step is given for block C. Probes were run from a copy of the tree (`bun install --ignore-scripts`, Bun 1.3.14,
-not the pinned 1.4.4; the probed functions are pure).
-
 ### [P1] `needs_attention` has no exit for any operation kind outside four migration kinds, and it keeps the operation's locks for ever
 - **Area:** `packages/operations` (driver, supersede, locks), `packages/application` (`views.ts`), `apps/cli`
 - **Block:** E

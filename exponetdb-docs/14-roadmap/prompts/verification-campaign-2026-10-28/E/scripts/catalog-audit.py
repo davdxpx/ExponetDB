@@ -29,3 +29,7 @@ for p in files:
         if m in seen:
             seen[m] += 1
 print('never named by a server-side source file:', sorted(c for c, n in seen.items() if n == 0))
+meaning = {m.group(1): m.group(4) for m in re.finditer(r'^\| `([A-Z][A-Z0-9_]+)` \| ([^|]*) \| ([^|]*) \| (.*) \|\s*$', doc, re.M)}
+remw = re.compile(r"(re-?plan|plan again|create a new|ask |run |use |add |fix |apply |wait|retry|re-?authenticat|resolve|restore|rotate|register|enable|change|decide|cancel|open |set |supply|check |tell |retire|unlock)", re.I)
+norem = [x['code'] for x in cat if not x.get('remediation') and not remw.search(meaning.get(x['code'], ''))]
+print('no remediation field and no remedy keyword in the documented meaning (heuristic, upper bound):', len(norem))
