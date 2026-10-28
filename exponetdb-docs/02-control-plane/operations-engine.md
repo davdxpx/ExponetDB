@@ -88,7 +88,7 @@ Initial kinds (owning wave in brackets):
 | `node.enroll`, `node.revoke` | high | 5 |
 | `access.*` (role bindings, clients, keys) | standard / high | 3 |
 | `ledger.initialize` (part of `target.register`) | standard / high | 4 |
-| `ledger.reconcile` | high | 6 |
+| `ledger.reconcile` (adopt the target's ledger as the truth after a restore or a hand change; built by the test campaign fixes, TC-007) | high | 6 |
 | `migration.resume` (continue or clean up an incomplete non-transactional bundle) | high | 6 |
 | `migration.rebaseline` (legacy import correction) | high | 6 |
 | `drift.accept` (adopt the target's current schema as its baseline; resolves the covered drift findings `accepted`; no DDL) | standard / high | 8 |
@@ -319,6 +319,7 @@ stateDiagram-v2
   verifying --> verification_failed: verification failed or partial
   verifying --> needs_attention: verification could not run (timeout, target unreachable)
   needs_attention --> verifying: operator retries verification
+  needs_attention --> verification_failed: a recovery plan that names it supersedes it
   succeeded --> [*]
   failed --> [*]
   verification_failed --> [*]
@@ -352,8 +353,29 @@ re-runs only its verification. Kinds: `migration.apply` and
 `migration.resume`, and since the follow-up 3 review (2026-10-24)
 `migration.baseline` and `migration.verify`, whose retry re-runs the whole
 read-only run ([`verification.md`](../04-migrations/verification.md#retrying-verification)).
-An operation whose outcome is unknown (reconciliation inconclusive) has no
-such path yet: `operation.force_release` remains planned.
+**[DECIDED]** (test campaign TC-005, MIG-01; [OD-58](../00-product/open-decisions.md#od-58-how-an-operation-in-needs_attention-is-closed))
+An operation in `needs_attention` is closed by the recovery plan that names
+it. `migration.resume` names the operation that started the bundle (its
+binding already holds it); `migration.verify` names the operation in
+`needs_attention` that holds the target's schema domain and concerns the
+migration, in the plan's content (`supersedes`), so the person who accepts
+the plan sees which operation it closes. When the recovery starts, in the
+transaction that takes its domains and before it takes them, the worker moves
+each named operation that is still in `needs_attention` and holds one of those
+domains to `verification_failed` (the one new edge, listed by
+`operations.recovery_transition_allowed`; `operations.transition_allowed`
+keeps its fifteen pairs). Its locks go with the transition, the audit event
+`operation.state_changed` records it, and the operation event carries
+`supersededBy` and the outcomes it had; a verification outcome of `error` or
+`pending` becomes `failed`, and an apply outcome of `unknown` becomes
+`partially_applied`, the only finished state that admits work stopped
+part-way. An operation that is not in `needs_attention`, holds none of the
+recovery's domains, or is not a valid id is left alone. Nothing is
+re-executed (C-16), and a plan whose named operation is no longer in
+`needs_attention` is stale (`PLAN_STALE`, binding `operation`). The retry
+(`operation.retry_verification`) stays for an applied change whose
+verification only needs another run. `operation.force_release`, for an
+operation no recovery plan covers, remains planned.
 
 ### 4.2 Workers and leases
 
@@ -707,7 +729,9 @@ without product kinds; tests drive it with synthetic kinds.
   `locks_waiting` with the holder. Locks are released only with the
   operation's final transition; row-level security refuses to delete a live
   operation's lock, so there is no force-release shortcut
-  (`operation.force_release` remains its own planned kind).
+  (`operation.force_release` remains its own planned kind; the one other way a
+  lock goes is the supersession of a `needs_attention` operation by the
+  recovery plan that names it, §4.1).
 - **Idempotency keys** (§5.3): per principal key (`<kind>:<id>`), the primary
   key serializes concurrent requests with the same key (the second waits for
   the first to commit and replays its stored response; after a rollback it

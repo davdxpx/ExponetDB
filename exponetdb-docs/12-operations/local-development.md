@@ -346,7 +346,11 @@ The browser suites are `web.e2e`, `web-review.e2e`, `mcp-approval.e2e`,
 `web-browser-surface.e2e`, `web-axe.e2e` and `visual-regression.e2e`; each
 fails on any CSP violation the page reports. The visual baselines in
 `apps/server/test/visual-baselines/` are Chromium-specific (another Chromium
-build or operating system's font rendering needs them regenerated). The web
+build or operating system's font rendering needs them regenerated). **[DECIDED]**
+(test campaign TC-054) The default set `local` matches only the machine that recorded
+it; on another machine run with `EXDB_VISUAL_BASELINE_SET=ci-ubuntu-24.04` on a pinned
+Ubuntu 24.04 host (what CI does) or record your own set with `EXDB_UPDATE_VISUAL=1` and
+review the diff; a failing run says so. The web
 build also checks the bundle budgets (`apps/web/scripts/budgets.ts`) and
 writes the license notices (`apps/web/scripts/notices.ts`). Component tests
 (`cd apps/web && bunx vitest run`) need no Docker. Every database is local

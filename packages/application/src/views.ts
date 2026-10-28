@@ -56,6 +56,43 @@ function withoutLocation(content: JsonValue): JsonValue {
   )
 }
 
+/**
+ * The node plans (`postgres.*`, TC-001) a person must judge before applying: the change they
+ * asked for and what the node reported about the cluster (a restart's connections per role, the
+ * managed pg_hba block, the extension steps). The node already withholds host text by export
+ * class; the members left here are the host's own files and directories, which are no part of a
+ * decision and are never shown in a plan, however deep the observation holds them.
+ */
+const HOST_MEMBERS = new Set([
+  'dataDirectory',
+  'hbaFile',
+  'sourcefile',
+  'sourceFile',
+  'file',
+  'path',
+  'certFile',
+  'keyFile',
+  'directory',
+])
+const NODE_PLAN_KINDS = new Set([
+  'postgres.reload',
+  'postgres.restart',
+  'postgres.config.apply',
+  'postgres.hba.apply',
+  'postgres.roles.apply',
+  'postgres.extensions.apply',
+  'postgres.tls.rotate',
+])
+function withoutHostValues(value: JsonValue): JsonValue {
+  if (isJsonArray(value)) return value.map(withoutHostValues)
+  if (!isJsonObject(value)) return value
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !HOST_MEMBERS.has(key))
+      .map(([key, member]) => [key, withoutHostValues(member)]),
+  )
+}
+
 export function requirementsOf(plan: PlanRecord): PlanView['requirements'] {
   const policy = plan.body['policy']
   const list = isJsonObject(policy) ? policy['requirements'] : undefined
@@ -162,6 +199,8 @@ export async function planView(q: Queryable, plan: PlanRecord): Promise<PlanView
       kind.startsWith('target.') ||
       kind.startsWith('node.') ||
       kind.startsWith('migration.') ||
+      // TC-007: the ids a ledger reconciliation moves and the person's note, never a row.
+      kind === 'ledger.reconcile' ||
       // Wave 8: a drift acceptance names finding ids, fingerprints and the person's reason, never catalog text.
       kind.startsWith('drift.') ||
       // The role and the stored verifier's id, never the verifier (owner decision S3).
@@ -169,13 +208,20 @@ export async function planView(q: Queryable, plan: PlanRecord): Promise<PlanView
       // Wave 9 Part B: ids, labels and the data-loss window; the repository's location is
       // withheld here as in every read (review finding F-1), never a credential.
       kind.startsWith('backup.') ||
-      kind.startsWith('restore.')) &&
+      kind.startsWith('restore.') ||
+      // TC-001: the change of a node plan, without the host's files and directories.
+      NODE_PLAN_KINDS.has(kind)) &&
     content !== undefined
       ? {
-          change: {
-            content: kind.startsWith('backup.') ? withoutLocation(content) : content,
-            analysis: analysis ?? null,
-          },
+          change: NODE_PLAN_KINDS.has(kind)
+            ? {
+                content: withoutHostValues(content),
+                analysis: analysis === undefined ? null : withoutHostValues(analysis),
+              }
+            : {
+                content: kind.startsWith('backup.') ? withoutLocation(content) : content,
+                analysis: analysis ?? null,
+              },
         }
       : {}),
     ...(kind.startsWith('migration.') || kind.startsWith('drift.')

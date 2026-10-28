@@ -101,11 +101,29 @@ Verification of a restored cluster (`restore.verify@1`):
 |---|---|
 | Recovery target reached | `pg_last_wal_replay_lsn()` / recovery end time matches the plan |
 | Cluster starts and accepts connections | simple **and** extended-protocol probe succeed ([`../10-observability/health.md`](../10-observability/health.md)) |
-| Index integrity | `amcheck` (`bt_index_check`) on all B-tree indexes of configured databases (sampled for very large databases, sample size recorded) |
+| Index integrity | `amcheck` (`bt_index_check`) on all B-tree indexes of configured databases that have the extension (sampled for very large databases, sample size recorded). **[DECIDED]** (test campaign TC-010, D-02) A database without the extension makes the check `not_run`, never `passed` ([ADR-0038](../01-architecture/adr/0038-restore-plans-drills-and-offline-runbooks.md)); a drill still passes, with the check recorded `not_run` and its detail ("497 indexes checked in 3 of 5 databases; amcheck is missing in the others"). A `failed` or `error` check fails the drill. Strictness is [OD-60](../00-product/open-decisions.md#od-60-how-strict-a-drill-is-about-amcheck) |
 | Schema | fingerprint equals the source target's fingerprint at that time (if the history has one), otherwise recorded as the new baseline evidence |
 | Ledger | `exponetdb` ledger head matches the Control Store's mirror for that time |
 | Data | row counts of configured tables within configured bounds; consumer-defined probe queries (read-only, reviewed like `verify.sql`) |
 | RLS posture | for consumers that require it (REOSA): number of tables with RLS enabled equals the expected number; the restore does not silently drop policies |
+
+**[DECIDED]** (test campaign TC-009, D-01) What `restore.execute@1` asks of
+pgBackRest. A plan's source is a backup label, a timeline and, for a
+point-in-time drill or recovery, a time. With a time the node builds `--type=time
+--target=… --target-action=promote`; with an LSN, `--type=lsn`; with neither, the
+backup is restored and **replayed to the end of the archive**: `--type=default
+--set=<label>`. It is never `--type=immediate`, which stops at the end of the
+backup, so a drill of the newest or an older backup could not reach the WAL end
+the Control Plane counted on (`replayShort`), and pgBackRest refuses
+`--target-timeline` after it (error 031, exit 31), which failed every such drill
+in 0.05 s. `--target-timeline` goes only with a type that takes one (`default`,
+`time`, `lsn`), and every type the node builds is one. `immediate` stays an
+explicit choice of the human offline runbook (`RESTORE_TYPE`). Proven by
+`agent/node/internal/helper` (`TestRestoreTypeArgs`: the label alone, with a
+timeline, with a time, the LSN, nothing, and that no argv holds `immediate`).
+The same argv against real pgBackRest 2.60 (the finding's `pglab` matrix) is
+NOT EXECUTED in this session, see
+[`PRE-WAVE-11-REVIEW.md`](../14-roadmap/PRE-WAVE-11-REVIEW.md#test-campaign-fixes--parallel-session).
 
 ## 4. Clones from production into nonprod
 
@@ -149,6 +167,16 @@ execution and measurement.
 | Outcome | `passed`, `failed`, `aborted`; a failed drill is a critical finding until a later drill passes |
 | Findings | drill overdue (warning at cadence, critical at 2× cadence), drill failed, drill never run |
 | Without ExponetDB | once per quarter (and in the Wave 9 gate) the drill is run from the generated shell runbook with offline keys and the Control Plane stopped; the result is recorded afterwards (C-35) |
+
+**[DECIDED]** (test campaign TC-013, D-09) The result of a drill run from the shell
+runbook is recorded with `POST /api/v1/clusters/{clusterId}/drills/offline`
+(`exponetdb drill record-offline`): the request names the runbook digest, which must
+be the current one (`422` otherwise), and an outcome of `attested` or `failed`.
+The serve process writes the row through `backups.record_offline_drill(...)`
+([`control-database.md`](../02-control-plane/control-database.md)), not through a
+table grant, and the action is audited (`restore.drill.offline.recorded`). Before
+this the insert ran as `exdb_serve`, which holds no `INSERT` on `backups.drills`,
+and every valid request answered `500 INTERNAL`.
 
 A drill that leaves a scratch cluster behind is not `passed` until
 `restore.discard@1` has run; a scratch cluster older than 24 hours is a finding.

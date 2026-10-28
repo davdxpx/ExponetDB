@@ -100,6 +100,11 @@ export function syntheticKind(
       const domains = isJsonObject(content) ? content['domains'] : undefined
       return isJsonArray(domains) ? domains.filter((d) => typeof d === 'string') : []
     },
+    supersedes(plan: PlanRecord) {
+      const content = plan.body['content']
+      const named = isJsonObject(content) ? content['supersedes'] : undefined
+      return isJsonArray(named) ? named.filter((d) => typeof d === 'string') : []
+    },
     checkBindings: async () => (behavior.bindings === undefined ? [] : behavior.bindings()),
     async execute(ctx) {
       calls.execute += 1
@@ -134,6 +139,8 @@ export async function newPlan(
     kind?: string
     actor?: OperationActor
     domains?: readonly string[]
+    /** Operations in needs_attention the plan names to close (TC-005). */
+    supersedes?: readonly string[]
     decision?: PolicyDecision
     lifetimeMs?: number
   } = {},
@@ -148,7 +155,11 @@ export async function newPlan(
         actionClass: 'standard',
         actor: options.actor ?? human,
         subject: { tier: 'nonprod' },
-        content: { domains: [...(options.domains ?? [])], note: 'synthetic' },
+        content: {
+          domains: [...(options.domains ?? [])],
+          ...(options.supersedes === undefined ? {} : { supersedes: [...options.supersedes] }),
+          note: 'synthetic',
+        },
         policy,
         ...(options.lifetimeMs === undefined ? {} : { lifetimeMs: options.lifetimeMs }),
       },

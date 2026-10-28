@@ -137,6 +137,24 @@ describe('the findings page', () => {
     )
   })
 
+  it('offers every kind the server returns, and keeps advisor and statements in the address (TC-036)', async () => {
+    const world = worldWithFindings()
+    mountApp('/findings?kind=advisor', world)
+    await table()
+    // The contract's kinds, not only drift and health: every finding of a target that has only
+    // advisor findings used to be unreachable by a filter.
+    const options = within(screen.getByLabelText('Kind')).getAllByRole('option')
+    expect(options.map((o) => o.textContent)).toEqual([
+      'Any',
+      'Drift',
+      'Health',
+      'Advisor',
+      'Statements',
+    ])
+    expect(lastQuery(world).get('kind')).toBe('advisor')
+    expect(screen.getByLabelText('Kind')).toHaveValue('advisor')
+  })
+
   it('ignores a hostile filter of the address', async () => {
     const world = worldWithFindings()
     mountApp('/findings?severity=%3Cscript%3E&state=bogus&kind=%00&target=..%2F..%2Fetc', world)

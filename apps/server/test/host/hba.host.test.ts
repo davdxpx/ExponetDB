@@ -5,8 +5,12 @@ import { hostScenario } from '../support/host-world.ts'
 /**
  * Host scenario: pg_hba.conf through the helper (G5 item 7), on a cluster of
  * its own. A managed block is written and verified; a block that would lock
- * the agent out is refused on the host and the file is put back byte for
- * byte; the agent can still connect afterwards.
+ * ExponetDB out is refused at plan time (TC-018) and the file stays byte for byte;
+ * the agent can still connect afterwards. The agent's own refusal after the write, with
+ * the file put back, cannot be reached through a plan any more: the only rules the plan cannot
+ * judge (`samehost`, `samenet`) are network rules, which never apply to the agent's local access,
+ * and the helper writes every name but `all` double-quoted, so no keyword can hide in a name;
+ * `capabilities_pgit_test.go` (CI job node-pg) proves the agent's refusal on real clusters.
  */
 const w = hostScenario({ scenario: 'hba' })
 
@@ -34,10 +38,10 @@ describe('pg_hba through the managed block (host scenario)', () => {
     expect(text).toContain('local all exponetdb_node peer map=exponetdb\n')
   })
 
-  it('refuses a block that would lock the agent out, and puts the file back', async () => {
+  it('refuses a block that would lock ExponetDB out at plan time (TC-018)', async () => {
     const before = readFileSync(w.instance.hbaFile)
     await w.inspect('postgres.hba.inspect@2')
-    const lockout = await w.planAndApply({
+    const planned = await w.plan({
       kind: 'postgres.hba.apply',
       managedRules: [
         {
@@ -51,11 +55,10 @@ describe('pg_hba through the managed block (host scenario)', () => {
       ],
       protectedAccess: [],
     })
-    expect([lockout.state, lockout.applyOutcome]).toEqual(['failed', 'not_applied'])
+    // The agent's own socket access is cut off by the first rule: no plan, no write.
+    expect([planned.status, planned.body?.code]).toEqual([409, 'HBA_WOULD_LOCK_OUT'])
+    expect(planned.body?.details).toMatchObject({ address: 'local', method: 'peer', rule: 1 })
     expect(Buffer.compare(readFileSync(w.instance.hbaFile), before)).toBe(0)
-    expect(await w.psql('SELECT 1')).toBe('1')
-    // The node still reads the cluster afterwards.
-    await w.inspect('postgres.hba.inspect@2')
   })
 
   it('removes the managed block again', async () => {

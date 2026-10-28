@@ -52,6 +52,8 @@ const SEVERITY_LABELS: Readonly<Record<(typeof SEVERITIES)[number], MessageKey>>
 const KIND_LABELS: Readonly<Record<(typeof KINDS)[number], MessageKey>> = {
   drift: 'globalFindings.kind.drift',
   health: 'globalFindings.kind.health',
+  advisor: 'globalFindings.kind.advisor',
+  statements: 'globalFindings.kind.statements',
 }
 
 const LINK = 'text-xs text-primary underline focus-ring'

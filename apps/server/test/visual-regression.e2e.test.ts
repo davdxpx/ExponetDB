@@ -37,6 +37,17 @@ if (!/^[a-z0-9][a-z0-9.-]{0,63}$/.test(BASELINE_SET)) {
 }
 const BASELINES = fileURLToPath(new URL(`./visual-baselines/${BASELINE_SET}/`, import.meta.url))
 const UPDATE = process.env['EXDB_UPDATE_VISUAL'] === '1'
+
+/**
+ * What a failing comparison says about the set it ran against (test campaign TC-054). The default
+ * set `local` matches only the machine that recorded it (fonts and rasterization differ
+ * elsewhere), so a pixel difference on another machine is not a regression.
+ */
+function setHint(): string {
+  return process.env['EXDB_VISUAL_BASELINE_SET'] === undefined
+    ? `The baseline set was the default \`${BASELINE_SET}\`, which matches only the machine that recorded it: on another machine set EXDB_VISUAL_BASELINE_SET=ci-ubuntu-24.04 (a pinned Ubuntu 24.04 host with the CI fonts) or record your own set with EXDB_UPDATE_VISUAL=1 and review the diff (local-development.md).`
+    : `Compared against the baseline set \`${BASELINE_SET}\`.`
+}
 const ACTUAL_DIR = process.env['EXDB_VISUAL_ACTUAL_DIR']
 const CHANNEL_TOLERANCE = 12
 const MAX_DIFF_RATIO = 0.002
@@ -216,7 +227,9 @@ describe('visual regression of the design system /visual page', () => {
       }
       await compare.close()
       await page.close()
-      expect(failures, failures.join('\n')).toEqual([])
+      expect(failures, failures.length === 0 ? '' : `${failures.join('\n')}\n${setHint()}`).toEqual(
+        [],
+      )
     })
   }
 

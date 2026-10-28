@@ -2234,6 +2234,7 @@ export const NODE_ROUTES = [
       'CAPABILITY_UNAVAILABLE',
       'NODE_OBSERVATION_STALE',
       'REGISTRY_CONFLICT',
+      'HBA_WOULD_LOCK_OUT',
     ],
   },
   {

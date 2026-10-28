@@ -1,6 +1,7 @@
 import type { Operation, PlanView } from '@exponetdb/sdk'
 import { dash, toneOf } from './format.ts'
 import type { Block } from './model.ts'
+import { nodeChangeBlocks } from './node-plans.ts'
 
 /**
  * The plan and operation views every command shares
@@ -137,6 +138,8 @@ export function planBlocks(p: PlanView): Block[] {
     ],
   })
   blocks.push(...migrationRows(p))
+  // The change of a node plan (TC-001): what a person judges before applying it.
+  blocks.push(...nodeChangeBlocks(p))
   const failing = (p.policyRules ?? []).filter(
     (r) => r.result !== 'pass' && r.result !== 'not_applicable',
   )

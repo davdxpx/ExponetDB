@@ -29,6 +29,8 @@ export function compareLedger(
   mirror: readonly LedgerRowFact[],
   live: readonly LedgerRowFact[],
   known: ReadonlySet<string>,
+  /** How many ids of each class to keep: a refusal names a few, a reconciliation needs them all. */
+  shown = SHOWN,
 ): LedgerDivergence | null {
   const liveById = new Map(live.map((r) => [r.migrationId, r]))
   const mirrored = new Set(mirror.map((r) => r.migrationId))
@@ -46,9 +48,9 @@ export function compareLedger(
     .map((r) => r.migrationId)
   if (missing.length + checksumDiffers.length + unrecorded.length === 0) return null
   return {
-    missing: missing.slice(0, SHOWN),
-    checksumDiffers: checksumDiffers.slice(0, SHOWN),
-    unrecorded: unrecorded.slice(0, SHOWN),
+    missing: missing.slice(0, shown),
+    checksumDiffers: checksumDiffers.slice(0, shown),
+    unrecorded: unrecorded.slice(0, shown),
   }
 }
 

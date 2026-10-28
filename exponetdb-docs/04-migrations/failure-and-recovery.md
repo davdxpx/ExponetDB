@@ -24,7 +24,7 @@ automatically, nothing in the ledger is edited
 | E7 | Node agent unavailable | n/a for SQL-only migrations | unaffected | Migrations do not need the agent; backup-gated migrations wait for the backup subsystem (policy) |
 | E8 | Legacy migration exists but its checksum provenance is `unknown` | ledger row | imported | Treated as applied history; dependencies on the baseline are satisfied; it never needs a checksum to be re-proven |
 | E9 | New migration depends on an imported legacy migration | DAG validation | n/a | Not allowed: bundles depend on the baseline or on bundles (legacy files are not graph nodes) |
-| E10 | `verify.sql` times out | statement or lock timeout | `applied`, `error`; operation `needs_attention`, the target's schema domain held | `operation retry-verification` once the cause is gone (the worker re-runs only the verification); with a broken `verify.sql`, a verify revision, then `migration.verify` |
+| E10 | `verify.sql` times out | statement or lock timeout | `applied`, `error`; operation `needs_attention`, the target's schema domain held | `operation retry-verification` once the cause is gone (the worker re-runs only the verification); with a broken `verify.sql`, a verify revision, then `migration.verify`, whose plan names the operation and closes it as `verification_failed` (TC-005) |
 | E11 | Migration requires a non-transactional statement | parser classification | n/a | `transactional: false`; plan alone; approval on prod; §2 |
 | E12 | `CREATE INDEX CONCURRENTLY` fails or is interrupted | error / reconciliation | `partially_applied`; an **INVALID** index may exist (still adds write overhead; an invalid unique index still enforces uniqueness) | Cleanup plan (`DROP INDEX CONCURRENTLY IF EXISTS`), then re-plan; or `migration.resume` which re-runs from the failed statement after the engine verified the cleanup (§2) |
 | E13 | Required extension missing | plan-time requirement check | n/a | `postgres.extensions.apply` operation (node capability), then re-plan |
@@ -38,8 +38,8 @@ automatically, nothing in the ledger is edited
 | E21 | Dependency cycle | DAG validation | n/a | Fix `dependsOn` (only possible before apply) |
 | E22 | Migration's dependency applied with a different checksum on this target | DAG validation | n/a | `MIGRATION_CHECKSUM_MISMATCH`; investigate ledger divergence |
 | E23 | Out-of-band DDL on the target between plan and apply | fingerprint binding | plan stale | Re-plan; drift finding records the out-of-band change |
-| E24 | Ledger tampered with (row added/removed by hand) | mirror comparison | `LEDGER_DIVERGENCE`, schema changes blocked | `ledger.reconcile` with an explicit operator decision |
-| E25 | Target restored to an earlier point in time | restore operation or generation/identity mismatch | ledger reflects the restored state; mirror reconciled; plans stale | Re-plan; migrations after the restore point show as pending again (and must have the same checksums as before) |
+| E24 | Ledger tampered with (row added/removed by hand) | mirror comparison | `LEDGER_DIVERGENCE`, schema changes blocked | `ledger.reconcile` with an explicit operator decision (`adopt_target`; TC-007) |
+| E25 | Target restored to an earlier point in time | restore operation or generation/identity mismatch | ledger reflects the restored state; mirror reconciled; plans stale | The operator plans `ledger.reconcile` (`adopt_target`, with a note; production: approval and re-authentication): the mirror rows the target no longer has move to `migrations.ledger_mirror_history`, the live rows are mirrored, and migrations after the restore point show as pending again (planned from the stored bundles, with the same checksums as before) (TC-007) |
 | E26 | Control Plane restarts during an operation | lease expiry | reconciliation by new worker | Automatic; see [`../02-control-plane/operations-engine.md` §4.2](../02-control-plane/operations-engine.md#42-workers-and-leases) |
 | E27 | Grant of the applying client revoked mid-operation | authorization re-check at dispatch, at execution start and before each further migration | remaining migrations not started (`GRANT_REVOKED` in their progress); operation `failed` with `GRANT_REVOKED` when nothing ran, else `verification_failed` (`partially_applied`) with what ran verified | Re-plan by an authorized actor |
 | E28 | Plan approved after the target changed | bindings re-checked at execution start | `PLAN_STALE`, nothing executed | Re-plan, re-approve |
@@ -108,7 +108,10 @@ For `transactional: false`:
   - Reconciliation never reads a missing row of a started, unclosed
     non-transactional migration as `not_applied`: the operation goes to
     `needs_attention` (`MIGRATION_INCOMPLETE` in its progress) and the
-    target stays blocked until a resume.
+    target stays blocked until a resume. The resume plan names that
+    operation; when the resume starts, the operation is closed as
+    `verification_failed` (`partially_applied`, the outcome it had was
+    `unknown`) and its lock goes (TC-005).
   - Policy: `migration.resume` falls under the SQL rules (lint gate,
     execution role, lock risk, agent production) and
     `migration.nontransactional` (production: approval and re-authentication).

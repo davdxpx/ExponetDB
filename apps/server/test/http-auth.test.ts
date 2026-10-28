@@ -107,6 +107,7 @@ describe('served routes (Wave 2 and 4 to 9)', () => {
       'listPlans',
       'planBaseline',
       'planImportAnalysis',
+      'planLedgerReconcile',
       'planMigrationResume',
       'planMigrationRollback',
       'planMigrations',
@@ -245,16 +246,13 @@ describe('served routes (Wave 2 and 4 to 9)', () => {
     }
   })
 
-  it('leaves exactly the Wave 9 routes and the ledger reconciliation plan unserved', () => {
+  it('serves every contracted route (the ledger reconciliation plan since TC-007)', () => {
     const served = new Set(servedRoutes().map(({ route }) => route.operationId))
     expect(
       ROUTE_LIST.filter((r) => !served.has(r.operationId))
         .map((r) => r.operationId)
         .sort(),
-    ).toEqual([
-      // Wave 9 follow-up: the ledger reconciliation plan is contracted, not served.
-      'planLedgerReconcile',
-    ])
+    ).toEqual([])
   })
 })
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); OD-50 added on 2026-10-21 with the CLI's scope presets; on 2026-10-21 the owner's Wave 9 order ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)) split OD-7 into OD-7a (staging: yes) and OD-7b (production: no applies before Wave 11), decided the engine part of OD-4 (pgBackRest; the storage stays open until the measured spike B0), and added OD-51 (a declared `BYPASSRLS` execution-role exception) and OD-52 (adopting a running pgBackRest setup), both decided by the order's defaults; OD-53 (fingerprint lineage across per-environment owner roles) added on 2026-10-21 by Part A (A5); OD-54 (how an external cluster gains the node agent) added on 2026-10-22 by Part A (A8); OD-55 (procedural code in a migration session can act as any role the migrator holds) added on 2026-10-22 by Part A's review round 3; OD-56 (an excused value outside the fingerprint that changes after the review) added on 2026-10-24 by the review of Part A follow-up 3; on 2026-10-26 the owner's Wave 9 Part B order decided OD-8 (technical default option (a); the legal review stays open as EXTERNAL LEGAL REVIEW), OD-53 (a), OD-54 (a), OD-55 (c) with (d) and OD-56 (a), and kept the storage part of OD-4 open (it blocks the full G9 acceptance; see ["Owner decisions of the Wave 9 Part B order"](#owner-decisions-of-the-wave-9-part-b-order-2026-10-26)); OD-57 (an advisor run's scope) added on 2026-10-27 by the Part B review F-4; all other entries wait for the owner |
+| Status | OD-2, OD-3, OD-9 and OD-19 resolved on 2026-10-05; OD-5 resolved on 2026-10-06; OD-17, OD-18 and OD-20 resolved on 2026-10-07 (Wave 5 entry conditions); OD-23, OD-24 and OD-25 resolved on 2026-10-07 (Wave 5 design); OD-20 and OD-21 added on 2026-10-05; OD-22 added on 2026-10-07 (G4 acceptance); OD-23 to OD-25 added on 2026-10-07 (Wave 5 design); OD-26 added on 2026-10-07 and OD-27 on 2026-10-08 (Wave 5 Phases 5 and 6); OD-28 added on 2026-10-08 (Wave 5 correction F1); OD-6, OD-14, OD-15, OD-16, OD-22 and OD-26 resolved on 2026-10-12 by the owner's Wave 6 order (OD-22's declared-tier field on clusters was an open limit of the G6 acceptance until Wave 8 part 2 implemented it on 2026-10-13); OD-28 resolved on 2026-10-12 at the G5 acceptance (nothing to do on the owner's installation); OD-13 resolved and OD-29 (F9) added and resolved on 2026-10-12 by the owner's Wave 7 order, which also decided the points listed in ["Decisions of the Wave 7 order"](#decisions-of-the-wave-7-order-2026-10-12); OD-30 to OD-37 added on 2026-10-13 (Wave 7 follow-up, after an external test of the live endpoint; OD-30 and OD-31 are already built and wait for the owner's confirmation, the others are not implemented); OD-8: Wave 2 design settled on 2026-10-05, legal setting open; OD-1 and OD-11 resolved and OD-38 and OD-39 added on 2026-10-13 by the owner's Wave 8 order (which named them OD-30 and OD-31; renumbered because the Wave 7 follow-up took OD-30 to OD-37 the same day), which also decided the points listed in ["Decisions of the Wave 8 order"](#decisions-of-the-wave-8-order-2026-10-13); OD-40 added on 2026-10-13 from the Wave 8 CSP spike and resolved the same day by the owner, who also extended OD-22 and decided the points listed in ["Owner decisions in the Wave 8 session"](#owner-decisions-in-the-wave-8-session-2026-10-13); OD-41 to OD-48 added on 2026-10-20 by the Wave 8 completion's Studio parity audit ([`../11-ui/studio-parity.md`](../11-ui/studio-parity.md)); OD-49 added on 2026-10-21 with the owner's decision on the provider list (S11 in ["Owner decisions after the Wave 8 session"](#owner-decisions-after-the-wave-8-session)); OD-50 added on 2026-10-21 with the CLI's scope presets; on 2026-10-21 the owner's Wave 9 order ([`../14-roadmap/orders/wave-9-order.md`](../14-roadmap/orders/wave-9-order.md)) split OD-7 into OD-7a (staging: yes) and OD-7b (production: no applies before Wave 11), decided the engine part of OD-4 (pgBackRest; the storage stays open until the measured spike B0), and added OD-51 (a declared `BYPASSRLS` execution-role exception) and OD-52 (adopting a running pgBackRest setup), both decided by the order's defaults; OD-53 (fingerprint lineage across per-environment owner roles) added on 2026-10-21 by Part A (A5); OD-54 (how an external cluster gains the node agent) added on 2026-10-22 by Part A (A8); OD-55 (procedural code in a migration session can act as any role the migrator holds) added on 2026-10-22 by Part A's review round 3; OD-56 (an excused value outside the fingerprint that changes after the review) added on 2026-10-24 by the review of Part A follow-up 3; on 2026-10-26 the owner's Wave 9 Part B order decided OD-8 (technical default option (a); the legal review stays open as EXTERNAL LEGAL REVIEW), OD-53 (a), OD-54 (a), OD-55 (c) with (d) and OD-56 (a), and kept the storage part of OD-4 open (it blocks the full G9 acceptance; see ["Owner decisions of the Wave 9 Part B order"](#owner-decisions-of-the-wave-9-part-b-order-2026-10-26)); OD-57 (an advisor run's scope) added on 2026-10-27 by the Part B review F-4; OD-58 to OD-67 added on 2026-10-28 by the test campaign fixes; all other entries wait for the owner |
 | Read before | [`../14-roadmap/implementation-waves.md`](../14-roadmap/implementation-waves.md) |
 
 Only real decisions are listed: questions where the answer changes the design,
@@ -77,6 +77,16 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-55 | Procedural code in a migration session can act as any role the migrator holds | **resolved 2026-10-26** | options (c) and (d): a person approves every agent-initiated plan with procedural statements (`DO`, created and called routines, dynamic SQL where detectable) on **every** tier; the executor compares the `exponetdb` schema's ledger and marker state before and after each authored statement inside the transaction and refuses a change it did not make; fail closed where the check cannot run; cross-project role reach on one cluster stays a recorded residual risk | agent applies of procedural bundles without a person | decided |
 | OD-56 | An excused value outside the fingerprint that changes after the review | **resolved 2026-10-26** | option (a): a keyed digest (HMAC-SHA-256 under a server-side installation key, never a plain hash) of the observed value of open-domain kinds is recorded with the excused failure and compared at every later verification; a changed value fails closed even with the same aspect; a missing or rotated key fails closed; values never appear in UI, API, audit or logs | nothing | decided |
 | OD-57 | `advisors_run` records a run, but its scope `diagnostics.read` is a read scope | **open** | (a) a new additive oauth bundle makes `diagnostics.read` a write scope (consent shows it; clients that auto-approve read tools stop doing so); (b) a separate record scope for advisor runs (`diagnostics.record`), `diagnostics.read` stays read-only; (c) an advisor run over MCP records nothing (findings only from Web App, CLI and the worker) | nothing in Part B; the MCP annotation stays `readOnlyHint` until decided | open |
+| OD-58 | How an operation in `needs_attention` is closed | **open** (built with option (a) by the test campaign fixes) | (a) the recovery plan that names it closes it as `verification_failed`, `unknown` becomes `partially_applied`; (b) (a) plus the planned `operation.force_release` for operations no recovery plan covers; (c) (a) with `verification_failed` admitting an `unknown` apply outcome | option (a) is in the code on the branch; the owner confirms or changes it | open |
+| OD-59 | Flagging ledger rows as untrusted (`ledger.reconcile` with `flag_untrusted`) | **open** | (a) leave it unbuilt: `adopt_target` is the only decision, `flag_untrusted` is refused as `not_built`; (b) record the decision and a finding while the divergence keeps refusing plans; (c) remove it from the contract | (a) is in the code on the branch; the owner decides | open |
+| OD-60 | How strict a restore drill is about `amcheck` | **open** (built with option (a) by the test campaign fixes) | (a) a check the node could not run everywhere (`not_run`) does not fail a drill and stays recorded; `failed` and `error` do; (b) strict: a drill is refused at planning unless the extension is known to exist in every database of the restored cluster; (c) the node creates `amcheck` in the disposable scratch cluster with the host's contrib package, so the check runs everywhere | (a) is in the code on the branch; the owner confirms or changes it | open |
+| OD-61 | What an empty or missing drift baseline means, how large a read-lane result may be, and what counts toward the findings headline | **open** (nothing built; test campaign TC-017, TC-037) | (a) a target without a usable baseline reports one `no_baseline` finding and no `object_added` flood; roll-ups leave the severity counters; MCP results are capped (64 KB with a cursor) and repeated codes grouped; (b) keep the counts and only present them better (group by target and code, "rehearsal drift" separate); (c) leave as is | (a) together with OD-57 (b), as one change to the recording path |
+| OD-62 | Node certificate expiry: a distinct refusal reason, findings and thresholds | **open** (the agent's `status` text is built; test campaign TC-042) | (a) reason `certificate_expired`, findings `node_certificate_near_expiry` (warning from 12 h before the end without a renewal, critical after) and `node_certificate_expired`; (b) findings only; (c) documentation only (built) | (a) with a 12 h warning |
+| OD-63 | Who may withdraw a node plan, and whether withdrawing a revoke plan needs a fresh passkey | **open** (test campaign TC-020) | (a) the plan's creator withdraws it with the scope that created it, without a fresh passkey (withdrawing is the safe direction); (b) as (a), but a `node.revoke` or `node.decommission` plan still needs re-authentication to withdraw; (c) keep `nodes.operate` | (a) |
+| OD-64 | How long an operation may wait for approval | **open** (test campaign TC-034; the owner is asked to look at `op_01M5X74EJ0CD4BYGRZ9DM1KZYA`) | (a) an `awaiting_approval` operation whose plan expired is canceled (`plan_expired`, audited) and the approval page says so; (b) a separate deadline for approvals (for example 24 h); (c) no deadline (today) | (b), with (a) as the floor |
+| OD-65 | E16 and E18 waivers: detection before more imports | **open** (test campaign TC-023, TC-024) | (a) the OD-7a staging import counts as real REOSA data: build `hotfix_without_evidence` and `applied_not_in_source` before the next import; (b) it does not: keep the waivers until Wave 10 | (a) for E16 (a break-glass hotfix is reachable once a channel is set), (b) for E18 |
+| OD-66 | G10.3 wording against OD-7b | **open** (test campaign TC-063) | (a) "at least five REOSA migrations applied staging-first; production evidence checked by a plan only until Wave 11"; (b) keep the wording and treat it as a Wave 11 gate | (a) |
+| OD-67 | Step-up for enrolling a node | **open** (test campaign TC-053) | (a) one combined step-up whose receipt covers the plan apply and the token reveal of that plan only; (b) a longer receipt (5 min) for those two actions; (c) keep two receipts | (a) |
 
 ---
 
@@ -1798,6 +1808,193 @@ History:
   grant shows the record right separately.
 - **Blocks.** Nothing in Part B; the residual is listed in
   [`../14-roadmap/PRE-WAVE-11-REVIEW.md`](../14-roadmap/PRE-WAVE-11-REVIEW.md) W9-04.
+
+## OD-58. How an operation in `needs_attention` is closed
+
+- **Status.** OPEN (found on 2026-10-27 by the test campaign, TC-005 / MIG-01;
+  built with option (a) by the fixes of 2026-10-28, for the owner to confirm)
+- **Question.** An operation in `needs_attention` keeps its exclusivity
+  domains and is never claimed, so the documented recovery of a verify.sql
+  that errors (a verify revision, then `migration.verify`) and of a killed
+  non-transactional bundle (`migration.resume`) waited for ever behind the
+  operation it was meant to recover. How does such an operation leave?
+- **Why it matters.** **[OBSERVED]** The target was blocked for every schema
+  change, production hotfixes included, until someone edited the Control Store
+  by hand. The existing suites missed it because their partial failure ends in
+  `verification_failed`, which holds no domain.
+- **Options.** (a) **built**: the recovery plan names the operation; when it
+  starts, the worker closes the named operation (still in `needs_attention`
+  and holding one of its domains) as `verification_failed` in the same
+  transaction, with `supersededBy` in the event; an apply outcome of `unknown`
+  is recorded as `partially_applied`, the verification outcome as `failed`.
+  (b) (a), and also build `operation.force_release` (its own kind, the
+  `operations.recover` permission, human only, tier of the operation that owns
+  the lock, [operations-engine.md §2](../02-control-plane/operations-engine.md#2-operation-kinds))
+  for an operation no recovery plan covers (a node or registry operation that
+  reaches `needs_attention`). (c) (a), but `verification_failed` admits an
+  `unknown` apply outcome, so the closed record keeps the truth that nobody
+  knows; every reader of the state (views, CLI, Web) must then handle it.
+- **Recommendation.** (a) now, as built; (b) before Wave 11 if a kind other
+  than the migration kinds can end in `needs_attention` on a real target;
+  (c) only with a review of the readers.
+- **Blocks.** Nothing.
+
+## OD-59. Flagging ledger rows as untrusted
+
+- **Status.** OPEN (found on 2026-10-28 while building `ledger.reconcile`,
+  TC-007; built with option (a), for the owner to confirm)
+- **Question.** The contract of `ledger.reconcile.plan` takes a decision of
+  `adopt_target` or `flag_untrusted`
+  ([`../04-migrations/ledger.md` §5](../04-migrations/ledger.md#5-mirror-and-reconciliation)
+  says the operator "records the decision (adopt target as truth, or flag
+  rows as untrusted)"). Only the first is built. What should the second do?
+- **Why it matters.** `adopt_target` is the recovery of a restore (E25). A
+  decision that the target's rows are untrusted keeps the divergence in
+  place by definition (plans stay refused), so on its own it only leaves a
+  record; whether that record is worth a plan, an audit event and a finding
+  depends on how the owner wants a tampered ledger handled.
+- **Options.** (a) built: `flag_untrusted` is refused at planning as
+  `VALIDATION_FAILED` (`/decision`, `not_built`), the contract keeps the
+  value. (b) build it: the plan records the decision and the note, raises a
+  critical finding for the listed ids, changes no mirror row, and the
+  divergence keeps refusing schema plans until it is undone or adopted.
+  (c) remove the value from the contract (a contract change, generated
+  files).
+- **Recommendation.** (a) until a real tampered ledger needs it; then (b).
+- **Blocks.** Nothing.
+
+## OD-60. How strict a drill is about `amcheck`
+
+- **Status.** OPEN (found on 2026-10-27 by the test campaign, TC-010 / D-02; built
+  with option (a) by the fixes of 2026-10-28, for the owner to confirm)
+- **Question.** The node's `amcheck` check reports `not_run` when a database of the
+  restored cluster lacks the extension (a template, an application database, any
+  backup older than the extension). The Control Plane required every configured
+  check to be `passed`, so such a drill ended `verification_failed` although the
+  recovery target was reached and the probes passed. Is "the integrity check could
+  not run everywhere" a failed drill?
+- **Why it matters.** **[OBSERVED]** On a real host no drill could pass unless the
+  extension existed in every database of every backup. RB-08 and ADR-0038 say
+  "`amcheck` where installed, otherwise recorded `not_run`, never `passed`": the
+  node already followed that; the drill verification did not.
+- **Options.** (a) **built**: `not_run` of `amcheck` does not fail the drill; the check
+  keeps its outcome and detail in the drill record and the restore list, and
+  `failed` or `error` still fail it. (b) strict: refuse the drill plan up front when
+  the extension is not known to exist in every database (the Control Plane has no
+  such fact today; a node observation would have to carry it). (c) the node creates
+  the extension in the disposable scratch cluster (the host's contrib package is
+  needed; the restored data is not changed beyond the extension).
+- **Recommendation.** (a) now; (c) when a real cluster's drills keep reporting
+  `not_run` and the host has the package. (b) only if the owner wants a drill to be
+  a proof of index integrity.
+- **Blocks.** Nothing.
+
+## OD-61. Empty drift baselines, the size of a read result and the findings headline
+
+- **Status.** OPEN (found on 2026-10-27 by the test campaign, TC-017 and TC-037; nothing
+  built, so that the numbers keep meaning what the CLI and the Web App say today)
+- **Question.** (1) A rehearsal copy has no ledger and an empty baseline: is a drift check
+  against an empty baseline `no_baseline`, or 13,741 `object_added` findings? (2) How large
+  may a read-lane result be (131,395 and 229,168 characters were answered)? (3) Do roll-ups
+  such as the advisor `drift_open` and `drift_overflow` count in the severity counters, and
+  do findings of a target without a baseline belong in the headline "Critical findings"?
+- **Why it matters.** **[OBSERVED]** The Overview showed "520 critical of 14,184 open": 518
+  expected drift rows of a scratch copy, one roll-up counting them again and one real finding.
+  An empty baseline is also a legitimate state (an empty database that someone then fills out
+  of band is drift), so reading it as `no_baseline` has a cost.
+- **Options.** (a) a baseline without objects, on a target that has objects, is reported once as
+  `no_baseline` with what to do (accept the schema as the baseline), roll-ups leave the counters,
+  MCP results are capped at 64 KB with a cursor and repeated finding codes grouped; (b) keep the
+  recording and the counts, and present them better (group by target and code, show findings of
+  targets without a baseline apart); (c) leave as is.
+- **Recommendation.** (a), built together with [OD-57](#od-57-advisors_run-records-a-run-but-its-scope-is-a-read-scope)
+  (b), because both change what the recording path writes. (b) alone is the smaller step if (a)'s
+  trade-off is unwanted.
+- **Blocks.** Nothing.
+
+## OD-62. Node certificate expiry: the signal and its thresholds
+
+- **Status.** OPEN (found on 2026-10-27 by the test campaign, TC-042 / GAP-11; the agent's
+  `status` text is built)
+- **Question.** The gateway answers an expired node certificate like any refused one (`403
+  NODE_CERTIFICATE_REFUSED`), the node row stays `active` and nothing warns before the renewal
+  window closes (the last third of the 72 hours). Should the Control Plane raise a signal, and
+  from when?
+- **Why it matters.** An agent down for the whole window needs RB-13; nothing warns before it
+  closes. The live node's certificate ends 2026-10-30T05:57:35Z.
+- **Options.** (a) a distinct refusal reason `certificate_expired` and node findings
+  `node_certificate_near_expiry` (warning from 12 hours before the end without a renewal, critical
+  after) and `node_certificate_expired`; (b) the findings only; (c) documentation and the agent's
+  `status` only (built).
+- **Recommendation.** (a), with the 12-hour warning proposed by the campaign.
+- **Blocks.** Nothing.
+
+## OD-63. Withdrawing a node plan
+
+- **Status.** OPEN (found on 2026-10-27 by the test campaign, TC-020)
+- **Question.** A user with `nodes.plan` cannot withdraw their own node plans
+  (`INSUFFICIENT_SCOPE`, needs `nodes.operate`), and withdrawing a `node.revoke` plan asks for a
+  fresh passkey (`REAUTH_REQUIRED`) although creating it did not. May the creator withdraw, and
+  with what proof?
+- **Why it matters.** Ten plans made by the campaign could not be cleaned up and waited for their
+  expiry (15 or 30 minutes); withdrawing is the safe direction.
+- **Options.** (a) the plan's creator withdraws it with the scope that created it and without a
+  fresh passkey; (b) as (a) but a revoke or decommission plan still needs re-authentication to
+  withdraw; (c) keep `nodes.operate`.
+- **Recommendation.** (a).
+- **Blocks.** Nothing.
+
+## OD-64. How long an operation may wait for approval
+
+- **Status.** OPEN (found on 2026-10-27 by the test campaign, TC-034)
+- **Question.** An `access.identity.erase` operation (`op_01M5X74EJ0CD4BYGRZ9DM1KZYA`, created
+  2026-10-26T23:01Z) is `awaiting_approval` with a live approval URL although its plan was
+  consumed, approved 1 of 1 and expired about 20 hours before the campaign. Is that the designed
+  cooling flow, and may an operation wait for ever?
+- **Why it matters.** An erasure left dangling is dangerous if it can still be approved later,
+  and each waiting operation uses one of the 20 approval places of its actor.
+  **The owner is asked to look at that operation and decide whether to cancel it.**
+- **Options.** (a) an `awaiting_approval` operation whose plan expired is canceled (`plan_expired`,
+  audited), and the approval page and the CLI say when a cooling self-approval can run; (b) a
+  separate deadline for approvals (for example 24 hours); (c) no deadline (today).
+- **Recommendation.** (b), with (a) as the floor.
+- **Blocks.** Nothing.
+
+## OD-65. E16 and E18: detection before the next import
+
+- **Status.** OPEN (found on 2026-10-27 by the test campaign, TC-023 and TC-024)
+- **Question.** The G6 waivers of E16 (`hotfix_without_evidence`) and E18
+  (`applied_not_in_source`) expire "before the first import of real REOSA data (Wave 10)"; the
+  live staging target already carries 555 `legacy_import` ledger rows from the OD-7a import. Is
+  that import "real data", and must detection exist before more imports?
+- **Why it matters.** A break-glass grant on `migration.staging-evidence` can be activated once a
+  notification channel is set, and nothing marks the production ledger row afterwards; a plan
+  whose source omits an applied migration is `allow` with no finding.
+- **Options.** (a) the import counts as real data: build both detections first (E16 at the
+  ledger mirror write, E18 as a lint or stream finding); (b) it does not: the waivers run to
+  Wave 10.
+- **Recommendation.** (a) for E16, (b) for E18.
+- **Blocks.** Nothing built here.
+
+## OD-66. G10.3 against OD-7b
+
+- **Status.** OPEN (found on 2026-10-27 by the test campaign, TC-063)
+- **Question.** `acceptance-gates.md` G10 row 3 requires "at least five REOSA migrations applied
+  staging-first, production with evidence", while OD-7b forbids production applies before Wave 11.
+- **Options.** (a) reword: staging-first, with the production evidence checked by a plan only until
+  Wave 11; (b) keep the wording as a Wave 11 gate.
+- **Recommendation.** (a).
+- **Blocks.** Nothing.
+
+## OD-67. Step-up receipts for enrolling a node
+
+- **Status.** OPEN (found on 2026-10-27 by the test campaign, TC-053 / E10)
+- **Question.** Applying the `node.enroll` plan and revealing the token each need their own
+  step-up receipt (120 seconds): two passkey prompts within about two minutes.
+- **Options.** (a) one combined step-up whose receipt covers both actions for that plan only; (b)
+  a longer receipt (5 minutes) for those two actions; (c) keep two receipts.
+- **Recommendation.** (a).
+- **Blocks.** Nothing.
 
 ## Owner decisions of the Wave 9 Part B order (2026-10-26)
 

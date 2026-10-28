@@ -116,6 +116,7 @@ exit codes are in [`README.md`](./README.md).
 | [`migration import report`](#migration-import-report) | remote | read | An import report: every legacy file’s classification and the decisions so far. |
 | [`migration import resolve`](#migration-import-resolve) | remote | mutation | Record your decision for one item of an import report (with a note). |
 | [`migration import baseline`](#migration-import-baseline) | remote | plan | Plan the baseline of a resolved import report (records the legacy ledger; changes no schema). |
+| [`migration ledger reconcile`](#migration-ledger-reconcile) | remote | plan | Plan adopting the target’s ledger as the truth after a restore or a hand change; the mirror rows that differ move to a history, no row is deleted. |
 | [`plan show`](#plan-show) | remote | read | Show a plan: subject, decision, requirements, content and analysis. |
 | [`plan list`](#plan-list) | remote | read | List plans you may read, newest first (filter by target, kind, state). |
 | [`plan export`](#plan-export) | remote | read | Write a plan as JSON (to stdout, or to a new private file with --file). |
@@ -172,7 +173,6 @@ exit codes are in [`README.md`](./README.md).
 | [`access identities`](#access-identities) | remote | read | Identities (people and service accounts). |
 | [`access roles`](#access-roles) | remote | read | The built-in roles and their permissions. |
 | [`access bindings`](#access-bindings) | remote | read | Role bindings (who holds which role where). |
-| [`access grants`](#access-grants) | remote | read | Your own OAuth grants (applications you connected). |
 | [`access clients`](#access-clients) | remote | read | Registered OAuth clients (names are untrusted text). |
 | [`dev up`](#dev-up) | local | local | Create or start a local lab: Control Store, staging and production targets, serve, worker and gateway. |
 | [`dev status`](#dev-status) | local | read | The lab’s roles and readiness, its image against the source, the active and the last run (exit 0 only when ready). |
@@ -1452,6 +1452,7 @@ Runs: against the server; effect: plan; action: `node.inspect`; scopes: `nodes.p
 | `--capability <name@major>` | An inspectable capability. (required) |
 | `--cluster <cls_…>` | The cluster (for postgres capabilities). |
 | `--arg <k=v>` | Capability arguments (string values). |
+| `--arg-json <k=json>` | Capability arguments as JSON (arrays and objects, for example changes=[…]). |
 | `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
 
 ### node postgres reload
@@ -1470,6 +1471,7 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 |---|---|
 | `node` (required) | The node id (nod_…). |
 | `--cluster <cls_…>` | The cluster on the node. (required) |
+| `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
@@ -1491,6 +1493,7 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 |---|---|
 | `node` (required) | The node id (nod_…). |
 | `--cluster <cls_…>` | The cluster on the node. (required) |
+| `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
@@ -1515,6 +1518,7 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 | `--set <name=value>` | Parameters to set. |
 | `--reset <name>` | Parameters to reset. |
 | `--no-reload` | Do not reload after applying. |
+| `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
@@ -1537,6 +1541,7 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 | `node` (required) | The node id (nod_…). |
 | `--cluster <cls_…>` | The cluster on the node. (required) |
 | `--file <path>` | The change as JSON or YAML (checked against the contract). (required) |
+| `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
@@ -1559,6 +1564,7 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 | `node` (required) | The node id (nod_…). |
 | `--cluster <cls_…>` | The cluster on the node. (required) |
 | `--file <path>` | The change as JSON or YAML (checked against the contract). (required) |
+| `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
@@ -1581,6 +1587,7 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 | `node` (required) | The node id (nod_…). |
 | `--cluster <cls_…>` | The cluster on the node. (required) |
 | `--file <path>` | The change as JSON or YAML (checked against the contract). (required) |
+| `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
@@ -1603,6 +1610,7 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 | `node` (required) | The node id (nod_…). |
 | `--cluster <cls_…>` | The cluster on the node. (required) |
 | `--file <path>` | The change as JSON or YAML (checked against the contract). (required) |
+| `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
@@ -2048,6 +2056,25 @@ Runs: against the server; effect: plan; action: `migration.baseline.plan`; scope
 |---|---|
 | `report` (required) | The import report id. |
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
+| `--apply` | Apply at once and wait. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+### migration ledger reconcile
+
+Plan adopting the target’s ledger as the truth after a restore or a hand change; the mirror rows that differ move to a history, no row is deleted.
+
+```text
+exponetdb migration ledger reconcile [flags]
+```
+
+Runs: against the server; effect: plan; action: `ledger.reconcile.plan`; scopes: `migrations.import`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
+| `--note <text>` | Why: what happened to the target (kept with the plan, 1 to 1000 characters). (required) |
 | `--apply` | Apply at once and wait. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
@@ -3098,16 +3125,6 @@ Runs: against the server; effect: read; action: `role_binding.list`; scopes: `ac
 | `--limit <number>` | Items to show (1 to 10000). (default 50) |
 | `--all` | Every page (at most 10000 items). |
 | `--cursor <cursor>` | Continue after a previous page. |
-
-### access grants
-
-Your own OAuth grants (applications you connected).
-
-```text
-exponetdb access grants
-```
-
-Runs: against the server; effect: read; action: `oauth.grant.list_own`; output: `GrantList`.
 
 ### access clients
 

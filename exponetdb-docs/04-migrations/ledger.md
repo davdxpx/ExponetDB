@@ -247,7 +247,9 @@ mirror's last known `ledger_state_hash` no longer matches.
 
 `ledger.reconcile` is a planned, audited operation that records the operator's
 decision (adopt target as truth, or flag rows as untrusted) without deleting any
-row anywhere.
+row anywhere. **[DECIDED]** (test campaign TC-007, MIG-03, failure case E25)
+`adopt_target` is built; `flag_untrusted` is refused as `not_built`
+([OD-59](../00-product/open-decisions.md#od-59-flagging-ledger-rows-as-untrusted)).
 
 **[DECIDED]** (Wave 6, implementation; `packages/migrations-engine/src/divergence.ts`)
 
@@ -272,11 +274,39 @@ row anywhere.
 - **After planning,** the plan's `ledgerStateHash` binding catches any
   change: at acceptance (the live binding check), at dispatch and under the
   schema lock at execution start (`PLAN_STALE`).
-- **[PLANNED]** `ledger.reconcile` (recording the operator's decision) and
-  the `ledger.mirror_healed` audit event are not in Wave 6. Until then a
-  divergence is resolved on the target: the hand-written change is undone
-  (the row restored, removed or its checksum written back), after which the
-  next plan compares clean.
+- **[DECIDED]** (test campaign TC-007) **`ledger.reconcile`**, the operator's
+  explicit way out of a divergence that is the truth (a restore, a database
+  copied from another point in time, a ledger changed by hand on purpose).
+  `POST /targets/{target}/ledger/reconcile-plans`, CLI `migration ledger
+  reconcile --note`, human only, class `high`, exclusivity `target:<id>:schema`;
+  on production a human approval and a fresh re-authentication
+  (`migration.ledger-reconcile-production`, no break-glass override). The
+  plan reads the live ledger as the observer **with the identity marker and
+  the cluster identity checked** (another installation, target, generation or
+  cluster is `TARGET_IDENTITY_MISMATCH` / `CLUSTER_IDENTITY_MISMATCH`, never
+  adopted) and names the divergence: the ids the mirror has and the target
+  lacks (`missing`), the ids whose checksum or operation differs
+  (`checksumDiffers`) and the ids no operation of the target wrote
+  (`unrecorded`), with the operator's note. It binds the live ledger's `ls1`
+  hash and a digest of all three lists (`PLAN_STALE` at acceptance, dispatch and
+  under the lock). Nothing to reconcile is `VALIDATION_FAILED`
+  (`nothing_to_reconcile`). **Execution writes only the Control Store**, in
+  one fenced transaction: the mirror rows of `missing` and `checksumDiffers`
+  move to `migrations.ledger_mirror_history` (append-only: the row as it was,
+  the reason `missing` or `differs`, the operation) through
+  `migrations.archive_mirror_rows`, a SECURITY DEFINER function the worker may
+  call only for a running `ledger.reconcile` operation of that target (the
+  worker has no `DELETE` on the mirror and the history is never changed); the
+  live rows of `checksumDiffers` and `unrecorded` are mirrored; `ledger_state`
+  takes the live hash and `divergent = false`. Verification re-reads both
+  and passes when they agree. The lost migrations are then pending again:
+  planned from the stored bundles, applied, mirrored once more. The target is
+  not touched. Proven by `packages/migrations-engine/test/reconcile.int.test.ts`
+  on PostgreSQL 17 (a restore that forgets two migrations, a checksum and a
+  row written by hand, a marker of another installation or cluster, a ledger
+  that agrees, a plan gone stale, the function refused for any other
+  operation). The `ledger.mirror_healed` audit event of a crash heal is
+  still not built (the heal needs none).
 
 ## 6. Retention
 

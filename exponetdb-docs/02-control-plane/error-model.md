@@ -169,7 +169,7 @@ later without changes).
 | `MIGRATION_DEPENDENCY_MISSING` | 409 | no | `details.missing[]` not applied and not in the plan. |
 | `MIGRATION_DEPENDENCY_UNVERIFIED` | 409 | no | Dependency applied but not verified (prod tier). |
 | `MIGRATION_DEPENDENCY_CYCLE` | 422 | no | `details.cycle[]`. |
-| `MIGRATION_DEPENDENCY_UNKNOWN` | 422 | no | `dependsOn` names an id not in the stream. |
+| `MIGRATION_DEPENDENCY_UNKNOWN` | 422 | no | `dependsOn` names an id not in the stream; `details.migrationId` is the bundle that declares it and `details.missing[]` the ids it lacks (absent where the code is raised without them). |
 | `MIGRATION_MANIFEST_INVALID` | 422 | no | Schema validation errors in `details.errors[]`. |
 | `MIGRATION_BUNDLE_INVALID` | 422 | no | Missing files, bad encoding, name/id mismatch; `details.reason`, `details.file` (reason codes in `packages/contracts`). |
 | `MIGRATION_LINT_BLOCKED` | 422 | no | Blocking lint findings in `details.findings[]`. |
@@ -252,7 +252,7 @@ later without changes).
 | `REGISTRY_CONFLICT` | 409 | no | Wave 4: the registry refuses the change in its current state (`details.reason`: `slug_taken`, `path_taken`, `address_taken`, `database_taken`, `cluster_not_confirmed`, `cluster_already_confirmed`, `cluster_retired`, `evidence_cycle`, `evidence_other_product`, `tier_in_use`, `target_state`, `endpoint_retired`, `database_not_found`, `no_active_endpoint`, `observer_credential_missing`, `system_identifier_taken`, `credential_missing`; Wave 5: `cluster_unmapped`, `cluster_not_agent_managed`, `cluster_ambiguous` (two local instances with the cluster's system identifier), `postgres_ca_missing`, `ca_bundle_lacks_postgres_ca`, `role_missing`, `role_privileges` (the role is not at its documented least privilege), `egress_addresses_unknown`, `tls_name_not_registered`; Wave 8: `role_superuser` (a role verifier for a superuser role, which the agent never changes); open enum). |
 | `NODE_OFFLINE` | 503 | yes | No heartbeat within threshold. |
 | `NODE_REVOKED` | 409 | no | |
-| `CAPABILITY_UNAVAILABLE` | 409 | no | Node does not report the capability/version, or the cluster is external. |
+| `CAPABILITY_UNAVAILABLE` | 409 | no | Node does not report the capability/version, the cluster is external, or a required extension is missing. **[DECIDED]** (test campaign TC-015) Optional `details`: `{ reason: 'extension_missing', extension: 'pg_stat_statements' }` for `query_stats` on a target whose last sample found the extension missing (it was answered with the node/external message, which named the wrong cause); the catalog remediation says to add it to `shared_preload_libraries`, restart and `CREATE EXTENSION`. The CLI prints `reason:` and `extension:` lines. |
 | `JOB_EXPIRED` | 409 | no | Job not claimed before `expiresAt`. |
 | `NODE_PROTOCOL_UNSUPPORTED` | 400 | no | Wave 5 agent API: no protocol major in common with the gateway, or a missing or malformed `X-Exponetdb-Protocol` / `X-Exponetdb-Agent-Version` header ([`protocol.md` §1, §6](../07-node-agent/protocol.md#1-transport)). |
 | `NODE_ENROLLMENT_REFUSED` | 401 | no | Wave 5: the enrollment token is unknown, expired, already used, or its redeem key does not match; one code for all four, so the answer reveals nothing about a token ([`enrollment.md` §3](../07-node-agent/enrollment.md#3-enrollment-flow)). The token is not consumed. |
@@ -260,6 +260,7 @@ later without changes).
 | `NODE_ALREADY_ENROLLED` | 409 | no | Wave 5: the server record already has a node that is not revoked or decommissioned (I-6). |
 | `NODE_CERTIFICATE_REFUSED` | 403 | no | Wave 5: the client certificate is not the node's current certificate, or the node's state does not allow the request (renewal only while `active` or `degraded`). |
 | `NODE_CAPABILITY_FAILED` | 422 | no | Wave 5 Phase 5: the node ran the capability and reported a failure before its effect point, so the host did not change; the operation shows the agent's (host-redacted) message ([`../07-node-agent/control-plane.md` §9.4](../07-node-agent/control-plane.md#94-execution-and-outcomes)). |
+| `HBA_WOULD_LOCK_OUT` | 409 | no | **[DECIDED]** (test campaign TC-018) A `postgres.hba.apply` plan whose managed rules, first match first, would cut off ExponetDB's own access (a protected access, the Control Plane's derived network access, or the agent's peer access over the local socket): `details` names the `role`, `database`, `address` and `method` of the access and the 1-based `rule` that decides it. A network rule with `samehost` or `samenet` is not judged and is left to the agent (names are literal: the helper writes every name but `all` double-quoted), which checks the written file and puts the previous one back (§9.6). |
 | `NODE_OBSERVATION_STALE` | 409 | no | Wave 5 Phase 5: no node-signed observation of the cluster is recent enough (10 minutes) to plan against; `details.capability` names what to inspect first. |
 
 ### Backup and restore

@@ -33,3 +33,26 @@ cp "$here"/systemd/* "$root/etc/systemd/system/"
 systemd-analyze verify --man=no --root="$root" \
   exponetdb-node.service exponetdb-node-helper.service exponetdb-node-helper.socket
 echo "units verified"
+
+# A fresh host enrolls the node before any unit started (node-runbook.md section 3), so the
+# agent's state directory has to come from tmpfiles.d, not from StateDirectory= (test campaign
+# TC-039). The configuration is always read back through systemd; with root privileges the
+# directory is also created in the scratch root and its owner and mode are checked, as the agent
+# checks them (state.Open: owned by its user, no access for group or others).
+mkdir -p "$root/usr/lib/sysusers.d" "$root/usr/lib/tmpfiles.d" "$root/etc"
+cp "$here"/sysusers.d/*.conf "$root/usr/lib/sysusers.d/"
+cp "$here"/tmpfiles.d/*.conf "$root/usr/lib/tmpfiles.d/"
+systemd-tmpfiles --root="$root" --cat-config 2>/dev/null \
+  | grep -Eq '^d /var/lib/exponetdb-node 0700 exponetdb-node exponetdb-node -$' \
+  || { echo "tmpfiles.d does not create /var/lib/exponetdb-node (0700, exponetdb-node)" >&2; exit 1; }
+if [ "$(id -u)" -eq 0 ]; then
+  systemd-sysusers --root="$root"
+  systemd-tmpfiles --root="$root" --create
+  [ "$(stat -c %a "$root/var/lib/exponetdb-node")" = 700 ] \
+    || { echo "/var/lib/exponetdb-node is not mode 0700" >&2; exit 1; }
+  [ "$(stat -c %U "$root/var/lib/exponetdb-node")" = exponetdb-node ] \
+    || { echo "/var/lib/exponetdb-node is not owned by exponetdb-node" >&2; exit 1; }
+  echo "state directory created with mode 0700"
+else
+  echo "state directory configuration verified (creation is checked when run as root)"
+fi

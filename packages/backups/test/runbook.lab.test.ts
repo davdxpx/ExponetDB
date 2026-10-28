@@ -139,7 +139,7 @@ beforeAll(() => {
     execFileSync('sleep', ['1'])
   }
   expect(
-    psql('SELECT last_archived_wal >= $$' + switched + '$$ FROM pg_stat_archiver').stdout.trim(),
+    psql(`SELECT last_archived_wal >= $$${switched}$$ FROM pg_stat_archiver`).stdout.trim(),
   ).toBe('t')
 }, 300_000)
 

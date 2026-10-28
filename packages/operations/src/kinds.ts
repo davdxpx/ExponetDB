@@ -68,6 +68,13 @@ export interface OperationKind {
   readonly verifies: boolean
   /** Exclusivity domains held from `running` until the operation finishes. */
   exclusivity(plan: PlanRecord): readonly string[]
+  /**
+   * Operations in `needs_attention` that this operation's plan names as the
+   * ones it recovers (the plan binds them; TC-005). One that holds a domain
+   * this operation needs is closed, in the transaction that takes the domains
+   * ([`supersede.ts`](./supersede.ts)); nothing else is touched.
+   */
+  supersedes?(plan: PlanRecord): readonly string[]
   /** Kind-specific bindings, checked at acceptance and again under the locks. */
   checkBindings(plan: PlanRecord): Promise<readonly ChangedBinding[]>
   execute(ctx: ExecutionContext): Promise<ExecutionOutcome>

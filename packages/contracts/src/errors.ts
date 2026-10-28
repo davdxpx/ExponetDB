@@ -405,6 +405,14 @@ export const ERRORS = {
     retryable: false,
     title: 'Migration dependency unknown',
     message: 'dependsOn names an id that is not in the project stream.',
+    // The bundle that declares the dependency and the ids it lacks (TC-022); absent where the
+    // code is raised without them.
+    details: z
+      .strictObject({
+        migrationId: DependencyRefSchema,
+        missing: z.array(DependencyRefSchema).min(1).max(256),
+      })
+      .optional(),
   },
   MIGRATION_MANIFEST_INVALID: {
     group: 'migrations',
@@ -1118,7 +1126,17 @@ export const ERRORS = {
     status: 409,
     retryable: false,
     title: 'Capability unavailable',
-    message: 'The node does not report this capability version, or the cluster is external.',
+    message:
+      'The capability is not available here: the node does not report this capability version, the cluster is external, or a required extension is missing (see details).',
+    remediation:
+      'When details.reason is extension_missing, install the named extension on the target (add it to shared_preload_libraries, restart, then CREATE EXTENSION) and wait for the next sample.',
+    // Optional: a node without the capability and an external cluster carry no details.
+    details: z
+      .strictObject({
+        reason: z.enum(['extension_missing']),
+        extension: z.enum(['pg_stat_statements']),
+      })
+      .optional(),
   },
   JOB_EXPIRED: {
     group: 'targets_clusters_nodes',
@@ -1175,6 +1193,30 @@ export const ERRORS = {
     message:
       'The node ran the capability and reported a failure before it changed the host; the operation shows its message.',
     remediation: 'Correct what the message names and plan the change again.',
+  },
+  HBA_WOULD_LOCK_OUT: {
+    group: 'targets_clusters_nodes',
+    status: 409,
+    retryable: false,
+    title: 'pg_hba block would lock ExponetDB out',
+    message:
+      'The planned pg_hba rules would cut off an access that ExponetDB needs: the first rule that matches it rejects it or answers with another method.',
+    remediation:
+      'Change the rules so that the named access is kept (a rule for it before any reject), or name it in protectedAccess; the agent checks the written file again and puts the previous one back.',
+    details: z.strictObject({
+      role: z.string().max(64).meta({ description: 'The role of the access that would be lost.' }),
+      database: z.string().max(64),
+      address: z
+        .string()
+        .max(45)
+        .meta({ description: 'A client address, or local for the socket.' }),
+      method: z.enum(['scram-sha-256', 'peer']),
+      rule: z
+        .int()
+        .min(1)
+        .max(64)
+        .meta({ description: 'The 1-based planned rule that decides it.' }),
+    }),
   },
   NODE_OBSERVATION_STALE: {
     group: 'targets_clusters_nodes',

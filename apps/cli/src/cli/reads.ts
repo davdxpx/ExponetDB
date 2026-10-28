@@ -32,6 +32,11 @@ export interface ListSpec<Id extends ListId> extends ReadBase {
     remote: Remote,
   ) => Operations[Id]['params'] | Promise<Operations[Id]['params']>
   readonly query?: (input: CommandInput) => Record<string, unknown>
+  /** A filter the route does not have: applied to every page before the limit counts. */
+  readonly keep?: (
+    item: Operations[Id]['response']['items'][number],
+    input: CommandInput,
+  ) => boolean
   readonly columns: readonly Column[]
   readonly row: (
     item: Operations[Id]['response']['items'][number],
@@ -41,7 +46,7 @@ export interface ListSpec<Id extends ListId> extends ReadBase {
 }
 
 export function listCommand<Id extends ListId>(spec: ListSpec<Id>): CommandSpec {
-  const { operation, noun, params, query, columns, row, empty, title, ...rest } = spec
+  const { operation, noun, params, query, keep, columns, row, empty, title, ...rest } = spec
   return {
     ...rest,
     flags: [...(rest.flags ?? []), ...LIST_FLAGS],
@@ -55,6 +60,8 @@ export function listCommand<Id extends ListId>(spec: ListSpec<Id>): CommandSpec 
         await params?.(input, remote),
         (query?.(input) ?? {}) as never,
         input.flags,
+        undefined,
+        keep === undefined ? undefined : (item) => keep(item, input),
       )
       const now = ctx.io.now()
       const name = rest.path.join(' ')

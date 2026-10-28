@@ -177,6 +177,16 @@ source, never deciding an operation.
   canceled; a running job can no longer be reported or asked to stop, so it
   turns `outcome_unknown` when its lease ends and is reconciled from the
   host, never assumed undone; the audit event counts such jobs.
+  **[DECIDED]** (test campaign TC-019) The plans say what they do and need: the
+  subject carries the derived tier of the node's server (absent when it has
+  none); the content names the `action` (`revoke` or `decommission`), so the two
+  kinds never share a content checksum; the analysis states the `effect` and the
+  `impact` counted when the plan is made (`servedClusters` the node reported,
+  `waitingJobs`, `runningJobs`, `openOperations` with a job on the node, and
+  `activePlans` naming the node); and the policy rule `node.lifecycle-reauth`
+  ([policy-engine.md §4](../02-control-plane/policy-engine.md)) lists the fresh
+  re-authentication in `requirements`. Before this the plans read `analysis: null`,
+  "Tier: unknown", `requirements: []` and one shared checksum.
 - **Job-key rotation:** `node.config.update` signs a `config.update@1` job
   with the active key, which the node trusts (§9.8).
 
@@ -220,7 +230,19 @@ secret ever entering a plan or an operation. Reads: the lifecycle state from
 the Control Store (`pending_binding` reads `pending_enrollment`); an active
 node without a heartbeat for 60 s reads `offline`; what the agent last
 reported carries `source` (`agent_reported`, or `inferred` before any
-heartbeat) and `observedAt`. Revocation and decommissioning cancel waiting
+heartbeat) and `observedAt`. **[DECIDED]** (test campaign TC-016) The clusters of
+the node view come from the stored hello (`nodes.nodes.clusters`: local name, port,
+whether it runs, the system identifier), each refined by the heartbeat's entry of
+the same local name (service state, pending restart, server certificate expiry), and
+`clusterId` is the live registry cluster whose `system_identifier` the node
+reported (`null` when the registry does not know it). The view read only the
+heartbeat's list, and the agent sends an empty list by construction, so it was
+always empty and `clusterId` was hard-coded `null`. **Open limit:** the agent does
+not yet send clusters in its heartbeat, so for every cluster `pendingRestart` reads
+`false` and the certificate expiry `null` because they are not reported (the REST
+shape has no "unknown"; a nullable `pendingRestart` and an agent that reports
+state in the heartbeat are a later, additive protocol and contract change).
+Revocation and decommissioning cancel waiting
 jobs; running ones are left to their lease and reconciled (§6), never assumed
 undone.
 
@@ -296,6 +318,37 @@ at most 10 minutes old, otherwise `NODE_OBSERVATION_STALE`. The plan content
 is the exact change and the mapping; the expected state binds the node id
 and state, the mapping and the basis observation's digest; the analysis is
 taken from the observation, so the person approves what the node reported.
+**[DECIDED]** (test campaign TC-002) The CLI makes the basis observation
+itself. `exponetdb node postgres reload|restart|config|hba|roles|extensions|tls`
+runs the kind's basis capability first (`BASIS` in `capability-plans.ts`: the
+capability, and the arguments `basisArgs` derives from the change: the
+`changes` of a config plan, the `database` of an extension plan, an empty
+`expectSettings` for roles), waits for its signed result and then plans.
+An observation of the same capability younger than five minutes is reused only
+where the arguments do not depend on the change (reload, restart, hba, roles,
+tls); the config and extension plans bind exactly their own arguments and
+always inspect first. `--no-inspect` plans against an observation you made
+yourself. Before this, a config or roles plan was a dead end from the CLI:
+`node inspect --arg` took string values only, so `changes` and
+`expectSettings` arrived as the strings `"[]"` and failed the contract,
+and the remediation of `NODE_OBSERVATION_STALE` sent the person into it.
+`node inspect --arg-json k=<json>` (repeatable, each value whole: a list
+flag splits on commas) takes the typed arguments for anyone who runs the
+inspection on its own.
+
+**[DECIDED]** (test campaign TC-001) The plan view (`GET /plans/{id}`, the CLI
+`plan show`, the Web plan page) carries that content and analysis as `change`
+for the seven kinds above that are `postgres.*`, so the person sees the
+pg_hba block before and after and the protected access, the connections a
+restart would sever per role, the parameters with their effect, the role and
+extension steps and the certificate names. The host's own files and
+directories (`dataDirectory`, `hbaFile`, `sourcefile`, `file`, `path`,
+`certFile`, `keyFile`, `directory`) are left out wherever the observation
+holds them, and the node already withholds host text by export class; no
+verifier or key is in these plans at all. `credential.rotate` and
+`node.config.update` keep their content out of the view. Proven by
+`packages/application/test/views.test.ts`, `apps/cli/test/foundation.test.ts`
+and `apps/web/test/plans/plan-page.test.tsx`.
 
 | Kind | Change | Basis observation (its digest) | Analysis, refusals at plan time | Jobs at apply |
 |---|---|---|---|---|
@@ -470,6 +523,15 @@ valid wherever that CA is trusted).
 | `postgres.tls.rotate` | the certificate's fingerprint is the issued one, and the cluster presents it to the Control Plane itself (a TLS session to its first direct endpoint, verified against its CA bundle and registered server name); when the job stated its result, its `fingerprint` and `presentedFingerprint` are the issued one too |
 | `credential.rotate` | a login with the new credential over `verify-full` with the pinned identity and the role's documented least privilege; the credential is activated and the one it replaces retired in that transaction |
 | `postgres.roles.verifier.set` | the role shows a SCRAM-SHA-256 verifier (`password: scram-sha-256` in `postgres.roles.inspect`) and the apply job's signed statement says the step committed (the agent checks the roles, sets the verifier and commits in one transaction); without that statement it is `error`. The verifier is never read back, so which verifier the host holds is proven by the signed statement, not by a read; the consumer's login is the end-to-end proof. Reconciliation: a role that had no password and now has a SCRAM verifier is `applied`, one still without a password `not_applied`, anything else `unknown` |
+
+**[DECIDED]** (test campaign TC-018) The lock-out is also judged **at plan time**
+(`packages/nodes/src/hba-lockout.ts`): the planned managed rules, first match first
+(the block sits first in the file), against the merged protected access and the
+agent's own socket access (`exponetdb_node`, `postgres`, `local`, `peer`); a rule that
+rejects an access, or answers with another method, refuses the plan with
+`HBA_WOULD_LOCK_OUT` naming the access and the rule. Before this a block of
+`reject` rules with `protectedAccess: []` was planned with `decision: allow` and only
+the agent refused it after writing. The agent's check stays the second line.
 
 `postgres.hba.apply` keeps ExponetDB's own access: the plan's
 `protectedAccess`, and always the agent's own peer access over the local

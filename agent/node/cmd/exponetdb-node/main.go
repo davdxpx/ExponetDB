@@ -256,6 +256,35 @@ func runCommand(ctx context.Context, cfg *config.Config, store *state.Store, v *
 	return a.Run(ctx)
 }
 
+// certificateLife says how long a certificate lasts, or that it has expired (test campaign TC-042,
+// GAP-11): a bare date read like a healthy node when the certificate was long past, and the
+// gateway answers an expired certificate like any refused one. An expired node renews no more and
+// has to be enrolled again (node-runbook.md section 6, RB-13).
+func certificateLife(expiresAt string, now time.Time) string {
+	at, err := time.Parse(time.RFC3339, expiresAt)
+	if err != nil {
+		return ""
+	}
+	if remaining := at.Sub(now); remaining > 0 {
+		return " (in " + lifeText(remaining) + ")"
+	}
+	return " (EXPIRED " + lifeText(now.Sub(at)) + " ago: the gateway refuses this node and it renews no more; enroll it again, see node-runbook.md section 6, RB-13)"
+}
+
+// lifeText is a duration in its two largest units: 3d4h, 5h12m, 7m.
+func lifeText(d time.Duration) string {
+	d = d.Round(time.Minute)
+	days, hours, minutes := int(d.Hours())/24, int(d.Hours())%24, int(d.Minutes())%60
+	switch {
+	case days > 0:
+		return fmt.Sprintf("%dd%dh", days, hours)
+	case hours > 0:
+		return fmt.Sprintf("%dh%dm", hours, minutes)
+	default:
+		return fmt.Sprintf("%dm", minutes)
+	}
+}
+
 func statusCommand(store *state.Store, d deps) error {
 	st, err := store.LoadState()
 	if err != nil {
@@ -265,8 +294,9 @@ func statusCommand(store *state.Store, d deps) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(d.stdout, "node %s\ninstallation %s\nserver %s\ngateway %s (%s)\ncertificate expires %s\njob keys",
-		st.NodeID, st.InstallationID, st.ServerID, st.GatewayURL, st.GatewayServerName, id.CertificateExpiresAt)
+	fmt.Fprintf(d.stdout, "node %s\ninstallation %s\nserver %s\ngateway %s (%s)\ncertificate expires %s%s\njob keys",
+		st.NodeID, st.InstallationID, st.ServerID, st.GatewayURL, st.GatewayServerName, id.CertificateExpiresAt,
+		certificateLife(id.CertificateExpiresAt, d.clock.Now()))
 	for _, k := range st.JobKeys {
 		fmt.Fprintf(d.stdout, " %s", k.KeyID)
 	}

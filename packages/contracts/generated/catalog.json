@@ -9478,7 +9478,50 @@
     },
     {
       "code": "MIGRATION_DEPENDENCY_UNKNOWN",
-      "details": null,
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/MIGRATION_DEPENDENCY_UNKNOWN",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "migrationId": {
+            "anyOf": [
+              {
+                "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+                "type": "string"
+              }
+            ]
+          },
+          "missing": {
+            "items": {
+              "anyOf": [
+                {
+                  "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+                  "type": "string"
+                }
+              ]
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "migrationId",
+          "missing"
+        ],
+        "type": "object"
+      },
       "group": "migrations",
       "message": "dependsOn names an id that is not in the project stream.",
       "retryable": false,
@@ -10982,9 +11025,34 @@
     },
     {
       "code": "CAPABILITY_UNAVAILABLE",
-      "details": null,
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/CAPABILITY_UNAVAILABLE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "extension": {
+            "enum": [
+              "pg_stat_statements"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "extension_missing"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "extension"
+        ],
+        "type": "object"
+      },
       "group": "targets_clusters_nodes",
-      "message": "The node does not report this capability version, or the cluster is external.",
+      "message": "The capability is not available here: the node does not report this capability version, the cluster is external, or a required extension is missing (see details).",
+      "remediation": "When details.reason is extension_missing, install the named extension on the target (add it to shared_preload_libraries, restart, then CREATE EXTENSION) and wait for the next sample.",
       "retryable": false,
       "status": 409,
       "title": "Capability unavailable",
@@ -11063,6 +11131,59 @@
       "status": 422,
       "title": "Node capability failed",
       "type": "https://db.exponet.cloud/errors/node-capability-failed"
+    },
+    {
+      "code": "HBA_WOULD_LOCK_OUT",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/HBA_WOULD_LOCK_OUT",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "description": "A client address, or local for the socket.",
+            "maxLength": 45,
+            "type": "string"
+          },
+          "database": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "method": {
+            "enum": [
+              "scram-sha-256",
+              "peer"
+            ],
+            "type": "string"
+          },
+          "role": {
+            "description": "The role of the access that would be lost.",
+            "maxLength": 64,
+            "type": "string"
+          },
+          "rule": {
+            "description": "The 1-based planned rule that decides it.",
+            "maximum": 64,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "role",
+          "database",
+          "address",
+          "method",
+          "rule"
+        ],
+        "type": "object"
+      },
+      "group": "targets_clusters_nodes",
+      "message": "The planned pg_hba rules would cut off an access that ExponetDB needs: the first rule that matches it rejects it or answers with another method.",
+      "remediation": "Change the rules so that the named access is kept (a rule for it before any reject), or name it in protectedAccess; the agent checks the written file again and puts the previous one back.",
+      "retryable": false,
+      "status": 409,
+      "title": "pg_hba block would lock ExponetDB out",
+      "type": "https://db.exponet.cloud/errors/hba-would-lock-out"
     },
     {
       "code": "NODE_OBSERVATION_STALE",

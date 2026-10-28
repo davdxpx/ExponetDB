@@ -726,6 +726,49 @@ digests), never a digest or the key's secret id. Tests:
 ("excused values (OD-56 (a))"), `packages/control-store/test/registry-schema.int.test.ts`
 (the upgrade through every bundle).
 
+**[DECIDED]** (test campaign TC-005; bundle
+`01M61AGQKSBZ9VN71DHYFVCQHT_operation-supersession`, depending on
+`excused-value-digests`, additive, transactional, not frozen) The one new edge
+of the operation state machine, `needs_attention` to `verification_failed`
+([`operations-engine.md` §4.1](./operations-engine.md#41-state-machine)):
+`operations.recovery_transition_allowed(from, to)` (pure, `exdb_serve` and
+`exdb_worker` may execute it) and a replaced `operations.operation_guard()`
+that accepts a transition either that function or the operations bundle's
+`transition_allowed` allows. The frozen function and its `verify.sql` (fifteen
+pairs) are untouched. Tests: `packages/operations/test/engine.int.test.ts`
+(both functions against the code for every input),
+`packages/operations/test/driver.int.test.ts`,
+`packages/migrations-engine/test/recovery.int.test.ts`.
+
+**[DECIDED]** (test campaign TC-007; bundle
+`01M61C90YHV706H2B8EW39TBAF_ledger-reconcile`, depending on
+`operation-supersession`, additive, transactional, not frozen) The history of
+the mirror rows `ledger.reconcile` moves
+([`../04-migrations/ledger.md` §5](../04-migrations/ledger.md#5-mirror-and-reconciliation)):
+`migrations.ledger_mirror_history` (per row: target, generation, migration id,
+the reason `missing` or `differs`, the row as it was as `jsonb`, the operation;
+append-only, `EXA01` on any change; `exdb_serve` and `exdb_worker` may read it)
+and `migrations.archive_mirror_rows(operation, target, generation, ids, reason)`,
+a `SECURITY DEFINER` function (`search_path` pinned) that moves the named
+mirror rows to the history in one statement and answers `EXM01` unless the
+operation is a running `ledger.reconcile` whose plan is for that target.
+`exdb_worker` may execute it and still has no `DELETE` on
+`migrations.ledger_mirror`. Test:
+`packages/migrations-engine/test/reconcile.int.test.ts`.
+
+**[DECIDED]** (test campaign TC-013; bundle
+`01M61FKAJN5VP9H2E73K74NCZ2_offline-drill-record`, depending on
+`ledger-reconcile`, additive, transactional, not frozen) The attestation of an
+offline drill ([`../09-backups-and-restore/restore.md` §6](../09-backups-and-restore/restore.md)):
+`backups.record_offline_drill(...)`, a `SECURITY DEFINER` function
+(`search_path` pinned, `EXECUTE` revoked from `PUBLIC` and granted to
+`exdb_serve`) that inserts one `backups.drills` row with mode `offline_runbook`
+and no restore id, and answers `EXB06` for an outcome other than `attested` or
+`failed`. `exdb_serve` still has no `INSERT` on `backups.drills` (the frozen
+backup-catalog bundle grants it to `exdb_worker` only and its `verify.sql` states
+that serve only reads); the function is the single write the serve role gained.
+Test: `apps/server/test/http-backups.int.test.ts` (the real role set).
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

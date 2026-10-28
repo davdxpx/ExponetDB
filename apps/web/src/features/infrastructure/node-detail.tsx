@@ -68,7 +68,12 @@ function NodeDetail({ nodeId }: { readonly nodeId: string }): ReactNode {
   const production = node.data !== undefined && tier === 'prod'
   return (
     <InfraPage
-      title={t('infra.node.title', { id: nodeId })}
+      // The id is one long word: it wraps anywhere instead of pushing a phone's page sideways (TC-038).
+      title={
+        <span data-wrap="anywhere" className="min-w-0 [overflow-wrap:anywhere]">
+          {t('infra.node.title', { id: nodeId })}
+        </span>
+      }
       description={t('infra.node.description')}
       production={production}
     >

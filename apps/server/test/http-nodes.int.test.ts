@@ -455,6 +455,20 @@ describe('node routes over REST', () => {
 
     // Revocation, then decommissioning, both re-authenticated at apply.
     const revoke = await plan(`/api/v1/nodes/${enrolled.nodeId}/revoke`)
+    // The plan says what it does and what it needs (TC-019): the effect, what depends on the
+    // node, and the fresh re-authentication that the apply will ask for.
+    expect(revoke.requirements).toContainEqual({ kind: 'reauth', withinSeconds: 300 })
+    expect(revoke.change.content).toMatchObject({ nodeId: enrolled.nodeId, action: 'revoke' })
+    expect(revoke.change.analysis).toMatchObject({
+      effect: expect.stringContaining('refuses the node at its next request'),
+      impact: {
+        waitingJobs: 0,
+        runningJobs: 0,
+        servedClusters: 0,
+        openOperations: 0,
+        activePlans: expect.any(Number),
+      },
+    })
     await reauth()
     expect((await apply(revoke.id)).status).toBe(202)
     await drive()
@@ -462,6 +476,10 @@ describe('node routes over REST', () => {
     expect(revoked.body).toMatchObject({ state: 'revoked' })
     await expect(gateway.hello(presented, {} as never)).rejects.toThrow()
     const decommission = await plan(`/api/v1/nodes/${enrolled.nodeId}/decommission`)
+    expect(decommission.requirements).toContainEqual({ kind: 'reauth', withinSeconds: 300 })
+    expect(decommission.change.content).toMatchObject({ action: 'decommission' })
+    // The two kinds no longer share a checksum.
+    expect(decommission.contentChecksum).not.toBe(revoke.contentChecksum)
     await reauth()
     expect((await apply(decommission.id)).status).toBe(202)
     await drive()

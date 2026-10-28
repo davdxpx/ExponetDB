@@ -208,3 +208,54 @@ func TestConfigOwnedByAnotherUserIsRefused(t *testing.T) {
 		t.Fatalf("%d %q", code, errs.String())
 	}
 }
+
+// Test campaign TC-039 (E1): enrolling on a fresh host, before the state directory exists, says
+// what to do instead of `lstat ...: no such file or directory`.
+func TestEnrollMissingStateDirectoryExplainsFix(t *testing.T) {
+	configPath, stateDir := setup(t)
+	if err := os.Remove(stateDir); err != nil {
+		t.Fatal(err)
+	}
+	var out, errs bytes.Buffer
+	d := deps{stdin: strings.NewReader("x\n"), stdout: &out, stderr: &errs, configOwnerUID: os.Getuid(),
+		clock: &clock.Fixed{T: time.Now().UTC(), Synced: true}, host: fakeHost{}}
+	if code := run(context.Background(), []string{"enroll", "--config", configPath, "--token-file", "-"}, d); code != 1 {
+		t.Fatalf("exit %d, want 1", code)
+	}
+	for _, want := range []string{"does not exist", "node-runbook.md"} {
+		if !strings.Contains(errs.String(), want) {
+			t.Errorf("stderr lacks %q: %s", want, errs.String())
+		}
+	}
+}
+
+// Test campaign TC-042 (GAP-11): `status` printed only the date of the certificate, so a node whose
+// certificate had expired read like a healthy one.
+func TestStatusSaysHowLongTheCertificateLasts(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	gw := testgateway.New(t, now)
+	configPath, _ := setup(t)
+	var out, errs bytes.Buffer
+	d := deps{stdin: strings.NewReader(gw.Token(now.Add(30*time.Minute)) + "\n"), stdout: &out, stderr: &errs,
+		configOwnerUID: os.Getuid(), clock: &clock.Fixed{T: now, Synced: true}, host: fakeHost{}, dial: gw.URL()}
+	if code := run(context.Background(), []string{"enroll", "--config", configPath, "--token-file", "-"}, d); code != 0 {
+		t.Fatalf("enroll: %d %s", code, errs.String())
+	}
+	status := func(at time.Time) string {
+		out.Reset()
+		d.clock = &clock.Fixed{T: at, Synced: true}
+		if code := run(context.Background(), []string{"status", "--config", configPath}, d); code != 0 {
+			t.Fatalf("status: %s", errs.String())
+		}
+		return out.String()
+	}
+	if got := status(now); !strings.Contains(got, "certificate expires ") || !strings.Contains(got, " (in ") {
+		t.Errorf("a valid certificate: no remaining time: %s", got)
+	}
+	got := status(now.Add(10 * 365 * 24 * time.Hour))
+	for _, want := range []string{"EXPIRED", "ago", "node-runbook.md"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("an expired certificate: status lacks %q: %s", want, got)
+		}
+	}
+}

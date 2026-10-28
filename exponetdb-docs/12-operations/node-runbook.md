@@ -39,14 +39,23 @@ As root on the host:
    install -m 0755 exponetdb-node-helper-<version>-linux-amd64 /usr/sbin/exponetdb-node-helper
    install -m 0644 sysusers.d/exponetdb-node.conf /usr/lib/sysusers.d/
    systemd-sysusers
+   install -m 0644 tmpfiles.d/exponetdb-node.conf tmpfiles.d/exponetdb-node-engine.conf \
+     /usr/lib/tmpfiles.d/
+   systemd-tmpfiles --create
+   install -d -m 0755 /etc/exponetdb-node
    install -m 0644 systemd/exponetdb-node.service systemd/exponetdb-node-helper.service \
      systemd/exponetdb-node-helper.socket /etc/systemd/system/
    install -D -m 0644 doc/node-runbook.md /usr/share/doc/exponetdb-node/node-runbook.md
    systemctl daemon-reload
    ```
 
+   `systemd-tmpfiles --create` makes the agent's state directory
+   (`/var/lib/exponetdb-node`, mode `0700`, the agent's user) and the backup
+   engine's run directories (`/var/lib/exponetdb-node-engine/…`). The state
+   directory is needed before any unit starts: §3 enrolls the node first, and
+   `enroll` on a host without it stops with `state directory … does not exist`.
    The release directory holds the binaries, `systemd/`, `sysusers.d/`,
-   `doc/` and `SHA256SUMS-<version>` over all of them
+   `tmpfiles.d/`, `doc/` and `SHA256SUMS-<version>` over all of them
    ([`agent/node/packaging/README.md`](../../agent/node/packaging/README.md)).
    `exponetdb-node version` prints the version and the commit it was built
    from.
@@ -116,9 +125,13 @@ As root on the host:
 3. Enroll as the agent's user, then remove the file:
 
    ```sh
-   sudo -u exponetdb-node exponetdb-node enroll --config /etc/exponetdb-node/config.json --token-file /root/token
+   sudo -u exponetdb-node exponetdb-node enroll --config /etc/exponetdb-node/config.json --token-file - < /root/token
    shred -u /root/token
    ```
+
+   The token is read from standard input: the agent's user cannot open a file
+   in `/root` (mode `0700`), and the redirection is made by your shell, as root,
+   before `sudo` runs (`--token-file /root/token` fails with `permission denied`).
 
    The command prints the node id. The token pins the agent PKI's root and
    the job keys; a token for another installation, an expired or a used
@@ -214,7 +227,16 @@ tokens (ADR-0024 §1).
    `journalctl -u exponetdb-node -u exponetdb-node-helper --since -1h`.
 2. `sudo -u exponetdb-node exponetdb-node status`: the certificate's expiry
    (72 hours; the agent renews at two thirds), the journal (`journal_corrupt`
-   refuses every job).
+   refuses every job). **[DECIDED]** (test campaign TC-042, GAP-11) `status` prints
+   how long the certificate lasts (`certificate expires 2026-10-30T05:57:35Z (in
+   5h12m)`) or, past its end, `(EXPIRED 2h5m ago: …)`. The gateway answers an
+   expired certificate like any refused one (`403 NODE_CERTIFICATE_REFUSED`), the node
+   row stays `active` and nothing warns before the renewal window closes: an
+   agent that was down for the whole window (the last third of the 72 hours) is
+   enrolled again (RB-13 below); one that is back inside the window renews within
+   seconds. A node finding for an approaching or passed expiry and a distinct
+   refusal reason are not built; the thresholds are an owner decision
+   ([OD-62](../00-product/open-decisions.md)).
 3. `timedatectl`: an unsynchronized clock makes the agent refuse every job
    (`clock_untrusted`), not go offline; an offline node is a process,
    network or certificate problem.
@@ -390,8 +412,21 @@ stored but not journaled is settled at the first start) or for the helper
 (a ledger without its record gets one at the first start; a helper that
 never served creates its ledger then). A node enrolled by the previous
 release that never started needs step 2. From the first job on, the
-journal is in format 2: an older agent refuses every job with
-`journal_corrupt`, so a downgrade means enrolling the host again (step 3).
+journal is in format 2: an agent of a release **before the Wave 5
+correction** (F7) refuses every job with `journal_corrupt`, so a downgrade
+below the correction means enrolling the host again (step 3).
+**[OBSERVED]** (test campaign TC-068, GAP-04) Releases 0.6.0 and 0.7.0 both
+write format 2: a node enrolled with 0.6.0, upgraded to 0.7.0 and used (12
+journal jobs), then downgraded to 0.6.0, kept its journal, nonce and effect
+ledger prefixes byte for byte and ran a job. What a downgrade does break:
+
+- **The configuration.** A `config.json` with a field the older release does
+  not know makes its agent and helper refuse to start (`configuration: json:
+  unknown field "pgbackrestConfig"`: a crash loop, the node `offline`). Remove
+  the fields added since (`pgbackrestConfig` came with 0.7.0) before the older
+  binary starts.
+- **The capabilities.** What only the newer release has (`backup.timers@1`)
+  answers `CAPABILITY_UNAVAILABLE`.
 
 **Verify:** `exponetdb-node status` prints the journal's jobs, the
 helper's log has no "lost" line, and an inspection succeeds (§4).
@@ -432,7 +467,9 @@ unclassified, and changes what counts as a node's trust in a job key.
    (`credential.rotate`, [`control-plane.md` §9.7](../07-node-agent/control-plane.md)).
 
 A downgrade below the correction is not supported (§8): enroll the host
-again instead.
+again instead. A downgrade from 0.7.0 to 0.6.0 needs no re-enrollment, but the
+configuration must lose the fields of the newer release first (§8, "Upgrade and
+downgrade").
 
 ## 10. OD-28: node exports stored before the correction (owner only)
 

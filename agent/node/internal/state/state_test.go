@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/davdxpx/ExponetDB/agent/node/internal/nodecrypto"
@@ -157,4 +159,30 @@ func TestLockIsExclusive(t *testing.T) {
 		t.Fatalf("lock after release: %v", err)
 	}
 	_ = again.Close()
+}
+
+// Test campaign TC-039 (E1): on a fresh host the enrollment runs before any unit created the state
+// directory (the runbook installs, then enrolls, then starts), and the bare `lstat ...: no such
+// file or directory` told the operator nothing.
+func TestOpenMissingDirectoryExplainsTheFix(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "missing")
+	_, err := Open(dir, os.Getuid())
+	if err == nil {
+		t.Fatal("opened a state directory that does not exist")
+	}
+	for _, want := range []string{"does not exist", dir, "systemd-tmpfiles --create", "node-runbook.md"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error lacks %q: %v", want, err)
+		}
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the error no longer wraps ErrNotExist: %v", err)
+	}
+	// Another failure keeps its own words.
+	if err := os.Mkdir(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(dir, os.Getuid()); err == nil || strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("a directory with the wrong mode: %v", err)
+	}
 }

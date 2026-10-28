@@ -80,8 +80,11 @@ describe('node.prod-apply-approval', () => {
 
   it('does not apply to reads or to the node lifecycle', async () => {
     for (const kind of ['node.inspect', ...LIFECYCLE]) {
-      expect((await decide(kind, 'prod')).decision, kind).toBe('allow')
+      const applied = (await decide(kind, 'prod')).rules.map((r) => r.id)
+      expect(applied, kind).not.toContain('node.prod-apply-approval')
     }
+    expect((await decide('node.inspect', 'prod')).decision).toBe('allow')
+    expect((await decide('node.enroll', 'prod')).decision).toBe('allow')
   })
 
   it('covers the whole Wave 5 and Wave 8 mutation catalog of nodes and clusters', () => {
@@ -101,5 +104,49 @@ describe('node.prod-apply-approval', () => {
     // it always needs production authority and re-authentication (authorization.md §5.1).
     const REGISTRY = ['registry.cluster.declare_tier']
     expect([...mutations].sort()).toEqual([...NODE_APPLY_KINDS, ...LIFECYCLE, ...REGISTRY].sort())
+  })
+})
+
+/** `node.lifecycle-reauth` (test campaign TC-019): the plan states the re-authentication its apply asks for. */
+describe('node.lifecycle-reauth', () => {
+  it('lists a fresh re-authentication for a revocation and a decommissioning, on every tier', async () => {
+    for (const kind of ['node.revoke', 'node.decommission']) {
+      for (const tier of [undefined, 'nonprod', 'prod'] as const) {
+        const d = await decide(kind, tier)
+        expect(d.decision, `${kind} ${tier}`).toBe('require')
+        expect(d.requirements, `${kind} ${tier}`).toEqual([{ kind: 'reauth', withinSeconds: 300 }])
+      }
+    }
+  })
+
+  it('leaves enrollment and reads alone, and takes a shorter window but never an unusable one', async () => {
+    expect((await decide('node.enroll', 'prod')).requirements).toEqual([])
+    expect((await decide('node.inspect')).requirements).toEqual([])
+    const shorter = await engine.evaluate({
+      request: request('node.revoke', 'prod'),
+      settings: [
+        {
+          scopeKind: 'installation',
+          scopeId: 'installation',
+          ruleId: 'node.lifecycle-reauth',
+          revision: 1,
+          params: { reauthWithinSeconds: 120 },
+        },
+      ],
+    })
+    expect(shorter.requirements).toEqual([{ kind: 'reauth', withinSeconds: 120 }])
+    const unusable = await engine.evaluate({
+      request: request('node.revoke', 'prod'),
+      settings: [
+        {
+          scopeKind: 'installation',
+          scopeId: 'installation',
+          ruleId: 'node.lifecycle-reauth',
+          revision: 1,
+          params: { reauthWithinSeconds: 0 },
+        },
+      ],
+    })
+    expect(unusable.decision).toBe('deny')
   })
 })

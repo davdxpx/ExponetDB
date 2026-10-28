@@ -67,4 +67,35 @@ export const nodeProdApplyApproval: Rule = {
   },
 }
 
-export const NODE_RULES: readonly Rule[] = [nodeProdApplyApproval]
+/**
+ * `node.lifecycle-reauth` (test campaign TC-019): revoking or decommissioning a node cuts
+ * ExponetDB off from a host and is applied only after a fresh re-authentication (the action
+ * catalog requires it at apply). The rule lists that requirement in the plan, on every tier, so
+ * the person and an agent see it before they apply instead of meeting `REAUTH_REQUIRED`.
+ */
+export const nodeLifecycleReauth: Rule = {
+  id: 'node.lifecycle-reauth',
+  version: 1,
+  description:
+    'Revoking or decommissioning a node needs a fresh re-authentication, which the plan lists.',
+  appliesTo: ['node.revoke', 'node.decommission'],
+  severity: 'require',
+  overridableByBreakGlass: false,
+  facts: [],
+  defaults: { reauthWithinSeconds: 300 },
+  requirements(params) {
+    const within = params['reauthWithinSeconds']
+    if (typeof within !== 'number' || !Number.isSafeInteger(within) || within < 1 || within > 900) {
+      return []
+    }
+    return [{ kind: 'reauth', withinSeconds: within }]
+  },
+  evaluate() {
+    return {
+      result: 'fail',
+      message: 'Revoking or decommissioning a node runs only after a fresh re-authentication.',
+    }
+  },
+}
+
+export const NODE_RULES: readonly Rule[] = [nodeProdApplyApproval, nodeLifecycleReauth]

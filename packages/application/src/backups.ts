@@ -611,11 +611,11 @@ export class BackupUseCases {
       const outcome = request.outcome === 'passed' ? 'attested' : 'failed'
       const finishedMs = Date.parse(request.restoredAt)
       const startedAt = new Date(finishedMs - request.durationSeconds * 1000).toISOString()
+      // serve has no INSERT on backups.drills (the catalog bundle verifies that it only reads): the
+      // attestation goes through the one function it may call (TC-013, D-09; it was a 500).
       await tx.query(
         'application.backups.offline_drill.insert',
-        `INSERT INTO backups.drills (drill_id, cluster_id, restore_id, repository_id, selection, mode, outcome,
-           runbook_digest, notes, recorded_by, started_at, finished_at)
-         VALUES ($1, $2, NULL, $3, 'latest', 'offline_runbook', $4, $5, $6, $7, $8, $9)`,
+        `SELECT backups.record_offline_drill($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, $9::timestamptz)`,
         [
           drillId,
           clusterId,

@@ -224,6 +224,8 @@ const findingsMessages = {
   'findings.state.all': 'Open and resolved',
   'findings.kind.drift': 'Drift',
   'findings.kind.health': 'Health',
+  'findings.kind.advisor': 'Advisor',
+  'findings.kind.statements': 'Statements',
   'findings.empty': 'The read succeeded: this target has no open finding.',
   'findings.emptyFiltered': 'The read succeeded: no finding matches these filters.',
   'findings.more': 'More findings exist than the pages read so far.',

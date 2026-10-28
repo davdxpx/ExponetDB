@@ -461,13 +461,33 @@ export type GuardStrictness = 'none' | 'relations' | 'all'
 const SHADOWING =
   /\b(?:table|view|into|to|exists)\s+(?:only\s+)?(?:"?[\w$]+"?\s*\.\s*)?"?(?:pg_roles|pg_auth_members)\b/i
 const EQUALS_OPERATOR = /\b(?:create|alter)\s+operator\s+(?:[\w$"]+\s*\.\s*)?=\s*\(/i
-const CATALOG_LATER = /\bsearch_path\b[^;]*?,\s*["']?\s*pg_catalog\b/i
+/** `, pg_catalog` (optionally quoted): one `\s*` on each side of the quote would make a long run of white space quadratic. */
+const CATALOG_AFTER_COMMA = /,\s*(?:["']\s*)?pg_catalog\b/i
+
+/**
+ * Whether a `search_path` names `pg_catalog` after another schema: from a
+ * `search_path` to the next `;`, once. The first one in a statement covers the
+ * rest of it, so the scan continues after the `;` and reads the text once
+ * (TC-004: a lazy `[^;]*?` rescanned the statement for every occurrence, 17 s
+ * for a 100 KB file, hours for 4 MiB).
+ */
+export function catalogNamedLater(text: string): boolean {
+  const word = /\bsearch_path\b/gi
+  for (let m = word.exec(text); m !== null; m = word.exec(text)) {
+    const end = text.indexOf(';', m.index)
+    if (CATALOG_AFTER_COMMA.test(text.slice(m.index + m[0].length, end < 0 ? undefined : end)))
+      return true
+    if (end < 0) return false
+    word.lastIndex = end
+  }
+  return false
+}
 
 /** The strictness a history's guards are read with (see {@link GuardStrictness}). */
 export function guardStrictness(texts: readonly string[]): GuardStrictness {
   let strictness: GuardStrictness = 'none'
   for (const text of texts) {
-    if (EQUALS_OPERATOR.test(text) || CATALOG_LATER.test(text)) return 'all'
+    if (EQUALS_OPERATOR.test(text) || catalogNamedLater(text)) return 'all'
     if (SHADOWING.test(text)) strictness = 'relations'
   }
   return strictness

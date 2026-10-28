@@ -118,6 +118,59 @@ describe('problem documents', () => {
     expect(buildProblem('PLAN_STALE', { requestId }).ok).toBe(false)
   })
 
+  it('names a missing extension in the optional details of CAPABILITY_UNAVAILABLE (TC-015)', () => {
+    // Optional: the code is also answered for a node without the capability and for a cluster
+    // that is external, and those carry no details.
+    expect(buildProblem('CAPABILITY_UNAVAILABLE', { requestId }).ok).toBe(true)
+    const named = buildProblem('CAPABILITY_UNAVAILABLE', {
+      requestId,
+      details: { reason: 'extension_missing', extension: 'pg_stat_statements' },
+    })
+    expect(named.ok).toBe(true)
+    if (named.ok) {
+      expect(named.value.details).toEqual({
+        reason: 'extension_missing',
+        extension: 'pg_stat_statements',
+      })
+      // The message no longer blames the node or an external cluster alone, and the
+      // remediation says what to install and where.
+      expect(named.value.message).toMatch(/extension/i)
+      expect(named.value.remediation).toMatch(/shared_preload_libraries/)
+      expect(named.value.remediation).toMatch(/CREATE EXTENSION/)
+    }
+    for (const details of [
+      { reason: 'extension_missing' },
+      { reason: 'other', extension: 'pg_stat_statements' },
+      { reason: 'extension_missing', extension: 'pg_stat_statements', extra: 1 },
+    ]) {
+      expect(buildProblem('CAPABILITY_UNAVAILABLE', { requestId, details }).ok).toBe(false)
+    }
+  })
+
+  it('names the access a pg_hba plan would cut off in HBA_WOULD_LOCK_OUT (TC-018)', () => {
+    const access = {
+      role: 'exponetdb_app',
+      database: 'app',
+      address: '203.0.113.7',
+      method: 'scram-sha-256',
+      rule: 2,
+    }
+    const problem = buildProblem('HBA_WOULD_LOCK_OUT', { requestId, details: access })
+    expect(problem.ok).toBe(true)
+    if (problem.ok) {
+      expect(problem.value).toMatchObject({
+        status: 409,
+        code: 'HBA_WOULD_LOCK_OUT',
+        retryable: false,
+      })
+      expect(problem.value.remediation).toMatch(/protected|keep/i)
+    }
+    expect(buildProblem('HBA_WOULD_LOCK_OUT', { requestId }).ok).toBe(false)
+    expect(
+      buildProblem('HBA_WOULD_LOCK_OUT', { requestId, details: { ...access, extra: 1 } }).ok,
+    ).toBe(false)
+  })
+
   it('gives RATE_LIMITED optional details: the wait of Retry-After, positive whole seconds', () => {
     // Optional: a rate limit with no known wait is still a RATE_LIMITED problem.
     const plain = buildProblem('RATE_LIMITED', { requestId })

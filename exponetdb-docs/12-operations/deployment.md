@@ -191,6 +191,31 @@ only) memory stays flat and parsing is as fast (1 200 parses of a 2 KiB file:
   does not parse (`parse_error`, `too_large`); a statement above it is
   redacted by the lexer (statement-redaction.md §2). The 4 MiB file bound
   of a bundle stays; above about 900 KB of dense SQL the tokens decide.
+  **[DECIDED]** (test campaign TC-003, Part A P1 no. 1) A body is read
+  whatever its quoting: the dollar-quoted literal, and the single-quoted
+  string after `DO` (optionally `LANGUAGE x`) or `AS` or before `LANGUAGE`,
+  decoded as PostgreSQL reads it (`''`, the `E''` escapes, continuation
+  lines) and counted on its own. Any other string is data and counts as one
+  token: a 1 MB JSON literal in an `INSERT` stays legal. A 4 MiB
+  `DO '…'` took 1 114 MiB before this; it is refused with the rest.
+  **[DECIDED]** (test campaign TC-021, Part A P1 no. 2) The files of one request
+  are also bounded **together**: at most **1 000 000 tokens**, counted with the
+  bodies of `DO` blocks and functions (`MAX_TOTAL_PARSE_TOKENS`); the file that
+  crosses it is refused, `422 VALIDATION_FAILED` (`/files/<i>/text`, `too_large`,
+  "import the history in several parts"). The per-file bound limits one parse, not
+  the sum, and the retained memory adds up (about 15 KiB per file; 565 MiB peak for
+  nine files of 190 000 tokens, 1.7 million in all). The campaign proposed 600 000;
+  the 600-file, 3 MB history of the size of the first real import holds 623 009
+  tokens, so 1 000 000 lets the real import through with margin and refuses the
+  dense case. The chain step `survivingExpectations` is linear (one pass for the
+  last statement that touches each key, one lookup per expectation; 30 000
+  statements take well under a second; it took 3.1 s for 1 000 files and 196 s for
+  5 000), and the chain analysis groups survivors by file once. **Not done:** keeping
+  only compact facts per file after the replay, a byte cap or cursor on the legacy
+  ledger read (it has no `LIMIT`: 289 MiB at 26 MB of statements), and the
+  measurement in a 512 MiB container (`scripts/measure-analyze-memory.ts` with nine
+  dense files) that would confirm the peak under the budget; the figure for the
+  budget is an extrapolation from the measured nine-file peak, not a measurement.
 - At most **two** requests that carry a legacy history at once
   (`LEGACY_REQUESTS_IN_FLIGHT`); a third is `429 RATE_LIMITED` with
   `Retry-After: 5`. **[DECIDED]** (the verification review of follow-up 2,

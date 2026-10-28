@@ -1,6 +1,7 @@
 import { createPrivateKey, createPublicKey, randomBytes, X509Certificate } from 'node:crypto'
 import {
   EnrollRequestSchema,
+  HeartbeatRequestSchema,
   HelloRequestSchema,
   JobCompleteRequestSchema,
   JobStartRequestSchema,
@@ -42,6 +43,7 @@ import {
   createEnrollmentToken,
   createJob,
   type GatewayPki,
+  getNode,
   initPki,
   jobEvidence,
   judgeCompletions,
@@ -366,6 +368,104 @@ describe('node agent control plane (control-plane.md)', () => {
     expect(audit.rows.map((r) => r.action)).toEqual(
       expect.arrayContaining(['node.enrolled', 'node.bound', 'node.binding_failed']),
     )
+  })
+
+  it('lists the clusters a node serves: from its hello, mapped to the registry, merged with the heartbeat (TC-016)', async () => {
+    const serverId = await server()
+    const keys = agentKeys()
+    const enrolled = await gateway.enroll(
+      enrollRequest((await (await revealedToken(serverId)).reveal()).token, keys),
+    )
+    const presented: Presented = {
+      nodeId: enrolled.nodeId,
+      certificate: Buffer.from(enrolled.certificateChain[0] ?? '', 'base64url'),
+    }
+    await bindPendingNodes(worker, keyring, clock, db.installationId)
+    const SYSTEM_ID = '7701448509665702082'
+    const local = {
+      dataDirectory: '/var/lib/postgresql/17/exdbnode',
+      localName: '17/exdbnode',
+      port: 55417,
+      running: true,
+      systemIdentifier: SYSTEM_ID,
+      version: '17.11',
+    }
+    const unmapped = { ...local, localName: '17/other', port: 55418, systemIdentifier: '42' }
+    await gateway.hello(
+      presented,
+      HelloRequestSchema.parse({
+        nodeId: enrolled.nodeId,
+        agentVersion: '1.0.0',
+        protocolMajors: [1],
+        capabilities: [{ name: 'agent.diagnostics', major: 1 }],
+        clusters: [local, unmapped],
+        host: HOST,
+        clock: { agentTime: new Date().toISOString() },
+        journal: { inFlight: [] },
+      }),
+    )
+    // The registry knows the first cluster by its system identifier.
+    const clusterId = newId('cls', Date.now())
+    const op = await operation()
+    await db.asSuperuser(async (c) => {
+      await c.query(
+        `INSERT INTO registry.clusters (cluster_id, server_id, management_mode, display_name, state, ca_bundle, created_by_operation_id)
+         VALUES ($1, $2, 'agent', 'main', 'pending', $3, $4)`,
+        [
+          clusterId,
+          serverId,
+          '-----BEGIN CERTIFICATE-----\nMIIBfake\n-----END CERTIFICATE-----\n',
+          op,
+        ],
+      )
+      await c.query(
+        `UPDATE registry.clusters SET state = 'active', system_identifier = $2, server_version_num = 170000,
+                confirmed_at = now(), confirmed_by_operation_id = $3 WHERE cluster_id = $1`,
+        [clusterId, SYSTEM_ID, op],
+      )
+    })
+
+    // Before any heartbeat the view comes from the hello: the node's own report of what runs.
+    const afterHello = await getNode(serve, enrolled.nodeId, Date.now())
+    expect(afterHello?.clusters).toEqual([
+      expect.objectContaining({ clusterId, localName: '17/exdbnode', running: true }),
+      expect.objectContaining({ clusterId: null, localName: '17/other', running: true }),
+    ])
+
+    // The heartbeat's per-cluster state refines it: service state, pending restart, certificate.
+    await gateway.heartbeat(
+      presented,
+      HeartbeatRequestSchema.parse({
+        nodeId: enrolled.nodeId,
+        sentAt: new Date().toISOString(),
+        host: { cpuPercent: 1, memoryUsedBytes: 1, load1: 0, load5: 0, load15: 0, mounts: [] },
+        clusters: [
+          {
+            localName: '17/exdbnode',
+            serviceState: 'stopped',
+            pendingRestart: true,
+            walDirectoryBytes: 0,
+            archiver: { failedCount: 0, lastArchivedAt: null, lastFailedAt: null },
+            serverCertificateExpiresAt: '2027-01-01T00:00:00.000Z',
+          },
+        ],
+        nodeCertificateExpiresAt: enrolled.certificateExpiresAt,
+        clockSkewMs: 0,
+        inFlightJobs: [],
+        agent: { queueSize: 0, bufferedResults: 0, lastErrors: [] },
+      }),
+    )
+    const afterBeat = await getNode(serve, enrolled.nodeId, Date.now())
+    expect(afterBeat?.clusters).toEqual([
+      {
+        clusterId,
+        localName: '17/exdbnode',
+        running: false,
+        pendingRestart: true,
+        serverCertificateExpiresAt: '2027-01-01T00:00:00.000Z',
+      },
+      expect.objectContaining({ clusterId: null, localName: '17/other', running: true }),
+    ])
   })
 
   it('bounds the gateway: no completion before binding, one undecidable binding holds up no other, one long poll per node, no U+0000', async () => {

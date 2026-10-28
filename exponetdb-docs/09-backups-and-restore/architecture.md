@@ -140,6 +140,20 @@ Verification (`backup.verify@1`) is separate and scheduled: engine `verify`,
 `pg_verifybackup` where applicable, and the restore drills in
 [`restore.md`](./restore.md). "Backed up" and "verified" are separate fields.
 
+**[DECIDED]** (test campaign TC-011, D-03) `pgbackrest verify` exits 0 when it
+reports a corrupt, missing or invalid file, so the exit code says nothing about the
+repository. The helper reads the engine's text: the counts under each archive and
+backup (`missing`, `checksum invalid`, `size invalid`, `other`) are summed into
+`verifyErrors`; when it counted none, every line that says `status: error` or
+`status: invalid` and every `invalid result` warning counts as one. A run with
+`verifyErrors > 0` ends `failed`, and the Control Plane (which needs `succeeded`
+and `verifyErrors == 0`) records the backup's verification as `failed`. Before
+this, a flipped byte range in an archived WAL segment gave `verifyErrors 0` and a
+passed verification. Proven by `TestEngineRunVerifyReadsWhatPgBackRestReports` (a
+clean repository, a corrupt segment, a deleted segment, an invalid backup, an error
+status without counts). Against real pgBackRest 2.60 (a `pglab` corrupt-segment and
+deleted-segment case) it is NOT EXECUTED in this session.
+
 ## 7. Exponet-wide rules
 
 - **Restorable without ExponetDB (C-35).** Each repository has a runbook in

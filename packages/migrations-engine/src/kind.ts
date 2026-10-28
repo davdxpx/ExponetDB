@@ -122,6 +122,21 @@ export class MigrationApplyKind implements OperationKind {
     }
   }
 
+  /**
+   * A resume continues what the operation that started the bundle left
+   * part-way; when that operation is in needs_attention it holds the target
+   * and is closed by this one (TC-005). The plan already binds it, with the
+   * event log it left.
+   */
+  supersedes(plan: PlanRecord): readonly string[] {
+    try {
+      const resume = this.#content(plan).resume
+      return resume === undefined ? [] : [resume.originalOperationId]
+    } catch {
+      return []
+    }
+  }
+
   // ----- bindings -----
 
   async #registryBindings(
@@ -801,11 +816,18 @@ export class MigrationApplyKind implements OperationKind {
       if (target === undefined) return
       const row = await this.#ledgerRow(target, last.migrationId)
       if (row?.fingerprintAfter === null || row?.fingerprintAfter === undefined) return
+      // The schema the migration started from: a resume plan's own is the partial one, so it
+      // names the original plan's. An expected state that was not the baseline's is drift.
+      const preFingerprint =
+        content.resume === undefined
+          ? content.expectedState.schemaFingerprint
+          : content.resume.fingerprintBeforeMigration
       await expected.record({
         targetId: target.targetId,
         generation: content.target.generation,
         operationId: ctx.operationId,
         fingerprint: row.fingerprintAfter,
+        ...(preFingerprint === null ? {} : { preFingerprint }),
       })
     } catch {
       // The drift check reports what the baseline does not explain.

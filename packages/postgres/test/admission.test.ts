@@ -151,6 +151,19 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
       if (!a.ok) expect(a.code).toBe(code)
     })
 
+    it('tells a bare relation name which schema to write (TC-014)', () => {
+      const a = admitReadSync(major, 'SELECT count(*) FROM pg_stat_activity')
+      expect(a).toMatchObject({ ok: false, code: 'QUERY_CONSTRUCT_UNSUPPORTED' })
+      if (a.ok) return
+      expect(a.reason).toBe('relation_unqualified')
+      expect(a.construct).toBe(
+        'pg_stat_activity: write the schema, e.g. pg_catalog.pg_stat_activity or public.pg_stat_activity',
+      )
+      // A qualified name, also one that bears a system view's name, is admitted.
+      expect(admitReadSync(major, 'SELECT 1 FROM pg_catalog.pg_stat_activity').ok).toBe(true)
+      expect(admitReadSync(major, 'SELECT 1 FROM other.pg_stat_activity').ok).toBe(true)
+    })
+
     it('reports relations and functions of an admitted read', () => {
       const a = admitReadSync(
         major,

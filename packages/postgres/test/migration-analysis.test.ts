@@ -11,6 +11,7 @@ import {
   survivingExpectations,
   worstSeverity,
 } from '../src/parser/index.ts'
+import { expectationKeys, touchedKeys } from '../src/parser/migration.ts'
 import { SUPPORTED_MAJORS } from '../src/versions.ts'
 
 /**
@@ -415,5 +416,135 @@ describe('structural expectations (verification.md §3)', () => {
       [3, 'relation'],
       [4, 'index'],
     ])
+  })
+})
+
+/**
+ * `survivingExpectations` over a whole legacy chain (test campaign TC-021): one reverse-looking
+ * pass instead of a scan of every later statement per expectation (it took 3.1 s for 1,000
+ * files and 196 s for 5,000). It must answer exactly what the quadratic definition answers.
+ */
+describe('survivingExpectations is linear and keeps its meaning', () => {
+  /** The definition, as it was written before: an expectation survives unless a later statement touches its keys. */
+  function reference(statements: readonly StatementFacts[]) {
+    const touched = statements.map(touchedKeys)
+    const out: { statement: number; expectation: Expectation }[] = []
+    for (const [i, s] of statements.entries()) {
+      for (const e of s.expectations) {
+        const keys = expectationKeys(e)
+        const superseded = touched
+          .slice(i + 1)
+          .some(
+            (t) =>
+              (keys[0] !== undefined && t.exact.has(keys[0])) ||
+              keys.some((k) => k.startsWith('rel:') && t.relations.has(k)),
+          )
+        if (!superseded) out.push({ statement: i, expectation: e })
+      }
+    }
+    return out
+  }
+
+  /** A small seeded generator (mulberry32): the same inputs on every run. */
+  function random(seed: number) {
+    let a = seed
+    return () => {
+      a = (a + 0x6d2b79f5) | 0
+      let t = Math.imul(a ^ (a >>> 15), 1 | a)
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    }
+  }
+
+  function facts(count: number, seed: number): StatementFacts[] {
+    const next = random(seed)
+    const pick = <T>(items: readonly T[]): T => items[Math.floor(next() * items.length)] as T
+    const schema = () => pick(['public', 'app', null] as const)
+    const table = () => pick(['t0', 't1', 't2', 't3'])
+    const column = () => pick(['c0', 'c1', 'c2'])
+    const expectation = (): Expectation =>
+      pick<() => Expectation>([
+        () => ({
+          kind: 'relation',
+          schema: schema(),
+          name: table(),
+          relkinds: ['r'],
+          present: true,
+        }),
+        () => ({
+          kind: 'column',
+          schema: schema(),
+          table: table(),
+          column: column(),
+          present: true,
+        }),
+        () =>
+          ({ kind: 'not_null', schema: schema(), table: table(), column: column() }) as Expectation,
+        () => ({ kind: 'index', schema: schema(), name: `i${table()}`, present: true }),
+        () => ({ kind: 'constraint', schema: schema(), table: table(), name: 'k', present: true }),
+        () => ({ kind: 'schema', name: pick(['app', 'public']) }) as Expectation,
+      ])()
+    const object = () =>
+      pick([
+        () => ({
+          kind: 'column',
+          schema: null,
+          name: column(),
+          table: { schema: schema(), name: table() },
+          action: 'alter',
+        }),
+        () => ({
+          kind: 'table',
+          schema: schema(),
+          name: table(),
+          action: pick(['drop', 'rename', 'grant', 'create']),
+        }),
+        () => ({ kind: 'index', schema: schema(), name: `i${table()}`, action: 'drop' }),
+        () => ({ kind: 'schema', schema: null, name: pick(['app', 'public']), action: 'drop' }),
+        () => ({
+          kind: 'constraint',
+          schema: null,
+          name: 'k',
+          table: { schema: schema(), name: table() },
+          action: 'alter',
+        }),
+      ])()
+    return Array.from(
+      { length: count },
+      (_, index) =>
+        ({
+          index,
+          expectations: Array.from({ length: Math.floor(next() * 3) }, expectation),
+          objects: Array.from({ length: Math.floor(next() * 3) }, object),
+        }) as unknown as StatementFacts,
+    )
+  }
+
+  it('answers what the quadratic definition answers, on random small chains', () => {
+    for (let seed = 1; seed <= 200; seed++) {
+      const statements = facts(1 + (seed % 40), seed)
+      expect(survivingExpectations(statements), `seed ${seed}`).toEqual(reference(statements))
+    }
+  })
+
+  it('grows linearly: four times the statements take about four times as long, not sixteen', () => {
+    // A machine's speed cancels out of the ratio; the old definition took 2.4 s for 30,000
+    // statements and 16 times as long as a quarter of them. The best of five runs and a floor keep a
+    // loaded machine (the workspace runs every package at once) out of the ratio.
+    const best = (statements: StatementFacts[]): number => {
+      let ms = Number.POSITIVE_INFINITY
+      for (let i = 0; i < 5; i++) {
+        const t0 = performance.now()
+        survivingExpectations(statements)
+        ms = Math.min(ms, performance.now() - t0)
+      }
+      return ms
+    }
+    const small = facts(7_500, 7)
+    const large = facts(30_000, 7)
+    expect(survivingExpectations(large).length).toBeGreaterThan(0)
+    const quarter = best(small)
+    const whole = best(large)
+    expect(whole / Math.max(quarter, 20)).toBeLessThan(8)
   })
 })

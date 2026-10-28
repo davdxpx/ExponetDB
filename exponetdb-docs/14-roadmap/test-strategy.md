@@ -138,3 +138,40 @@ stands in for product evidence.
 | Parity oracle | the rebuilt Web App keeps every security behavior and URL of the pages it replaces | the existing suites stay green before the old code is deleted: `web.e2e`, `web-review.e2e`, `mcp-approval.e2e`, `quickstart.lab`, `http-auth*` and `http` tests, the ports of the `safe` and `review` unit tests including their hostile cases, and `tooling/smoke/roles.sh` ([order Appendix C](./orders/wave-8-order.md)) |
 | Hostile-content end to end | untrusted content is rendered as text only | script tags, bidi and tag characters, a hidden `DROP`, hostile client, target and catalog names on every untrusted-content surface |
 | Browser security | the browser trust boundary holds | cookie flags, CSRF, exact `Origin`, clickjacking, `returnTo` open redirect, fragment tokens, and that no token or connection material is ever rendered |
+
+## 9. What `bun run verify` does not run
+
+**[DECIDED]** (test campaign TC-026, TC-029, TC-049 to TC-051, TC-054) `bun run verify` is
+the default proof, not the whole proof. The default test run (`bun run test`) leaves out the
+files named `*.int.test.ts` (run by `test:integration`), `*.e2e.test.ts` (`test:e2e`), and four
+classes that need a host `verify` does not have. `bun run verify:host` prints the exact command
+of each (and `--list` one per line); it never runs them, and it fails when a file it names is
+gone.
+
+| Class | Files | Needs | Run by |
+|---|---|---|---|
+| Host scenarios (`*.host.test.ts`) | `apps/server/test/host/*`, `agent-capabilities.host.test.ts` | Linux with systemd, root, PostgreSQL 17 clusters | CI `node-host-scenarios`, `node-pg` |
+| Go against real clusters (tag `pgit`) | `agent/node/internal/pgwire`, `capabilities` | root, PostgreSQL 16, 17, 18 | CI `node-pg` |
+| **Backup and restore lab (tag `pglab`)** | `agent/node/internal/helper/pglab_test.go`, `packages/backups/test/runbook.lab.test.ts` (`bun run --cwd packages/backups test:lab`) | root, pgBackRest >= 2.59.3, restic, PostgreSQL 17 | CI `backup-lab` (added by the campaign; `go vet -tags pglab` also runs in the `go` job) |
+| Install tests (`*.install.test.ts`) | `apps/cli/test/packed.install.test.ts` | a built, packed CLI | CI `postgres` |
+| Lab tests (`*.lab.test.ts`) | quickstart, Traefik, MCP stability, the CLI dev lab | Docker | CI `image` |
+| Model evals (`*.model.test.ts`) | `apps/server/test/mcp-evals.model.test.ts` | the owner's own API key | the owner; without a key they are reported **skipped (NOT RUN)** with the reason, never as failures |
+
+What stays unproven by any default run: the transient systemd units of the backup engine runs
+(no host scenario runs a backup under real systemd; T-NODE-1 to T-NODE-5 stay manual); the visual
+baselines on a machine other than the one that recorded them. (CI first ran on the pull request of
+the test campaign fixes; its `backup-lab` job passed against pgBackRest 2.60.0, restic 0.16.4 and
+PostgreSQL 17, which proves the lab's happy paths, not the cases of TC-009, TC-011 and TC-012.)
+
+Reproducibility rules of the default run:
+
+- **Time zone.** The shared Vitest configuration sets `TZ=UTC`; tests that format a time expect it
+  (`TZ=Europe/Berlin bun run test` was red before).
+- **Toolchain.** `bun run toolchain` (the first step of `verify`, and a `preinstall` that only warns
+  outside `CI=true`) compares the Node and Bun binaries on the PATH with `engines` (Node `>=24.22.1
+  <25`, Bun `>=1.4.4`). Under Bun `process.versions.node` is the emulated Node version, so the check
+  asks the binaries themselves.
+- **Visual baselines.** The default set `local` matches only the machine that recorded it; CI sets
+  `EXDB_VISUAL_BASELINE_SET=ci-ubuntu-24.04`. A failing run names the set and what to do. A run that
+  refuses before comparing pixels on a platform without a recorded set is not built: nothing records
+  which machine made `local`.

@@ -48,7 +48,12 @@ export {
   SQL_KINDS,
   VERIFYING_KINDS,
 } from './catalog/migrations.ts'
-export { NODE_APPLY_KINDS, NODE_RULES, nodeProdApplyApproval } from './catalog/nodes.ts'
+export {
+  NODE_APPLY_KINDS,
+  NODE_RULES,
+  nodeLifecycleReauth,
+  nodeProdApplyApproval,
+} from './catalog/nodes.ts'
 export {
   clusterAdoptAgentApproval,
   driftAcceptProd,

@@ -197,7 +197,7 @@ Rewritten on 2026-10-13 by the owner's Wave 8 order and
 
 - [ ] REOSA targets registered; health and drift observed for staging and production
 - [ ] Legacy import baseline accepted with every review item decided
-- [ ] At least five REOSA migrations applied staging-first through ExponetDB, production with evidence
+- [ ] At least five REOSA migrations applied staging-first through ExponetDB, production with evidence (**wording open: [OD-66](../00-product/open-decisions.md)**, test campaign TC-063; it contradicts OD-7b, which forbids production applies before Wave 11)
 - [ ] Runtime schema contract active in REOSA's health checks
 - [ ] REOSA Admin `/database` reads ExponetDB through the SDK
 - [ ] **S** REOSA's service account is read-only; out-of-band changes produce drift findings

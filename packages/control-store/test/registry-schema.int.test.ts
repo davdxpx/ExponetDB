@@ -791,6 +791,12 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M5X840BMQPER7PK6WH64NR2J',
         // OD-56 (a), Wave 9 Part B order (2026-10-26): keyed digests of excused values.
         '01M5X840BP8JXGEQGS0PHPTB58',
+        // Test campaign TC-005 (2026-10-28): a recovery plan closes the needs_attention operation it names.
+        '01M61AGQKSBZ9VN71DHYFVCQHT',
+        // Test campaign TC-007 (2026-10-28): ledger.reconcile moves mirror rows to a history.
+        '01M61C90YHV706H2B8EW39TBAF',
+        // Test campaign TC-013 (2026-10-28): serve records the attestation of an offline drill.
+        '01M61FKAJN5VP9H2E73K74NCZ2',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

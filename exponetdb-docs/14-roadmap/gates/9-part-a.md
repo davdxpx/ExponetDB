@@ -992,6 +992,15 @@ passes the parser's token bound, memory adds up across the files of a large
 history, and the `search_path` check of the guard strictness is a
 quadratic regular expression. They wait for the owner's go-ahead.
 
+**Update 2026-10-28 (test campaign, [fix prompt](../prompts/2026-10-27-test-campaign-fixes.md)):**
+the single-quoted `DO` body is fixed (TC-003: the token bound reads a body
+whatever its quoting, [deployment.md §2a](../../12-operations/deployment.md#2a-memory)).
+The `search_path` check is fixed too (TC-004: a linear scan per statement
+instead of a backtracking regular expression; 4 MiB of the worst text took
+17 s at 100 000 characters before, a few milliseconds now). The memory over a
+whole history is tracked as TC-021 in
+[`PRE-WAVE-11-REVIEW.md`](../PRE-WAVE-11-REVIEW.md#test-campaign-fixes--parallel-session).
+
 ## 10. Follow-up 4: re-verifying a baseline after later verified migrations (2026-10-24)
 
 **[OBSERVED]** After the deploy of `8b0aa6cf` on `reos-01` follow-up 3 worked
@@ -1073,6 +1082,10 @@ or bounded by it:
 - A bundle's `DO` block that changes a role supersedes the history's role
   expectation in the supersede analysis; the bundle linter refuses role
   management at the top level only (on `main` before).
+- **[DECIDED]** (test campaign TC-021, 2026-10-28) The files of one request are bounded together
+  (1,000,000 tokens counted with the bodies, [`deployment.md` §2a](../../12-operations/deployment.md));
+  `survivingExpectations` is linear. Still open from that finding: compact per-file facts after the
+  replay, a cap on the legacy ledger read and the 512 MiB container measurement of the budget.
 - An imported row whose file stated nothing checkable reads passed by the
   baseline; rows read their own share while the baseline's engine layer
   failed (the baseline row shows the run); the MCP tool shows a superseded

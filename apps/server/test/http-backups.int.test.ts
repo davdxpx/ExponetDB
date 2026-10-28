@@ -45,6 +45,8 @@ import {
 
 let db: MigratedTestDatabase
 let keyring: Keyring
+/** Every line the serve logger wrote (TC-013: a 5xx must say why). */
+const logLines: string[] = []
 let app: ReturnType<typeof createPublicApp>
 let owner: Person
 let registry: KindRegistry
@@ -156,6 +158,10 @@ function answer(host: Host) {
   }
 }
 
+/** What the simulated node reports for the amcheck check of a restore (TC-010). */
+let amcheckOutcome: 'passed' | 'not_run' | 'failed' = 'passed'
+const AMCHECK_DETAIL = '497 indexes checked in 3 of 5 databases; amcheck is missing in the others'
+
 function statusOf(
   runId: string,
   run: { purpose: string; startJobId: string; label: string | null } | null,
@@ -189,7 +195,10 @@ function statusOf(
             checks:
               run.purpose === 'restore'
                 ? ['recovery_target_reached', 'probe_simple', 'probe_extended', 'amcheck'].map(
-                    (check) => ({ check, outcome: 'passed', detail: null }),
+                    (check) =>
+                      check === 'amcheck' && amcheckOutcome !== 'passed'
+                        ? { check, outcome: amcheckOutcome, detail: AMCHECK_DETAIL }
+                        : { check, outcome: 'passed', detail: null },
                   )
                 : [],
             phases:
@@ -238,6 +247,7 @@ beforeAll(async () => {
     role: 'serve',
     level: 'warn',
     write: (line) => {
+      logLines.push(line)
       if (process.env['EXDB_TEST_LOGS'] === '1') process.stderr.write(`${line}\n`)
     },
   })
@@ -657,6 +667,126 @@ describe('backups through REST, the worker and a simulated node', () => {
       undefined,
     ])
     expect(String(recovery.body.change?.analysis?.activation)).toMatch(/^not activated/)
+    await node.stop()
+  })
+
+  it('passes a drill whose amcheck was not run where the extension is missing, and fails one whose amcheck failed (TC-010, D-02)', async () => {
+    const { w, node } = await setup('nonprod')
+    const repositoryId = await adopt(w)
+    await refresh(w)
+    const catalog = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/backups`)
+    const backupId = catalog.body.backups[0].id as string
+    const verified = await owner.browser.call(
+      'POST',
+      `/api/v1/clusters/${w.clusterId}/backups/${backupId}/verify`,
+      {},
+    )
+    expect(verified.status).toBe(202)
+    await drive()
+    const drillOutcomes: string[] = []
+    try {
+      for (const outcome of ['not_run', 'failed'] as const) {
+        amcheckOutcome = outcome
+        const drill = await planAndApply(`/api/v1/clusters/${w.clusterId}/drills`, {
+          repositoryId,
+          selection: { kind: 'latest' },
+        })
+        drillOutcomes.push(`${outcome}:${drill.operation.state}`)
+        const restores = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/restores`)
+        // The newest restore first: the amcheck check keeps its outcome and its detail, whatever the drill's.
+        expect(restores.body.restores[0].checks).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ check: 'amcheck', outcome, detail: AMCHECK_DETAIL }),
+          ]),
+        )
+      }
+    } finally {
+      amcheckOutcome = 'passed'
+    }
+    expect(drillOutcomes).toEqual(['not_run:succeeded', 'failed:verification_failed'])
+    const drills = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/drills`)
+    expect(drills.body.drills.map((d: { outcome: string }) => d.outcome).slice(0, 2)).toEqual([
+      'failed',
+      'passed',
+    ])
+    await node.stop()
+  })
+
+  it('records an offline drill as an attestation: 201, listed, audited, with the real role set (TC-013, D-09)', async () => {
+    const { w, node } = await setup('nonprod')
+    const repositoryId = await adopt(w)
+    const runbook = await owner.browser.call(
+      'GET',
+      `/api/v1/clusters/${w.clusterId}/restore-runbook?repository=${repositoryId}`,
+    )
+    expect(runbook.status, JSON.stringify(runbook.body)).toBe(200)
+    const attest = (over: Record<string, unknown> = {}) =>
+      owner.browser.call('POST', `/api/v1/clusters/${w.clusterId}/drills/offline`, {
+        repositoryId,
+        runbookDigest: runbook.body.digest,
+        restoredAt: new Date(Date.now() - 60_000).toISOString(),
+        durationSeconds: 1800,
+        outcome: 'passed',
+        notes: 'Restored on a spare host from the downloaded runbook; 370 of 370 rows.',
+        ...over,
+      })
+    await owner.reauth()
+    // The digest of another repository's runbook is refused before anything is written.
+    const wrong = await attest({ runbookDigest: `sha256:${'0'.repeat(64)}` })
+    expect([wrong.status, wrong.body?.code]).toEqual([422, 'VALIDATION_FAILED'])
+    const passed = await attest()
+    expect([passed.status, passed.body?.code], JSON.stringify(passed.body)).toEqual([
+      201,
+      undefined,
+    ])
+    expect(passed.body).toMatchObject({
+      mode: 'offline_runbook',
+      outcome: 'attested',
+      repositoryId,
+      measuredRtoSeconds: null,
+    })
+    await owner.reauth()
+    const failed = await attest({
+      outcome: 'failed',
+      notes: 'The restore stopped: wrong passphrase.',
+    })
+    expect([failed.status, failed.body?.code]).toEqual([201, undefined])
+    expect(failed.body).toMatchObject({ mode: 'offline_runbook', outcome: 'failed' })
+    // Listed as an attestation, not a measured pass; the audit row names it.
+    const drills = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/drills`)
+    expect(
+      drills.body.drills.map((d: { mode: string; outcome: string }) => `${d.mode}:${d.outcome}`),
+    ).toEqual(expect.arrayContaining(['offline_runbook:attested', 'offline_runbook:failed']))
+    const audit = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT count(*)::int AS n FROM audit.audit_events WHERE action = 'restore.drill.offline.recorded'`,
+      ),
+    )
+    expect(Number(audit.rows[0]?.n)).toBeGreaterThanOrEqual(2)
+
+    // And a 5xx says why: take the function away from serve, as it was missing before, and the
+    // answer is a plain INTERNAL while the log names the error, its code and the route.
+    const signature =
+      'backups.record_offline_drill(text, text, text, text, text, text, text, timestamptz, timestamptz)'
+    await db.asSuperuser((c) => c.query(`REVOKE EXECUTE ON FUNCTION ${signature} FROM exdb_serve`))
+    try {
+      await owner.reauth()
+      logLines.length = 0
+      const broken = await attest({ notes: 'The function is gone.' })
+      expect([broken.status, broken.body?.code]).toEqual([500, 'INTERNAL'])
+      const logged = logLines.filter(
+        (l) => l.includes('http.request_failed') && l.includes('/drills/offline'),
+      )
+      expect(logged, logLines.join('\n')).toHaveLength(1)
+      expect(JSON.parse(logged[0] ?? '{}')).toMatchObject({
+        errorName: 'ControlStoreError',
+        errorCode: 'control_store_permission_denied',
+        causeCode: '42501',
+      })
+      expect(logged[0]).not.toContain(String(runbook.body.digest))
+    } finally {
+      await db.asSuperuser((c) => c.query(`GRANT EXECUTE ON FUNCTION ${signature} TO exdb_serve`))
+    }
     await node.stop()
   })
 

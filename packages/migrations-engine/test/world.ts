@@ -40,7 +40,12 @@ import {
   targetDatabase,
   verifyCredentials,
 } from '../../registry/test/harness.ts'
-import { type MigrationPlanContext, migrationKinds, planMigrationApply } from '../src/index.ts'
+import {
+  type ExpectedSchema,
+  type MigrationPlanContext,
+  migrationKinds,
+  planMigrationApply,
+} from '../src/index.ts'
 
 /**
  * A registered project with migration targets on real PostgreSQL, for the
@@ -86,6 +91,12 @@ export interface DriveOptions {
   readonly wrap?: (c: Connector) => Connector
   /** The worker's dispatch admission (the server composes the application's). */
   readonly admit?: DispatchAdmission
+  /**
+   * Polls the worker this many times and returns, idle or not: an operation
+   * that waits for a domain answers `waiting` for ever, so a test about one
+   * bounds the loop instead of expecting the worker to become idle.
+   */
+  readonly polls?: number
 }
 
 export interface BundleSpec {
@@ -100,7 +111,12 @@ export interface BundleSpec {
   readonly down?: string
 }
 
-export async function migrationWorld(label: string, server: TestServer): Promise<World> {
+export async function migrationWorld(
+  label: string,
+  server: TestServer,
+  /** Receives the schema each verified migration left (the worker composes the baseline store). */
+  expected?: ExpectedSchema,
+): Promise<World> {
   const h = await harness(label)
   const a = actor()
   await runAsSuperuser(server, 'postgres', [
@@ -140,6 +156,7 @@ export async function migrationWorld(label: string, server: TestServer): Promise
         connector,
         installationId: h.db.installationId,
         engineVersion: '0.1.0+test',
+        ...(expected === undefined ? {} : { expected }),
       }),
     ])
   const kinds = kindsWith(h.workerConnector)
@@ -243,7 +260,7 @@ export async function migrationWorld(label: string, server: TestServer): Promise
       const registry =
         options.wrap === undefined ? kinds : kindsWith(options.wrap(h.workerConnector))
       const workerId = newId('prc', Date.now())
-      for (let i = 0; i < 50; i++) {
+      for (let i = 0; i < (options.polls ?? 50); i++) {
         const r = await processNextOperation(h.worker, {
           workerId,
           kinds: registry,
@@ -252,6 +269,7 @@ export async function migrationWorld(label: string, server: TestServer): Promise
         })
         if (r.status === 'idle') return
       }
+      if (options.polls !== undefined) return
       throw new Error('the worker did not become idle')
     },
     async apply(p, options) {

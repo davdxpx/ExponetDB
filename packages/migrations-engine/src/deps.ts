@@ -34,6 +34,11 @@ export interface ExpectedSchema {
     readonly operationId: string
     /** The fingerprint the verification saw after the last migration of the operation. */
     readonly fingerprint: string
+    /**
+     * The fingerprint the operation's plan started from; the baseline is not
+     * replaced when the target's was another (the schema had drifted, TC-006).
+     */
+    readonly preFingerprint?: string
   }): Promise<unknown>
 }
 

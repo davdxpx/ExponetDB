@@ -1359,11 +1359,21 @@ abstract class RestoreRunKind extends RunKind {
       source['pointInTime'] == null &&
       walTo !== null &&
       (reached === null || lsnValue(reached) < lsnValue(walTo))
+    // RB-08 asks for amcheck "where installed": the node reports `not_run`, never `passed`, when a
+    // database of the restored cluster lacks the extension (a template, an application database, a
+    // backup older than the extension). That is reduced assurance, not a failed restore (TC-010,
+    // D-02): the check keeps its outcome and detail in the record and a `failed` or `error` one
+    // still fails the drill. Whether it should be strict is OD-60.
+    const advisory = new Set(['amcheck'])
     const allPassed =
       succeeded &&
       !replayShort &&
       configured.every((name) =>
-        nodeChecks.some((k) => k['check'] === name && k['outcome'] === 'passed'),
+        nodeChecks.some(
+          (k) =>
+            k['check'] === name &&
+            (k['outcome'] === 'passed' || (advisory.has(name) && k['outcome'] === 'not_run')),
+        ),
       )
     // The fingerprint and the ledger head need a Control Plane read of the scratch cluster, which V1 does not have.
     const checks = [

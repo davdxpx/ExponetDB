@@ -1,5 +1,5 @@
 import { encodeUtf8 } from '@exponetdb/kernel'
-import { countTokens, lex } from './lexer.ts'
+import { countTokens, statementBodies } from './lexer.ts'
 import type { SupportedMajor } from './majors.ts'
 
 /**
@@ -114,13 +114,8 @@ export const MAX_PARSE_TOKENS = 200_000
  */
 export function exceedsParseWork(text: string, depth = 0): boolean {
   if (countTokens(text, MAX_PARSE_TOKENS) > MAX_PARSE_TOKENS) return true
-  if (depth >= 2 || !text.includes('$')) return false
-  for (const token of lex(text)) {
-    if (token.kind !== 'dollar') continue
-    const body = dollarBody(text.slice(token.start, token.end))
-    if (body !== undefined && exceedsParseWork(body, depth + 1)) return true
-  }
-  return false
+  if (depth >= 2) return false
+  return statementBodies(text).some((body) => exceedsParseWork(body, depth + 1))
 }
 
 /** The text between the tags of a dollar-quoted literal (`undefined` when unterminated). */

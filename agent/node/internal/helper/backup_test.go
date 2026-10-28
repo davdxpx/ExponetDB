@@ -798,6 +798,47 @@ func list(o canon.Object, name string) canon.Array {
 	return a
 }
 
+// A run of the unit writes the restic repository it was given (locks, packs, snapshots), and
+// ProtectSystem=strict makes everything outside ReadWritePaths read-only: a local repository must
+// be listed, or the run fails after minutes of lock retries with "read-only file system" (TC-012, D-06).
+// A repository at a URL adds nothing, and a path that is not a plain absolute one is never listed.
+func TestLocalResticRepositoryIsWritableInTheUnit(t *testing.T) {
+	for _, c := range []struct {
+		name, repository string
+		writable         string
+	}{
+		{"a local directory", "/var/lib/restic-repo", "--property=ReadWritePaths=-/var/lib/restic-repo"},
+		{"the local: form", "local:/srv/backups/restic", "--property=ReadWritePaths=-/srv/backups/restic"},
+		{"s3", "s3:https://objects.example.test/bucket", ""},
+		{"sftp", "sftp:backup@host.example.test:/srv/restic", ""},
+		{"rest", "rest:https://host.example.test:8000/", ""},
+		{"a path that climbs", "/var/lib/../etc/restic", ""},
+		{"the root", "/", ""},
+		{"a relative path", "restic-repo", ""},
+	} {
+		b := newBackupEnv(t)
+		b.mode(ModeOwned)
+		dir := b.root + "/etc/exponetdb-node/repositories/" + repoID
+		writeFile(t, dir+"/repository", c.repository+"\n", 0o600)
+		writeFile(t, dir+"/password", resticPass, 0o600)
+		b.mustCall(OpBackupRun, b.job("backup.run", runArgs(runA, "logical", resticRepo(), "app")))
+		start := strings.Join(b.run.find(SystemdRun, "--unit=")[0].Args, "\n")
+		var repoPaths []string
+		for _, line := range strings.Split(start, "\n") {
+			if strings.HasPrefix(line, "--property=ReadWritePaths=") && !strings.Contains(line, "/runs/") {
+				repoPaths = append(repoPaths, line)
+			}
+		}
+		switch {
+		case c.writable == "" && len(repoPaths) != 0:
+			t.Fatalf("%s: the unit may write %v", c.name, repoPaths)
+		case c.writable != "" && (len(repoPaths) != 1 || repoPaths[0] != c.writable):
+			t.Fatalf("%s: want %s, got %v", c.name, c.writable, repoPaths)
+		}
+		noSecrets(t, c.name, b.allArgv())
+	}
+}
+
 func TestLogicalBackupSecretsStayInFiles(t *testing.T) {
 	b := newBackupEnv(t)
 	b.mode(ModeOwned)
@@ -967,6 +1008,52 @@ func TestEngineRunPgBackRestBackup(t *testing.T) {
 	noSecrets(t, "status", string(out))
 	if str(st, "state") != "succeeded" || !strings.Contains(string(out), `"label":"20261007-010000F_20261007-120000I"`) {
 		t.Fatalf("%s", out)
+	}
+}
+
+// pgbackrest verify exits 0 even when it reports a corrupt or missing file: the result is in its
+// text. A verified backup must not rest on a corrupt archive (TC-011, D-03): the run counts what
+// pgBackRest reports and fails when it reported anything.
+func TestEngineRunVerifyReadsWhatPgBackRestReports(t *testing.T) {
+	counts := func(missing, checksum, size, other int) string {
+		return fmt.Sprintf("    missing: %d, checksum invalid: %d, size invalid: %d, other: %d\n", missing, checksum, size, other)
+	}
+	clean := "P00   INFO: verify command begin 2.60.0: --stanza=main\n" +
+		"stanza: main\nstatus: ok\n" +
+		"  archiveId: 17-1, total WAL checked: 3, total valid WAL: 3\n" + counts(0, 0, 0, 0) +
+		"  backup: 20261007-010000F, status: ok, total files checked: 12, total valid files: 12\n" + counts(0, 0, 0, 0) +
+		"P00   INFO: verify command end: completed successfully\n"
+	for _, c := range []struct {
+		name   string
+		out    string
+		errors int64
+		state  string
+	}{
+		{"clean", clean, 0, "succeeded"},
+		{"a corrupt WAL segment", "P01   WARN: invalid result 000000010000000100000023-0123456789abcdef: checksum mismatch, Data corruption detected\n" +
+			"stanza: main\nstatus: error\n  archiveId: 17-1, total WAL checked: 3, total valid WAL: 2\n" + counts(0, 1, 0, 0), 1, "failed"},
+		{"a deleted WAL segment", "stanza: main\nstatus: error\n  archiveId: 17-1, total WAL checked: 2, total valid WAL: 2\n" + counts(1, 0, 0, 0), 1, "failed"},
+		{"an invalid backup", "stanza: main\nstatus: error\n  archiveId: 17-1, total WAL checked: 3, total valid WAL: 3\n" + counts(0, 0, 0, 0) +
+			"  backup: 20261007-010000F, status: invalid, total files checked: 12, total valid files: 9\n" + counts(1, 2, 0, 0), 3, "failed"},
+		// No count line at all: an error status or an invalid result is still at least one error.
+		{"an error status without counts", "P01   WARN: invalid result 000000010000000100000023-0123: Data corruption detected\nstanza: main\nstatus: error\n", 2, "failed"},
+	} {
+		b := newBackupEnv(t)
+		b.mode("")
+		b.mustCall(OpBackupVerify, b.job("backup.verify", canon.Object{{Name: "cluster", Value: cluster()}, {Name: "repository", Value: pgbrRepo()},
+			{Name: "runId", Value: canon.String(runA)}, {Name: "label", Value: canon.Null{}}, {Name: "snapshot", Value: canon.Null{}}}))
+		fx := &fakeExec{fn: func(e engineCmd) (int, string) {
+			if strings.HasSuffix(strings.Join(e.Args, " "), " info") {
+				return 0, pgbrInfoFixture(sysid)
+			}
+			return 0, c.out
+		}}
+		b.engine(runA, fx, context.Background())
+		st := b.status(b.record(runA))
+		out, _ := canon.Canonicalize(st)
+		if str(st, "state") != c.state || !strings.Contains(string(out), fmt.Sprintf(`"verifyErrors":%d`, c.errors)) {
+			t.Fatalf("%s: want %s with %d errors: %s", c.name, c.state, c.errors, out)
+		}
 	}
 }
 
@@ -1153,22 +1240,43 @@ func TestEngineRunRestoreRefusesAnotherStanza(t *testing.T) {
 func TestRestoreTypeArgs(t *testing.T) {
 	label, at, lsn, tl := "20261006-010000F", "2026-10-06T02:30:00.5Z", "0/6000120", int64(2)
 	for _, c := range []struct {
+		name string
 		t    restoreTarget
 		want string
 	}{
-		{restoreTarget{Time: &at, Timeline: &tl}, "--type=time --target=2026-10-06 02:30:00.5+00 --target-action=promote --target-timeline=2"},
-		{restoreTarget{Lsn: &lsn}, "--type=lsn --target=0/6000120 --target-action=promote"},
-		{restoreTarget{Label: &label}, "--type=immediate --target-action=promote --set=20261006-010000F"},
-		{restoreTarget{}, "--type=default"},
+		{"time with a timeline", restoreTarget{Time: &at, Timeline: &tl}, "--type=time --target=2026-10-06 02:30:00.5+00 --target-action=promote --target-timeline=2"},
+		{"lsn", restoreTarget{Lsn: &lsn}, "--type=lsn --target=0/6000120 --target-action=promote"},
+		{"lsn with a timeline", restoreTarget{Lsn: &lsn, Timeline: &tl}, "--type=lsn --target=0/6000120 --target-action=promote --target-timeline=2"},
+		// TC-009 (D-01): a backup with no point in time restores to the end of the archive, as a drill
+		// that must reach the WAL end requires. It used to be --type=immediate, which stops at the end of
+		// the backup, and --target-timeline on it is refused by pgBackRest (error 031, exit 31).
+		{"a label alone", restoreTarget{Label: &label}, "--type=default --set=20261006-010000F"},
+		{"a label with a timeline", restoreTarget{Label: &label, Timeline: &tl}, "--type=default --set=20261006-010000F --target-timeline=2"},
+		{"a label with a time", restoreTarget{Label: &label, Time: &at}, "--type=time --target=2026-10-06 02:30:00.5+00 --target-action=promote --set=20261006-010000F"},
+		{"nothing", restoreTarget{}, "--type=default"},
+		{"nothing with a timeline", restoreTarget{Timeline: &tl}, "--type=default --target-timeline=2"},
 	} {
 		got, err := restoreTypeArgs(c.t)
 		if err != nil || strings.Join(got, " ") != c.want {
-			t.Fatalf("%v %v, want %s", got, err, c.want)
+			t.Fatalf("%s: %v %v, want %s", c.name, got, err, c.want)
+		}
+		// pgBackRest takes --target-timeline only with a type of default, time or lsn: never without one,
+		// and never after immediate (the engine refuses it, error 031).
+		joined := strings.Join(got, " ")
+		if strings.Contains(joined, "--target-timeline") && !(strings.Contains(joined, "--type=default") || strings.Contains(joined, "--type=time") || strings.Contains(joined, "--type=lsn")) {
+			t.Fatalf("%s: a timeline without a type that takes one: %s", c.name, joined)
+		}
+		if strings.Contains(joined, "immediate") {
+			t.Fatalf("%s: a restore that stops at the end of the backup: %s", c.name, joined)
 		}
 	}
 	bad := "1/x; rm -rf /"
 	if _, err := restoreTypeArgs(restoreTarget{Lsn: &bad}); err == nil {
 		t.Fatal("a bad LSN passed")
+	}
+	badLabel := "not a label"
+	if _, err := restoreTypeArgs(restoreTarget{Label: &badLabel}); err == nil {
+		t.Fatal("a bad label passed")
 	}
 }
 

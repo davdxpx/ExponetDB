@@ -48,7 +48,16 @@ export {
   outsideScope,
   type ScopeTest,
 } from './legacy-references.ts'
-export { countTokens, isLiteral, type LexMode, lex, type Token, type TokenKind } from './lexer.ts'
+export {
+  countTokens,
+  isLiteral,
+  type LexMode,
+  lex,
+  quotedBody,
+  statementBodies,
+  type Token,
+  type TokenKind,
+} from './lexer.ts'
 export { isSupportedMajor, SUPPORTED_MAJORS, type SupportedMajor } from './majors.ts'
 export {
   type AnalyzeOptions,

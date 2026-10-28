@@ -148,6 +148,8 @@ export const fleetMessages = {
   'globalFindings.state.all': 'Open and resolved',
   'globalFindings.kind.drift': 'Drift',
   'globalFindings.kind.health': 'Health',
+  'globalFindings.kind.advisor': 'Advisor',
+  'globalFindings.kind.statements': 'Statements',
   'globalFindings.target.only': 'Showing the findings of {target} only.',
   'globalFindings.target.clear': 'Show every database',
   'globalFindings.target.filter': 'Only this database',

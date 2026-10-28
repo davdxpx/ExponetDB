@@ -94,6 +94,90 @@ async function requireCapability(remote: Remote, nodeId: string, name: string): 
   }
 }
 
+/**
+ * The observation a node plan binds (the server's `BASIS` and `basisArgs`, capability-plans.ts): the
+ * capability the plan reads first and its arguments, built from the change. `reusable`: the
+ * arguments do not depend on the change, so an observation younger than five minutes is reused;
+ * otherwise the plan binds an observation made for exactly these arguments, and a stale or
+ * different one is `NODE_OBSERVATION_STALE`, which is how the config and roles plans were a dead
+ * end from the CLI (TC-002: `--arg` could not carry the arrays).
+ */
+const BASIS: Readonly<
+  Record<
+    string,
+    {
+      readonly capability: string
+      readonly reusable: boolean
+      readonly args: (change: Record<string, unknown>) => Record<string, unknown>
+    }
+  >
+> = {
+  'postgres.reload': { capability: 'postgres.status@1', reusable: true, args: () => ({}) },
+  'postgres.restart': { capability: 'postgres.restart.plan@2', reusable: true, args: () => ({}) },
+  'postgres.config.apply': {
+    capability: 'postgres.config.plan@2',
+    reusable: false,
+    args: (change) => ({ changes: change['changes'] ?? [] }),
+  },
+  'postgres.hba.apply': { capability: 'postgres.hba.inspect@2', reusable: true, args: () => ({}) },
+  'postgres.roles.apply': {
+    capability: 'postgres.roles.inspect@2',
+    reusable: true,
+    args: () => ({ expectSettings: [] }),
+  },
+  'postgres.extensions.apply': {
+    capability: 'postgres.extensions.inspect@1',
+    reusable: false,
+    args: (change) => ({ database: change['database'] ?? null }),
+  },
+  'postgres.tls.rotate': { capability: 'postgres.tls.inspect@1', reusable: true, args: () => ({}) },
+}
+const FRESH_OBSERVATION_MS = 5 * 60_000
+
+/** Runs one capability on a node and waits for its signed result. */
+async function inspect(
+  ctx: RunContext,
+  remote: Remote,
+  nodeId: string,
+  capability: string,
+  clusterId: string | undefined,
+  args: Record<string, unknown>,
+  timeoutMs = 300_000,
+): Promise<CommandResult> {
+  const body = checkedBody('inspectNode', { capability, clusterId: clusterId ?? null, args })
+  const op = must(await remote.sdk.call('inspectNode', { params: { nodeId }, body: body as never }))
+  return watchOperation(ctx, remote, 'node inspect', op, timeoutMs)
+}
+
+/**
+ * Makes the basis observation of a node plan when none usable exists, so `node postgres
+ * <config|roles|…>` is one command. Returns the inspection's result when it did not succeed (the
+ * plan is then not made), `undefined` when the plan can go on.
+ */
+async function ensureBasis(
+  ctx: RunContext,
+  remote: Remote,
+  nodeId: string,
+  clusterId: string,
+  kind: string,
+  change: Record<string, unknown>,
+): Promise<CommandResult | undefined> {
+  const basis = BASIS[kind]
+  if (basis === undefined) return undefined
+  if (basis.reusable) {
+    const seen = must(
+      await remote.sdk.call('listNodeObservations', {
+        params: { nodeId },
+        query: { capability: basis.capability as never, clusterId: clusterId as never },
+      }),
+    )
+    const newest = Math.max(0, ...seen.items.map((o) => Date.parse(o.observedAt)))
+    if (ctx.io.now() - newest < FRESH_OBSERVATION_MS) return undefined
+  }
+  const done = await inspect(ctx, remote, nodeId, basis.capability, clusterId, basis.args(change))
+  return done.exitCode === EXIT.ok ? undefined : done
+}
+
 /** Plans one node change (a contract `NodeChange`) and, with --apply, applies it. */
 function nodeChange(
   path: readonly string[],
@@ -112,6 +196,12 @@ function nodeChange(
     flags: [
       CLUSTER_FLAG,
       ...extraFlags,
+      {
+        name: 'no-inspect',
+        type: 'boolean',
+        description:
+          'Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old).',
+      },
       { name: 'apply', type: 'boolean', description: 'Apply the plan at once and wait.' },
       ...WAIT_FLAGS,
     ],
@@ -122,12 +212,24 @@ function nodeChange(
     output: 'PlanView',
     async run(ctx, input): Promise<CommandResult> {
       const nodeId = arg(input, 'node')
+      const changed = await change(input, ctx)
       const body = checkedBody('planNodeOperation', {
         clusterId: flag(input, 'cluster'),
-        change: { kind, ...(await change(input, ctx)) },
+        change: { kind, ...changed },
       })
       const remote = await ctx.remote()
       await requireCapability(remote, nodeId, kind)
+      if (input.flags['no-inspect'] !== true) {
+        const failed = await ensureBasis(
+          ctx,
+          remote,
+          nodeId,
+          String(flag(input, 'cluster')),
+          kind,
+          changed,
+        )
+        if (failed !== undefined) return failed
+      }
       const plan = must(
         await remote.sdk.call('planNodeOperation', { params: { nodeId }, body: body as never }),
       ) as PlanView
@@ -204,6 +306,16 @@ export const nodeCommands: readonly CommandSpec[] = [
     title: 'nodes',
     operation: 'listNodes',
     noun: 'node',
+    // The route has no server filter: an unknown server is an error (not an empty list), and the
+    // nodes of the others are left out here (TC-031).
+    params: async (input, remote) => {
+      const serverId = input.flags['server']
+      if (typeof serverId === 'string') {
+        must(await remote.sdk.call('getServer', { params: { serverId } }))
+      }
+      return undefined as never
+    },
+    keep: (n, input) => input.flags['server'] === undefined || n.serverId === input.flags['server'],
     columns: [
       { title: 'NODE' },
       { title: 'SERVER' },
@@ -345,6 +457,12 @@ export const nodeCommands: readonly CommandSpec[] = [
         placeholder: 'k=v',
         description: 'Capability arguments (string values).',
       },
+      {
+        name: 'arg-json',
+        type: 'repeat',
+        placeholder: 'k=json',
+        description: 'Capability arguments as JSON (arrays and objects, for example changes=[…]).',
+      },
       WAIT_FLAGS[2] ?? { name: 'timeout-wait', type: 'duration', description: 'Wait.' },
     ],
     locality: 'remote',
@@ -354,20 +472,28 @@ export const nodeCommands: readonly CommandSpec[] = [
     output: 'Operation',
     async run(ctx, input) {
       const nodeId = arg(input, 'node')
-      const body = checkedBody('inspectNode', {
-        capability: flag(input, 'capability'),
-        clusterId: flag(input, 'cluster') ?? null,
-        args: Object.fromEntries(pairs(input.flags['arg'] as string[] | undefined, 'arg')),
-      })
-      const remote = await ctx.remote()
-      const op = must(
-        await remote.sdk.call('inspectNode', { params: { nodeId }, body: body as never }),
+      const strings = pairs(input.flags['arg'] as string[] | undefined, 'arg')
+      const typed = pairs(input.flags['arg-json'] as string[] | undefined, 'arg-json').map(
+        ([name, text]): [string, unknown] => {
+          try {
+            return [name, JSON.parse(text) as unknown]
+          } catch {
+            throw new UsageError(`--arg-json ${name}: the value is not valid JSON.`)
+          }
+        },
       )
-      const watched = await watchOperation(
+      const names = [...strings, ...typed].map(([name]) => name)
+      if (new Set(names).size !== names.length) {
+        throw new UsageError('Each capability argument is given once (--arg or --arg-json).')
+      }
+      const remote = await ctx.remote()
+      const watched = await inspect(
         ctx,
         remote,
-        'node inspect',
-        op,
+        nodeId,
+        String(flag(input, 'capability')),
+        flag(input, 'cluster'),
+        Object.fromEntries([...strings, ...typed]),
         Number(input.flags['timeout-wait'] ?? 300_000),
       )
       if (watched.exitCode !== EXIT.ok) return watched
@@ -579,6 +705,8 @@ export const nodeCommands: readonly CommandSpec[] = [
     async run(ctx, input) {
       const serverId = arg(input, 'server')
       const remote = await ctx.remote()
+      // An unknown server is not "no node has enrolled yet" (TC-031).
+      must(await remote.sdk.call('getServer', { params: { serverId } }))
       const until = ctx.io.now() + Number(input.flags['timeout-wait'] ?? 900_000)
       for (;;) {
         const items = []

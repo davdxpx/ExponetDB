@@ -1,7 +1,7 @@
 import { mkdtemp, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { SERVER_PROVIDERS } from '@exponetdb/contracts'
+import { actionDefinition, isActionId, SERVER_PROVIDERS } from '@exponetdb/contracts'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parse, parseDuration, UsageError } from '../src/cli/args.ts'
 import { EXIT, exitFor } from '../src/cli/exit.ts'
@@ -12,6 +12,7 @@ import { run } from '../src/main.ts'
 import { OUTPUT_SCHEMA, result } from '../src/output/model.ts'
 import { renderHuman, renderJson, renderNdjson, type Terminal } from '../src/output/render.ts'
 import { clean, cleanLine, truncate, width } from '../src/output/text.ts'
+import { planBlocks } from '../src/output/views.ts'
 import { testIo } from './support.ts'
 
 /**
@@ -269,6 +270,244 @@ describe('terminal safety', () => {
   })
 })
 
+describe('the human renderer names the data of a refusal (TC-022)', () => {
+  const terminal = { columns: 100, color: false, ascii: false, quiet: false }
+  const A = '01M5X840BP8JXGEQGS0PHPTB58'
+  const B = '01M5X840BMQPER7PK6WH64NR2J'
+  const refused = (code: string, details: unknown) =>
+    renderHuman(
+      result({ command: 'migration plan', error: { code, message: 'refused', details } }),
+      terminal,
+    ).err
+
+  it('prints the bundle and the ids a dependency refusal lacks', () => {
+    expect(refused('MIGRATION_DEPENDENCY_UNKNOWN', { migrationId: A, missing: [B] })).toEqual(
+      expect.arrayContaining([`  migrationId: ${A}`, `  missing: ${B}`]),
+    )
+    expect(refused('MIGRATION_DEPENDENCY_MISSING', { missing: [A, B] })).toContain(
+      `  missing: ${A}, ${B}`,
+    )
+    expect(refused('MIGRATION_DEPENDENCY_CYCLE', { cycle: [A, B] })).toContain(
+      `  cycle: ${A} → ${B}`,
+    )
+  })
+
+  it('cuts a long list and keeps hostile text inert', () => {
+    const many = Array.from({ length: 8 }, (_, i) => `01M5X840BP8JXGEQGS0PHPTB5${i}`)
+    const lines = refused('MIGRATION_DEPENDENCY_MISSING', { missing: many })
+    expect(lines).toContain(`  missing: ${many.slice(0, 5).join(', ')}, … 3 more`)
+    const hostile = refused('MIGRATION_DEPENDENCY_UNKNOWN', {
+      migrationId: 'x\u001b[31mred',
+      missing: ['a\nb'],
+    })
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: the test looks for control characters
+    const controls = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/
+    for (const line of hostile) expect(line).not.toMatch(controls)
+  })
+})
+
+describe('the plan view shows the change of a node plan (TC-001)', () => {
+  const terminal = { columns: 110, color: false, ascii: false, quiet: false }
+  const plan = (kind: string, content: object, analysis: object) =>
+    ({
+      id: 'pln_01M5ZF4EQW8F0GGEAV93NKAA98',
+      kind,
+      kindVersion: 1,
+      class: 'high',
+      state: 'active',
+      planHash: `sha256:pv1:${'b'.repeat(64)}`,
+      createdAt: '2026-10-28T10:00:00.000000Z',
+      expiresAt: '2026-10-28T10:15:00.000000Z',
+      subject: {
+        targetId: null,
+        targetPath: null,
+        clusterId: 'cls_01M5J4RDBP52B715X5HDFKDN5F',
+        nodeId: 'nod_01M5XZ84V768SYCHZKRNGJFQP2',
+        tier: 'nonprod',
+      },
+      decision: 'allow',
+      requirements: [],
+      overriddenRules: [],
+      approvals: { required: 0, given: 0 },
+      change: { content, analysis },
+    }) as unknown as Parameters<typeof planBlocks>[0]
+  const shown = (p: Parameters<typeof planBlocks>[0]) =>
+    renderHuman(result({ command: 'plan show', blocks: planBlocks(p) }), terminal).out.join('\n')
+
+  it('shows the pg_hba rules before and after and the access it protects', () => {
+    const text = shown(
+      plan(
+        'postgres.hba.apply',
+        {
+          change: {
+            managedRules: [
+              {
+                type: 'hostssl',
+                database: ['all'],
+                user: ['app'],
+                address: '10.8.0.0/16',
+                method: 'scram-sha-256',
+                map: null,
+              },
+              {
+                type: 'local',
+                database: ['all'],
+                user: ['all'],
+                address: null,
+                method: 'reject',
+                map: null,
+              },
+            ],
+            protectedAccess: [
+              {
+                role: 'exdb_reader',
+                database: 'postgres',
+                address: '10.8.1.1',
+                method: 'scram-sha-256',
+              },
+            ],
+          },
+        },
+        {
+          managedBlockBefore: ['hostssl all app 10.8.0.0/16 scram-sha-256'],
+          foreignRules: 3,
+          managedRulesAfter: 2,
+          protectedAccess: {
+            requested: 1,
+            derived: [
+              {
+                role: 'exdb_migrator',
+                database: 'postgres',
+                address: '10.8.1.1',
+                method: 'scram-sha-256',
+              },
+            ],
+          },
+        },
+      ),
+    )
+    // After: the rules the plan writes, one per line, as pg_hba.conf reads them.
+    expect(text).toMatch(/After:\s+hostssl all app 10\.8\.0\.0\/16 scram-sha-256/)
+    expect(text).toContain('local all all reject')
+    // Before: the managed block now in the file.
+    expect(text).toMatch(/Before:\s+hostssl all app 10\.8\.0\.0\/16 scram-sha-256/)
+    expect(text).toMatch(/Foreign rules kept:\s+3/)
+    // The access the plan keeps: the requested and the derived one.
+    expect(text).toContain('exdb_reader postgres 10.8.1.1')
+    expect(text).toContain('exdb_migrator postgres 10.8.1.1')
+  })
+
+  it('shows what a restart would sever, per role, and what else it waits for', () => {
+    const text = shown(
+      plan(
+        'postgres.restart',
+        { change: {}, targetIds: ['tgt_01M5J5G1P2QETPENWYHDJBVR4N'] },
+        {
+          observed: {
+            shutdownMode: 'fast',
+            pendingRestart: ['shared_buffers'],
+            connections: [
+              { role: 'staging_app', count: 9 },
+              { role: null, count: 1 },
+            ],
+            activeBackups: 1,
+            activeMaintenance: 0,
+            replicationSlots: [{ name: 'standby_a', active: true }],
+          },
+        },
+      ),
+    )
+    expect(text).toMatch(/staging_app\s+9/)
+    expect(text).toMatch(/Pending restart:\s+shared_buffers/)
+    expect(text).toMatch(/Active backups:\s+1/)
+    expect(text).toContain('standby_a')
+    expect(text).toContain('tgt_01M5J5G1P2QETPENWYHDJBVR4N')
+  })
+
+  it('shows the config parameters, the role steps, the extension steps and the certificate names', () => {
+    expect(
+      shown(
+        plan(
+          'postgres.config.apply',
+          {
+            change: {
+              changes: [
+                { name: 'work_mem', value: '8MB' },
+                { name: 'max_wal_size', value: null },
+              ],
+              reload: true,
+            },
+          },
+          { parameters: [{ name: 'work_mem', effect: 'reload' }], needsRestart: false },
+        ),
+      ),
+    ).toMatch(/work_mem\s+8MB/)
+    expect(
+      shown(
+        plan(
+          'postgres.roles.apply',
+          { change: { steps: [{ op: 'grant_membership', role: 'reports', member: 'analyst' }] } },
+          { steps: [{ op: 'grant_membership', role: 'reports', classification: 'high' }] },
+        ),
+      ),
+    ).toMatch(/grant_membership\s+reports/)
+    expect(
+      shown(
+        plan(
+          'postgres.extensions.apply',
+          {
+            change: {
+              database: 'staging',
+              steps: [{ op: 'create', name: 'pg_stat_statements', version: '1.11' }],
+            },
+          },
+          { database: 'staging', installedBefore: [] },
+        ),
+      ),
+    ).toMatch(/create\s+pg_stat_statements/)
+    expect(
+      shown(
+        plan(
+          'postgres.tls.rotate',
+          { change: { dnsNames: ['pg.exdb.test'], ipAddresses: ['10.8.1.1'], validityDays: 30 } },
+          { certificateBefore: { notAfter: '2026-11-30T00:00:00Z' } },
+        ),
+      ),
+    ).toMatch(/pg\.exdb\.test/)
+  })
+
+  it('keeps hostile text from a rule inert', () => {
+    const text = shown(
+      plan(
+        'postgres.hba.apply',
+        {
+          change: {
+            managedRules: [
+              {
+                type: 'host',
+                database: 'a\u001b[31mb',
+                user: 'all',
+                address: '1.2.3.4/32',
+                method: 'reject',
+              },
+            ],
+            protectedAccess: [],
+          },
+        },
+        {
+          managedBlockBefore: [],
+          foreignRules: 0,
+          managedRulesAfter: 1,
+          protectedAccess: { requested: 0, derived: [] },
+        },
+      ),
+    )
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: the test looks for control characters
+    const controls = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/
+    expect(text).not.toMatch(controls)
+  })
+})
+
 describe('the human renderer', () => {
   const r = result({
     command: 'thing list',
@@ -463,5 +702,21 @@ describe('exit codes', () => {
   it('exits 5 when the server cannot be reached', async () => {
     const out = await cli(['whoami', '--server', 'https://db.example.test'])
     expect(out.code).toBe(EXIT.unavailable)
+  })
+})
+
+describe('every command can be run by the CLI (TC-033)', () => {
+  it('names no action that the CLI client kind is refused', () => {
+    const refused = COMMANDS.filter((c) => {
+      const action = c.action
+      return (
+        action !== undefined &&
+        isActionId(action) &&
+        !actionDefinition(action).clientKinds.includes('cli')
+      )
+    }).map((c) => `${c.path.join(' ')} (${c.action})`)
+    // `access grants` listed an action of the browser session only: it always answered
+    // PERMISSION_DENIED and sent the owner to an administrator.
+    expect(refused).toEqual([])
   })
 })

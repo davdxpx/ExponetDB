@@ -1,4 +1,6 @@
+import fc from 'fast-check'
 import { beforeAll, describe, expect, it } from 'vitest'
+import { catalogNamedLater } from '../src/parser/cluster-global.ts'
 import {
   type ClusterGlobalStatement,
   clusterGlobalStatements,
@@ -661,5 +663,100 @@ END $$`).form,
     expect(one(text).form).toBe('mixed_do_block')
     const guarded = `DO $$ BEGIN ${`IF EXISTS (${guard('acme_b')}) THEN `.repeat(80)}CREATE ROLE acme_a;${' END IF;'.repeat(80)} END $$`
     expect(one(guarded).form).toBe('mixed_do_block')
+  })
+})
+
+/**
+ * The `search_path` check of the guard strictness ran a lazy, backtracking
+ * regular expression over the raw text of the history: quadratic in the
+ * length of one statement, synchronous, and reachable with a 100 KB file
+ * (TC-004, Part A P1 no. 3; 17 s at 100 000 characters, hours at 4 MiB).
+ */
+describe('the search_path check of the guard strictness', () => {
+  /** What the function replaced: the semantic reference, quadratic on long input. */
+  const OLD = /\bsearch_path\b[^;]*?,\s*["']?\s*pg_catalog\b/i
+
+  it('reads pg_catalog after another schema, in one statement only', () => {
+    for (const text of [
+      'SET search_path = public, pg_catalog;',
+      "SELECT set_config('search_path', 'public,pg_catalog', false);",
+      'ALTER ROLE r SET search_path = a,\n  "pg_catalog", b',
+      "set SEARCH_PATH = a , 'pg_catalog'",
+    ]) {
+      expect(catalogNamedLater(text), text).toBe(true)
+    }
+    for (const text of [
+      'SET search_path = pg_catalog, public;',
+      "SELECT set_config('search_path', '', false);",
+      'SET search_path = a; SELECT 1, pg_catalog.now();',
+      'SET search_path = a, pg_catalogx;',
+      'SELECT 1, pg_catalog.now(); SET search_path = a;',
+    ]) {
+      expect(catalogNamedLater(text), text).toBe(false)
+    }
+  })
+
+  it('agrees with the regular expression it replaced on short generated texts', () => {
+    const atoms = [
+      'search_path',
+      'SEARCH_PATH',
+      'xsearch_path',
+      ' ',
+      '\n',
+      ',',
+      ';',
+      '=',
+      "'",
+      '"',
+      '.',
+      'pg_catalog',
+      'PG_CATALOG',
+      'pg_catalogx',
+      'public',
+      'a',
+    ]
+    fc.assert(
+      fc.property(
+        fc.array(fc.constantFrom(...atoms), { maxLength: 16 }).map((a) => a.join('')),
+        (text) => catalogNamedLater(text) === OLD.test(text),
+      ),
+      { numRuns: 30_000 },
+    )
+  })
+
+  it('keeps the history strictness: a ; after each search_path is none, a real pg_catalog later is all', () => {
+    const terminated = 'SET search_path = a, b; '.repeat(1000)
+    expect(guardStrictness([terminated])).toBe('none')
+    expect(guardStrictness([`${terminated}SET search_path = public, pg_catalog;`])).toBe('all')
+  })
+
+  // Linear is 4 when the size grows by 4, quadratic 16; a machine's speed cancels out.
+  const SMALL = 256 * 1024
+  const LARGE = 1024 * 1024
+  const families: Record<string, (chars: number) => string> = {
+    one_ws: (n) => `SET search_path =,${' '.repeat(n)}`,
+    rep_noterm: (n) => 'SET search_path = a, b '.repeat(Math.ceil(n / 23)),
+    rep_comma: (n) => 'search_path,'.repeat(Math.ceil(n / 12)),
+    rep_pad: (n) => `search_path${' '.repeat(40)}`.repeat(Math.ceil(n / 51)),
+  }
+  const best = (text: string): number => {
+    let ms = Number.POSITIVE_INFINITY
+    // The best of seven: the full parallel run of the workspace starves a process in bursts, and a
+    // burst in every one of three runs read as a slowdown once (the quadratic regex took minutes).
+    for (let i = 0; i < 7; i++) {
+      const t0 = performance.now()
+      guardStrictness([text])
+      ms = Math.min(ms, performance.now() - t0)
+    }
+    return ms
+  }
+  it.each(Object.keys(families))('takes linear time on the %s family', (family) => {
+    const make = families[family] as (chars: number) => string
+    const small = best(make(SMALL))
+    const large = best(make(LARGE))
+    expect(guardStrictness([make(LARGE)])).toBe('none')
+    expect(large).toBeLessThan(200)
+    // A floor of 25 ms keeps timer noise out of the ratio of two very fast runs.
+    expect(large / Math.max(small, 25)).toBeLessThan(8)
   })
 })

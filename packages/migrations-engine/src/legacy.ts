@@ -939,7 +939,14 @@ function analyzeChain(
       owner.push(i)
     }
   }
-  const survivors = survivingExpectations(flat)
+  // The survivors grouped by their file once, in statement order, not filtered per file.
+  const survivorsOf = new Map<number, ReturnType<typeof survivingExpectations>>()
+  for (const x of survivingExpectations(flat)) {
+    const file = owner[x.statement] as number
+    const list = survivorsOf.get(file)
+    if (list === undefined) survivorsOf.set(file, [x])
+    else list.push(x)
+  }
   const globals = survivingGlobals(perFile)
   return files.map((file, i) => {
     const r = perFile[i] as FileReplay
@@ -948,7 +955,7 @@ function analyzeChain(
       file,
       statements: r.statements,
       expectations: r.statements.flatMap((s) => [...s.expectations]),
-      surviving: survivors.filter((x) => owner[x.statement] === i),
+      surviving: survivorsOf.get(i) ?? [],
       // An elided statement's effects are the cluster-global expectations, not underived SQL.
       underived: r.statements.some(
         (s) => !elided.has(s.index) && (s.procedural || s.coverage !== 'derived'),

@@ -7,6 +7,7 @@ import {
   configHostState,
   configRuns,
   fragmentHolds,
+  hbaLockOut,
   hbaRuleShows,
   outcomeOf,
   pemCertificates,
@@ -576,5 +577,105 @@ describe('the reload proof of a configuration change (ADR-0025)', () => {
     // Without the reload step the same host state decides nothing.
     const unproven = reloadProven(failed(journaled.slice(0, 3)), cap)
     expect(configRuns(plan, changes, { reload: true, reloadProven: unproven })).toBe('unknown')
+  })
+})
+
+describe('a pg_hba block that would lock ExponetDB out (TC-018)', () => {
+  const rule = (
+    type: 'local' | 'hostssl',
+    address: string | null,
+    method: 'scram-sha-256' | 'peer' | 'reject',
+    over: { database?: string[]; user?: string[] } = {},
+  ) => ({
+    type,
+    database: over.database ?? ['all'],
+    user: over.user ?? ['all'],
+    address,
+    method,
+    map: null,
+  })
+  const network = {
+    role: 'exponetdb_app',
+    database: 'app',
+    address: '203.0.113.7',
+    method: 'scram-sha-256',
+  } as const
+  const socket = {
+    role: 'exponetdb_node',
+    database: 'postgres',
+    address: 'local',
+    method: 'peer',
+  } as const
+
+  it('names the access a reject-all block cuts off', () => {
+    const rules = [rule('local', null, 'reject'), rule('hostssl', 'all', 'reject')]
+    expect(hbaLockOut(rules, [network])).toEqual({ ...network, rule: 2 })
+    expect(hbaLockOut(rules, [socket])).toEqual({ ...socket, rule: 1 })
+    // Nothing is protected by an empty list; the first cut-off access is the one named.
+    expect(hbaLockOut(rules, [])).toBeUndefined()
+    expect(hbaLockOut(rules, [socket, network])).toMatchObject({ address: 'local' })
+  })
+
+  it('lets a block that keeps the access through', () => {
+    const keep = [
+      rule('local', null, 'peer'),
+      rule('hostssl', '203.0.113.0/24', 'scram-sha-256', {
+        database: ['app'],
+        user: ['exponetdb_app'],
+      }),
+      rule('hostssl', 'all', 'reject'),
+    ]
+    expect(hbaLockOut(keep, [network, socket])).toBeUndefined()
+  })
+
+  it('takes the first rule that matches, in order', () => {
+    const rejectFirst = [
+      rule('hostssl', '203.0.113.0/24', 'reject'),
+      rule('hostssl', 'all', 'scram-sha-256'),
+    ]
+    expect(hbaLockOut(rejectFirst, [network])).toMatchObject({ rule: 1 })
+    const acceptFirst = [...rejectFirst].reverse()
+    expect(hbaLockOut(acceptFirst, [network])).toBeUndefined()
+    // A rule for another role, database or network does not apply to the access.
+    const elsewhere = [
+      rule('hostssl', '203.0.113.0/24', 'reject', { user: ['someone_else'] }),
+      rule('hostssl', '198.51.100.0/24', 'reject'),
+      rule('hostssl', 'all', 'reject', { database: ['other'] }),
+    ]
+    expect(hbaLockOut(elsewhere, [network])).toBeUndefined()
+  })
+
+  it('judges IPv6 networks and a method that is not the one the access needs', () => {
+    const v6 = { ...network, address: '2001:db8::7' }
+    expect(hbaLockOut([rule('hostssl', '2001:db8::/32', 'reject')], [v6])).toMatchObject({
+      rule: 1,
+    })
+    expect(hbaLockOut([rule('hostssl', '2001:db9::/32', 'reject')], [v6])).toBeUndefined()
+    // The socket role answered with a method that is not peer.
+    expect(hbaLockOut([rule('local', null, 'scram-sha-256')], [socket])).toMatchObject({ rule: 1 })
+  })
+
+  it('leaves what it cannot judge to the agent, which refuses it after writing', () => {
+    expect(hbaLockOut([rule('hostssl', 'samehost', 'reject')], [network])).toBeUndefined()
+    expect(hbaLockOut([rule('hostssl', 'samenet', 'reject')], [network])).toBeUndefined()
+  })
+
+  it('reads every name but all as a literal name, as the helper writes it', () => {
+    // The helper double-quotes every name but `all`, so `sameuser` and `samerole` are databases and
+    // roles of those names, never the keywords. An access whose database is its role is not matched
+    // by "sameuser"; a database that is called samerole is.
+    const same = { ...network, role: 'app', database: 'app' }
+    expect(
+      hbaLockOut([rule('hostssl', 'all', 'reject', { database: ['sameuser'] })], [same]),
+    ).toBeUndefined()
+    expect(
+      hbaLockOut([rule('hostssl', 'all', 'reject', { database: ['samerole'] })], [network]),
+    ).toBeUndefined()
+    expect(
+      hbaLockOut(
+        [rule('hostssl', 'all', 'reject', { database: ['samerole'] })],
+        [{ ...network, database: 'samerole' }],
+      ),
+    ).toMatchObject({ rule: 1 })
   })
 })

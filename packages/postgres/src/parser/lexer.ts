@@ -74,23 +74,136 @@ export function countTokens(
   text: string,
   max: number,
   mode: LexMode = 'standard',
-  /** Counts the tokens of a dollar-quoted body instead of the literal (a PL/pgSQL parse). */
+  /** Counts the tokens of a statement body instead of the literal it is in (a PL/pgSQL parse). */
   bodies = false,
 ): number {
   let count = 0
-  scan(text, mode, (kind, start, end, unterminated) => {
+  scan(text, mode, (kind) => {
     if (kind === 'space' || kind === 'comment') return true
-    if (bodies && kind === 'dollar' && !unterminated) {
-      DOLLAR_TAG.lastIndex = start
-      const tag = DOLLAR_TAG.exec(text)?.[0] ?? ''
-      const inner = text.slice(start + tag.length, end - tag.length)
-      count += Math.max(1, countTokens(inner, max - count, mode))
-    } else {
-      count++
-    }
+    count++
     return count <= max
   })
+  if (!bodies || count > max) return count
+  for (const body of statementBodies(text, mode)) {
+    // The body's tokens replace the one literal they are inside (already counted).
+    count += Math.max(1, countTokens(body, max - count + 1, mode)) - 1
+    if (count > max) break
+  }
   return count
+}
+
+const ESCAPES: Readonly<Record<string, string>> = { b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' }
+
+/** The character an `E''` backslash escape stands for, and where the text goes on. */
+function escapeAt(s: string, i: number): { text: string; next: number } {
+  const c = s[i] ?? ''
+  const known = ESCAPES[c]
+  if (known !== undefined) return { text: known, next: i + 1 }
+  const digits = (
+    re: RegExp,
+    from: number,
+    radix: number,
+  ): { text: string; next: number } | null => {
+    const m = re.exec(s.slice(from, from + 8))
+    if (m === null) return null
+    const code = Number.parseInt(m[0], radix)
+    return { text: code > 0x10ffff ? '�' : String.fromCodePoint(code), next: from + m[0].length }
+  }
+  const found =
+    c >= '0' && c <= '7'
+      ? digits(/^[0-7]{1,3}/, i, 8)
+      : c === 'x'
+        ? digits(/^[0-9a-fA-F]{1,2}/, i + 1, 16)
+        : c === 'u'
+          ? digits(/^[0-9a-fA-F]{4}/, i + 1, 16)
+          : c === 'U'
+            ? digits(/^[0-9a-fA-F]{8}/, i + 1, 16)
+            : null
+  return found ?? { text: c, next: i + 1 }
+}
+
+/**
+ * The text a single-quoted literal denotes, as PostgreSQL reads it: `''` is
+ * one quote, an `E` string decodes backslash escapes, and literals separated
+ * by white space with a newline are one. `undefined` when the literal is
+ * unterminated or is not a string. shortcut: a `U&''` string is read without
+ * its `\XXXX` escapes (the count can only differ by encoded characters), a
+ * rare form for a function body; decode them if one is ever seen in a history.
+ */
+export function quotedBody(literal: string): string | undefined {
+  const prefix = /^(?:(e)|u&|n)?'/i.exec(literal)
+  if (prefix === null) return undefined
+  const escapes = prefix[1] !== undefined
+  const n = literal.length
+  let out = ''
+  let i = prefix[0].length
+  for (;;) {
+    let j = i
+    while (j < n && literal[j] !== "'" && !(escapes && literal[j] === '\\')) j++
+    out += literal.slice(i, j)
+    if (j >= n) return undefined
+    if (literal[j] === '\\') {
+      const e = escapeAt(literal, j + 1)
+      out += e.text
+      i = e.next
+    } else if (literal[j + 1] === "'") {
+      out += "'"
+      i = j + 2
+    } else {
+      // the closing quote: a literal that continues after a newline is the same string
+      let k = j + 1
+      let newline = false
+      while (k < n && SPACE.test(literal[k] ?? '')) {
+        if (literal[k] === '\n' || literal[k] === '\r') newline = true
+        k++
+      }
+      if (!newline || literal[k] !== "'") return out
+      i = k + 1
+    }
+  }
+}
+
+/**
+ * The bodies a statement hands to another parser: the text of every
+ * terminated dollar-quoted literal, and of a single-quoted string where one
+ * is a body, whatever the quoting: after `DO` (optionally `LANGUAGE x`) or
+ * `AS`, or before `LANGUAGE` (`DO '…' LANGUAGE plpgsql`, `AS '…' LANGUAGE
+ * sql`). Any other string, a large JSON literal for instance, is data.
+ */
+export function statementBodies(text: string, mode: LexMode = 'standard'): string[] {
+  const out: string[] = []
+  // The three words before this token (lower case, '' for any other token) and a string
+  // that is a body if `LANGUAGE` follows it.
+  let w1 = ''
+  let w2 = ''
+  let w3 = ''
+  let maybe: [number, number] | undefined
+  scan(text, mode, (kind, start, end, unterminated) => {
+    if (kind === 'space' || kind === 'comment') return true
+    const word = kind === 'ident' ? text.slice(start, end).toLowerCase() : ''
+    if (word === 'language' && maybe !== undefined) {
+      const body = quotedBody(text.slice(maybe[0], maybe[1]))
+      if (body !== undefined) out.push(body)
+    }
+    maybe = undefined
+    if (kind === 'dollar' && !unterminated) {
+      DOLLAR_TAG.lastIndex = start
+      const tag = DOLLAR_TAG.exec(text)?.[0] ?? ''
+      out.push(text.slice(start + tag.length, end - tag.length))
+    } else if (kind === 'string' && !unterminated) {
+      if (w1 === 'do' || w1 === 'as' || (w3 === 'do' && w2 === 'language')) {
+        const body = quotedBody(text.slice(start, end))
+        if (body !== undefined) out.push(body)
+      } else {
+        maybe = [start, end]
+      }
+    }
+    w3 = w2
+    w2 = w1
+    w1 = word
+    return true
+  })
+  return out
 }
 
 /** Scans a text and hands every token to `emit`; `emit` returns false to stop. */

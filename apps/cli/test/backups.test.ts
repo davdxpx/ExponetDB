@@ -853,12 +853,16 @@ describe('diagnostics', () => {
       `/targets/${TGT}/query-stats`,
       refusal(409, 'CAPABILITY_UNAVAILABLE', {
         remediation: 'Install pg_stat_statements and add it to shared_preload_libraries.',
+        details: { reason: 'extension_missing', extension: 'pg_stat_statements' },
       }),
     )
     const refused = await cli(['diagnose', 'query-stats', TGT])
     expect(refused.code).toBe(EXIT.failure)
     expect(refused.stderr).toContain('CAPABILITY_UNAVAILABLE')
     expect(refused.stderr).toContain('shared_preload_libraries')
+    // The text output names the missing extension (TC-015), not only the generic message.
+    expect(refused.stderr).toContain('extension: pg_stat_statements')
+    expect(refused.stderr).toContain('reason: extension_missing')
     on(
       'GET',
       `/targets/${TGT}/query-stats`,
@@ -1088,5 +1092,592 @@ describe('session actions', () => {
       condition: 'idle_in_transaction',
       reason: 'holding locks',
     })
+  })
+})
+
+describe('ledger reconcile (TC-007)', () => {
+  const NOTE = 'Restored to the backup of Monday, before the second migration.'
+
+  it('plans adopting the target ledger with a note, and applies nothing without --apply', async () => {
+    on(
+      'POST',
+      `/targets/${TGT}/ledger/reconcile-plans`,
+      plan('planLedgerReconcile', 'ledger.reconcile'),
+    )
+    // The note is the person's reason and is required; nothing is sent without it.
+    const bare = await cli(['migration', 'ledger', 'reconcile', '--target', TGT])
+    expect(bare.code).toBe(EXIT.usage)
+    expect(sent('POST', `/targets/${TGT}/ledger/reconcile-plans`)).toEqual([])
+    const out = await cli(['migration', 'ledger', 'reconcile', '--target', TGT, '--note', NOTE])
+    expect(out.code, out.stderr).toBe(0)
+    expect(sent('POST', `/targets/${TGT}/ledger/reconcile-plans`)[0]?.body).toEqual({
+      decision: 'adopt_target',
+      note: NOTE,
+    })
+    expect(out.stdout).toContain('ledger.reconcile')
+    expect(requests.filter((r) => r.path.endsWith('/apply'))).toEqual([])
+  })
+
+  it('shows the server’s refusal when the ledger agrees with the mirror', async () => {
+    on(
+      'POST',
+      `/targets/${TGT}/ledger/reconcile-plans`,
+      refusal(422, 'VALIDATION_FAILED', {
+        details: {
+          errors: [
+            {
+              path: '/decision',
+              code: 'nothing_to_reconcile',
+              message: 'The ledger of the target agrees with the mirror.',
+            },
+          ],
+        },
+      }),
+    )
+    const out = await cli(['migration', 'ledger', 'reconcile', '--target', TGT, '--note', NOTE])
+    expect(out.code).toBe(EXIT.usage)
+    expect(out.stderr).toContain('/decision: The ledger of the target agrees with the mirror.')
+  })
+
+  it('is catalogued as a human-only plan with the scope of the action', () => {
+    const command = COMMANDS.find((c) => c.path.join(' ') === 'migration ledger reconcile')
+    expect(command).toMatchObject({
+      effect: 'plan',
+      action: 'ledger.reconcile.plan',
+      scopes: ['migrations.import'],
+    })
+  })
+})
+
+describe('node plans create their own basis observation (TC-002)', () => {
+  const OBSERVED_FRESH = '2026-10-26T11:58:00.000Z'
+  const OBSERVED_STALE = '2026-10-26T11:20:00.000Z'
+  const INSPECTION_OP = id('op', 9)
+
+  function node(capabilities: readonly string[]) {
+    return ok('getNode', {
+      id: NOD,
+      serverId: id('srv', 10),
+      state: 'active',
+      agentVersion: '0.7.0',
+      protocolMajor: 1,
+      lastHeartbeatAt: T,
+      clockSkewMs: 0,
+      capabilities: capabilities.map((c) => ({
+        name: c.split('@')[0],
+        major: Number(c.split('@')[1]),
+      })),
+      clusters: [],
+      host: null,
+      nodeCertificateExpiresAt: null,
+      source: 'agent_reported',
+      observedAt: T,
+    })
+  }
+  const observation = (capability: string, observedAt: string) => ({
+    capability,
+    clusterId: CLS,
+    argsHash: HASH,
+    operationId: id('op', 11),
+    jobId: id('job', 12),
+    source: 'agent_reported',
+    observedAt,
+    result: {},
+  })
+
+  /** A node that offers the kinds, with the observations it has, and an inspection that succeeds. */
+  function world(
+    observations: readonly ReturnType<typeof observation>[] = [],
+    inspect: Answer | null = null,
+  ) {
+    on(
+      'GET',
+      `/nodes/${NOD}`,
+      node([
+        'postgres.reload@2',
+        'postgres.restart@1',
+        'postgres.config.apply@2',
+        'postgres.roles.apply@2',
+        'postgres.extensions.apply@1',
+      ]),
+    )
+    on('GET', `/nodes/${NOD}/observations`, (req) =>
+      ok('listNodeObservations', {
+        items: observations.filter((o) => o.capability === req.query.get('capability')),
+      }),
+    )
+    on(
+      'POST',
+      `/nodes/${NOD}/inspections`,
+      inspect ?? operation('inspectNode', 'node.inspect', 'queued'),
+    )
+    on(
+      'GET',
+      `/operations/${INSPECTION_OP}`,
+      operation('getOperation', 'node.inspect', 'succeeded'),
+    )
+  }
+  const planned = (kind: string) =>
+    on('POST', `/nodes/${NOD}/plans`, plan('planNodeOperation', kind))
+  const order = () =>
+    requests.filter((r) => r.method === 'POST').map((r) => r.path.replace(NOD, 'NOD'))
+
+  it('inspects the config plan with the changes as typed arguments, then plans', async () => {
+    world()
+    planned('postgres.config.apply')
+    const out = await cli([
+      'node',
+      'postgres',
+      'config',
+      NOD,
+      '--cluster',
+      CLS,
+      '--set',
+      'work_mem=8MB',
+      '--reset',
+      'max_wal_size',
+      '--no-wait',
+    ])
+    expect(out.code, out.stderr).toBe(0)
+    expect(order()).toEqual(['/nodes/NOD/inspections', '/nodes/NOD/plans'])
+    expect(sent('POST', `/nodes/${NOD}/inspections`)[0]?.body).toEqual({
+      capability: 'postgres.config.plan@2',
+      clusterId: CLS,
+      args: {
+        changes: [
+          { name: 'work_mem', value: '8MB' },
+          { name: 'max_wal_size', value: null },
+        ],
+      },
+    })
+    expect(sent('POST', `/nodes/${NOD}/plans`)[0]?.body).toMatchObject({
+      clusterId: CLS,
+      change: { kind: 'postgres.config.apply', reload: true },
+    })
+  })
+
+  it('inspects the roles with an empty list of expected settings', async () => {
+    world()
+    planned('postgres.roles.apply')
+    const file = join(dir, 'roles.json')
+    await writeFile(
+      file,
+      JSON.stringify({
+        steps: [
+          {
+            op: 'grant_membership',
+            role: 'reports',
+            attributes: null,
+            verifier: null,
+            member: 'analyst',
+            admin: false,
+            inherit: true,
+            set: true,
+            database: null,
+            setting: null,
+            value: null,
+          },
+        ],
+      }),
+    )
+    const out = await cli([
+      'node',
+      'postgres',
+      'roles',
+      NOD,
+      '--cluster',
+      CLS,
+      '--file',
+      file,
+      '--no-wait',
+    ])
+    expect(out.code, out.stderr).toBe(0)
+    expect(sent('POST', `/nodes/${NOD}/inspections`)[0]?.body).toEqual({
+      capability: 'postgres.roles.inspect@2',
+      clusterId: CLS,
+      args: { expectSettings: [] },
+    })
+  })
+
+  it('reuses an observation younger than five minutes where the arguments do not depend on the change', async () => {
+    world([observation('postgres.status@1', OBSERVED_FRESH)])
+    planned('postgres.reload')
+    const reused = await cli(['node', 'postgres', 'reload', NOD, '--cluster', CLS, '--no-wait'])
+    expect(reused.code, reused.stderr).toBe(0)
+    expect(order()).toEqual(['/nodes/NOD/plans'])
+    // An older one is made again.
+    requests = []
+    world([observation('postgres.status@1', OBSERVED_STALE)])
+    const again = await cli(['node', 'postgres', 'reload', NOD, '--cluster', CLS, '--no-wait'])
+    expect(again.code, again.stderr).toBe(0)
+    expect(order()).toEqual(['/nodes/NOD/inspections', '/nodes/NOD/plans'])
+    expect(sent('POST', `/nodes/${NOD}/inspections`)[0]?.body).toEqual({
+      capability: 'postgres.status@1',
+      clusterId: CLS,
+      args: {},
+    })
+  })
+
+  it('always inspects where the arguments are the change, however fresh the last one is', async () => {
+    world([observation('postgres.config.plan@2', OBSERVED_FRESH)])
+    planned('postgres.config.apply')
+    await cli([
+      'node',
+      'postgres',
+      'config',
+      NOD,
+      '--cluster',
+      CLS,
+      '--set',
+      'work_mem=8MB',
+      '--no-wait',
+    ])
+    expect(order()).toEqual(['/nodes/NOD/inspections', '/nodes/NOD/plans'])
+  })
+
+  it('skips the inspection with --no-inspect, and plans nothing when the inspection fails', async () => {
+    world()
+    planned('postgres.config.apply')
+    await cli([
+      'node',
+      'postgres',
+      'config',
+      NOD,
+      '--cluster',
+      CLS,
+      '--set',
+      'work_mem=8MB',
+      '--no-inspect',
+      '--no-wait',
+    ])
+    expect(order()).toEqual(['/nodes/NOD/plans'])
+    requests = []
+    world([], operation('inspectNode', 'node.inspect', 'queued'))
+    on('GET', `/operations/${INSPECTION_OP}`, operation('getOperation', 'node.inspect', 'failed'))
+    const failed = await cli([
+      'node',
+      'postgres',
+      'config',
+      NOD,
+      '--cluster',
+      CLS,
+      '--set',
+      'work_mem=8MB',
+      '--no-wait',
+    ])
+    expect(failed.code).not.toBe(0)
+    expect(order()).toEqual(['/nodes/NOD/inspections'])
+  })
+
+  it('node inspect takes typed arguments with --arg-json, and refuses invalid JSON before sending', async () => {
+    world()
+    const ok1 = await cli([
+      'node',
+      'inspect',
+      NOD,
+      '--capability',
+      'postgres.config.plan@2',
+      '--cluster',
+      CLS,
+      '--arg-json',
+      'changes=[{"name":"work_mem","value":"8MB"},{"name":"max_wal_size","value":null}]',
+      '--arg-json',
+      'expectSettings=[]',
+      '--arg',
+      'note=text',
+    ])
+    expect(ok1.code, ok1.stderr).toBe(0)
+    expect(sent('POST', `/nodes/${NOD}/inspections`)[0]?.body).toMatchObject({
+      args: {
+        changes: [
+          { name: 'work_mem', value: '8MB' },
+          { name: 'max_wal_size', value: null },
+        ],
+        expectSettings: [],
+        note: 'text',
+      },
+    })
+    requests = []
+    const bad = await cli([
+      'node',
+      'inspect',
+      NOD,
+      '--capability',
+      'postgres.roles.inspect@2',
+      '--arg-json',
+      'expectSettings=[oops',
+    ])
+    expect(bad.code).toBe(EXIT.usage)
+    expect(sent('POST', `/nodes/${NOD}/inspections`)).toEqual([])
+  })
+})
+
+describe('a failed list read (TC-030, principle 5)', () => {
+  // Every paged list the CLI has, with the positional arguments it needs.
+  const LISTS: readonly (readonly string[])[] = [
+    ['product', 'list'],
+    ['environment', 'list', id('prd', 10)],
+    ['project', 'list'],
+    ['target', 'list'],
+    ['server', 'list'],
+    ['cluster', 'list'],
+    ['node', 'list'],
+    ['plan', 'list'],
+    ['operation', 'list'],
+    ['approval', 'list'],
+    ['finding', 'list'],
+    ['cluster', 'findings', CLS],
+    ['schema', 'search', TGT, 'lead'],
+    ['backup', 'overview'],
+    ['backup', 'list', CLS],
+    ['backup', 'runs', CLS],
+    ['restore', 'list', CLS],
+    ['drill', 'list', CLS],
+    ['audit', 'list'],
+    ['access', 'identities'],
+    ['access', 'bindings'],
+    ['access', 'clients'],
+  ]
+
+  const NAMED = LISTS.map((argv) => [argv.slice(0, 2).join(' '), argv] as const)
+
+  // Every route answers a missing scope; only the installation read succeeds.
+  const denyAll: typeof fetch = async (input, init) => {
+    const url = new URL(
+      typeof input === 'string' ? input : input instanceof URL ? input : input.url,
+    )
+    if (url.pathname.replace(/^\/api\/v1/, '') === '/installation') return fakeFetch(input, init)
+    const [status, body] = refusal(403, 'INSUFFICIENT_SCOPE', {
+      details: { requiredScope: 'backups.read' },
+    })
+    return Response.json(body, { status })
+  }
+
+  it.each(NAMED)(
+    '%s: no table, no count and no empty-state text on stdout',
+    async (_name, argv) => {
+      const out = await cli(argv, { fetch: denyAll })
+      expect(out.code).toBe(EXIT.auth)
+      expect(out.stdout).toBe('')
+      expect(out.stderr).toContain('INSUFFICIENT_SCOPE')
+    },
+  )
+
+  it.each(NAMED)('%s: the JSON error envelope has no data', async (_name, argv) => {
+    const out = await cli([...argv, '--output', 'json'], { fetch: denyAll })
+    expect(out.code).toBe(EXIT.auth)
+    const doc = JSON.parse(out.stdout)
+    expect(doc.status).toBe('error')
+    expect(doc.error.code).toBe('INSUFFICIENT_SCOPE')
+    expect(doc).not.toHaveProperty('data')
+  })
+
+  it('keeps the items that arrived when a later page fails, and says the list is partial', async () => {
+    on('GET', `/clusters/${CLS}/backups`, (req) =>
+      req.query.get('cursor') === null
+        ? catalog([backupEntry(1)], 'c2')
+        : refusal(503, 'DEPENDENCY_UNAVAILABLE'),
+    )
+    const out = await json(['backup', 'list', CLS, '--all'])
+    expect(out.code).not.toBe(0)
+    expect(out.doc.status).toBe('error')
+    expect(out.doc.data.partial).toBe(true)
+    expect(out.doc.data.backups).toHaveLength(1)
+  })
+})
+
+describe('node reads name their server (TC-031)', () => {
+  const SRV_A = id('srv', 20)
+  const SRV_B = id('srv', 21)
+  const SRV_NONE = id('srv', 22)
+  const nodeItem = (n: number, serverId: string) => ({
+    id: id('nod', n),
+    serverId,
+    state: 'active',
+    agentVersion: '1.0.0',
+    protocolMajor: 1,
+    lastHeartbeatAt: T,
+    clockSkewMs: 0,
+    capabilities: [],
+  })
+  const server = (serverId: string) =>
+    ok('getServer', {
+      id: serverId,
+      displayName: 'db host',
+      provider: 'other',
+      location: null,
+      derivedTier: null,
+      observedFacts: null,
+      state: 'active',
+      retiredAt: null,
+    })
+
+  beforeEach(() => {
+    on(
+      'GET',
+      '/nodes',
+      ok('listNodes', {
+        items: [nodeItem(30, SRV_A), nodeItem(31, SRV_B)],
+        nextCursor: null,
+      }),
+    )
+    on('GET', `/servers/${SRV_A}`, server(SRV_A))
+    on('GET', `/servers/${SRV_B}`, server(SRV_B))
+  })
+
+  it('lists only the nodes of the server it is given', async () => {
+    const a = await json(['node', 'list', '--server', SRV_A])
+    expect(a.code, a.stderr).toBe(0)
+    expect(a.doc.data.items.map((n: { id: string }) => n.id)).toEqual([id('nod', 30)])
+    const table = await cli(['node', 'list', '--server', SRV_B])
+    expect(table.stdout).toContain(id('nod', 31))
+    expect(table.stdout).not.toContain(id('nod', 30))
+  })
+
+  it('answers a server that does not exist with NOT_FOUND, not with a list or an empty state', async () => {
+    for (const argv of [
+      ['node', 'list', '--server', SRV_NONE],
+      ['node', 'enrollment', 'status', SRV_NONE],
+    ]) {
+      const out = await cli(argv)
+      expect(out.code, argv.join(' ')).not.toBe(0)
+      expect(out.stdout, argv.join(' ')).toBe('')
+      expect(out.stderr, argv.join(' ')).toContain('NOT_FOUND')
+    }
+  })
+
+  it('shows the nodes of a known server that has none as an empty list', async () => {
+    on('GET', '/nodes', ok('listNodes', { items: [nodeItem(30, SRV_A)], nextCursor: null }))
+    const b = await json(['node', 'list', '--server', SRV_B])
+    expect(b.code, b.stderr).toBe(0)
+    expect(b.doc.data.items).toEqual([])
+  })
+})
+
+describe('the import scratch helpers need a scratch target that exists (TC-032)', () => {
+  const SCRATCH = 'nope/nope/nope'
+  const scratchId = id('tgt', 40)
+  const importedId = id('tgt', 41)
+  const target = (targetId: string, path: string) =>
+    ok('getTarget', {
+      id: targetId,
+      path,
+      productId: id('prd', 1),
+      projectId: id('prj', 1),
+      environmentId: id('env', 1),
+      tier: 'nonprod',
+      state: 'active',
+      generation: 1,
+      health: null,
+      environment: { slug: 'scratch', tier: 'nonprod' },
+      placement: null,
+      ledger: null,
+      openFindingCount: 0,
+    })
+  const notReady = ok('checkScratchTarget', {
+    targetId: importedId,
+    scratchTargetId: scratchId,
+    ready: false,
+    checkedAt: T,
+    checks: [
+      { check: 'scratch_usable', status: 'pass', detail: null, items: [], truncated: false },
+      {
+        check: 'outside_scope',
+        status: 'fail',
+        detail: 'objects_missing',
+        items: ['auth'],
+        truncated: false,
+      },
+    ],
+    copySchemas: ['auth'],
+  })
+
+  // The targets route answers per path (a target path is URL-encoded): the scratch is unknown
+  // unless a test registers it.
+  const routed: typeof fetch = async (input, init) => {
+    const url = new URL(
+      typeof input === 'string' ? input : input instanceof URL ? input : input.url,
+    )
+    const path = decodeURIComponent(url.pathname.replace(/^\/api\/v1/, ''))
+    if (path === '/installation') return fakeFetch(input, init)
+    if (handlers.has(`${init?.method ?? 'GET'} ${path}`)) {
+      return fakeFetch(new URL(`${url.origin}/api/v1${path}${url.search}`), init)
+    }
+    return Response.json(refusal(404, 'TARGET_NOT_FOUND')[1], { status: 404 })
+  }
+
+  // What the server really answers for a scratch that does not exist: a check result that
+  // names the failure, not an error.
+  const unknownScratch = ok('checkScratchTarget', {
+    targetId: importedId,
+    scratchTargetId: null,
+    ready: false,
+    checkedAt: T,
+    checks: [
+      { check: 'scratch_usable', status: 'fail', detail: 'not_found', items: [], truncated: false },
+    ],
+  })
+
+  it.each([
+    ['scratch-check', ['migration', 'import', 'scratch-check']],
+    ['scratch-copy-commands', ['migration', 'import', 'scratch-copy-commands']],
+  ])(
+    '%s: an unknown scratch is TARGET_NOT_FOUND, with no reassurance on stdout',
+    async (_n, argv) => {
+      on('GET', '/targets/reosa/platform/staging', target(importedId, 'reosa/platform/staging'))
+      on('GET', '/targets/reosa/platform/staging/migrations/scratch-check', unknownScratch)
+      const out = await cli([...argv, '--target', 'reosa/platform/staging', '--scratch', SCRATCH], {
+        fetch: routed,
+      })
+      expect(out.code).toBe(EXIT.failure)
+      expect(out.stderr).toContain('TARGET_NOT_FOUND')
+      expect(out.stdout).toBe('')
+      expect(out.stdout).not.toContain('nothing to copy')
+    },
+  )
+
+  it('scratch-check exits non-zero while the scratch is not ready, and keeps the result', async () => {
+    on('GET', `/targets/${SCRATCH}`, target(scratchId, SCRATCH))
+    on('GET', '/targets/reosa/platform/staging/migrations/scratch-check', notReady)
+    const out = await cli(
+      [
+        'migration',
+        'import',
+        'scratch-check',
+        '--target',
+        'reosa/platform/staging',
+        '--scratch',
+        SCRATCH,
+        '--output',
+        'json',
+      ],
+      { fetch: routed },
+    )
+    expect(out.code).toBe(EXIT.failure)
+    const doc = JSON.parse(out.stdout)
+    expect(doc.status).toBe('error')
+    expect(doc.error.code).toBe('SCRATCH_NOT_READY')
+    expect(doc.data).toMatchObject({ ready: false, copySchemas: ['auth'] })
+    expect(doc.next).toEqual([expect.stringContaining('scratch-copy-commands')])
+  })
+
+  it('scratch-copy-commands stays a success: it is what a scratch that is not ready needs', async () => {
+    on('GET', `/targets/${SCRATCH}`, target(scratchId, SCRATCH))
+    on('GET', '/targets/reosa/platform/staging', target(importedId, 'reosa/platform/staging'))
+    on('GET', '/targets/reosa/platform/staging/migrations/scratch-check', notReady)
+    const out = await cli(
+      [
+        'migration',
+        'import',
+        'scratch-copy-commands',
+        '--target',
+        'reosa/platform/staging',
+        '--scratch',
+        SCRATCH,
+      ],
+      { fetch: routed },
+    )
+    expect(out.code, out.stderr).toBe(0)
+    expect(out.stdout).toContain('pg_dump')
   })
 })

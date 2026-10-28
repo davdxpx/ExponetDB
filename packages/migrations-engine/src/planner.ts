@@ -160,7 +160,10 @@ function graphRefusal(failure: GraphFailure | PendingFailure): MigrationError {
         cycle: [...failure.cycle].slice(0, 256),
       })
     case 'unknown_dependency':
-      return new MigrationError('MIGRATION_DEPENDENCY_UNKNOWN')
+      return new MigrationError('MIGRATION_DEPENDENCY_UNKNOWN', {
+        migrationId: failure.from,
+        missing: [...failure.missing].slice(0, 256),
+      })
     case 'dependency_missing':
       return new MigrationError('MIGRATION_DEPENDENCY_MISSING', {
         missing: [...failure.missing].slice(0, 256),
@@ -267,6 +270,28 @@ function requires(revision: StoredRevision): {
   }
 }
 
+/**
+ * The ids reachable from `start` through `dependsOn`, with their dependencies, as far as `lookup`
+ * knows them. A plan's graph is made of these and of the ledger, not of the whole stored stream:
+ * another bundle that names an unknown id is that bundle's problem. It refuses the plan of itself
+ * and of what depends on it, and no other plan of the project (TC-008, MIG-04).
+ */
+function reachable(
+  start: Iterable<string>,
+  lookup: (id: string) => readonly string[] | undefined,
+): Map<string, readonly string[]> {
+  const out = new Map<string, readonly string[]>()
+  const queue = [...start]
+  for (let id = queue.pop(); id !== undefined; id = queue.pop()) {
+    if (out.has(id)) continue
+    const dependsOn = lookup(id)
+    if (dependsOn === undefined) continue
+    out.set(id, dependsOn)
+    queue.push(...dependsOn)
+  }
+  return out
+}
+
 /** Order the selection against the target's ledger with the project's stream (store and ledger). */
 async function planOrder(
   q: Queryable,
@@ -292,10 +317,14 @@ async function planOrder(
     else applied.add(r.migrationId)
     nodes.set(r.migrationId, { id: r.migrationId, dependsOn: [...r.dependencies] })
   }
-  for (const [id, s] of stream) {
-    if (!nodes.has(id)) nodes.set(id, { id, dependsOn: [...s.dependsOn] })
+  // The graph of this plan is the ledger, what is chosen and the stored bundles they depend on,
+  // however far (the chosen revision's own dependencies win over the stream's).
+  for (const [id, dependsOn] of reachable(
+    chosen.keys(),
+    (id) => chosen.get(id)?.dependsOn ?? nodes.get(id)?.dependsOn ?? stream.get(id)?.dependsOn,
+  )) {
+    nodes.set(id, { id, dependsOn: [...dependsOn] })
   }
-  for (const [id, r] of chosen) nodes.set(id, { id, dependsOn: [...r.dependsOn] })
   for (const b of baselines) nodes.delete(b)
   // The target's ledger is the truth: a chosen id it has applied is a no-op or a mismatch.
   for (const [id, r] of chosen) {
@@ -628,7 +657,12 @@ export async function planMigrationApply(
     major,
     project: lintConfig(project, resolved.roles, request, defaults),
     tier: target.tier,
-    stream: [...stream].map(([id, s]) => ({ id, dependsOn: s.dependsOn })),
+    stream: [
+      ...reachable(
+        order.map((r) => r.migrationId),
+        (id) => stream.get(id)?.dependsOn,
+      ),
+    ].map(([id, dependsOn]) => ({ id, dependsOn })),
     baselines: state.meta.baselineId === null ? [] : [state.meta.baselineId],
     applied,
     catalog: {

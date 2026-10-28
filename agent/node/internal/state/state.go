@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -104,6 +105,11 @@ func OpenExisting(dir string, uid int) (*Store, error) {
 // others) and creates its subdirectories.
 func Open(dir string, uid int) (*Store, error) {
 	if err := fsutil.CheckOwnedPrivate(dir, fsutil.Owner{UID: uid}); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			// A fresh host enrolls before any unit has started, so nothing created the directory yet
+			// (test campaign TC-039): say how it is created instead of the bare lstat error.
+			return nil, fmt.Errorf("state directory %s does not exist: run systemd-tmpfiles --create (the packaged tmpfiles.d/exponetdb-node.conf creates it), see node-runbook.md section 2: %w", dir, err)
+		}
 		return nil, fmt.Errorf("state directory: %w", err)
 	}
 	if info, err := os.Stat(dir); err != nil || info.Mode().Perm()&0o077 != 0 {
