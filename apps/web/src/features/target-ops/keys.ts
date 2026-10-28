@@ -115,7 +115,7 @@ export function importReportQuery(client: ApiClient, path: string, reportId: str
 export interface FindingFilters {
   readonly severity?: 'info' | 'warning' | 'critical'
   readonly state: 'open' | 'resolved' | 'all'
-  readonly kind?: 'drift' | 'health'
+  readonly kind?: 'drift' | 'health' | 'advisor' | 'statements'
 }
 
 /** Findings of one target, keyset pages by the server's opaque cursor. */

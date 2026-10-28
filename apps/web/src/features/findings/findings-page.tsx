@@ -43,6 +43,8 @@ const SEVERITY_LABELS: Readonly<Record<(typeof SEVERITIES)[number], MessageKey>>
 const KIND_LABELS: Readonly<Record<(typeof KINDS)[number], MessageKey>> = {
   drift: 'findings.kind.drift',
   health: 'findings.kind.health',
+  advisor: 'findings.kind.advisor',
+  statements: 'findings.kind.statements',
 }
 
 /**

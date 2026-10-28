@@ -44,6 +44,12 @@ describe('the findings search parameters', () => {
     expect(findingsSearch({ severity: '<script>', state: ['open'], kind: 'DROP TABLE x' })).toEqual(
       { severity: undefined, state: undefined, kind: undefined },
     )
+    // Every kind the server returns is selectable, advisor and statements included (TC-036).
+    for (const kind of ['drift', 'health', 'advisor', 'statements'] as const) {
+      expect(findingsSearch({ kind })).toMatchObject({ kind })
+      expect(searchString({ kind })).toBe(`?kind=${kind}`)
+      expect(filtersOf({ kind })).toEqual({ state: 'open', kind })
+    }
     expect(filtersOf({})).toEqual({ state: 'open' })
     expect(searchString({ severity: 'info', state: 'open', kind: 'health' })).toBe(
       '?severity=info&kind=health',

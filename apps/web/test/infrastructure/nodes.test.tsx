@@ -160,6 +160,16 @@ describe('the node page', () => {
     expect(await axeViolations(container)).toEqual([])
   })
 
+  it('lets the heading wrap the id of the node, so a phone does not scroll sideways (TC-038)', async () => {
+    mountApp(DETAIL, new World())
+    // jsdom has no layout: the proof is the wrapping the heading asks for. The id is one 30
+    // character word, 454 px at 24 px, in a 327 px box on a 390 px phone; `overflow-wrap: normal`
+    // let it push the page (the real-browser measure belongs to the phone tour of web.e2e).
+    const heading = await screen.findByRole('heading', { level: 1 })
+    expect(heading).toHaveTextContent(/^Node nod_/)
+    expect(heading.querySelector('[data-wrap="anywhere"]')).not.toBeNull()
+  })
+
   it('shows a failed job read as failed, never as "no jobs"', async () => {
     const world = new World()
     world.failures.set(`GET /api/v1/nodes/${NODE}/jobs`, {

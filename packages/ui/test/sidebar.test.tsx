@@ -505,6 +505,21 @@ describe('SidebarMenuButton', () => {
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 
+  it('leaves no tooltip open when keyboard focus passed the rail while it was expanded and it collapses later (TC-035)', async () => {
+    const user = userEvent.setup()
+    render(<Layout />)
+
+    // Focus moves over the entries of the expanded sidebar: their tooltips stay closed, because the
+    // label is visible. Radix has nothing to close then, so a remembered "open" used to outlive the
+    // focus and open every tooltip at once the moment the sidebar collapsed.
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Targets' })).toHaveFocus()
+    await user.tab()
+    await user.click(screen.getByRole('button', { name: 'Toggle sidebar' }))
+    expect(screen.getByTestId('state')).toHaveTextContent('collapsed:false')
+    expect(screen.queryAllByRole('tooltip')).toHaveLength(0)
+  })
+
   it('shows the reason of a disabled entry whatever the state of the sidebar', async () => {
     const user = userEvent.setup()
     render(

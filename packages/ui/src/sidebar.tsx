@@ -773,7 +773,13 @@ const SidebarMenuButton = React.forwardRef<
     const tooltipEnabled = (state === 'collapsed' && !isMobile) || ariaOnly
 
     return (
-      <Tooltip open={tooltipEnabled && tooltipOpen} onOpenChange={setTooltipOpen}>
+      // While the tooltip is disabled Radix is controlled with `open={false}`: it asks to open on
+      // focus or hover but never to close (the value does not change), so a remembered "open"
+      // outlived the focus and opened every tooltip at once when the sidebar collapsed (TC-035).
+      <Tooltip
+        open={tooltipEnabled && tooltipOpen}
+        onOpenChange={(next) => setTooltipOpen(tooltipEnabled && next)}
+      >
         <TooltipTrigger asChild>{button}</TooltipTrigger>
         <TooltipContent side="right" align="center" {...tooltipProps} />
       </Tooltip>

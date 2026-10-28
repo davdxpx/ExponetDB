@@ -8,7 +8,9 @@ import type { FindingFilters } from '../target-ops/keys.ts'
  */
 export const SEVERITIES = ['info', 'warning', 'critical'] as const
 export const STATES = ['open', 'resolved', 'all'] as const
-export const KINDS = ['drift', 'health'] as const
+// The kinds `GET /findings` takes (contract: FindingListQuerySchema); advisor and statements came
+// with Wave 9, and without them the findings of a target that has only those had no filter.
+export const KINDS = ['drift', 'health', 'advisor', 'statements'] as const
 
 export interface FindingsSearch {
   readonly severity?: (typeof SEVERITIES)[number]
