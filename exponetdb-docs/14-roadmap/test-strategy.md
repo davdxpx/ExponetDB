@@ -159,8 +159,9 @@ gone.
 
 What stays unproven by any default run: the transient systemd units of the backup engine runs
 (no host scenario runs a backup under real systemd; T-NODE-1 to T-NODE-5 stay manual); the visual
-baselines on a machine other than the one that recorded them; CI itself, which has never run on
-this repository (the `backup-lab` job is as unproven as the others).
+baselines on a machine other than the one that recorded them. (CI first ran on the pull request of
+the test campaign fixes; its `backup-lab` job passed against pgBackRest 2.60.0, restic 0.16.4 and
+PostgreSQL 17, which proves the lab's happy paths, not the cases of TC-009, TC-011 and TC-012.)
 
 Reproducibility rules of the default run:
 
