@@ -6,7 +6,9 @@ import {
   loadClusterGlobalParsers,
   MAX_PARSE_TOKENS,
   outsideScope,
+  parsePlpgsql,
   parseWith,
+  statementBodies,
 } from '../src/parser/index.ts'
 
 /**
@@ -227,5 +229,65 @@ describe('what the scan cannot follow (the verification review of follow-up 2)',
         `CREATE FUNCTION public.f${i}() RETURNS int LANGUAGE sql AS $$ SELECT ${'1 + '.repeat(40)}1 $$;`,
     ).join('\n')
     expect(exceedsParseWork(library)).toBe(false)
+  })
+
+  describe('a single-quoted DO body gets the same token bound as a dollar-quoted one (TC-003, Part A P1 no. 1)', () => {
+    const over = Math.ceil(MAX_PARSE_TOKENS / 3) + 1
+    const block = (statements: number) => `BEGIN ${'PERFORM 1;'.repeat(statements)} END`
+    const shapes = (statements: number): Record<string, string> => ({
+      'DO ‹body›': `DO '${block(statements)}';`,
+      'DO LANGUAGE x ‹body›': `DO LANGUAGE plpgsql '${block(statements)}';`,
+      'DO ‹body› LANGUAGE x': `DO '${block(statements)}' LANGUAGE plpgsql;`,
+      'DO E‹body›': `DO E'${block(statements)}';`,
+    })
+
+    for (const [shape, sql] of Object.entries(shapes(over))) {
+      it(`refuses ${shape} above the budget, at every layer`, () => {
+        expect(countTokens(sql, MAX_PARSE_TOKENS)).toBeLessThan(10)
+        expect(countTokens(sql, MAX_PARSE_TOKENS, 'standard', true)).toBeGreaterThan(
+          MAX_PARSE_TOKENS,
+        )
+        expect(exceedsParseWork(sql)).toBe(true)
+        expect(parsePlpgsql(sql)).toBeUndefined()
+        expect(refs([['0001_big.sql', sql]]).tooComplex).toBe(true)
+      })
+    }
+
+    for (const [shape, sql] of Object.entries(shapes(1000))) {
+      it(`still reads ${shape} with 1,000 statements`, () => {
+        expect(exceedsParseWork(sql)).toBe(false)
+        expect(parsePlpgsql(sql)).toBeDefined()
+        expect(refs([['0001_ok.sql', sql]]).tooComplex).toBe(false)
+      })
+    }
+
+    it('counts the body as PostgreSQL decodes it: doubled quotes, E escapes and continuations', () => {
+      // `''` is one quote, `\040` is a space and `\x3b` a semicolon: the parser reads PERFORM 1; per unit.
+      const unit = String.raw`PERFORM\0401\x3b`
+      const escaped = `DO E'BEGIN ${unit.repeat(over)} END';`
+      expect(exceedsParseWork(escaped)).toBe(true)
+      const quotes = `DO 'BEGIN ${"PERFORM ''x'';".repeat(over)} END';`
+      expect(exceedsParseWork(quotes)).toBe(true)
+      const continued = `DO 'BEGIN ${'PERFORM 1;'.repeat(over)}'\n' END';`
+      expect(exceedsParseWork(continued)).toBe(true)
+      expect(statementBodies(String.raw`DO E'a\nb\'c\\d''e';`)).toEqual(["a\nb'c\\d'e"])
+      expect(statementBodies(`DO 'a\\b';`)).toEqual(['a\\b'])
+      expect(statementBodies(`DO 'a'\n'b';`)).toEqual(['ab'])
+    })
+
+    it('does not count an ordinary string literal as a body', () => {
+      const json = JSON.stringify({ items: Array.from({ length: 60_000 }, (_, i) => `x${i}`) })
+      expect(json.length).toBeGreaterThan(500_000)
+      const insert = `INSERT INTO public.t (doc) VALUES ('${json.replaceAll("'", "''")}');`
+      expect(exceedsParseWork(insert)).toBe(false)
+      expect(statementBodies(insert)).toEqual([])
+      const comment = `COMMENT ON TABLE public.t IS '${'word '.repeat(300_000)}';`
+      expect(exceedsParseWork(comment)).toBe(false)
+      // `AS` before a string is a function body; a string before `AS` is not.
+      expect(statementBodies(`SELECT 'x' AS y;`)).toEqual([])
+      expect(
+        statementBodies(`CREATE FUNCTION f() RETURNS int AS 'SELECT 1' LANGUAGE sql;`),
+      ).toEqual(['SELECT 1'])
+    })
   })
 })

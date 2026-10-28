@@ -704,3 +704,24 @@ evidence; nothing here is a claim that it passed on real infrastructure):
 | 2026-10-27 | `c10417a` | CI: the phone tour of the pending view (red on `main` since #42), the unserved-route example, the secret scan |
 | 2026-10-27 | (docs) | OD-57 opened (F-4) |
 | 2026-10-27 | `f35319d`, `aac31cf` | MCP replay recordings recorded again (the Wave 9 read tools, the procedural facts), the role-start probe, the partition scenario waits for the node after the gateway outage; CI green on `aac31cf` (17 of 17 jobs, run 40437293860) |
+
+## Test campaign fixes – Parallel Session
+
+| | |
+|---|---|
+| Branch | `fix/test-campaign-2026-10-27`, one pull request, based on `origin/main` `92a416f4` (the campaign tested `d0229550`) |
+| Source | [the fix prompt](./prompts/2026-10-27-test-campaign-fixes.md) and its [evidence](./prompts/test-campaign-2026-10-27/README.md): 75 findings (P0 0, P1 13, P2 34, P3 28) |
+| Toolchain of the runs | Ubuntu 24.04 on WSL2, UTC, Node 24.22.1, Bun 1.4.4 (the CI pins) |
+| Rule | One commit per finding or tight group, tests first (red, then green); nothing is merged or deployed by this session |
+
+### TC-1. Findings fixed on this branch
+
+| Finding | Status | Regression artifact | Document |
+|---|---|---|---|
+| TC-003 single-quoted `DO` body bypasses the token bound | IMPLEMENTED, TESTED LOCALLY (red without the fix, green with it) | `packages/postgres/test/legacy-references.test.ts` (four single-quoted shapes, the decoder, the negative cases), `packages/migrations-engine/test/legacy-files.test.ts` (the `422 too_large` and a 4 MiB `DO '…'` refused within 200 MiB of growth) | [deployment.md §2a](../12-operations/deployment.md#2a-memory), [9-part-a.md §9](./gates/9-part-a.md) |
+
+### TC-2. Review history (append-only)
+
+| Date | Commit | Change |
+|---|---|---|
+| 2026-10-28 | (this branch) | section opened; TC-003 |

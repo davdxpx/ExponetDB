@@ -191,6 +191,13 @@ only) memory stays flat and parsing is as fast (1 200 parses of a 2 KiB file:
   does not parse (`parse_error`, `too_large`); a statement above it is
   redacted by the lexer (statement-redaction.md §2). The 4 MiB file bound
   of a bundle stays; above about 900 KB of dense SQL the tokens decide.
+  **[DECIDED]** (test campaign TC-003, Part A P1 no. 1) A body is read
+  whatever its quoting: the dollar-quoted literal, and the single-quoted
+  string after `DO` (optionally `LANGUAGE x`) or `AS` or before `LANGUAGE`,
+  decoded as PostgreSQL reads it (`''`, the `E''` escapes, continuation
+  lines) and counted on its own. Any other string is data and counts as one
+  token: a 1 MB JSON literal in an `INSERT` stays legal. A 4 MiB
+  `DO '…'` took 1 114 MiB before this; it is refused with the rest.
 - At most **two** requests that carry a legacy history at once
   (`LEGACY_REQUESTS_IN_FLIGHT`); a third is `429 RATE_LIMITED` with
   `Retry-After: 5`. **[DECIDED]** (the verification review of follow-up 2,
