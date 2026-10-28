@@ -570,6 +570,11 @@ func (h *Helper) startRun(ctx context.Context, job *verify.Job, p startPlan) (ca
 		rec.PgBackRest = &recordPgbr{Config: h.path(p.repo.pgbrConfig), Include: includeOf(h, p.repo), Stanza: p.repo.stanza(), Repo: p.repo.repoIndex()}
 		spec.Optional, spec.Bind = pgbrWritable(p.repo.pgbrPaths)
 	}
+	if p.repo != nil && p.repo.logical() {
+		if dir := p.repo.resticLocalPath(); dir != "" {
+			spec.Optional = append(spec.Optional, dir)
+		}
+	}
 	data, err := json.Marshal(rec)
 	if err != nil {
 		return nil, refuse(CodeFailed, "the run record cannot be built")

@@ -55,6 +55,19 @@ before the end returns `running` and changes nothing.
   restore 24 h, discard 1 h), `LimitCORE=0` (no core dumps with key
   material), `KillMode=control-group`, `TimeoutStopSec=` the engine's grace
   time, `Restart=no`.
+  **[DECIDED]** (test campaign TC-012, D-06) Besides the run and scratch
+  directories the unit may write what its engine writes by design:
+  pgBackRest's log, spool and lock directories and its local repository, and
+  the directory of a **local restic repository** (a plain, clean absolute path
+  or `local:` and one, from the root-owned `repository` file of the host;
+  never `/`, never an unclean path, nothing for `s3:`, `sftp:`, `rest:` and
+  the like). Without it `ProtectSystem=strict` made the repository read-only
+  and a logical run or its `restic check` failed after 234 s of lock retries
+  with `read-only file system`. Proven by
+  `TestLocalResticRepositoryIsWritableInTheUnit`; the host scenario with a
+  real directory repository (the snapshot listed, `restic check` passing) is
+  NOT EXECUTED (no systemd host, no restic here). The 234 s of lock retries
+  for a repository that stays unwritable are unchanged.
 - **[OBSERVED]** (`agent/node/packaging/systemd/exponetdb-node-helper.service`,
   2026-10-26) The helper itself runs with `PrivateNetwork=yes`,
   `ProtectSystem=strict`, one request at a time (`QueueWait` 30 s) and a

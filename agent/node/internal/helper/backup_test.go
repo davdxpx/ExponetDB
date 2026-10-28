@@ -798,6 +798,47 @@ func list(o canon.Object, name string) canon.Array {
 	return a
 }
 
+// A run of the unit writes the restic repository it was given (locks, packs, snapshots), and
+// ProtectSystem=strict makes everything outside ReadWritePaths read-only: a local repository must
+// be listed, or the run fails after minutes of lock retries with "read-only file system" (TC-012, D-06).
+// A repository at a URL adds nothing, and a path that is not a plain absolute one is never listed.
+func TestLocalResticRepositoryIsWritableInTheUnit(t *testing.T) {
+	for _, c := range []struct {
+		name, repository string
+		writable         string
+	}{
+		{"a local directory", "/var/lib/restic-repo", "--property=ReadWritePaths=-/var/lib/restic-repo"},
+		{"the local: form", "local:/srv/backups/restic", "--property=ReadWritePaths=-/srv/backups/restic"},
+		{"s3", "s3:https://objects.example.test/bucket", ""},
+		{"sftp", "sftp:backup@host.example.test:/srv/restic", ""},
+		{"rest", "rest:https://host.example.test:8000/", ""},
+		{"a path that climbs", "/var/lib/../etc/restic", ""},
+		{"the root", "/", ""},
+		{"a relative path", "restic-repo", ""},
+	} {
+		b := newBackupEnv(t)
+		b.mode(ModeOwned)
+		dir := b.root + "/etc/exponetdb-node/repositories/" + repoID
+		writeFile(t, dir+"/repository", c.repository+"\n", 0o600)
+		writeFile(t, dir+"/password", resticPass, 0o600)
+		b.mustCall(OpBackupRun, b.job("backup.run", runArgs(runA, "logical", resticRepo(), "app")))
+		start := strings.Join(b.run.find(SystemdRun, "--unit=")[0].Args, "\n")
+		var repoPaths []string
+		for _, line := range strings.Split(start, "\n") {
+			if strings.HasPrefix(line, "--property=ReadWritePaths=") && !strings.Contains(line, "/runs/") {
+				repoPaths = append(repoPaths, line)
+			}
+		}
+		switch {
+		case c.writable == "" && len(repoPaths) != 0:
+			t.Fatalf("%s: the unit may write %v", c.name, repoPaths)
+		case c.writable != "" && (len(repoPaths) != 1 || repoPaths[0] != c.writable):
+			t.Fatalf("%s: want %s, got %v", c.name, c.writable, repoPaths)
+		}
+		noSecrets(t, c.name, b.allArgv())
+	}
+}
+
 func TestLogicalBackupSecretsStayInFiles(t *testing.T) {
 	b := newBackupEnv(t)
 	b.mode(ModeOwned)

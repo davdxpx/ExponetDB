@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -91,6 +92,22 @@ func (r *repository) repoIndex() int {
 }
 
 func (r *repository) logical() bool { return r.ref.Engine == "restic" || r.ref.Engine == "pg_dump" }
+
+// resticLocalPath is the directory of a restic repository that lies on this host (a plain
+// absolute path, or `local:` and one), or "" for a repository at a URL (`s3:`, `sftp:`, `rest:`,
+// ...) and for a path that is not clean or is the root. A run writes it (locks, packs and
+// snapshots), so the unit, which is ProtectSystem=strict, must list it (TC-012, D-06). The file
+// that names it is root's and trusted, as the pgBackRest paths are.
+func (r *repository) resticLocalPath() string {
+	s := strings.TrimPrefix(string(bytes.TrimSpace(r.resticRepository)), "local:")
+	if !strings.HasPrefix(s, "/") {
+		return ""
+	}
+	if clean := path.Clean(s); clean != s || clean == "/" {
+		return ""
+	}
+	return s
+}
 
 type pgbrPaths struct {
 	// repo is the repository's local path (posix and cifs repositories
