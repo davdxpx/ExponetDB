@@ -8,9 +8,11 @@
  *                      credentials, databases and four targets
  *   seed.ts enrollment the node enrollment token for the server, written to a new 0600 file
  *   seed.ts adopt      the one-way adoption of the PostgreSQL 17 cluster by the enrolled node
+ *   seed.ts add-target <slug> <major> [prod]   one more environment, database and target (lab/platform/<slug>) on the cluster of <major>;
+ *                      tests that leave a target blocked take a fresh one
  *
  * Environment: EXSTACK_OWNER_FILE, EXSTACK_STATE (default .), EXSTACK_MAJORS ("16 17 18"),
- * EXSTACK_PORT_BASE (55400), EXSTACK_IDS (output, ids only, default $STATE/ids.json),
+ * EXSTACK_PG_PORT_BASE (55400), EXSTACK_IDS (output, ids only, default $STATE/ids.json),
  * EXSTACK_CA (the target CA certificate file). Prints ids and counts, never a secret.
  */
 import { spawnSync } from 'node:child_process'
@@ -22,7 +24,7 @@ import { Human, must } from './human.ts'
 
 const STATE = process.env['EXSTACK_STATE'] ?? '.'
 const MAJORS = (process.env['EXSTACK_MAJORS'] ?? '16 17 18').split(/\s+/).map(Number)
-const PORT_BASE = Number(process.env['EXSTACK_PORT_BASE'] ?? 55400)
+const PORT_BASE = Number(process.env['EXSTACK_PG_PORT_BASE'] ?? 55400)
 const IDS_FILE = process.env['EXSTACK_IDS'] ?? join(STATE, 'ids.json')
 const CA_FILE = process.env['EXSTACK_CA'] ?? join(STATE, 'tls', 'ca.crt')
 const OWNER_ROLE = 'lab_owner'
@@ -217,6 +219,45 @@ async function adopt(h: Human): Promise<void> {
   say('adopted', { cluster, node: node.id, managementMode: c.body.managementMode })
 }
 
+async function addTarget(h: Human, slug: string, major: number, tier: 'nonprod' | 'prod'): Promise<void> {
+  const name = `pg${major}`
+  const cluster = ids[`cluster_${name}`]
+  if (cluster === undefined) throw new Error(`no cluster ${name} in ids.json`)
+  const db = `lab_${slug}`.replace(/[^a-z0-9_]/g, '_').slice(0, 60)
+  const envKey = `env_${slug}`
+  if (ids[envKey] === undefined) {
+    await h.planAndApply(`/api/v1/products/${ids['product']}/environments`, {
+      slug,
+      displayName: slug,
+      tier,
+      ...(tier === 'prod' ? { evidenceFrom: 'staging' } : {}),
+    })
+    ids[envKey] = (await items(h, `/api/v1/products/${ids['product']}/environments`)).find((e) => e.slug === slug).id
+    save()
+  }
+  if (psql(major, 'postgres', `SELECT 1 FROM pg_database WHERE datname='${db}'`) !== '1') {
+    psql(major, 'postgres', `CREATE DATABASE ${db} OWNER ${OWNER_ROLE}`)
+  }
+  const sql = await h.call('GET', `/api/v1/clusters/${cluster}/bootstrap-sql?database=${db}&project=${ids['project']}`)
+  must(sql, 200, 'bootstrap-sql')
+  psql(major, 'postgres', sql.body.script)
+  await h.planAndApply(`/api/v1/clusters/${cluster}/databases`, { name: db })
+  const database = (await items(h, `/api/v1/clusters/${cluster}/databases`)).find((d) => d.name === db)
+  const planned = await h.call('POST', '/api/v1/targets', { projectId: ids['project'], environmentId: ids[envKey], databaseId: database.id })
+  must(planned, 201, 'plan target')
+  await h.reauth()
+  const applied = await h.call('POST', `/api/v1/plans/${planned.body.id}/apply`, {})
+  must(applied, 202, 'apply target')
+  if (applied.body.state === 'awaiting_approval') must(await h.approve(applied.body.id, planned.body.planHash), 200, 'approve target')
+  const op = await h.finished(applied.body.id)
+  if (op.state !== 'succeeded') throw new Error(`target ${slug}: ${op.state} ${op.errorCode}`)
+  const t = await h.call('GET', `/api/v1/targets/${encodeURIComponent(`lab/platform/${slug}`)}`)
+  must(t, 200, 'GET target')
+  ids[`target_${slug}`] = t.body.id
+  save()
+  say('target', { path: `lab/platform/${slug}`, id: t.body.id, pg: major, database: db, tier })
+}
+
 async function main(): Promise<void> {
   const [cmd, arg] = process.argv.slice(2)
   const human = Human.load()
@@ -224,6 +265,7 @@ async function main(): Promise<void> {
   if (cmd === 'registry') await registry(human)
   else if (cmd === 'enrollment') await enrollment(human, arg ?? join(STATE, 'node-token'))
   else if (cmd === 'adopt') await adopt(human)
+  else if (cmd === 'add-target') await addTarget(human, arg ?? 'extra', Number(process.argv[4] ?? 17), process.argv[5] === 'prod' ? 'prod' : 'nonprod')
   else throw new Error('commands: registry | enrollment <token file> | adopt')
 }
 

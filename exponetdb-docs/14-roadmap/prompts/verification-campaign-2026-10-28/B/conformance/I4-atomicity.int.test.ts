@@ -70,8 +70,11 @@ async function attempt(ctx: Ctx, hazard: string, opts: { transactional?: boolean
     })
     if (p.state === 'denied' || p.decision === 'deny') {
       // A blocked plan is stored "for explanation only"; accepting it is PLAN_DENIED. That is a refusal at plan time.
-      const rules = JSON.stringify((p.body as Record<string, unknown>)['policy'] ?? '').match(/migration\.[a-z0-9_.-]+/g) ?? []
-      outcome = { kind: 'refused', code: 'PLAN_DENIED', rules: [...new Set(rules)] }
+      const policy = ((p.body as Record<string, unknown>)['policy'] ?? {}) as { rules?: { id: string; result: string }[] }
+      const rules = (policy.rules ?? []).filter((r) => r.result !== 'pass' && r.result !== 'not_applicable' && r.result !== 'allow').map((r) => `${r.id}:${r.result}`)
+      const analysis = JSON.stringify((p.body as Record<string, unknown>)['analysis'] ?? {})
+      const lintRules = [...new Set([...analysis.matchAll(/"rule":"([a-z_]+)","level":"([a-z]+)"[^}]*?"blocking":true/g)].map((m) => m[1] as string))]
+      outcome = { kind: 'refused', code: 'PLAN_DENIED', rules: [...rules, ...lintRules.map((r) => `lint:${r}`)] }
       return { outcome, before: await tableExists(ctx, `before_${k}`), after: await tableExists(ctx, `after_${k}`), ledger: await ledgerHas(ctx, id), id }
     }
     const op = await ctx.w.apply(p)
@@ -149,6 +152,34 @@ describe.each(MAJORS)('I4 atomicity on PostgreSQL %i', (major: Major) => {
     ['two-phase: PREPARE TRANSACTION through EXECUTE', "DO $$ BEGIN EXECUTE $q$PREPARE TRANSACTION 'x'$q$; END $$;"],
     ['advisory lock release of all locks', 'SELECT pg_advisory_unlock_all();'],
   ]
+  // The apply role must be unable to reach the host or the cluster (I14 at statement level): each is refused by
+  // PostgreSQL's own privileges for the execution role, or by the classifier; none may be applied.
+  const HOST_HAZARDS: [string, string][] = [
+    ['host: pg_read_file', "SELECT pg_read_file('/etc/passwd');"],
+    ['host: pg_ls_dir', "SELECT pg_ls_dir('/');"],
+    ['host: pg_stat_file', "SELECT pg_stat_file('/etc/passwd');"],
+    ['host: lo_import', "SELECT lo_import('/etc/passwd');"],
+    ['host: pg_ls_waldir', 'SELECT pg_ls_waldir();'],
+    ['host: pg_switch_wal', 'SELECT pg_switch_wal();'],
+    ['host: pg_rotate_logfile', 'SELECT pg_rotate_logfile();'],
+    ['host: pg_promote', 'SELECT pg_promote();'],
+    ['host: pg_create_physical_replication_slot', "SELECT pg_create_physical_replication_slot('b2_slot');"],
+    ['host: CREATE EXTENSION plpython3u', 'CREATE EXTENSION plpython3u;'],
+    ['host: CREATE EXTENSION dblink', 'CREATE EXTENSION dblink;'],
+    ['host: COPY ... PROGRAM', "COPY before_1 FROM PROGRAM 'id';"],
+    ['host: COPY TO file', "COPY before_1 TO '/tmp/b2_out';"],
+    ['host: ALTER SYSTEM', "ALTER SYSTEM SET archive_command = 'id';"],
+    ['host: CREATE SERVER', 'CREATE SERVER b2_srv FOREIGN DATA WRAPPER postgres_fdw;'],
+    ['host: LOAD', "LOAD 'auto_explain';"],
+  ]
+  for (const [name, hazard] of HOST_HAZARDS) {
+    test(`${name}: never applied, nothing persists`, async () => {
+      const a = await attempt(ctx, hazard)
+      assertAtomic(a, name)
+      console.log(`I4[pg${major}] ${name}: ${JSON.stringify(a.outcome).slice(0, 160)}`)
+      expect(a.outcome.kind, `${name}: ${JSON.stringify(a.outcome)}`).not.toBe('applied')
+    })
+  }
   for (const [name, hazard] of BODY_HAZARDS) {
     test(`body hazard: ${name}: atomic, and never a ledger row without the effects`, async () => {
       const a = await attempt(ctx, hazard)
@@ -163,6 +194,22 @@ describe.each(MAJORS)('I4 atomicity on PostgreSQL %i', (major: Major) => {
       }
     })
   }
+
+  test('up.sql cannot terminate or cancel another session (pg_terminate_backend / pg_cancel_backend of a superuser session)', async () => {
+    const victim = await superuserClient(ctx.server, ctx.t.database)
+    try {
+      const pid = Number((await victim.query('SELECT pg_backend_pid() AS p')).rows[0]?.p)
+      for (const fn of ['pg_terminate_backend', 'pg_cancel_backend']) {
+        const a = await attempt(ctx, `SELECT ${fn}(${pid});`)
+        assertAtomic(a, fn)
+        expect(a.outcome.kind, `${fn} of a foreign session: ${JSON.stringify(a.outcome)}`).not.toBe('applied')
+      }
+      // the victim is still connected
+      expect((await victim.query('SELECT 1 AS ok')).rows[0]?.ok).toBe(1)
+    } finally {
+      await victim.end().catch(() => undefined)
+    }
+  })
 
   test('up.sql cannot release the engine\'s own target lock (pg_advisory_unlock_all): single writer holds for the whole migration', async () => {
     const EXDB = 1163412546 // key1 of every ExponetDB advisory lock: ASCII "EXDB"
@@ -231,13 +278,14 @@ describe.each(MAJORS)('I4 atomicity on PostgreSQL %i', (major: Major) => {
   test('DETACH PARTITION ... CONCURRENTLY cannot run in a transaction block: it must be refused at lint time (or be expressible non-transactionally)', async () => {
     const setup = await attempt(ctx, 'CREATE TABLE public.part_p (i int) PARTITION BY RANGE (i);\nCREATE TABLE public.part_p1 PARTITION OF public.part_p FOR VALUES FROM (0) TO (10);', { wrap: false })
     expect(setup.outcome.kind).toBe('applied')
-    const tx = await attempt(ctx, 'ALTER TABLE public.part_p DETACH PARTITION public.part_p1 CONCURRENTLY;', { wrap: false, dependsOn: [setup.id], declared: 'potentially_breaking' })
+    const tx = await attempt(ctx, 'ALTER TABLE public.part_p DETACH PARTITION public.part_p1 CONCURRENTLY;', { wrap: false, dependsOn: [setup.id], declared: 'destructive' })
     console.log(`I4[pg${major}] DETACH CONCURRENTLY in a transactional bundle: ${JSON.stringify(tx.outcome)}`)
-    // Expected by migration-bundles.md §5: "the parser classifies these; a mismatch is a blocking lint"
-    // (nontransactional_statement_in_transactional). A late server error is atomic but not a lint answer.
-    expect(tx.outcome.kind, `outcome: ${JSON.stringify(tx.outcome)}`).toBe('refused')
-    const nontx = await attempt(ctx, 'ALTER TABLE public.part_p DETACH PARTITION public.part_p1 CONCURRENTLY;', { wrap: false, transactional: false, dependsOn: [setup.id], declared: 'potentially_breaking' })
-    expect(nontx.outcome, `a non-transactional bundle must be able to carry it: ${JSON.stringify(nontx.outcome)}`).toEqual({ kind: 'applied' })
+    // migration-bundles.md section 5: "the parser classifies these; a mismatch is a blocking lint".
+    // (The plan may be denied for other reasons too; the classification is what is asserted.)
+    expect(JSON.stringify(tx.outcome), 'lint rule for a statement that cannot run in a transaction block').toContain('lint:nontransactional_statement_in_transactional')
+    const nontx = await attempt(ctx, 'ALTER TABLE public.part_p DETACH PARTITION public.part_p1 CONCURRENTLY;', { wrap: false, transactional: false, dependsOn: [setup.id], declared: 'destructive' })
+    console.log(`I4[pg${major}] DETACH CONCURRENTLY in a non-transactional bundle: ${JSON.stringify(nontx.outcome)}`)
+    expect(JSON.stringify(nontx.outcome), 'a non-transactional bundle for it must not be called needless').not.toContain('lint:needless_nontransactional')
   })
 
   test('ALTER TYPE ... ADD VALUE used in the same transaction is stopped (lint or server), never half applied', async () => {

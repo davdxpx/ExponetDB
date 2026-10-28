@@ -38,7 +38,7 @@ const su = await kit.superuserClient(server, 'postgres')
 const pid = (await su.query(`SELECT pid FROM pg_stat_activity WHERE usename = 'exponetdb_reader' AND state = 'active' AND query LIKE '%generate_series%' LIMIT 1`)).rows[0]?.pid
 if (pid === undefined) throw new Error('no active reader backend found: the test did not kill anything')
 if (MODE === 'sigterm') await su.query('SELECT pg_terminate_backend($1)', [pid]).catch(() => undefined)
-else spawnSync('docker', ['exec', container, 'kill', '-9', String(pid)])
+else spawnSync('docker', ['exec', container, 'sh', '-c', `kill -9 ${pid}`])
 await su.end().catch(() => undefined)
 const killedAt = Date.now()
 const outcome = await Promise.race([

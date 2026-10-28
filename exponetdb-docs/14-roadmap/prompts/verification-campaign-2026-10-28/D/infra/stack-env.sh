@@ -23,6 +23,12 @@
 #   op_state <operation id>      state / applyOutcome / verificationOutcome of an operation from the Control Store
 #   journal <role> [args]        journalctl of a role's unit
 #   target_id lab/platform/staging   the id of a target (from ids.json)
+#   new_project NAME             a scratch project dir (EXSTACK_ROOT/projects/NAME) for lab/platform; prints the path
+#   mkb DIR SLUG [flags] < up.sql   a new bundle (flags of `migration new`, e.g. --nontransactional); VERIFY_SQL overrides verify.sql; prints its id
+#   mplan DIR TARGET [ids...]    plan from the bundles in DIR; sets PLAN_ID, PLAN_STATE; prints one line
+#   mapply [PLAN] [flags]        `plan apply` (default --wait unless flags are given); sets OP_ID; prints the operation as the Control Store has it
+#   add_target SLUG pg17 [prod]  one more environment + database + target lab/platform/SLUG (fresh state for a test); prints the path
+#   ledger pg17 lab_staging      the target's ledger rows (ids, checksum prefix, transactional, operation)
 
 # --- configuration ---------------------------------------------------------------------------
 [ -r /etc/exstack.env ] && . /etc/exstack.env
@@ -212,7 +218,7 @@ _stk_wait_control() {
   return 1
 }
 
-stack_ready() { curl -fsS -m 3 -o /dev/null "http://127.0.0.1:${EXSTACK_PORT_INTERNAL_SERVE}/healthz/ready"; }
+stack_ready() { curl -fs -m 3 -o /dev/null "http://127.0.0.1:${EXSTACK_PORT_INTERNAL_SERVE}/healthz/ready"; }
 
 restart_cp() {
   local r
@@ -251,3 +257,59 @@ stack_status() {
   if stack_ready; then echo "serve    ready (readiness 200)"; else echo "serve    NOT ready"; fi
   [ -r "${EXSTACK_STATE}/ids.json" ] && jq -r 'to_entries | map(select(.key|test("^target_"))) | length | "targets  \(.) registered"' "${EXSTACK_STATE}/ids.json"
 }
+
+# --- migration authoring and driving (the scratch projects of the tests) -------------------------------
+EXSTACK_PROJECTS="${EXSTACK_ROOT}/projects"
+
+new_project() {
+  local name="${1:?name}" dir="${EXSTACK_PROJECTS}/${1}"
+  rm -rf "$dir"; mkdir -p "$dir"
+  ( cd "$dir" && exdb init --project lab/platform >/dev/null \
+      && sed -i 's/role: migrator/role: owner/; s/migrator: app_migrator/owner: lab_owner/' exponetdb.project.yaml ) || return 1
+  echo "$dir"
+}
+
+mkb() {
+  local dir="${1:?project dir}" slug="${2:?slug}"; shift 2
+  local out id d
+  out="$(cd "$dir" && exdb migration new "$slug" "$@")" || { echo "$out" >&2; return 1; }
+  id="$(awk '/^Migration:/ {print $2}' <<<"$out")"
+  d="$(ls -d "$dir"/migrations/"${id}"_*)"
+  cat >"$d/up.sql"
+  if [ -n "${VERIFY_SQL:-}" ]; then printf '%s\n' "$VERIFY_SQL" >"$d/verify.sql"; fi
+  echo "$id"
+}
+
+PLAN_ID=""; PLAN_STATE=""; OP_ID=""
+mplan() {
+  local dir="${1:?project dir}" target="${2:?target path}"; shift 2
+  local j rc
+  j="$(cd "$dir" && exdb_json migration plan --target "$target" "$@")"; rc=$?
+  PLAN_ID="$(jq -r '.data.id // .planId // empty' <<<"$j")"
+  PLAN_STATE="$(jq -r '.data.state // empty' <<<"$j")"
+  echo "plan=${PLAN_ID:-none} state=${PLAN_STATE:-?} decision=$(jq -r '.data.decision // "?"' <<<"$j") error=$(jq -r '.error.code // "-"' <<<"$j") rc=$rc"
+  return $rc
+}
+
+mapply() {
+  local plan="${1:-$PLAN_ID}"; shift || true
+  local args=("$@"); [ ${#args[@]} -eq 0 ] && args=(--wait)
+  local j rc
+  j="$(exdb_json plan apply "$plan" "${args[@]}")"; rc=$?
+  OP_ID="$(jq -r '.operationId // .data.operationId // (if (.data.id // "" | startswith("op_")) then .data.id else empty end)' <<<"$j")"
+  echo "op=${OP_ID:-none} rc=$rc error=$(jq -r '.error.code // "-"' <<<"$j") store: $( if [ -n "$OP_ID" ]; then op_state "$OP_ID"; else echo '-'; fi)"
+  return $rc
+}
+
+ledger() {
+  PGDATABASE="${2:?database}" psql_target "${1:?pg17}" -Atc \
+    "SELECT migration_id||' '||name||' '||left(checksum,28)||' tx='||coalesce(transactional::text,'?')||' op='||operation_id FROM exponetdb.schema_migrations ORDER BY applied_seq"
+}
+
+add_target() {
+  local slug="${1:?slug}" name="${2:-pg17}" tier="${3:-nonprod}"
+  ( cd "${EXSTACK_KIT}" && EXSTACK_OWNER_FILE="${EXSTACK_STATE}/owner.json" EXSTACK_STATE="${EXSTACK_STATE}" \
+      EXSTACK_PG_PORT_BASE="${EXSTACK_PG_PORT_BASE}" bun --conditions=@exponetdb/source seed.ts add-target "$slug" "${name#pg}" "$tier" ) >&2 || return 1
+  echo "lab/platform/${slug}"
+}
+

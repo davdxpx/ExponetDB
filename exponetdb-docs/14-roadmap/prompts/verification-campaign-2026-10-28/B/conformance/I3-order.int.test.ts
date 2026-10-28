@@ -129,11 +129,17 @@ describe('I3 refusals at plan time (named errors)', () => {
         await ingestBundles(tx, { projectId: a.record.projectId, bundles: bundles.slice(i, i + 50), defaults: (await import('./lib/world.ts')).DEFAULTS, identityId: w.a.identityId })
       })
     }
-    const p = await w.plan(a, { migrationIds: [ids[999] as string] })
+    let p
+    try {
+      p = await w.plan(a, { migrationIds: [ids[999] as string] })
+    } catch (e) {
+      // The lint of a 1,000-chain is CPU bound inside the plan's Control Store transaction (idle_in_transaction_session_timeout = 60 s).
+      throw new Error(`the plan of a 1,000-bundle chain FAILED after ${Math.round((Date.now() - t0) / 1000)} s: ${(e as Error).name}: ${(e as Error).message}`)
+    }
     const planned = planItems(p)
     const ms = Date.now() - t0
     console.log(`I3 engine: plan of a 1,000-deep chain: ${planned.length} items in ${ms} ms, RSS +${Math.round((process.memoryUsage().rss - rss0) / 1048576)} MiB`)
     expect(planned).toEqual(ids)
-    expect(ms).toBeLessThan(120_000)
+    expect(ms, 'a 1,000-bundle project must plan in under 30 s (it is 53 s on an idle machine and fails with a Control Store timeout under load)').toBeLessThan(30_000)
   }, 300_000)
 })

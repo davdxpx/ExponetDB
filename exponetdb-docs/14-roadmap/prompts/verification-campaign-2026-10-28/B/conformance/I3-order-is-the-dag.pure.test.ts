@@ -289,7 +289,7 @@ describe('I3 through the linter (the CLI / CI view of the same stream)', () => {
 })
 
 describe('I3 scale of the linter over a dependency chain (the CLI / CI / plan view of a project)', () => {
-  test('lint time over a chain of n bundles must not grow faster than quadratically: t(400) / t(200) < 3.5', async () => {
+  test('lint time over a chain of n bundles is near-linear (dependency-graph.md section 7: O(V+E)): t(400) / t(200) < 3', async () => {
     await prepareLint(17)
     const chain = (n: number) =>
       Array.from({ length: n }, (_, i) =>
@@ -299,7 +299,7 @@ describe('I3 scale of the linter over a dependency chain (the CLI / CI / plan vi
     const a = measure('I3 lint chain-200', () => lint(chain(200)))
     const b = measure('I3 lint chain-400', () => lint(chain(400)))
     console.log(`I3 lint chain: 200 -> ${a.ms} ms, 400 -> ${b.ms} ms (x${Math.round((b.ms / a.ms) * 10) / 10}); 800 bundles took 61 s in the first run (x8.7)`)
-    expect(b.ms / a.ms, 'doubling the chain must not multiply lint time by more than 3.5').toBeLessThan(3.5)
+    expect(b.ms / a.ms, 'doubling the chain must not multiply lint time by 3 or more').toBeLessThan(3)
   }, 300_000)
 
   test('lint time over 400 independent bundles that touch one table is linear (control)', async () => {

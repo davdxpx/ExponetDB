@@ -1,0 +1,4 @@
+[
+{"major":16,"temp_file_limit":"(unset: product bootstrap)","outcome":"QUERY_TIMEOUT","ms":8482,"tempDirPeakMb":754},
+{"major":16,"temp_file_limit":"256MB","outcome":"QUERY_FAILED 53400","ms":2292,"tempDirPeakMb":206}
+]

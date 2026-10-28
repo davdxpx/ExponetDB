@@ -197,3 +197,22 @@ describe('I13 the mirror window: the store trusts the Control Store mirror, not 
     expect(e, 'the rewritten bytes were ACCEPTED although the id is applied on stage').toBeInstanceOf(MigrationError)
   })
 })
+
+describe('I13 consequence of the mirror window', () => {
+  test('INVARIANT: no plan for any target may carry other bytes than the ones an applied id has (checked at plan time, end to end)', async () => {
+    const id = w.ulid()
+    const original = w.bundle({ id, name: 'mirrorlag2', up: 'CREATE TABLE public.i13_lag2 (i int);\n' })
+    const first = await w.plan(t1, { bundles: [original] })
+    await w.apply(first)
+    const appliedChecksum = (first.body['content'] as { migrations: { checksum: string }[] }).migrations[0]?.checksum
+    await w.h.db.asSuperuser((c) => c.query('DELETE FROM migrations.ledger_mirror WHERE migration_id = $1', [id]))
+    let planned: string | undefined
+    try {
+      const p = await w.plan(t2, { bundles: [w.bundle({ id, name: 'mirrorlag2', up: 'CREATE TABLE public.i13_lag2 (i int, evil int);\n' })] })
+      planned = (p.body['content'] as { migrations: { checksum: string }[] }).migrations[0]?.checksum
+    } catch {
+      return // refused: the invariant holds
+    }
+    expect(planned, 'a plan for another target carries the rewritten bytes of an id that is applied elsewhere').toBe(appliedChecksum)
+  })
+})

@@ -33,6 +33,12 @@ const entries: Entry[] = readFileSync(CORPUS, 'utf8')
   .filter(Boolean)
   .map((l) => JSON.parse(l) as Entry)
   .filter((e) => e.class !== 'limit')
+  // D2_STRIDE=n takes every n-th statement of each class (the real program is slow: every call is audited)
+  .filter((e, _i, all) => {
+    const stride = Number(process.env['D2_STRIDE'] ?? '1')
+    const same = all.filter((x) => x.class === e.class)
+    return same.indexOf(e) % stride === 0
+  })
 const sqlOf = (e: Entry) => (e.gen ? e.gen.prefix + e.gen.unit.repeat(e.gen.count) : e.sql)
 
 const FIXTURE = [
@@ -124,4 +130,36 @@ describe('the corpus through /mcp and REST', () => {
     writeFileSync(`${OUT}/mcp-rest-failures.json`, `${JSON.stringify(failures, null, 2)}\n`)
     expect(failures).toEqual([])
   }, 1_800_000)
+
+  it('a read whose backend is terminated returns, and the cluster keeps serving reads', async () => {
+    const target = w.ids.stagingTarget
+    const long = 'SELECT count(*) FROM generate_series(1, 1000000000000)'
+    const answers: string[] = []
+    const calls = [0, 1].map(async (i) => {
+      const started = Date.now()
+      const r = await agent.call('sql_query', { target, sql: long, queryId: `qry_01M4S9000000000000000000W${i}` } as never)
+      answers.push(`read ${i}: ${r.isError ? (r.content[0]?.text ?? '').slice(0, 60) : 'rows'} after ${Date.now() - started} ms`)
+    })
+    await new Promise((res) => setTimeout(res, 4000))
+    const c = await superuserClient(pg17, 'postgres')
+    const killed = await c.query(
+      "SELECT count(*)::int AS n FROM (SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = 'exponetdb_reader' AND query LIKE '%generate_series%') t",
+    )
+    await c.end()
+    const within = (ms: number) => new Promise<'timeout'>((res) => setTimeout(() => res('timeout'), ms))
+    const t0 = Date.now()
+    const both = await Promise.race([Promise.all(calls).then(() => 'answered' as const), within(25_000)])
+    // The caller's own wait ends at the statement timeout plus 30 s; then the lane rows are gone and a new read can be tried.
+    const late = await Promise.race([Promise.all(calls).then(() => 'answered' as const), within(150_000)])
+    const next = await Promise.race([
+      agent.call('sql_query', { target, sql: 'SELECT 1 AS one' }).then((r) => (r.isError ? `error: ${(r.content[0]?.text ?? '').slice(0, 80)}` : 'rows')),
+      within(150_000),
+    ])
+    writeFileSync(
+      `${OUT}/mcp-wedge.json`,
+      `${JSON.stringify({ backendsTerminated: killed.rows[0]?.n, bothReadsAnsweredWithin25s: both === 'answered', bothAnsweredAfterLaneGaveUp: late === 'answered', msUntilAnswered: Date.now() - t0, answers, nextReadAfterwards: next }, null, 1)}\n`,
+    )
+    expect(both).toBe('answered')
+    expect(next).toBe('rows')
+  }, 600_000)
 })

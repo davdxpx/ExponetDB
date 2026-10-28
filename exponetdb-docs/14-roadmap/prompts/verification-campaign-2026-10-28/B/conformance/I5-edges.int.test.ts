@@ -62,11 +62,20 @@ describe.each(MAJORS)('I5 edges on PostgreSQL %i', (major) => {
     expect((await runWhole(lab().admin, sql)).tags).toEqual(['COMMENT', 'COMMENT'])
   })
 
-  test('characterisation: the SAME text under standard_conforming_strings = off is one different statement for the server (why the engine pins it and guards it after every statement)', async () => {
-    const sql = "SELECT 'a\\'; SELECT 2;'"
-    const on = (await lab().admin.query(sql)) as unknown as { rows: Record<string, string>[] }
-    expect(on.rows).toBeDefined() // scs on: 'a\' ; then SELECT 2 ; then an unterminated string: the server refuses, so this is only a parse probe
-  }, 30_000)
+  test('characterisation: under standard_conforming_strings = off the server lexes the SAME text differently from the repo (why the engine pins the setting and reads a guard after every statement)', async () => {
+    const sql = "COMMENT ON SCHEMA public IS 'a\\'; COMMENT ON SCHEMA public IS 'b';"
+    const mine = repo(major, sql)
+    expect(mine.ok && mine.statements.length, 'the repo assumes scs = on: two statements').toBe(2)
+    const client = lab().admin
+    await client.query('BEGIN')
+    await client.query('SET LOCAL standard_conforming_strings = off')
+    const off = await runWhole(client, sql)
+    await client.query('ROLLBACK')
+    // with scs off, \' is an escaped quote: the first literal runs on and the text is not two COMMENT statements
+    expect(off.ok && off.tags.length === 2, 'scs off: the server sees the same two statements').toBe(false)
+    const on = await runWhole(client, sql)
+    expect(on.tags).toEqual(['COMMENT', 'COMMENT'])
+  })
 
   test('nesting depth: parentheses at 1,000 / 3,000 / 5,000 / 8,000 / 12,000 / 20,000: repo and server accept or refuse together', async () => {
     const verdicts: string[] = []

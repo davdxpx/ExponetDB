@@ -1,0 +1,18 @@
+[
+{"major":16,"attempt":"write a table row","sql":"INSERT INTO public.accounts VALUES (2, 'two')","outcome":"refused 42501"},
+{"major":16,"attempt":"update a table row","sql":"UPDATE public.accounts SET note = 'x'","outcome":"refused 42501"},
+{"major":16,"attempt":"delete table rows","sql":"DELETE FROM public.accounts","outcome":"refused 42501"},
+{"major":16,"attempt":"truncate","sql":"TRUNCATE public.accounts","outcome":"refused 42501"},
+{"major":16,"attempt":"create a table in public","sql":"CREATE TABLE public.d2_new (a int)","outcome":"refused 42501"},
+{"major":16,"attempt":"create a schema","sql":"CREATE SCHEMA d2_new","outcome":"refused 42501"},
+{"major":16,"attempt":"advance a sequence","sql":"SELECT nextval('public.s')","outcome":"refused 42501"},
+{"major":16,"attempt":"create a temporary table and write it","sql":"CREATE TEMP TABLE d2_tmp (a int); INSERT INTO d2_tmp VALUES (1)","outcome":"ALLOWED"},
+{"major":16,"attempt":"create a large object","sql":"SELECT lo_create(0)","outcome":"ALLOWED"},
+{"major":16,"attempt":"take an advisory lock","sql":"SELECT pg_advisory_lock(1)","outcome":"ALLOWED"},
+{"major":16,"attempt":"send a notification","sql":"SELECT pg_notify('d2', 'x')","outcome":"ALLOWED"},
+{"major":16,"attempt":"read a server file","sql":"SELECT pg_read_file('/etc/passwd')","outcome":"refused 42501"},
+{"major":16,"attempt":"COPY to a program","sql":"COPY (SELECT 1) TO PROGRAM 'true'","outcome":"refused 42501"},
+{"major":16,"attempt":"become another role","sql":"SET ROLE postgres","outcome":"refused 42501"},
+{"major":16,"attempt":"alter itself","sql":"ALTER ROLE exponetdb_reader SUPERUSER","outcome":"refused 42501"},
+{"major":16,"attempt":"terminate another backend","sql":"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE pid <> pg","outcome":"refused 42501"}
+]

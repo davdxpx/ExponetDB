@@ -10,6 +10,8 @@
 #   CLI             built from the same commit, signed in as that owner (device flow, admin scopes + prod apply)
 #   registry        product lab, project platform, targets lab/platform/{staging,production,dev16,dev18}
 #
+# Parameters (environment): STACK_NAME, COMMIT, PORT_BASE, PG_PORT_BASE, AGENT=0 (see stack-env.sh), e.g.
+#   COMMIT=d0229550 STACK_NAME=old PORT_BASE=59400 PG_PORT_BASE=56400 AGENT=0 ./stack-up.sh   # the pre-fix release next to a stack
 # Usage: stack-up.sh [--from PHASE] [--only PHASE]
 #   phases: preflight src build control pki services targets owner cli registry agent smoke
 # Repeatable: stack-down.sh, then stack-up.sh again (source and build are cached; the rest is minutes).
@@ -25,7 +27,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --from) FROM="$2"; shift 2 ;;
     --only) ONLY="$2"; shift 2 ;;
-    -h|--help) sed -n 2,18p "$0"; exit 0 ;;
+    -h|--help) sed -n 2,22p "$0"; exit 0 ;;
     *) echo "unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -54,7 +56,7 @@ phase_preflight() {
   if [ "$FROM" = preflight ] && [ -e "${EXSTACK_STATE}/stack.up" ]; then die "a stack is already up here; run stack-down.sh first (or use --from PHASE)"; fi
   local p
   if [ "$FROM" = preflight ]; then
-    for p in "${EXSTACK_PORT_CONTROL}" "${EXSTACK_PORT_SERVE}" "${EXSTACK_PORT_GATEWAY}" 55416 55417 55418 \
+    for p in "${EXSTACK_PORT_CONTROL}" "${EXSTACK_PORT_SERVE}" "${EXSTACK_PORT_GATEWAY}" $((EXSTACK_PG_PORT_BASE + 16)) $((EXSTACK_PG_PORT_BASE + 17)) $((EXSTACK_PG_PORT_BASE + 18)) \
              "${EXSTACK_PORT_INTERNAL_SERVE}" "${EXSTACK_PORT_INTERNAL_WORKER}" "${EXSTACK_PORT_INTERNAL_GATEWAY}"; do
       ss -Hltn "sport = :$p" | grep -q . && die "port $p is already in use"
     done
@@ -78,7 +80,9 @@ phase_src() {
   fi
   git -C "${EXSTACK_SRC}" cat-file -e "${EXSTACK_COMMIT}^{commit}" 2>/dev/null || git -C "${EXSTACK_SRC}" fetch -q origin "${EXSTACK_COMMIT}"
   git -C "${EXSTACK_SRC}" checkout -q --detach "${EXSTACK_COMMIT}"
-  [ "$(git -C "${EXSTACK_SRC}" rev-parse HEAD)" = "${EXSTACK_COMMIT}" ] || die "checkout is not ${EXSTACK_COMMIT}"
+  FULL_COMMIT="$(git -C "${EXSTACK_SRC}" rev-parse HEAD)"
+  case "${FULL_COMMIT}" in "${EXSTACK_COMMIT}"*) ;; *) die "checkout ${FULL_COMMIT} is not ${EXSTACK_COMMIT}" ;; esac
+  printf '%s' "${FULL_COMMIT}" >"${EXSTACK_BUILD}/.commit"
   if [ ! -e "${EXSTACK_BUILD}/.install-${EXSTACK_COMMIT}" ]; then
     log "bun install --frozen-lockfile"
     (cd "${EXSTACK_SRC}" && heavy bun install --frozen-lockfile >"${EXSTACK_LOGS}/build-install.log" 2>&1) || die "bun install failed (see build-install.log)"
@@ -100,10 +104,10 @@ phase_build() {
     log "build: web app"
     (cd "${EXSTACK_SRC}" && heavy bun run --cwd apps/web build >"${EXSTACK_LOGS}/build-web.log" 2>&1) || die "web build failed"
     log "build: server bundle"
-    (cd "${EXSTACK_SRC}" && EXPONETDB_BUILD_COMMIT="${EXSTACK_COMMIT}" heavy bun run --cwd apps/server bundle >"${EXSTACK_LOGS}/build-bundle.log" 2>&1) || die "bundle failed"
+    (cd "${EXSTACK_SRC}" && EXPONETDB_BUILD_COMMIT="$(cat "${EXSTACK_BUILD}/.commit")" heavy bun run --cwd apps/server bundle >"${EXSTACK_LOGS}/build-bundle.log" 2>&1) || die "bundle failed"
     rm -rf "${EXSTACK_BUILD}/bundle"; cp -a "${EXSTACK_SRC}/apps/server/dist/bundle" "${EXSTACK_BUILD}/bundle"
     log "build: CLI package"
-    (cd "${EXSTACK_SRC}" && EXPONETDB_BUILD_COMMIT="${EXSTACK_COMMIT}" heavy bun run --cwd apps/cli pack >"${EXSTACK_LOGS}/build-cli.log" 2>&1) || die "cli pack failed"
+    (cd "${EXSTACK_SRC}" && EXPONETDB_BUILD_COMMIT="$(cat "${EXSTACK_BUILD}/.commit")" heavy bun run --cwd apps/cli pack >"${EXSTACK_LOGS}/build-cli.log" 2>&1) || die "cli pack failed"
     rm -rf "${EXSTACK_BUILD}/cli"; mkdir -p "${EXSTACK_BUILD}/cli"
     npm install --prefix "${EXSTACK_BUILD}/cli" --offline --no-audit --no-fund "${EXSTACK_SRC}"/apps/cli/dist/artifacts/exponetdb-cli-*.tgz >>"${EXSTACK_LOGS}/build-cli.log" 2>&1 || die "cli install failed"
     log "build: node agent release ${EXSTACK_AGENT_VERSION}"
@@ -119,26 +123,14 @@ phase_build() {
 # ------------------------------------------------------------------------------------------------
 phase_control() {
   local pw="${EXSTACK_STATE}/control.superuser"
-  [ -s "$pw" ] || { umask 077; head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32 >"$pw"; }
-  mkdir -p "${EXSTACK_CONTROL_DATA}"
   if ! docker inspect "${EXSTACK_CONTROL_NAME}" >/dev/null 2>&1; then
     log "Control Store: starting ${EXSTACK_CONTROL_NAME} (PostgreSQL 17.11, 127.0.0.1:${EXSTACK_PORT_CONTROL})"
-    docker run -d --name "${EXSTACK_CONTROL_NAME}" --label purpose=exponetdb-stack \
-      -e POSTGRES_PASSWORD="$(cat "$pw")" -e PGDATA=/var/lib/postgresql/data/pgdata \
-      -v "${EXSTACK_CONTROL_DATA}:/var/lib/postgresql/data" \
-      -p "127.0.0.1:${EXSTACK_PORT_CONTROL}:5432" "${EXSTACK_CONTROL_IMAGE}" -c max_connections=200 >/dev/null
+    control_container_start postgres || die "Control Store did not come up"
   fi
-  # the image's init server listens on the socket only: wait for a TCP answer (the final server)
-  local i
-  for i in $(seq 1 90); do
-    docker exec -e PGPASSWORD="$(cat "$pw")" "${EXSTACK_CONTROL_NAME}" psql -h 127.0.0.1 -U postgres -tAc 'SELECT 1' >/dev/null 2>&1 && break
-    sleep 1
-  done
-  docker exec -e PGPASSWORD="$(cat "$pw")" "${EXSTACK_CONTROL_NAME}" psql -h 127.0.0.1 -U postgres -tAc 'SELECT 1' >/dev/null || die "Control Store did not come up"
   if [ ! -s "${EXSTACK_STATE}/installation_id" ]; then
     rm -f "${EXSTACK_STATE}/control.cred" "${EXSTACK_STATE}/bootstrap.sql"
     EXPONETDB_LOG_LEVEL=warn node_run control-store bootstrap-sql --credentials-file "${EXSTACK_STATE}/control.cred" --output "${EXSTACK_STATE}/bootstrap.sql" >/dev/null
-    docker exec -i -e PGPASSWORD="$(cat "$pw")" "${EXSTACK_CONTROL_NAME}" psql -X -q -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 <"${EXSTACK_STATE}/bootstrap.sql" >/dev/null
+    docker exec -i -e PGPASSWORD="$(cat "$pw")" "${EXSTACK_CONTROL_NAME}" psql -X -q -h 127.0.0.1 -U "$(_stk_super)" -d postgres -v ON_ERROR_STOP=1 <"${EXSTACK_STATE}/bootstrap.sql" >/dev/null
     local out
     out="$(EXPONETDB_LOG_LEVEL=warn EXPONETDB_CONTROL_STORE_URL="$(store_url exdb_migrate)" node_run control-store migrate)" || die "control-store migrate failed"
     jq -r .installationId <<<"$out" >"${EXSTACK_STATE}/installation_id"
@@ -249,8 +241,14 @@ phase_targets() {
   local out="${EXSTACK_STATE}/nodeclusters"
   if [ ! -e "${EXSTACK_STATE}/clusters.done" ]; then
     log "targets: PostgreSQL clusters ${EXSTACK_MAJORS} (tooling/dev/node-clusters.sh)"
+    # the product's script fixes the port (554NN) and the cluster name (exdbnode); a copy with the stack's own values
+    sed -e "s|port=\"554\$v\"|port=\"\$((${EXSTACK_PG_PORT_BASE} + v))\"|" -e "s|^name=\"exdbnode\"|name=\"${EXSTACK_CLUSTER_NAME}\"|" \
+      "${EXSTACK_SRC}/tooling/dev/node-clusters.sh" >"${EXSTACK_STATE}/node-clusters.sh"
+    if [ "${EXSTACK_PG_PORT_BASE}" != 55400 ] || [ "${EXSTACK_CLUSTER_NAME}" != exdbnode ]; then
+      grep -q "${EXSTACK_PG_PORT_BASE}" "${EXSTACK_STATE}/node-clusters.sh" || die "could not patch the cluster script for the ports"
+    fi
     EXDB_NODE_PG_VERSIONS="${EXSTACK_MAJORS}" EXDB_NODE_AGENT_USER=exponetdb-node \
-      bash "${EXSTACK_SRC}/tooling/dev/node-clusters.sh" "$out" >/dev/null || die "node-clusters.sh failed"
+      bash "${EXSTACK_STATE}/node-clusters.sh" "$out" >/dev/null || die "node-clusters.sh failed"
     # TLS: a lab CA signs a server certificate with the names the registry verifies (verify-full)
     local tls="${EXSTACK_STATE}/tls"
     if [ ! -s "${tls}/ca.crt" ]; then
@@ -269,10 +267,12 @@ phase_targets() {
     done
     touch "${EXSTACK_STATE}/clusters.done"
   fi
-  local v listening
+  local v a
   for v in ${EXSTACK_MAJORS}; do
-    listening="$(ss -Hltn "sport = :$((55400 + v))" | awk '{print $4}' | tr '\n' ' ')"
-    case "$listening" in "127.0.0.1:$((55400 + v)) ") ;; *) die "cluster ${v} listens on: ${listening:-nothing}" ;; esac
+    # loopback only: 127.0.0.1 and ::1 (the Debian default listen_addresses = localhost)
+    while read -r a; do
+      case "$a" in "127.0.0.1:$((EXSTACK_PG_PORT_BASE + v))"|"[::1]:$((EXSTACK_PG_PORT_BASE + v))") ;; *) die "cluster ${v} listens on ${a}" ;; esac
+    done < <(ss -Hltn "sport = :$((EXSTACK_PG_PORT_BASE + v))" | awk '{print $4}')
     PGSSLMODE=require psql_target "pg${v}" -tAc 'SHOW ssl' | grep -q '^on$' || die "cluster ${v}: ssl is off"
   done
   log "targets: clusters ${EXSTACK_MAJORS} online on 127.0.0.1, ssl on"
@@ -316,12 +316,13 @@ phase_cli() {
 phase_registry() {
   if [ -e "${EXSTACK_STATE}/registry.done" ]; then log "registry already seeded"; return; fi
   ( cd "${EXSTACK_KIT}" && EXSTACK_OWNER_FILE="${EXSTACK_STATE}/owner.json" EXSTACK_STATE="${EXSTACK_STATE}" \
-      EXSTACK_MAJORS="${EXSTACK_MAJORS}" bun --conditions=@exponetdb/source seed.ts registry ) | tee -a "$LOG" >&2
+      EXSTACK_MAJORS="${EXSTACK_MAJORS}" EXSTACK_PG_PORT_BASE="${EXSTACK_PG_PORT_BASE}" bun --conditions=@exponetdb/source seed.ts registry ) | tee -a "$LOG" >&2
   touch "${EXSTACK_STATE}/registry.done"
 }
 
 # ------------------------------------------------------------------------------------------------
 phase_agent() {
+  if [ "${EXSTACK_AGENT}" = 0 ]; then log "AGENT=0: no node agent on this stack"; return; fi
   local pkg="${EXSTACK_BUILD}/agent" v="${EXSTACK_AGENT_VERSION}"
   if [ -e "${EXSTACK_STATE}/agent.done" ]; then log "agent already installed"; return; fi
   ( cd "$pkg" && sha256sum -c "SHA256SUMS-${v}" >/dev/null ) || die "agent release checksums do not match"
@@ -357,8 +358,20 @@ phase_smoke() {
   log "smoke: auth status"
   exdb auth status | head -6
   log "smoke: targets and nodes"
-  exdb_json target list | jq -c '{targets: ((.data // .items // .) | length)}'
-  exdb_json node list | jq -c '{nodes: ((.data // .items // .) | length)}'
+  exdb_json target list | jq -c '{targets: (.data.items | length), states: [.data.items[].state] | unique}'
+  exdb_json node list | jq -c '{nodes: (.data.items | length), states: [.data.items[].state] | unique}'
+  # a trivial migration through plan, apply and verify on every nonprod target (PostgreSQL 16, 17, 18)
+  local dir t
+  dir="$(new_project smoke)"
+  mkb "$dir" stack-smoke >/dev/null <<'SQL'
+CREATE TABLE public.stack_smoke (id integer PRIMARY KEY);
+SQL
+  for t in staging dev16 dev18; do
+    mplan "$dir" "lab/platform/$t" >/dev/null; mapply "" --wait >/dev/null || true
+    [ -n "$OP_ID" ] || die "smoke migration on $t: no operation"
+    log "smoke: lab/platform/$t -> $(op_state "$OP_ID")"
+    case "$(op_state "$OP_ID")" in "succeeded apply=applied verify=passed"*) ;; *) die "smoke migration on $t did not end applied and verified" ;; esac
+  done
   touch "${EXSTACK_STATE}/stack.up"
   log "stack is up. Reach it: source ${HERE}/stack-env.sh; exdb target list; psql_target pg17"
 }

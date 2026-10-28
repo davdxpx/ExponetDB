@@ -52,7 +52,7 @@ describe('I15 file sizes (documented: migration-bundles.md §1; code: BUNDLE_FIL
     expect(JSON.stringify(over)).toContain('"file":"up.sql"')
   })
   test('up.sql: the limit counts BYTES (a 2-byte character counts twice)', () => {
-    const half = 'CREATE TABLE public.t (i int);\n--' + 'é'.repeat((4 * 1024 * 1024 - 34) / 2)
+    const half = 'CREATE TABLE public.t (i int);\n-- ' + '\u00e9'.repeat((4 * 1024 * 1024 - 34) / 2)
     expect(enc(half).length).toBe(4 * 1024 * 1024)
     expect(reason(validateBundle(mk({ up: half })))).toBe('ok')
     expect(reason(validateBundle(mk({ up: half + 'é' })))).toBe('file_too_large')

@@ -15,14 +15,16 @@ Tree under test: `d51da5d0d8832ebc569f23985c7e5176e4d450ad` (merge of fix PR #46
 | `I3-order-is-the-dag.pure.test.ts` | I3 graph: diamond, 1,000 chain, 5,000 fan-out, cycle, self, unknown, cross-project, shuffles | nothing |
 | `I3-order.int.test.ts` | I3 plan order / apply order / plan content on real PostgreSQL 17 | targets + Control Store |
 | `I4-atomicity.pure.test.ts` | I4 lint / classifier matrix (about 250 statements) | nothing |
-| `I4-atomicity.int.test.ts` | I4 apply on PostgreSQL 16, 17, 18 through the engine (hazards in function bodies, engine guards, locks) | targets + Control Store |
+| `I4-classifier-vs-server.int.test.ts` | I4 40 statements, the server (BEGIN ... ROLLBACK) as oracle for "cannot run in a transaction block" | targets |
+| `I4-atomicity.int.test.ts` | I4 apply on PostgreSQL 16, 17, 18 through the engine (34 hazards in function bodies, 16 host-reaching statements, 15 lint hazards, engine guards, locks) | targets + Control Store |
 | `I5-parser-equals-server.int.test.ts` | I5 seeded scripts: model = server = repo ranges = c1 executable text, PostgreSQL 16/17/18 | targets |
-| `I5-edges.int.test.ts` | I5 edge inputs (comment continuation, VT, depth, 3 MB, 100,000 statements) | targets |
+| `I5-edges.int.test.ts` | I5 edge inputs (comment continuation, VT, depth, 3 MB, 100,000 statements, scs off) | targets |
+| `I5-mutation.int.test.ts` | I5 single-edit mutants of generated scripts: server, libpg_query and c1 compared | targets |
 | `I13-immutability.int.test.ts` | I13 bundle store: same id other bytes, races, mirror window, dangling bundle | targets + Control Store |
 | `I14-containment.pure.test.ts` | I14 hostile content in CHILD processes (`node --liftoff-only`): time, CPU, RSS; loader on hostile directories | nothing |
 | `I15-limits.pure.test.ts` | I15 every limit at the boundary (accepted at the limit, refused one past it) | nothing |
 | `I15-time.int.test.ts` | I15 statement / lock timeouts | targets + Control Store |
-| `lib/`, `tools/` | generator with a model (`lib/gen.ts`), pg helpers, probe and dump programs | |
+| `lib/`, `tools/` | generator with a model (`lib/gen.ts`), pg helpers, `tools/probe.ts` (one hostile input per child process), `tools/densescale.ts`, `tools/lintscale.ts`, `tools/dump.ts` (I1 matrix), `tools/turkish.mjs` | |
 | `fixtures/` | minimal reproducers of the findings | |
 | `RESULTS.md` | counts and verdicts per invariant | |
 
@@ -57,7 +59,7 @@ The first run adds `packages/b2-conformance` to the checkout's workspace and run
 (the lockfile of the THROWAWAY checkout gains the new workspace entry; the packages and versions are the
 ones already in the lockfile). Nothing is written to `/home/david/Development/ExponetDB-verify`.
 
-Environment knobs: `B2_I5_SEEDS` (default 120 scripts per major), `B2_MEASURE_FILE` (JSON lines with time/CPU/RSS
+Environment knobs: `B2_I5_SEEDS` (default 120 scripts per major), `B2_I5_MUTANTS` (default 150 per major), `B2_MEASURE_FILE` (JSON lines with time/CPU/RSS
 of the scale tests, default `/tmp/b2-run/measure.jsonl`), `B2_FIXTURE_OUT` (minimal reproducers written by I5),
 `B2_NODE` / `B2_BUN` (runtime used by the child-process tests, default `node` / `bun` on PATH).
 

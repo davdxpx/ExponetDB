@@ -169,13 +169,13 @@ function bareStatement(s: Stmt, r: Rng): string {
 }
 
 /** A script of `count` statements; `tables` upper-bounds the comment targets. */
-export function script(seed: number, count: number, opts: { trailingSemicolon?: boolean } = {}): Script {
+export function script(seed: number, count: number, opts: { trailingSemicolon?: boolean; noDo?: boolean } = {}): Script {
   const r = new Rng(seed)
   const stmts: Stmt[] = []
   const model: Model = { comments: {}, tables: [], log: [] }
   const used = new Set<string>()
   for (let k = 0; k < count; k++) {
-    const kind = r.pick(['comment', 'comment', 'table', 'do', 'do'] as const)
+    const kind = opts.noDo === true ? r.pick(['comment', 'comment', 'table'] as const) : r.pick(['comment', 'comment', 'table', 'do', 'do'] as const)
     if (kind === 'comment') {
       const s: Stmt = { kind, k, value: randomValue(r, 20), form: r.pick(FORMS) }
       stmts.push(s)

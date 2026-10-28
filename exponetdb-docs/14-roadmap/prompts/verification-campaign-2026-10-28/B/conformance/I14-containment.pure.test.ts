@@ -93,6 +93,24 @@ describe('I14 hostile SQL content: wall time and memory of one bundle through c1
   })
 })
 
+describe('I14 memory per REQUEST (not per parse): several dense bundles in one lint', () => {
+  // 66,000 x "SELECT 1;" = 198,000 tokens = 660 KB per bundle: valid SQL under every documented limit
+  // (4 MiB per file, 200,000 tokens per parse, 50 bundles and 32 MiB per request).
+  // The heap limit is the one deployment.md section 2a derives for the documented 512 MiB container (259 MiB).
+  for (const k of [3, 6]) {
+    test(`${k} dense bundles (${(k * 0.66).toFixed(1)} MB) in one lint request: no V8 out-of-memory, peak RSS within 512 MiB`, () => {
+      const r = spawnSync(
+        process.env['B2_NODE'] ?? 'node',
+        ['--liftoff-only', '--max-old-space-size=259', '--conditions=@exponetdb/source', join(here, 'tools', 'densescale.ts'), String(k)],
+        { encoding: 'utf8', timeout: 180_000, maxBuffer: 8 * 1024 * 1024 },
+      )
+      expect(r.status, `exit ${r.status} (134 = V8 fatal out of memory): ${(r.stderr || '').split('\n').find((l) => /heap|memory|FATAL/i.test(l)) ?? ''}`).toBe(0)
+      const line = JSON.parse(r.stdout.trim().split('\n').at(-1) ?? '{}') as { rssMb: number }
+      expect(line.rssMb, `peak RSS ${line.rssMb} MiB for ${k} dense bundles`).toBeLessThanOrEqual(RSS_BUDGET_MB)
+    }, 200_000)
+  }
+})
+
 describe('I14 manifest (migration.yaml, at most 64 KiB): hostile YAML', () => {
   const YAML_CASES: [string, number, string][] = [
     ['yaml-flow-depth', 30_000, '30,000 nested flow sequences'],

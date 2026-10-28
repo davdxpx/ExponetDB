@@ -21,10 +21,12 @@ timedatectl set-ntp true 2>/dev/null
 say "services"
 for r in serve worker gateway; do systemctl disable --now "${EXSTACK_UNIT_PREFIX}-${r}.service" 2>/dev/null; rm -f "/etc/systemd/system/${EXSTACK_UNIT_PREFIX}-${r}.service"; done
 say "node agent"
+if [ "${EXSTACK_AGENT}" != 0 ]; then
 systemctl disable --now exponetdb-node.service exponetdb-node-helper.socket exponetdb-node-helper.service 2>/dev/null
 rm -f /etc/systemd/system/exponetdb-node.service /etc/systemd/system/exponetdb-node-helper.service /etc/systemd/system/exponetdb-node-helper.socket \
       /usr/bin/exponetdb-node /usr/sbin/exponetdb-node-helper
 rm -rf /etc/exponetdb-node /var/lib/exponetdb-node /var/lib/exponetdb-node-helper /var/lib/exponetdb-node-engine /usr/share/doc/exponetdb-node /run/exponetdb-node
+fi
 systemctl daemon-reload
 say "Control Store"
 docker rm -f "${EXSTACK_CONTROL_NAME}" >/dev/null 2>&1
