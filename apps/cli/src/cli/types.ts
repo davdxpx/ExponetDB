@@ -9,7 +9,11 @@ import type { Profile, ProfileStore } from './profiles.ts'
  * dispatcher, the remote seam and the commands never import each other in
  * a circle).
  */
-export type FlagType = 'boolean' | 'string' | 'number' | 'duration' | 'enum' | 'list'
+/**
+ * `list`: one occurrence, split on commas. `repeat`: every occurrence is one whole value (a JSON
+ * text holds commas), and the flag may be given again.
+ */
+export type FlagType = 'boolean' | 'string' | 'number' | 'duration' | 'enum' | 'list' | 'repeat'
 
 export interface FlagSpec {
   readonly name: string

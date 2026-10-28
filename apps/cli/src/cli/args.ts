@@ -140,6 +140,8 @@ function convert(flag: FlagSpec, raw: string): string | number | boolean | reado
       }
       return raw
     }
+    case 'repeat':
+      return [raw]
     case 'list':
       return raw
         .split(',')
@@ -233,6 +235,10 @@ export function parse(commands: readonly CommandSpec[], argv: readonly string[])
     value: string | number | boolean | readonly string[],
   ) => {
     const before = target.get(flag.name)
+    if (flag.type === 'repeat' && Array.isArray(before) && Array.isArray(value)) {
+      target.set(flag.name, [...before, ...value])
+      return
+    }
     if (before !== undefined && JSON.stringify(before) !== JSON.stringify(value)) {
       throw new UsageError(`--${flag.name} is given twice with different values.`, undefined, spec)
     }

@@ -1144,3 +1144,266 @@ describe('ledger reconcile (TC-007)', () => {
     })
   })
 })
+
+describe('node plans create their own basis observation (TC-002)', () => {
+  const OBSERVED_FRESH = '2026-10-26T11:58:00.000Z'
+  const OBSERVED_STALE = '2026-10-26T11:20:00.000Z'
+  const INSPECTION_OP = id('op', 9)
+
+  function node(capabilities: readonly string[]) {
+    return ok('getNode', {
+      id: NOD,
+      serverId: id('srv', 10),
+      state: 'active',
+      agentVersion: '0.7.0',
+      protocolMajor: 1,
+      lastHeartbeatAt: T,
+      clockSkewMs: 0,
+      capabilities: capabilities.map((c) => ({
+        name: c.split('@')[0],
+        major: Number(c.split('@')[1]),
+      })),
+      clusters: [],
+      host: null,
+      nodeCertificateExpiresAt: null,
+      source: 'agent_reported',
+      observedAt: T,
+    })
+  }
+  const observation = (capability: string, observedAt: string) => ({
+    capability,
+    clusterId: CLS,
+    argsHash: HASH,
+    operationId: id('op', 11),
+    jobId: id('job', 12),
+    source: 'agent_reported',
+    observedAt,
+    result: {},
+  })
+
+  /** A node that offers the kinds, with the observations it has, and an inspection that succeeds. */
+  function world(
+    observations: readonly ReturnType<typeof observation>[] = [],
+    inspect: Answer | null = null,
+  ) {
+    on(
+      'GET',
+      `/nodes/${NOD}`,
+      node([
+        'postgres.reload@2',
+        'postgres.restart@1',
+        'postgres.config.apply@2',
+        'postgres.roles.apply@2',
+        'postgres.extensions.apply@1',
+      ]),
+    )
+    on('GET', `/nodes/${NOD}/observations`, (req) =>
+      ok('listNodeObservations', {
+        items: observations.filter((o) => o.capability === req.query.get('capability')),
+      }),
+    )
+    on(
+      'POST',
+      `/nodes/${NOD}/inspections`,
+      inspect ?? operation('inspectNode', 'node.inspect', 'queued'),
+    )
+    on(
+      'GET',
+      `/operations/${INSPECTION_OP}`,
+      operation('getOperation', 'node.inspect', 'succeeded'),
+    )
+  }
+  const planned = (kind: string) =>
+    on('POST', `/nodes/${NOD}/plans`, plan('planNodeOperation', kind))
+  const order = () =>
+    requests.filter((r) => r.method === 'POST').map((r) => r.path.replace(NOD, 'NOD'))
+
+  it('inspects the config plan with the changes as typed arguments, then plans', async () => {
+    world()
+    planned('postgres.config.apply')
+    const out = await cli([
+      'node',
+      'postgres',
+      'config',
+      NOD,
+      '--cluster',
+      CLS,
+      '--set',
+      'work_mem=8MB',
+      '--reset',
+      'max_wal_size',
+      '--no-wait',
+    ])
+    expect(out.code, out.stderr).toBe(0)
+    expect(order()).toEqual(['/nodes/NOD/inspections', '/nodes/NOD/plans'])
+    expect(sent('POST', `/nodes/${NOD}/inspections`)[0]?.body).toEqual({
+      capability: 'postgres.config.plan@2',
+      clusterId: CLS,
+      args: {
+        changes: [
+          { name: 'work_mem', value: '8MB' },
+          { name: 'max_wal_size', value: null },
+        ],
+      },
+    })
+    expect(sent('POST', `/nodes/${NOD}/plans`)[0]?.body).toMatchObject({
+      clusterId: CLS,
+      change: { kind: 'postgres.config.apply', reload: true },
+    })
+  })
+
+  it('inspects the roles with an empty list of expected settings', async () => {
+    world()
+    planned('postgres.roles.apply')
+    const file = join(dir, 'roles.json')
+    await writeFile(
+      file,
+      JSON.stringify({
+        steps: [
+          {
+            op: 'grant_membership',
+            role: 'reports',
+            attributes: null,
+            verifier: null,
+            member: 'analyst',
+            admin: false,
+            inherit: true,
+            set: true,
+            database: null,
+            setting: null,
+            value: null,
+          },
+        ],
+      }),
+    )
+    const out = await cli([
+      'node',
+      'postgres',
+      'roles',
+      NOD,
+      '--cluster',
+      CLS,
+      '--file',
+      file,
+      '--no-wait',
+    ])
+    expect(out.code, out.stderr).toBe(0)
+    expect(sent('POST', `/nodes/${NOD}/inspections`)[0]?.body).toEqual({
+      capability: 'postgres.roles.inspect@2',
+      clusterId: CLS,
+      args: { expectSettings: [] },
+    })
+  })
+
+  it('reuses an observation younger than five minutes where the arguments do not depend on the change', async () => {
+    world([observation('postgres.status@1', OBSERVED_FRESH)])
+    planned('postgres.reload')
+    const reused = await cli(['node', 'postgres', 'reload', NOD, '--cluster', CLS, '--no-wait'])
+    expect(reused.code, reused.stderr).toBe(0)
+    expect(order()).toEqual(['/nodes/NOD/plans'])
+    // An older one is made again.
+    requests = []
+    world([observation('postgres.status@1', OBSERVED_STALE)])
+    const again = await cli(['node', 'postgres', 'reload', NOD, '--cluster', CLS, '--no-wait'])
+    expect(again.code, again.stderr).toBe(0)
+    expect(order()).toEqual(['/nodes/NOD/inspections', '/nodes/NOD/plans'])
+    expect(sent('POST', `/nodes/${NOD}/inspections`)[0]?.body).toEqual({
+      capability: 'postgres.status@1',
+      clusterId: CLS,
+      args: {},
+    })
+  })
+
+  it('always inspects where the arguments are the change, however fresh the last one is', async () => {
+    world([observation('postgres.config.plan@2', OBSERVED_FRESH)])
+    planned('postgres.config.apply')
+    await cli([
+      'node',
+      'postgres',
+      'config',
+      NOD,
+      '--cluster',
+      CLS,
+      '--set',
+      'work_mem=8MB',
+      '--no-wait',
+    ])
+    expect(order()).toEqual(['/nodes/NOD/inspections', '/nodes/NOD/plans'])
+  })
+
+  it('skips the inspection with --no-inspect, and plans nothing when the inspection fails', async () => {
+    world()
+    planned('postgres.config.apply')
+    await cli([
+      'node',
+      'postgres',
+      'config',
+      NOD,
+      '--cluster',
+      CLS,
+      '--set',
+      'work_mem=8MB',
+      '--no-inspect',
+      '--no-wait',
+    ])
+    expect(order()).toEqual(['/nodes/NOD/plans'])
+    requests = []
+    world([], operation('inspectNode', 'node.inspect', 'queued'))
+    on('GET', `/operations/${INSPECTION_OP}`, operation('getOperation', 'node.inspect', 'failed'))
+    const failed = await cli([
+      'node',
+      'postgres',
+      'config',
+      NOD,
+      '--cluster',
+      CLS,
+      '--set',
+      'work_mem=8MB',
+      '--no-wait',
+    ])
+    expect(failed.code).not.toBe(0)
+    expect(order()).toEqual(['/nodes/NOD/inspections'])
+  })
+
+  it('node inspect takes typed arguments with --arg-json, and refuses invalid JSON before sending', async () => {
+    world()
+    const ok1 = await cli([
+      'node',
+      'inspect',
+      NOD,
+      '--capability',
+      'postgres.config.plan@2',
+      '--cluster',
+      CLS,
+      '--arg-json',
+      'changes=[{"name":"work_mem","value":"8MB"},{"name":"max_wal_size","value":null}]',
+      '--arg-json',
+      'expectSettings=[]',
+      '--arg',
+      'note=text',
+    ])
+    expect(ok1.code, ok1.stderr).toBe(0)
+    expect(sent('POST', `/nodes/${NOD}/inspections`)[0]?.body).toMatchObject({
+      args: {
+        changes: [
+          { name: 'work_mem', value: '8MB' },
+          { name: 'max_wal_size', value: null },
+        ],
+        expectSettings: [],
+        note: 'text',
+      },
+    })
+    requests = []
+    const bad = await cli([
+      'node',
+      'inspect',
+      NOD,
+      '--capability',
+      'postgres.roles.inspect@2',
+      '--arg-json',
+      'expectSettings=[oops',
+    ])
+    expect(bad.code).toBe(EXIT.usage)
+    expect(sent('POST', `/nodes/${NOD}/inspections`)).toEqual([])
+  })
+})

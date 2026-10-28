@@ -296,6 +296,24 @@ at most 10 minutes old, otherwise `NODE_OBSERVATION_STALE`. The plan content
 is the exact change and the mapping; the expected state binds the node id
 and state, the mapping and the basis observation's digest; the analysis is
 taken from the observation, so the person approves what the node reported.
+**[DECIDED]** (test campaign TC-002) The CLI makes the basis observation
+itself. `exponetdb node postgres reload|restart|config|hba|roles|extensions|tls`
+runs the kind's basis capability first (`BASIS` in `capability-plans.ts`: the
+capability, and the arguments `basisArgs` derives from the change: the
+`changes` of a config plan, the `database` of an extension plan, an empty
+`expectSettings` for roles), waits for its signed result and then plans.
+An observation of the same capability younger than five minutes is reused only
+where the arguments do not depend on the change (reload, restart, hba, roles,
+tls); the config and extension plans bind exactly their own arguments and
+always inspect first. `--no-inspect` plans against an observation you made
+yourself. Before this, a config or roles plan was a dead end from the CLI:
+`node inspect --arg` took string values only, so `changes` and
+`expectSettings` arrived as the strings `"[]"` and failed the contract,
+and the remediation of `NODE_OBSERVATION_STALE` sent the person into it.
+`node inspect --arg-json k=<json>` (repeatable, each value whole: a list
+flag splits on commas) takes the typed arguments for anyone who runs the
+inspection on its own.
+
 **[DECIDED]** (test campaign TC-001) The plan view (`GET /plans/{id}`, the CLI
 `plan show`, the Web plan page) carries that content and analysis as `change`
 for the seven kinds above that are `postgres.*`, so the person sees the

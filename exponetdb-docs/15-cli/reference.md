@@ -1453,6 +1453,7 @@ Runs: against the server; effect: plan; action: `node.inspect`; scopes: `nodes.p
 | `--capability <name@major>` | An inspectable capability. (required) |
 | `--cluster <cls_…>` | The cluster (for postgres capabilities). |
 | `--arg <k=v>` | Capability arguments (string values). |
+| `--arg-json <k=json>` | Capability arguments as JSON (arrays and objects, for example changes=[…]). |
 | `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
 
 ### node postgres reload
@@ -1471,6 +1472,7 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 |---|---|
 | `node` (required) | The node id (nod_…). |
 | `--cluster <cls_…>` | The cluster on the node. (required) |
+| `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
@@ -1492,6 +1494,7 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 |---|---|
 | `node` (required) | The node id (nod_…). |
 | `--cluster <cls_…>` | The cluster on the node. (required) |
+| `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
@@ -1516,6 +1519,7 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 | `--set <name=value>` | Parameters to set. |
 | `--reset <name>` | Parameters to reset. |
 | `--no-reload` | Do not reload after applying. |
+| `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
@@ -1538,6 +1542,7 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 | `node` (required) | The node id (nod_…). |
 | `--cluster <cls_…>` | The cluster on the node. (required) |
 | `--file <path>` | The change as JSON or YAML (checked against the contract). (required) |
+| `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
@@ -1560,6 +1565,7 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 | `node` (required) | The node id (nod_…). |
 | `--cluster <cls_…>` | The cluster on the node. (required) |
 | `--file <path>` | The change as JSON or YAML (checked against the contract). (required) |
+| `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
@@ -1582,6 +1588,7 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 | `node` (required) | The node id (nod_…). |
 | `--cluster <cls_…>` | The cluster on the node. (required) |
 | `--file <path>` | The change as JSON or YAML (checked against the contract). (required) |
+| `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
@@ -1604,6 +1611,7 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 | `node` (required) | The node id (nod_…). |
 | `--cluster <cls_…>` | The cluster on the node. (required) |
 | `--file <path>` | The change as JSON or YAML (checked against the contract). (required) |
+| `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
