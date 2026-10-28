@@ -995,7 +995,10 @@ quadratic regular expression. They wait for the owner's go-ahead.
 **Update 2026-10-28 (test campaign, [fix prompt](../prompts/2026-10-27-test-campaign-fixes.md)):**
 the single-quoted `DO` body is fixed (TC-003: the token bound reads a body
 whatever its quoting, [deployment.md §2a](../../12-operations/deployment.md#2a-memory)).
-The other two are tracked as TC-004 and TC-021 in
+The `search_path` check is fixed too (TC-004: a linear scan per statement
+instead of a backtracking regular expression; 4 MiB of the worst text took
+17 s at 100 000 characters before, a few milliseconds now). The memory over a
+whole history is tracked as TC-021 in
 [`PRE-WAVE-11-REVIEW.md`](../PRE-WAVE-11-REVIEW.md#test-campaign-fixes--parallel-session).
 
 ## 10. Follow-up 4: re-verifying a baseline after later verified migrations (2026-10-24)

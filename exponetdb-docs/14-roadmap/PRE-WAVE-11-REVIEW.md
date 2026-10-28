@@ -719,9 +719,10 @@ evidence; nothing here is a claim that it passed on real infrastructure):
 | Finding | Status | Regression artifact | Document |
 |---|---|---|---|
 | TC-003 single-quoted `DO` body bypasses the token bound | IMPLEMENTED, TESTED LOCALLY (red without the fix, green with it) | `packages/postgres/test/legacy-references.test.ts` (four single-quoted shapes, the decoder, the negative cases), `packages/migrations-engine/test/legacy-files.test.ts` (the `422 too_large` and a 4 MiB `DO '…'` refused within 200 MiB of growth) | [deployment.md §2a](../12-operations/deployment.md#2a-memory), [9-part-a.md §9](./gates/9-part-a.md) |
+| TC-004 `search_path` strictness check is a quadratic regular expression | IMPLEMENTED, TESTED LOCALLY (red on the old regex for all four families, green with the scan) | `packages/postgres/test/cluster-global.test.ts` (differential fast-check against the old regex, 30 000 cases; scaling `time(1 MiB) / time(256 KiB) < 8` and 1 MiB under 200 ms for `one_ws`, `rep_noterm`, `rep_comma`, `rep_pad`; the strictness results unchanged) | [9-part-a.md §9](./gates/9-part-a.md) |
 
 ### TC-2. Review history (append-only)
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-10-28 | (this branch) | section opened; TC-003 |
+| 2026-10-28 | (this branch) | section opened; TC-003, TC-004 |
