@@ -457,12 +457,55 @@ func (e *engineRun) pgbrVerify(ctx context.Context) {
 	if set := e.str("label"); set != "" {
 		args = append(args, "--set="+set)
 	}
-	code, err := e.exec(ctx, PgBackRest, e.pgbr(append(args, "verify")...), nil, nil)
+	scan := &verifyScan{}
+	code, err := e.exec(ctx, PgBackRest, e.pgbr(append(args, "verify")...), nil, scan.line)
 	e.finishExit(code, err)
 	if err == nil && code == 0 {
-		n := int64(0)
+		// pgbackrest verify exits 0 when it reports a corrupt or missing file (TC-011, D-03): the
+		// result is in its text, and a backup is not verified on a corrupt archive.
+		n := scan.errors()
 		e.outcome.VerifyErrors = &n
+		if n > 0 {
+			e.outcome.State = "failed"
+			e.note("pgbackrest verify reported %d error(s) in the repository", n)
+		}
 	}
+}
+
+// verifyCountsRE is the line pgBackRest prints under each archive and backup it verified.
+var verifyCountsRE = regexp.MustCompile(`^\s*missing:\s*(\d+),\s*checksum invalid:\s*(\d+),\s*size invalid:\s*(\d+),\s*other:\s*(\d+)\s*$`)
+
+// verifyFlaggedRE is what marks a bad result without a count: an error or invalid status of the
+// stanza or a backup, and the warning for a file that did not verify.
+var verifyFlaggedRE = regexp.MustCompile(`(?i)^\s*status:\s*(?:error|invalid)\b|,\s*status:\s*(?:error|invalid)\b|invalid result`)
+
+// verifyScan reads pgbackrest verify's text: the files it counted as missing or invalid, or, when
+// it counted none, the lines that say a result was bad (at least one error then).
+type verifyScan struct {
+	counted int64
+	flagged int64
+}
+
+func (v *verifyScan) line(l string) {
+	if m := verifyCountsRE.FindStringSubmatch(l); m != nil {
+		for _, field := range m[1:] {
+			n, err := strconv.ParseInt(field, 10, 64)
+			if err == nil && n > 0 {
+				v.counted += n
+			}
+		}
+		return
+	}
+	if verifyFlaggedRE.MatchString(l) {
+		v.flagged++
+	}
+}
+
+func (v *verifyScan) errors() int64 {
+	if v.counted > 0 {
+		return v.counted
+	}
+	return v.flagged
 }
 
 func (e *engineRun) pgbrInfo(ctx context.Context) (*pgbrStanza, bool) {

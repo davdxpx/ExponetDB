@@ -970,6 +970,52 @@ func TestEngineRunPgBackRestBackup(t *testing.T) {
 	}
 }
 
+// pgbackrest verify exits 0 even when it reports a corrupt or missing file: the result is in its
+// text. A verified backup must not rest on a corrupt archive (TC-011, D-03): the run counts what
+// pgBackRest reports and fails when it reported anything.
+func TestEngineRunVerifyReadsWhatPgBackRestReports(t *testing.T) {
+	counts := func(missing, checksum, size, other int) string {
+		return fmt.Sprintf("    missing: %d, checksum invalid: %d, size invalid: %d, other: %d\n", missing, checksum, size, other)
+	}
+	clean := "P00   INFO: verify command begin 2.60.0: --stanza=main\n" +
+		"stanza: main\nstatus: ok\n" +
+		"  archiveId: 17-1, total WAL checked: 3, total valid WAL: 3\n" + counts(0, 0, 0, 0) +
+		"  backup: 20261007-010000F, status: ok, total files checked: 12, total valid files: 12\n" + counts(0, 0, 0, 0) +
+		"P00   INFO: verify command end: completed successfully\n"
+	for _, c := range []struct {
+		name   string
+		out    string
+		errors int64
+		state  string
+	}{
+		{"clean", clean, 0, "succeeded"},
+		{"a corrupt WAL segment", "P01   WARN: invalid result 000000010000000100000023-0123456789abcdef: checksum mismatch, Data corruption detected\n" +
+			"stanza: main\nstatus: error\n  archiveId: 17-1, total WAL checked: 3, total valid WAL: 2\n" + counts(0, 1, 0, 0), 1, "failed"},
+		{"a deleted WAL segment", "stanza: main\nstatus: error\n  archiveId: 17-1, total WAL checked: 2, total valid WAL: 2\n" + counts(1, 0, 0, 0), 1, "failed"},
+		{"an invalid backup", "stanza: main\nstatus: error\n  archiveId: 17-1, total WAL checked: 3, total valid WAL: 3\n" + counts(0, 0, 0, 0) +
+			"  backup: 20261007-010000F, status: invalid, total files checked: 12, total valid files: 9\n" + counts(1, 2, 0, 0), 3, "failed"},
+		// No count line at all: an error status or an invalid result is still at least one error.
+		{"an error status without counts", "P01   WARN: invalid result 000000010000000100000023-0123: Data corruption detected\nstanza: main\nstatus: error\n", 2, "failed"},
+	} {
+		b := newBackupEnv(t)
+		b.mode("")
+		b.mustCall(OpBackupVerify, b.job("backup.verify", canon.Object{{Name: "cluster", Value: cluster()}, {Name: "repository", Value: pgbrRepo()},
+			{Name: "runId", Value: canon.String(runA)}, {Name: "label", Value: canon.Null{}}, {Name: "snapshot", Value: canon.Null{}}}))
+		fx := &fakeExec{fn: func(e engineCmd) (int, string) {
+			if strings.HasSuffix(strings.Join(e.Args, " "), " info") {
+				return 0, pgbrInfoFixture(sysid)
+			}
+			return 0, c.out
+		}}
+		b.engine(runA, fx, context.Background())
+		st := b.status(b.record(runA))
+		out, _ := canon.Canonicalize(st)
+		if str(st, "state") != c.state || !strings.Contains(string(out), fmt.Sprintf(`"verifyErrors":%d`, c.errors)) {
+			t.Fatalf("%s: want %s with %d errors: %s", c.name, c.state, c.errors, out)
+		}
+	}
+}
+
 func TestEngineRunExpireKeepsLabels(t *testing.T) {
 	b := newBackupEnv(t)
 	b.mode(ModeOwned)
