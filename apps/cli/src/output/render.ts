@@ -148,6 +148,29 @@ function status(t: Terminal, b: Extract<Block, { kind: 'status' }>): string[] {
   return [b.text === undefined ? word : `${word}  ${cleanLine(b.text)}`, '']
 }
 
+/** The details a catalog code names as plain data, and how a list of them is joined. */
+const NAMED_DETAILS: readonly (readonly [key: string, joiner: string])[] = [
+  ['migrationId', ', '],
+  ['missing', ', '],
+  ['cycle', ' → '],
+]
+
+/** `key: value` for each named detail that is a string or a list of strings (at most five entries). */
+function namedLines(details: unknown): string[] {
+  if (typeof details !== 'object' || details === null) return []
+  const data = details as Record<string, unknown>
+  return NAMED_DETAILS.flatMap(([key, joiner]) => {
+    const value = data[key]
+    const items = Array.isArray(value) ? value : [value]
+    const texts = items.filter((v): v is string => typeof v === 'string')
+    if (texts.length === 0) return []
+    const shown = texts.slice(0, 5).join(joiner)
+    return [
+      `${key}: ${texts.length > 5 ? `${shown}${joiner === ', ' ? ', ' : ' '}… ${texts.length - 5} more` : shown}`,
+    ]
+  })
+}
+
 /** At most five `path: message` lines of an error's field details (`details.errors`). */
 function detailLines(details: unknown): string[] {
   const errors =
@@ -163,7 +186,10 @@ function detailLines(details: unknown): string[] {
     const message = 'message' in e && typeof e.message === 'string' ? e.message : ''
     return message === '' ? [] : [`${path === '' ? '(request)' : path}: ${message}`]
   })
-  return errors.length > 5 ? [...lines, `… ${errors.length - 5} more`] : lines
+  return [
+    ...(errors.length > 5 ? [...lines, `… ${errors.length - 5} more`] : lines),
+    ...namedLines(details),
+  ]
 }
 
 /** The human view of a result: stdout lines and stderr lines (the error goes to stderr). */

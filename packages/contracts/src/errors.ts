@@ -405,6 +405,14 @@ export const ERRORS = {
     retryable: false,
     title: 'Migration dependency unknown',
     message: 'dependsOn names an id that is not in the project stream.',
+    // The bundle that declares the dependency and the ids it lacks (TC-022); absent where the
+    // code is raised without them.
+    details: z
+      .strictObject({
+        migrationId: DependencyRefSchema,
+        missing: z.array(DependencyRefSchema).min(1).max(256),
+      })
+      .optional(),
   },
   MIGRATION_MANIFEST_INVALID: {
     group: 'migrations',

@@ -171,6 +171,17 @@ Details that the sections above leave open:
   duplicate id, invalid `dependsOn` entry, unknown dependency, cycle (a
   self-dependency is a cycle of one), and a migration without dependencies in
   a stream that has a baseline (`unanchored_root`, the root rule of §1).
+- **[DECIDED]** (test campaign TC-008 / MIG-04, TC-022) A plan validates its
+  own graph: the ledger, the bundles it selects or submits, and the stored
+  bundles they depend on, however far. A stored bundle that names an id the
+  stream does not know is that bundle's problem: planning it, or a bundle that
+  depends on it, is `MIGRATION_DEPENDENCY_UNKNOWN` with `details.migrationId`
+  (the bundle that declares the dependency) and `details.missing[]`; no other
+  plan of the project is affected, and the lint a plan runs sees the same part
+  of the stream. (Before this, one such bundle, stored by `bundles ingest`,
+  refused every plan of the project on every target until a corrected revision
+  of the same id was ingested.) The CLI prints both. Ingestion still stores a
+  bundle with an unknown dependency; the local lint reports it.
 - The cycle is reported as the shortest cycle through the smallest id on any
   cycle, listed in `dependsOn` direction, ties broken by smaller ids, so the
   same stream always reports the same cycle.

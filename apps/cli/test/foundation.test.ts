@@ -269,6 +269,42 @@ describe('terminal safety', () => {
   })
 })
 
+describe('the human renderer names the data of a refusal (TC-022)', () => {
+  const terminal = { columns: 100, color: false, ascii: false, quiet: false }
+  const A = '01M5X840BP8JXGEQGS0PHPTB58'
+  const B = '01M5X840BMQPER7PK6WH64NR2J'
+  const refused = (code: string, details: unknown) =>
+    renderHuman(
+      result({ command: 'migration plan', error: { code, message: 'refused', details } }),
+      terminal,
+    ).err
+
+  it('prints the bundle and the ids a dependency refusal lacks', () => {
+    expect(refused('MIGRATION_DEPENDENCY_UNKNOWN', { migrationId: A, missing: [B] })).toEqual(
+      expect.arrayContaining([`  migrationId: ${A}`, `  missing: ${B}`]),
+    )
+    expect(refused('MIGRATION_DEPENDENCY_MISSING', { missing: [A, B] })).toContain(
+      `  missing: ${A}, ${B}`,
+    )
+    expect(refused('MIGRATION_DEPENDENCY_CYCLE', { cycle: [A, B] })).toContain(
+      `  cycle: ${A} → ${B}`,
+    )
+  })
+
+  it('cuts a long list and keeps hostile text inert', () => {
+    const many = Array.from({ length: 8 }, (_, i) => `01M5X840BP8JXGEQGS0PHPTB5${i}`)
+    const lines = refused('MIGRATION_DEPENDENCY_MISSING', { missing: many })
+    expect(lines).toContain(`  missing: ${many.slice(0, 5).join(', ')}, … 3 more`)
+    const hostile = refused('MIGRATION_DEPENDENCY_UNKNOWN', {
+      migrationId: 'x\u001b[31mred',
+      missing: ['a\nb'],
+    })
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: the test looks for control characters
+    for (const line of hostile)
+      expect(line).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/)
+  })
+})
+
 describe('the human renderer', () => {
   const r = result({
     command: 'thing list',

@@ -9478,7 +9478,50 @@
     },
     {
       "code": "MIGRATION_DEPENDENCY_UNKNOWN",
-      "details": null,
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/MIGRATION_DEPENDENCY_UNKNOWN",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "migrationId": {
+            "anyOf": [
+              {
+                "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                "type": "string"
+              },
+              {
+                "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+                "type": "string"
+              }
+            ]
+          },
+          "missing": {
+            "items": {
+              "anyOf": [
+                {
+                  "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+                  "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+                  "type": "string"
+                },
+                {
+                  "pattern": "^baseline:[a-z0-9]+(-[a-z0-9]+)*$",
+                  "type": "string"
+                }
+              ]
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "migrationId",
+          "missing"
+        ],
+        "type": "object"
+      },
       "group": "migrations",
       "message": "dependsOn names an id that is not in the project stream.",
       "retryable": false,

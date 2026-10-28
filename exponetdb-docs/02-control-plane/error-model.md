@@ -169,7 +169,7 @@ later without changes).
 | `MIGRATION_DEPENDENCY_MISSING` | 409 | no | `details.missing[]` not applied and not in the plan. |
 | `MIGRATION_DEPENDENCY_UNVERIFIED` | 409 | no | Dependency applied but not verified (prod tier). |
 | `MIGRATION_DEPENDENCY_CYCLE` | 422 | no | `details.cycle[]`. |
-| `MIGRATION_DEPENDENCY_UNKNOWN` | 422 | no | `dependsOn` names an id not in the stream. |
+| `MIGRATION_DEPENDENCY_UNKNOWN` | 422 | no | `dependsOn` names an id not in the stream; `details.migrationId` is the bundle that declares it and `details.missing[]` the ids it lacks (absent where the code is raised without them). |
 | `MIGRATION_MANIFEST_INVALID` | 422 | no | Schema validation errors in `details.errors[]`. |
 | `MIGRATION_BUNDLE_INVALID` | 422 | no | Missing files, bad encoding, name/id mismatch; `details.reason`, `details.file` (reason codes in `packages/contracts`). |
 | `MIGRATION_LINT_BLOCKED` | 422 | no | Blocking lint findings in `details.findings[]`. |

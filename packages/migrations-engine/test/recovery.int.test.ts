@@ -226,6 +226,88 @@ describe('a verify.sql that errors (E10, second case)', () => {
   })
 })
 
+describe('a stored bundle with an unknown dependency (TC-008, MIG-04; TC-022)', () => {
+  const ingest = (t: Target, ...bundles: ReturnType<World['bundle']>[]) =>
+    w.h.serve.transaction('test.dangling.ingest', (tx) =>
+      ingestBundles(tx, {
+        projectId: t.record.projectId,
+        bundles,
+        defaults: DEFAULTS,
+        identityId: w.a.identityId,
+      }),
+    )
+  const refusal = async (p: Promise<unknown>) => {
+    try {
+      await p
+    } catch (error) {
+      return error as { code?: string; details?: unknown }
+    }
+    throw new Error('expected a refusal')
+  }
+
+  it('stops no other plan of the project, and names its missing ids when it is planned itself', async () => {
+    const { t, base } = await targetWithBase('rec-f')
+    const ghost = w.ulid()
+    const dangling = w.ulid()
+    await ingest(
+      t,
+      w.bundle({
+        id: dangling,
+        name: 'dangling',
+        up: 'CREATE TABLE public.dangling (id int);\n',
+        dependsOn: [ghost],
+      }),
+    )
+    // An unrelated plan, with its own bundle or a stored one, is not the dangling bundle's business.
+    const unrelated = w.ulid()
+    await ingest(
+      t,
+      w.bundle({
+        id: unrelated,
+        name: 'unrelated',
+        up: 'CREATE TABLE public.unrelated (id int);\n',
+        dependsOn: [base],
+      }),
+    )
+    const op = await w.apply(await w.plan(t, { migrationIds: [unrelated] }))
+    expect(op).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
+    // Planned itself, it is refused with the node and the ids it lacks.
+    expect(await refusal(w.plan(t, { migrationIds: [dangling] }))).toMatchObject({
+      code: 'MIGRATION_DEPENDENCY_UNKNOWN',
+      details: { migrationId: dangling, missing: [ghost] },
+    })
+    // So is a bundle that depends on it, however far: the stored ancestor is part of its graph.
+    const child = w.ulid()
+    await ingest(
+      t,
+      w.bundle({
+        id: child,
+        name: 'child',
+        up: 'CREATE TABLE public.child (id int);\n',
+        dependsOn: [dangling],
+      }),
+    )
+    expect(await refusal(w.plan(t, { migrationIds: [child] }))).toMatchObject({
+      code: 'MIGRATION_DEPENDENCY_UNKNOWN',
+      details: { migrationId: dangling, missing: [ghost] },
+    })
+    // And one submitted with the plan.
+    expect(
+      await refusal(
+        w.plan(t, {
+          bundles: [
+            w.bundle({
+              name: 'submitted',
+              up: 'CREATE TABLE public.submitted (id int);\n',
+              dependsOn: [ghost],
+            }),
+          ],
+        }),
+      ),
+    ).toMatchObject({ code: 'MIGRATION_DEPENDENCY_UNKNOWN', details: { missing: [ghost] } })
+  })
+})
+
 describe('the baseline after a rollback (TC-006)', () => {
   it('is handed the fingerprint the rollback plan started from', async () => {
     const { t, base } = await targetWithBase('rec-e')
