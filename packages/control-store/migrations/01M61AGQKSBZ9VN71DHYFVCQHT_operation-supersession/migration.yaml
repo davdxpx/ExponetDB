@@ -1,0 +1,26 @@
+schema: exponetdb.migration/v1
+id: 01M61AGQKSBZ9VN71DHYFVCQHT
+name: operation-supersession
+description: |
+  Test campaign TC-005 (MIG-01): an operation in needs_attention keeps its
+  exclusivity domains and is never claimed, so the documented recovery (a
+  verify revision then migration.verify, or migration.resume) waited for ever
+  behind the operation it was meant to recover. A recovery plan that names the
+  operation now closes it in the transaction that takes the domains:
+  needs_attention to verification_failed. This bundle adds that one edge as
+  operations.recovery_transition_allowed and replaces the guard function
+  (operations.operation_guard) with the same text plus a condition that
+  accepts it. The operations bundle is frozen and unchanged;
+  operations.transition_allowed keeps its 15 pairs and state_admits is
+  unchanged (verification_failed already admits an applied or partially
+  applied change with a failed verification). Additive: no table, grant or
+  policy changes.
+dependsOn:
+  - 01M5X840BP8JXGEQGS0PHPTB58
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

@@ -13,6 +13,7 @@ import {
 } from './leases.ts'
 import { acquireLocks } from './locks.ts'
 import { type PlanRecord, readPlan } from './plans.ts'
+import { closeSuperseded } from './supersede.ts'
 import { type OperationRecord, readOperation, transitionOperation } from './transitions.ts'
 
 /**
@@ -175,6 +176,7 @@ async function drive(
 
   if (claim.next === 'start') {
     const started = await store.transaction('operations.driver.start', async (tx) => {
+      await closeSuperseded(tx, id, kind, plan, clock)
       const locks = await acquireLocks(tx, id, kind.exclusivity(plan))
       if (!locks.acquired) {
         return locks

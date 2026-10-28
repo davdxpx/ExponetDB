@@ -77,6 +77,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-55 | Procedural code in a migration session can act as any role the migrator holds | **resolved 2026-10-26** | options (c) and (d): a person approves every agent-initiated plan with procedural statements (`DO`, created and called routines, dynamic SQL where detectable) on **every** tier; the executor compares the `exponetdb` schema's ledger and marker state before and after each authored statement inside the transaction and refuses a change it did not make; fail closed where the check cannot run; cross-project role reach on one cluster stays a recorded residual risk | agent applies of procedural bundles without a person | decided |
 | OD-56 | An excused value outside the fingerprint that changes after the review | **resolved 2026-10-26** | option (a): a keyed digest (HMAC-SHA-256 under a server-side installation key, never a plain hash) of the observed value of open-domain kinds is recorded with the excused failure and compared at every later verification; a changed value fails closed even with the same aspect; a missing or rotated key fails closed; values never appear in UI, API, audit or logs | nothing | decided |
 | OD-57 | `advisors_run` records a run, but its scope `diagnostics.read` is a read scope | **open** | (a) a new additive oauth bundle makes `diagnostics.read` a write scope (consent shows it; clients that auto-approve read tools stop doing so); (b) a separate record scope for advisor runs (`diagnostics.record`), `diagnostics.read` stays read-only; (c) an advisor run over MCP records nothing (findings only from Web App, CLI and the worker) | nothing in Part B; the MCP annotation stays `readOnlyHint` until decided | open |
+| OD-58 | How an operation in `needs_attention` is closed | **open** (built with option (a) by the test campaign fixes) | (a) the recovery plan that names it closes it as `verification_failed`, `unknown` becomes `partially_applied`; (b) (a) plus the planned `operation.force_release` for operations no recovery plan covers; (c) (a) with `verification_failed` admitting an `unknown` apply outcome | option (a) is in the code on the branch; the owner confirms or changes it | open |
 
 ---
 
@@ -1798,6 +1799,36 @@ History:
   grant shows the record right separately.
 - **Blocks.** Nothing in Part B; the residual is listed in
   [`../14-roadmap/PRE-WAVE-11-REVIEW.md`](../14-roadmap/PRE-WAVE-11-REVIEW.md) W9-04.
+
+## OD-58. How an operation in `needs_attention` is closed
+
+- **Status.** OPEN (found on 2026-10-27 by the test campaign, TC-005 / MIG-01;
+  built with option (a) by the fixes of 2026-10-28, for the owner to confirm)
+- **Question.** An operation in `needs_attention` keeps its exclusivity
+  domains and is never claimed, so the documented recovery of a verify.sql
+  that errors (a verify revision, then `migration.verify`) and of a killed
+  non-transactional bundle (`migration.resume`) waited for ever behind the
+  operation it was meant to recover. How does such an operation leave?
+- **Why it matters.** **[OBSERVED]** The target was blocked for every schema
+  change, production hotfixes included, until someone edited the Control Store
+  by hand. The existing suites missed it because their partial failure ends in
+  `verification_failed`, which holds no domain.
+- **Options.** (a) **built**: the recovery plan names the operation; when it
+  starts, the worker closes the named operation (still in `needs_attention`
+  and holding one of its domains) as `verification_failed` in the same
+  transaction, with `supersededBy` in the event; an apply outcome of `unknown`
+  is recorded as `partially_applied`, the verification outcome as `failed`.
+  (b) (a), and also build `operation.force_release` (its own kind, the
+  `operations.recover` permission, human only, tier of the operation that owns
+  the lock, [operations-engine.md §2](../02-control-plane/operations-engine.md#2-operation-kinds))
+  for an operation no recovery plan covers (a node or registry operation that
+  reaches `needs_attention`). (c) (a), but `verification_failed` admits an
+  `unknown` apply outcome, so the closed record keeps the truth that nobody
+  knows; every reader of the state (views, CLI, Web) must then handle it.
+- **Recommendation.** (a) now, as built; (b) before Wave 11 if a kind other
+  than the migration kinds can end in `needs_attention` on a real target;
+  (c) only with a review of the readers.
+- **Blocks.** Nothing.
 
 ## Owner decisions of the Wave 9 Part B order (2026-10-26)
 

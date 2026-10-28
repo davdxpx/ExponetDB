@@ -38,6 +38,7 @@ describe('operation state machine (operations-engine.md §4.1)', () => {
         'verifying->verification_failed',
         'verifying->needs_attention',
         'needs_attention->verifying',
+        'needs_attention->verification_failed',
       ].sort(),
     )
   })

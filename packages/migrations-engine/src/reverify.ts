@@ -35,6 +35,7 @@ import {
   writeProgress,
   writeVerificationMirror,
 } from './records.ts'
+import { stuckOperationOf } from './recovery.ts'
 import { readRevision, revisionsOf, type StoredRevision } from './store.ts'
 import { verifyMigration } from './verification.ts'
 
@@ -59,6 +60,8 @@ interface VerifyContent {
   readonly verifyDigest: string | null
   readonly item: PlanItem
   readonly facts: MigrationFacts
+  /** The operation in needs_attention this plan recovers and closes (recovery.ts, TC-005). */
+  readonly supersedes?: string
 }
 
 /** The content of a re-verification of a baseline ref (follow-up 3, F3), or `undefined`. */
@@ -221,6 +224,7 @@ export async function planMigrationVerify(
     dependenciesVerified: true,
     legacyProject: false,
   }
+  const stuck = await stuckOperationOf(tx, target.targetId, migrationId)
   const content: VerifyContent = {
     projectId: target.projectId,
     targetId: target.targetId,
@@ -234,6 +238,7 @@ export async function planMigrationVerify(
     verifyDigest: revision.verifyDigest,
     item,
     facts,
+    ...(stuck === undefined ? {} : { supersedes: stuck }),
   }
   const subject = {
     productId: target.productId,
@@ -265,7 +270,12 @@ export async function planMigrationVerify(
         environmentId: target.environmentId,
       },
       content: content as unknown as JsonObject,
-      analysis: { migrationId, revision: revision.revision, verifyChecks: checks },
+      analysis: {
+        migrationId,
+        revision: revision.revision,
+        verifyChecks: checks,
+        ...(stuck === undefined ? {} : { supersedes: stuck }),
+      },
       policy,
     },
     { clock: ctx.policy.clock },
@@ -367,6 +377,15 @@ export class MigrationVerifyKind implements OperationKind {
     }
   }
 
+  supersedes(plan: PlanRecord): readonly string[] {
+    try {
+      const named = baselineVariantOf(plan) === undefined ? contentOf(plan).supersedes : undefined
+      return named === undefined ? [] : [named]
+    } catch {
+      return []
+    }
+  }
+
   async checkBindings(plan: PlanRecord): Promise<readonly ChangedBinding[]> {
     let baseline: BaselineVerifyContent | undefined
     try {
@@ -392,6 +411,18 @@ export class MigrationVerifyKind implements OperationKind {
       }
     } catch {
       return [{ binding: 'target', actual: 'unreachable' }]
+    }
+    // The operation this plan recovers still needs attention: retried or closed since, the plan is stale.
+    // (Read on its own connection, so the worker's closing of it, not yet committed, is not seen.)
+    if (c.supersedes !== undefined) {
+      const state = await this.#deps.store.query(
+        'migrations.reverify.stuck_state',
+        'SELECT state FROM operations.operations WHERE operation_id = $1',
+        [c.supersedes],
+      )
+      if (state.rows[0]?.text('state') !== 'needs_attention') {
+        return [{ binding: 'operation', actual: state.rows[0]?.text('state') ?? 'missing' }]
+      }
     }
     return []
   }

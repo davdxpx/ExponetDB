@@ -32,8 +32,16 @@ afterAll(async () => {
   await db?.drop()
 })
 
-async function queue(kind: OperationKind, domains: readonly string[] = []): Promise<OperationId> {
-  const plan = await newPlan(as('exdb_serve'), { kind: kind.kind, domains })
+async function queue(
+  kind: OperationKind,
+  domains: readonly string[] = [],
+  supersedes?: readonly string[],
+): Promise<OperationId> {
+  const plan = await newPlan(as('exdb_serve'), {
+    kind: kind.kind,
+    domains,
+    ...(supersedes === undefined ? {} : { supersedes }),
+  })
   const result = await as('exdb_serve').transaction('test.accept', (tx) =>
     acceptPlan(
       tx,
@@ -277,5 +285,131 @@ describe('the audit chain', () => {
   it('verifies after every path above', async () => {
     const verified = await verifyAuditChain(as('exdb_serve'))
     expect(verified).toMatchObject({ ok: true })
+  })
+})
+
+describe('a recovery operation closes the needs_attention operation that holds its domain (TC-005, MIG-01)', () => {
+  const stuck = async (
+    name: string,
+    behavior: Parameters<typeof syntheticKind>[1],
+    tgt: string,
+  ) => {
+    const kind = syntheticKind(name, behavior)
+    const id = await queue(kind, [`target:${tgt}:schema`])
+    await run(kind)
+    return { kind, id }
+  }
+  const recover = (name: string, tgt: string, ...named: string[]) => {
+    const kind = syntheticKind(name)
+    return queue(kind, [`target:${tgt}:schema`], named).then((id) => ({ kind, id }))
+  }
+
+  it('is blocked for ever without the plan naming it, and runs with it', async () => {
+    const tgt = target()
+    const first = await stuck('synthetic.stucka', { verify: async () => 'error' }, tgt)
+    expect(await readOperation(as('exdb_worker'), first.id)).toMatchObject({
+      state: 'needs_attention',
+      applyOutcome: 'applied',
+      verificationOutcome: 'error',
+    })
+    // An ordinary plan waits behind it: nothing releases the domain.
+    const plain = await recover('synthetic.plaina', tgt)
+    expect(await run(plain.kind)).toMatchObject({
+      status: 'waiting',
+      blockingOperationId: first.id,
+    })
+    // The recovery names it: the domain is taken in the same transaction, and the plan runs.
+    const fix = await recover('synthetic.fixa', tgt, first.id)
+    expect(await run(fix.kind)).toMatchObject({
+      status: 'done',
+      operation: { state: 'succeeded', applyOutcome: 'applied', verificationOutcome: 'passed' },
+    })
+    expect(await readOperation(as('exdb_worker'), first.id)).toMatchObject({
+      state: 'verification_failed',
+      applyOutcome: 'applied',
+      verificationOutcome: 'failed',
+      leaseOwner: null,
+    })
+    expect(await heldLocks(as('exdb_worker'), first.id)).toEqual([])
+    expect(await heldLocks(as('exdb_worker'), fix.id)).toEqual([])
+    expect(await events(first.id)).toEqual([
+      'created:queued',
+      'lease_acquired:queued',
+      'locks_acquired',
+      'transition:running',
+      'step_started:execute',
+      'step_finished:execute',
+      'transition:verifying',
+      'step_started:verify',
+      'step_finished:verify',
+      'transition:needs_attention',
+      'transition:verification_failed',
+      'locks_released',
+    ])
+    // The closing event names who superseded it and what the outcome was before.
+    const { rows } = await as('exdb_worker').query(
+      'test.superseded',
+      `SELECT detail::text AS detail FROM operations.operation_events
+        WHERE operation_id = $1 AND to_state = 'verification_failed'`,
+      [first.id],
+    )
+    expect(rows[0]?.text('detail')).toContain(fix.id)
+    // The next ordinary plan is admitted.
+    expect(await run(plain.kind)).toMatchObject({
+      status: 'done',
+      operation: { state: 'succeeded' },
+    })
+  })
+
+  it('closes an operation whose outcome is unknown as partially applied, and says so', async () => {
+    const tgt = target()
+    const first = await stuck('synthetic.stuckb', { execute: async () => 'unknown' }, tgt)
+    expect(await readOperation(as('exdb_worker'), first.id)).toMatchObject({
+      state: 'needs_attention',
+      applyOutcome: 'unknown',
+    })
+    const fix = await recover('synthetic.fixb', tgt, first.id)
+    await run(fix.kind)
+    expect(await readOperation(as('exdb_worker'), first.id)).toMatchObject({
+      state: 'verification_failed',
+      applyOutcome: 'partially_applied',
+      verificationOutcome: 'failed',
+    })
+    const { rows } = await as('exdb_worker').query(
+      'test.superseded.detail',
+      `SELECT detail->>'previousApplyOutcome' AS before, detail->>'supersededBy' AS by
+         FROM operations.operation_events WHERE operation_id = $1 AND to_state = 'verification_failed'`,
+      [first.id],
+    )
+    expect(rows[0]?.text('before')).toBe('unknown')
+    expect(rows[0]?.text('by')).toBe(fix.id)
+  })
+
+  it('closes only an operation in needs_attention that holds a domain the recovery needs', async () => {
+    const tgt = target()
+    const other = target()
+    const first = await stuck('synthetic.stuckc', { verify: async () => 'error' }, tgt)
+    // Another target's plan naming it takes no part in it.
+    const elsewhere = await recover('synthetic.fixc', other, first.id)
+    expect(await run(elsewhere.kind)).toMatchObject({
+      status: 'done',
+      operation: { state: 'succeeded' },
+    })
+    expect(await readOperation(as('exdb_worker'), first.id)).toMatchObject({
+      state: 'needs_attention',
+    })
+    expect(await heldLocks(as('exdb_worker'), first.id)).toEqual([`target:${tgt}:schema`])
+    // An operation that is finished, or unknown, is left as it is and the plan simply runs.
+    const done = await recover(
+      'synthetic.fixd',
+      other,
+      first.id,
+      'op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z',
+      'not an id',
+    )
+    expect(await run(done.kind)).toMatchObject({
+      status: 'done',
+      operation: { state: 'succeeded' },
+    })
   })
 })

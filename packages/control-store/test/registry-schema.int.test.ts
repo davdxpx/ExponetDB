@@ -791,6 +791,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M5X840BMQPER7PK6WH64NR2J',
         // OD-56 (a), Wave 9 Part B order (2026-10-26): keyed digests of excused values.
         '01M5X840BP8JXGEQGS0PHPTB58',
+        // Test campaign TC-005 (2026-10-28): a recovery plan closes the needs_attention operation it names.
+        '01M61AGQKSBZ9VN71DHYFVCQHT',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

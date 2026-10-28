@@ -122,6 +122,21 @@ export class MigrationApplyKind implements OperationKind {
     }
   }
 
+  /**
+   * A resume continues what the operation that started the bundle left
+   * part-way; when that operation is in needs_attention it holds the target
+   * and is closed by this one (TC-005). The plan already binds it, with the
+   * event log it left.
+   */
+  supersedes(plan: PlanRecord): readonly string[] {
+    try {
+      const resume = this.#content(plan).resume
+      return resume === undefined ? [] : [resume.originalOperationId]
+    } catch {
+      return []
+    }
+  }
+
   // ----- bindings -----
 
   async #registryBindings(

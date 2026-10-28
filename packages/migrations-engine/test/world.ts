@@ -86,6 +86,12 @@ export interface DriveOptions {
   readonly wrap?: (c: Connector) => Connector
   /** The worker's dispatch admission (the server composes the application's). */
   readonly admit?: DispatchAdmission
+  /**
+   * Polls the worker this many times and returns, idle or not: an operation
+   * that waits for a domain answers `waiting` for ever, so a test about one
+   * bounds the loop instead of expecting the worker to become idle.
+   */
+  readonly polls?: number
 }
 
 export interface BundleSpec {
@@ -243,7 +249,7 @@ export async function migrationWorld(label: string, server: TestServer): Promise
       const registry =
         options.wrap === undefined ? kinds : kindsWith(options.wrap(h.workerConnector))
       const workerId = newId('prc', Date.now())
-      for (let i = 0; i < 50; i++) {
+      for (let i = 0; i < (options.polls ?? 50); i++) {
         const r = await processNextOperation(h.worker, {
           workerId,
           kinds: registry,
@@ -252,6 +258,7 @@ export async function migrationWorld(label: string, server: TestServer): Promise
         })
         if (r.status === 'idle') return
       }
+      if (options.polls !== undefined) return
       throw new Error('the worker did not become idle')
     },
     async apply(p, options) {

@@ -726,6 +726,20 @@ digests), never a digest or the key's secret id. Tests:
 ("excused values (OD-56 (a))"), `packages/control-store/test/registry-schema.int.test.ts`
 (the upgrade through every bundle).
 
+**[DECIDED]** (test campaign TC-005; bundle
+`01M61AGQKSBZ9VN71DHYFVCQHT_operation-supersession`, depending on
+`excused-value-digests`, additive, transactional, not frozen) The one new edge
+of the operation state machine, `needs_attention` to `verification_failed`
+([`operations-engine.md` §4.1](./operations-engine.md#41-state-machine)):
+`operations.recovery_transition_allowed(from, to)` (pure, `exdb_serve` and
+`exdb_worker` may execute it) and a replaced `operations.operation_guard()`
+that accepts a transition either that function or the operations bundle's
+`transition_allowed` allows. The frozen function and its `verify.sql` (fifteen
+pairs) are untouched. Tests: `packages/operations/test/engine.int.test.ts`
+(both functions against the code for every input),
+`packages/operations/test/driver.int.test.ts`,
+`packages/migrations-engine/test/recovery.int.test.ts`.
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

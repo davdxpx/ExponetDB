@@ -720,9 +720,10 @@ evidence; nothing here is a claim that it passed on real infrastructure):
 |---|---|---|---|
 | TC-003 single-quoted `DO` body bypasses the token bound | IMPLEMENTED, TESTED LOCALLY (red without the fix, green with it) | `packages/postgres/test/legacy-references.test.ts` (four single-quoted shapes, the decoder, the negative cases), `packages/migrations-engine/test/legacy-files.test.ts` (the `422 too_large` and a 4 MiB `DO '…'` refused within 200 MiB of growth) | [deployment.md §2a](../12-operations/deployment.md#2a-memory), [9-part-a.md §9](./gates/9-part-a.md) |
 | TC-004 `search_path` strictness check is a quadratic regular expression | IMPLEMENTED, TESTED LOCALLY (red on the old regex for all four families, green with the scan) | `packages/postgres/test/cluster-global.test.ts` (differential fast-check against the old regex, 30 000 cases; scaling `time(1 MiB) / time(256 KiB) < 8` and 1 MiB under 200 ms for `one_ws`, `rep_noterm`, `rep_comma`, `rep_pad`; the strictness results unchanged) | [9-part-a.md §9](./gates/9-part-a.md) |
+| TC-005 an operation in `needs_attention` holds the target's schema domain and the documented recovery cannot start (MIG-01) | IMPLEMENTED, TESTED LOCALLY on PostgreSQL 17 (red before: the resume and the verify wait for ever; the Control Store bundle `operation-supersession`; owner confirms [OD-58](../00-product/open-decisions.md#od-58-how-an-operation-in-needs_attention-is-closed)) | `packages/operations/test/states.test.ts`, `engine.int.test.ts` (both transition functions against the code), `driver.int.test.ts` (closes the named operation, `unknown` becomes `partially_applied`, only one in `needs_attention` that holds a needed domain); `packages/migrations-engine/test/recovery.int.test.ts` (a verify.sql that errors, a killed `CREATE INDEX CONCURRENTLY`, an unrelated migration's verify closes nothing) | [operations-engine.md §4.1](../02-control-plane/operations-engine.md#41-state-machine), [control-database.md §5](../02-control-plane/control-database.md), [failure-and-recovery.md](../04-migrations/failure-and-recovery.md) |
 
 ### TC-2. Review history (append-only)
 
 | Date | Commit | Change |
 |---|---|---|
-| 2026-10-28 | (this branch) | section opened; TC-003, TC-004 |
+| 2026-10-28 | (this branch) | section opened; TC-003, TC-004, TC-005 |
