@@ -12,7 +12,7 @@ import type { Queryable, Row } from '@exponetdb/control-store'
 export const OFFLINE_AFTER_MS = 4 * NODE_PROTOCOL_LIMITS.heartbeatIntervalSeconds * 1000
 
 const COLUMNS = `node_id, server_id, state, agent_version, protocol_major, capabilities, heartbeat,
-  last_heartbeat_at, certificate_expires_at, state_changed_at`
+  clusters, last_heartbeat_at, certificate_expires_at, state_changed_at`
 
 export interface NodeRead {
   readonly id: string
@@ -27,7 +27,7 @@ export interface NodeRead {
 
 export interface NodeStatusRead extends NodeRead {
   readonly clusters: {
-    clusterId: null
+    clusterId: string | null
     localName: string
     running: boolean
     pendingRestart: boolean
@@ -91,7 +91,53 @@ function nodeRead(row: Row, nowMs: number): NodeRead {
   }
 }
 
-function statusRead(row: Row, nowMs: number): NodeStatusRead {
+/** The cluster entries of a JSON array column (a hello's `clusters`, a heartbeat's), by local name. */
+function entriesOf(value: unknown): Map<string, Readonly<Record<string, unknown>>> {
+  const entries = new Map<string, Readonly<Record<string, unknown>>>()
+  for (const c of Array.isArray(value) ? value : []) {
+    const r = record(c)
+    const localName = str(r['localName'])
+    if (localName !== null) entries.set(localName, r)
+  }
+  return entries
+}
+
+/**
+ * The clusters a node serves. The agent lists them in its hello (what runs, with the PostgreSQL
+ * system identifier) and its heartbeat refines the state of each one it reports (service state,
+ * pending restart, server certificate). The heartbeat alone was read before and the agent sends
+ * none, so the view was always empty (TC-016). A cluster the node reports without a heartbeat
+ * entry keeps the hello's running state; whether a restart is pending is then not reported and
+ * reads `false` (the REST shape has no unknown), the certificate expiry reads `null`.
+ */
+function clustersOf(
+  row: Row,
+  registryIds: ReadonlyMap<string, string>,
+): NodeStatusRead['clusters'] {
+  const hello = entriesOf(row.json('clusters'))
+  const beat = entriesOf(record(row.json('heartbeat'))['clusters'])
+  return [...new Set([...hello.keys(), ...beat.keys()])].map((localName) => {
+    const known = hello.get(localName)
+    const reported = beat.get(localName)
+    const systemIdentifier = str(known?.['systemIdentifier'])
+    return {
+      clusterId: systemIdentifier === null ? null : (registryIds.get(systemIdentifier) ?? null),
+      localName,
+      running:
+        reported === undefined
+          ? known?.['running'] === true
+          : reported['serviceState'] === 'running',
+      pendingRestart: reported?.['pendingRestart'] === true,
+      serverCertificateExpiresAt: str(reported?.['serverCertificateExpiresAt']),
+    }
+  })
+}
+
+function statusRead(
+  row: Row,
+  nowMs: number,
+  registryIds: ReadonlyMap<string, string>,
+): NodeStatusRead {
   const heartbeat = record(row.json('heartbeat'))
   const beat = row.dateOrNull('last_heartbeat_at')
   const host = record(heartbeat['host'])
@@ -102,24 +148,9 @@ function statusRead(row: Row, nowMs: number): NodeStatusRead {
     const total = num(r['totalBytes'])
     return used !== null && total !== null && total > 0 ? Math.max(max, (100 * used) / total) : max
   }, 0)
-  const clusters = Array.isArray(heartbeat['clusters']) ? heartbeat['clusters'] : []
   return {
     ...nodeRead(row, nowMs),
-    clusters: clusters.flatMap((c) => {
-      const r = record(c)
-      const localName = str(r['localName'])
-      return localName === null
-        ? []
-        : [
-            {
-              clusterId: null,
-              localName,
-              running: r['serviceState'] === 'running',
-              pendingRestart: r['pendingRestart'] === true,
-              serverCertificateExpiresAt: str(r['serverCertificateExpiresAt']),
-            },
-          ]
-    }),
+    clusters: clustersOf(row, registryIds),
     host:
       beat === null
         ? null
@@ -167,5 +198,21 @@ export async function getNode(
     [nodeId],
   )
   const row = rows[0]
-  return row === undefined ? undefined : statusRead(row, nowMs)
+  if (row === undefined) return undefined
+  // The live registry cluster of each system identifier the node reported.
+  const identifiers = [...entriesOf(row.json('clusters')).values()].flatMap((c) => {
+    const id = str(c['systemIdentifier'])
+    return id === null ? [] : [id]
+  })
+  const registry = await q.query(
+    'nodes.read.registry_clusters',
+    `SELECT cluster_id, system_identifier FROM registry.clusters
+      WHERE system_identifier = ANY($1::text[]) AND state <> 'retired'`,
+    [identifiers],
+  )
+  return statusRead(
+    row,
+    nowMs,
+    new Map(registry.rows.map((r) => [r.text('system_identifier'), r.text('cluster_id')])),
+  )
 }

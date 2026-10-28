@@ -220,7 +220,19 @@ secret ever entering a plan or an operation. Reads: the lifecycle state from
 the Control Store (`pending_binding` reads `pending_enrollment`); an active
 node without a heartbeat for 60 s reads `offline`; what the agent last
 reported carries `source` (`agent_reported`, or `inferred` before any
-heartbeat) and `observedAt`. Revocation and decommissioning cancel waiting
+heartbeat) and `observedAt`. **[DECIDED]** (test campaign TC-016) The clusters of
+the node view come from the stored hello (`nodes.nodes.clusters`: local name, port,
+whether it runs, the system identifier), each refined by the heartbeat's entry of
+the same local name (service state, pending restart, server certificate expiry), and
+`clusterId` is the live registry cluster whose `system_identifier` the node
+reported (`null` when the registry does not know it). The view read only the
+heartbeat's list, and the agent sends an empty list by construction, so it was
+always empty and `clusterId` was hard-coded `null`. **Open limit:** the agent does
+not yet send clusters in its heartbeat, so for every cluster `pendingRestart` reads
+`false` and the certificate expiry `null` because they are not reported (the REST
+shape has no "unknown"; a nullable `pendingRestart` and an agent that reports
+state in the heartbeat are a later, additive protocol and contract change).
+Revocation and decommissioning cancel waiting
 jobs; running ones are left to their lease and reconciled (§6), never assumed
 undone.
 
