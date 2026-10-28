@@ -27,6 +27,7 @@ import {
 } from '@exponetdb/registry'
 import type { Keyring } from '@exponetdb/secrets'
 import { NodeError } from './errors.ts'
+import { hbaLockOut } from './hba-lockout.ts'
 import { argsHashOf } from './jobs.ts'
 import {
   type ClusterMapping,
@@ -610,6 +611,18 @@ function mappingContent(m: ClusterMapping): JsonObject {
 }
 
 /**
+ * The agent's own peer access over the local socket, which it always keeps (§9.6). The role is
+ * the documented default of `exponetdb-node`; a rule that names that role and rejects it is
+ * refused at plan time, one that names another role is judged by the agent after the write.
+ */
+const AGENT_OWN_ACCESS: JsonObject = {
+  role: 'exponetdb_node',
+  database: 'postgres',
+  address: 'local',
+  method: 'peer',
+}
+
+/**
  * ExponetDB's own network access to a cluster, which a pg_hba plan protects
  * (§9.6): every access role with an active credential, to every registered
  * database (or `postgres`), from every egress address. A cluster with such
@@ -731,6 +744,15 @@ export async function planNodeOperation(
     }
     fields['protectedAccess'] = [...merged.values()]
     analysis = { ...analysis, protectedAccess: { requested: requested.length, derived } }
+    // The planned rules against the access that must stay, the agent's own socket access included
+    // (TC-018): a block that would cut ExponetDB off is refused here, not only after the write.
+    const lockedOut = hbaLockOut(list(fields['managedRules']) as JsonObject[], [
+      ...(fields['protectedAccess'] as JsonObject[]),
+      AGENT_OWN_ACCESS,
+    ])
+    if (lockedOut !== undefined) {
+      throw new NodeError('HBA_WOULD_LOCK_OUT', lockedOut)
+    }
   }
   const steps = list(analysis['steps'])
   const byPlan =

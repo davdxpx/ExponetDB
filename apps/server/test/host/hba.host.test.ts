@@ -5,8 +5,9 @@ import { hostScenario } from '../support/host-world.ts'
 /**
  * Host scenario: pg_hba.conf through the helper (G5 item 7), on a cluster of
  * its own. A managed block is written and verified; a block that would lock
- * the agent out is refused on the host and the file is put back byte for
- * byte; the agent can still connect afterwards.
+ * ExponetDB out is refused at plan time, and one the plan cannot judge is refused
+ * on the host with the file put back byte for byte; the agent can still connect
+ * afterwards.
  */
 const w = hostScenario({ scenario: 'hba' })
 
@@ -34,7 +35,32 @@ describe('pg_hba through the managed block (host scenario)', () => {
     expect(text).toContain('local all exponetdb_node peer map=exponetdb\n')
   })
 
-  it('refuses a block that would lock the agent out, and puts the file back', async () => {
+  it('refuses a block that would lock ExponetDB out at plan time (TC-018)', async () => {
+    const before = readFileSync(w.instance.hbaFile)
+    await w.inspect('postgres.hba.inspect@2')
+    const planned = await w.plan({
+      kind: 'postgres.hba.apply',
+      managedRules: [
+        {
+          type: 'local',
+          database: ['all'],
+          user: ['all'],
+          address: null,
+          method: 'reject',
+          map: null,
+        },
+      ],
+      protectedAccess: [],
+    })
+    // The agent's own socket access is cut off by the first rule: no plan, no write.
+    expect([planned.status, planned.body?.code]).toEqual([409, 'HBA_WOULD_LOCK_OUT'])
+    expect(planned.body?.details).toMatchObject({ address: 'local', method: 'peer', rule: 1 })
+    expect(Buffer.compare(readFileSync(w.instance.hbaFile), before)).toBe(0)
+  })
+
+  it('refuses on the host a block the plan cannot judge, and puts the file back', async () => {
+    // `samerole` cannot be judged at plan time, so the plan is allowed; the agent checks the
+    // written file, refuses it and puts the previous one back byte for byte (G5 item 7).
     const before = readFileSync(w.instance.hbaFile)
     await w.inspect('postgres.hba.inspect@2')
     const lockout = await w.planAndApply({
@@ -42,7 +68,7 @@ describe('pg_hba through the managed block (host scenario)', () => {
       managedRules: [
         {
           type: 'local',
-          database: ['all'],
+          database: ['samerole'],
           user: ['all'],
           address: null,
           method: 'reject',

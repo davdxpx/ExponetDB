@@ -514,6 +514,15 @@ valid wherever that CA is trusted).
 | `credential.rotate` | a login with the new credential over `verify-full` with the pinned identity and the role's documented least privilege; the credential is activated and the one it replaces retired in that transaction |
 | `postgres.roles.verifier.set` | the role shows a SCRAM-SHA-256 verifier (`password: scram-sha-256` in `postgres.roles.inspect`) and the apply job's signed statement says the step committed (the agent checks the roles, sets the verifier and commits in one transaction); without that statement it is `error`. The verifier is never read back, so which verifier the host holds is proven by the signed statement, not by a read; the consumer's login is the end-to-end proof. Reconciliation: a role that had no password and now has a SCRAM verifier is `applied`, one still without a password `not_applied`, anything else `unknown` |
 
+**[DECIDED]** (test campaign TC-018) The lock-out is also judged **at plan time**
+(`packages/nodes/src/hba-lockout.ts`): the planned managed rules, first match first
+(the block sits first in the file), against the merged protected access and the
+agent's own socket access (`exponetdb_node`, `postgres`, `local`, `peer`); a rule that
+rejects an access, or answers with another method, refuses the plan with
+`HBA_WOULD_LOCK_OUT` naming the access and the rule. Before this a block of
+`reject` rules with `protectedAccess: []` was planned with `decision: allow` and only
+the agent refused it after writing. The agent's check stays the second line.
+
 `postgres.hba.apply` keeps ExponetDB's own access: the plan's
 `protectedAccess`, and always the agent's own peer access over the local
 socket, which the agent adds itself; a block that would lock either out is

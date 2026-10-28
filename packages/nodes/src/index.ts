@@ -36,6 +36,7 @@ export {
 } from './capability-plans.ts'
 export { NodeError, refusalOf } from './errors.ts'
 export { AgentGateway, type AgentGatewayDeps, type Presented } from './gateway.ts'
+export { hbaLockOut } from './hba-lockout.ts'
 export {
   type AgentConnections,
   agentConnections,

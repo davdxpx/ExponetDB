@@ -147,6 +147,30 @@ describe('problem documents', () => {
     }
   })
 
+  it('names the access a pg_hba plan would cut off in HBA_WOULD_LOCK_OUT (TC-018)', () => {
+    const access = {
+      role: 'exponetdb_app',
+      database: 'app',
+      address: '203.0.113.7',
+      method: 'scram-sha-256',
+      rule: 2,
+    }
+    const problem = buildProblem('HBA_WOULD_LOCK_OUT', { requestId, details: access })
+    expect(problem.ok).toBe(true)
+    if (problem.ok) {
+      expect(problem.value).toMatchObject({
+        status: 409,
+        code: 'HBA_WOULD_LOCK_OUT',
+        retryable: false,
+      })
+      expect(problem.value.remediation).toMatch(/protected|keep/i)
+    }
+    expect(buildProblem('HBA_WOULD_LOCK_OUT', { requestId }).ok).toBe(false)
+    expect(
+      buildProblem('HBA_WOULD_LOCK_OUT', { requestId, details: { ...access, extra: 1 } }).ok,
+    ).toBe(false)
+  })
+
   it('gives RATE_LIMITED optional details: the wait of Retry-After, positive whole seconds', () => {
     // Optional: a rate limit with no known wait is still a RATE_LIMITED problem.
     const plain = buildProblem('RATE_LIMITED', { requestId })

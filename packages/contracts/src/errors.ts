@@ -1194,6 +1194,30 @@ export const ERRORS = {
       'The node ran the capability and reported a failure before it changed the host; the operation shows its message.',
     remediation: 'Correct what the message names and plan the change again.',
   },
+  HBA_WOULD_LOCK_OUT: {
+    group: 'targets_clusters_nodes',
+    status: 409,
+    retryable: false,
+    title: 'pg_hba block would lock ExponetDB out',
+    message:
+      'The planned pg_hba rules would cut off an access that ExponetDB needs: the first rule that matches it rejects it or answers with another method.',
+    remediation:
+      'Change the rules so that the named access is kept (a rule for it before any reject), or name it in protectedAccess; the agent checks the written file again and puts the previous one back.',
+    details: z.strictObject({
+      role: z.string().max(64).meta({ description: 'The role of the access that would be lost.' }),
+      database: z.string().max(64),
+      address: z
+        .string()
+        .max(45)
+        .meta({ description: 'A client address, or local for the socket.' }),
+      method: z.enum(['scram-sha-256', 'peer']),
+      rule: z
+        .int()
+        .min(1)
+        .max(64)
+        .meta({ description: 'The 1-based planned rule that decides it.' }),
+    }),
+  },
   NODE_OBSERVATION_STALE: {
     group: 'targets_clusters_nodes',
     status: 409,

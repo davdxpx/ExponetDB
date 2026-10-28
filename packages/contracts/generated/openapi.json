@@ -16934,6 +16934,7 @@
               "NODE_ALREADY_ENROLLED",
               "NODE_CERTIFICATE_REFUSED",
               "NODE_CAPABILITY_FAILED",
+              "HBA_WOULD_LOCK_OUT",
               "NODE_OBSERVATION_STALE",
               "BACKUP_FAILED",
               "BACKUP_REPOSITORY_UNAVAILABLE",
@@ -32166,7 +32167,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CAPABILITY_UNAVAILABLE, NODE_OBSERVATION_STALE, NODE_REVOKED, REGISTRY_CONFLICT."
+            "description": "Error codes: CAPABILITY_UNAVAILABLE, HBA_WOULD_LOCK_OUT, NODE_OBSERVATION_STALE, NODE_REVOKED, REGISTRY_CONFLICT."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -32209,6 +32210,7 @@
           "CONTROL_PLANE_DEGRADED",
           "CSRF_FAILED",
           "GRANT_REVOKED",
+          "HBA_WOULD_LOCK_OUT",
           "IDEMPOTENCY_KEY_REUSED",
           "INSUFFICIENT_SCOPE",
           "INTERNAL",
