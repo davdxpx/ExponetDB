@@ -144,6 +144,24 @@ function plan(target: TargetRecord, request: Partial<MigrationPlanRequest>): Pro
   )
 }
 
+/** Fails with the rules and lint findings that denied the plan, so a denial explains itself. */
+function expectAllowed(p: PlanRecord): void {
+  if (p.decision === 'allow') return
+  const policy = p.body['policy'] as {
+    rules: { id: string; result: string; message: string }[]
+  }
+  const analysis = p.body['analysis'] as {
+    perMigration: { lint: { rule: string; blocking: boolean; message: string }[] }[]
+  }
+  throw new Error(
+    JSON.stringify({
+      rules: policy.rules.filter((r) => r.result !== 'pass' && r.result !== 'not_applicable'),
+      lint: analysis.perMigration.flatMap((m) => m.lint.filter((l) => l.blocking)),
+      facts: (p.body['content'] as { facts: unknown }).facts,
+    }),
+  )
+}
+
 async function accept(p: PlanRecord): Promise<OperationRecord> {
   const result = await h.serve.transaction('test.migrations.accept', (tx) =>
     acceptPlan(
@@ -322,21 +340,7 @@ describe('migration.apply on a nonprod target', () => {
     const p = await plan(staging, {
       bundles: [bundle({ id: first, name: 'add-leads', up: LEADS, verify: LEADS_VERIFY })],
     })
-    if (p.decision !== 'allow') {
-      const policy = p.body['policy'] as {
-        rules: { id: string; result: string; message: string }[]
-      }
-      const analysis = p.body['analysis'] as {
-        perMigration: { lint: { rule: string; blocking: boolean; message: string }[] }[]
-      }
-      throw new Error(
-        JSON.stringify({
-          rules: policy.rules.filter((r) => r.result !== 'pass' && r.result !== 'not_applicable'),
-          lint: analysis.perMigration.flatMap((m) => m.lint.filter((l) => l.blocking)),
-          facts: (p.body['content'] as { facts: unknown }).facts,
-        }),
-      )
-    }
+    expectAllowed(p)
     const content = p.body['content'] as Record<string, unknown>
     expect((content['migrations'] as unknown[]).length).toBe(1)
     const op = await apply(p)
@@ -483,6 +487,42 @@ describe('migration.apply on a nonprod target', () => {
       expect(rows.map((r) => r.migrationId)).not.toContain(id)
     })
     await runAsSuperuser(pg17, db, ['DROP TABLE public.contacts'])
+  })
+
+  it('applies and verifies a bundle whose named ADD CONSTRAINT is CHECK, UNIQUE, PRIMARY KEY or FOREIGN KEY (the L0 contype is the catalog letter)', async () => {
+    const id = ulid()
+    const p = await plan(staging, {
+      bundles: [
+        bundle({
+          id,
+          name: 'named-constraints',
+          up: [
+            'CREATE TABLE public.region (id int NOT NULL, code text NOT NULL);',
+            'CREATE TABLE public.depot (id int NOT NULL, region_id int, size int);',
+            'ALTER TABLE public.region ADD CONSTRAINT region_pk PRIMARY KEY (id);',
+            'ALTER TABLE public.region ADD CONSTRAINT region_code_uq UNIQUE (code);',
+            'ALTER TABLE public.depot ADD CONSTRAINT depot_size_chk CHECK (size IS NULL OR size IN (1, 2));',
+            'ALTER TABLE public.depot ADD CONSTRAINT depot_region_fk FOREIGN KEY (region_id) REFERENCES public.region (id);',
+            '',
+          ].join('\n'),
+          dependsOn: [first],
+          declared: 'potentially_breaking',
+        }),
+      ],
+    })
+    expectAllowed(p)
+    const op = await apply(p)
+    const progress = await readProgress(h.worker, op.operationId)
+    expect(progress[0]?.gate).toBeNull()
+    expect(op).toMatchObject({
+      state: 'succeeded',
+      applyOutcome: 'applied',
+      verificationOutcome: 'passed',
+    })
+    await migrator(staging, async (s) => {
+      const rows = await s.readOnly((tx) => readLedgerRows(tx))
+      expect(rows.map((r) => r.migrationId)).toContain(id)
+    })
   })
 })
 

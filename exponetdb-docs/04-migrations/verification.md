@@ -142,7 +142,7 @@ with a boolean result and a description. Coverage is reported per statement.
 | `ALTER DEFAULT PRIVILEGES …` | matching `pg_default_acl` entry |
 | `CREATE [UNIQUE] INDEX [CONCURRENTLY] i ON t …` | index exists on t; unique flag; access method; `indisvalid` and `indisready` true; key columns/expressions; predicate present if partial |
 | `DROP INDEX` | index absent |
-| `ALTER TABLE t ADD CONSTRAINT c … [NOT VALID]` | constraint exists, type, `convalidated` as stated |
+| `ALTER TABLE t ADD CONSTRAINT c … [NOT VALID]` | constraint exists, `contype` equals the `pg_constraint` code of the stated kind (`c` check, `f` foreign key, `p` primary key, `u` unique, `x` exclusion; any other kind is not compared), `convalidated` as stated |
 | `ALTER TABLE t VALIDATE CONSTRAINT c` | `convalidated = true` |
 | `CREATE [OR REPLACE] FUNCTION f(args)` | function with identity args exists; return type; language; volatility; `prosecdef`; `proconfig` contains `search_path` if specified; body digest equals the statement's body |
 | `CREATE TRIGGER` | trigger exists on table with timing/events/level; function; enabled state |

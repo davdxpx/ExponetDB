@@ -366,6 +366,18 @@ function str(value: unknown): string | null {
   return typeof value === 'string' ? value : null
 }
 
+/**
+ * The parser's constraint kind as `pg_constraint.contype::text` spells it, which is what the
+ * L0 check compares. Any other kind has no expectation of its own (the check is skipped).
+ */
+const CONTYPE_CODES: ReadonlyMap<string, string> = new Map([
+  ['CONSTR_CHECK', 'c'],
+  ['CONSTR_FOREIGN', 'f'],
+  ['CONSTR_PRIMARY', 'p'],
+  ['CONSTR_UNIQUE', 'u'],
+  ['CONSTR_EXCLUSION', 'x'],
+])
+
 function list(value: unknown): readonly unknown[] {
   return Array.isArray(value) ? value : []
 }
@@ -903,7 +915,7 @@ function alterTable(d: Draft, body: JsonNode): void {
             table: rel.name,
             name: conname,
             present: true,
-            contype: contype ?? undefined,
+            contype: contype === null ? undefined : CONTYPE_CODES.get(contype),
             validated: !notValid,
           } as Expectation)
         } else {
