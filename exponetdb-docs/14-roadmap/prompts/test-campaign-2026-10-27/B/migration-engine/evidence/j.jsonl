@@ -1,0 +1,7 @@
+{"t":"2026-10-27T20:21:36.381Z","id":"j1.unknown_dependency","verdict":"CONFIRMED-NO-ID","data":{"ghost":"01M5ZGD1CTAHHR4FT1X492PQES","result":{"ok":false,"code":"MIGRATION_DEPENDENCY_UNKNOWN","message":"dependsOn names an id that is not in the project stream.","name":"MigrationError"}}}
+{"t":"2026-10-27T20:21:36.470Z","id":"j2.two_unknown_dependencies","verdict":"info","data":{"ghosts":["01M5ZGD1FX0TW39YRHY25BD10B","01M5ZGD1FXPFCQTSW19ZWEVTK9"],"result":{"ok":false,"code":"MIGRATION_DEPENDENCY_UNKNOWN","message":"dependsOn names an id that is not in the project stream.","name":"MigrationError"}}}
+{"t":"2026-10-27T20:30:45.909Z","id":"j3.ingest_with_unknown_dependency","verdict":"STORED (no graph validation at ingest)","data":{"status":"stored"}}
+{"t":"2026-10-27T20:30:45.982Z","id":"j3.unrelated_plan_after_poison","verdict":"BLOCKED","data":{"ok":false,"code":"MIGRATION_DEPENDENCY_UNKNOWN","message":"dependsOn names an id that is not in the project stream.","name":"MigrationError","op":"succeeded","ghost":"01M5ZGXT4FS4AP63ZB7PK8J9R3","bad":"01M5ZGXT4FTKACSKFP69JM5PH9"}}
+{"t":"2026-10-27T20:30:46.627Z","id":"j3.other_target_same_project","verdict":"BLOCKED","data":{"ok":false,"code":"MIGRATION_DEPENDENCY_UNKNOWN","message":"dependsOn names an id that is not in the project stream.","name":"MigrationError"}}
+{"t":"2026-10-27T20:30:46.636Z","id":"j3.repair_by_new_revision","verdict":"REPAIRED","data":{"status":"rewritten_unapplied"}}
+{"t":"2026-10-27T20:30:46.743Z","id":"j3.plan_after_repair","verdict":"PLAN CREATED","data":{}}
