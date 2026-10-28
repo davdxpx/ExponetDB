@@ -1,0 +1,27 @@
+=== D0 the new function does not exist before the PR
+Pager usage is off.
+ absent_before_pr 
+------------------
+ t
+(1 row)
+
+=== D1 baseline defect (TC-005): needs_attention -> verification_failed is refused by the frozen guard (expect EXO01)
+You are now connected to database "exponetdb_pre" as user "exdb_worker".
+ERROR:  EXO01: operation state transition not allowed
+CONTEXT:  PL/pgSQL function operations.operation_guard() line 24 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+=== D2 the worker already had a two-step path to the same end state (needs_attention -> verifying -> verification_failed), incl. rewriting unknown to applied
+You are now connected to database "exponetdb_pre" as user "exdb_serve".
+INSERT 0 1
+INSERT 0 1
+You are now connected to database "exponetdb_pre" as user "exdb_worker".
+UPDATE 1
+UPDATE 1
+UPDATE 1
+UPDATE 1
+UPDATE 1
+         operation_id          |        state        | apply_outcome | verification_outcome 
+-------------------------------+---------------------+---------------+----------------------
+ op_01M61C90YHV706H2B8EW39TBQ9 | verification_failed | applied       | failed
+(1 row)
+

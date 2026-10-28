@@ -1,0 +1,17 @@
+
+ RUN  v5.0.3 /tmp/claude-1000/-home-david-Development/f17099ee-bebb-431d-8bb5-92c66a60f60d/scratchpad/work/packages/operations
+
+ ✓ test/supersede-order.int.test.ts (3 tests) 5656ms
+   ✓ the operation in needs_attention is closed before the recovery is checked (D0) (3)
+     ✓ a recovery refused as PLAN_STALE (bindings changed) has already closed it and released its domain 442ms
+     ✓ a recovery that then waits for another domain has closed it and stays queued 442ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  20:38:58
+   Duration  9.73s (tests 60%, transform 27%, import 13%)
+
+  Transform  transforming modules took 2.54s · 27% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

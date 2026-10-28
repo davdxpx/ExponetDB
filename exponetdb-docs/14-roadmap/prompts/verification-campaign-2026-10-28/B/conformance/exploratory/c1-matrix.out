@@ -1,0 +1,58 @@
+base checksum sha256:c1:e85120d05b6e8ccfd885db9c7e6a15dc606999cb7583d24afed9c4d657d1c7e9
+comment appended at end                                        checksum SAME  source diff bundle same
+comment on own line between statements                         checksum SAME  source diff bundle same
+block comment after a space already present                    checksum SAME  source diff bundle same
+block comment between ADJACENT tokens (a,b)->(a,/*c*/b)        checksum DIFF  source diff bundle diff
+   vs: comment inserted into "(a int,b text)" variant          checksum SAME  source diff bundle same
+double spaces / tabs (runs collapse)                           checksum SAME  source diff bundle same
+NO trailing newline                                            checksum SAME  source diff bundle same
+leading blank lines + trailing blank lines                     checksum SAME  source diff bundle same
+space removed: (a int, b text) -> (a int,b text)               checksum DIFF  source diff bundle diff
+space added: ";" -> " ;"                                       checksum DIFF  source diff bundle diff
+newline added after ";" is run -> same? (; NL INSERT)          checksum DIFF  source diff bundle diff
+CRLF line endings                                              checksum SAME  source same bundle same
+lone CR line endings                                           checksum SAME  source same bundle same
+BOM prefix                                                     REFUSED {"code":"bom","file":"up.sql"}
+NUL byte                                                       REFUSED {"code":"nul","file":"up.sql"}
+invalid UTF-8 (0xC3 0x28)                                      REFUSED {"code":"invalid_utf8","file":"up.sql"}
+keyword case: create table                                     checksum DIFF  source diff bundle diff
+identifier case t -> T (unquoted)                              checksum DIFF  source diff bundle diff
+string literal changed x -> y                                  checksum DIFF  source diff bundle diff
+whitespace INSIDE string literal 'x' -> 'x '                   checksum DIFF  source diff bundle diff
+statement order swapped                                        checksum DIFF  source diff bundle diff
+trailing semicolon dropped on last statement                   checksum DIFF  source diff bundle diff
+extra empty statement ";;"                                     checksum DIFF  source diff bundle diff
+comment inside dollar-quoted body (kept)                       checksum DIFF  source diff bundle diff
+   same without comment                                        checksum DIFF  source diff bundle diff
+NFC vs NFD in literal: é U+00E9 vs e+U+0301                    checksum DIFF  source diff bundle diff
+   NFD form                                                    checksum DIFF  source diff bundle diff
+nested block comment                                           checksum SAME  source diff bundle same
+line comment w/ unicode LS U+2028 (not newline in PG)          checksum SAME  source diff bundle same
+NBSP U+00A0 between tokens (ident char in PG!)                 checksum DIFF  source diff bundle diff
+--- manifest fields (up.sql identical)
+description changed                                            checksum SAME  source same bundle same
+name changed (also dir)                                        checksum SAME  source same bundle same
+compatibility.notes added                                      checksum SAME  source same bundle same
+compatibility.declared additive->destructive                   checksum DIFF  source same bundle diff
+source.authors added                                           checksum SAME  source same bundle same
+dependsOn reordered (2 entries)                                checksum DIFF  source same bundle diff
+  vs original order                                            checksum DIFF  source same bundle diff
+dependsOn duplicate entry removed                              checksum DIFF  source same bundle diff
+  duplicate present                                            checksum DIFF  source same bundle diff
+lockTimeout 5s explicit (= engine default 5000ms)              checksum SAME  source same bundle same
+lockTimeout 5000ms explicit                                    checksum SAME  source same bundle same
+lockTimeout 10s                                                checksum DIFF  source same bundle diff
+statementTimeout 15m explicit (= engine default)               checksum SAME  source same bundle same
+transactional false                                            checksum DIFF  source same bundle diff
+searchPath [public, extensions]                                checksum DIFF  source same bundle diff
+verification.expectations none                                 checksum SAME  source same bundle diff
+rollback block added (no down.sql file)                        checksum SAME  source same bundle diff
+requires.postgres added                                        checksum DIFF  source same bundle diff
+--- PROJECT DEFAULTS (not part of bundle!)
+same bundle, project default lockTimeout 10s                   checksum DIFF  source same bundle diff
+same bundle, project default statementTimeout 30m              checksum DIFF  source same bundle diff
+same bundle, manifest w/o role, default role "owner" (explicit in manifest is same) checksum SAME  source same bundle same
+same bundle, manifest w/o role, default role "admin"           checksum DIFF  source same bundle diff
+--- verify/rollback digests
+verify comment appended: verifyDigest DIFF  checksum same bundleDigest DIFF
+verify CRLF:             verifyDigest same

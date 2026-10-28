@@ -1,0 +1,15 @@
+--- E2: with the engine's fence (SELECT ... FOR SHARE on the operation row, records.ts/leases.ts leaseHeld)
+BEGIN
+holder locks X1 at 19:34:12.28986
+BEGIN
+fenced caller starts at 19:34:13.332206
+fence held (leaseHeld: ... FOR SHARE) for op_01M61C90YHV706H2B8EW39TBQ2
+flip: R2 running -> verifying (waits for the fence)
+
+fenced caller moved 2 rows at 19:34:18.301984
+COMMIT
+holder committed at 19:34:18.302252
+COMMIT
+fenced caller committed at 19:34:18.310383
+UPDATE 1
+flip committed at 19:34:18.325387

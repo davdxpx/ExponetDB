@@ -1,0 +1,94 @@
+Pager usage is off.
+=== B0 extra fixture: Q7 and Q8 reach needs_attention with apply_outcome unknown (running -> needs_reconciliation -> needs_attention)
+You are now connected to database "exponetdb_control" as user "exdb_serve".
+INSERT 0 2
+INSERT 0 2
+You are now connected to database "exponetdb_control" as user "exdb_worker".
+UPDATE 2
+UPDATE 2
+UPDATE 2
+         operation_id          |      state      | apply_outcome | verification_outcome | lease_owner 
+-------------------------------+-----------------+---------------+----------------------+-------------
+ op_01M61C90YHV706H2B8EW39TBQ5 | needs_attention | applied       | error                | 
+ op_01M61C90YHV706H2B8EW39TBQ6 | needs_attention | applied       | error                | 
+ op_01M61C90YHV706H2B8EW39TBQ7 | needs_attention | unknown       | pending              | 
+ op_01M61C90YHV706H2B8EW39TBQ8 | needs_attention | unknown       | pending              | 
+(4 rows)
+
+=== B1 serve cannot use the new edge (expect EXO02: serve may only approve or cancel)
+You are now connected to database "exponetdb_control" as user "exdb_serve".
+ERROR:  EXO02: serve may only approve or cancel an operation that has not started
+CONTEXT:  PL/pgSQL function operations.operation_guard() line 41 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+You are now connected to database "exponetdb_control" as user "exdb_worker".
+=== B2 worker, edge without matching outcomes (expect EXO01 outcomes do not match: applied/error is not admitted by verification_failed)
+ERROR:  EXO01: outcomes do not match the operation state
+CONTEXT:  PL/pgSQL function operations.operation_guard() line 28 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+=== B3 worker, no other exit from needs_attention than verifying (all expect EXO01 transition not allowed)
+ERROR:  EXO01: operation state transition not allowed
+CONTEXT:  PL/pgSQL function operations.operation_guard() line 25 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+ERROR:  EXO01: operation state transition not allowed
+CONTEXT:  PL/pgSQL function operations.operation_guard() line 25 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+ERROR:  EXO01: operation state transition not allowed
+CONTEXT:  PL/pgSQL function operations.operation_guard() line 25 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+ERROR:  EXO01: operation state transition not allowed
+CONTEXT:  PL/pgSQL function operations.operation_guard() line 25 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+ERROR:  EXO01: operation state transition not allowed
+CONTEXT:  PL/pgSQL function operations.operation_guard() line 25 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+ERROR:  EXO01: operation state transition not allowed
+CONTEXT:  PL/pgSQL function operations.operation_guard() line 25 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+ERROR:  EXO01: operation state transition not allowed
+CONTEXT:  PL/pgSQL function operations.operation_guard() line 25 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+=== B4 unknown stays unknown: needs_attention -> verification_failed with apply unknown (expect EXO01: verification_failed does not admit unknown)
+ERROR:  EXO01: outcomes do not match the operation state
+CONTEXT:  PL/pgSQL function operations.operation_guard() line 28 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+=== B5 the engine path (supersede.ts): unknown -> partially_applied, verification failed (expect UPDATE 1), lease stays NULL
+UPDATE 1
+=== B6 the lock: only a finished operation lets the worker delete its lock (RLS). Q5 holds target:T1:schema in needs_attention
+INSERT 0 1
+DELETE 0
+UPDATE 1
+DELETE 1
+=== B7 a verification_failed operation never changes again (expect EXO01 x2)
+ERROR:  EXO01: a finished operation never changes
+CONTEXT:  PL/pgSQL function operations.operation_guard() line 21 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+ERROR:  EXO01: a finished operation never changes
+CONTEXT:  PL/pgSQL function operations.operation_guard() line 21 at RAISE
+LOCATION:  exec_stmt_raise, pl_exec.c:3897
+=== B8 the state of the world
+         operation_id          |        state        |   apply_outcome   | verification_outcome |          lease_owner           
+-------------------------------+---------------------+-------------------+----------------------+--------------------------------
+ op_01M61C90YHV706H2B8EW39TBQ1 | running             | not_started       | pending              | prc_01M61C90YHV706H2B8EW39TBW1
+ op_01M61C90YHV706H2B8EW39TBQ2 | running             | not_started       | pending              | prc_01M61C90YHV706H2B8EW39TBW1
+ op_01M61C90YHV706H2B8EW39TBQ3 | running             | not_started       | pending              | prc_01M61C90YHV706H2B8EW39TBW1
+ op_01M61C90YHV706H2B8EW39TBQ4 | queued              | not_started       | pending              | 
+ op_01M61C90YHV706H2B8EW39TBQ5 | verification_failed | applied           | failed               | 
+ op_01M61C90YHV706H2B8EW39TBQ6 | needs_attention     | applied           | error                | 
+ op_01M61C90YHV706H2B8EW39TBQ7 | verification_failed | partially_applied | failed               | 
+ op_01M61C90YHV706H2B8EW39TBQ8 | needs_attention     | unknown           | pending              | 
+(8 rows)
+
+=== B9 the grants of the two pure functions and the guard (proacl)
+You are now connected to database "exponetdb_control" as user "postgres".
+                        fn                         |    owner     | definer |        proconfig         |                                       proacl                                       
+---------------------------------------------------+--------------+---------+--------------------------+------------------------------------------------------------------------------------
+ operations.transition_allowed(text,text)          | exdb_migrate | f       | {search_path=pg_catalog} | {exdb_migrate=X/exdb_migrate,exdb_serve=X/exdb_migrate,exdb_worker=X/exdb_migrate}
+ operations.operation_guard()                      | exdb_migrate | f       | {search_path=pg_catalog} | {exdb_migrate=X/exdb_migrate}
+ operations.recovery_transition_allowed(text,text) | exdb_migrate | f       | {search_path=pg_catalog} | {exdb_migrate=X/exdb_migrate,exdb_serve=X/exdb_migrate,exdb_worker=X/exdb_migrate}
+(3 rows)
+
+ public_cannot_execute | gateway_can_execute | audit_maint_can_execute 
+-----------------------+---------------------+-------------------------
+ t                     | f                   | f
+(1 row)
+

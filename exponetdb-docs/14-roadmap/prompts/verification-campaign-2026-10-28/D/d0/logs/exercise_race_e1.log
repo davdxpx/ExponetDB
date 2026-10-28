@@ -1,0 +1,15 @@
+--- E1: no fence (a raw call of the function) while the operation leaves 'running' during the DELETE's lock wait
+BEGIN
+holder locks M1 at 19:35:16.918128
+BEGIN
+caller starts at 19:35:17.892335
+flip: R1 running -> verifying
+UPDATE 1
+flip committed at 19:35:18.9176
+
+caller moved 2 rows at 19:35:22.929974
+COMMIT
+holder committed at 19:35:22.928406
+COMMIT
+R1 state now: verifying
+history rows written for R1: 2
