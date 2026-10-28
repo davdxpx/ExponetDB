@@ -69,7 +69,7 @@ describe('refuseOversizedLegacyFiles', () => {
  * chain analysis runs in the worker, so the sum is bounded too.
  */
 describe('the total token budget of a legacy history', () => {
-  // `PERFORM 1;` is three tokens: a file of this many repetitions holds `tokens` of them.
+  // `PERFORM 1;` is three tokens: a file of this many repetitions holds about `tokens` of them.
   const file = (tokens: number) =>
     `-- file\nBEGIN ${'PERFORM 1;'.repeat(Math.floor(tokens / 3))} END`
   const files = (count: number, tokens: number) =>
@@ -82,14 +82,14 @@ describe('the total token budget of a legacy history', () => {
     expect(MAX_TOTAL_PARSE_TOKENS).toBe(1_000_000)
   })
 
-  it('accepts files that together fit, even when each is large', () => {
-    expect(() => refuseOversizedLegacyFiles(files(5, 190_000))).not.toThrow()
+  it('accepts files that together fit', () => {
+    expect(() => refuseOversizedLegacyFiles(files(3, 1_000), 3_500)).not.toThrow()
   })
 
   it('refuses a history over the budget with 422 too_large, naming the file that crosses it', () => {
     let error: unknown
     try {
-      refuseOversizedLegacyFiles(files(6, 190_000))
+      refuseOversizedLegacyFiles(files(4, 1_000), 3_500)
     } catch (e) {
       error = e
     }
@@ -98,11 +98,21 @@ describe('the total token budget of a legacy history', () => {
     expect((error as RegistryError).details).toMatchObject({
       errors: [
         {
-          path: '/files/5/text',
+          path: '/files/3/text',
           code: 'too_large',
           message: expect.stringContaining('together'),
         },
       ],
     })
+  })
+
+  it('counts the bodies of DO blocks, which a replay parses as well', () => {
+    const doBlock = (n: number) => ({
+      name: '0001_do.sql',
+      text: `DO $$ ${'PERFORM 1;'.repeat(n)} $$;`,
+    })
+    // About 30,000 tokens in the body, one top-level statement: the body is what costs.
+    expect(() => refuseOversizedLegacyFiles([doBlock(10_000)], 20_000)).toThrow(RegistryError)
+    expect(() => refuseOversizedLegacyFiles([doBlock(10_000)], 40_000)).not.toThrow()
   })
 })

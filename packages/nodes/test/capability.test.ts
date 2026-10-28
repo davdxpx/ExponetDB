@@ -656,10 +656,26 @@ describe('a pg_hba block that would lock ExponetDB out (TC-018)', () => {
   })
 
   it('leaves what it cannot judge to the agent, which refuses it after writing', () => {
-    const uncertain = [
-      rule('hostssl', 'samehost', 'reject'),
-      rule('hostssl', 'all', 'reject', { database: ['samerole'] }),
-    ]
-    expect(hbaLockOut(uncertain, [network])).toBeUndefined()
+    expect(hbaLockOut([rule('hostssl', 'samehost', 'reject')], [network])).toBeUndefined()
+    expect(hbaLockOut([rule('hostssl', 'samenet', 'reject')], [network])).toBeUndefined()
+  })
+
+  it('reads every name but all as a literal name, as the helper writes it', () => {
+    // The helper double-quotes every name but `all`, so `sameuser` and `samerole` are databases and
+    // roles of those names, never the keywords. An access whose database is its role is not matched
+    // by "sameuser"; a database that is called samerole is.
+    const same = { ...network, role: 'app', database: 'app' }
+    expect(
+      hbaLockOut([rule('hostssl', 'all', 'reject', { database: ['sameuser'] })], [same]),
+    ).toBeUndefined()
+    expect(
+      hbaLockOut([rule('hostssl', 'all', 'reject', { database: ['samerole'] })], [network]),
+    ).toBeUndefined()
+    expect(
+      hbaLockOut(
+        [rule('hostssl', 'all', 'reject', { database: ['samerole'] })],
+        [{ ...network, database: 'samerole' }],
+      ),
+    ).toMatchObject({ rule: 1 })
   })
 })

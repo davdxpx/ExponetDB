@@ -817,7 +817,9 @@ describe('capability operations through the Go agent and the helper', () => {
     expect(await psql('SHOW work_mem')).toBe('4MB')
 
     // pg_hba: a managed block is written and verified; a block that would lock
-    // the agent out is refused on the host and the file put back (G5 item 7).
+    // ExponetDB out is refused when it is planned (TC-018), and the file stays as it was.
+    // The agent's own refusal after the write, with the file put back (G5 item 7), is proven on
+    // real clusters by `capabilities_pgit_test.go` (CI job node-pg), which a plan cannot reach.
     await inspect('postgres.hba.inspect@2')
     const rule = {
       type: 'hostssl',
@@ -835,21 +837,24 @@ describe('capability operations through the Go agent and the helper', () => {
     expect([hba.state, hba.verificationOutcome], logs.join('')).toEqual(['succeeded', 'passed'])
     const before = readFileSync(instance.hbaFile)
     await inspect('postgres.hba.inspect@2')
-    const lockout = await planAndApply({
-      kind: 'postgres.hba.apply',
-      managedRules: [
-        {
-          type: 'local',
-          database: ['all'],
-          user: ['all'],
-          address: null,
-          method: 'reject',
-          map: null,
-        },
-      ],
-      protectedAccess: [],
+    const lockout = await call('POST', `/api/v1/nodes/${nodeId}/plans`, {
+      clusterId,
+      change: {
+        kind: 'postgres.hba.apply',
+        managedRules: [
+          {
+            type: 'local',
+            database: ['all'],
+            user: ['all'],
+            address: null,
+            method: 'reject',
+            map: null,
+          },
+        ],
+        protectedAccess: [],
+      },
     })
-    expect([lockout.state, lockout.applyOutcome]).toEqual(['failed', 'not_applied'])
+    expect([lockout.status, lockout.body?.code]).toEqual([409, 'HBA_WOULD_LOCK_OUT'])
     expect(Buffer.compare(readFileSync(instance.hbaFile), before)).toBe(0)
     expect(await psql('SELECT 1')).toBe('1')
 

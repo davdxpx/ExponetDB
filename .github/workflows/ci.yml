@@ -32,7 +32,9 @@ jobs:
   typescript:
     name: TypeScript (lint, types, tests, contracts, boundaries)
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # The unit tests take 11 to 17 minutes depending on the runner (a run of this job was cancelled
+    # at 20 minutes while building); 30 leaves the headroom a slower runner needs.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:

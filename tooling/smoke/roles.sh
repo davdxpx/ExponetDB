@@ -93,8 +93,13 @@ for path in targets nodes clusters/cls_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/backups backup
   [ "$code" = 401 ] || { echo "/api/v1/$path without credentials answered $code" >&2; exit 1; }
 done
 code="$(curl -s -o /dev/null -w '%{http_code}' -X POST \
-  http://127.0.0.1:18080/api/v1/targets/tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/ledger/reconcile-plans)"
+  http://127.0.0.1:18080/api/v1/targets/tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/ledger/not-a-route)"
 [ "$code" = 404 ] || { echo "an unserved route answered $code" >&2; exit 1; }
+# The ledger reconciliation plan has been served since TC-007: without a session a served mutating
+# route answers 403 (the CSRF check comes first), not the 404 of a path nobody serves.
+code="$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+  http://127.0.0.1:18080/api/v1/targets/tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z/ledger/reconcile-plans)"
+[ "$code" = 403 ] || { echo "the served reconcile-plans route answered $code" >&2; exit 1; }
 # Wave 7: /mcp is served; without a token it answers 401 with the challenge naming its metadata.
 curl -s -o /dev/null -D "$work/mcp.headers" -w '%{http_code}' -X POST \
   -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \

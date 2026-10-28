@@ -6,25 +6,16 @@ import type { JsonObject, JsonValue } from '@exponetdb/kernel'
  * managed rules, first match first, against the access ExponetDB must keep. It mirrors the
  * agent's own check after the write (`matchAccess` in `agent/node/internal/capabilities/hba.go`),
  * which stays the second line. The managed block is placed first in the file, so a rule of it
- * that matches an access decides it. A rule the check cannot judge (`samehost`, `samenet`,
- * `samerole`) ends the check for that access without a verdict: the agent refuses it after the
- * write and puts the file back.
+ * that matches an access decides it. A network rule with `samehost` or `samenet` ends the check
+ * for that access without a verdict: the agent refuses it after the write and puts the file back.
+ *
+ * Names: the helper writes every name of a rule double-quoted except `all`, so `sameuser`,
+ * `samerole` and the like are literal database and role names here, never the pg_hba keywords.
  */
 
-/** 1 match, 0 no match, -1 uncertain (the Go `listMatch`). */
-function listMatch(items: readonly JsonValue[], want: string, database: boolean, role: string) {
-  let result = 0
-  for (const item of items) {
-    if (item === 'all') return 1
-    if (database && item === 'sameuser') {
-      if (role === want) return 1
-    } else if (item === 'samerole' || item === 'samegroup') {
-      result = -1
-    } else if (item === want) {
-      return 1
-    }
-  }
-  return result
+/** Whether a database or user list names the value: `all`, or the literal name. */
+function listMatches(items: readonly JsonValue[], want: string): boolean {
+  return items.some((item) => item === 'all' || item === want)
 }
 
 /** 1 match, 0 no match, -1 uncertain, for a network access address against a rule's address. */
@@ -66,11 +57,11 @@ export function hbaLockOut(
     const local = address === 'local'
     for (const [index, rule] of rules.entries()) {
       if ((rule['type'] === 'local') !== local) continue
-      const db = listMatch(list(rule['database']), database, true, role)
-      const user = listMatch(list(rule['user']), role, false, '')
+      if (!listMatches(list(rule['database']), database)) continue
+      if (!listMatches(list(rule['user']), role)) continue
       const addr = local ? 1 : addressMatch(rule['address'], address)
-      if (db === 0 || user === 0 || addr === 0) continue
-      if (db < 0 || user < 0 || addr < 0) break
+      if (addr === 0) continue
+      if (addr < 0) break
       if (rule['method'] !== access['method']) {
         return {
           role,

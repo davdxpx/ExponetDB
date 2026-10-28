@@ -23,8 +23,10 @@ export const MAX_TOTAL_PARSE_TOKENS = 1_000_000
  */
 export function refuseOversizedLegacyFiles(
   files: readonly { readonly name: string; readonly text: string }[],
+  /** The total budget; the tests pass a small one instead of scanning a million tokens. */
+  budget = MAX_TOTAL_PARSE_TOKENS,
 ): void {
-  let remaining = MAX_TOTAL_PARSE_TOKENS
+  let remaining = budget
   for (const [i, f] of files.entries()) {
     if (exceedsParseWork(f.text)) {
       throw new RegistryError('VALIDATION_FAILED', {
@@ -45,7 +47,7 @@ export function refuseOversizedLegacyFiles(
           {
             path: `/files/${i}/text`,
             code: 'too_large',
-            message: `The files together hold more than ${MAX_TOTAL_PARSE_TOKENS} tokens: import the history in several parts.`,
+            message: `The files together hold more than ${budget} tokens: import the history in several parts.`,
           },
         ],
       })
