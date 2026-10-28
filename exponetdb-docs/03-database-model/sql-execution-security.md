@@ -79,6 +79,19 @@ is refused with `QUERY_NOT_READ_ONLY` and the hint to use a migration.
    `_pg_user_mappings` (`SECRET_CATALOG_RELATIONS` in
    `packages/postgres/src/parser/admission.ts`; for `data.read` and
    `verify.sql` alike).
+   **[DECIDED]** (test campaign TC-014) A `data.read` relation must be written
+   with its schema, because the session's `search_path` is empty by design (a
+   fixed search path would make the meaning of a bare name depend on state the
+   caller cannot see). System views are readable when qualified:
+   `pg_catalog.pg_stat_activity`, `pg_catalog.pg_settings`, `public.<table>`;
+   a table in another schema that bears a system view's name is its own relation.
+   A bare name is refused with `QUERY_CONSTRUCT_UNSUPPORTED` (audit reason
+   `relation_unqualified`) whose `construct` now says what to write, for example
+   `pg_stat_activity: write the schema, e.g. pg_catalog.pg_stat_activity or
+   public.pg_stat_activity`; before this it held the bare name, which read as "an
+   ordinary table is a construct the admission cannot classify" and led an agent to
+   conclude that connection counts could not be read. The text is capped at 128
+   characters (the whole advice fits for a name of up to 40).
    **[DECIDED]** (G4 correction, 2026-10-07) Calls and operators are also
    checked where the syntax hides them:
    - field selection `(expr).name` is refused as a whole: PostgreSQL turns it

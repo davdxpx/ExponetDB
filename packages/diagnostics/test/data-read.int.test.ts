@@ -276,6 +276,55 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       }
     })
 
+    it('answers an unqualified relation with the schema to write, and keeps qualified names and look-alikes apart (TC-014)', async () => {
+      await runAsSuperuser(server, database, [
+        'CREATE SCHEMA lookalike',
+        'CREATE TABLE lookalike.pg_stat_activity (id integer)',
+      ])
+      // The session's search_path is empty by design, so a bare name is refused: the refusal says
+      // what to write instead of calling an ordinary table a construct it cannot classify.
+      for (const [statement, relation, qualified] of [
+        [
+          'SELECT count(*) FROM pg_stat_activity',
+          'pg_stat_activity',
+          'pg_catalog.pg_stat_activity',
+        ],
+        [
+          "SELECT name, setting FROM pg_settings WHERE name = 'max_connections'",
+          'pg_settings',
+          'pg_catalog.pg_settings',
+        ],
+        ['SELECT count(*) AS n FROM accounts', 'accounts', 'public.accounts'],
+        ['SELECT count(*) FROM pg_class', 'pg_class', 'pg_catalog.pg_class'],
+      ] as const) {
+        const r = await read(statement, { callerClass: 'human' })
+        expect(r, statement).toMatchObject({
+          kind: 'refused',
+          code: 'QUERY_CONSTRUCT_UNSUPPORTED',
+          reason: 'relation_unqualified',
+        })
+        const construct = String((r as { details?: { construct?: unknown } }).details?.construct)
+        expect(construct, statement).toContain(relation)
+        expect(construct, statement).toContain('schema')
+        expect(construct, statement).toContain(qualified)
+      }
+      // Qualified, the same statements are answered, and a table that merely bears the name of
+      // a system view in another schema is its own relation.
+      for (const statement of [
+        'SELECT count(*) FROM pg_catalog.pg_stat_activity',
+        "SELECT name, setting FROM pg_catalog.pg_settings WHERE name = 'max_connections'",
+        'SELECT count(*) AS n FROM public.accounts',
+      ]) {
+        expect(await read(statement, { callerClass: 'human' }), statement).toMatchObject({
+          kind: 'query',
+        })
+      }
+      const lookalike = await read('SELECT count(*)::int AS n FROM lookalike.pg_stat_activity', {
+        callerClass: 'human',
+      })
+      expect(lookalike).toMatchObject({ kind: 'query', rows: [[0]] })
+    })
+
     it('refuses the catalogs that pg_read_all_data would let the reader read: verifiers, mappings, column statistics', async () => {
       // The reader role itself can read them: the refusal by the parser is the barrier.
       await runAsSuperuser(server, database, ['ANALYZE public.accounts'])

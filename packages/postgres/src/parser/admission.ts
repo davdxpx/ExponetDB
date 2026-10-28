@@ -161,6 +161,16 @@ export const SECRET_CATALOG_RELATIONS: ReadonlyMap<string, ReadonlySet<string>> 
   ['information_schema', new Set(['user_mapping_options', 'user_mappings', '_pg_user_mappings'])],
 ])
 
+/**
+ * What a refusal of a bare relation name says: the session's `search_path` is empty by design,
+ * so the name must carry its schema. Without this a plain table was reported as a construct the
+ * admission cannot classify, and a caller concluded that system views were forbidden (TC-014).
+ * The text is capped at 128 characters, which holds for a name of up to 40.
+ */
+function unqualifiedAdvice(name: string): string {
+  return `${name}: write the schema, e.g. pg_catalog.${name} or public.${name}`
+}
+
 function isSecretRelation(schema: string | null, name: string): boolean {
   return SECRET_CATALOG_RELATIONS.get(schema ?? 'pg_catalog')?.has(name) === true
 }
@@ -479,7 +489,7 @@ function checkTree(
       }
       if (schema === null && options.unqualifiedRelations !== true) {
         refusal = refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'relation_unqualified', {
-          construct: name,
+          construct: unqualifiedAdvice(name),
           ...at(body),
         })
         return false
