@@ -198,7 +198,7 @@ of one person through one client wait for an approval at a time; a further
 
 | Tool | Scope | Ann. | Input | Output | REST | Wave |
 |---|---|---|---|---|---|---|
-| `query_stats` | `diagnostics.read` | RO | `target`, window, order (total time, mean, calls, I/O), limit | normalized statements with metrics and deltas; `CAPABILITY_UNAVAILABLE` if `pg_stat_statements` is absent | `GET /targets/{id}/query-stats` | 9, served |
+| `query_stats` | `diagnostics.read` | RO | `target`, window, order (total time, mean, calls, I/O), limit | normalized statements with metrics and deltas; `CAPABILITY_UNAVAILABLE` with `details.reason = extension_missing` and `details.extension = pg_stat_statements` if the extension is absent | `GET /targets/{id}/query-stats` | 9, served |
 | `table_stats` | `diagnostics.read` | RO | `target`, filters | table and index sizes, scans, dead tuples, last (auto)vacuum/analyze, bloat estimate, unused/duplicate/invalid indexes, xid age | `GET /targets/{id}/table-stats` | 9, served |
 | `advisors_run` | `diagnostics.read` | RO | `target`, categories | live findings (security, performance, operations, change safety; default security and performance) with remediation, evidence, the recorded finding id and the skipped rules with their reason | `POST /targets/{id}/advisor-runs` | 9, served |
 

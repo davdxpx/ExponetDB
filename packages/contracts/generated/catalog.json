@@ -11025,9 +11025,34 @@
     },
     {
       "code": "CAPABILITY_UNAVAILABLE",
-      "details": null,
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/CAPABILITY_UNAVAILABLE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "extension": {
+            "enum": [
+              "pg_stat_statements"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "extension_missing"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "extension"
+        ],
+        "type": "object"
+      },
       "group": "targets_clusters_nodes",
-      "message": "The node does not report this capability version, or the cluster is external.",
+      "message": "The capability is not available here: the node does not report this capability version, the cluster is external, or a required extension is missing (see details).",
+      "remediation": "When details.reason is extension_missing, install the named extension on the target (add it to shared_preload_libraries, restart, then CREATE EXTENSION) and wait for the next sample.",
       "retryable": false,
       "status": 409,
       "title": "Capability unavailable",

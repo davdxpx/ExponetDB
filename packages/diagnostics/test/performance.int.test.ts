@@ -260,6 +260,10 @@ describe('a database without pg_stat_statements', () => {
     const refused = await queryStats(h.serve, target, {}).catch((e: unknown) => e)
     expect(refused).toBeInstanceOf(DiagnosticsError)
     expect(refused).toMatchObject({ code: 'CAPABILITY_UNAVAILABLE' })
+    // And it says which extension is missing, so the answer is not read as a node or cluster problem.
+    expect(refused).toMatchObject({
+      details: { reason: 'extension_missing', extension: 'pg_stat_statements' },
+    })
   }, 120_000)
 })
 

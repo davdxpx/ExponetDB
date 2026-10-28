@@ -785,7 +785,10 @@ export async function queryStats(
     )
   ).rows[0]
   if (last?.text('outcome') === 'extension_missing') {
-    throw new DiagnosticsError('CAPABILITY_UNAVAILABLE')
+    throw new DiagnosticsError('CAPABILITY_UNAVAILABLE', {
+      reason: 'extension_missing',
+      extension: 'pg_stat_statements',
+    })
   }
   const order = ORDER[request.order ?? 'total_time']
   const { rows } = await q.query(

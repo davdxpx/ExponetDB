@@ -1126,7 +1126,17 @@ export const ERRORS = {
     status: 409,
     retryable: false,
     title: 'Capability unavailable',
-    message: 'The node does not report this capability version, or the cluster is external.',
+    message:
+      'The capability is not available here: the node does not report this capability version, the cluster is external, or a required extension is missing (see details).',
+    remediation:
+      'When details.reason is extension_missing, install the named extension on the target (add it to shared_preload_libraries, restart, then CREATE EXTENSION) and wait for the next sample.',
+    // Optional: a node without the capability and an external cluster carry no details.
+    details: z
+      .strictObject({
+        reason: z.enum(['extension_missing']),
+        extension: z.enum(['pg_stat_statements']),
+      })
+      .optional(),
   },
   JOB_EXPIRED: {
     group: 'targets_clusters_nodes',

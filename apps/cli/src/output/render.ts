@@ -151,6 +151,8 @@ function status(t: Terminal, b: Extract<Block, { kind: 'status' }>): string[] {
 /** The details a catalog code names as plain data, and how a list of them is joined. */
 const NAMED_DETAILS: readonly (readonly [key: string, joiner: string])[] = [
   ['migrationId', ', '],
+  ['reason', ', '],
+  ['extension', ', '],
   ['missing', ', '],
   ['cycle', ' → '],
 ]

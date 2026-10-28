@@ -853,12 +853,16 @@ describe('diagnostics', () => {
       `/targets/${TGT}/query-stats`,
       refusal(409, 'CAPABILITY_UNAVAILABLE', {
         remediation: 'Install pg_stat_statements and add it to shared_preload_libraries.',
+        details: { reason: 'extension_missing', extension: 'pg_stat_statements' },
       }),
     )
     const refused = await cli(['diagnose', 'query-stats', TGT])
     expect(refused.code).toBe(EXIT.failure)
     expect(refused.stderr).toContain('CAPABILITY_UNAVAILABLE')
     expect(refused.stderr).toContain('shared_preload_libraries')
+    // The text output names the missing extension (TC-015), not only the generic message.
+    expect(refused.stderr).toContain('extension: pg_stat_statements')
+    expect(refused.stderr).toContain('reason: extension_missing')
     on(
       'GET',
       `/targets/${TGT}/query-stats`,
