@@ -295,18 +295,19 @@ phase_cli() {
   exdb profile add stack --server "${EXSTACK_PUBLIC_URL}" --use >/dev/null || true
   local scopes; scopes="$(cd "${EXSTACK_KIT}" && bun --conditions=@exponetdb/source scopes.ts)"
   local outfile="${EXSTACK_LOGS}/cli-login.out"; : >"$outfile"
-  # the device flow: the CLI shows a user code; the scripted owner approves it, as a person would in the browser
-  ( EXPONETDB_CONFIG_DIR="$cfg" "${EXSTACK_NODE_BIN}" --liftoff-only "${EXSTACK_CLI_BIN}" login --device --scope "$scopes" >"$outfile" 2>&1 ) &
-  local pid=$! code="" i
+  # the loopback sign-in (PKCE): the CLI prints the authorization URL and waits on 127.0.0.1; the scripted owner opens
+  # it, ticks every scope and production, and the redirect reaches the CLI, as a person's browser would deliver it
+  ( EXPONETDB_CONFIG_DIR="$cfg" "${EXSTACK_NODE_BIN}" --liftoff-only "${EXSTACK_CLI_BIN}" login --no-browser --scope "$scopes" >"$outfile" 2>&1 ) &
+  local pid=$! url="" i
   for i in $(seq 1 60); do
-    code="$(grep -Eo '[A-Z0-9]{4}-[A-Z0-9]{4}' "$outfile" | head -1 || true)"
-    [ -n "$code" ] && break
+    url="$(grep -Eo 'https?://[^ ]*/oauth/authorize\?[^ ]*' "$outfile" | head -1 || true)"
+    [ -n "$url" ] && break
     sleep 0.5
   done
-  [ -n "$code" ] || { cat "$outfile" >&2; kill "$pid" 2>/dev/null || true; die "no device code from the CLI"; }
+  [ -n "$url" ] || { sed 's/code=[^& ]*/code=<r>/' "$outfile" >&2; kill "$pid" 2>/dev/null || true; die "no sign-in URL from the CLI"; }
   # shellcheck disable=SC2086
-  human device-approve "$code" $scopes | jq -c '{status}' >&2
-  wait "$pid" || { cat "$outfile" >&2; die "CLI login failed"; }
+  human consent "$url" $scopes >&2
+  wait "$pid" || { sed 's/code=[^& ]*/code=<r>/' "$outfile" >&2; die "CLI login failed"; }
   chmod -R go-rwx "$cfg"
   exdb auth status | tee -a "$LOG" | head -12 >&2
 }
