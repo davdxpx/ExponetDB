@@ -1,0 +1,58 @@
+ea1f29367e1395724c82db751c30135eb2cc39efbbf0ef7013da1adc778a0097  /root/evid/pre/effects.log
+c2014ae8b74589b08f9c8fac0db4c91a8e49251acf07b6ad37c23e8dff2b8e34  /root/evid/pre/journal.log
+ef94e7fc284e351453a777ff38e782cdf672db316496681fb2e8f61ccf77c6b0  /root/evid/pre/nonces.log
+/root/evid/pre/effects.log 373
+/root/evid/pre/journal.log 11263
+/root/evid/pre/nonces.log 1494
+=== upgrade per runbook 9: install new binaries, units, restart both (agent stopped first; a read queued meanwhile)
+20:19:03
++ install -m 0755 /root/dist-0.7.0/exponetdb-node-0.7.0-linux-amd64 /usr/bin/exponetdb-node
++ install -m 0755 /root/dist-0.7.0/exponetdb-node-helper-0.7.0-linux-amd64 /usr/sbin/exponetdb-node-helper
++ install -m 0644 /root/dist-0.7.0/systemd/exponetdb-node-helper.service /root/dist-0.7.0/systemd/exponetdb-node-helper.socket /root/dist-0.7.0/systemd/exponetdb-node.service /etc/systemd/system/
++ install -m 0644 /root/dist-0.7.0/tmpfiles.d/exponetdb-node-engine.conf /usr/lib/tmpfiles.d/
++ systemd-tmpfiles --create
++ systemctl daemon-reload
++ systemctl stop exponetdb-node-helper.service
+Stopping 'exponetdb-node-helper.service', but its triggering units are still active:
+exponetdb-node-helper.socket
++ systemctl restart exponetdb-node-helper.socket
++ systemctl start exponetdb-node.service
++ set +x
+{"status":202,"done":{"id":"op_01M5ZG8C94GS7XEQ0KB74T8W6M","state":"succeeded","applyOutcome":"applied","verificationOutcome":"passed","errorCode":null},"id":"op_01M5ZG8C94GS7XEQ0KB74T8W6M"}
+0.7.0 commit d02295503bcfb7a4a4baea860bd9fceebe80b8b4
+journal prefix byte-identical
+nonces prefix byte-identical
+effects prefix byte-identical
+job keys jobkey_2026_10_bk5bkc
+journal 6 jobs, 13323 bytes, 0 in flight
+Stopped exponetdb-node.service - ExponetDB node agent.
+Started exponetdb-node.service - ExponetDB node agent.
+{"time":"2026-10-27T20:18:24.373191369Z","level":"INFO","msg":"agent started","version":"0.6.0","commit":"1819998e"}
+Started exponetdb-node-helper.service - ExponetDB node agent root helper.
+Stopping exponetdb-node.service - ExponetDB node agent...
+exponetdb-node.service: Deactivated successfully.
+Stopped exponetdb-node.service - ExponetDB node agent.
+Stopping exponetdb-node-helper.service - ExponetDB node agent root helper...
+exponetdb-node-helper.service: Deactivated successfully.
+Stopped exponetdb-node-helper.service - ExponetDB node agent root helper.
+Started exponetdb-node.service - ExponetDB node agent.
+{"time":"2026-10-27T20:19:05.661734269Z","level":"INFO","msg":"agent started","version":"0.7.0","commit":"d02295503bcfb7a4a4baea860bd9fceebe80b8b4"}
+total 20
+drwx--x--x  5 root root 4096 Oct 27 20:19 .
+drwxr-xr-x 47 root root 4096 Oct 27 20:19 ..
+drwx--x--x  2 root root 4096 Oct 27 20:19 reads
+drwx--x--x  2 root root 4096 Oct 27 20:19 runs
+drwx--x--x  2 root root 4096 Oct 27 20:19 scratch
+--- post-upgrade jobs: read and a helper effect
+{"status":202,"done":{"id":"op_01M5ZGF4A7V6943ZAFEWARPE4A","state":"succeeded","applyOutcome":"applied","verificationOutcome":"passed","errorCode":null},"id":"op_01M5ZGF4A7V6943ZAFEWARPE4A"}
+{"planStatus":409,"body":{"type":"https://db.exponet.cloud/errors/node-observation-stale","title":"Node observation missing or stale","status":409,"code":"NODE_OBSERVATION_STALE","message":"No node-signed observation of this cluster is recent enough to plan against (at most 10 minutes).","retryable"
+{"status":202,"done":{"id":"op_01M5ZGFFYFZYMKEZA1HHCR9N7V","state":"succeeded","applyOutcome":"applied","verificationOutcome":"passed","errorCode":null},"id":"op_01M5ZGFFYFZYMKEZA1HHCR9N7V"}
+{"planId":"pln_01M5ZGFK81EKGK870AB3ZZXV91","id":"op_01M5ZGFK9FR3NSVN9ZAK9JT4VJ","done":{"id":"op_01M5ZGFK9FR3NSVN9ZAK9JT4VJ","state":"succeeded","applyOutcome":"applied","verificationOutcome":"passed","errorCode":null}}
+/var/lib/exponetdb-node-helper/effects.log 746
+/var/lib/exponetdb-node/journal/journal.log 24600
+effects prefix still byte-identical
+{"schema":"exponetdb.helper-ledger/v1","ledger":"/var/lib/exponetdb-node-helper/effects.log","initializedAt":"2026-10-27T20:18:39Z"}
+Stopping exponetdb-node-helper.service - ExponetDB node agent root helper...
+exponetdb-node-helper.service: Deactivated successfully.
+Stopped exponetdb-node-helper.service - ExponetDB node agent root helper.
+Started exponetdb-node-helper.service - ExponetDB node agent root helper.

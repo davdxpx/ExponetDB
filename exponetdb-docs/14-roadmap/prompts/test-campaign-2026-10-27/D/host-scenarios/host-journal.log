@@ -1,0 +1,16 @@
+$ vitest run --config vitest.host.config.ts test/host/journal.host.test.ts
+
+ RUN  v5.0.3 /root/exdb/apps/server
+
+ ✓ test/host/journal.host.test.ts (4 tests) 154960ms
+   ✓ a broken or lost journal and a lost helper ledger (host scenario) (4)
+     ✓ a corrupted journal: every job is refused and nothing runs; restored, the node works 6815ms
+     ✓ a missing journal after enrollment: every job is refused, none is created again by the agent 4986ms
+     ✓ a stopped helper (service and socket) does not stop the agent: it keeps heartbeating and serving reads, and the helper works again when its socket starts 17566ms
+     ✓ a lost helper ledger: every effect is refused, reads stay available, the host is unchanged 110377ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  20:28:09
+   Duration  161.67s (tests 96%, transform 3%, import 1%)
+

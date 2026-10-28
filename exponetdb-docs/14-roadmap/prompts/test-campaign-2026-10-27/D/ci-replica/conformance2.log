@@ -1,0 +1,44 @@
+$ vitest run --config vitest.conformance.config.ts
+
+ RUN  v5.0.3 /root/exdb/apps/server
+
+ ✓ test/mcp-inspector.conformance.test.ts (3 tests) 38566ms
+   ✓ MCP Inspector CLI (pinned) (3)
+     ✓ lists every served tool in the legacy era with portable schemas (--strict: no finding) 24505ms
+     ✓ lists every served tool in the modern era with portable schemas (--strict: no finding) 9575ms
+     ✓ stops at a refused token: exit 3, no tool listed 4481ms
+ ❯ test/mcp-conformance.conformance.test.ts (2 tests | 2 failed) 174ms
+   ❯ MCP conformance suite (2)
+     × meets the 2026-07-28 requirements except the recorded expected failures 124ms
+     × meets the 2025-11-25 requirements except the recorded expected failures 48ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/mcp-conformance.conformance.test.ts > MCP conformance suite > meets the 2026-07-28 requirements except the recorded expected failures
+ FAIL  test/mcp-conformance.conformance.test.ts > MCP conformance suite > meets the 2025-11-25 requirements except the recorded expected failures
+AssertionError: 
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ test/mcp-conformance.conformance.test.ts:77:76
+     75|         }
+     76|         const summary = stdout.slice(stdout.indexOf('=== SUMMARY ==='))
+     77|         expect(code, `${summary}\n${(await failures(output)).join('\n'…
+       |                                                                            ^
+     78|         // The run really happened: scenarios ran and wrote their chec…
+     79|         expect((await readdir(output)).length).toBeGreaterThan(10)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  2 failed | 3 passed (5)
+   Start at  21:12:53
+   Duration  46.41s (tests 84%, transform 10%, import 6%)
+
+error: script "test:conformance" exited with code 1

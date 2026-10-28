@@ -1,0 +1,61 @@
++ systemctl disable --now exponetdb-node.service exponetdb-node-helper.socket exponetdb-node-helper.service
++ tail -2
+Disabling 'exponetdb-node-helper.service', but its triggering units are still active:
+exponetdb-node-helper.socket
++ mv /var/lib/exponetdb-node /root/old-state-070
++ install -m 0755 /root/dist-0.6.0/exponetdb-node-0.6.0-linux-amd64 /usr/bin/exponetdb-node
++ install -m 0755 /root/dist-0.6.0/exponetdb-node-helper-0.6.0-linux-amd64 /usr/sbin/exponetdb-node-helper
++ install -m 0644 /root/dist-0.6.0/systemd/exponetdb-node-helper.service /root/dist-0.6.0/systemd/exponetdb-node-helper.socket /root/dist-0.6.0/systemd/exponetdb-node.service /etc/systemd/system/
++ systemctl daemon-reload
++ exponetdb-node version
+0.6.0 commit 1819998e
++ exponetdb-node-helper version
+0.6.0 commit 1819998e
++ install -d -m 0700 -o exponetdb-node -g exponetdb-node /var/lib/exponetdb-node
++ set +x
++ sudo -u exponetdb-node exponetdb-node enroll --config /etc/exponetdb-node/config.json --token-file -
+enrolled as nod_01M5ZG6V93FD0PRJGF64HPPZE5 (installation ins_01M5ZG0D37P80QGM68SCHEMWEH, server srv_01M5ZG0ZV6QPW2YY0F8GCNQDH4); certificate valid until 2026-10-30T20:13:13Z
++ echo exit=0
+exit=0
++ shred -u /root/token
+++ lab '{"op":"sql","text":"select fingerprint from nodes.job_keys where state=$$active$$ limit 1"}'
+++ python3 -c 'import sys,json; print(json.load(sys.stdin)["rows"][0]["fingerprint"])'
++ fp=sha256:337347d5f717d5ac80ff148228ab2bb0e0bf13b0f5dbbadb863fc75f672c03fd
++ echo '--- re-trust with a trust file of the old node present:'
+--- re-trust with a trust file of the old node present:
++ exponetdb-node-helper trust --agent-state /var/lib/exponetdb-node --expect-key sha256:337347d5f717d5ac80ff148228ab2bb0e0bf13b0f5dbbadb863fc75f672c03fd
+trust written for node nod_01M5ZG6V93FD0PRJGF64HPPZE5 (installation ins_01M5ZG0D37P80QGM68SCHEMWEH):
+  job key jobkey_2026_10_bk5bkc sha256:337347d5f717d5ac80ff148228ab2bb0e0bf13b0f5dbbadb863fc75f672c03fd
++ echo exit=0
+exit=0
++ exponetdb-node-helper trust --show
+node nod_01M5ZG6V93FD0PRJGF64HPPZE5 (installation ins_01M5ZG0D37P80QGM68SCHEMWEH):
+  job key jobkey_2026_10_bk5bkc sha256:337347d5f717d5ac80ff148228ab2bb0e0bf13b0f5dbbadb863fc75f672c03fd
+Created symlink /etc/systemd/system/multi-user.target.wants/exponetdb-node.service → /etc/systemd/system/exponetdb-node.service.
+{"rows":[{"state":"active","agent_version":"0.6.0","last_heartbeat_at":"2026-10-27T20:18:24.389Z","caps":"30"}]}
+{"status":202,"done":{"id":"op_01M5ZG7GC2MGQ2NJ9D9GF9VFKV","state":"succeeded","applyOutcome":"applied","verificationOutcome":"passed","errorCode":null},"id":"op_01M5ZG7GC2MGQ2NJ9D9GF9VFKV"}
+{"status":202,"done":{"id":"op_01M5ZG7J6CMTNS4YWXKJGZZ9KQ","state":"succeeded","applyOutcome":"applied","verificationOutcome":"passed","errorCode":null},"id":"op_01M5ZG7J6CMTNS4YWXKJGZZ9KQ"}
+{"planId":"pln_01M5ZG7N86XNB7JWNFQGN3G7HY","id":"op_01M5ZG7N9KWQEE4BZ102EBZHN3","done":{"id":"op_01M5ZG7N9KWQEE4BZ102EBZHN3","state":"succeeded","applyOutcome":"applied","verificationOutcome":"passed","errorCode":null}}
+/var/lib/exponetdb-node-helper:
+total 20
+drwx------  3 root root 4096 Oct 27 20:18 .
+drwxr-xr-x 46 root root 4096 Oct 27 20:18 ..
+-rw-------  1 root root   96 Oct 27 20:18 digest.key
+-rw-------  1 root root  373 Oct 27 20:18 effects.log
+drwx------  2 root root 4096 Oct 27 20:18 staging
+
+/var/lib/exponetdb-node/journal:
+total 24
+drwx------ 2 exponetdb-node exponetdb-node  4096 Oct 27 20:18 .
+drwx------ 5 exponetdb-node exponetdb-node  4096 Oct 27 20:18 ..
+-rw------- 1 exponetdb-node exponetdb-node 11263 Oct 27 20:18 journal.log
+-rw------- 1 exponetdb-node exponetdb-node  1494 Oct 27 20:18 nonces.log
+{"schema":"exponetdb.helper-ledger/v1","ledger":"/var/lib/exponetdb-node-helper/effects.log","initializedAt":"2026-10-27T20:18:39Z"}
+node nod_01M5ZG6V93FD0PRJGF64HPPZE5
+installation ins_01M5ZG0D37P80QGM68SCHEMWEH
+server srv_01M5ZG0ZV6QPW2YY0F8GCNQDH4
+gateway https://127.0.0.1:36209 (gateway.exdb.test)
+certificate expires 2026-10-30T20:13:13Z
+job keys jobkey_2026_10_bk5bkc
+journal 5 jobs, 11263 bytes, 0 in flight
+active

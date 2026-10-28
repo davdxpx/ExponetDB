@@ -1,0 +1,68 @@
+=== DIFFERENTIAL
+differential: run=run_0XEC18AWCZP8M7NPP8W5CVVT8Z duration=2.563011035s state=succeeded label=20261027-201556F_20261027-201638D exit=0
+{"runId":"run_0XEC18AWCZP8M7NPP8W5CVVT8Z","state":"succeeded","exitCode":0,"startJobId":"job_124QKX71HXTD97223KXN8YJ397","startArgsHash":"sha256:3a7b70d2451001288aeec50dafa94e62a33aea29ee3569e1218876f83d244186"}
+=== INCREMENTAL on owned
+incremental: run=run_0Q0CRZCYJAA7NYZ9BGY0X3F5FZ duration=3.701173928s state=succeeded label=20261027-201556F_20261027-201641I exit=0
+{"runId":"run_0Q0CRZCYJAA7NYZ9BGY0X3F5FZ","state":"succeeded","exitCode":0,"startJobId":"job_4WES9DNQW59E9808CFHCKZV89C","startArgsHash":"sha256:43c9d8f75b356720a642a70d70a92e1bb695f1ea7ade1f1fa1dad345a3437dc1"}
+=== backup.list
+{
+  "jobId": "job_6SFHNMDYSMDB1AFM6BC7DEFZ9V",
+  "result": {
+    "archive": [
+      {
+        "id": "17-1",
+        "max": "00000001000000000000001C",
+        "min": "000000010000000000000001"
+      }
+    ],
+    "backups": [
+      {
+        "error": false,
+        "finishedAt": "2026-10-27T20:16:01Z",
+        "kind": "full",
+        "label": "20261027-201556F",
+        "lsnStart": "0/D000028",
+        "lsnStop": "0/D000120",
+        "postgresMajor": 17,
+        "repositorySizeBytes": 11763440,
+        "sizeBytes": 209317308,
+        "startedAt": "2026-10-27T20:15:56Z",
+        "walStart": "00000001000000000000000D"
+      },
+      {
+        "error": false,
+        "finishedAt": "2026-10-27T20:16:39Z",
+        "kind": "differential",
+        "label": "20261027-201556F_20261027-201638D",
+        "lsnStart": "0/10003340",
+        "lsnStop": "0/12A04AE8",
+        "postgresMajor": 17,
+        "repositorySizeBytes": 15266704,
+        "sizeBytes": 216747454,
+        "startedAt": "2026-10-27T20:16:38Z",
+        "walStart": "000000010000000000000010"
+      },
+      {
+        "error": false,
+        "finishedAt": "2026-10-27T20:16:43Z",
+        "kind": "incremental",
+        "label": "20261027-201556F_20261027-201641I",
+        "lsnStart": "0/160000E8",
+        "lsnStop": "0/1A9FE930",
+        "postgresMajor": 17,
+        "repositorySizeBytes": 50354864,
+        "sizeBytes": 290704830,
+        "startedAt": "2026-10-27T20:16:41Z",
+        "walStart": "000000010000000000000016"
+      }
+    ],
+    "engineVersion": "2.60.0",
+    "stanza": {
+      "cipher": "aes-256-cbc",
+      "message": "ok",
+      "status": "ok",
+      "systemIdentifier": "7701442058581394345"
+    },
+    "truncated": false
+  }
+}

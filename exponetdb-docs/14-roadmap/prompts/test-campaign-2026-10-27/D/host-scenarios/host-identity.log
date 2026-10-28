@@ -1,0 +1,16 @@
+$ vitest run --config vitest.host.config.ts test/host/identity.host.test.ts
+
+ RUN  v5.0.3 /root/exdb/apps/server
+
+ ✓ test/host/identity.host.test.ts (5 tests) 33427ms
+   ✓ the wrong node, installation, cluster or path (host scenario) (5)
+     ✓ a job naming another node is refused by the agent (node_mismatch); nothing runs 2678ms
+     ✓ a job signed by a key this node does not trust (another installation’s) is refused; nothing runs 895ms
+     ✓ a managed fragment the cluster does not include: the plan is refused and the file never created 5466ms
+     ✓ a cluster replaced after planning: the plan is stale at apply; nothing reaches the new cluster 9515ms
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  20:30:51
+   Duration  39.97s (tests 84%, transform 12%, import 4%)
+

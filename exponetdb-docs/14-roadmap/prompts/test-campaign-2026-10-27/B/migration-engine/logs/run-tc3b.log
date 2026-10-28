@@ -1,0 +1,10 @@
+[tc:e] e8.killed_stmt0_concurrently info {"t":"2026-10-27T20:28:00.770Z","id":"e8.killed_stmt0_concurrently","verdict":"info","data":{"terminated":true,"state":"needs_attention","apply":"unknown","code":"OUTCOME_UNKNOWN","progress":{"apply":"unknown","code":"MIGRATION_INCOMPLETE","idx":null},"events":["nontx_started"],"invalidIndex":[{"valid":false}]}}
+[tc:e] e9.blocked_after_stmt0_kill blocked {"t":"2026-10-27T20:28:00.858Z","id":"e9.blocked_after_stmt0_kill","verdict":"blocked","data":{"ok":false,"code":"MIGRATION_INCOMPLETE","details":{"migrationId":"01M5ZGRRBD8JRMRE9ZY4KSD456"},"message":"A non-transactional migration on this target stopped part-way; no other schema change is planned until it is resolved.","name":"MigrationError"}}
+[tc:e] e10.resume_stmt0 FAIL {"t":"2026-10-27T20:28:01.174Z","id":"e10.resume_stmt0","verdict":"FAIL","data":{"decision":"allow","accepted":true,"trace":["waiting","waiting","waiting","waiting","waiting","waiting"],"state":"queued","ops":["T0E3A7 target.register succeeded applied passed","EV4ZR8 migration.apply succeeded applied passed","VPZJV2 migration.apply needs_attention unknown pending","Y6G9KZ migration.resume queued not_started pending"],"heldDomains":["VPZJV2 76MZT:schema"],"events":["nontx_started"]}}
+ ✓ test/tc-3.int.test.ts (8 tests | 7 skipped) 7804ms
+   ✓ (e) a non-transactional bundle killed mid-way (2)
+     ✓ (e2) killed while statement 0 is a CONCURRENTLY statement 2170ms
+ Test Files  1 passed (1)
+      Tests  1 passed | 7 skipped (8)
+   Duration  10.47s (tests 75%, transform 19%, import 5%)
+exit 0

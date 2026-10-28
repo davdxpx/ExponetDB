@@ -1,0 +1,11 @@
+{
+  "schema": "exponetdb.helper-trust/v1",
+  "installationId": "ins_01M5ZG0D37P80QGM68SCHEMWEH",
+  "nodeId": "nod_01M5ZG6V93FD0PRJGF64HPPZE5",
+  "jobKeys": [
+    {
+      "keyId": "jobkey_2026_10_bk5bkc",
+      "publicKey": "SJNYCwIILx2R-gF0B1UBPz21L-dY0sKMixjYja6opU0"
+    }
+  ]
+}

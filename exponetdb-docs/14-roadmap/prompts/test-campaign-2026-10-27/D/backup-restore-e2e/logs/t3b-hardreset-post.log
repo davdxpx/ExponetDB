@@ -1,0 +1,24 @@
+boot at: 2026-10-27 20:33:03; now 20:34:00; record startedAt 2026-10-27T20:32:55Z
+units: 0 exponetdb-run-*; pgbackrest procs: 0
+20:34:00 {"state":"starting","finishedAt":null}
+20:34:56 {"state":"lost","finishedAt":null}
+{"excerpt":"the run's unit is gone without an outcome (a host restart stops runs)","exitCode":null,"finishedAt":null,"found":true,"outcome":null,"progress":null,"purpose":"backup","runId":"run_0QZPY1V5DWY5V2S1ZHP2E5FV4V","startArgsHash":"sha256:36480aa13a4ebcfbf20679b900dff2744a511d72309475bd3ff1706e90903e5c","startJobId":"job_5CJX26YE28VSJXFG4ATMMWEY3C","startedAt":"2026-10-27T20:32:55Z","state":"lost"}
+total 20
+drwxr-x---  3 root     postgres 4096 Oct 27 20:34 .
+drwx--x--x 13 root     root     4096 Oct 27 20:32 ..
+-rw-r-----  1 root     postgres 1235 Oct 27 20:32 record.json
+-rw-------  1 root     root      163 Oct 27 20:34 result.json
+drwx------  2 postgres postgres 4096 Oct 27 20:32 work
+nothing restarted: units=0 procs=0
+-- postgres recovered after crash:
+17 exdbnode 55417 online postgres /var/lib/postgresql/17/exdbnode /var/log/postgresql/postgresql-17-exdbnode.log
+2026-10-27 20:33:21.699 UTC [1002] LOG:  invalid record length at 0/D6000130: expected at least 24, got 0
+2026-10-27 20:33:21.699 UTC [1002] LOG:  redo done at 0/D60000F8 system usage: CPU: user: 0.00 s, system: 0.00 s, elapsed: 0.00 s
+2026-10-27 20:33:21.703 UTC [999] LOG:  checkpoint starting: end-of-recovery immediate wait
+2026-10-27 20:33:21.717 UTC [999] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 1 removed, 0 recycled; write=0.003 s, sync=0.001 s, total=0.016 s; sync files=2, longest=0.001 s, average=0.001 s; distance=0 kB, estimate=0 kB; lsn=0/D6000130, redo lsn=0/D6000130
+2026-10-27 20:33:21.722 UTC [990] LOG:  database system is ready to accept connections
+-- repo after hard reset
+        diff backup: 20261027-201556F_20261027-201721D
+        incr backup: 20261027-201556F_20261027-201741I
+        full backup: 20261027-202418F
+        full backup: 20261027-202504F

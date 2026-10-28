@@ -1,0 +1,14 @@
+$ vitest run --config vitest.host.config.ts test/host/production.host.test.ts
+
+ RUN  v5.0.3 /root/exdb/apps/server
+
+ ✓ test/host/production.host.test.ts (2 tests) 31334ms
+   ✓ production approval and the critical class (host scenario) (2)
+     ✓ refuses a critical role change applied by a machine, on a nonprod cluster too 3989ms
+     ✓ holds a production reload for a human approval; no job before it, run after 12020ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  20:31:32
+   Duration  38.08s (tests 83%, transform 13%, import 5%)
+

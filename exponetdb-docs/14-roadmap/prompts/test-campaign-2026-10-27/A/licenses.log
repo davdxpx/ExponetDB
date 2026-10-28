@@ -1,0 +1,2 @@
+$ bun --conditions=@exponetdb/source tooling/checks/licenses.ts
+dependency licenses hold (288 shipped and 346 development packages checked)

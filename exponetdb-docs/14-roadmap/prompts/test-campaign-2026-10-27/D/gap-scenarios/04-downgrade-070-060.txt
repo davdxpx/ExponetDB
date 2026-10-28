@@ -1,0 +1,31 @@
+=== baseline on 0.7.0: backup.timers@1 (0.7.0-only capability)
+{"status":202,"done":{"id":"op_01M5ZGGC6P89F53REQEB3X3CC1","state":"succeeded","applyOutcome":"applied","verificationOutcome":"passed","errorCode":null},"id":"op_01M5ZGGC6P89F53REQEB3X3CC1"}
+journal 12 jobs, 26660 bytes, 0 in flight
+=== DOWNGRADE to 0.6.0 (binaries + units), restart both
+Stopping 'exponetdb-node-helper.service', but its triggering units are still active:
+exponetdb-node-helper.socket
+0.6.0 commit 1819998e
+journal 12 jobs, 26660 bytes, 0 in flight
+Stopped exponetdb-node.service - ExponetDB node agent.
+Started exponetdb-node.service - ExponetDB node agent.
+{"time":"2026-10-27T20:23:28.984874596Z","level":"INFO","msg":"agent started","version":"0.6.0","commit":"1819998e"}
+{"rows":[{"state":"active","agent_version":"0.6.0","last_heartbeat_at":"2026-10-27T20:23:29.001Z","caps":30}]}
+{"status":202,"done":{"id":"op_01M5ZGGSSQEA5XJHNWKKDFD08S","state":"succeeded","applyOutcome":"applied","verificationOutcome":"passed","errorCode":null},"id":"op_01M5ZGGSSQEA5XJHNWKKDFD08S"}
+{"status":202,"done":{"id":"op_01M5ZGGVV38XBTRBEGV75Z57HX","state":"succeeded","applyOutcome":"applied","verificationOut
+{"planId":"pln_01M5ZGGZCDQHCWFSX2FMHFWB1R","id":"op_01M5ZGGZDFBT9900BCM5BSCH8F","done":{"id":"op_01M5ZGGZDFBT9900BCM5BSCH8F","state":"succeeded","applyOutcome":"applied","verificationOutcome":"passed","errorCode":null}}
+effects (written by 0.7.0 helper) prefix intact under 0.6.0 helper
+1119
+journal 17 jobs, 37950 bytes, 0 in flight
+--- 0.7.0-only capability against the 0.6.0 node:
+{"status":409,"body":{"type":"https://db.exponet.cloud/errors/capability-unavailable","title":"Capability unavailable","status":409,"code":"CAPABILITY_UNAVAILABLE","message":"The node does not report this capability version, or the cluster is external.","retryable":false,"requestId":"req_01M5ZGH47GNEXNTVFCRAFXTWHJ"}}
+=== 0.6.0 agent and helper with a 0.7.0-style config.json (pgbackrestConfig set)
+activating
+Result=exit-code NRestarts=1 
+configuration: json: unknown field "pgbackrestConfig"
+exponetdb-node.service: Main process exited, code=exited, status=1/FAILURE
+exponetdb-node.service: Failed with result 'exit-code'.
+Stopping 'exponetdb-node-helper.service', but its triggering units are still active:
+exponetdb-node-helper.socket
+exponetdb-node-helper: configuration: json: unknown field "pgbackrestConfig"
+{"rows":[{"state":"active","last_heartbeat_at":"2026-10-27T20:23:59.010Z"}]}
+active

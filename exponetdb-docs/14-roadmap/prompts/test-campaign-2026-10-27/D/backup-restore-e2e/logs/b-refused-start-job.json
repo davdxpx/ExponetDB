@@ -1,0 +1,18 @@
+{
+    "jobId": "job_01M5ZJ1NNH05DMH3YFKJ17R7HD",
+    "steps": [
+        {
+            "at": "2026-10-27T20:50:21.773003302Z",
+            "name": "start_run",
+            "index": 0,
+            "state": "running",
+            "message": null
+        }
+    ],
+    "nodeId": "nod_01M5ZJ10SKYQ9NP7DEZSPJA2J2",
+    "result": null,
+    "outcome": "failed",
+    "finishedAt": "2026-10-27T20:50:21.872541731Z",
+    "outputExcerpt": "helper refused (precondition_failed): the host's repository mode adopted_observed does not allow a incremental backup run",
+    "rejectionReason": null
+}

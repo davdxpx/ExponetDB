@@ -1,0 +1,25 @@
+Unable to find image 'versity/versitygw:v1.8.0@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499' locally
+docker.io/versity/versitygw@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499: Pulling from versity/versitygw
+efa6472e291a: Pulling fs layer
+55afa1ecc21d: Pulling fs layer
+89febdabccfc: Pulling fs layer
+c0a28bc257cb: Pulling fs layer
+a03ca9a10f7f: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+55afa1ecc21d: Download complete
+4f4fb700ef54: Download complete
+89febdabccfc: Download complete
+efa6472e291a: Download complete
+c0a28bc257cb: Download complete
+44136fa355b3: Download complete
+a03ca9a10f7f: Download complete
+e13ba82a95fa: Download complete
+55afa1ecc21d: Pull complete
+4f4fb700ef54: Pull complete
+c0a28bc257cb: Pull complete
+89febdabccfc: Pull complete
+efa6472e291a: Pull complete
+a03ca9a10f7f: Pull complete
+Digest: sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499
+Status: Downloaded newer image for versity/versitygw@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499
+fb23cf15587ba42fae693d29bfcb7de68a3e2354f38ad8eb412fdaf9355c5a78

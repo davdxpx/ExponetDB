@@ -1,0 +1,120 @@
+{
+  "schema": "exponetdb.lab-scenario/v1",
+  "scenario": "config",
+  "state": "passed",
+  "pid": 32937,
+  "startedAt": "2026-10-27T20:10:25.381Z",
+  "endedAt": "2026-10-27T20:11:35.863Z",
+  "failedTests": [],
+  "labProblems": []
+}
+{
+  "schema": "exponetdb.lab-scenario/v1",
+  "scenario": "crash-points",
+  "state": "passed",
+  "pid": 38761,
+  "startedAt": "2026-10-27T20:17:23.683Z",
+  "endedAt": "2026-10-27T20:26:13.721Z",
+  "failedTests": [],
+  "labProblems": []
+}
+{
+  "schema": "exponetdb.lab-scenario/v1",
+  "scenario": "e2",
+  "state": "passed",
+  "pid": 48955,
+  "startedAt": "2026-10-27T20:33:31.178Z",
+  "endedAt": "2026-10-27T20:33:48.531Z",
+  "failedTests": [],
+  "labProblems": []
+}
+{
+  "schema": "exponetdb.lab-scenario/v1",
+  "scenario": "enrollment",
+  "state": "passed",
+  "pid": 34074,
+  "startedAt": "2026-10-27T20:11:43.040Z",
+  "endedAt": "2026-10-27T20:12:53.024Z",
+  "failedTests": [],
+  "labProblems": []
+}
+{
+  "schema": "exponetdb.lab-scenario/v1",
+  "scenario": "hba",
+  "state": "passed",
+  "pid": 35203,
+  "startedAt": "2026-10-27T20:13:00.335Z",
+  "endedAt": "2026-10-27T20:15:18.333Z",
+  "failedTests": [],
+  "labProblems": []
+}
+{
+  "schema": "exponetdb.lab-scenario/v1",
+  "scenario": "identity",
+  "state": "passed",
+  "pid": 45362,
+  "startedAt": "2026-10-27T20:30:58.329Z",
+  "endedAt": "2026-10-27T20:31:31.764Z",
+  "failedTests": [],
+  "labProblems": []
+}
+{
+  "schema": "exponetdb.lab-scenario/v1",
+  "scenario": "job-keys",
+  "state": "passed",
+  "pid": 37762,
+  "startedAt": "2026-10-27T20:16:32.462Z",
+  "endedAt": "2026-10-27T20:17:16.422Z",
+  "failedTests": [],
+  "labProblems": []
+}
+{
+  "schema": "exponetdb.lab-scenario/v1",
+  "scenario": "journal",
+  "state": "passed",
+  "pid": 43758,
+  "startedAt": "2026-10-27T20:28:16.387Z",
+  "endedAt": "2026-10-27T20:30:51.352Z",
+  "failedTests": [],
+  "labProblems": []
+}
+{
+  "schema": "exponetdb.lab-scenario/v1",
+  "scenario": "partition",
+  "state": "passed",
+  "pid": 42167,
+  "startedAt": "2026-10-27T20:26:20.650Z",
+  "endedAt": "2026-10-27T20:28:09.186Z",
+  "failedTests": [],
+  "labProblems": []
+}
+{
+  "schema": "exponetdb.lab-scenario/v1",
+  "scenario": "production",
+  "state": "passed",
+  "pid": 46860,
+  "startedAt": "2026-10-27T20:31:39.073Z",
+  "endedAt": "2026-10-27T20:32:10.410Z",
+  "failedTests": [],
+  "labProblems": []
+}
+{
+  "schema": "exponetdb.lab-scenario/v1",
+  "scenario": "roles-tls",
+  "state": "passed",
+  "pid": 36572,
+  "startedAt": "2026-10-27T20:15:24.929Z",
+  "endedAt": "2026-10-27T20:16:25.225Z",
+  "failedTests": [],
+  "labProblems": []
+}
+{
+  "schema": "exponetdb.lab-scenario/v1",
+  "scenario": "secrets",
+  "state": "passed",
+  "pid": 47880,
+  "startedAt": "2026-10-27T20:32:17.641Z",
+  "endedAt": "2026-10-27T20:33:13.947Z",
+  "failedTests": [],
+  "labProblems": []
+}

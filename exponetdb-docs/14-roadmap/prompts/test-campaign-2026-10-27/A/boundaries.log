@@ -1,0 +1,2 @@
+$ bun --conditions=@exponetdb/source tooling/boundaries/check.ts
+boundaries hold (44 components modeled, packages, apps, tooling scanned)

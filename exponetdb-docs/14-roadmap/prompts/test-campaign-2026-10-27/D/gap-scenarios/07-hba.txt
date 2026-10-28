@@ -1,0 +1,97 @@
+=== (7) foreign lines: add odd foreign content to pg_hba.conf, keep a copy
+foreign file sha256: 16623fe8491585e0…  (5714 bytes)
+=== apply managed block (2 rules)
+plan pln_01M5ZHY8V0RK6T27RF489EBJ63 -> op succeeded applied passed None
+--- markers and block as written:
+1:# BEGIN EXPONETDB MANAGED BLOCK: written by exponetdb-node-helper, do not edit
+4:# END EXPONETDB MANAGED BLOCK
+# BEGIN EXPONETDB MANAGED BLOCK: written by exponetdb-node-helper, do not edit
+hostssl "app" "app_user" 10.1.0.0/16 scram-sha-256
+local "appdb" "reporter" peer map=exponetdb
+# END EXPONETDB MANAGED BLOCK
+--- block position: line numbers of block vs agent line vs foreign:
+1:# BEGIN EXPONETDB MANAGED BLOCK: written by exponetdb-node-helper, do not edit
+4:# END EXPONETDB MANAGED BLOCK
+5:local all exponetdb_node peer map=exponetdb
+7:# foreign comment with UTF-8 äöü and trailing spaces   
+8:host	all		all	192.0.2.0/24		scram-sha-256   
+11:hostnossl  all   all   198.51.100.0/24   reject # inline comment
+--- remove the block region and compare with the foreign file byte-for-byte:
+IDENTICAL: foreign lines kept byte-for-byte around the block
+640 postgres:postgres
+=== replace the block (1 rule), then remove it (managedRules: [])
+plan pln_01M5ZHYGHBX0JQBZQNMB1ZQCHB -> op succeeded applied passed None
+1
+plan pln_01M5ZHYRZ2HDFCYMWHZ77PVCA5 -> op succeeded applied passed None
+markers left: 2
+/etc/postgresql/17/exdbnode/pg_hba.conf /root/evid/hba.foreign differ: byte 1, line 1
+DIFFERS from foreign file:
+0a1,2
+> # BEGIN EXPONETDB MANAGED BLOCK: written by exponetdb-node-helper, do not edit$
+> # END EXPONETDB MANAGED BLOCK$
+/root/lab/hba-test2.sh: line 14: syntax error near unexpected token `('
+/root/lab/hba-test2.sh: line 14: `echo "=== A. lockout of the agent'"'"'s own access (managed 'local all all reject'), protectedAccess empty"'
+=== A. lockout of the agent own access (managed: local all all reject), protectedAccess empty
+PLAN status 201 pln_01M5ZJ09ZRXN024XQBY4NQJGJ2
+  analysis protectedAccess: null
+APPLY failed not_applied not_applicable OUTCOME_UNKNOWN
+file unchanged: yes
+agent still connects: 1
+=== B. lockout of ExponetDB network login (protectedAccess app_user@app from 10.1.0.0/16 vs a reject above it)
+seed block applied: succeeded passed
+PLAN status 422 {"type": "https://db.exponet.cloud/errors/validation-failed", "title": "Validation failed", "status": 422, "code": "VALIDATION_FAILED", "message": "The request does not match the contract.", "retryable": false, "details": {"errors": [{"path": "/change/protectedAccess/0/address", "code": "invalid_for
+APPLY refused 404 {"type": "https://db.exponet.cloud/errors/not-found", "title": "Not found", "status": 404, "code": "NOT_FOUND", "message": "No such resource is visible to the caller.", "retryable": false, "remediation": "Use an id from a list the caller can see.", "requestId"
+file unchanged: yes
+=== C. stale plan replay: plan L (lockout) against digest D1, then a good change moves the file to D2, then replay L
+PLAN status 422 {"type": "https://db.exponet.cloud/errors/validation-failed", "title": "Validation failed", "status": 422, "code": "VALIDATION_FAILED", "message": "The request does not match the contract.", "retryable": false, "details": {"errors": [{"path": "/change/protectedAccess/0/address", "code": "invalid_for
+PLAN status 201 pln_01M5ZJ3WVTVHMADCDQJ82ZRH6K
+  analysis protectedAccess: null
+APPLY succeeded applied passed None
+file moved D1->D2: yes
+-- replay the already applied good plan (single use):
+APPLY succeeded applied passed None
+-- replay the stale lockout plan L:
+APPLY refused 404 {"type": "https://db.exponet.cloud/errors/not-found", "title": "Not found", "status": 404, "code": "NOT_FOUND", "message": "No such resource is visible to the caller.", "retryable": false, "remediation": "Use an id from a list the caller can see.", "requestId"
+file unchanged by L: yes
+=== D. stale plan whose file changed behind its back (foreign edit) then apply a benign plan
+PLAN status 201 pln_01M5ZJ44S6CA6PF0EPZJ4VB70V
+  analysis protectedAccess: null
+APPLY failed not_applied not_applicable PLAN_STALE
+file still holds the foreign edit: 1
+=== E. cleanup
+cleanup: succeeded passed
+######## rerun with a single-address protectedAccess
+=== B. lockout of ExponetDB network login (protectedAccess app_user@app from 10.1.0.0/16 vs a reject above it)
+seed block applied: succeeded passed
+PLAN status 201 pln_01M5ZJ91K8XYMT8KZ6H3NY13Q8
+  analysis protectedAccess: null
+APPLY op op_01M5ZJ9246JPGM35RWT525K1C9 failed not_applied not_applicable OUTCOME_UNKNOWN
+file unchanged: yes
+=== C. stale plan replay: plan L (lockout) against digest D1, then a good change moves the file to D2, then replay L
+PLAN status 201 pln_01M5ZJC6KBFT49NKP8J6GPMFWG
+  analysis protectedAccess: null
+PLAN status 201 pln_01M5ZJC9MTNW8TFD3M9W1E532G
+  analysis protectedAccess: null
+APPLY op op_01M5ZJCA5HNQJZHZH52T1QS6A9 succeeded applied passed None
+file moved D1->D2: yes
+-- replay the already applied good plan (single use):
+APPLY op op_01M5ZJCA5HNQJZHZH52T1QS6A9 succeeded applied passed None
+-- replay the stale lockout plan L:
+APPLY op op_01M5ZJCESY49WD956VFJHB12K6 failed not_applied not_applicable PLAN_STALE
+file unchanged by L: yes
+=== D. stale plan whose file changed behind its back (foreign edit) then apply a benign plan
+PLAN status 201 pln_01M5ZJCM64BK1VPE940M0423ZH
+  analysis protectedAccess: null
+APPLY op op_01M5ZJCMQG8EV7KGM1847WER7Z failed not_applied not_applicable PLAN_STALE
+file still holds the foreign edit: 2
+=== E. cleanup
+cleanup: succeeded passed
+=== lockout refusal details (op B)
+{'state': 'failed', 'applyOutcome': 'not_applied', 'verificationOutcome': 'not_applicable', 'errorCode': 'OUTCOME_UNKNOWN', 'nextAction': 'replan', 'retryable': False}
+[('execute', 'failed'), ('reconcile', 'succeeded')]
+postgres.hba.apply@2 completed succeeded | excerpt: None | steps: [('check', 'succeeded'), ('write_file', 'running'), ('write_file', 'succeeded'), ('check_rules', 'succeeded'), ('reload', 'succeeded'), ('probe', 'succeeded')]
+postgres.hba.apply@2 completed succeeded | excerpt: None | steps: [('check', 'succeeded'), ('write_file', 'running'), ('write_file', 'succeeded'), ('check_rules', 'succeeded'), ('reload', 'succeeded'), ('probe', 'succeeded')]
+/etc/postgresql/17/exdbnode/pg_hba.conf /root/evid/hba.foreign differ: byte 1, line 1
+0a1,2
+> # BEGIN EXPONETDB MANAGED BLOCK: written by exponetdb-node-helper, do not edit$
+> # END EXPONETDB MANAGED BLOCK$

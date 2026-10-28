@@ -1,0 +1,19 @@
+$ vitest run --config vitest.host.config.ts test/host/hba.host.test.ts
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/root/exdb/apps/server[39m
+
+ [32m✓[39m test/host/hba.host.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 163516[2mms[22m[39m
+   [32m✓[39m pg_hba through the managed block (host scenario) [2m(3)[22m
+     [33m[2m✓[22m[39m writes a managed block and verifies it by a fresh read[33m 11313[2mms[22m[39m
+     [33m[2m✓[22m[39m refuses a block that would lock the agent out, and puts the file back[33m 107109[2mms[22m[39m
+     [33m[2m✓[22m[39m removes the managed block again[33m 8038[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m   Start at [22m 20:08:22
+[2m   Duration [22m 170.14s[2m (tests 96%, transform 3%, import 1%)[22m
+
+
+real	2m50.672s
+user	1m26.256s
+sys	0m12.669s

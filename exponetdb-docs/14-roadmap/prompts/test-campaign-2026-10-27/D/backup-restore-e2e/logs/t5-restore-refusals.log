@@ -1,0 +1,44 @@
+=== 1. existing scratch directory
+prepare: {"scratchFree":false,"refusals":["scratch_exists"]}
+execute: {"code":"precondition_failed","message":"the scratch directory of run run_0T8FEBWQ7B4Z1DRN1EVVY3ZP05 exists"}
+before scratch=4 runs=20 after scratch=4 runs=20; scratch content: planted  ; stat postgres:postgres 700
+=== 2. wrong node (job for another node)
+prepare: {"code":"job_invalid","message":"the job is for another node"}
+execute: {"code":"job_invalid","message":"the job is for another node"}
+before scratch=4 runs=20 after scratch=4 runs=20
+=== 3. wrong cluster id (system identifier)
+prepare: {"code":"precondition_failed","message":"cluster 17/exdbnode has another system identifier"}
+execute: {"code":"precondition_failed","message":"cluster 17/exdbnode has another system identifier"}
+before scratch=4 runs=20 after scratch=4 runs=20
+unknown local name prepare: {"code":"not_configured","message":"the operator did not map cluster 17/unknown"}
+=== 4. stale source: label that was expired (F1)
+prepare: {"refusals":["label_not_found"],"engineCanRead":true}
+execute: {"runId":"run_0XCFKNHGQG8MF4DA8FCA96W9VW","startedAt":"2026-10-27T20:39:11Z","unit":"exponetdb-run-run_0XCFKNHGQG8MF4DA8FCA96W9VW.service"}
+   run (if started): {"state":"failed","excerpt":"2026-10-27 20:39:11.482 P00   INFO: restore command begin 2.60.0: --archive-mode=off --config=/etc/pgbackrest/pgbackrest.conf --exec-id=4483-490efc73 --log-level-console=info --log-path=/var/log/pgbac"}
+=== 5. duplicate restore: same run id twice, and same job replayed
+first : {"runId":"run_0GR1BXRS956E69QRPAVCXDX02Z","startedAt":"2026-10-27T20:39:12Z","unit":"exponetdb-run-run_0GR1BXRS956E69QRPAVCXDX02Z.service"}
+same jobId replay: {"code":"precondition_failed","message":"run run_0GR1BXRS956E69QRPAVCXDX02Z was started already"}
+same runId, new job (while running): {"code":"precondition_failed","message":"run run_0GR1BXRS956E69QRPAVCXDX02Z was started already"}
+=== 6. concurrent job: second restore and a backup while the first restore runs
+second restore (other runId, same cluster): [] / {"code":"precondition_failed","message":"a restore run of this cluster is active"}
+backup.run incremental during restore: {"runId":"run_0H7Y9ZEWETHFF1FJM9FW8ED4JS"}
+{"state":"succeeded"}
+{"state":"succeeded","label":"20261027-202624F_20261027-203913I"}
+=== 7. concurrent backups: full then differential
+{"runId":"run_0AD53XGTJK7ABN8D7N85KFSGDB"}
+second backup: {"code":"precondition_failed","message":"a backup run of this cluster is active"}
+expire during backup: {"code":"precondition_failed","message":"a backup run of this cluster is active"}
+{"state":"succeeded"}
+=== 8. another cluster's stanza (stanza 'other' bound to a second repository id)
+backup.list stanza other as cluster exdbnode: {"cipher":"aes-256-cbc","message":"ok","status":"ok","systemIdentifier":"7701450044122735567"}
+backup.run: {"code":"precondition_failed","message":"the stanza does not belong to cluster 17/exdbnode (system identifier)"}
+backup.expire: {"code":"precondition_failed","message":"the stanza does not belong to cluster 17/exdbnode (system identifier)"}
+backup.verify: {"code":"precondition_failed","message":"the stanza does not belong to cluster 17/exdbnode (system identifier)"}
+restore.prepare: {"engineCanRead":false,"refusals":["system_identifier_mismatch"]}
+restore.execute: {"code":"precondition_failed","message":"the stanza does not belong to cluster 17/exdbnode (system identifier)"}
+before scratch=6 runs=24 after scratch=6 runs=24
+binding of the repo id says stanza=exdbnode but the job names stanza other:
+backup.run: {"code":"precondition_failed","message":"the job names another stanza or repo index than the host binds to this repository"}
+=== final leak check
+0
+4

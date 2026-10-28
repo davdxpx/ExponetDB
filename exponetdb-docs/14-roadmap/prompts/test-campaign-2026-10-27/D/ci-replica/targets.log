@@ -1,0 +1,155 @@
+Unable to find image 'pgvector/pgvector:pg16@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a' locally
+docker.io/pgvector/pgvector@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a: Pulling from pgvector/pgvector
+774043ccc8cc: Pulling fs layer
+e9cc823db10f: Pulling fs layer
+00ea30b13a58: Pulling fs layer
+2ede25b7c579: Pulling fs layer
+50a212ffc5a1: Pulling fs layer
+003442b28249: Pulling fs layer
+f2455d5db1ca: Pulling fs layer
+1a60cdc4b8b6: Pulling fs layer
+708679827647: Pulling fs layer
+639aa37fe549: Pulling fs layer
+3e13d544cd35: Pulling fs layer
+b3e09271b721: Pulling fs layer
+e0d7eb465374: Pulling fs layer
+aae3fa55f377: Pulling fs layer
+2dd9b1a67dcf: Pulling fs layer
+8445317dd84f: Pulling fs layer
+e9cc823db10f: Download complete
+00ea30b13a58: Download complete
+1a60cdc4b8b6: Download complete
+708679827647: Download complete
+774043ccc8cc: Download complete
+f2455d5db1ca: Download complete
+8445317dd84f: Download complete
+2ede25b7c579: Download complete
+003442b28249: Download complete
+639aa37fe549: Download complete
+2dd9b1a67dcf: Download complete
+e0d7eb465374: Download complete
+b3e09271b721: Download complete
+aae3fa55f377: Download complete
+50a212ffc5a1: Download complete
+b236bce97e86: Download complete
+3e13d544cd35: Download complete
+774043ccc8cc: Pull complete
+f2455d5db1ca: Pull complete
+8445317dd84f: Pull complete
+2dd9b1a67dcf: Pull complete
+1a60cdc4b8b6: Pull complete
+e0d7eb465374: Pull complete
+00ea30b13a58: Pull complete
+708679827647: Pull complete
+3e13d544cd35: Pull complete
+e9cc823db10f: Pull complete
+639aa37fe549: Pull complete
+b3e09271b721: Pull complete
+aae3fa55f377: Pull complete
+50a212ffc5a1: Pull complete
+003442b28249: Pull complete
+2ede25b7c579: Pull complete
+Digest: sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
+Status: Downloaded newer image for pgvector/pgvector@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
+started exdb-target-pg16 on 127.0.0.1:55516 (tls on)
+Unable to find image 'pgvector/pgvector:pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d' locally
+docker.io/pgvector/pgvector@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d: Pulling from pgvector/pgvector
+6cb8fb654a8d: Pulling fs layer
+8eaf27f6576d: Pulling fs layer
+29edd5ac10d9: Pulling fs layer
+55601d7a9d50: Pulling fs layer
+7aa71304d2ca: Pulling fs layer
+dce7e4753c95: Pulling fs layer
+e1eef2f0f6c0: Pulling fs layer
+2049766aed7c: Pulling fs layer
+f4baa57a3cc7: Pulling fs layer
+8bd8ce8492d5: Pulling fs layer
+ee67d2d59980: Pulling fs layer
+c0ca64f2011e: Pulling fs layer
+89e6130c295b: Pulling fs layer
+3393b06e3522: Pulling fs layer
+c70c031f679d: Pulling fs layer
+c70c031f679d: Download complete
+8eaf27f6576d: Download complete
+2049766aed7c: Download complete
+8bd8ce8492d5: Download complete
+f4baa57a3cc7: Download complete
+7aa71304d2ca: Download complete
+29edd5ac10d9: Download complete
+3393b06e3522: Download complete
+c0ca64f2011e: Download complete
+dce7e4753c95: Download complete
+e1eef2f0f6c0: Download complete
+89e6130c295b: Download complete
+ee67d2d59980: Download complete
+55601d7a9d50: Download complete
+f4baa57a3cc7: Pull complete
+5d672a3ccfa8: Download complete
+dce7e4753c95: Pull complete
+55601d7a9d50: Pull complete
+6cb8fb654a8d: Download complete
+3393b06e3522: Pull complete
+2049766aed7c: Pull complete
+8bd8ce8492d5: Pull complete
+89e6130c295b: Pull complete
+8eaf27f6576d: Pull complete
+7aa71304d2ca: Pull complete
+c0ca64f2011e: Pull complete
+ee67d2d59980: Pull complete
+6cb8fb654a8d: Pull complete
+c70c031f679d: Pull complete
+29edd5ac10d9: Pull complete
+e1eef2f0f6c0: Pull complete
+Digest: sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
+Status: Downloaded newer image for pgvector/pgvector@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
+started exdb-target-pg17 on 127.0.0.1:55517 (tls on)
+Unable to find image 'pgvector/pgvector:pg18@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11' locally
+docker.io/pgvector/pgvector@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11: Pulling from pgvector/pgvector
+d1c18bcbca3a: Pulling fs layer
+0e6c3beb32b1: Pulling fs layer
+980abddbe295: Pulling fs layer
+211cec8da20e: Pulling fs layer
+c043c1caa591: Pulling fs layer
+c56d732b49fe: Pulling fs layer
+9dd6e8795674: Pulling fs layer
+de9ba41de9ee: Pulling fs layer
+ddda533f81f8: Pulling fs layer
+5178c10d12ba: Pulling fs layer
+aac640d5ec42: Pulling fs layer
+a9bacfc8d232: Pulling fs layer
+6bd876b3b38f: Pulling fs layer
+bdbb8057313b: Pulling fs layer
+bdbb8057313b: Download complete
+c56d732b49fe: Download complete
+ddda533f81f8: Download complete
+6bd876b3b38f: Download complete
+d1c18bcbca3a: Download complete
+aac640d5ec42: Download complete
+980abddbe295: Download complete
+211cec8da20e: Download complete
+c043c1caa591: Download complete
+5178c10d12ba: Download complete
+9dd6e8795674: Download complete
+de9ba41de9ee: Download complete
+a9bacfc8d232: Download complete
+211cec8da20e: Pull complete
+394a74b6a854: Download complete
+c56d732b49fe: Pull complete
+a9bacfc8d232: Pull complete
+0e6c3beb32b1: Download complete
+c043c1caa591: Pull complete
+bdbb8057313b: Pull complete
+6bd876b3b38f: Pull complete
+d1c18bcbca3a: Pull complete
+0e6c3beb32b1: Pull complete
+ddda533f81f8: Pull complete
+980abddbe295: Pull complete
+5178c10d12ba: Pull complete
+9dd6e8795674: Pull complete
+aac640d5ec42: Pull complete
+de9ba41de9ee: Pull complete
+Digest: sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
+Status: Downloaded newer image for pgvector/pgvector@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
+started exdb-target-pg18 on 127.0.0.1:55518 (tls on)
+started exdb-target-plain on 127.0.0.1:55599 (tls off)
+export EXDB_TEST_TARGETS="/root/targets/targets.json"

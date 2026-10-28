@@ -1,0 +1,22 @@
+=== T-NODE-4 too little space: engine directory on a 512 MB tmpfs
+tmpfs           512M     0  512M   0% /var/lib/exponetdb-node-engine
+prepare: {"spaceAvailableBytes":536870912,"spaceRequiredBytes":4413158379,"refusals":["space_insufficient"],"scratchFree":true}
+execute: {"runId":"run_0R35GK6MG85HVZCEJG8PSR0R7Y","startedAt":"2026-10-27T21:30:08Z","unit":"exponetdb-run-run_0R35GK6MG85HVZCEJG8PSR0R7Y.service"}
+run status if one started: {"state":"running","excerpt":""}
+before scratch=0 runs=0; after scratch=1 runs=1; tmpfs use: 512M/512M
+{"removed":true,"runId":"run_0R35GK6MG85HVZCEJG8PSR0R7Y","wasRunning":false}
+umounted; real engine dir runs=83
+=== wrong key (pgbackrest.conf cipher-pass changed) - what each helper capability answers
+backup.list: {"code":"failed","message":"pgBackRest's catalog is not readable"}
+backup.run incremental: {"code":"failed","message":"pgBackRest's catalog is not readable"}
+backup.verify: {"code":"failed","message":"pgBackRest's catalog is not readable"}
+restore.prepare: {"engineCanRead":false,"refusals":["engine_cannot_read"]}
+key restored: "ok"
+=== run records and scratch dirs left behind
+83
+run_09DP4E7X2XMDH63DRX5HAR1PCY
+run_09RVAG83Q7QMBSRPMDAGBDSRG5
+run_0GR1BXRS956E69QRPAVCXDX02Z
+run_0T8FEBWQ7B4Z1DRN1EVVY3ZP05
+run_0VSSW080KS6JDTARNMH08HAJBD
+run_0XCFKNHGQG8MF4DA8FCA96W9VW

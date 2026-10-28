@@ -1,0 +1,123 @@
+$ vitest run --config vitest.host.config.ts "test/host/zz-backup-e2e.host.test.ts"
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/root/exdb/apps/server[39m
+
+[90mstderr[2m | test/host/zz-backup-e2e.host.test.ts[2m > [22m[2mbackups through the Control Plane, agent and helper (tc-node-2)[2m > [22m[2mB2 M-4: a wrong key fails the refresh with BACKUP_REPOSITORY_UNAVAILABLE
+[22m[39mPRODUCT FAILURE suspected in backup-e2e: the lab checks passed after "B2 M-4: a wrong key fails the refresh with BACKUP_REPOSITORY_UNAVAILABLE" failed
+
+[90mstderr[2m | test/host/zz-backup-e2e.host.test.ts[2m > [22m[2mbackups through the Control Plane, agent and helper (tc-node-2)[2m > [22m[2mB2 M-4: a wrong key fails the refresh with BACKUP_REPOSITORY_UNAVAILABLE
+[22m[39mStarted exdb-host-backup-e2e-node.service - ExponetDB node agent.
+exponetdb-node: built with end-to-end test seams; never a release build
+{"time":"2026-10-27T20:50:00.120723138Z","level":"INFO","msg":"agent started","version":"0.0.0-dev.e2e","commit":"unknown"}
+{"time":"2026-10-27T20:50:00.158731303Z","level":"WARN","msg":"session ended","error":"claim: gateway 403 NODE_CERTIFICATE_REFUSED: The client certificate is not the node's current certificate, or the node's state does not allow the request."}
+{"time":"2026-10-27T20:50:01.290787711Z","level":"WARN","msg":"session ended","error":"claim: gateway 403 NODE_CERTIFICATE_REFUSED: The client certificate is not the node's current certificate, or the node's state does not allow the request."}
+{"time":"2026-10-27T20:50:02.6707369Z","level":"WARN","msg":"session ended","error":"claim: gateway 403 NODE_CERTIFICATE_REFUSED: The client certificate is not the node's current certificate, or the node's state does not allow the request."}
+Started exdb-host-backup-e2e-helper.service - ExponetDB node agent root helper.
+exponetdb-node-helper: built with end-to-end test seams; never a release build
+helper: refused (failed)
+helper: refused (precondition_failed)
+exdb-host-backup-e2e-helper.service: Sent signal SIGKILL to main process 10592 (exponetdb-node-) on client request.
+exdb-host-backup-e2e-helper.service: Failed to send signal SIGKILL to auxiliary processes on client request: Invalid argument
+exdb-host-backup-e2e-node.service: Sent signal SIGKILL to main process 10549 (exponetdb-node) on client request.
+exdb-host-backup-e2e-node.service: Failed to send signal SIGKILL to auxiliary processes on client request: Invalid argument
+exdb-host-backup-e2e-helper.service: Main process exited, code=killed, status=9/KILL
+exdb-host-backup-e2e-helper.service: Failed with result 'signal'.
+exdb-host-backup-e2e-helper.service: Consumed 1.466s CPU time.
+exdb-host-backup-e2e-node.service: Main process exited, code=killed, status=9/KILL
+exdb-host-backup-e2e-node.service: Failed with result 'signal'.
+exdb-host-backup-e2e-node.service: Scheduled restart job, restart counter is at 1.
+Started exdb-host-backup-e2e-node.service - ExponetDB node agent.
+exponetdb-node: built with end-to-end test seams; never a release build
+{"time":"2026-10-27T20:54:44.934892585Z","level":"INFO","msg":"agent started","version":"0.0.0-dev.e2e","commit":"unknown"}
+Started exdb-host-backup-e2e-helper.service - ExponetDB node agent root helper.
+exponetdb-node-helper: built with end-to-end test seams; never a release build
+Stopping exdb-host-backup-e2e-node.service - ExponetDB node agent...
+Stopping exdb-host-backup-e2e-helper.service - ExponetDB node agent root helper...
+exdb-host-backup-e2e-node.service: Deactivated successfully.
+Stopped exdb-host-backup-e2e-node.service - ExponetDB node agent.
+exdb-host-backup-e2e-helper.service: Deactivated successfully.
+Stopped exdb-host-backup-e2e-helper.service - ExponetDB node agent root helper.
+Started exdb-host-backup-e2e-node.service - ExponetDB node agent.
+exponetdb-node: built with end-to-end test seams; never a release build
+{"time":"2026-10-27T20:55:58.513864303Z","level":"INFO","msg":"agent started","version":"0.0.0-dev.e2e","commit":"unknown"}
+{"time":"2026-10-27T20:55:58.548725867Z","level":"WARN","msg":"session ended","error":"claim: gateway 403 NODE_CERTIFICATE_REFUSED: The client certificate is not the node's current certificate, or the node's state does not allow the request."}
+{"time":"2026-10-27T20:56:00.00450689Z","level":"WARN","msg":"session ended","error":"claim: gateway 403 NODE_CERTIFICATE_REFUSED: The client certificate is not the node's current certificate, or the node's state does not allow the request."}
+Started exdb-host-backup-e2e-helper.service - ExponetDB node agent root helper.
+exponetdb-node-helper: built with end-to-end test seams; never a release build
+helper: refused (failed)
+exdb-host-backup-e2e-helper.service: Sent signal SIGKILL to main process 12299 (exponetdb-node-) on client request.
+exdb-host-backup-e2e-helper.service: Failed to send signal SIGKILL to auxiliary processes on client request: Invalid argument
+exdb-host-backup-e2e-node.service: Sent signal SIGKILL to main process 12261 (exponetdb-node) on client request.
+exdb-host-backup-e2e-node.service: Failed to send signal SIGKILL to auxiliary processes on client request: Invalid argument
+exdb-host-backup-e2e-helper.service: Main process exited, code=killed, status=9/KILL
+exdb-host-backup-e2e-helper.service: Failed with result 'signal'.
+exdb-host-backup-e2e-helper.service: Consumed 1.345s CPU time.
+exdb-host-backup-e2e-node.service: Main process exited, code=killed, status=9/KILL
+exdb-host-backup-e2e-node.service: Failed with result 'signal'.
+exdb-host-backup-e2e-node.service: Scheduled restart job, restart counter is at 1.
+Started exdb-host-backup-e2e-node.service - ExponetDB node agent.
+exponetdb-node: built with end-to-end test seams; never a release build
+{"time":"2026-10-27T20:58:58.666088753Z","level":"INFO","msg":"agent started","version":"0.0.0-dev.e2e","commit":"unknown"}
+Started exdb-host-backup-e2e-helper.service - ExponetDB node agent root helper.
+exponetdb-node-helper: built with end-to-end test seams; never a release build
+Stopping exdb-host-backup-e2e-node.service - ExponetDB node agent...
+Stopping exdb-host-backup-e2e-helper.service - ExponetDB node agent root helper...
+exdb-host-backup-e2e-node.service: Deactivated successfully.
+Stopped exdb-host-backup-e2e-node.service - ExponetDB node agent.
+exdb-host-backup-e2e-helper.service: Deactivated successfully.
+Stopped exdb-host-backup-e2e-helper.service - ExponetDB node agent root helper.
+Started exdb-host-backup-e2e-node.service - ExponetDB node agent.
+exponetdb-node: built with end-to-end test seams; never a release build
+{"time":"2026-10-27T21:00:08.671705502Z","level":"INFO","msg":"agent started","version":"0.0.0-dev.e2e","commit":"unknown"}
+{"time":"2026-10-27T21:00:08.715146947Z","level":"WARN","msg":"session ended","error":"claim: gateway 403 NODE_CERTIFICATE_REFUSED: The client certificate is not the node's current certificate, or the node's state does not allow the request."}
+{"time":"2026-10-27T21:00:09.45674137Z","level":"WARN","msg":"session ended","error":"claim: gateway 403 NODE_CERTIFICATE_REFUSED: The client certificate is not the node's current certificate, or the node's state does not allow the request."}
+{"time":"2026-10-27T21:00:10.642315062Z","level":"WARN","msg":"session ended","error":"claim: gateway 403 NODE_CERTIFICATE_REFUSED: The client certificate is not the node's current certificate, or the node's state does not allow the request."}
+Started exdb-host-backup-e2e-helper.service - ExponetDB node agent root helper.
+exponetdb-node-helper: built with end-to-end test seams; never a release build
+helper: refused (failed)
+
+
+ [31m❯[39m test/host/zz-backup-e2e.host.test.ts [2m([22m[2m9 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 353702[2mms[22m[39m
+   [31m❯[39m backups through the Control Plane, agent and helper (tc-node-2) [2m(9)[22m
+     [33m[2m✓[22m[39m B1 T-ADV-1: adopt the existing repository read-only and mirror its catalog[33m 8520[2mms[22m[39m
+[31m     [31m×[31m B2 M-4: a wrong key fails the refresh with BACKUP_REPOSITORY_UNAVAILABLE[39m[33m 3069[2mms[22m[39m
+     [33m[2m✓[22m[39m B3 T-NODE-3/M-4: ownership changes, and the runs the Control Plane may start[33m 38861[2mms[22m[39m
+     [33m[2m✓[22m[39m B4 M-6: verify the newest backup, then drills latest / older / pitr_random (amcheck as shipped)[33m 125017[2mms[22m[39m
+     [33m[2m✓[22m[39m B5 M-6: the same drills with amcheck installed in every database[33m 12980[2mms[22m[39m
+     [33m[2m✓[22m[39m B6 M-7: duplicate and concurrent drills, scratch_exists, a stale plan[33m 19536[2mms[22m[39m
+     [33m[2m✓[22m[39m B7 M-4/M-7: a corrupt WAL segment after the newest backup fails the drill (never good enough)[33m 47187[2mms[22m[39m
+     [32m✓[39m B8 C-35: the generated runbook (written to /root/lab for the offline drill)[32m 45[2mms[22m[39m
+     [33m[2m✓[22m[39m B9 T-NODE-2: kill helper and agent mid-run, restart; the run and the operation survive[33m 89422[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m test/host/zz-backup-e2e.host.test.ts[2m > [22mbackups through the Control Plane, agent and helper (tc-node-2)[2m > [22mB2 M-4: a wrong key fails the refresh with BACKUP_REPOSITORY_UNAVAILABLE
+[31m[1mAssertionError[22m: expected null to be 'BACKUP_REPOSITORY_UNAVAILABLE' // Object.is equality[39m
+
+[32m- Expected:[39m
+"BACKUP_REPOSITORY_UNAVAILABLE"
+
+[31m+ Received:[39m
+null
+
+[36m [2m❯[22m test/host/zz-backup-e2e.host.test.ts:[2m103:27[22m[39m
+    [90m101|[39m       const finds = await w.call('GET', `/api/v1/clusters/${cid()}/fin…
+    [90m102|[39m       ev('findings after wrong key', finds.body.items?.map((f: any) =>…
+    [90m103|[39m       expect(r.errorCode).toBe('BACKUP_REPOSITORY_UNAVAILABLE')
+    [90m   |[39m                           [31m^[39m
+    [90m104|[39m     } finally {
+    [90m105|[39m       copyFileSync('/root/lab/pgbackrest.conf.b2', '/etc/pgbackrest/pg…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m8 passed[39m[22m[90m (9)[39m
+[2m   Start at [22m 20:59:57
+[2m   Duration [22m 360.03s[2m (tests 98%, transform 1%)[22m
+
+error: script "test:host" exited with code 1
+
+real	6m0.566s
+user	0m25.220s
+sys	0m4.248s

@@ -1,0 +1,14 @@
+$ vitest run --config vitest.host.config.ts test/host/partition.host.test.ts
+
+ RUN  v5.0.3 /root/exdb/apps/server
+
+ ✓ test/host/partition.host.test.ts (2 tests) 108531ms
+   ✓ a partition, a lost lease and a late result (host scenario) (2)
+     ✓ gateway gone and lease taken over: outcome unknown, nothing decided, the late statement decides 72434ms
+     ✓ the worker stops while the job runs: a restarted worker takes the operation over; one job, one effect 18650ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  20:26:14
+   Duration  115.00s (tests 94%, transform 4%, import 1%)
+

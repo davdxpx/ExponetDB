@@ -1,0 +1,70 @@
+$ turbo run typecheck
+
+   • turbo 2.11.7
+   • Packages in scope: @exponetdb/application, @exponetdb/audit, @exponetdb/auth, @exponetdb/backups, @exponetdb/cli, @exponetdb/contracts, @exponetdb/control-store, @exponetdb/design-system, @exponetdb/diagnostics, @exponetdb/icons, @exponetdb/kernel, @exponetdb/migrations, @exponetdb/migrations-engine, @exponetdb/nodes, @exponetdb/observability, @exponetdb/operations, @exponetdb/policy, @exponetdb/postgres, @exponetdb/registry, @exponetdb/sdk, @exponetdb/secrets, @exponetdb/server, @exponetdb/testkit, @exponetdb/tokens, @exponetdb/tooling, @exponetdb/ui, @exponetdb/ui-data, @exponetdb/ui-patterns, @exponetdb/web
+   • Running typecheck in 29 packages
+   • Remote caching disabled, using shared worktree cache
+
+@exponetdb/web:typecheck: cache miss, executing 3ddac5ab3c09eda2
+@exponetdb/application:typecheck: cache miss, executing 56c65a7c2b0b9c83
+@exponetdb/cli:typecheck: cache miss, executing f0d9d3b1c7a6c690
+@exponetdb/server:typecheck: cache miss, executing c09afdf2a09fd8ab
+@exponetdb/kernel:typecheck: cache miss, executing a4158acd29a3d076
+@exponetdb/web:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/application:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/ui-patterns:typecheck: cache hit, replaying logs 096181c7c801f4f8
+@exponetdb/ui-patterns:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/ui-data:typecheck: cache hit, replaying logs 234190a3c095aa3b
+@exponetdb/ui-data:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/operations:typecheck: cache hit, replaying logs 47a47e75de4cc5fd
+@exponetdb/operations:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/audit:typecheck: cache hit, replaying logs f0119ebbc51db317
+@exponetdb/audit:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/testkit:typecheck: cache hit, replaying logs 95b32cbd9a226ced
+@exponetdb/testkit:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/cli:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/auth:typecheck: cache hit, replaying logs 6a644d23a5cade4b
+@exponetdb/auth:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/server:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/diagnostics:typecheck: cache miss, executing b047b7550ebc26d7
+@exponetdb/kernel:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/secrets:typecheck: cache hit, replaying logs 1f67206df99a201f
+@exponetdb/secrets:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/diagnostics:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/contracts:typecheck: cache miss, executing 5d14648e081c1c0d
+@exponetdb/contracts:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/policy:typecheck: cache miss, executing 1d460fb08ac20081
+@exponetdb/design-system:typecheck: cache hit, replaying logs 57d324d7317728fa
+@exponetdb/design-system:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/backups:typecheck: cache miss, executing 0bcbeeae4b937bb3
+@exponetdb/policy:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/backups:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/ui:typecheck: cache hit, replaying logs 1f8331dc30e97649
+@exponetdb/ui:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/control-store:typecheck: cache miss, executing 8eb7cd6d5f06d2ca
+@exponetdb/control-store:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/sdk:typecheck: cache miss, executing 807e1f430f8bb2b7
+@exponetdb/sdk:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/icons:typecheck: cache hit, replaying logs be6ffd65c0579f8f
+@exponetdb/icons:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/tokens:typecheck: cache hit, replaying logs 898bc44d68d253d2
+@exponetdb/tokens:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/registry:typecheck: cache miss, executing 50359b4f1b2b53b0
+@exponetdb/registry:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/observability:typecheck: cache hit, replaying logs 62121756205eaac1
+@exponetdb/observability:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/nodes:typecheck: cache hit, replaying logs 5ebaffd59476e4a5
+@exponetdb/nodes:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/postgres:typecheck: cache miss, executing 96c77f157ae5eca6
+@exponetdb/postgres:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/tooling:typecheck: cache hit, replaying logs 9cf13647cea1041a
+@exponetdb/tooling:typecheck: $ tsc -p ../tsconfig.json --noEmit
+@exponetdb/migrations:typecheck: cache hit, replaying logs c8045060f77a14fc
+@exponetdb/migrations:typecheck: $ tsc -p tsconfig.json --noEmit
+@exponetdb/migrations-engine:typecheck: cache miss, executing 536774f8f58a261a
+@exponetdb/migrations-engine:typecheck: $ tsc -p tsconfig.json --noEmit
+
+ Tasks:    29 successful, 29 total
+Cached:    15 cached, 29 total
+  Time:    1m23.929s 
+

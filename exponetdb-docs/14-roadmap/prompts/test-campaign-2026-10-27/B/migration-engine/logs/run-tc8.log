@@ -1,0 +1,9 @@
+[tc:b] b6.apply_with_erroring_verify info {"t":"2026-10-27T20:35:57.751Z","id":"b6.apply_with_erroring_verify","verdict":"info","data":{"state":"needs_attention","apply":"applied","ver":"error","code":"VERIFICATION_ERROR","progress":"VERIFICATION_ERROR"}}
+[tc:b] b6.retry_verification_reuses_the_broken_digest STILL-STUCK {"t":"2026-10-27T20:35:58.407Z","id":"b6.retry_verification_reuses_the_broken_digest","verdict":"STILL-STUCK","data":{"state":"needs_attention","ver":"error"}}
+[tc:b] b6.migration_verify_while_needs_attention FAIL(DEADLOCK) {"t":"2026-10-27T20:35:59.147Z","id":"b6.migration_verify_while_needs_attention","verdict":"FAIL(DEADLOCK)","data":{"plan":"created","accepted":true,"trace":["waiting","waiting","waiting","waiting","waiting","waiting"],"verifyOpState":"queued","steps":["created:","lease_acquired:","locks_waiting:","lease_acquired:","locks_waiting:","lease_acquired:","locks_waiting:","lease_acquired:"],"originalOpState":"needs_attention"}}
+ ✓ test/tc-8.int.test.ts (1 test) 24811ms
+   ✓ (b) E10 with a broken verify.sql: retry-verification and migration.verify (1)
+     ✓ the documented recovery of a verify.sql that errors 4324ms
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Duration  38.34s (tests 66%, transform 25%, import 9%, setup 1%)

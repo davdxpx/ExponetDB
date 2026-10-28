@@ -1,0 +1,277 @@
+$ turbo run test
+
+   • turbo 2.11.7
+   • Packages in scope: @exponetdb/application, @exponetdb/audit, @exponetdb/auth, @exponetdb/backups, @exponetdb/cli, @exponetdb/contracts, @exponetdb/control-store, @exponetdb/design-system, @exponetdb/diagnostics, @exponetdb/icons, @exponetdb/kernel, @exponetdb/migrations, @exponetdb/migrations-engine, @exponetdb/nodes, @exponetdb/observability, @exponetdb/operations, @exponetdb/policy, @exponetdb/postgres, @exponetdb/registry, @exponetdb/sdk, @exponetdb/secrets, @exponetdb/server, @exponetdb/testkit, @exponetdb/tokens, @exponetdb/tooling, @exponetdb/ui, @exponetdb/ui-data, @exponetdb/ui-patterns, @exponetdb/web
+   • Running test in 29 packages
+   • Remote caching disabled
+
+@exponetdb/audit:test: cache miss, executing dd08c0093ff03848
+@exponetdb/sdk:test: cache miss, executing 582da573021f491e
+@exponetdb/testkit:test: cache miss, executing 54b246634de06ebb
+@exponetdb/web:test: cache miss, executing 61a98dc7d48c30f9
+@exponetdb/ui-patterns:test: cache miss, executing 1f9cae09d5c92d57
+@exponetdb/ui-data:test: cache miss, executing 592a30b3adeec7ec
+@exponetdb/tooling:test: cache miss, executing 04473187779b00bb
+@exponetdb/icons:test: cache miss, executing 128cb3492ffb7c38
+@exponetdb/migrations-engine:test: cache miss, executing 3145ae3cd53b79b6
+@exponetdb/ui:test: cache miss, executing 8f37174bb35101e0
+@exponetdb/audit:test: $ vitest run
+@exponetdb/sdk:test: $ vitest run
+@exponetdb/tooling:test: $ vitest run
+@exponetdb/testkit:test: $ vitest run
+@exponetdb/ui-patterns:test: $ vitest run
+@exponetdb/icons:test: $ vitest run
+@exponetdb/web:test: $ vitest run
+@exponetdb/ui-data:test: $ vitest run
+@exponetdb/migrations-engine:test: $ vitest run
+@exponetdb/ui:test: $ vitest run
+@exponetdb/migrations-engine:test: 
+@exponetdb/audit:test: 
+@exponetdb/audit:test:  RUN  v5.0.3 /root/exdb/packages/audit
+@exponetdb/audit:test: 
+@exponetdb/migrations-engine:test:  RUN  v5.0.3 /root/exdb/packages/migrations-engine
+@exponetdb/migrations-engine:test: 
+@exponetdb/ui-patterns:test: 
+@exponetdb/ui-patterns:test:  RUN  v5.0.3 /root/exdb/packages/ui-patterns
+@exponetdb/ui-patterns:test: 
+@exponetdb/web:test: 
+@exponetdb/web:test:  RUN  v5.0.3 /root/exdb/apps/web
+@exponetdb/web:test: 
+@exponetdb/icons:test: 
+@exponetdb/icons:test:  RUN  v5.0.3 /root/exdb/packages/icons
+@exponetdb/icons:test: 
+@exponetdb/tooling:test: 
+@exponetdb/tooling:test:  RUN  v5.0.3 /root/exdb/tooling
+@exponetdb/tooling:test: 
+@exponetdb/sdk:test: 
+@exponetdb/sdk:test:  RUN  v5.0.3 /root/exdb/packages/sdk
+@exponetdb/sdk:test: 
+@exponetdb/ui-data:test: 
+@exponetdb/ui:test: 
+@exponetdb/ui:test:  RUN  v5.0.3 /root/exdb/packages/ui
+@exponetdb/ui:test: 
+@exponetdb/ui-data:test:  RUN  v5.0.3 /root/exdb/packages/ui-data
+@exponetdb/ui-data:test: 
+@exponetdb/testkit:test: 
+@exponetdb/testkit:test:  RUN  v5.0.3 /root/exdb/packages/testkit
+@exponetdb/testkit:test: 
+@exponetdb/tooling:test:  ✓ test/third-party.test.ts (32 tests) 244ms
+@exponetdb/tooling:test:  ✓ test/ui-safety.test.ts (65 tests) 342ms
+@exponetdb/sdk:test:  ✓ test/operations.test.ts (3 tests) 70ms
+@exponetdb/testkit:test:  ✓ test/kit.test.ts (2 tests) 34ms
+@exponetdb/testkit:test:  ✓ test/mcp-evals.test.ts (6 tests) 280ms
+@exponetdb/testkit:test:  ✓ test/mcp-transcript.test.ts (4 tests) 214ms
+@exponetdb/testkit:test: 
+@exponetdb/testkit:test:  Test Files  3 passed (3)
+@exponetdb/testkit:test:       Tests  12 passed (12)
+@exponetdb/testkit:test:    Start at  20:35:16
+@exponetdb/testkit:test:    Duration  3.26s (import 49%, transform 41%, tests 8%, worker 1%)
+@exponetdb/testkit:test: 
+@exponetdb/testkit:test:   Transform  transforming modules took 2.62s · 41% of tracked time, re-done on every run
+@exponetdb/testkit:test:              persist transforms across runs with fsModuleCache: true
+@exponetdb/testkit:test:              learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+@exponetdb/testkit:test: 
+@exponetdb/diagnostics:test: cache miss, executing 4c15fb2fcde343a0
+@exponetdb/diagnostics:test: $ vitest run
+@exponetdb/tooling:test:  ✓ test/licenses.test.ts (25 tests) 491ms
+@exponetdb/sdk:test:  ✓ test/sdk.test.ts (86 tests) 3132ms
+@exponetdb/sdk:test:    ✓ private_key_jwt (6)
+@exponetdb/sdk:test:      ✓ signs a RS256 assertion the issuer can verify, with a fresh jti each time 889ms
+@exponetdb/sdk:test:      ✓ signs a PS256 assertion the issuer can verify, with a fresh jti each time 907ms
+@exponetdb/sdk:test:    ✓ review hardening (6)
+@exponetdb/sdk:test:      ✓ refuses a key that does not fit its algorithm at construction 418ms
+@exponetdb/sdk:test: 
+@exponetdb/sdk:test:  Test Files  2 passed (2)
+@exponetdb/sdk:test:       Tests  89 passed (89)
+@exponetdb/sdk:test:    Start at  20:35:16
+@exponetdb/sdk:test:    Duration  5.52s (tests 54%, transform 27%, import 18%, worker 1%)
+@exponetdb/sdk:test: 
+@exponetdb/kernel:test: cache miss, executing 9a83ad734ecc557b
+@exponetdb/kernel:test: $ vitest run
+@exponetdb/diagnostics:test: 
+@exponetdb/diagnostics:test:  RUN  v5.0.3 /root/exdb/packages/diagnostics
+@exponetdb/diagnostics:test: 
+@exponetdb/migrations-engine:test:  ✓ test/legacy-evidence.test.ts (13 tests) 149ms
+@exponetdb/kernel:test: 
+@exponetdb/kernel:test:  RUN  v5.0.3 /root/exdb/packages/kernel
+@exponetdb/kernel:test: 
+@exponetdb/audit:test:  ✓ test/golden.test.ts (30 tests) 94ms
+@exponetdb/icons:test:  ✓ test/icons.test.tsx (1 test) 284ms
+@exponetdb/audit:test:  ✓ test/units.test.ts (16 tests) 456ms
+@exponetdb/audit:test: 
+@exponetdb/audit:test:  Test Files  2 passed (2)
+@exponetdb/audit:test:       Tests  46 passed (46)
+@exponetdb/audit:test:    Start at  20:35:16
+@exponetdb/audit:test:    Duration  8.89s (transform 61%, import 35%, tests 3%)
+@exponetdb/audit:test: 
+@exponetdb/audit:test:   Transform  transforming modules took 9.63s · 61% of tracked time, re-done on every run
+@exponetdb/audit:test:              persist transforms across runs with fsModuleCache: true
+@exponetdb/audit:test:              learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+@exponetdb/audit:test: 
+@exponetdb/control-store:test: cache miss, executing ba208e849094dea0
+@exponetdb/control-store:test: $ vitest run
+@exponetdb/kernel:test:  ✓ test/json.test.ts (22 tests) 119ms
+@exponetdb/tooling:test:  ✓ test/golden-history.test.ts (26 tests) 8031ms
+@exponetdb/tooling:test:    ✓ golden history guard (16)
+@exponetdb/tooling:test:      ✓ passes when nothing changed 333ms
+@exponetdb/tooling:test:      ✓ fails for a new vector without a lock entry or with a wrong one 304ms
+@exponetdb/tooling:test:      ✓ fails when file metadata outside the vectors was changed, added or removed 309ms
+@exponetdb/tooling:test:      ✓ fails when a vector file or the lock of the base was removed 427ms
+@exponetdb/tooling:test:    ✓ golden history guard: frozen Control Store bundles (7)
+@exponetdb/tooling:test:      ✓ passes when a frozen bundle is byte-identical to the base 332ms
+@exponetdb/tooling:test:      ✓ fails when a file is added to or removed from a frozen bundle 438ms
+@exponetdb/tooling:test:      ✓ fails when the bundle, its pins and the list entry are edited together 345ms
+@exponetdb/tooling:test:      ✓ fails when a frozen entry or the whole list is removed 492ms
+@exponetdb/tooling:test:      ✓ accepts a newly frozen bundle that exists and refuses one that does not 551ms
+@exponetdb/tooling:test:      ✓ leaves new, unlisted bundles free to change 440ms
+@exponetdb/tooling:test:    ✓ golden history guard: MCP tool version pins (3)
+@exponetdb/tooling:test:      ✓ passes when the pins are unchanged and when a tool gains a higher version 380ms
+@exponetdb/tooling:test:      ✓ fails when a pinned version names another digest (a changed definition kept its version) 350ms
+@exponetdb/tooling:test:      ✓ fails when a pinned version, a tool or the whole file is removed 412ms
+@exponetdb/kernel:test:  ✓ test/ids.test.ts (55 tests) 238ms
+@exponetdb/icons:test:  ✓ test/brands.test.tsx (7 tests) 1888ms
+@exponetdb/icons:test:    ✓ BrandGlyph (4)
+@exponetdb/icons:test:      ✓ passes axe, decorative next to a name and labelled on its own 1195ms
+@exponetdb/icons:test: 
+@exponetdb/icons:test:  Test Files  2 passed (2)
+@exponetdb/icons:test:       Tests  8 passed (8)
+@exponetdb/icons:test:    Start at  20:35:16
+@exponetdb/icons:test:    Duration  11.22s (environment 61%, import 20%, tests 12%, transform 5%, setup 1%, worker 1%)
+@exponetdb/icons:test: 
+@exponetdb/tooling:test:  ✓ test/boundaries.test.ts (6 tests) 3374ms
+@exponetdb/tooling:test:    ✓ boundary checker (1)
+@exponetdb/tooling:test:      ✓ reports every planted violation and nothing for allowed edges 3287ms
+@exponetdb/kernel:test:  ✓ test/node.golden.test.ts (42 tests) 255ms
+@exponetdb/observability:test: cache miss, executing cdb8bfbf0fcbe244
+@exponetdb/observability:test: $ vitest run
+@exponetdb/control-store:test: 
+@exponetdb/control-store:test:  RUN  v5.0.3 /root/exdb/packages/control-store
+@exponetdb/control-store:test: 
+@exponetdb/kernel:test:  ✓ test/kernel.test.ts (12 tests) 93ms
+@exponetdb/kernel:test:  ✓ test/plan-hash.golden.test.ts (14 tests) 98ms
+@exponetdb/kernel:test:  ✓ test/jcs.golden.test.ts (51 tests) 94ms
+@exponetdb/kernel:test: 
+@exponetdb/kernel:test:  Test Files  6 passed (6)
+@exponetdb/kernel:test:       Tests  196 passed (196)
+@exponetdb/kernel:test:    Start at  20:35:24
+@exponetdb/kernel:test:    Duration  4.81s (import 47%, transform 37%, tests 13%, worker 3%)
+@exponetdb/kernel:test: 
+@exponetdb/kernel:test:   Transform  transforming modules took 2.58s · 37% of tracked time, re-done on every run
+@exponetdb/kernel:test:              persist transforms across runs with fsModuleCache: true
+@exponetdb/kernel:test:              learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+@exponetdb/kernel:test: 
+@exponetdb/secrets:test: cache miss, executing 03cded58355418f5
+@exponetdb/secrets:test: $ vitest run
+@exponetdb/migrations-engine:test:  ✓ test/baseline-chain.test.ts (11 tests) 103ms
+@exponetdb/migrations-engine:test:  ✓ test/verification-failures.test.ts (10 tests) 100ms
+@exponetdb/observability:test: 
+@exponetdb/observability:test:  RUN  v5.0.3 /root/exdb/packages/observability
+@exponetdb/observability:test: 
+@exponetdb/migrations-engine:test:  ✓ test/units.test.ts (11 tests) 124ms
+@exponetdb/secrets:test: 
+@exponetdb/secrets:test:  RUN  v5.0.3 /root/exdb/packages/secrets
+@exponetdb/secrets:test: 
+@exponetdb/migrations-engine:test:  ✓ test/legacy-replay.test.ts (9 tests) 727ms
+@exponetdb/observability:test:  ✓ test/metrics-health-tracing.test.ts (10 tests) 236ms
+@exponetdb/migrations-engine:test:  ✓ test/execution-roles.test.ts (5 tests) 155ms
+@exponetdb/migrations-engine:test: 
+@exponetdb/migrations-engine:test:  Test Files  6 passed (6)
+@exponetdb/migrations-engine:test:       Tests  59 passed (59)
+@exponetdb/migrations-engine:test:    Start at  20:35:16
+@exponetdb/migrations-engine:test:    Duration  45.51s (import 63%, transform 35%, tests 2%)
+@exponetdb/migrations-engine:test: 
+@exponetdb/migrations-engine:test:   Transform  transforming modules took 24.84s · 35% of tracked time, re-done on every run
+@exponetdb/migrations-engine:test:              persist transforms across runs with fsModuleCache: true
+@exponetdb/migrations-engine:test:              learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+@exponetdb/migrations-engine:test: 
+@exponetdb/observability:test:  ✓ test/redaction.test.ts (72 tests) 1345ms
+@exponetdb/contracts:test: cache miss, executing 43ee322351a25ed4
+@exponetdb/observability:test: 
+@exponetdb/observability:test:  Test Files  2 passed (2)
+@exponetdb/observability:test:       Tests  82 passed (82)
+@exponetdb/observability:test:    Start at  20:35:30
+@exponetdb/observability:test:    Duration  31.92s (import 93%, transform 4%, tests 3%)
+@exponetdb/observability:test: 
+@exponetdb/contracts:test: $ vitest run
+@exponetdb/migrations:test: cache miss, executing 38c10948c2f3062e
+@exponetdb/migrations:test: $ vitest run
+@exponetdb/ui:test:  ✓ test/button.test.tsx (49 tests) 33845ms
+@exponetdb/ui:test:    ✓ #Button (49)
+@exponetdb/ui:test:      ✓ should render button correctly 330ms
+@exponetdb/ui:test:      ✓ should default to the neutral default variant 772ms
+@exponetdb/ui:test:      ✓ variants and sizes (17)
+@exponetdb/ui:test:        ✓ renders the primary variant as a named button without accessibility violations 360ms
+@exponetdb/ui:test:      ✓ type (3)
+@exponetdb/ui:test:        ✓ defaults to type="button" so it never submits a form by accident 333ms
+@exponetdb/ui:test:      ✓ focusableWhenDisabled (5)
+@exponetdb/ui:test:        ✓ swallows keyboard activation with Enter and Space 26688ms
+@exponetdb/ui:test:        ✓ does nothing without disabled 787ms
+@exponetdb/contracts:test: 
+@exponetdb/contracts:test:  RUN  v5.0.3 /root/exdb/packages/contracts
+@exponetdb/contracts:test: 
+@exponetdb/migrations:test: 
+@exponetdb/migrations:test:  RUN  v5.0.3 /root/exdb/packages/migrations
+@exponetdb/migrations:test: 
+@exponetdb/ui:test:  ✓ test/alert-dialog.test.tsx (15 tests) 36386ms
+@exponetdb/ui:test:    ✓ #AlertDialog (7)
+@exponetdb/ui:test:      ✓ closes after a synchronous action 1540ms
+@exponetdb/ui:test:      ✓ keeps the dialog open and shows loading while an async action is pending 585ms
+@exponetdb/ui:test:      ✓ closes after an async action resolves 468ms
+@exponetdb/ui:test:      ✓ keeps the dialog open after an async action rejects 451ms
+@exponetdb/ui:test:      ✓ blocks cancel, Escape, and outside interaction while an async action is pending 397ms
+@exponetdb/ui:test:      ✓ disables action and cancel when loading is controlled by a parent 336ms
+@exponetdb/ui:test:      ✓ uses the latest onOpenChange callback after a rerender 337ms
+@exponetdb/ui:test:    ✓ #AlertDialog with a user (6)
+@exponetdb/ui:test:      ✓ ignores Escape while the action is pending, then closes when it resolves 501ms
+@exponetdb/ui:test:      ✓ ignores a click on the cancel button and outside the dialog while pending 27335ms
+@exponetdb/ui:test:      ✓ stays open on a rejection and hands the error to onActionError 450ms
+@exponetdb/ui:test:      ✓ works controlled: a resolved action reports the close to the owner 418ms
+@exponetdb/ui:test:      ✓ has no accessibility violations: idle, pending and failed 2540ms
+@exponetdb/ui:test:    ✓ AlertDialogAction double press (2)
+@exponetdb/ui:test:      ✓ starts an async action once for two presses before a render 356ms
+@exponetdb/ui:test:      ✓ cannot be dismissed in the same moment as the press, and shows the failure after 479ms
+@exponetdb/diagnostics:test:  ✓ test/reducer.test.ts (34 tests) 196ms
+@exponetdb/diagnostics:test:  ✓ test/drift.test.ts (38 tests) 1291ms
+@exponetdb/diagnostics:test:    ✓ schema diffs (3)
+@exponetdb/diagnostics:test:      ✓ caps the listed objects and says so, with totals before the cap 784ms
+@exponetdb/control-store:test:  ✓ test/control-store.test.ts (24 tests) 5785ms
+@exponetdb/control-store:test:    ✓ shipped bundles (3)
+@exponetdb/control-store:test:      ✓ load, validate with migrations/format and order with migrations/graph 1882ms
+@exponetdb/control-store:test:      ✓ contain no transaction control in up.sql and name every verify.sql check 3710ms
+@exponetdb/control-store:test:  ✓ test/immutable-bundles.test.ts (3 tests) 7000ms
+@exponetdb/control-store:test:    ✓ shipped Control Store bundles are immutable (3)
+@exponetdb/control-store:test:      ✓ keeps the apply checksum and verify digest of every Wave 2, 3A, 3B, 4, 5 and 6 bundle 2204ms
+@exponetdb/control-store:test:      ✓ lists exactly the pinned bundles in frozen-bundles.json, with the same digests 3451ms
+@exponetdb/control-store:test:      ✓ orders every later bundle after the frozen ones through dependsOn 1317ms
+@exponetdb/control-store:test: 
+@exponetdb/control-store:test:  Test Files  2 passed (2)
+@exponetdb/control-store:test:       Tests  27 passed (27)
+@exponetdb/control-store:test:    Start at  20:35:27
+@exponetdb/control-store:test:    Duration  47.28s (import 71%, tests 15%, transform 14%)
+@exponetdb/control-store:test: 
+@exponetdb/tokens:test: cache miss, executing 663b80af6fac5837
+@exponetdb/tokens:test: $ vitest run
+@exponetdb/ui:test:  ✓ test/sidebar.test.tsx (34 tests) 48924ms
+@exponetdb/ui:test:    ✓ SidebarProvider and persistence (5)
+@exponetdb/ui:test:      ✓ is open by default and toggles from the trigger 1542ms
+@exponetdb/ui:test:      ✓ reports each toggle through onOpenChange, so the app can save the choice 567ms
+@exponetdb/ui:test:      ✓ follows the open prop when controlled and only asks for the change 303ms
+@exponetdb/ui:test:      ✓ writes no cookie and no storage 500ms
+@exponetdb/ui:test:    ✓ Sidebar behaviors (9)
+@exponetdb/ui:test:      ✓ expand on hover: opens over the page while the pointer is on it and closes when it leaves 962ms
+@exponetdb/ui:test:      ✓ expand on hover: also opens when focus moves into it and closes when focus leaves 725ms
+@exponetdb/ui:test:      ✓ expand on hover: stays open while either the pointer or focus is inside 27756ms
+@exponetdb/ui:test:      ✓ expand on hover: a click leaves focus in the rail but does not keep it open over the page 1013ms
+@exponetdb/ui:test:      ✓ has no accessibility violations in either state 1633ms
+@exponetdb/ui:test:    ✓ Sidebar toggle controls (2)
+@exponetdb/ui:test:      ✓ tells assistive technology whether the sidebar is open 374ms
+@exponetdb/ui:test:      ✓ offers the rail as a pointer shortcut that is not an extra tab stop 312ms
+@exponetdb/ui:test:    ✓ SidebarMenuButton (8)
+@exponetdb/ui:test:      ✓ keeps an entry focusable when disabled with a reason, and suppresses its click 2750ms
+@exponetdb/ui:test:      ✓ shows its tooltip only while the sidebar is collapsed 734ms
+@exponetdb/ui:test:      ✓ shows the reason of a disabled entry whatever the state of the sidebar 457ms
+@exponetdb/ui:test:      ✓ leaves the Escape key to the sheet while its tooltip is closed 4591ms
+@exponetdb/ui:test:    ✓ Sidebar on small screens (2)
+@exponetdb/ui:test:      ✓ is a named dialog sheet that opens from the trigger and closes with Escape 1698ms
+@exponetdb/ui:test:      ✓ uses the label it is given for the sheet 622ms
+error: script "test" was terminated by signal SIGKILL (Forced quit)

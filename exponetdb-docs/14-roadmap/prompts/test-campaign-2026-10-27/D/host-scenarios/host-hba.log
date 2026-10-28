@@ -1,0 +1,15 @@
+$ vitest run --config vitest.host.config.ts test/host/hba.host.test.ts
+
+ RUN  v5.0.3 /root/exdb/apps/server
+
+ ✓ test/host/hba.host.test.ts (3 tests) 137992ms
+   ✓ pg_hba through the managed block (host scenario) (3)
+     ✓ writes a managed block and verifies it by a fresh read 7722ms
+     ✓ refuses a block that would lock the agent out, and puts the file back 106856ms
+     ✓ removes the managed block again 8378ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  20:12:53
+   Duration  144.80s (tests 95%, transform 3%, import 1%)
+

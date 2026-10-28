@@ -1,0 +1,49 @@
+Unable to find image 'postgres:17.11@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f' locally
+docker.io/library/postgres@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f: Pulling from library/postgres
+564dc3c4a6f9: Pulling fs layer
+752819419f50: Pulling fs layer
+8b51b9245051: Pulling fs layer
+6b37362b3da7: Pulling fs layer
+498b9ff7d682: Pulling fs layer
+71f55f60a786: Pulling fs layer
+73872941ba23: Pulling fs layer
+3feaebf93d15: Pulling fs layer
+755a851127eb: Pulling fs layer
+bed9376b51dc: Pulling fs layer
+bbe7b3469b20: Pulling fs layer
+2f9b6cf2e417: Pulling fs layer
+50e228e2fe6d: Pulling fs layer
+0725a8be915e: Pulling fs layer
+50e228e2fe6d: Download complete
+bed9376b51dc: Download complete
+755a851127eb: Download complete
+73872941ba23: Download complete
+3feaebf93d15: Download complete
+2f9b6cf2e417: Download complete
+564dc3c4a6f9: Download complete
+8b51b9245051: Download complete
+0725a8be915e: Download complete
+498b9ff7d682: Download complete
+752819419f50: Download complete
+71f55f60a786: Download complete
+6b37362b3da7: Download complete
+8149cae2e315: Download complete
+090191b9c428: Download complete
+bbe7b3469b20: Download complete
+0725a8be915e: Pull complete
+6b37362b3da7: Pull complete
+564dc3c4a6f9: Pull complete
+71f55f60a786: Pull complete
+8b51b9245051: Pull complete
+498b9ff7d682: Pull complete
+752819419f50: Pull complete
+755a851127eb: Pull complete
+73872941ba23: Pull complete
+bbe7b3469b20: Pull complete
+50e228e2fe6d: Pull complete
+bed9376b51dc: Pull complete
+3feaebf93d15: Pull complete
+2f9b6cf2e417: Pull complete
+Digest: sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f
+Status: Downloaded newer image for postgres@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f
+db160297098cd9ce8d7f319947b4bbe3bd47c76ad9657ebd823abedd1a147111

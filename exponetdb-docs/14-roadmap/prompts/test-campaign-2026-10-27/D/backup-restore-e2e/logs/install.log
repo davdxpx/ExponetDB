@@ -1,0 +1,20 @@
+Creating group 'exponetdb-node' with GID 987.
+Creating user 'exponetdb-node' (ExponetDB node agent) with UID 987 and GID 987.
+uid=987(exponetdb-node) gid=987(exponetdb-node) groups=987(exponetdb-node)
+drwx--x--x 5 root root 4096 Oct 27 20:14 /var/lib/exponetdb-node-engine
+drwx--x--x 2 root root 4096 Oct 27 20:14 /var/lib/exponetdb-node-engine/reads
+drwx--x--x 2 root root 4096 Oct 27 20:14 /var/lib/exponetdb-node-engine/runs
+drwx--x--x 2 root root 4096 Oct 27 20:14 /var/lib/exponetdb-node-engine/scratch
+0.7.0 commit d02295503bcfb7a4a4baea860bd9fceebe80b8b4
+0.7.0 commit d02295503bcfb7a4a4baea860bd9fceebe80b8b4
+Created symlink /etc/systemd/system/sockets.target.wants/exponetdb-node-helper.socket → /etc/systemd/system/exponetdb-node-helper.socket.
+● exponetdb-node-helper.socket - ExponetDB node agent root helper socket
+     Loaded: loaded (/etc/systemd/system/exponetdb-node-helper.socket; enabled; preset: enabled)
+     Active: active (listening) since Tue 2026-10-27 20:15:05 UTC; 7ms ago
+   Triggers: ● exponetdb-node-helper.service
+     Listen: /run/exponetdb-node/helper.sock (Stream)
+      Tasks: 0 (limit: 9255)
+     Memory: 4.0K (peak: 256.0K)
+        CPU: 828us
+total 0
+srw-rw---- 1 root exponetdb-node 0 Oct 27 20:15 helper.sock

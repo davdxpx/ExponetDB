@@ -1,0 +1,19 @@
+$ vitest run --config vitest.host.config.ts "test/host/zz-backup-e2e2.host.test.ts"
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/root/exdb/apps/server[39m
+
+ [32m✓[39m test/host/zz-backup-e2e2.host.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 251046[2mms[22m[39m
+   [32m✓[39m drills, C-35 and the offline record (tc-node-2) [2m(3)[22m
+     [33m[2m✓[22m[39m C1 adopt, adopted_runs, wal.archive_status, refresh, verify three backups[33m 122941[2mms[22m[39m
+     [33m[2m✓[22m[39m C2 M-6: pitr_random and an explicit pitr drill[33m 85009[2mms[22m[39m
+     [33m[2m✓[22m[39m C3 T-C35-1: runbook, Control Plane roles stopped, offline restore, record-offline[33m 32909[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m   Start at [22m 21:06:17
+[2m   Duration [22m 258.68s[2m (tests 97%, transform 2%, import 1%)[22m
+
+
+real	4m19.206s
+user	0m33.438s
+sys	0m8.158s

@@ -1,0 +1,80 @@
++ psqlx 'CREATE TABLE public.filler AS SELECT g, repeat(md5(g::text), 20) AS pad FROM generate_series(1,250000) g'
++ runuser -u postgres -- psql -X -q -A -t -p 55417 -d app -c 'CREATE TABLE public.filler AS SELECT g, repeat(md5(g::text), 20) AS pad FROM generate_series(1,250000) g'
++ psqlx 'SELECT pg_size_pretty(pg_database_size('\''app'\''))'
++ runuser -u postgres -- psql -X -q -A -t -p 55417 -d app -c 'SELECT pg_size_pretty(pg_database_size('\''app'\''))'
+170 MB
++ set +x
+=== host mode: absent -> run must be refused
+{"error":{"code":"precondition_failed","message":"the host's repository mode adopted_observed does not allow a full backup run"},"jobId":"job_2NGQM46ZGCYWSWKDM2YKQJP0YF"}
+rc=3
+=== mode owned, FULL via backup.run@1
+{"jobId":"job_75VZ23F9VHZMWFADDVXC0EHBR1","result":{"runId":"run_0XFV299SRXH7N1R0EMQ0E8ARBC","startedAt":"2026-10-27T20:15:56Z","unit":"exponetdb-run-run_0XFV299SRXH7N1R0EMQ0E8ARBC.service"}}
+start job returned after .151971220 s
+--- unit while running
+Type=exec
+Restart=no
+TimeoutStopUSec=1min 30s
+RuntimeMaxUSec=12h
+MainPID=21640
+ExecStart={ path=/usr/sbin/exponetdb-node-helper ; argv[]=/usr/sbin/exponetdb-node-helper engine-run --run run_0XFV299SRXH7N1R0EMQ0E8ARBC ; ignore_errors=no ; start_time=[Tue 2026-10-27 20:15:56 UTC] ; stop_time=[n/a] ; pid=21640 ; code=(null) ; status=0/0 }
+CPUWeight=50
+IOWeight=50
+MemoryMax=2147483648
+TasksMax=256
+IPAddressAllow=
+IPAddressDeny=
+UMask=0077
+LimitCORE=0
+StandardOutput=null
+StandardError=null
+CapabilityBoundingSet=cap_chown cap_dac_override cap_dac_read_search cap_fowner cap_fsetid cap_kill cap_setgid cap_setuid cap_setpcap cap_linux_immutable cap_net_bind_service cap_net_broadcast cap_net_admin cap_net_raw cap_ipc_lock cap_ipc_owner cap_sys_chroot cap_sys_ptrace cap_sys_pacct cap_sys_admin cap_sys_boot cap_sys_nice cap_sys_resource cap_sys_time cap_sys_tty_config cap_lease cap_audit_write cap_audit_control cap_setfcap cap_mac_override cap_mac_admin cap_syslog cap_wake_alarm cap_block_suspend cap_audit_read cap_perfmon cap_bpf cap_checkpoint_restore
+User=108
+Group=112
+ReadWritePaths=/var/lib/exponetdb-node-engine/runs/run_0XFV299SRXH7N1R0EMQ0E8ARBC/work -/var/log/pgbackrest -/var/spool/pgbackrest -/var/lib/pgbackrest
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+PrivateNetwork=no
+ProtectHome=yes
+ProtectSystem=strict
+NoNewPrivileges=yes
+SystemCallFilter=~
+RestrictAddressFamilies=~
+RestrictSUIDSGID=yes
+BindPaths=-/tmp/pgbackrest:/tmp/pgbackrest:rbind
+KillMode=control-group
+Id=exponetdb-run-run_0XFV299SRXH7N1R0EMQ0E8ARBC.service
+LoadState=loaded
+ActiveState=active
+SubState=running
+/var/lib/exponetdb-node-engine/runs/run_0XFV299SRXH7N1R0EMQ0E8ARBC:
+total 16
+drwxr-x--- 3 root     postgres 4096 Oct 27 20:15 .
+drwx--x--x 3 root     root     4096 Oct 27 20:15 ..
+-rw-r----- 1 root     postgres 1235 Oct 27 20:15 record.json
+drwx------ 2 postgres postgres 4096 Oct 27 20:15 work
+
+/var/lib/exponetdb-node-engine/runs/run_0XFV299SRXH7N1R0EMQ0E8ARBC/work:
+total 8
+drwx------ 2 postgres postgres 4096 Oct 27 20:15 .
+drwxr-x--- 3 root     postgres 4096 Oct 27 20:15 ..
+root:postgres 640 /var/lib/exponetdb-node-engine/runs/run_0XFV299SRXH7N1R0EMQ0E8ARBC/record.json
+postgres:postgres 700 /var/lib/exponetdb-node-engine/runs/run_0XFV299SRXH7N1R0EMQ0E8ARBC/work
+    PID USER     COMMAND
+  14328 postgres /usr/lib/postgresql/18/bin/postgres -D /var/lib/postgresql/18/main -c config_file=/etc/postgresql/18/main/postgresql.conf
+  20970 postgres /usr/lib/postgresql/17/bin/postgres -D /var/lib/postgresql/17/exdbnode -c config_file=/etc/postgresql/17/exdbnode/postgresql.conf
+  21640 postgres /usr/sbin/exponetdb-node-helper engine-run --run run_0XFV299SRXH7N1R0EMQ0E8ARBC
+  21656 postgres /usr/bin/pgbackrest --config=/etc/pgbackrest/pgbackrest.conf --stanza=exdbnode --repo=1 --output=json --log-level-console=off --log-level-stderr=off info
+{"jobId":"job_5FN5MM5VSQQVY98C3EFF13FS20","result":{"excerpt":"2026-10-27 20:15:56.254 P00   INFO: backup command begin 2.60.0: --compress-type=zst --config=/etc/pgbackrest/pgbackrest.conf --exec-id=21662-d5bc85b1 --no-expire-auto --log-level-console=info --log-path=/var/log/pgbackrest --pg1-path=/var/lib/postgresql/17/exdbnode --pg1-port=55417 --pg1-socket-path=/var/run/postgresql --repo=1 --repo1-cipher-pass=\u003credacted\u003e --repo1-cipher-type=aes-256-cbc --repo1-path=/var/lib/pgbackrest --repo1-retention-full=2 --stanza=exdbnode --start-fast --type=full\n2026-10-27 20:15:56.266 P00   INFO: execute backup start: backup begins after the requested immediate checkpoint completes\n2026-10-27 20:15:56.494 P00   INFO: backup start archive = 00000001000000000000000D, lsn = 0/D000028\n2026-10-27 20:15:56.494 P00   INFO: check archive for prior segment 00000001000000000000000C\n2026-10-27 20:16:01.018 P00   INFO: execute backup stop and wait for all WAL segments to archive\n2026-10-27 20:16:01.045 P00   INFO: backup stop archive = 00000001000000000000000D, lsn = 0/D000120\n2026-10-27 20:16:01.049 P00   INFO: check archive for segment(s) 00000001000000000000000D:00000001000000000000000D\n2026-10-27 20:16:01.166 P00   INFO: new backup label = 20261027-201556F\n2026-10-27 20:16:01.226 P00   INFO: full backup size = 199.6MB, file total = 1567\n2026-10-27 20:16:01.226 P00   INFO: backup command end: completed successfully (4975ms)","exitCode":0,"finishedAt":"2026-10-27T20:16:01.231185495Z","found":true,"outcome":{"checks":[],"label":"20261027-201556F","phases":[],"port":null,"recoveryReachedAt":null,"recoveryReachedLsn":null,"timeline":null,"verifyErrors":null},"progress":null,"purpose":"backup","runId":"run_0XFV299SRXH7N1R0EMQ0E8ARBC","startArgsHash":"sha256:68d97cac5e1f1dc506eeafb87aa3cdbee0a2d972157a6817ad19650aaeff438f","startJobId":"job_75VZ23F9VHZMWFADDVXC0EHBR1","startedAt":"2026-10-27T20:15:56Z","state":"succeeded"}}
+full backup wall time (start request -> terminal status): 6.054387323 s
+total 20
+drwxr-x--- 3 root     postgres 4096 Oct 27 20:16 .
+drwx--x--x 3 root     root     4096 Oct 27 20:15 ..
+-rw-r----- 1 root     postgres 1235 Oct 27 20:15 record.json
+-rw------- 1 root     root     1645 Oct 27 20:16 result.json
+drwx------ 2 postgres postgres 4096 Oct 27 20:16 work
+root:postgres 640 /var/lib/exponetdb-node-engine/runs/run_0XFV299SRXH7N1R0EMQ0E8ARBC/record.json
+root:root 600 /var/lib/exponetdb-node-engine/runs/run_0XFV299SRXH7N1R0EMQ0E8ARBC/result.json
+postgres:postgres 700 /var/lib/exponetdb-node-engine/runs/run_0XFV299SRXH7N1R0EMQ0E8ARBC/work

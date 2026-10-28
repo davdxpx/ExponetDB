@@ -1,0 +1,2 @@
+$ bun --conditions=@exponetdb/source tooling/checks/third-party.ts
+third-party register holds (171 copied files registered and reviewed; 1 from other sources)

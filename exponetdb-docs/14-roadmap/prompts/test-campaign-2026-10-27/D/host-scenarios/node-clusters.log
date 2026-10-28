@@ -1,0 +1,1 @@
+export EXDB_NODE_CLUSTERS=/root/exdb-node/clusters.json

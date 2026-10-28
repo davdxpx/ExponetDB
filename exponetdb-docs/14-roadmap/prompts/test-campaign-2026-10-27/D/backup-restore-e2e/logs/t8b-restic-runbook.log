@@ -1,0 +1,47 @@
+sha256:a5ac770d82b0eb4bb0c8a23bae4c41d787f45d53f3e3ffb4cde145ce1101b668 TARGET_DIR,PG_BIN,PORT,RESTIC_PASSWORD_FILE,SNAPSHOT
+=== populate the restic repository the way the helper's logical run would (pg_dump per database + globals), as postgres, outside the sandbox
+source accounts=370
+{"message_type":"summary","files_new":0,"files_changed":2,"files_unmodified":0,"dirs_new":0,"dirs_changed":4,"dirs_unmodified":0,"data_blobs":2,"tree_blobs":5,"data_added":677141,"total_files_processe
+4
+=== 1. restic runbook into an empty TARGET_DIR
+Summary: Restored 6 files/dirs (1.813 GiB) in 0:06
+waiting for server to start.... done
+server started
+recovery ended; replayed to no WAL on timeline 1
+find: Failed to restore initial working directory: /root: Permission denied
+runbook: review /tmp/tmp.O9cZ3Zuiyn/dump/var/lib/c35/dump/globals.sql before applying it (roles without passwords)
+find: Failed to restore initial working directory: /root: Permission denied
+CREATE DATABASE
+pg_restore: error: could not execute query: ERROR:  role "reader" does not exist
+Command was: GRANT SELECT ON TABLE public.accounts TO reader;
+
+
+rc=1 duration=45.445305834s
+restored accounts: 370 (source 370); big: 16000000
+roles in the restored cluster (globals applied?): (none)
+table owner in restored app: postgres  (source: postgres)
+server stopped
+=== 2. missing globals: a snapshot holding only app.dump
+snapshot 6f33def8 saved
+find: Failed to restore initial working directory: /root: Permission denied
+CREATE DATABASE
+pg_restore: error: could not execute query: ERROR:  role "reader" does not exist
+Command was: GRANT SELECT ON TABLE public.accounts TO reader;
+
+
+rc=1  (M-5 expects: the runbook stops on a missing globals file)
+server stopped
+=== 3. restore role
+Summary: Restored 5 files/dirs (1.813 GiB) in 0:06
+initdb: error: cannot be run as root
+initdb: hint: Please log in (using, e.g., "su") as the (unprivileged) user that will own the server process.
+rc=1 as root (over-privileged)
+mkdir: cannot create directory ‘/var/lib/c35/restic-nobody.exponetdb’: Permission denied
+rc=1 as nobody (under-privileged)
+=== 4. wrong restic password
+Fatal: wrong password or no key found
+rc=1
+ls: cannot access '/var/lib/c35/restic-badpw': No such file or directory
+=== 5. non-empty TARGET_DIR
+runbook: TARGET_DIR exists and is not empty: refusing to restore over it
+rc=1

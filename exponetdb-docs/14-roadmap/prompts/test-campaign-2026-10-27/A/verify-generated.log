@@ -1,0 +1,2 @@
+$ bun --conditions=@exponetdb/source tooling/generators/generate.ts --check
+generated artifacts are up to date (10 files, deterministic)

@@ -1,0 +1,33 @@
+$ vitest run --config vitest.host.config.ts "test/host/zz-e2-e6.host.test.ts"
+
+ RUN  v5.0.3 /root/exdb/apps/server
+
+stdout | test/host/zz-e2-e6.host.test.ts > campaign E2 / E6 > E2: the node view against the stored clusters column and the heartbeat
+E2-ROW {"clusters_col":"[{\"port\": 55417, \"running\": true, \"version\": \"17.11\", \"localName\": \"17/exdbnode\", \"dataDirectory\": \"/var/lib/postgresql/17/exdbnode\", \"systemIdentifier\": \"7701448509665702082\"}]","hb_clusters":"[]","hb_type":"array","skew":"-3"}
+E2-REST-CLUSTERS []
+E2-LIST null
+
+stdout | test/host/zz-e2-e6.host.test.ts > campaign E2 / E6 > E6: enrollment token states and any way to list or revoke one
+E6-TOKENS [{"token_id":"ent_01M5ZH35WB786CGBPEDN8TH0CN","state":"used","reveal_until":"2026-10-27T21:03:41.777Z","expires_at":"2026-10-27T21:03:41.812Z","used_at":"2026-10-27T20:33:41.919Z"}]
+
+stdout | test/host/zz-e2-e6.host.test.ts > campaign E2 / E6 > E6: enrollment token states and any way to list or revoke one
+E6-ROUTE GET /api/v1/enrollment-tokens 404
+
+stdout | test/host/zz-e2-e6.host.test.ts > campaign E2 / E6 > E6: enrollment token states and any way to list or revoke one
+E6-ROUTE GET /api/v1/enrollment-tokens/<id> 404
+
+stdout | test/host/zz-e2-e6.host.test.ts > campaign E2 / E6 > E6: enrollment token states and any way to list or revoke one
+E6-ROUTE DELETE /api/v1/enrollment-tokens/<id> 404
+
+stdout | test/host/zz-e2-e6.host.test.ts > campaign E2 / E6 > E6: enrollment token states and any way to list or revoke one
+E6-ROUTE POST /api/v1/enrollment-tokens/<id>/revoke 404
+
+ ✓ test/host/zz-e2-e6.host.test.ts (2 tests) 17346ms
+   ✓ campaign E2 / E6 (2)
+     ✓ E2: the node view against the stored clusters column and the heartbeat 2046ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  20:33:24
+   Duration  24.19s (tests 72%, transform 20%, import 7%)
+

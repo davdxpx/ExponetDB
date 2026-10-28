@@ -1,0 +1,14 @@
+--- relaunch with turbo concurrency 2 (8 GB host OOM-killed the default run)
+typecheck2 rc=0 dur=122s
+test2 rc=0 dur=794s
+build2 rc=0 dur=44s
+test-integration2 rc=1 dur=849s
+playwright-install rc=0 dur=3s
+design-system-build rc=0 dur=4s
+test-e2e2 rc=0 dur=358s
+conformance2 rc=1 dur=46s
+D2-DONE
+test-integration3 rc=0 dur=1076s
+D4-DONE
+conformance3 rc=0 dur=37s
+D5-DONE

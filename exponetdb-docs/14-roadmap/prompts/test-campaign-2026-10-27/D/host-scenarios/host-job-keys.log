@@ -1,0 +1,15 @@
+$ vitest run --config vitest.host.config.ts test/host/job-keys.host.test.ts
+
+ RUN  v5.0.3 /root/exdb/apps/server
+
+ ✓ test/host/job-keys.host.test.ts (3 tests) 43952ms
+   ✓ job-key rotation with overlap, trusted by the agent and the helper (host scenario) (3)
+     ✓ adds a staged key to the node; activation waits for the node’s signed statement of trust 3554ms
+     ✓ signs with the new key after activation; the helper accepts it for an effect 16730ms
+     ✓ keeps the old key for the overlap, then removes it from the node and retires it 8301ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  20:16:25
+   Duration  50.71s (tests 87%, transform 10%, import 3%)
+
