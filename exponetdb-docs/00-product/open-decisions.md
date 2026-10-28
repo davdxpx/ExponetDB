@@ -79,6 +79,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-57 | `advisors_run` records a run, but its scope `diagnostics.read` is a read scope | **open** | (a) a new additive oauth bundle makes `diagnostics.read` a write scope (consent shows it; clients that auto-approve read tools stop doing so); (b) a separate record scope for advisor runs (`diagnostics.record`), `diagnostics.read` stays read-only; (c) an advisor run over MCP records nothing (findings only from Web App, CLI and the worker) | nothing in Part B; the MCP annotation stays `readOnlyHint` until decided | open |
 | OD-58 | How an operation in `needs_attention` is closed | **open** (built with option (a) by the test campaign fixes) | (a) the recovery plan that names it closes it as `verification_failed`, `unknown` becomes `partially_applied`; (b) (a) plus the planned `operation.force_release` for operations no recovery plan covers; (c) (a) with `verification_failed` admitting an `unknown` apply outcome | option (a) is in the code on the branch; the owner confirms or changes it | open |
 | OD-59 | Flagging ledger rows as untrusted (`ledger.reconcile` with `flag_untrusted`) | **open** | (a) leave it unbuilt: `adopt_target` is the only decision, `flag_untrusted` is refused as `not_built`; (b) record the decision and a finding while the divergence keeps refusing plans; (c) remove it from the contract | (a) is in the code on the branch; the owner decides | open |
+| OD-60 | How strict a restore drill is about `amcheck` | **open** (built with option (a) by the test campaign fixes) | (a) a check the node could not run everywhere (`not_run`) does not fail a drill and stays recorded; `failed` and `error` do; (b) strict: a drill is refused at planning unless the extension is known to exist in every database of the restored cluster; (c) the node creates `amcheck` in the disposable scratch cluster with the host's contrib package, so the check runs everywhere | (a) is in the code on the branch; the owner confirms or changes it | open |
 
 ---
 
@@ -1853,6 +1854,32 @@ History:
   (c) remove the value from the contract (a contract change, generated
   files).
 - **Recommendation.** (a) until a real tampered ledger needs it; then (b).
+- **Blocks.** Nothing.
+
+## OD-60. How strict a drill is about `amcheck`
+
+- **Status.** OPEN (found on 2026-10-27 by the test campaign, TC-010 / D-02; built
+  with option (a) by the fixes of 2026-10-28, for the owner to confirm)
+- **Question.** The node's `amcheck` check reports `not_run` when a database of the
+  restored cluster lacks the extension (a template, an application database, any
+  backup older than the extension). The Control Plane required every configured
+  check to be `passed`, so such a drill ended `verification_failed` although the
+  recovery target was reached and the probes passed. Is "the integrity check could
+  not run everywhere" a failed drill?
+- **Why it matters.** **[OBSERVED]** On a real host no drill could pass unless the
+  extension existed in every database of every backup. RB-08 and ADR-0038 say
+  "`amcheck` where installed, otherwise recorded `not_run`, never `passed`": the
+  node already followed that; the drill verification did not.
+- **Options.** (a) **built**: `not_run` of `amcheck` does not fail the drill; the check
+  keeps its outcome and detail in the drill record and the restore list, and
+  `failed` or `error` still fail it. (b) strict: refuse the drill plan up front when
+  the extension is not known to exist in every database (the Control Plane has no
+  such fact today; a node observation would have to carry it). (c) the node creates
+  the extension in the disposable scratch cluster (the host's contrib package is
+  needed; the restored data is not changed beyond the extension).
+- **Recommendation.** (a) now; (c) when a real cluster's drills keep reporting
+  `not_run` and the host has the package. (b) only if the owner wants a drill to be
+  a proof of index integrity.
 - **Blocks.** Nothing.
 
 ## Owner decisions of the Wave 9 Part B order (2026-10-26)

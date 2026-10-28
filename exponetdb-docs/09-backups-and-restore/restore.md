@@ -101,7 +101,7 @@ Verification of a restored cluster (`restore.verify@1`):
 |---|---|
 | Recovery target reached | `pg_last_wal_replay_lsn()` / recovery end time matches the plan |
 | Cluster starts and accepts connections | simple **and** extended-protocol probe succeed ([`../10-observability/health.md`](../10-observability/health.md)) |
-| Index integrity | `amcheck` (`bt_index_check`) on all B-tree indexes of configured databases (sampled for very large databases, sample size recorded) |
+| Index integrity | `amcheck` (`bt_index_check`) on all B-tree indexes of configured databases that have the extension (sampled for very large databases, sample size recorded). **[DECIDED]** (test campaign TC-010, D-02) A database without the extension makes the check `not_run`, never `passed` ([ADR-0038](../01-architecture/adr/0038-restore-plans-drills-and-offline-runbooks.md)); a drill still passes, with the check recorded `not_run` and its detail ("497 indexes checked in 3 of 5 databases; amcheck is missing in the others"). A `failed` or `error` check fails the drill. Strictness is [OD-60](../00-product/open-decisions.md#od-60-how-strict-a-drill-is-about-amcheck) |
 | Schema | fingerprint equals the source target's fingerprint at that time (if the history has one), otherwise recorded as the new baseline evidence |
 | Ledger | `exponetdb` ledger head matches the Control Store's mirror for that time |
 | Data | row counts of configured tables within configured bounds; consumer-defined probe queries (read-only, reviewed like `verify.sql`) |

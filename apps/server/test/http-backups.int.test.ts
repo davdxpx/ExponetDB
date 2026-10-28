@@ -156,6 +156,10 @@ function answer(host: Host) {
   }
 }
 
+/** What the simulated node reports for the amcheck check of a restore (TC-010). */
+let amcheckOutcome: 'passed' | 'not_run' | 'failed' = 'passed'
+const AMCHECK_DETAIL = '497 indexes checked in 3 of 5 databases; amcheck is missing in the others'
+
 function statusOf(
   runId: string,
   run: { purpose: string; startJobId: string; label: string | null } | null,
@@ -189,7 +193,10 @@ function statusOf(
             checks:
               run.purpose === 'restore'
                 ? ['recovery_target_reached', 'probe_simple', 'probe_extended', 'amcheck'].map(
-                    (check) => ({ check, outcome: 'passed', detail: null }),
+                    (check) =>
+                      check === 'amcheck' && amcheckOutcome !== 'passed'
+                        ? { check, outcome: amcheckOutcome, detail: AMCHECK_DETAIL }
+                        : { check, outcome: 'passed', detail: null },
                   )
                 : [],
             phases:
@@ -657,6 +664,48 @@ describe('backups through REST, the worker and a simulated node', () => {
       undefined,
     ])
     expect(String(recovery.body.change?.analysis?.activation)).toMatch(/^not activated/)
+    await node.stop()
+  })
+
+  it('passes a drill whose amcheck was not run where the extension is missing, and fails one whose amcheck failed (TC-010, D-02)', async () => {
+    const { w, node } = await setup('nonprod')
+    const repositoryId = await adopt(w)
+    await refresh(w)
+    const catalog = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/backups`)
+    const backupId = catalog.body.backups[0].id as string
+    const verified = await owner.browser.call(
+      'POST',
+      `/api/v1/clusters/${w.clusterId}/backups/${backupId}/verify`,
+      {},
+    )
+    expect(verified.status).toBe(202)
+    await drive()
+    const drillOutcomes: string[] = []
+    try {
+      for (const outcome of ['not_run', 'failed'] as const) {
+        amcheckOutcome = outcome
+        const drill = await planAndApply(`/api/v1/clusters/${w.clusterId}/drills`, {
+          repositoryId,
+          selection: { kind: 'latest' },
+        })
+        drillOutcomes.push(`${outcome}:${drill.operation.state}`)
+        const restores = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/restores`)
+        // The newest restore first: the amcheck check keeps its outcome and its detail, whatever the drill's.
+        expect(restores.body.restores[0].checks).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ check: 'amcheck', outcome, detail: AMCHECK_DETAIL }),
+          ]),
+        )
+      }
+    } finally {
+      amcheckOutcome = 'passed'
+    }
+    expect(drillOutcomes).toEqual(['not_run:succeeded', 'failed:verification_failed'])
+    const drills = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/drills`)
+    expect(drills.body.drills.map((d: { outcome: string }) => d.outcome).slice(0, 2)).toEqual([
+      'failed',
+      'passed',
+    ])
     await node.stop()
   })
 
