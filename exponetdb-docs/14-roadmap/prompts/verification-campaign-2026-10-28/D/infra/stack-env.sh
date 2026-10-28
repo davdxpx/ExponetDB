@@ -27,12 +27,20 @@
 # --- configuration ---------------------------------------------------------------------------
 [ -r /etc/exstack.env ] && . /etc/exstack.env
 
-: "${EXSTACK_ROOT:=/srv/work/stack}"
+# Parameters (environment or /etc/exstack.env). The short names are accepted too:
+#   STACK_NAME  (EXSTACK_NAME)   names the root dir, systemd units and Control Store container; default "stack"
+#   COMMIT      (EXSTACK_COMMIT)  the commit to build: a full or abbreviated sha, e.g. COMMIT=d0229550 for the pre-fix release
+#   PORT_BASE   (EXSTACK_PORT_BASE) 58400: Control Store +32, agent listener +43, serve +80, internal probes +81..+83
+#   PG_PORT_BASE (EXSTACK_PG_PORT_BASE) 55400: target clusters at base+16, +17, +18
+#   AGENT=0     skip the node agent (the agent is one per host: a second stack on the same host needs AGENT=0)
+: "${EXSTACK_NAME:=${STACK_NAME:-stack}}"
+: "${EXSTACK_ROOT:=/srv/work/${EXSTACK_NAME}}"
 : "${EXSTACK_LOGS:=${EXSTACK_ROOT}/logs}"
-: "${EXSTACK_COMMIT:=d51da5d0d8832ebc569f23985c7e5176e4d450ad}"       # commit under test (merge of fix PR 46)
+: "${EXSTACK_COMMIT:=${COMMIT:-d51da5d0d8832ebc569f23985c7e5176e4d450ad}}"   # default: the commit under test (merge of fix PR 46)
 : "${EXSTACK_REPO_URL:=https://github.com/davdxpx/ExponetDB.git}"
 : "${EXSTACK_REPO_SEED:=}"                                             # optional local git dir to clone from (faster)
 : "${EXSTACK_AGENT_VERSION:=0.7.0}"
+: "${EXSTACK_AGENT:=${AGENT:-1}}"
 : "${EXSTACK_NODE_BIN:=node}"
 : "${EXSTACK_USER:=exstack}"                                           # unprivileged user of serve, worker, gateway
 
@@ -42,22 +50,25 @@ EXSTACK_STATE="${EXSTACK_ROOT}/state"                                  # 0700, e
 EXSTACK_BUNDLE="${EXSTACK_BUILD}/bundle/bin/exponetdb.mjs"
 EXSTACK_CLI_BIN="${EXSTACK_BUILD}/cli/node_modules/.bin/exponetdb"
 EXSTACK_KIT="${EXSTACK_SRC}/packages/stack-kit"
-EXSTACK_CONTROL_NAME=exstack-control
+EXSTACK_UNIT_PREFIX="ex${EXSTACK_NAME}"                               # exstack-serve.service, ...
+EXSTACK_CONTROL_NAME="${EXSTACK_UNIT_PREFIX}-control"
 EXSTACK_CONTROL_IMAGE='postgres:17.11@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f'
 EXSTACK_CONTROL_DATA="${EXSTACK_CONTROL_DATA:-${EXSTACK_ROOT}/control-data}"
 
-# Every port is on 127.0.0.1. PostgreSQL targets: 55400 + major (tooling/dev/node-clusters.sh fixes 554NN).
-: "${EXSTACK_PORT_CONTROL:=58432}"
-: "${EXSTACK_PORT_SERVE:=58480}"
-: "${EXSTACK_PORT_GATEWAY:=58443}"      # the agent listener (HTTP/2 mTLS)
-: "${EXSTACK_PORT_INTERNAL_SERVE:=58481}"
-: "${EXSTACK_PORT_INTERNAL_WORKER:=58482}"
-: "${EXSTACK_PORT_INTERNAL_GATEWAY:=58483}"
+# Every port is on 127.0.0.1.
+: "${EXSTACK_PORT_BASE:=${PORT_BASE:-58400}}"
+: "${EXSTACK_PG_PORT_BASE:=${PG_PORT_BASE:-55400}}"
+: "${EXSTACK_PORT_CONTROL:=$((EXSTACK_PORT_BASE + 32))}"
+: "${EXSTACK_PORT_GATEWAY:=$((EXSTACK_PORT_BASE + 43))}"                # the agent listener (HTTP/2 mTLS)
+: "${EXSTACK_PORT_SERVE:=$((EXSTACK_PORT_BASE + 80))}"
+: "${EXSTACK_PORT_INTERNAL_SERVE:=$((EXSTACK_PORT_BASE + 81))}"
+: "${EXSTACK_PORT_INTERNAL_WORKER:=$((EXSTACK_PORT_BASE + 82))}"
+: "${EXSTACK_PORT_INTERNAL_GATEWAY:=$((EXSTACK_PORT_BASE + 83))}"
 : "${EXSTACK_PUBLIC_URL:=http://localhost:${EXSTACK_PORT_SERVE}}"
 : "${EXSTACK_GATEWAY_NAME:=gateway.exdb.test}"
 : "${EXSTACK_MAJORS:=16 17 18}"
-EXSTACK_UNIT_PREFIX=exstack
-EXSTACK_CLUSTER_NAME=exdbnode           # tooling/dev/node-clusters.sh names every cluster this
+# tooling/dev/node-clusters.sh names every cluster "exdbnode" (the product's host tests expect that for the default stack)
+if [ "${EXSTACK_NAME}" = stack ]; then : "${EXSTACK_CLUSTER_NAME:=exdbnode}"; else : "${EXSTACK_CLUSTER_NAME:=ex${EXSTACK_NAME}}"; fi
 
 export TZ=UTC
 export NO_COLOR=1 FORCE_COLOR=0
@@ -65,7 +76,7 @@ export NO_COLOR=1 FORCE_COLOR=0
 # --- small helpers -----------------------------------------------------------------------------
 _stk_log() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*" >&2; }
 _stk_die() { _stk_log "ERROR: $*"; return 1 2>/dev/null || exit 1; }
-_stk_port() { case "$1" in pg16) echo 55416;; pg17) echo 55417;; pg18) echo 55418;; *) return 1;; esac; }
+_stk_port() { case "$1" in pg16|pg17|pg18) echo $((EXSTACK_PG_PORT_BASE + ${1#pg}));; *) return 1;; esac; }
 _stk_major() { echo "${1#pg}"; }
 
 _stk_unit() {
@@ -95,9 +106,10 @@ psql_target() {
   PGDATABASE="${PGDATABASE:-postgres}" runuser -u postgres -- psql -X -p "$port" "$@"
 }
 
+_stk_super() { cat "${EXSTACK_STATE}/control.superuser.name" 2>/dev/null || echo postgres; }
 psql_control() {
   docker exec -i -e PGPASSWORD="$(cat "${EXSTACK_STATE}/control.superuser")" "${EXSTACK_CONTROL_NAME}" \
-    psql -X -h 127.0.0.1 -U postgres -d "${PGDATABASE_CONTROL:-exponetdb_control}" "$@"
+    psql -X -h 127.0.0.1 -U "$(_stk_super)" -d "${PGDATABASE_CONTROL:-exponetdb_control}" "$@"
 }
 ctl_sql() { psql_control -v ON_ERROR_STOP=1 -At -c "$1"; }
 
@@ -105,6 +117,66 @@ op_state() { ctl_sql "SELECT state||' apply='||apply_outcome||' verify='||verifi
 
 target_id() { jq -r --arg p "${1:?lab/platform/staging}" '.["target_" + ($p | split("/")[2])] // empty' "${EXSTACK_STATE}/ids.json"; }
 stack_id() { jq -r --arg k "${1:?key}" '.[$k] // empty' "${EXSTACK_STATE}/ids.json"; }
+
+# --- Control Store: container, backup the way the runbook says, loss and restore --------------------------
+# control_container_start [superuser]  creates and starts the Control Store container on an EMPTY data directory
+control_container_start() {
+  local super="${1:-postgres}" pw="${EXSTACK_STATE}/control.superuser"
+  [ -s "$pw" ] || { ( umask 077; head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32 >"$pw" ); }
+  printf '%s' "$super" >"${EXSTACK_STATE}/control.superuser.name"
+  mkdir -p "${EXSTACK_CONTROL_DATA}"
+  docker run -d --name "${EXSTACK_CONTROL_NAME}" --label purpose=exponetdb-stack \
+    -e POSTGRES_USER="$super" -e POSTGRES_PASSWORD="$(cat "$pw")" -e PGDATA=/var/lib/postgresql/data/pgdata \
+    -v "${EXSTACK_CONTROL_DATA}:/var/lib/postgresql/data" \
+    -p "127.0.0.1:${EXSTACK_PORT_CONTROL}:5432" "${EXSTACK_CONTROL_IMAGE}" -c max_connections=200 >/dev/null
+  # the image's init server listens on the socket only: wait for a TCP answer (the final server)
+  local i
+  for i in $(seq 1 120); do
+    docker exec -e PGPASSWORD="$(cat "$pw")" "${EXSTACK_CONTROL_NAME}" psql -h 127.0.0.1 -U "$super" -d postgres -tAc 'SELECT 1' >/dev/null 2>&1 && return 0
+    sleep 1
+  done
+  return 1
+}
+
+# cs_dump [file]   a complete pg_dumpall of the Control Store (control-store-runbook.md section 3), gzip, 0600.
+#                  Prints path, size and sha256 only.
+cs_dump() {
+  local dir="${EXSTACK_STATE}/dumps" f
+  mkdir -p "$dir"; chmod 0700 "$dir"
+  f="${1:-${dir}/control-$(date -u +%Y%m%dT%H%M%SZ).sql.gz}"
+  ( umask 077; docker exec -e PGPASSWORD="$(cat "${EXSTACK_STATE}/control.superuser")" "${EXSTACK_CONTROL_NAME}" \
+      pg_dumpall -h 127.0.0.1 -U "$(_stk_super)" | gzip -c >"$f" ) || { _stk_log "pg_dumpall failed"; return 1; }
+  printf 'dump %s bytes=%s sha256=%s\n' "$f" "$(stat -c %s "$f")" "$(sha256sum "$f" | cut -c1-16)"
+}
+
+# cs_wipe   simulates the loss of the Control Store: stops the three roles, removes the container AND its data, and
+#           starts a new EMPTY PostgreSQL 17 with the temporary superuser restore_admin (RB-10 step 2: a name that is
+#           none of the roles in the export). The roles stay stopped. Nothing of the dead system is kept but the
+#           role-credentials file and the keyring in STATE (the runbook says to keep those offline).
+cs_wipe() {
+  local r
+  for r in serve worker gateway; do systemctl stop "$(_stk_unit "$r")" 2>/dev/null; done
+  docker rm -f "${EXSTACK_CONTROL_NAME}" >/dev/null 2>&1
+  rm -rf "${EXSTACK_CONTROL_DATA}"
+  control_container_start restore_admin && _stk_log "Control Store wiped; empty PostgreSQL 17, superuser restore_admin, roles stopped"
+}
+
+# cs_restore file   RB-10 step 2: feed the pg_dumpall export to the empty server with ON_ERROR_STOP.
+#                   Step 3 onward (control-store status, audit verify, keyring) and step 5 (start the roles) are the
+#                   caller's: cs_status, then restart_cp.
+cs_restore() {
+  local f="${1:?dump file (.sql or .sql.gz)}" cat_=cat
+  case "$f" in *.gz) cat_="gzip -dc" ;; esac
+  $cat_ "$f" | docker exec -i -e PGPASSWORD="$(cat "${EXSTACK_STATE}/control.superuser")" "${EXSTACK_CONTROL_NAME}" \
+    psql -X -q -h 127.0.0.1 -U "$(_stk_super)" -d postgres -v ON_ERROR_STOP=1 >/dev/null || { _stk_log "restore failed"; return 1; }
+  _stk_log "dump restored"
+}
+
+# cs_status   control-store status with the runtime login exdb_serve (JSON: status, installation id, bundle counts)
+cs_status() {
+  ( set -a; . "${EXSTACK_STATE}/env/operator-serve.env"; set +a
+    "${EXSTACK_NODE_BIN}" --liftoff-only "${EXSTACK_BUNDLE}" control-store status )
+}
 
 # --- processes -------------------------------------------------------------------------------------
 journal() { local u; u="$(_stk_unit "${1:?role}")" || return 1; shift; journalctl --no-pager -o cat -u "$u" "$@"; }
@@ -134,7 +206,7 @@ restart_role() {
 _stk_wait_control() {
   local i
   for i in $(seq 1 90); do
-    docker exec "${EXSTACK_CONTROL_NAME}" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1 && return 0
+    docker exec "${EXSTACK_CONTROL_NAME}" pg_isready -h 127.0.0.1 -U "$(_stk_super)" >/dev/null 2>&1 && return 0
     sleep 1
   done
   return 1

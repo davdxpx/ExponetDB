@@ -33,9 +33,10 @@ const session = await TargetSession.open({
 })
 const started = Date.now()
 const read = exec.executeDataRead(session, { kind: 'query', sql: 'SELECT count(*) FROM generate_series(1, 1000000000000)', params: [], callerClass: 'agent', maxRows: 500, maxBytes: 5 << 20, statementTimeoutMs: 60_000, analyze: false, sensitiveColumns: [], requestId: 'req_01M4S9000000000000000000D6' })
-await new Promise((r) => setTimeout(r, 1500))
+await new Promise((r) => setTimeout(r, 2500))
 const su = await kit.superuserClient(server, 'postgres')
 const pid = (await su.query(`SELECT pid FROM pg_stat_activity WHERE usename = 'exponetdb_reader' AND state = 'active' AND query LIKE '%generate_series%' LIMIT 1`)).rows[0]?.pid
+if (pid === undefined) throw new Error('no active reader backend found: the test did not kill anything')
 if (MODE === 'sigterm') await su.query('SELECT pg_terminate_backend($1)', [pid]).catch(() => undefined)
 else spawnSync('docker', ['exec', container, 'kill', '-9', String(pid)])
 await su.end().catch(() => undefined)
