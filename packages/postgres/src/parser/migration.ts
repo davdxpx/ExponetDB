@@ -2237,7 +2237,7 @@ function rel(schema: string | null, name: string): string {
 }
 
 /** The keys an expectation asserts; a later statement that touches one of them supersedes it. */
-function expectationKeys(e: Expectation): string[] {
+export function expectationKeys(e: Expectation): string[] {
   switch (e.kind) {
     case 'relation':
       return [`rel:${rel(e.schema, e.name)}`]
@@ -2286,7 +2286,7 @@ function expectationKeys(e: Expectation): string[] {
  * everything about it). Statements whose effects are not derivable touch
  * nothing here: their effect is covered only by `verify.sql`.
  */
-function touchedKeys(s: StatementFacts): { exact: Set<string>; relations: Set<string> } {
+export function touchedKeys(s: StatementFacts): { exact: Set<string>; relations: Set<string> } {
   const exact = new Set<string>()
   const relations = new Set<string>()
   for (const e of s.expectations) {
@@ -2333,18 +2333,25 @@ function touchedKeys(s: StatementFacts): { exact: Set<string>; relations: Set<st
 export function survivingExpectations(
   statements: readonly StatementFacts[],
 ): { readonly statement: number; readonly expectation: Expectation }[] {
-  const touched = statements.map(touchedKeys)
+  // The last statement that touches each key: an expectation of statement `i` is superseded
+  // exactly when that is a later statement. One pass over the chain plus one lookup per
+  // expectation, where the scan of every later statement per expectation took minutes for a
+  // chain of thousands of files (test campaign TC-021).
+  const lastExact = new Map<string, number>()
+  const lastRelation = new Map<string, number>()
+  for (const [j, s] of statements.entries()) {
+    const touched = touchedKeys(s)
+    for (const k of touched.exact) lastExact.set(k, j)
+    for (const k of touched.relations) lastRelation.set(k, j)
+  }
   const out: { statement: number; expectation: Expectation }[] = []
   for (const [i, s] of statements.entries()) {
     for (const e of s.expectations) {
       const keys = expectationKeys(e)
-      const superseded = touched
-        .slice(i + 1)
-        .some(
-          (t) =>
-            (keys[0] !== undefined && t.exact.has(keys[0])) ||
-            keys.some((k) => k.startsWith('rel:') && t.relations.has(k)),
-        )
+      const [first] = keys
+      const superseded =
+        (first !== undefined && (lastExact.get(first) ?? -1) > i) ||
+        keys.some((k) => k.startsWith('rel:') && (lastRelation.get(k) ?? -1) > i)
       if (!superseded) out.push({ statement: i, expectation: e })
     }
   }

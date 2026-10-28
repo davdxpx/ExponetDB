@@ -1,7 +1,7 @@
 import { loadClusterGlobalParsers } from '@exponetdb/postgres/parser'
 import { RegistryError } from '@exponetdb/registry'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { refuseOversizedLegacyFiles } from '../src/legacy-files.ts'
+import { MAX_TOTAL_PARSE_TOKENS, refuseOversizedLegacyFiles } from '../src/legacy-files.ts'
 
 /**
  * The early refusal of a legacy file one parse could not be given
@@ -60,5 +60,49 @@ describe('refuseOversizedLegacyFiles', () => {
     expect(refusal(text)?.code).toBe('VALIDATION_FAILED')
     // The parser measured 1,114 MiB on this text before the bound (TC-003); refusing it reads the text only.
     expect(process.memoryUsage().rss - before).toBeLessThan(200 * MIB)
+  })
+})
+
+/**
+ * The token budget of a whole request (test campaign TC-021): each file stays under
+ * `MAX_PARSE_TOKENS`, but memory adds up across files (about 15 KiB retained per file) and the
+ * chain analysis runs in the worker, so the sum is bounded too.
+ */
+describe('the total token budget of a legacy history', () => {
+  // `PERFORM 1;` is three tokens: a file of this many repetitions holds `tokens` of them.
+  const file = (tokens: number) =>
+    `-- file\nBEGIN ${'PERFORM 1;'.repeat(Math.floor(tokens / 3))} END`
+  const files = (count: number, tokens: number) =>
+    Array.from({ length: count }, (_, i) => ({
+      name: `${String(i + 1).padStart(4, '0')}_f.sql`,
+      text: file(tokens),
+    }))
+
+  it('states the budget', () => {
+    expect(MAX_TOTAL_PARSE_TOKENS).toBe(1_000_000)
+  })
+
+  it('accepts files that together fit, even when each is large', () => {
+    expect(() => refuseOversizedLegacyFiles(files(5, 190_000))).not.toThrow()
+  })
+
+  it('refuses a history over the budget with 422 too_large, naming the file that crosses it', () => {
+    let error: unknown
+    try {
+      refuseOversizedLegacyFiles(files(6, 190_000))
+    } catch (e) {
+      error = e
+    }
+    expect(error).toBeInstanceOf(RegistryError)
+    expect((error as RegistryError).code).toBe('VALIDATION_FAILED')
+    expect((error as RegistryError).details).toMatchObject({
+      errors: [
+        {
+          path: '/files/5/text',
+          code: 'too_large',
+          message: expect.stringContaining('together'),
+        },
+      ],
+    })
   })
 })
