@@ -185,6 +185,6 @@ D/d0/reset_pre.sh && docker exec -i d0-pg psql -X -U postgres -d exponetdb_pre <
 D/d0/reset_and_load.sh && D/d0/exercise_race.sh e1 ; D/d0/reset_and_load.sh && D/d0/exercise_race.sh e2   # E
 D/d0/mutate_verify.sh                  # verify.sql mutation test
 # product tests: copy D/d0/tests/*.ts into packages/operations/test and packages/policy/test of a scratch copy of T,
-# EXDB_TEST_PG_URL=postgres://postgres:<throwaway>@127.0.0.1:56500/postgres vitest run --config vitest.integration.config.ts <file>
+# EXDB_TEST_PG_URL=a postgres URL for 127.0.0.1:56500 with a throwaway password supplied through PGPASSWORD vitest run --config vitest.integration.config.ts <file>
 docker rm -f d0-pg                     # done at the end of this review
 ```
