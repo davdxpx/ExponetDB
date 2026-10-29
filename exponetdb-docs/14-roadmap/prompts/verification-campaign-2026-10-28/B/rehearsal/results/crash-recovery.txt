@@ -1,0 +1,14 @@
+phase 1: load for 200 s (marker writer 1/s, pgbench -R 100)
+[crash-plan-e2 rc=0 .88964 s]
+[crash-apply-e2 rc=0 4.3388 s]
+bundle E2 applied at 2026-10-29T21:28:23.394Z; waiting 8 s, then the primary is killed
+last marker the client saw commit: 5012357 2026-10-29T21:28:31.187829Z
+T0 kill -9 of the primary: 2026-10-29T21:28:31.399Z
+phase 2: new cluster rs1 from base backup b1 + archive, timeline latest
+T1->T2 base backup copied: 2026-10-29T21:28:33.303Z -> 2026-10-29T21:28:43.294Z
+T3 started 2026-10-29T21:28:46.510Z; T4 accepting connections 2026-10-29T21:28:47.679Z
+ledger head of the recovered database: drop-docs-tags
+timeline: 3
+RPO (time between the last marker the client saw commit and the last one recovered): 12.000098000 s
+markers lost: 12
+RTO (kill -> accepting connections on the new cluster): 16.280000000 s

@@ -1,0 +1,29 @@
+# I10: the replay (empty database, legacy files + bundles in applied order) against the live staging-like target (lab/platform/rhstg)
+# `exdb schema diff lab/platform/rhrep lab/platform/rhstg` (left = replay, right = live), run after the 12 bundles of the first round
+Comparable:        yes
+Totals:            +7 -7 ~6 (=4260)
+Security relevant: 6
+
+   CLASS       OBJECT                           CHANGED
++  column      public.hotfix_note                          <- hand-made hotfix (crm_items.hotfix_note)
++  column      public.rh_drift_col                         <- out-of-band drift (organizations.rh_drift_col)
+-  column      public.created_at                           <- legacy_sessions: dropped on the target by a ledger entry whose file was deleted (the gap)
+-  column      public.id                                   <- (same table)
+-  column      public.token                                <- (same table)
+-  column      public.user_id                              <- (same table)
+~  column      public.note                      position   <- crm_items.note sits after hotfix_note on the target
+~  column      public.priority                  default    <- the file edited after apply (default 1 in the repository, 0 as applied)
+-  constraint  public.legacy_sessions_pkey                 <- legacy_sessions
++  function    public.rh_drift_trg                         <- out-of-band drift
++  index       public.hotfix_support_items_idx             <- hand-made hotfix
+-  index       public.legacy_sessions_pkey                 <- legacy_sessions
++  policy      public.rh_drift_anon_read                   <- out-of-band drift
++  policy      public.hotfix_read_billing                  <- hand-made hotfix
+~  schema      app_private.app_private          acl        <- USAGE for exponetdb_observer (my grant for the analysis)
+~  schema      auth.auth                        acl        <- (same)
+~  schema      storage.storage                  acl        <- (same)
+-  table       public.legacy_sessions                      <- the gap
+~  table       public.api_keys                  acl        <- GRANT SELECT TO PUBLIC (out-of-band drift)
++  trigger     public.rh_drift_lower_role                  <- out-of-band drift
+# Every difference is explained; nothing is left over. fp1 replay e7f77112e428..., live 8f4c947ae970...
+# Note the OBJECT column: columns and constraints are printed without their table (`public.id`, `public.token`).

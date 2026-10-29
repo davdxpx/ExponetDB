@@ -1,0 +1,22 @@
+system identifiers: old line 7702188700571484352, restored copy (physical) same as above; logical copy 7702206708091143861
+logical copy of two databases in 5.460 s
+Next: exponetdb operation watch op_01M64SEQ4NARGYVVQYHXDSWAT1
+succeeded apply=applied verify=passed kind=registry.endpoint.add
+prod apply wall: 31.389334928 s
+
+Lifecycle: suspended
+Node:      unknown
+Backups:   unknown
+
+PROBE     ENDPOINT  OUTCOME  TLS       MS
+simple    standby   ok       verified   6
+extended  standby   ok       verified   4
+simple    logical   failed   verified   -
+extended  logical   failed   verified   -
+identity  standby   ok       verified   -
+settings  standby   ok       verified   -
+activity  standby   ok       verified   -
+
+CONDITION            SEVERITY  COUNT  OBSERVED
+probe_simple_failed  critical      -  1s ago
+identity_mismatch    critical      -  1s ago

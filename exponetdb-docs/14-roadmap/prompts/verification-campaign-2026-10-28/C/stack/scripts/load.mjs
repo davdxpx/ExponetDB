@@ -20,7 +20,9 @@ async function one() {
     const r = await fetch(url, { method, headers, body, signal: AbortSignal.timeout(tmo) })
     const txt = await r.text()
     statuses[r.status] = (statuses[r.status] ?? 0) + 1
-    if (r.status >= 400) { try { const c = JSON.parse(txt).code ?? 'noncode'; codes[`${r.status} ${c}`] = (codes[`${r.status} ${c}`] ?? 0) + 1 } catch { codes[`${r.status} nonjson`] = (codes[`${r.status} nonjson`] ?? 0) + 1 } }
+    if (r.status < 400 && txt.includes('"isError":true')) codes['200 tool-isError'] = (codes['200 tool-isError'] ?? 0) + 1
+    if (r.status < 400 && txt.includes('rate_limited')) codes['200 rate_limited-in-body'] = (codes['200 rate_limited-in-body'] ?? 0) + 1
+    if (r.status >= 400) { try { const j = JSON.parse(txt); const c = j.code ?? j.error?.data?.code ?? j.error?.code ?? j.error ?? 'noncode'; codes[`${r.status} ${c}`] = (codes[`${r.status} ${c}`] ?? 0) + 1 } catch { codes[`${r.status} nonjson`] = (codes[`${r.status} nonjson`] ?? 0) + 1 } }
   } catch (e) { const k = (e.cause?.code ?? e.name ?? 'err'); errs[k] = (errs[k] ?? 0) + 1 }
   lat.push(performance.now() - t); done++
 }

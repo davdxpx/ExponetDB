@@ -1,0 +1,14 @@
+ExponetDB · migrations                                            Profile: stack
+Server: http://localhost:58480      Installation: ins_01M64NE21TM2G9ZQFGPMYSX0H9
+
+Target:   tgt_01M64NZ73EHYWEHXX64AVG7E9E
+Ledger:   158 applied · 2 pending (live, 0s ago)
+Baseline: baseline:rehearsal-2024
+Mirror:   out of sync (checked 0s ago)
+
+MIGRATION: legacy:20240109210556_init_extensions_and_schemas
+NAME:      20240109210556_init_extensions_and_schemas
+STATE:     applied
+VERIFIED:  passed via baseline:rehearsal-2024
+ORIGIN:    legacy_import
+APPLIED:   20m ago

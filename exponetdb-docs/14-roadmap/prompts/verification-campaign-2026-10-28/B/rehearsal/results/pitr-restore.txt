@@ -1,0 +1,10 @@
+last marker before the disaster: 5009367 2026-10-29T21:09:30.669304Z
+T0 decision (cluster stopped)    2026-10-29T21:09:31.662Z
+T1 old directory moved away      2026-10-29T21:09:32.442Z
+T2 base backup copied back       2026-10-29T21:09:41.721Z
+T3 started (recovery running)    2026-10-29T21:09:45.020Z
+T4 accepting connections, promoted 2026-10-29T21:09:45.095Z
+last recovered marker: 5007840 21:08:16.668969
+pre-disaster counts (markers, max id): 179|5009367; restored: 105|5007851
+timeline of the restored cluster: 2
+RTO database: stop->accepting = 13.433000000 s (copy 9.279000000 s, recovery .075000000 s)

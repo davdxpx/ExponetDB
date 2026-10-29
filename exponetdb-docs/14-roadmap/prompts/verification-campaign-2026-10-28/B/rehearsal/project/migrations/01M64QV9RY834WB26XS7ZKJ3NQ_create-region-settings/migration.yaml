@@ -1,0 +1,14 @@
+schema: exponetdb.migration/v1
+id: 01M64QV9RY834WB26XS7ZKJ3NQ
+name: create-region-settings
+description: |
+  What this migration changes and why.
+dependsOn:
+  - 01M64QT2YF6RQ52SHEBM4ZXHRN
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

@@ -1,0 +1,16 @@
+schema: exponetdb.migration/v1
+id: 01M64Q4XVC0RHY9PV1GFSCPV6Y
+name: create-feature-usage
+description: |
+  What this migration changes and why.
+dependsOn:
+  - 01M64Q4XF04DTZPKAXKR658SFP
+execution:
+  transactional: true
+compatibility:
+  declared: potentially_breaking
+  notes: |
+    A new table with a policy and a trigger; no existing object changes, but the lint observes potentially_breaking.
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

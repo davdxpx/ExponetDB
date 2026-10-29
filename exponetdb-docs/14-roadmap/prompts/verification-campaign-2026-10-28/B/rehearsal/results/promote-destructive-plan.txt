@@ -1,0 +1,29 @@
+ExponetDB · Migration plan · pln_01M64R5G0D0W4MH7HKJZWEJGC9       Profile: stack
+Server: http://localhost:58480      Installation: ins_01M64NE21TM2G9ZQFGPMYSX0H9
+
+Target:        lab/platform/rhprod
+Tier:          prod
+Kind:          migration.apply (high)
+State:         active
+Decision:      approval required
+Expires:       2026-10-29T21:28:29.869000Z
+Plan hash:     sha256:a8a35fad8e592b3ab2c0217e54a365b42b7b816d51da9501b2fe91fb27db801a
+Content:       1 bundle · transactional
+Compatibility: destructive
+Evidence:      present
+Lineage:       mismatch
+Approvals:     0 of 1
+
+MIGRATION                                  APPLY CHECKSUM                                  VERIFY    MODE           LOCK
+01M64R59MMDHPF5S518WQSNTC6_drop-docs-tags  sha256:c1:5c7f5f7e7670094c0cb919338c5c149178d…  1 checks  transactional  high
+
+RULE                                  RESULT  SEVERITY  MESSAGE
+migration.compatibility               fail    require   The observed compatibility class is destructive.
+migration.destructive-backup          fail    require   A verified recent backup is required before this change.
+migration.fingerprint-lineage-legacy  fail    warn      Production and the evidence target diverged (imported legacy hi…
+migration.lock-risk                   fail    require   Lock severity high.
+
+Required: 1 human approval for the exact plan hash (plans.approve)
+Required: a verified backup newer than PT24H
+
+Next: exponetdb plan apply pln_01M64R5G0D0W4MH7HKJZWEJGC9 --wait

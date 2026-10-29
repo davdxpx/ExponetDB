@@ -1,0 +1,42 @@
+ExponetDB · drift check                                           Profile: stack
+Server: http://localhost:58480      Installation: ins_01M64NE21TM2G9ZQFGPMYSX0H9
+
+drifted  34 drifted, 2 unmanaged, 4244 matched
+
+FINDING                         BUCKET   KIND  SEVERITY  OBJECT
+fnd_01M64QKC2DA8GVR9YEKMN7VJKE  drifted  C     critical  policy public.feature_usage.feature_usage_select
+fnd_01M64QKC2FNC2M3RBXHBEK0E7Q  drifted  C     critical  policy public.feature_usage.feature_usage_service
+fnd_01M64QKC2F21XA8108V4R98K6P  drifted  C     critical  materialized view public.mv_crm_pipeline
+fnd_01M64QKC2G8PWAM3EPH01JPGGJ  drifted  C     critical  view public.v_billing_totals
+fnd_01M64QKC2H82BE2M4D67Z1YGKW  drifted  C     critical  view public.billing_overview
+fnd_01M64QKC2JSKSMB5V22JZ1M70G  drifted  C     critical  view public.crm_overview
+fnd_01M64QKC2JJHTH6XGE2M9B7S2B  drifted  C     warning   column public.feature_usage.org_id
+fnd_01M64QKC2KC74J8WS774TTE743  drifted  C     warning   column public.feature_usage.used_at
+fnd_01M64QKC2MN5THBP85V7ZGA6GT  drifted  C     warning   column public.feature_usage.updated_at
+fnd_01M64QKC2MM42AX7MA4P86XEAE  drifted  C     warning   column public.feature_usage.id
+fnd_01M64QKC2N4MJWV0PF1QBBE9QA  drifted  C     warning   column public.crm_items.note
+fnd_01M64QKC2T66WJ3MNKXE5VDT8B  drifted  C     warning   column public.feature_usage.feature
+fnd_01M64QKC2VQYCSSTGJVDHRWZK3  drifted  C     warning   constraint public.feature_usage.feature_usage_org_id_fkey
+fnd_01M64QKC2VE7HXBSQBPTNHN6V7  drifted  C     warning   constraint public.feature_usage.feature_usage_pkey
+fnd_01M64QKC2WZWREZ4K38RK79CZE  drifted  C     warning   index public.feature_usage_org_idx
+fnd_01M64QKC2X7QM8Z9H9TV198AZ2  drifted  C     warning   index public.feature_usage_pkey
+fnd_01M64QKC2X3VRBYC6SK69CPCVZ  drifted  C     warning   index public.events_log_org_kind_idx
+fnd_01M64QKC2YB337RGHRYP7AS0Y9  drifted  C     warning   index public.events_log_user_created_idx
+fnd_01M64QKC2ZAFFMXPQGD2YC7NPF  drifted  C     warning   index public.events_log_kind_created_idx
+fnd_01M64QKC30E8EXR9JS5FTG7Y4K  drifted  C     warning   table public.feature_usage
+fnd_01M64QKC31SHXEGC29Z87DQC75  drifted  C     warning   trigger public.feature_usage.set_updated_at
+fnd_01M64QKC3230DH0Y6RB1DKKJ5Q  drifted  C     warning   column public.billing_items.amount
+fnd_01M64QKC3328N7K9DWR0Y5VV0P  drifted  C     warning   column public.crm_items.amount
+fnd_01M64QKC34246WHW3Z342G8Y0E  drifted  C     warning   column public.hr_tags.org_id
+fnd_01M64QKC350R58ZCCA7KNDAAMD  drifted  C     warning   column public.hr_tags.id
+fnd_01M64QKC361KS4S9280XZAMCWX  drifted  C     warning   column public.hr_tags.item_id
+fnd_01M64QKC37MHSRX7NH0WK8E1AB  drifted  C     warning   column public.hr_tags.tag
+fnd_01M64QKC37NQ9HVD794JF9G9YH  drifted  C     warning   constraint public.hr_tags.hr_tags_item_id_fkey
+fnd_01M64QKC380V2M8K0FYTCYK6NY  drifted  C     warning   constraint public.hr_tags.hr_tags_item_id_tag_key
+fnd_01M64QKC392H8MB2KHZ3040S39  drifted  C     warning   constraint public.hr_tags.hr_tags_pkey
+fnd_01M64QKC3ATV42Y2ZVDNSMWY9X  drifted  C     warning   index public.hr_tags_org_idx
+fnd_01M64QKC3BZ9R6JQ8CMTBXZRGN  drifted  C     warning   index public.hr_tags_item_id_tag_key
+fnd_01M64QKC3BSRAZFN87E0FTJS82  drifted  C     warning   index public.hr_tags_pkey
+fnd_01M64QKC3CZHPZDR31BTGB55SF  drifted  C     warning   table public.hr_tags
+
+Next: exponetdb finding list --target tgt_01M64NZ73EHYWEHXX64AVG7E9E

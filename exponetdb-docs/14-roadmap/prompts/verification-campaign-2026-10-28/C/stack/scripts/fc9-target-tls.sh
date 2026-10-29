@@ -6,7 +6,7 @@ O=$L6/fc9.out; : >$O; exec > >(tee -a $O) 2>&1
 set +e
 D18=$(jq -r .target_dev18 ${EXSTACK_STATE}/ids.json); CL=$(jq -r .cluster_pg18 ${EXSTACK_STATE}/ids.json)
 PGD=/etc/postgresql/18/exs6; W6=$(mktemp -d /dev/shm/s6tls.XXXX); chmod 700 $W6
-th() { bearer; rest GET /api/v1/targets/$D18/health | head -1 >/dev/null; jq -c '{state:(.state // .status), source, observedAt, conditions:[.conditions[]?|(.code // .id // .name)], probes:[.probes[]?|{k:(.kind // .name), s:(.state // .status), c:(.errorClass // .class // .reason // .detail)}]}' /dev/shm/s6out.last | head -c 700; echo; }
+th() { bearer; rest GET /api/v1/targets/$D18/health | head -1 >/dev/null; jq -c '{state, source, observedAt, conditions:[.conditions[]?|(.code // .id // .condition // .name // .)], unknownBecause, probes:([.probes[]?|"\(.probe):\(.outcome):\(.errorClass // "-"):\(.tls // "-")"]|unique)}' /dev/shm/s6out.last | head -c 700; echo; }
 findings() { exdb_json finding list | jq -c '[.data.items[]?|select(.subject|tostring|test("'$D18'"))|(.kind // .code)] ' 2>/dev/null | head -c 300; }
 planp() { local d; d=$(new_project s6tls); echo "SELECT 1;" | mkb "$d" tls1 >/dev/null; mplan "$d" lab/platform/dev18; (cd $d; exdb migration plan --target lab/platform/dev18 2>&1 | tr '\n' ' ' | cut -c1-300); echo; }
 mkcert() { # name fake_date days san
@@ -14,7 +14,7 @@ mkcert() { # name fake_date days san
   openssl req -new -key $W6/$1.key -subj "/CN=$4" -out $W6/$1.csr 2>/dev/null
   printf 'subjectAltName=DNS:%s\n' "$4" >$W6/$1.ext
   if [ "$2" = now ]; then openssl x509 -req -in $W6/$1.csr -CA ${EXSTACK_STATE}/tls/ca.crt -CAkey ${EXSTACK_STATE}/tls/ca.key -CAcreateserial -days $3 -extfile $W6/$1.ext -out $W6/$1.crt 2>/dev/null
-  else faketime "$2" openssl x509 -req -in $W6/$1.csr -CA ${EXSTACK_STATE}/tls/ca.crt -CAkey ${EXSTACK_STATE}/tls/ca.key -CAcreateserial -days $3 -extfile $W6/$1.ext -out $W6/$1.crt 2>/dev/null; fi
+  else LD_PRELOAD=/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1 FAKETIME="@$2" openssl x509 -req -in $W6/$1.csr -CA ${EXSTACK_STATE}/tls/ca.crt -CAkey ${EXSTACK_STATE}/tls/ca.key -CAcreateserial -days $3 -extfile $W6/$1.ext -out $W6/$1.crt 2>/dev/null; fi
   openssl x509 -in $W6/$1.crt -noout -dates | tr '\n' ' '; echo
 }
 install_cert() { install -o postgres -g postgres -m 600 $W6/$1.key $PGD/server.key; install -o postgres -g postgres -m 644 $W6/$1.crt $PGD/server.crt; systemctl reload postgresql@18-${EXSTACK_CLUSTER_NAME}; }

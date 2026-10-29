@@ -52,3 +52,10 @@
 - D1 P3 (existence oracle): wider than D1 found (evidence line added).
 - S4 P2 "sub-megabyte bundle holds CPU" is a stack observation of B2's nested-comment P1 plus a second input shape (many statements); both stay filed, cross-referenced.
 - S4 task 5 (SSRF, rebinding, TLS downgrade, revoked node, wrong CA) is NOT RUN: a safety classifier stopped the agent; not worked around.
+
+## S5 duplicates folded into existing findings (as evidence lines)
+
+- S5 "destructive production apply ends INTERNAL" -> S4 P2 "unmet backup requirement answers 500".
+- S5 "plan holds at most 50 bundles" -> B1 P2 "default migration plan submits every local bundle".
+- S5 "lint cubic" -> B2 P2 "lint and plan over a dependency chain are cubic".
+- S5 "nothing flagged until someone plans; LEDGER_DIVERGENCE has no remedy" -> B1 P2 "ledger divergence is noticed only when someone plans" (also E1, S3).

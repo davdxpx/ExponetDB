@@ -1,0 +1,14 @@
+schema: exponetdb.migration/v1
+id: 01M64Q4XF04DTZPKAXKR658SFP
+name: index-events-log-user
+description: |
+  What this migration changes and why.
+dependsOn:
+  - 01M64Q4X3KW8VSWS5PBM5J5J9M
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

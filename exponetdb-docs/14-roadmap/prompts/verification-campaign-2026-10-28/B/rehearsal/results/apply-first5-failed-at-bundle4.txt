@@ -1,0 +1,47 @@
+Applying pln_01M64Q57GTQ6KAGGSSQEWBV12N (migration.apply) on http://localhost:58480 [stack] to lab/platform/rhstg (nonprod).
+queued · apply not_started · verify pending
+running · apply not_started · verify pending · step execute
+verification_failed · apply partially_applied · verify partial
+ExponetDB · Operation op_01M64Q7WTFHWVA1XK3AHSBM0DB · migration.apply    Profile: stack
+Server: http://localhost:58480      Installation: ins_01M64NE21TM2G9ZQFGPMYSX0H9
+
+Verification failed
+
+Apply:        partially_applied
+Verification: partial
+Target:       tgt_01M64NZ73EHYWEHXX64AVG7E9E
+Tier:         nonprod
+Plan:         pln_01M64Q57GTQ6KAGGSSQEWBV12N
+Error:        VERIFICATION_FAILED
+Updated:      2026-10-29T20:57:28.531823Z
+Observed:     2026-10-29T20:57:30.710545Z
+
+STEP     STATE   STARTED                      FINISHED
+execute  failed  2026-10-29T20:57:21.856346Z  2026-10-29T20:57:28.521730Z
+verify   failed  2026-10-29T20:57:28.527864Z  2026-10-29T20:57:28.529843Z
+
+MIGRATION                                             APPLY        VERIFY          STATEMENT  ERROR
+01M64Q4X3KW8VSWS5PBM5J5J9M_add-crm-items-note         applied      passed                  -  -
+01M64Q4XF04DTZPKAXKR658SFP_index-events-log-user      applied      passed                  -  -
+Tier:         nonprod
+Plan:         pln_01M64Q57GTQ6KAGGSSQEWBV12N
+Error:        VERIFICATION_FAILED
+Updated:      2026-10-29T20:57:28.531823Z
+Observed:     2026-10-29T20:57:30.710545Z
+
+STEP     STATE   STARTED                      FINISHED
+execute  failed  2026-10-29T20:57:21.856346Z  2026-10-29T20:57:28.521730Z
+verify   failed  2026-10-29T20:57:28.527864Z  2026-10-29T20:57:28.529843Z
+
+MIGRATION                                             APPLY        VERIFY          STATEMENT  ERROR
+01M64Q4X3KW8VSWS5PBM5J5J9M_add-crm-items-note         applied      passed                  -  -
+01M64Q4XF04DTZPKAXKR658SFP_index-events-log-user      applied      passed                  -  -
+01M64Q4XVC0RHY9PV1GFSCPV6Y_create-feature-usage       applied      passed                  -  -
+01M64Q4Y6D0YKK048NAK938MBW_crm-items-amount-precisi…  not_applied  not_applicable          0  MIGRATION_EXECUTION_FAILED
+01M64Q4YHV9Q02JMPA5HWCVC6H_drop-hr-tags               not_started  not_applicable          -  -
+
+The migration stopped part-way. Nothing was rolled back; nothing runs again by itself.
+Error VERIFICATION_FAILED: The operation ended verification failed.
+  (plan pln_01M64Q57GTQ6KAGGSSQEWBV12N, operation op_01M64Q7WTFHWVA1XK3AHSBM0DB)
+Next: exponetdb migration resume <migration> --target tgt_01M64NZ73EHYWEHXX64AVG7E9E
+Next: exponetdb operation show op_01M64Q7WTFHWVA1XK3AHSBM0DB

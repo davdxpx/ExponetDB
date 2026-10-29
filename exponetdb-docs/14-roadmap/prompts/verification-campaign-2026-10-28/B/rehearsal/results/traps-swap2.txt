@@ -1,0 +1,28 @@
+oids now:
+in lab_rh18 (oid 32766): hr_accounts.flag absent, ledger rows 162
+in lab_rh18_orig (oid 16517): hr_accounts.flag absent, ledger rows 162
+registry's recorded database oid:
+dbs_01M64RAPXH4B9N6TJVHEV1TJNQ|cls_01M64NK2CD4BCQVHJ7K8YSBH0R|lab_rh18|registered|16517|lab_owner|UTF8|en_US.UTF-8|2026-10-29 21:16:22.20508+00|2026-10-29 21:16:22.205386+00|op_01M64RAPY3N0VZPR1041NJX4YN
+Plan hash:     sha256:108b0fcff626c57ecdc4d2dbddf7b3da1ddb6582315af14efeb978c946093920
+Content:       1 bundle · transactional
+Compatibility: additive
+Evidence:      not_required
+Lineage:       not_required
+
+MIGRATION                                        APPLY CHECKSUM                            VERIFY    MODE           LOCK
+01M64RN60KH3JFJ8EFPFVTREKV_add-hr-accounts-flag  sha256:c1:f7e1f0f54566761a87c186dc7e022…  1 checks  transactional  high
+
+Next: exponetdb plan apply pln_01M64RPX1WEAEQZR1C1105TSFB --wait
+[swap2-plan rc=0 .98778 s]
+plan made against the clone: pln_01M64RPX1WEAEQZR1C1105TSFB
+Applying pln_01M64RPX1WEAEQZR1C1105TSFB (migration.apply) on http://localhost:58480 [stack] to lab/platform/rh18 (nonprod).
+Error PLAN_STALE: The plan no longer matches the target. Create a new plan.
+  Create a new plan for the same change.
+  (request req_01M64RPXE14MNW0YZB1WVAV7XH)
+[swap2-apply rc=1 .38924 s]
+=== after the apply attempt
+in lab_rh18 (oid 32766): hr_accounts.flag absent, ledger rows 162
+in lab_rh18_orig (oid 16517): hr_accounts.flag absent, ledger rows 162
+ERROR:  column "error_code" does not exist
+LINE 1: select operation_id, state, apply_outcome, error_code from o...
+                                                   ^
