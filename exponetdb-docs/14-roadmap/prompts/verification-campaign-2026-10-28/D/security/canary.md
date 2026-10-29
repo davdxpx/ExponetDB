@@ -19,7 +19,7 @@ and `$S4/patterns.tsv` (0600, on the server); everything below is ids and counts
 Flows that touched them: register/rotate (`credential.rotate` through the node on three roles of pg17), migration plan,
 apply and re-verify on dev16, drift check, schema/health/session/query-stats/table-stats/advisors reads, `sql_query` and
 `sql_explain` over REST and MCP, `plan show/export`, `audit list/export/chain`, `node show/observations/inspect`, every
-read route of the REST API (D1's sample set, 108 requests per credential) as owner bearer, service-account API key,
+read route of the REST API (D1's sample set, about 106 requests per credential) as owner bearer, service-account API key,
 viewer bearer and the owner's Web App cookie session, 23 MCP tools, `/metrics`, `/healthz/*` on the three internal
 listeners, the SPA assets, and the failure paths: wrong password at query time (`TARGET_CREDENTIAL_INVALID`), target
 unreachable (`TARGET_UNAVAILABLE`, port rejected), TLS failure (`TARGET_TLS_FAILED`, server stops offering TLS), a wrong
@@ -63,8 +63,7 @@ key's first lines, a `sha256:` checksum prefix, and a key file matching itself.
 
 ## Not covered (NOT RUN, with the reason)
 
-- A crash that writes a core or a heap snapshot: all product units run with core files disabled (`LimitCORE=0` for the
-  node agent; the services use the default) and no dump exists; `/var/crash` (PostgreSQL 17 crash report of an earlier
+- A crash that writes a core or a heap snapshot: all four product units run with `LimitCORE=0` (verified with `systemctl show`) and no dump exists; `/var/crash` (PostgreSQL 17 crash report of an earlier
   test) was scanned and clean. Provoking a crash of the three services was left to task 4's resource runs.
 - A real browser's network panel: the Web App's calls were replayed with the same cookie session (all read routes of
   the sample set), not captured from a browser.
@@ -76,6 +75,6 @@ key's first lines, a `sha256:` checksum prefix, and a key file matching itself.
 
 ## Reproduce
 
-`scripts/gen-canaries.py` (store and patterns), `scripts/plant1.sh`..`plant4.sh`, `p`-steps in the README, `scripts/scan-all.sh <round>`,
+`scripts/gen-canaries.py` (store and patterns), `scripts/plant1.sh` .. `plant4.sh` (plus `req.ts`, `mcp.ts`, `sweep.ts`, `mcpsweep.sh`, `session-canary.ts`), `scripts/scan-all.sh <round>`,
 `scripts/attr.py`, `scripts/pivot.py`. Everything runs on the stack of vc-3 under `/srv/work/s4`; raw logs under
 `/srv/work/logs-s4` (not committed).

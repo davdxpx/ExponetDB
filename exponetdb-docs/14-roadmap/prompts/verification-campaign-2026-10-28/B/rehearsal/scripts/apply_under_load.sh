@@ -7,7 +7,7 @@ PGB=/usr/lib/postgresql/18/bin/pgbench
 rm -f "$L"/pgb-$TAG.*
 APPLY_MAX=${APPLY_MAX:-240}
 TOTAL=$((PRE + APPLY_MAX + POST))
-( cd /tmp; runuser -u postgres -- "$PGB" -h /var/run/postgresql -p 55417 -n -c 8 -j 2 -R 300 -T "$TOTAL" --continue-on-error -P 10 \
+( cd /tmp; runuser -u postgres -- "$PGB" -h /var/run/postgresql -p 55417 -n -c 8 -j 2 -R 300 -T "$TOTAL" -P 10 \
     -f "$RH/pgbench_read.sql@8" -f "$RH/pgbench_write.sql@2" -l --log-prefix "$L/pgb-$TAG" lab_rhstg >"$L/pgb-$TAG.out" 2>&1 ) &
 PGBPID=$!
 sleep "$PRE"

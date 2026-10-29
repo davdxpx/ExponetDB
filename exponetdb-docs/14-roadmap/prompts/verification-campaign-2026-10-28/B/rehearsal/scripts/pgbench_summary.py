@@ -3,7 +3,7 @@
 Log columns: client tx latency_us script epoch_s epoch_us [schedule_lag_us]. Latency = tx latency + schedule lag when present."""
 import glob, sys
 rows = []
-for f in glob.glob(sys.argv[1] + '*'):
+for f in glob.glob(sys.argv[1] + '.[0-9]*'):
     for line in open(f):
         p = line.split()
         if len(p) < 6: continue

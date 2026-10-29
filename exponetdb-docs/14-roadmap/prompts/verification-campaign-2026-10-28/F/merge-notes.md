@@ -45,3 +45,10 @@
 - S3 P1 "serial column cannot be applied" and B3 P1 "ADD COLUMN serial/identity rewrite" are one blind spot (serial/identity in the parser) with two symptoms: keep both findings, the fix is one change.
 - S2 P1 "drill passes with the newest WAL segment deleted" and R1 P2 "replay end compares with the START of the newest segment": keep S2's P1 (stronger evidence), fold R1's P2 in.
 - S2 P1 "backup.verify passes after a deleted WAL segment" is R1's first P1 reproduced at scale: keep R1's, add S2's numbers.
+
+## S4 confirmations
+
+- D1 P2 (32 MiB body before authorization): confirmed over HTTP by S4 (evidence line added in `findings-D1.md`); S4's own P2 for it is not filed twice.
+- D1 P3 (existence oracle): wider than D1 found (evidence line added).
+- S4 P2 "sub-megabyte bundle holds CPU" is a stack observation of B2's nested-comment P1 plus a second input shape (many statements); both stay filed, cross-referenced.
+- S4 task 5 (SSRF, rebinding, TLS downgrade, revoked node, wrong CA) is NOT RUN: a safety classifier stopped the agent; not worked around.

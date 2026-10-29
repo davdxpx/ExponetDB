@@ -4,7 +4,7 @@
  * (0600) for the sink scan; stdout shows the status, the error code and the length of the message only.
  *
  *   EXSTACK_OWNER_FILE=<person>.json bun --conditions=@exponetdb/source s4/req.ts [--reauth] [--wait] [--approve] [--show k1,k2]
- *        [--header name=value] <name> <METHOD> <path> [body-json-or-@file]
+ *        [--age seconds] [--header name=value] <name> <METHOD> <path> [body-json-or-@file]
  * Placeholders in the body: @@<planted id>@@ (e.g. @@C2-migrator-password@@).
  * --wait: the response is an operation or a plan apply; poll the operation to its end and print its state.
  */
@@ -27,13 +27,14 @@ function fill(text: string): string {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
-  const flags = { reauth: false, wait: false, approve: false, show: [] as string[], headers: {} as Record<string, string> }
+  const flags = { reauth: false, wait: false, approve: false, age: 0, show: [] as string[], headers: {} as Record<string, string> }
   const pos: string[] = []
   while (args.length > 0) {
     const a = args.shift() as string
     if (a === '--reauth') flags.reauth = true
     else if (a === '--wait') flags.wait = true
     else if (a === '--approve') flags.approve = true
+    else if (a === '--age') flags.age = Number(args.shift())
     else if (a === '--show') flags.show = String(args.shift()).split(',')
     else if (a === '--header') {
       const [k, ...v] = String(args.shift()).split('=')
@@ -44,6 +45,8 @@ async function main(): Promise<void> {
   const human = Human.load()
   await human.signIn()
   if (flags.reauth) await human.reauth()
+  // --age N: the session ages N seconds before the request (a proof older than the window is stale)
+  if (flags.age > 0) await new Promise((r) => setTimeout(r, flags.age * 1000))
   let body: unknown
   if (bodyArg !== undefined) {
     const raw = bodyArg.startsWith('@') ? readFileSync(bodyArg.slice(1), 'utf8') : bodyArg
