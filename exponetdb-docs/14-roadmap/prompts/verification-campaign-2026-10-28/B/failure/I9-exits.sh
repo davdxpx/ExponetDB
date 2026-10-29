@@ -192,26 +192,41 @@ sc_endpoint() { # E1 P1 #1: a non-migration kind (registry.endpoint.add): the ve
 # ---------------------------------------------------------------------------------------------------------------
 sc_supersede() { # D0 P2: a refused recovery has already closed the needs_attention operation it names (driver.ts:178-186)
   local log="${OUT}/supersede.log"
-  local T db dir id op
+  local T db dir id N V
   T="$(fresh_target 9ss "$PG")"; db="$(target_db "$T")"; dir="$(new_project i9ss-${RUN_TAG})"
-  # M applied, but its verify.sql cannot pass: the operation parks in needs_attention (E10: verification error)
-  id="$(VERIFY_SQL='-- check: reads a table that does not exist yet
+  # M is applied but its verification cannot run (the check reads a table that is not there): N parks in needs_attention
+  id="$(VERIFY_SQL='-- check: reads a table that does not exist
 SELECT count(*) >= 0 AS ok FROM public.s1_missing;' mkb "$dir" parked <<'SQL'
 CREATE TABLE public.s1 (id int PRIMARY KEY);
 GRANT SELECT ON public.s1 TO lab_owner;
 SQL
 )"
-  mplan "$dir" "$T"; echo "plan: $PLAN_STATE"
-  mapply "$PLAN_ID" --wait; op="$OP_ID"
-  echo "N = $op : $(op_state "$op")   locks: $(ctl_sql "SELECT string_agg(domain_key, ',') FROM operations.operation_locks WHERE operation_id='${op}'")"
-  # the recovery: a verify revision (new verify.sql that passes), then `migration verify` names N
+  mplan "$dir" "$T"; echo "plan: ${PLAN_STATE}"
+  mapply "$PLAN_ID" --wait; N="$OP_ID"
+  echo "N = $N : $(op_state "$N")   locks: $(ctl_sql "SELECT string_agg(domain_key, ',') FROM operations.operation_locks WHERE operation_id='${N}'")"
+  [ "$(op_state "$N" | cut -d' ' -f1)" = needs_attention ] || { verdict I9.supersede NOT_RUN "N is not parked: $(op_state "$N")"; return; }
+  # the recovery: a verify revision that can pass, then `migration verify` (which names N and closes it when it starts).
   local bd; bd="$(ls -d "$dir"/migrations/${id}_*)"
   printf -- '-- check: the table exists\nSELECT count(*) >= 0 AS ok FROM public.s1;\n' >"$bd/verify.sql"
-  (cd "$dir" && exdb_json migration verify "$id" --target "$T" --no-wait) >"${log}.v.json"; echo "migration verify (no-wait): $(jq -c '{rc:.status, code:.error.code, plan:.data.planId}' "${log}.v.json")"
-  # --no-wait may not exist on `verify`: fall back to reading the recovery plan from the plan list
-  local rplan; rplan="$(exdb_json plan list --target "$T" | jq -r '[.data.items[] | select(.kind=="migration.verify")][0].id // empty')"
-  echo "recovery plan: ${rplan:-none}"
-  verdict I9.supersede NOT_RUN "scenario needs the recovery plan to be refused at dispatch; see log for what the CLI did (extended in the next iteration)"
+  # keep the worker from dispatching, accept the recovery, revoke the CLI's grant, let the worker go: admission refuses (GRANT_REVOKED)
+  systemctl stop "$(_stk_unit worker)"
+  (cd "$dir" && exdb_json migration verify "$id" --target "$T" --no-wait) >"${log}.v.json"
+  V="$(jq -r '.data.id // empty' "${log}.v.json")"; echo "recovery operation V = ${V:-none} ($(jq -c '{s:.status,e:.error.code}' "${log}.v.json"))"
+  [ -z "$V" ] && { systemctl start "$(_stk_unit worker)"; verdict I9.supersede NOT_RUN "the recovery was not accepted: $(jq -c .error "${log}.v.json")"; return; }
+  echo "V: $(op_state "$V")"
+  local gid; gid="$(human call GET /api/v1/me/grants | jq -r '[.body.items[] | select(.clientId=="exponetdb-cli")][0].id')"
+  echo "revoking the CLI grant $gid: $(human call POST "/api/v1/me/grants/${gid}/revoke" '{}' | jq -c '.status')"
+  systemctl start "$(_stk_unit worker)"
+  follow "$V" 120 >/dev/null; echo "V after dispatch: $(op_state "$V")"
+  local nstate nlocks
+  nstate="$(op_state "$N")"; nlocks="$(ctl_sql "SELECT count(*) FROM operations.operation_locks WHERE operation_id='${N}'")"
+  echo "N after the refused recovery: $nstate ; locks held by N: $nlocks"
+  cli_login 2>&1 | tail -1
+  case "${nstate%% *}" in
+    needs_attention) verdict I9.supersede PASS "the refused recovery left N in needs_attention with its lock (V: $(op_state "$V" | cut -d' ' -f1))" ;;
+    verification_failed|failed|canceled) verdict I9.supersede FAIL "V was refused ($(op_state "$V" | cut -d' ' -f1)) but N ended '${nstate%% *}' with ${nlocks} lock(s): the recovery closed N without doing anything" ;;
+    *) verdict I9.supersede PARTIAL "N is '${nstate}', V is '$(op_state "$V")'" ;;
+  esac
 }
 
 sc_approval() { # TC-034 / OD-64 and B1 P2: awaiting_approval, an expired plan, the approval window

@@ -1,0 +1,11 @@
+{
+ "backendsTerminated": 2,
+ "bothReadsAnsweredWithin25s": false,
+ "bothAnsweredAfterLaneGaveUp": true,
+ "msUntilAnswered": 147156,
+ "answers": [
+  "read 0: tools/call sql_query: 504 {\"jsonrpc\":\"2.0\",\"id\":158,\"error\":{\"code\":-32603,\"message\":\"The  after 91012 ms",
+  "read 1: tools/call sql_query: 504 {\"jsonrpc\":\"2.0\",\"id\":159,\"error\":{\"code\":-32603,\"message\":\"The  after 91029 ms"
+ ],
+ "nextReadAfterwards": "error: Refused: TARGET_UNAVAILABLE.\n{\"code\":\"TARGET_UNAVAILABLE\",\"message\":\"ExponetDB c"
+}

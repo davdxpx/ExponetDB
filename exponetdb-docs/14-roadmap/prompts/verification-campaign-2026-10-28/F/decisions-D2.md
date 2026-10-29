@@ -1,0 +1,9 @@
+# Open decisions raised by the SQL execution review (agent D2)
+
+- **D2-D1 (memory exhaustion, finding "One allowlisted read crashes the target PostgreSQL"):** no complete guard fix exists. Choose between size-argument rules in the guard, requiring memory-limited targets (cgroup or overcommit settings, recorded as a registry fact) and accepting the residual risk. Does the owner count a cluster restart by an authorised caller as an outage (P0 by the brief's definition)? The lead filed it as P1 because there is no data loss and no gate bypass.
+- **D2-D2 (reader privileges):** the reader role is in `pg_read_all_data`; `pg_authid`, `pg_statistic`, TOAST tables and foreign tables are readable at server level, and the guard's name list and the relation-kind step are the only barrier. Keep, or use a role with explicit grants?
+- **D2-D3 (admission outside the snapshot):** the admission steps (relation kinds, user code) run before and outside the REPEATABLE READ snapshot; a DDL race is theoretically possible, not reproduced. Move them inside the frame as hardening?
+
+What held (D2's verdict PARTIAL): 622 statements in 27 classes, 1,821 runs on the product path (`executeDataRead` on a real `exponetdb_reader` session) on PostgreSQL 16, 17 and 18: 1,820 as expected, 1 harmless over-refusal, 0 writes, 0 side effects; the frame alone is not enough (a superuser over the simple protocol deleted rows via `COMMIT; DELETE`, `COPY ... TO PROGRAM` and `pg_terminate_backend` ran inside the frame), only the guard, the reader role and the final ROLLBACK together stop everything. 157 statements through `/mcp` and REST over the real program: 0 failures.
+
+NOT RUN by D2: real servers and `pg_hba` (reos-db-01), the HTTP `sql_cancel` route, a browser run of the SQL editor, a canary search of logs and audit for these statements (the canary block), a graceful worker stop with a hung read (seen once, log lost, not repeated).

@@ -46,27 +46,32 @@ c_order() {
   local log="${OUT}/order.log"; : >"$log"
   local T db dir id
   T="$(fresh_target 6order "$PG")"; db="$(target_db "$T")"; dir="$(new_project "i6-order-${RUN_TAG}")"
-  # a check that takes a few seconds: a self join on a table of 3 million rows
-  PGDATABASE="$db" psql_target "$PG" -q -c "CREATE TABLE public.big AS SELECT g AS id FROM generate_series(1, 3000000) g; GRANT SELECT ON public.big TO exponetdb_verifier, exponetdb_reader, exponetdb_observer, lab_owner; ANALYZE public.big" >>"$log" 2>&1
-  id="$(VERIFY_SQL='-- check: a slow count over the big table
-SELECT count(*) > 0 AS ok FROM public.big a JOIN public.big b ON a.id = b.id + 1;' mkb "$dir" slow-verify <<'SQL'
+  # a check that takes a few seconds of CPU on the verifier session
+  id="$(VERIFY_SQL='-- check: a few seconds of work
+SELECT (SELECT count(*) FROM generate_series(1, 60000000)) > 0 AS ok;' mkb "$dir" slow-verify <<'SQL'
 CREATE TABLE public.v1 (id int PRIMARY KEY);
 GRANT SELECT ON public.v1 TO lab_owner;
 SQL
 )"
   mplan "$dir" "$T" >>"$log" 2>&1
-  # Control Store sampler and REST sampler, both started before the apply
   local samples="${OUT}/order.samples" rest="${OUT}/order.rest"; : >"$samples"; : >"$rest"
   mapply "$PLAN_ID" --no-wait >>"$log" 2>&1; local op="$OP_ID"
-  local end=$(( $(date +%s) + 90 )) cur last="" rlast="" r
+  # the REST view sampled by its own process (about 4 per second); the Control Store row sampled here every ~40 ms
+  ( local rlast="" r end=$(( $(date +%s) + 90 ))
+    while [ "$(date +%s)" -lt "$end" ]; do
+      r="$(human call GET "/api/v1/operations/${op}" 2>/dev/null | jq -r '.body | .state+"|"+.applyOutcome+"|"+.verificationOutcome' 2>/dev/null)"
+      [ -n "$r" ] && [ "$r" != "$rlast" ] && { printf '%s %s\n' "$(date -u +%T.%3N)" "$r" >>"$rest"; rlast="$r"; }
+      case "$r" in succeeded*|failed*|verification_failed*|needs_attention*) break ;; esac
+    done ) &
+  local rpid=$!
+  local end=$(( $(date +%s) + 90 )) cur last=""
   while [ "$(date +%s)" -lt "$end" ]; do
     cur="$(ctl_sql "SELECT state||'|'||apply_outcome||'|'||verification_outcome FROM operations.operations WHERE operation_id='${op}'")"
     [ "$cur" != "$last" ] && { printf '%s %s\n' "$(date -u +%T.%3N)" "$cur" >>"$samples"; last="$cur"; }
-    r="$(human call GET "/api/v1/operations/${op}" 2>/dev/null | jq -r '.body | .state+"|"+.applyOutcome+"|"+.verificationOutcome' 2>/dev/null)"
-    [ -n "$r" ] && [ "$r" != "$rlast" ] && { printf '%s %s\n' "$(date -u +%T.%3N)" "$r" >>"$rest"; rlast="$r"; }
     case "$cur" in succeeded*|failed*|verification_failed*|needs_attention*|canceled*) break ;; esac
-    sleep 0.04
+    sleep 0.02
   done
+  wait "$rpid" 2>/dev/null
   echo "Control Store transitions:"; cat "$samples"; echo "REST transitions:"; cat "$rest"
   { echo "Control Store transitions:"; cat "$samples"; echo "REST transitions:"; cat "$rest"; } >>"$log"
   local bad

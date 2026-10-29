@@ -291,24 +291,7 @@ phase_owner() {
 
 # ------------------------------------------------------------------------------------------------
 phase_cli() {
-  local cfg="${EXSTACK_STATE}/cli"; mkdir -p "$cfg"; chmod 0700 "$cfg"
-  exdb profile add stack --server "${EXSTACK_PUBLIC_URL}" --use >/dev/null || true
-  local scopes; scopes="$(cd "${EXSTACK_KIT}" && bun --conditions=@exponetdb/source scopes.ts)"
-  local outfile="${EXSTACK_LOGS}/cli-login.out"; : >"$outfile"
-  # the loopback sign-in (PKCE): the CLI prints the authorization URL and waits on 127.0.0.1; the scripted owner opens
-  # it, ticks every scope and production, and the redirect reaches the CLI, as a person's browser would deliver it
-  ( EXPONETDB_CONFIG_DIR="$cfg" "${EXSTACK_NODE_BIN}" --liftoff-only "${EXSTACK_CLI_BIN}" login --no-browser --scope "$scopes" >"$outfile" 2>&1 ) &
-  local pid=$! url="" i
-  for i in $(seq 1 60); do
-    url="$(grep -Eo 'https?://[^ ]*/oauth/authorize\?[^ ]*' "$outfile" | head -1 || true)"
-    [ -n "$url" ] && break
-    sleep 0.5
-  done
-  [ -n "$url" ] || { sed 's/code=[^& ]*/code=<r>/' "$outfile" >&2; kill "$pid" 2>/dev/null || true; die "no sign-in URL from the CLI"; }
-  # shellcheck disable=SC2086
-  human consent "$url" $scopes >&2
-  wait "$pid" || { sed 's/code=[^& ]*/code=<r>/' "$outfile" >&2; die "CLI login failed"; }
-  chmod -R go-rwx "$cfg"
+  cli_login || die "CLI login failed"
   exdb auth status | tee -a "$LOG" | head -12 >&2
 }
 

@@ -1,0 +1,157 @@
+{"id":"tx-001","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"tx-005","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"tx-009","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"tx-013","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"tx-017","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"tx-021","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"tx-025","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"tx-029","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"tx-033","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"tx-037","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"tx-041","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"tx-045","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"tx-049","expected":"RUNS_READ_ONLY","mcp":"ok rows=100","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"multi-001","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"multi-005","expected":"RUNS_READ_ONLY","mcp":"ok rows=1","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"multi-009","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"multi-013","expected":"RUNS_READ_ONLY","mcp":"ok rows=1","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"multi-017","expected":"RUNS_READ_ONLY","mcp":"ok rows=1","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"multi-021","expected":"RUNS_READ_ONLY","mcp":"ok rows=1","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"multi-025","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_PARSE_ERROR. {\"code\":\"QUE","rest":"422 QUERY_PARSE_ERROR","mcpOk":false,"restOk":false}
+{"id":"multi-029","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_PARSE_ERROR. {\"code\":\"QUE","rest":"422 QUERY_PARSE_ERROR","mcpOk":false,"restOk":false}
+{"id":"multi-033","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"enc-001","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"enc-005","expected":"BLOCKED_BY_SERVER_ROLE","mcp":"Refused: QUERY_PARSE_ERROR. {\"code\":\"QUE","rest":"422 QUERY_PARSE_ERROR","mcpOk":false,"restOk":false}
+{"id":"enc-009","expected":"BLOCKED_BY_SERVER_ROLE","mcp":"Refused: QUERY_FAILED. Next step: Look u","rest":"422 QUERY_FAILED","mcpOk":false,"restOk":false}
+{"id":"enc-013","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_PARSE_ERROR. {\"code\":\"QUE","rest":"422 QUERY_PARSE_ERROR","mcpOk":false,"restOk":false}
+{"id":"enc-017","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_PARSE_ERROR. {\"code\":\"QUE","rest":"422 QUERY_PARSE_ERROR","mcpOk":false,"restOk":false}
+{"id":"enc-021","expected":"RUNS_READ_ONLY","mcp":"ok rows=1","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"enc-025","expected":"RUNS_READ_ONLY","mcp":"ok rows=1","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"enc-029","expected":"RUNS_READ_ONLY","mcp":"ok rows=1","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"enc-033","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_PARSE_ERROR. {\"code\":\"QUE","rest":"422 QUERY_PARSE_ERROR","mcpOk":false,"restOk":false}
+{"id":"copy-001","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"copy-005","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"copy-009","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"file-001","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"file-005","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"file-009","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"file-013","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"file-017","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"file-021","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"file-025","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"file-029","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"file-033","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"file-037","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"file-041","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"file-045","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"file-049","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"file-053","expected":"BLOCKED_BY_SERVER_ROLE","mcp":"Refused: QUERY_FAILED. Next step: Look u","rest":"422 QUERY_FAILED","mcpOk":false,"restOk":false}
+{"id":"write-001","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"write-005","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"write-009","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"write-013","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"write-017","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"write-021","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"write-025","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"write-029","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"write-033","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"write-037","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"write-041","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"write-045","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"write-049","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"write-053","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"proc-001","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"proc-005","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"proc-009","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"proc-013","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"proc-017","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"proc-021","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"proc-025","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"proc-029","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"proc-033","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"proc-037","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"proc-041","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"func-001","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"func-005","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"func-009","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"func-013","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"func-017","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"func-021","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"func-025","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"func-029","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"func-033","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"func-037","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"func-041","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"func-045","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"func-049","expected":"BLOCKED_BY_SERVER_ROLE","mcp":"Refused: QUERY_FAILED. Next step: Look u","rest":"422 QUERY_FAILED","mcpOk":false,"restOk":false}
+{"id":"func-053","expected":"RUNS_READ_ONLY","mcp":"ok rows=1","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"func-057","expected":"RUNS_READ_ONLY","mcp":"ok rows=1","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"func-061","expected":"RUNS_READ_ONLY","mcp":"ok rows=1","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"func-065","expected":"BLOCKED_BY_SERVER_ROLE","mcp":"Refused: QUERY_FAILED. Next step: Look u","rest":"422 QUERY_FAILED","mcpOk":false,"restOk":false}
+{"id":"func-069","expected":"RUNS_READ_ONLY","mcp":"ok rows=1","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"func-073","expected":"RUNS_READ_ONLY","mcp":"ok rows=100","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"func-077","expected":"BLOCKED_BY_SERVER_ROLE","mcp":"Refused: QUERY_FAILED. Next step: Look u","rest":"422 QUERY_FAILED","mcpOk":false,"restOk":false}
+{"id":"func-081","expected":"RUNS_READ_ONLY","mcp":"ok rows=9","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"func-085","expected":"RUNS_READ_ONLY","mcp":"ok rows=0","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"func-089","expected":"RUNS_READ_ONLY","mcp":"ok rows=0","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"func-093","expected":"RUNS_READ_ONLY","mcp":"ok rows=1","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"lock-001","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"lock-005","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"lock-009","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"lock-013","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"shadow-001","expected":"RUNS_READ_ONLY","mcp":"ok rows=1","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"shadow-005","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"shadow-009","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"shadow-013","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"shadow-017","expected":"RUNS_READ_ONLY","mcp":"ok rows=1","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"shadow-021","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"shadow-025","expected":"RUNS_READ_ONLY","mcp":"ok rows=2","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"shadow-029","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"shadow-033","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"shadow-037","expected":"RUNS_READ_ONLY","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"shadow-041","expected":"RUNS_READ_ONLY","mcp":"ok rows=100","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"shadow-045","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"shadow-049","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"shadow-053","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"shadow-057","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"shadow-061","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"shadow-065","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"shadow-069","expected":"RUNS_READ_ONLY","mcp":"ok rows=3","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"shadow-073","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"shadow-077","expected":"RUNS_READ_ONLY","mcp":"ok rows=2","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"secret-001","expected":"RUNS_READ_ONLY","mcp":"ok rows=0","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"secret-005","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"secret-009","expected":"RUNS_READ_ONLY","mcp":"ok rows=0","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"secret-013","expected":"RUNS_READ_ONLY","mcp":"ok rows=0","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"secret-017","expected":"RUNS_READ_ONLY","mcp":"ok rows=100","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"secret-021","expected":"RUNS_READ_ONLY","mcp":"ok rows=17","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"secret-025","expected":"RUNS_READ_ONLY","mcp":"ok rows=0","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"secret-029","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"secret-033","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"secret-037","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"secret-041","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"secret-045","expected":"RUNS_READ_ONLY","mcp":"ok rows=7","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"explain-agent-001","expected":"RUNS_READ_ONLY","mcp":"ok rows=plan","rest":"ok","mcpOk":true,"restOk":true}
+{"id":"explain-agent-005","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"explain-agent-009","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"explain-agent-013","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"explain-agent-017","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_PARSE_ERROR. {\"code\":\"QUE","rest":"422 QUERY_PARSE_ERROR","mcpOk":false,"restOk":false}
+{"id":"explain-agent-021","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"explain-agent-025","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"explain-agent-029","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"explain-agent-analyze-001","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"ok","mcpOk":false,"restOk":true}
+{"id":"explain-agent-analyze-005","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"explain-agent-analyze-009","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"explain-agent-analyze-013","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"explain-agent-analyze-017","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_PARSE_ERROR. {\"code\":\"QUE","rest":"422 QUERY_PARSE_ERROR","mcpOk":false,"restOk":false}
+{"id":"explain-agent-analyze-021","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"explain-agent-analyze-025","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"explain-agent-analyze-029","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"explain-human-analyze-001","expected":"RUNS_READ_ONLY","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"ok","mcpOk":false,"restOk":true}
+{"id":"explain-human-analyze-005","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"explain-human-analyze-009","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"explain-human-analyze-013","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"explain-human-analyze-017","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_PARSE_ERROR. {\"code\":\"QUE","rest":"422 QUERY_PARSE_ERROR","mcpOk":false,"restOk":false}
+{"id":"explain-human-analyze-021","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_CONSTRUCT_UNSUPPORTED. {\"","rest":"422 QUERY_CONSTRUCT_UNSUPPORTED","mcpOk":false,"restOk":false}
+{"id":"explain-human-analyze-025","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}
+{"id":"explain-human-analyze-029","expected":"REFUSED_BY_GUARD","mcp":"Refused: QUERY_NOT_READ_ONLY. Next step:","rest":"422 QUERY_NOT_READ_ONLY","mcpOk":false,"restOk":false}

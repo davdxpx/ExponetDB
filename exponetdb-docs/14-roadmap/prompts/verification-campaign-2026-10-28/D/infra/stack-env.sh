@@ -358,3 +358,25 @@ inject_on_state() { # opid state "cmd" [timeout seconds]
   return 1
 }
 
+# cli_login   (re)signs the CLI in as the first owner with every scope it may hold: the loopback sign-in (PKCE) with the
+#             scripted owner delivering consent and the redirect, as a person's browser would. Use it after the grant
+#             was revoked or the refresh token ended.
+cli_login() {
+  local cfg="${EXSTACK_STATE}/cli"; mkdir -p "$cfg"; chmod 0700 "$cfg"
+  exdb profile add stack --server "${EXSTACK_PUBLIC_URL}" --use >/dev/null || true
+  local scopes; scopes="$(cd "${EXSTACK_KIT}" && bun --conditions=@exponetdb/source scopes.ts)"
+  local outfile="${EXSTACK_LOGS}/cli-login.out"; : >"$outfile"
+  ( EXPONETDB_CONFIG_DIR="$cfg" "${EXSTACK_NODE_BIN}" --liftoff-only "${EXSTACK_CLI_BIN}" login --no-browser --scope "$scopes" >"$outfile" 2>&1 ) &
+  local pid=$! url="" i
+  for i in $(seq 1 60); do
+    url="$(grep -Eo 'https?://[^ ]*/oauth/authorize\?[^ ]*' "$outfile" | head -1 || true)"
+    [ -n "$url" ] && break
+    sleep 0.5
+  done
+  [ -n "$url" ] || { sed 's/code=[^& ]*/code=<r>/' "$outfile" >&2; kill "$pid" 2>/dev/null; _stk_die "no sign-in URL from the CLI"; return 1; }
+  # shellcheck disable=SC2086
+  human consent "$url" $scopes >&2
+  wait "$pid" || { sed 's/code=[^& ]*/code=<r>/' "$outfile" >&2; _stk_die "CLI login failed"; return 1; }
+  chmod -R go-rwx "$cfg"
+}
+

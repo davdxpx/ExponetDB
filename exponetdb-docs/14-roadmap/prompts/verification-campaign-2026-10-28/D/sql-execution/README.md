@@ -27,6 +27,21 @@ every user function writes to, sequence state, large objects, catalog (relations
 roles, role settings, memberships, extensions, advisory locks, prepared transactions, notifications on a
 `LISTEN`ing connection, and marker files in the container. A change starts the next run from a fresh database.
 
+## Result in one paragraph
+
+Verdict **PARTIAL**. The read-only frame held: 607 corpus statements x PostgreSQL 16, 17 and 18 (1,821 runs through the
+worker's executor on a real `exponetdb_reader` session) produced no write, no lock that outlived the session, no file or
+program access and no disclosure of a secret catalog; 1,387 runs were stopped by the guard, 42 by the reader role
+(42501), 42 more were harmless server errors, 350 were legitimate reads (catalog rows name roles and FDW options: data, not errors); 157 statements through `/mcp` and REST changed
+nothing either. Row cap, byte cap (5 MiB), `statement_timeout`, `lock_timeout` and cancel work on all three majors, the
+session is gone afterwards, and no refusal or error text carried a host, path or connection string (the scan covers every outcome; the only hits are
+catalog result rows). What fails is not the
+read-only frame but the robustness of the read around it: (1) a read never returns when its backend dies, which wedges
+the worker's two reader slots of the cluster; (2) one allowlisted statement makes the kernel kill a backend and PostgreSQL
+restart every session of the cluster; (3) one `generate_series` read writes 100-160 MB/s of temp files with nothing to
+stop it but the 60 s timeout. Details and reproductions are in `results.md` (last sections) and in the findings of the
+final report.
+
 ## Files
 
 | File | Content |
@@ -50,6 +65,17 @@ nice bun --conditions @exponetdb/source run.ts --section sweep --out <out>
 nice bun --conditions @exponetdb/source run.ts --section limits --out <out>   # sets a 3 GiB memory limit on the containers
 bun report.ts <out> > results.md
 ```
+
+## NOT RUN
+
+- Real servers (`reos-db-01`, `db.exponetdb.cloud`): out of scope by the rules; no real `pg_hba.conf`, no real extension set.
+- HTTP `sql_cancel` / `POST .../queries/{id}/cancel`: the executor-level cancel was run (works on 16, 17, 18; it also
+  works before the read starts); the HTTP route was not run (the product's own `mcp-data.int.test.ts` covers it).
+- Browser run of the Web SQL editor: the editor's two calls (`runQuery`, `explainQuery`) and `classifySql` were tested
+  as the REST routes and as a pure function; no Playwright session.
+- Canary search over logs, audit and metrics for the SQL text of these statements: belongs to the canary block.
+- The worker's graceful stop with a hung read: observed once (the harness `afterAll` timed out after 10 minutes in an
+  earlier run; the log did not survive a session restart), not repeated.
 
 ## Caveats (what these results do not prove)
 

@@ -1,1 +1,1 @@
-{"major":16,"mode":"sigterm","statementTimeoutMs":60000,"returned":false,"outcome":"NO RESULT within 90 s of the kill","msFromKill":90114,"msFromStart":92017}
+{"major":16,"mode":"sigterm","statementTimeoutMs":60000,"returned":false,"outcome":"NO RESULT within 80 s of the kill","msFromKill":80102,"msFromStart":82636}
