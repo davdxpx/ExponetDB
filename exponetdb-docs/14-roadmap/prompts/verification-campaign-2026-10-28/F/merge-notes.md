@@ -36,3 +36,12 @@
 - E1 P1 / B1 P1 `needs_attention` dead ends: confirmed for rollback, ledger.reconcile, drift.accept and unknown outcome (line added to `findings-E1.md`; `findings-B1.md` first P1 is dropped as a duplicate).
 - D0 P2 close-before-checks: confirmed end to end (line added to `findings-D0.md`); R1's P2 on the same ordering is a duplicate, keep one.
 - S1 P2 "approval after plan expiry accepted" is the stack evidence for B1's approval-window P2 and OD-64: keep S1's (stronger), fold B1's in.
+
+## S3 and S2 duplicates and confirmations
+
+- S3 P1 "documented rollback of an upgrade dies" is the stack evidence for E1's third P1 (upgrade cannot be rolled back); keep S3's text, fold E1's in.
+- S3 P2 "redeploy loses the apply" is folded into C1's redeploy P2 as a measured evidence line (not filed twice).
+- S3 P2 "never mirrored production target adopted" shares its root with B1's evidence-by-operation-id P2: keep both (different surface: restore vs evidence), cross-reference.
+- S3 P1 "serial column cannot be applied" and B3 P1 "ADD COLUMN serial/identity rewrite" are one blind spot (serial/identity in the parser) with two symptoms: keep both findings, the fix is one change.
+- S2 P1 "drill passes with the newest WAL segment deleted" and R1 P2 "replay end compares with the START of the newest segment": keep S2's P1 (stronger evidence), fold R1's P2 in.
+- S2 P1 "backup.verify passes after a deleted WAL segment" is R1's first P1 reproduced at scale: keep R1's, add S2's numbers.

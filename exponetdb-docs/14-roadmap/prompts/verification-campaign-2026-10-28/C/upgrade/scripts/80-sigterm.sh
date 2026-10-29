@@ -17,13 +17,14 @@ graceful_stop() { # role seconds
   echo "exit=$(systemctl show -p ExecMainStatus --value "$u") signal=$(systemctl show -p ExecMainStatus --value "$u" | awk '$1==137{print "KILL"}') result=$(systemctl show -p Result --value "$u") after $(printf '%.1f' "$(echo "$(date +%s.%N) - $t0" | bc)")s killed=${killed}"
 }
 sess() { PGDATABASE="$1" psql_target "$PG" -Atc "SELECT count(*) FROM pg_stat_activity WHERE query LIKE '%pg_sleep(${SECS})%' AND pid <> pg_backend_pid()"; }
-for grace in 10 60; do
-  tag="${grace}"; echo "=================== docker stop --time ${grace} (apply: ${SECS} s statement) $(now)"
+for grace in ${GRACES:-10 60}; do
+  tag="${grace}${NONTX:+n}"; echo "=================== docker stop --time ${grace} (apply: ${SECS} s statement) $(now)"
   T="$(add_target "s3sig${tag}" "$PG" 2>/dev/null)"; db="lab_s3sig${tag}"
   PGDATABASE="$db" psql_target "$PG" -q -c "CREATE SEQUENCE public.exec_seq; GRANT USAGE ON SEQUENCE public.exec_seq TO lab_owner"
   dir="$(new_project "sig-${tag}")"
-  id="$(mkb "$dir" "long-sleep" <<SQL
+  id="$(mkb "$dir" "long-sleep" ${NONTX:+--nontransactional} <<SQL
 SELECT nextval('public.exec_seq');
+CREATE TABLE public.sig_first (id int PRIMARY KEY);
 SELECT pg_sleep(${SECS});
 CREATE TABLE public.sig_a (id int PRIMARY KEY);
 GRANT SELECT ON public.sig_a TO lab_owner;

@@ -1,0 +1,46 @@
+utc	phase	detail	ms	note
+2026-10-29T20:00:07.496Z	backup	pg_dumpall pre-upgrade	556	rc=0 dump /srv/work/s3/state/dumps/control-pre-upgrade.sql.gz bytes=1254467 sha256=ef4f6dba497677ee
+2026-10-29T20:00:33.598Z	upgrade	start	0	run=up1
+2026-10-29T20:00:34.376Z	upgrade	migrate	774	rc=0
+2026-10-29T20:00:38.529Z	upgrade	deploy-worker	1095	stop=70ms start-to-ready=1025ms ready_polls=8
+2026-10-29T20:00:50.846Z	upgrade	deploy-gateway	12314	stop=6315ms start-to-ready=5999ms ready_polls=53
+2026-10-29T20:00:51.943Z	upgrade	deploy-serve	1094	stop=54ms start-to-ready=1040ms ready_polls=8
+2026-10-29T20:00:51.946Z	upgrade	end	18347	migrate start to last role ready
+2026-10-29T20:04:22.981Z	rollback	cs_wipe (rm container+data, new empty PG17 with restore_admin)	1665	
+2026-10-29T20:04:25.049Z	rollback	cs_restore (psql ON_ERROR_STOP)	2065	rc=0
+2026-10-29T20:04:25.771Z	rollback	control-store status (old build)	720	
+2026-10-29T20:04:26.404Z	rollback	audit verify (old build)	626	
+2026-10-29T20:04:26.955Z	rollback	keyring status	544	
+2026-10-29T20:04:28.331Z	rollback	start old roles to serve ready	1116	
+2026-10-29T20:04:28.334Z	rollback	TOTAL decision to old release ready	7042	
+2026-10-29T20:06:36.362Z	upgrade	start	0	run=up2
+2026-10-29T20:06:37.182Z	upgrade	migrate	815	rc=0
+2026-10-29T20:06:41.457Z	upgrade	deploy-worker	1211	stop=51ms start-to-ready=1160ms ready_polls=9
+2026-10-29T20:06:53.963Z	upgrade	deploy-gateway	12503	stop=6289ms start-to-ready=6214ms ready_polls=54
+2026-10-29T20:06:55.152Z	upgrade	deploy-serve	1187	stop=41ms start-to-ready=1146ms ready_polls=9
+2026-10-29T20:06:55.155Z	upgrade	end	18794	migrate start to last role ready
+2026-10-29T20:07:33.302Z	reconcile	lab/platform/staging	6458	steps=6
+2026-10-29T20:07:48.330Z	reconcile	lab/platform/dev16	6163	steps=6
+2026-10-29T20:07:54.550Z	reconcile	lab/platform/dev18	6217	steps=6
+2026-10-29T20:12:54.004Z	loss	pg_dumpall	627	
+2026-10-29T20:19:05.063Z	reconcile	lab/platform/staging	6175	steps=6
+2026-10-29T20:19:11.413Z	reconcile	lab/platform/dev18	6348	steps=6
+2026-10-29T20:39:01.025Z	upgrade	start	0	run=up3
+2026-10-29T20:39:02.062Z	upgrade	migrate	1031	rc=0
+2026-10-29T20:39:06.421Z	upgrade	deploy-worker	1282	stop=64ms start-to-ready=1218ms ready_polls=9
+2026-10-29T20:39:18.776Z	upgrade	deploy-gateway	12352	stop=6301ms start-to-ready=6051ms ready_polls=53
+2026-10-29T20:39:19.995Z	upgrade	deploy-serve	1216	stop=53ms start-to-ready=1163ms ready_polls=8
+2026-10-29T20:39:19.998Z	upgrade	end	18972	migrate start to last role ready
+	rb10-as-written (first complete run)	step 1 [runbook=Y] RB-10.1 triage: is the resource running? disk? network? login refused?	59	
+	rb10-as-written (first complete run)	step 2 [runbook=Y] RB-10.2a new isolated PostgreSQL 17 resource, maintenance database postgres, temporary superuser restore_admin	1730	(a new Coolify resource also gets a NEW host name: the roles' URLs change, see step 9)
+	rb10-as-written (first complete run)	step 3 [runbook=V] RB-10.2b decompress the export and feed it to psql -U restore_admin -d postgres -v ON_ERROR_STOP=1 inside the scratch resource	2285	rc=0
+	rb10-as-written (first complete run)	step 4 [runbook=Y] RB-10.2c control-store status with a restored runtime login (exdb_serve, password from the offline credentials file): installation ID must match, every bundle applied and verified	690	
+	rb10-as-written (first complete run)	step 5 [runbook=Y] RB-10.2d later release's additive bundles through control-store migrate (exdb_migrate): none needed, status is current	1	(skipped: same release)
+	rb10-as-written (first complete run)	step 6 [runbook=Y] RB-10.3a integrity: audit verify (full chain)	761	
+	rb10-as-written (first complete run)	step 7 [runbook=V] RB-10.3b compare the newest exported checkpoint in the bucket with the restored chain: audit verify --from-checkpoint <seq>	754	
+	rb10-as-written (first complete run)	step 8 [runbook=N] RB-10.3c record the gap (events after the dump are lost): how many? the runbook says the exported checkpoints show its size	4	(checkpoints are hourly: newest is seq 1, the gap cannot be sized from them)
+	rb10-as-written (first complete run)	step 9 [runbook=Y] RB-10.4 keyring status with the offline keyring: no missing key	608	
+	rb10-as-written (first complete run)	step 10 [runbook=V] RB-10.5a roles: 'Update EXPONETDB_CONTROL_STORE_URL of each resource if the passwords changed' - same dump, same SCRAM verifiers: unchanged; host/port unchanged in the lab	1	(in Coolify the new resource has a new host name: every role's URL changes)
+	rb10-as-written (first complete run)	step 11 [runbook=Y] RB-10.5b start worker, serve, gateway - they were left running: do they recover by themselves (no restart)?	1092	
+	sigterm-during-60s-apply	docker stop --time 10		exit=9 signal= result=signal after 11.3s killed=yes | failed apply=not_applied verify=not_applicable kind=migration.apply | ledger=0 | execs=1
+	sigterm-during-60s-apply	docker stop --time 60		exit=1 signal= result=exit-code after 26.2s killed=no | failed apply=not_applied verify=not_applicable kind=migration.apply | ledger=0 | execs=1
