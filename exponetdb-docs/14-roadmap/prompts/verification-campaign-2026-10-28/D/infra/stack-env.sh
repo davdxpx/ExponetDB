@@ -19,12 +19,14 @@
 #   stack_status                 states, ports and health of everything, ids and counts only
 #   stack_ready                  exit 0 when serve answers readiness
 #   pg_restart pg17 [immediate|fast|smart]   restart a target cluster (immediate = SIGQUIT, like pg_ctl -m immediate)
+#   net_block <port> [drop|reject] / net_unblock   block (or restore) loopback TCP to a port for every process (chain EXSTACK_FAIL; stack-down removes it)
+#   net_delay <ms> [loss%]      netem delay/loss on lo (affects the whole loopback); net_clear removes it
 #   human ...                    act as the owner (human.ts): call, apply, approve, stepup, device-approve
 #   op_state <operation id>      state / applyOutcome / verificationOutcome of an operation from the Control Store
 #   journal <role> [args]        journalctl of a role's unit
 #   target_id lab/platform/staging   the id of a target (from ids.json)
 #   new_project NAME             a scratch project dir (EXSTACK_ROOT/projects/NAME) for lab/platform; prints the path
-#   mkb DIR SLUG [flags] < up.sql   a new bundle (flags of `migration new`, e.g. --nontransactional); VERIFY_SQL overrides verify.sql; prints its id
+#   mkb DIR SLUG [flags] < up.sql   a new bundle (flags of `migration new`, e.g. --nontransactional); VERIFY_SQL overrides verify.sql, DOWN_SQL adds a rollback script; prints its id
 #   mplan DIR TARGET [ids...]    plan from the bundles in DIR; sets PLAN_ID, PLAN_STATE; prints one line
 #   mapply [PLAN] [flags]        `plan apply` (default --wait unless flags are given); sets OP_ID; prints the operation as the Control Store has it
 #   add_target SLUG pg17 [prod]  one more environment + database + target lab/platform/SLUG (fresh state for a test); prints the path
@@ -278,6 +280,10 @@ mkb() {
   d="$(ls -d "$dir"/migrations/"${id}"_*)"
   cat >"$d/up.sql"
   if [ -n "${VERIFY_SQL:-}" ]; then printf '%s\n' "$VERIFY_SQL" >"$d/verify.sql"; fi
+  if [ -n "${DOWN_SQL:-}" ]; then   # an optional rollback script: down.sql plus the manifest block that names it
+    printf '%s\n' "$DOWN_SQL" >"$d/down.sql"
+    printf 'rollback:\n  script: down.sql\n  safety: unsafe\n  notes: |\n    test rollback\n' >>"$d/migration.yaml"
+  fi
   echo "$id"
 }
 
@@ -317,4 +323,38 @@ add_target() {
 
 # copies the helper kit next to this file into the checkout's workspace package (after the kit changed)
 kit_sync() { rsync -a --exclude node_modules "${EXSTACK_INFRA}/kit/" "${EXSTACK_KIT}/"; }
+
+# --- failure injection on the loopback (every stack process talks over 127.0.0.1) --------------------------------
+net_block() { # port [drop|reject]
+  local port="${1:?port}" how="${2:-reject}" target=REJECT extra=(--reject-with tcp-reset)
+  [ "$how" = drop ] && { target=DROP; extra=(); }
+  iptables -N EXSTACK_FAIL 2>/dev/null
+  iptables -C OUTPUT -j EXSTACK_FAIL 2>/dev/null || iptables -I OUTPUT 1 -j EXSTACK_FAIL
+  iptables -A EXSTACK_FAIL -p tcp --dport "$port" -j "$target" "${extra[@]}"
+  _stk_log "blocked tcp/$port ($how)"
+}
+net_unblock() {
+  iptables -F EXSTACK_FAIL 2>/dev/null
+  _stk_log "loopback blocks removed"
+}
+net_delay() { # ms [loss percent]
+  tc qdisc replace dev lo root netem delay "${1:?ms}ms" ${2:+loss "${2}%"} && _stk_log "netem on lo: delay ${1}ms loss ${2:-0}%"
+}
+net_clear() { tc qdisc del dev lo root 2>/dev/null; _stk_log "netem removed"; }
+
+# makes catalog reads slow (a verification then takes seconds): n empty tables in a target database
+bloat() { # pgNN database [n]
+  PGDATABASE="${2:?database}" psql_target "${1:?pg16}" -q -c "DO \$\$ BEGIN FOR i IN 1..${3:-1500} LOOP EXECUTE format('CREATE TABLE public.bulk_%s (id int primary key, a text, b text)', i); END LOOP; END \$\$"
+}
+
+# runs CMD (eval) the moment the operation row shows STATE (polled every ~50 ms from the Control Store)
+inject_on_state() { # opid state "cmd" [timeout seconds]
+  local op="${1:?op}" st="${2:?state}" cmd="${3:?cmd}" end=$(( $(date +%s) + ${4:-120} )) cur
+  while [ "$(date +%s)" -lt "$end" ]; do
+    cur="$(ctl_sql "SELECT state FROM operations.operations WHERE operation_id='${op}'" 2>/dev/null)"
+    if [ "$cur" = "$st" ]; then eval "$cmd"; _stk_log "injected on state=$cur"; return 0; fi
+    sleep 0.05
+  done
+  return 1
+}
 

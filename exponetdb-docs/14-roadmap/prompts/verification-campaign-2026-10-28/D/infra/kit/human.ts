@@ -12,6 +12,7 @@
  *   bun --conditions=@exponetdb/source human.ts consent <authorize url> <scope>...   (the CLI's loopback sign-in)
  *   bun --conditions=@exponetdb/source human.ts call <METHOD> <path> [json body]
  *   bun --conditions=@exponetdb/source human.ts apply <planId> [--approve]
+ *   bun --conditions=@exponetdb/source human.ts retry-apply <planId> same|new   (apply with an Idempotency-Key, client gives up after 300 ms, repeats)
  *   bun --conditions=@exponetdb/source human.ts approve <operationId>
  *   bun --conditions=@exponetdb/source human.ts stepup <step-up id> <code>
  *
@@ -82,7 +83,7 @@ function assertion(o: OwnerFile, challenge: string) {
 class Browser {
   readonly jar = new Map<string, string>()
   constructor(readonly origin: string) {}
-  async call(method: string, path: string, body?: unknown, extra: Record<string, string> = {}): Promise<Reply> {
+  async call(method: string, path: string, body?: unknown, extra: Record<string, string> = {}, abortAfterMs?: number): Promise<Reply> {
     const headers: Record<string, string> = { 'user-agent': UA, ...extra }
     if (this.jar.size > 0) headers['cookie'] = [...this.jar].map(([k, v]) => `${k}=${v}`).join('; ')
     if (method !== 'GET') {
@@ -95,6 +96,7 @@ class Browser {
       method,
       headers,
       redirect: 'manual',
+      ...(abortAfterMs === undefined ? {} : { signal: AbortSignal.timeout(abortAfterMs) }),
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     })
     for (const line of response.headers.getSetCookie()) {
@@ -125,8 +127,8 @@ export class Human {
     return new Human(JSON.parse(readFileSync(file, 'utf8')) as OwnerFile)
   }
 
-  call = (method: string, path: string, body?: unknown, extra?: Record<string, string>) =>
-    this.browser.call(method, path, body, extra)
+  call = (method: string, path: string, body?: unknown, extra?: Record<string, string>, abortAfterMs?: number) =>
+    this.browser.call(method, path, body, extra, abortAfterMs)
 
   async signIn(): Promise<void> {
     const options = await this.call('POST', '/auth/login/passkey/options', {})
@@ -306,6 +308,22 @@ async function main(): Promise<void> {
         const r = await human.approve(applied.body.id, plan.body.planHash)
         console.log(JSON.stringify({ approve: r.status, code: r.body?.code }))
       }
+      return
+    }
+    case 'retry-apply': {
+      const [planId, mode] = rest
+      const k1 = `idem-${crypto.randomUUID()}`
+      const k2 = mode === 'same' ? k1 : `idem-${crypto.randomUUID()}`
+      await human.reauth()
+      let first: unknown
+      try {
+        const r = await human.call('POST', `/api/v1/plans/${planId}/apply`, {}, { 'idempotency-key': k1 }, 300)
+        first = { status: r.status, op: r.body?.id, state: r.body?.state }
+      } catch (e) {
+        first = { aborted: true }
+      }
+      const second = await human.call('POST', `/api/v1/plans/${planId}/apply`, {}, { 'idempotency-key': k2 })
+      console.log(JSON.stringify({ first, second: { status: second.status, op: second.body?.id, state: second.body?.state, code: second.body?.code, already: second.body?.alreadyAccepted } }))
       return
     }
     case 'approve': {

@@ -43,7 +43,7 @@ await su.end().catch(() => undefined)
 const killedAt = Date.now()
 const outcome = await Promise.race([
   read.then((o: any) => ({ returned: true, outcome: o.kind === 'refused' ? `${o.code}${o.details?.sqlstate ? ` ${o.details.sqlstate}` : ''}` : o.kind })),
-  new Promise<{ returned: boolean; outcome: string }>((r) => setTimeout(() => r({ returned: false, outcome: 'NO RESULT within 90 s of the kill' }), 90_000)),
+  new Promise<{ returned: boolean; outcome: string }>((r) => setTimeout(() => r({ returned: false, outcome: 'NO RESULT within 80 s of the kill' }), 80_000)),
 ])
 const result = { major: MAJOR, mode: MODE, statementTimeoutMs: 60_000, ...outcome, msFromKill: Date.now() - killedAt, msFromStart: Date.now() - started }
 writeFileSync(join(OUT, `crash-pg${MAJOR}-${MODE}.json`), `${JSON.stringify(result)}\n`)

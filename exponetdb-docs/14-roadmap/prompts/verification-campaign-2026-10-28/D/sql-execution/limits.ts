@@ -98,6 +98,8 @@ export async function runLimits(ctx: any, h: any): Promise<void> {
   for (const e of corpus) await one('corpus', e, e.id === 'limit-002' ? 2000 : 2500)
   // 2. human class: 5000 rows, EXPLAIN ANALYZE of a long read
   await one('human-rows', { id: 'human-rows', class: 'limit', kind: 'query', sql: 'SELECT g FROM generate_series(1, 1000000000) g', callerClass: 'human' }, 2500, 5000)
+  await one('human-bytes-100MB', { id: 'human-bytes', class: 'limit', kind: 'query', sql: "SELECT repeat('x', 1000) FROM generate_series(1, 100000)", callerClass: 'human' }, 5000, 5000)
+  await one('human-bytes-500MB', { id: 'human-bytes2', class: 'limit', kind: 'query', sql: "SELECT repeat('x', 5000) FROM generate_series(1, 100000)", callerClass: 'human' }, 5000, 5000)
   await one('human-explain-analyze', { id: 'human-explain', class: 'limit', kind: 'explain', sql: 'SELECT count(*) FROM generate_series(1, 1000000000000)', analyze: true, callerClass: 'human' }, 2500)
   // 3. cancel: abort a long read after 500 ms; the next read must work and no backend may remain
   {

@@ -107,7 +107,7 @@ const STATE_SQL = `SELECT json_build_object(
   'roles', (SELECT md5(string_agg(r::text, ',' ORDER BY oid)) FROM pg_roles r),
   'role_settings', (SELECT md5(coalesce(string_agg(setrole::text || ':' || setdatabase::text || ':' || setconfig::text, ',' ORDER BY setrole, setdatabase), '')) FROM pg_db_role_setting),
   'memberships', (SELECT md5(coalesce(string_agg(m::text, ',' ORDER BY oid), '')) FROM pg_auth_members m),
-  'advisory_locks', (SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND pid <> pg_backend_pid()),
+  'advisory_locks', (SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND pid <> pg_backend_pid() AND database = (SELECT oid FROM pg_database WHERE datname = current_database())),
   'prepared_xacts', (SELECT count(*) FROM pg_prepared_xacts),
   'extensions', (SELECT md5(string_agg(extname, ',' ORDER BY extname)) FROM pg_extension)
 )::text AS s`

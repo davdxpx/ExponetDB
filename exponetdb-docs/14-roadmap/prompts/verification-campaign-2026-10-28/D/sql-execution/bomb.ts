@@ -67,7 +67,7 @@ async function scenario(label: string, sql: string, timeoutMs: number, watchTemp
   stamp(`${label}: read starts`)
   const r = await Promise.race([
     read(sql, timeoutMs),
-    new Promise<{ outcome: string; ms: number }>((res) => setTimeout(() => res({ outcome: 'HUNG: no result 240 s after the start (statement timeout was ' + timeoutMs / 1000 + ' s)', ms: 240_000 }), 240_000)),
+    new Promise<{ outcome: string; ms: number }>((res) => setTimeout(() => res({ outcome: 'HUNG: no result 100 s after the start (statement timeout was ' + timeoutMs / 1000 + ' s)', ms: 100_000 }), 100_000)),
   ])
   stamp(`${label}: read returned ${r.outcome}`)
   clearInterval(sampler)
@@ -109,7 +109,7 @@ if (only === '') {
 // 1. temp-file rate of a plain row-capped read of a set-returning function (FunctionScan materializes it)
 await scenario('temp-files-15s', 'SELECT g FROM generate_series(1, 1000000000) g', 15_000, true)
 // 2. one value of 500 MB per row, streaming: the memory one backend can hold without any aggregate
-await scenario('big-values-streaming', "SELECT count(*) FROM (SELECT repeat('x', 500000000) FROM generate_series(1, 6)) q", 30_000)
+await scenario('big-values-streaming', "SELECT sum(length(repeat('x', 500000000))) FROM generate_series(1, 6)", 30_000)
 }
 // 3. an aggregate that keeps every 100 MB value: ~10 GB asked within a second, no timeout can help
 if (only === '' || only === '3') await scenario('aggregate-of-big-values', "SELECT array_agg(repeat('x', 100000000)) FROM generate_series(1, 100)", 60_000)

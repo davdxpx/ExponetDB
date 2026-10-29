@@ -90,7 +90,7 @@ for (const [id, rs] of byId) {
 
 lines.push('# D2 results: SQL execution safety (sql_query / sql_explain)')
 lines.push('')
-lines.push(`Corpus statements run: ${byId.size} (x 3 majors = ${[...byId.values()].reduce((n, r) => n + r.length, 0)} runs); the 15 resource-limit statements and the limit scenarios are in limits.md.`)
+lines.push(`Corpus statements run: ${byId.size} (x 3 majors = ${[...byId.values()].reduce((n, r) => n + r.length, 0)} runs); the 15 resource-limit statements and the limit scenarios are in the sections below.`)
 lines.push('')
 lines.push('Verdict tally (per statement and major): ' + Object.entries(tally).map(([k, n]) => `${k} ${n}`).join(', '))
 lines.push('')

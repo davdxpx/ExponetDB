@@ -53,10 +53,10 @@
 - **Proposed fix:** validate restoredAt against the clock and map EXB06/EXM01 to typed errors.
 - **Acceptance test:** `http-backups.int.test.ts`: restoredAt one day ahead gives 400.
 
-### [P3] Control Store bundles are not pinned: the three new ones and 24 older ones (27 in all) are outside the freeze list
+### [P3] 24 of 45 Control Store bundles are not pinned, the three new ones among them
 - **Area:** packages/control-store/frozen-bundles.json, packages/control-store/test/immutable-bundles.test.ts
 - **Block:** D
-- **Reproduction:** `jq` over `frozen-bundles.json` and listing `packages/control-store/migrations/`: the freeze list stops at Wave 6 (21 entries); PR #46 changed neither the list nor the test.
+- **Reproduction:** `jq` over `frozen-bundles.json` and listing `packages/control-store/migrations/`: the freeze list stops at Wave 6 (21 entries for 45 bundle directories); PR #46 changed neither the list nor the test. (D0 first counted 27; E2 recounted: 45 directories, 21 pinned, 24 unpinned.)
 - **Expected:** every bundle that can have been applied on an installation is pinned by checksum (an applied bundle changed in place is a `MIGRATION_CHECKSUM_MISMATCH` on every installation that applied it); the docs call the backup-catalog bundle "frozen".
 - **Actual:** the backup-catalog bundle and everything after Wave 6, including the three new bundles, can be edited without a test failing.
 - **Evidence:** D/new-bundles-security-review.md §3 (finding 6); R/baseline.md.

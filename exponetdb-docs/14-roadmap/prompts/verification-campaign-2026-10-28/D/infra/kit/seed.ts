@@ -61,9 +61,18 @@ async function until<T>(what: string, fn: () => Promise<T>, ok: (v: T) => boolea
 }
 
 async function items(h: Human, path: string): Promise<any[]> {
-  const r = await h.call('GET', path)
-  must(r, 200, `GET ${path}`)
-  return r.body.items
+  // list endpoints page at 50: follow nextCursor
+  const all: any[] = []
+  let cursor: string | null = null
+  for (let page = 0; page < 200; page++) {
+    const sep = path.includes('?') ? '&' : '?'
+    const r = await h.call('GET', cursor === null ? path : `${path}${sep}cursor=${encodeURIComponent(cursor)}`)
+    must(r, 200, `GET ${path}`)
+    all.push(...r.body.items)
+    cursor = r.body.nextCursor ?? null
+    if (cursor === null) break
+  }
+  return all
 }
 
 async function registry(h: Human): Promise<void> {
