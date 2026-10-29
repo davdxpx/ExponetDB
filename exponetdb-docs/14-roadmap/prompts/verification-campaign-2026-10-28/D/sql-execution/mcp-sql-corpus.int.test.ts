@@ -88,8 +88,9 @@ beforeAll(async () => {
 }, 300_000)
 
 afterAll(async () => {
-  await w?.stop()
-})
+  // A worker whose read never ends cannot stop; do not let the harness wait for it.
+  await Promise.race([w?.stop(), new Promise((res) => setTimeout(res, 20_000))])
+}, 60_000)
 
 describe('the corpus through /mcp and REST', () => {
   it('refuses or contains every statement; the target does not change', async () => {
@@ -137,8 +138,13 @@ describe('the corpus through /mcp and REST', () => {
     const answers: string[] = []
     const calls = [0, 1].map(async (i) => {
       const started = Date.now()
-      const r = await agent.call('sql_query', { target, sql: long, queryId: `qry_01M4S9000000000000000000W${i}` } as never)
-      answers.push(`read ${i}: ${r.isError ? (r.content[0]?.text ?? '').slice(0, 60) : 'rows'} after ${Date.now() - started} ms`)
+      try {
+        const r = await agent.call('sql_query', { target, sql: long, queryId: `qry_01M4S9000000000000000000W${i}` } as never)
+        answers.push(`read ${i}: ${r.isError ? (r.content[0]?.text ?? '').slice(0, 60) : 'rows'} after ${Date.now() - started} ms`)
+      } catch (e) {
+        // McpCaller throws on a JSON-RPC error: here the gateway's 504 after the lane gave up
+        answers.push(`read ${i}: ${String((e as Error).message).slice(0, 90)} after ${Date.now() - started} ms`)
+      }
     })
     await new Promise((res) => setTimeout(res, 4000))
     const c = await superuserClient(pg17, 'postgres')

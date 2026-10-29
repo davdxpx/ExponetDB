@@ -36,7 +36,7 @@ case_() {
   id="$(printf '%s\n' "$sql" | mkb "$dir" "${name//_/-}" "${flags[@]}")"
   local lint plan_line plan_state="" op_line="-" opstate="-"
   lint="$(lint_summary "$dir")"
-  plan_line="$(mplan "$dir" "$target")" 2>>"$log"
+  mplan "$dir" "$target" >"${log}.plan" 2>&1; plan_line="$(cat "${log}.plan")"
   plan_state="${PLAN_STATE:-?}"
   echo "lint: $lint | $plan_line" >>"$log"
   local cls detail
@@ -45,7 +45,7 @@ case_() {
     local why; why="$(exdb_json plan show "${PLAN_ID:-none}" 2>/dev/null | jq -r '[.data.policyRules[]? | select(.result=="fail") | .id] | join(",")')"
     cls=REFUSED; detail="plan denied by ${why:-?}"
   else
-    op_line="$(mapply "$PLAN_ID" --wait 2>&1 | tail -1)"
+    mapply "$PLAN_ID" --wait >"${log}.apply" 2>&1; op_line="$(tail -1 "${log}.apply")"
     opstate="$( [ -n "${OP_ID:-}" ] && op_state "$OP_ID" || echo '-')"
     echo "apply: $op_line" >>"$log"
   fi

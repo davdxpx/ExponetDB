@@ -31,6 +31,7 @@
 #   ledger pg17 lab_staging      the target's ledger rows (ids, checksum prefix, transactional, operation)
 
 # --- configuration ---------------------------------------------------------------------------
+EXSTACK_INFRA="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ -r /etc/exstack.env ] && . /etc/exstack.env
 
 # Parameters (environment or /etc/exstack.env). The short names are accepted too:
@@ -308,8 +309,12 @@ ledger() {
 
 add_target() {
   local slug="${1:?slug}" name="${2:-pg17}" tier="${3:-nonprod}"
+  kit_sync || return 1
   ( cd "${EXSTACK_KIT}" && EXSTACK_OWNER_FILE="${EXSTACK_STATE}/owner.json" EXSTACK_STATE="${EXSTACK_STATE}" \
       EXSTACK_PG_PORT_BASE="${EXSTACK_PG_PORT_BASE}" bun --conditions=@exponetdb/source seed.ts add-target "$slug" "${name#pg}" "$tier" ) >&2 || return 1
   echo "lab/platform/${slug}"
 }
+
+# copies the helper kit next to this file into the checkout's workspace package (after the kit changed)
+kit_sync() { rsync -a --exclude node_modules "${EXSTACK_INFRA}/kit/" "${EXSTACK_KIT}/"; }
 

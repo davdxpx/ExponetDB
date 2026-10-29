@@ -35,11 +35,11 @@ event_summary() { # pgNN db migration_id -> "kind,kind,..." from the target's ev
   PGDATABASE="$2" psql_target "$1" -Atc "SELECT coalesce(string_agg(event_kind, ',' ORDER BY event_seq), '-') FROM exponetdb.migration_events WHERE migration_id='$3'" 2>/dev/null || echo "?"
 }
 
-# lint summary of a project dir: "rc=1 rules=error:verify_admission,warn:table_without_grant"
+# lint summary of a project dir: "rc=1 blocking=error:forbidden_statement,warn:table_without_grant warnings=3"
 lint_summary() { # dir
   local j rc
   j="$(cd "$1" && exdb_json migration lint)"; rc=$?
-  echo "rc=${rc} rules=$(jq -r '[(.data.findings // .data.items // [])[]? | (.level // .severity // "?") + ":" + (.rule // .code // "?")] | join(",")' <<<"$j" 2>/dev/null)"
+  echo "rc=${rc} blocking=$(jq -r '[.data.bundles[]?.findings[]? | select(.blocking) | .level + ":" + .rule] | unique | join(",")' <<<"$j" 2>/dev/null) findings=$(jq -r '[.data.bundles[]?.findings[]?] | length' <<<"$j" 2>/dev/null)"
 }
 
 # wait until the operation reaches one of the (space separated) states, up to $3 seconds; prints the last row
