@@ -46,4 +46,30 @@ Throughput is against the source size unless it says repository.
 | `pitr:<time>` / `pitr_random` right after a `pg_switch_wal` | - | - | - | - | 409 at plan time | see finding |
 | offline attestation | 7.6 GB | 101.5 s (script) | none (`null`) | - | - | PASS (as designed) |
 
-(restic, repository-full, restore-without-space, retention and the remaining failure rows follow)
+
+## Logical path (restic, helper level, 7.7 GB database)
+
+| operation | dataset | duration (measured) | throughput | product-reported | verdict |
+|---|---|---|---|---|---|
+| `backup.run logical` to a local restic repository | 7.7 GB -> `app.dump` 1.03 GB + `globals.sql`; repository 947 MB | 100.0 s | 77 MB/s source | 100.4 s | PASS |
+| `backup.run logical` to S3 (versitygw v1.8.0, TLS) | same | 103.3 s | 75 MB/s | 101.5 s | PASS |
+| `backup.verify` (restic check, 1/10 of the data) | 947 MB | 1.3 s (both) | - | `succeeded`, verifyErrors 0 | PASS |
+| restore from the generated restic runbook, local repository | 7.7 GB | 80.7 s until it stopped | - | script exit 1: `role "s2_reader" does not exist` (globals not applied) | **FAIL** (D-07 not fixed); data loaded, roles missing, cluster left running |
+| restore from the generated restic runbook, S3 | - | - | - | - | NOT RUN (time) |
+
+## Failure cases
+
+| case | dataset | duration | product-reported | measured / observed | verdict |
+|---|---|---|---|---|---|
+| backup data file corrupted | 7.7 GB | whole-repo verify 16.8 s, label verify 1.4 s, restore stops after 23 s | verify `failed`, verifyErrors 4; restore exit 29 `zst error [-20]`; Control Plane `VERIFICATION_FAILED`, later drill plans denied | no restore, nothing silently wrong | PASS |
+| middle WAL segment corrupted | 7.7 GB | restore 55 s | whole-repo verify `failed` (2), label verify `passed`; helper restore `failed` only because of the marker row count; Control Plane drill `failed`: "replay reached 5/6C8035C0, the archive the plan counted on ends at 5/F5000000" | rows after the hole missing, detected by the drill | PASS (drill) / PARTIAL (label verify blind) |
+| middle WAL segment deleted | 7.7 GB | restore 52 s | whole-repo verify **`succeeded`, 0 errors**; restore reached the hole and promoted | rows after the hole missing | **FAIL** (verify) |
+| newest WAL segment deleted | 7.7 GB | restore 54 s | verify `succeeded` 0; restore `succeeded`, all checks passed; Control Plane drill **`passed`**, RTO 35 s | **12 committed rows missing** | **FAIL (P1)** |
+| newest WAL segment corrupted | 7.7 GB | restore 60 s | whole-repo verify `failed` (2), label verify `passed`; restore `succeeded`; Control Plane drill **`passed`** | **4 committed rows missing** | **FAIL (P1)** |
+| STOP segment of the newest full deleted | 7.7 GB | restore fails after 11 s | verify (whole repo and label) **`succeeded`, 0 errors**; restore `FATAL: WAL ends before end of online backup` | the backup is unrestorable | **FAIL** (verify) |
+| wrong cipher passphrase | - | helper refuses at once; Control Plane verify 102.5 s | helper: "pgBackRest's catalog is not readable"; Control Plane: refresh `failed` with `errorCode null`, verify `OUTCOME_UNKNOWN` after 102.5 s, drill `RESTORE_SOURCE_INVALID` after 3.2 s | repository `degraded`, protection `unknown`; repaired by restoring the key | PARTIAL |
+| repository deleted | - | Control Plane verify 102.4 s | helper `backup.list` `{"backups":0}` without error, runs refused "stanza does not belong to cluster"; Control Plane refresh `failed`, drill `RESTORE_TARGET_MISMATCH` | WAL archiving fails (`failed_count` rises); repaired by putting the directories back | PARTIAL |
+| repository full (1.7 GB loop) | 7.7 GB | incremental fails after 46 s | helper run `failed`, exit 64, "[28] No space left on device"; archive command exit 104, backlog 20 and growing, `check` ERROR 082 | repository safe (`info` ok, aborted directory left); growing the filesystem drained the backlog, next incremental 14.5 s | PASS (clear, safe, recoverable) |
+| retention at the boundary | 4 chains | expire 1.3 s | refused when it would drop a kept label; otherwise removes older chains and WAL | PITR targets before the oldest backup: `target_outside_window` | PASS |
+| restore without disk space | 7.74 GB needed, 5.0 GB free | prepare 0.07 s; execute started | prepare `space_insufficient`; **execute accepted**, free space 5.0 GB to 349 MB in 4 s (guard stopped it) | filesystem would fill | **FAIL** (D-08 not fixed) |
+| restore while a backup runs / backup while a restore runs | 7.6 GB | 39 s | both `succeeded` | separate domains | PASS |

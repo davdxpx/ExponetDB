@@ -4,8 +4,8 @@ Commit under test `d51da5d0` (fix PR #46), release binaries `exponetdb-node` / `
 (posix repository, `aes-256-cbc`, `compress-type=zst`, `process-max=2`), restic 0.16.4, PostgreSQL 17.11 (PGDG), versitygw v1.8.0 (S3, TLS).
 Server `vc-2` (4 vCPU, 8 GB, local disk, UTC). Lab: privileged systemd container `s2-host` (shipped agent and root helper units, real engines,
 PostgreSQL cluster `17/exdbnode`), a second container `s2-host2` for the "other host" restore, `s2-s3` (versitygw). Raw logs stay on the server in
-`/srv/work/s2/logs` (index: `C/backup-restore/logs-index.md`); the scripts are in `C/backup-restore/`. Status of this file: **work in progress, updated as results arrive**;
-the verdict table at the end is authoritative.
+`/srv/work/s2/logs` (index: `C/backup-restore/logs-index.md`); the scripts are in `C/backup-restore/`. Status: final (the lead's session restarted once; the run was continued from the logs, nothing was measured twice). Section 9 is the verdict table, section 10 the findings.
+Times in the logs are UTC; the first part of the work ran on 2026-10-28, the rest on 2026-10-29.
 
 ## 0. Dataset
 
@@ -138,3 +138,90 @@ With a fresh full the same drill takes 35 s instead of 105 s: the RTO is dominat
 
 After every repair the next `backup verify` passed again and the protection reasons lost `repository_unreadable`: the Control Plane recovers without manual state surgery. Nothing the Control Plane did touched the repository.
 The protection state itself never reaches "protected" in this lab because the repository is posix, which the product never counts as off-host (`not_off_host`, `no_verified_backup`, `rpo_unknown`, PITR window `none`); the achievable RPO can therefore not be read from the product here (NOT RUN, would need an S3 pgBackRest repository).
+
+## 7. restic logical path: local repository and S3 (versitygw v1.8.0 over TLS), with globals
+
+Setup as the runbooks document it: `/etc/exponetdb-node/repositories/<id>/{repository,password,mode,env}` provisioned by root (S3 keys only in the 0600 `env` file), `restic init` by hand, then `backup.run kind logical databases ["app"]` through the shipped helper (the TC-012 sandbox fix works: no read-only file system).
+
+| step | local repository | S3 (TLS, self-signed CA in the system store) |
+|---|---|---|
+| logical backup of `app` (7.7 GB): `pg_dump -Fc` + `pg_dumpall --globals-only`, restic snapshot | **100.0 s** (product 100.4 s), `app.dump` 1.03 GB, `globals.sql` 1,128 bytes, repository 947 MB; 77 MB/s source | **103.3 s** (product 101.5 s), repository 947 MB |
+| `backup.list` | 0.5 s, snapshot listed (`kind logical`, `sizeBytes null`: restic sizes are not reported) | same |
+| `backup.verify` (`restic check --read-data-subset=1/10`) | 1.3 s, `succeeded`, verifyErrors 0 | 1.3 s, same |
+
+Control Plane: both repositories adopt (`l2_logical`, engine `restic`, provider `posix` / `s3_compatible`; an endpoint host ending in `.test`, `.local`, `.internal`, `.example`, `.invalid` is refused `VALIDATION_FAILED` without a reason, and the endpoint cannot carry a port or `http`,
+so a plain-HTTP or non-443 S3 endpoint can neither be adopted nor appear in the generated runbook). `backup refresh` lists the snapshots; `POST /backup-runs {kind:"logical"}` is answered `201 decision deny` for both repositories (the Control Plane does not start logical runs; they are started on the host, as the first campaign noted).
+
+**Restore from the generated runbook (re-check of TC-045 / D-07), small snapshots first, then 7.7 GB:**
+
+| case | result |
+|---|---|
+| snapshot WITH `globals.sql` (tiny database owned by one role, `GRANT ... TO s2_reader`) | the script prints `runbook: review .../globals.sql before applying it (roles without passwords)` and goes on; `pg_restore --exit-on-error` stops at `GRANT SELECT ON TABLE public.t TO s2_reader`: **`role "s2_reader" does not exist`**, exit 1; the cluster keeps running, database `tiny` exists half restored, no role was created |
+| snapshot WITHOUT a globals file | the script does not stop for the missing file; it fails the same way at the same `GRANT`, exit 1 |
+| the real 7.7 GB snapshot, local repository | `restic restore` + `initdb` + start + `pg_restore`: **80.7 s** until it stopped with the same error (exit 1); the database exists with 40,000,000 accounts and 680 marker rows loaded, but the script never reports success and the roles are missing |
+| the real 7.7 GB snapshot, S3 repository | NOT RUN (time); the S3 snapshot is intact (restic check passes), the script differs from the local one only in the repository URL and the two key-file placeholders |
+
+So TC-045 / D-07 is **not fixed**: the runbook neither applies the globals nor stops without them; with roles in the dump it always ends with exit 1 and a half-restored, running cluster. The logical restore itself is fast (80.7 s for 7.7 GB when the roles exist; I did not run the manual `psql -f globals.sql` workaround to completion).
+
+## 8. Repository full, restore without space, retention, concurrency
+
+**Repository full** (a fresh repository on a 1.7 GB loop filesystem as `repo1`; the helper has to be restarted to see a mount made after it started, which is why my first two attempts failed to start runs at all: `START FAILED`):
+full 26.6 s (1.19 GB), differential 12.4 s (+346 MB), then the incremental: **`failed`, exit 64 after 46 s**:
+`ERROR: [064] ... unable to write '.../20261029-201007F_20261029-201257I/pg_data/base/16385/16415.3.zst': [28] No space left on device` (pgBackRest retried twice, 18 s each; the message comes from the engine excerpt, the helper adds nothing).
+The repository is left safe: `pgbackrest info` still lists only the completed full and differential (`status: ok`); the aborted incremental directory stays and is resumed or cleaned by the next backup. WAL archiving fails at the same time:
+`archive command failed with exit code 104` every second, `failed_count` 43 to 103, `.ready` backlog 20 and growing, `pg_wal` 136 files, `pgbackrest check` `ERROR: [082] WAL segment ... was not archived before the 60000ms timeout`. Way forward (documented in RB-06): free or grow the repository, then the backlog drains by itself.
+After the filesystem was grown online (`truncate`, `losetup -c`, `resize2fs`) the backlog drained to 0 within the minute, `failed_count` stopped at 133, and the next incremental `succeeded` in 14.5 s (it resumed over the aborted directory). Repository-level safe state: yes; documented way forward: RB-06 (names the symptom, not the cause "repository full"; the product itself would show `wal_archive_failing`/`archive_stale` after a refresh; I did not wire the Control Plane to the loop repository, NOT RUN).
+
+**Restore without disk space** (TC-046 / D-08): with a filler file leaving 5.0 GB free where 7.74 GB (+10 %) are needed, `restore.prepare` answers `refusals: ["space_insufficient"]` (spaceRequired 7,742,276,705, available 5,368,692,736) but
+`restore.execute` with the same run id is **accepted and starts writing: the free space fell from 5.0 GB to 349 MB in 4 s**; my guard stopped the unit (exit 63) - without it the filesystem would have filled. D-08 (no re-check at execute) is **not fixed**.
+Also: `restore.prepare` measures the free space of the *engine directory*, not of the scratch directory where the data is written (a separate scratch filesystem of 2.9 GB was reported as 38.7 GB available).
+The Control Plane never calls execute after a refused prepare, so the exposure is a stale plan or a hand-made job; the filesystem under a registered cluster can still be filled that way.
+
+**Retention** (helper `backup.expire`, no Control Plane route exists; the host config says `repo1-retention-full=3`, there were 3 fulls plus chains): `fullCount=1` while `keepLabels` names the oldest full is refused before anything runs
+("the retention would remove, or cannot be shown to keep, backup ..."); `fullCount=1` keeping the newest full succeeds in 1.3 s (the engine runs a dry run first) and removes **three full chains and all WAL before the kept backup**: the archive window shrank from `...7C` to `5/FF .. 6/13`.
+Effect on the PITR window: `restore.prepare` for the two earlier PITR targets (T1, T3) before the expiry: no refusal; after: `refusals: ["target_outside_window"]`, `walContinuous: false`. PITR to a time before the oldest remaining backup is impossible afterwards, as it must be; the refusal is clear.
+
+**Concurrency** (helper level): a restore started 3 s after a full backup began: both `succeeded` (the restore used the previous complete backup, total 39 s); a backup started 10 s into a restore: both `succeeded`; a second backup started 2 s after another one: both `succeeded` (the first finished within 0.8 s, so no overlap was proven: PARTIAL).
+
+## 9. Verdict per sub-item of the task
+
+| # | item | verdict | one line |
+|---|---|---|---|
+| 1 | full, differential, incremental, WAL archiving under pgbench load, with time and size | **PASS** | 14.5 to 21.2 s for 7.6 GB (358 to 433 MB/s), 1.11 to 1.19 GB in the repository; archiving kept up with 34.6 MiB/s of WAL (lag <= 0.9 s, 0 failures); pgbench lost no transaction |
+| 2a | restore to the end of the archive | **PASS** | 67 s (helper, with checks), 101 s on another host; data equal to the source |
+| 2b | PITR to a recorded time with a marker table | **PASS** | five targets, exact marker counts and checksums, last replayed commit 0.8 to 3.5 ms before the target |
+| 2c | restore on another host from the repository only | **PASS** | s2-host2, read-only repository, offline runbook, 101 s / 20.9 s / 25.5 s |
+| 3a | restic logical path to a local repository | **PASS** backup and verify, **FAIL** restore | 100 s backup; the generated runbook cannot complete (globals) |
+| 3b | restic logical path to S3 | **PASS** backup and verify, restore **NOT RUN** | 103 s backup, TLS endpoint; plain-HTTP or ported endpoints cannot be adopted |
+| 3c | globals (roles) restored; runbook stops without them | **FAIL** | TC-045 / D-07 not fixed |
+| 4 | every drill kind via the product | **PARTIAL** | `latest` 105 s, `older` 112 s, `backup:<id>` 131 s, `pitr_random` 35 s all `passed` with RTO equal to the stopwatch within 1 s; offline attested; explicit `pitr:` selections were refused at plan time; the CLI as a process can plan but not apply a drill (human only, by design); the achieved recovery point is reported only for time targets |
+| 5a | corrupt backup file | **PASS** | detected by verify (4 errors), restore fails with exit 29, Control Plane `VERIFICATION_FAILED`, later drills denied |
+| 5b | corrupt WAL segment | **FAIL** (newest segment) / PASS (middle) | the middle hole is caught by the drill; a damaged newest segment passes the drill with committed rows lost |
+| 5c | deleted WAL segment (middle, end, stop segment) | **FAIL** | whole-repo and label verify pass in all three positions; the newest-segment case passes the drill with 12 rows lost |
+| 5d | wrong key | **PARTIAL** | helper clear; Control Plane: errorCode null on refresh, 102 s `OUTCOME_UNKNOWN` on verify |
+| 5e | repository full | **PASS** | engine message names the device error, repository stays safe, recoverable |
+| 5f | repository deleted | **PARTIAL** | state is true (`degraded`, `unknown`) but codes mislead, `backup.list` helper answer is an empty success |
+| 5g | retention vs PITR window | **PASS** | expire refuses to drop a kept label; early PITR targets become `target_outside_window`; no Control Plane route for expire |
+| 5h | restore without disk space | **FAIL** | D-08 not fixed |
+| 5i | restore while a backup runs | **PASS** | separate domains, both succeed |
+| 6 | numbers table | **PASS** | `C/backup-restore-numbers.md` |
+| - | repeat on PostgreSQL 16 and 18 | **NOT RUN** | no time in the budget; the lab image carries PostgreSQL 17 packages only; the helper and pgBackRest code paths are version-independent except `restoreTypeArgs` (covered by R1's Go tests) |
+| - | achievable RPO as the product reports it | **NOT RUN** | the product counts only off-host repositories; a posix repository gives `rpo_unknown`, `pitrWindow null` by design; an S3 pgBackRest repository was not wired in |
+| - | Control Plane `backup verify` of the "stop segment deleted" case, and a drill on it | **NOT RUN** | helper-level result only |
+
+## 10. Findings (the harness refused a write to `F/findings-S2.md`; they are returned as text and kept here)
+
+1. **[P1] A drill passes, and so does the restore, while committed data is missing: damage to the newest archived WAL segment** (area `packages/backups` `replayShort`, `selection.ts:98`, `kinds.ts:1356`; helper `restore.execute`). Reproduction: a 1 Hz marker table, `pg_switch_wal()`, wait for the archive, delete (or flip 16 bytes in) the newest segment, run `restore.execute` to the end of the archive and `POST /clusters/{id}/drills {selection:{kind:"latest"}}`. Expected: restore or drill fails, or at least reports the position reached against the last archived position. Actual: helper run `succeeded`, all checks passed, Control Plane drill `passed` with `measuredRtoSeconds 35`; the restored `marker` has 12 (deleted) or 4 (corrupted) committed rows fewer than the source. Root cause: the check compares the reached position with the *start* of the newest segment, and the drill configures no row count; `fingerprint` and `ledger_head` are `not_run`. Fix: compare with the end of the newest segment, take the archive end from `pg_stat_archiver.last_archived_wal` of the node (the node knows what it archived last), and add a mandatory data check (a count or checksum the node computed on the source at the backup's stop time). Acceptance test: host scenario with the marker table, delete / corrupt the newest segment, drill must end `failed`.
+2. **[P1] `backup.verify` passes after any deleted WAL segment, including the stop segment of the newest backup, which makes it unrestorable** (residual of TC-011, reproduced at 7.7 GB: middle, newest and stop segment all `verifyErrors 0`; the stop-segment backup restores to `FATAL: WAL ends before end of online backup` while its verification is `passed`; the Control Plane's label-scoped verify also passed with the newest segment deleted). Root cause as R1: pgBackRest does not report gaps; the helper does not compute them. Fix: list the archive segment names and compute gaps; fail the verification for a gap inside a backup's start..stop range and set `walContinuous`. Acceptance: delete each of the three positions, verify must fail.
+3. **[P2] The restic runbook does not apply globals and does not stop without them (TC-045 / D-07 not fixed)**: with `GRANT ... TO role` in the dump `pg_restore --exit-on-error` ends exit 1 after loading the data, leaving a running half-restored cluster; a snapshot without any globals file is not detected. Reproduced on tiny snapshots and on the 7.7 GB snapshot (80.7 s). Fix: stop before `pg_restore` when no `globals*.sql` exists, create the roles (or print the manual step and exit), refuse to continue past errors.
+4. **[P2] `restore.execute` does not re-check space (D-08 not fixed) and `restore.prepare` measures the engine directory, not the scratch directory** (5.0 GB free, 7.74 GB needed: prepare refuses, execute is accepted and writes 4.6 GB in 4 s). Fix: repeat the prepare checks at execute and measure the filesystem of `scratch/`.
+5. **[P2] Wrong key or deleted repository: `backup verify` needs 102 s and ends `OUTCOME_UNKNOWN` (run `lost`) although the helper refused the start at once; `backup refresh` ends `failed` with `errorCode null`; the deleted repository is reported as a foreign stanza** (`precondition_failed: the stanza does not belong to cluster`, `system_identifier_mismatch`, `RESTORE_TARGET_MISMATCH`), and the helper's `backup.list` answers `{"backups":0}` with no error. Fix: map the helper refusals (`failed`, `precondition_failed`) to definitive failures with their code, return an error for a missing stanza path, name "key" and "missing repository".
+6. **[P2] `pitr_random` is refused (409 `no_backup_selectable`) while a verified backup exists until a `wal.archive_status@1` observation exists; `backup refresh` does not make it; in one world (all five backups verified, observation present) even explicit `pitr:` plans were refused `point_in_time_outside_window`.** The reason text does not say what to do; the protection state shows no PITR window. Fix: let the refresh record the archive's newest segment time, or name the missing observation in the refusal.
+7. **[P3] A drill's record does not carry the recovery point reached for `latest` / `older` / `backup:` (only time targets name the last replayed commit), no data comparison, `fingerprint` and `ledger_head` are `not_run`, `amcheck` covers 1 of 3 to 7 databases.** The number the lead asked for (RPO achieved) cannot be read from the record.
+8. **[P3] Latency: a drill's operation takes 2.1 times its RTO (the scratch directory is discarded 60 to 108 s after the verification), REST verify operations take 3.9 to 38 s for a 1 to 2 s engine run (node job polling).**
+9. **[P3] CLI: `restore runbook` (human only) and drill apply cannot be driven with an API key (`PERMISSION_DENIED` generic text, `SCOPE_NOT_DELEGABLE`); `15-cli/reference.md` lists `restore.plan` for the runbook and does not say human only.** Also `backup run --kind logical` and `backup expire` have no Control Plane path (`decision deny`, no route).
+10. **[P3] S3 adoption limits: endpoint hosts under `.test`, `.local`, `.internal`, `.example`, `.invalid` are refused with `VALIDATION_FAILED` and no reason; no port, no `http`, so lab or private S3 endpoints cannot be adopted or put into the runbook.**
+
+Open decisions for the owner (not findings): (a) should `backup.verify` compute WAL gaps itself (D-R1-2 stands); (b) must a drill carry a data check (count or checksum from the source) before `passed`, and is `amcheck: not_run` acceptable at 1 of 7 databases (OD-60); (c) should drills be drivable from a headless CLI (a human OAuth session) or stay browser-only.
+
+Comparison with the first campaign (same host class): drills now produce a passing record with a measured RTO (the first campaign had none): 105 / 112 / 131 / 35 s against stopwatch values within 1 s. Fixed since: TC-009 (drill `latest`/`older`), TC-010 (`amcheck` advisory), TC-011 (corrupt files and WAL counted), TC-012 (local restic repository), TC-013 (`drills/offline` 201). Not fixed: D-05 shape (100 s `OUTCOME_UNKNOWN`), D-07, D-08, D-10 (full / differential / expire / logical through the Control Plane).
