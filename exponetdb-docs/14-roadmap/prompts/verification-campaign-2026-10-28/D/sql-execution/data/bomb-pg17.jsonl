@@ -1,9 +1,0 @@
-{"at":"2026-10-29T18:36:38.418Z","step":"temp-files-15s: read starts"}
-{"at":"2026-10-29T18:36:54.537Z","step":"temp-files-15s: read returned QUERY_TIMEOUT"}
-{"major":17,"label":"temp-files-15s","sql":"SELECT g FROM generate_series(1, 1000000000) g","result":{"outcome":"QUERY_TIMEOUT","ms":16078},"peakContainerMb":2664,"oomKills":0,"bystanderSessionSurvived":true,"bystanderError":null,"recoveredAfterMs":33,"tempDirMbMax":2262,"tempDirMbSamples":[170,332,492,692,876,1094,1340,1524,1556,1741,1904,2063,2142,2262,1]}
-{"at":"2026-10-29T18:36:54.907Z","step":"big-values-streaming: read starts"}
-{"at":"2026-10-29T18:36:59.414Z","step":"big-values-streaming: read returned query"}
-{"major":17,"label":"big-values-streaming","sql":"SELECT sum(length(repeat('x', 500000000))) FROM generate_series(1, 6)","result":{"outcome":"query","ms":4477},"peakContainerMb":842,"oomKills":0,"bystanderSessionSurvived":true,"bystanderError":null,"recoveredAfterMs":20}
-{"at":"2026-10-29T18:36:59.713Z","step":"aggregate-of-big-values: read starts"}
-{"at":"2026-10-29T18:38:39.719Z","step":"aggregate-of-big-values: read returned HUNG: no result 100 s after the start (statement timeout was 60 s)"}
-{"major":17,"label":"aggregate-of-big-values","sql":"SELECT array_agg(repeat('x', 100000000)) FROM generate_series(1, 100)","result":{"outcome":"HUNG: no result 100 s after the start (statement timeout was 60 s)","ms":100000},"peakContainerMb":3069,"oomKills":1,"bystanderSessionSurvived":false,"bystanderError":"Connection terminated unexpectedly","recoveredAfterMs":36}

@@ -1,7 +1,0 @@
-50 bundles -> OK
-51 bundles -> bundles: Too big: expected array to have <=50 items
-500 bundles -> bundles: Too big: expected array to have <=50 items
-{
-  bundles: 50,
-  migrationIds: 200,
-}

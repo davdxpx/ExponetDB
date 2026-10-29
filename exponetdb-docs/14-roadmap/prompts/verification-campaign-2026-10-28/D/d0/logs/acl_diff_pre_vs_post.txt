@@ -1,9 +1,0 @@
-407a408
-> fn  backups.record_offline_drill(text,text,text,text,text,text,text,timestamp with time zone,timestamp with time zone) owner=exdb_migrate definer=true config={"search_path=pg_catalog, pg_temp"} acl={exdb_migrate=X/exdb_migrate,exdb_serve=X/exdb_migrate}
-412a414
-> fn  migrations.archive_mirror_rows(text,text,integer,text[],text) owner=exdb_migrate definer=true config={"search_path=pg_catalog, pg_temp"} acl={exdb_migrate=X/exdb_migrate,exdb_worker=X/exdb_migrate}
-468a471
-> fn  operations.recovery_transition_allowed(text,text) owner=exdb_migrate definer=false config={search_path=pg_catalog} acl={exdb_migrate=X/exdb_migrate,exdb_serve=X/exdb_migrate,exdb_worker=X/exdb_migrate}
-569a573,574
-> rel migrations.ledger_mirror_history owner=exdb_migrate rls=false/false acl={exdb_migrate=arwdDxtm/exdb_migrate,exdb_serve=r/exdb_migrate,exdb_worker=r/exdb_migrate}
-> rel migrations.ledger_mirror_history_history_id_seq owner=exdb_migrate rls=false/false acl=-

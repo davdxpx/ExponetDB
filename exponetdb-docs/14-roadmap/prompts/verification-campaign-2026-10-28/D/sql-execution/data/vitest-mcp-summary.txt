@@ -1,7 +1,0 @@
- Test Files  1 failed (1)
-      Tests  1 failed | 1 passed (2)
-   Start at  18:27:04
-   Duration  222.03s (tests 97%, transform 3%, import 1%)
-
-     ✓ refuses or contains every statement; the target does not change 35001ms
-     × a read whose backend is terminated returns, and the cluster keeps serving reads 151210ms

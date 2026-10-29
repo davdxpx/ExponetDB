@@ -1,1 +1,0 @@
-ALTER TABLE public.orders ADD COLUMN line_no bigint GENERATED ALWAYS AS IDENTITY;

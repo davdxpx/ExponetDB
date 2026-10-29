@@ -1,4 +1,0 @@
-Error MIGRATION_CHECKSUM_MISMATCH: This migration id is already known with a different checksum. Applied history is immutable.
-  Restore the original bundle and add a new migration for the change.
-  migrationId: 01M64R37M90NC2WXENA5GKP3B9
-  (request req_01M64R3VK5C79NGXA35K3YZSE1)
