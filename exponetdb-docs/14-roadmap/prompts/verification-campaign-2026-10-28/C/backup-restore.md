@@ -65,13 +65,13 @@ Repository adopted (`l1_physical`, pgBackRest, posix), ownership `adopted_runs`,
 
 | selection | source (restore record) | outcome | RTO reported (`measuredRtoSeconds`) | RTO by stopwatch | phases (restore / recover / verify) | apply accepted to operation `succeeded` |
 |---|---|---|---|---|---|---|
-| `latest` | newest full, WAL 2/9000000 .. 4/D4000000 (about 6 GB of WAL after it) | passed | **105 s** | 104.3 s | 8.5 / 92.2 / 4.2 s | 217.9 s |
-| `older` | the differential, WAL 1/EE000000 .. 4/D4000000 | passed | **112 s** | 111.7 s | 9 / 99 / 5 s | 219.7 s |
-| `backup:<oldest full>` | WAL 1/7C000000 .. 4/D4000000 (about 12 GB of WAL) | passed | **131 s** | 130.7 s | 7.4 / 122 / - s | 220.0 s |
+| `latest` | newest full, WAL 2/9000000 .. 4/D4000000 (715 segments, 11.4 GB of WAL after it: 4 min of the load session, 21 h of autovacuum, the 5.45 GB burst) | passed | **105 s** | 104.3 s | 8.5 / 92.2 / 4.2 s | 217.9 s |
+| `older` | the differential, WAL 1/EE000000 .. 4/D4000000 (11.8 GB) | passed | **112 s** | 111.7 s | 9 / 99 / 5 s | 219.7 s |
+| `backup:<oldest full>` | WAL 1/7C000000 .. 4/D4000000 (13.7 GB) | passed | **131 s** | 130.7 s | 7.4 / 122 / - s | 220.0 s |
 | `pitr_random`, `pitr:<T1>`, `pitr:<T3>` | - | **plan refused, 409** `REGISTRY_CONFLICT` reason `no_backup_selectable` / `point_in_time_outside_window` (see finding F-S2-2) | - | - | - | - |
 
 The reported RTO equals the stopwatch to within 1 s in all three drills: the number is real. It is the time from the start of the restore to the end of verification; the operation as a whole needs 2.1 times as long, because the
-worker only issues the `discard` step about 108 s after the verification ended (the 7.6 GB scratch directory stays on disk for that time). RTO scales with the WAL that must be replayed (65 MB/s here), not with the data size: 105 s for 6 GB of WAL, 131 s for 12 GB.
+worker only issues the `discard` step about 108 s after the verification ended (the 7.6 GB scratch directory stays on disk for that time). RTO scales with the WAL that must be replayed (112 to 124 MB/s here), not with the data size: 105 s for 11.4 GB of WAL, 131 s for 13.7 GB. A fresh full backup makes the same drill take 35 s (section 6).
 A drill record carries `selection`, `mode control_plane`, `outcome`, `measuredRtoSeconds`, `startedAt`, `finishedAt` and `restoreId`; the restore record carries phases, source walFrom/walTo and the checks.
 It does **not** carry the recovery point that was reached (no LSN, no commit time): the only statement is the check `recovery_target_reached passed: "recovery ended and the cluster was promoted"`. The RPO a drill achieved is therefore not measurable from the product's records (it is from the helper's `run.status`: `recoveryReachedAt`).
 The checks a drill runs through the Control Plane are `recovery_target_reached`, `probe_simple`, `probe_extended`, `amcheck` (`not_run`: "177 indexes checked in 1 of 3 databases; amcheck is missing in the others"), `fingerprint` and `ledger_head` (`not_run`: "needs a Control Plane read of the scratch cluster (not in V1)"); **no row count or data comparison is configured**, so a drill passes with an unverified data set (see section 5).
@@ -121,3 +121,20 @@ After the configuration was restored: `check` clean. Safe state: yes (nothing wa
 **Repository deleted** (archive and backup directories moved away): `backup.list` answers **`{"backups":0}` with no error** (an empty list for a repository that does not exist; `pgbackrest info` says `status: error (missing stanza path)`);
 `backup.verify` / `backup.run` are refused `precondition_failed: the stanza does not belong to cluster 17/exdbnode (system identifier)` and `restore.prepare` says `system_identifier_mismatch`: both texts describe a foreign stanza, not a missing repository.
 Archiving fails (`failed_count` 6, `last_failed_wal` named). Moving the directories back: `check` clean, archiving resumes, no backlog.
+
+## 6. The same damage through the Control Plane (REST, repository adopted as `adopted_runs`; baseline = newest full `20261029-190316F` with a fresh archive)
+
+Baseline: product verify `passed`; drill `pitr_random` (a random time inside the window, picked 19:13:57 and 19:18:12) **passed twice, `measuredRtoSeconds` 35 s against 34.5 s by stopwatch** (restore 9.5 s, recover 21 s, verify 4 s; the check text names the last replayed commit, so this drill does report its recovery point).
+With a fresh full the same drill takes 35 s instead of 105 s: the RTO is dominated by the WAL since the last backup.
+
+| injected damage (and repair afterwards: file moved back, config restored) | product `backup verify` of the newest full | `drill latest` | what the operator sees |
+|---|---|---|---|
+| newest WAL segment **deleted** (held the last committed rows) | `succeeded / passed` | **`passed`**, `measuredRtoSeconds` 35, all reported checks passed | nothing; 12 committed rows are missing from the restored data (helper-level proof in section 5) |
+| newest WAL segment **corrupted** (16 bytes) | `succeeded / passed` | **`passed`**, RTO 35 s | nothing; 4 committed rows missing |
+| a MIDDLE WAL segment corrupted | `succeeded / passed` (the segment is outside the backup's own range) | `failed` / operation `verification_failed` / `VERIFICATION_FAILED`: check `recovery_target_reached failed: "replay reached 5/6C8035C0, the archive the plan counted on ends at 5/F5000000"`; scratch discarded; 38 s | clear, ids and positions named |
+| a data file of the backup corrupted | **`verification_failed` / `VERIFICATION_FAILED`**, catalog verification `failed` (7.3 s) | a drill plan for `latest` or `backup:<id>` is answered `201 decision deny` (the backup is not verified), no restore is attempted | clear; repaired file verifies again |
+| wrong cipher passphrase | `backup refresh` ends `failed / not_applied` with **`errorCode null`**; repository `degraded`, reconciliation `BACKUP_REPOSITORY_UNAVAILABLE`; protection `unknown`, reason `repository_unreadable`; `backup verify` needs **102.5 s** and ends `failed / OUTCOME_UNKNOWN` (the engine run is recorded `lost`, although the helper refused the start at once with "pgBackRest's catalog is not readable") | `failed / not_applied / RESTORE_SOURCE_INVALID` after 3.2 s | state is true, the cause (key) is not named, the 100 s wait is the D-05 shape again |
+| repository deleted | same as the wrong key: refresh `failed` with `errorCode null`, `repository_unreadable`; verify 102.4 s `OUTCOME_UNKNOWN`, run `lost` | `failed / not_applied / RESTORE_TARGET_MISMATCH` after 3.4 s (the helper says `system_identifier_mismatch`: the code names a foreign stanza, not a missing repository) | misleading code |
+
+After every repair the next `backup verify` passed again and the protection reasons lost `repository_unreadable`: the Control Plane recovers without manual state surgery. Nothing the Control Plane did touched the repository.
+The protection state itself never reaches "protected" in this lab because the repository is posix, which the product never counts as off-host (`not_off_host`, `no_verified_backup`, `rpo_unknown`, PITR window `none`); the achievable RPO can therefore not be read from the product here (NOT RUN, would need an S3 pgBackRest repository).

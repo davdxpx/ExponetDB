@@ -29,3 +29,10 @@
 | E1 P1 needs_attention (no exit) | B1 P1; plus D0 P2 and R1 P2 "recovery closes before its own checks" stay separate (different defect: ordering) | same engine gap |
 | C1 P2 "no certificate expiry signal" | the TC-042 / OD-62 item in F/decisions-R2.md | link, do not duplicate |
 | Corrected count | D0 "27 unpinned bundles" | 45 directories, 21 pinned, 24 unpinned (E2 recount, lead re-checked) |
+
+## S1 confirmations (stack reproductions, filed as evidence lines on the existing findings)
+
+- C1 P1 head-of-line blocking: confirmed (evidence line added to `findings-C1.md`).
+- E1 P1 / B1 P1 `needs_attention` dead ends: confirmed for rollback, ledger.reconcile, drift.accept and unknown outcome (line added to `findings-E1.md`; `findings-B1.md` first P1 is dropped as a duplicate).
+- D0 P2 close-before-checks: confirmed end to end (line added to `findings-D0.md`); R1's P2 on the same ordering is a duplicate, keep one.
+- S1 P2 "approval after plan expiry accepted" is the stack evidence for B1's approval-window P2 and OD-64: keep S1's (stronger), fold B1's in.

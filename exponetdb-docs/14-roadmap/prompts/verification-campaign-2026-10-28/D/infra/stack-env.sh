@@ -185,6 +185,7 @@ cs_restore() {
 # cs_status   control-store status with the runtime login exdb_serve (JSON: status, installation id, bundle counts)
 cs_status() {
   ( set -a; . "${EXSTACK_STATE}/env/operator-serve.env"; set +a
+    unset EXPONETDB_PUBLIC_URL   # the read-only store command accepts the store URL and the log level only
     "${EXSTACK_NODE_BIN}" --liftoff-only "${EXSTACK_BUNDLE}" control-store status )
 }
 

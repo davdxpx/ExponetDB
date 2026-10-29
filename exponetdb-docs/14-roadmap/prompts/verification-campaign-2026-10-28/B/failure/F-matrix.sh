@@ -25,6 +25,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 PG=pg16; PGPORT=$(_stk_port "$PG"); PGMAJOR=16
 OUT="${S1_LOGS}/F"; mkdir -p "$OUT"; RESULTS="${OUT}/RESULTS.tsv"
+mono() { cut -d' ' -f1 /proc/uptime | cut -d. -f1; }   # monotonic seconds: the wall clock is stepped by some cells
 SLEEP_S=8; SETTLE="${SETTLE:-10}"; FOLLOW_MAX="${FOLLOW_MAX:-300}"
 
 # ----- injections -------------------------------------------------------------------------------------
@@ -45,15 +46,20 @@ inj_pg_fast()           { pg_restart "$PG" fast; }
 inj_retry_same_key()    { :; }   # handled by the client leg (see cell_client)
 inj_retry_new_key()     { :; }
 
-recover_all() {
-  clock_restore >/dev/null 2>&1
-  net_unblock >/dev/null 2>&1; net_clear >/dev/null 2>&1
+# put the services, the Control Store and the target cluster back (the injections of the network and the clock are kept)
+recover_services() {
   local c r
   docker start "${EXSTACK_CONTROL_NAME}" >/dev/null 2>&1; _stk_wait_control >/dev/null 2>&1
   pg_lsclusters -h | awk -v v="$PGMAJOR" -v c="${EXSTACK_CLUSTER_NAME}" '$1==v && $2==c && $4!="online" {print "down"}' | grep -q down && systemctl start "postgresql@${PGMAJOR}-${EXSTACK_CLUSTER_NAME}.service"
   syncrep_off "$PG"
   for r in gateway worker serve agent; do systemctl is-active --quiet "$(_stk_unit "$r")" || systemctl start "$(_stk_unit "$r")"; done
   local i; for i in $(seq 1 60); do stack_ready && break; sleep 1; done
+}
+# everything back to normal: the clock, the loopback rules, then the services
+recover_all() {
+  clock_restore >/dev/null 2>&1
+  net_unblock >/dev/null 2>&1; net_clear >/dev/null 2>&1
+  recover_services
 }
 
 # ----- one cell ---------------------------------------------------------------------------------------
@@ -103,7 +109,7 @@ SQL
     PGDATABASE="$db" psql_target "$PG" -q -c "BEGIN; SELECT txid_current(); SELECT pg_sleep(90); COMMIT" >/dev/null 2>&1 &
     HOLDER_PID=$!; sleep 1
   fi
-  local t0; t0=$(date +%s)
+  local t0; t0=$(mono)
   echo "== cell ${id} target ${T} bundle ${idm}"
   local injected="no"
   fire() { "inj_${inj}"; injected="$(date -u +%T.%3N)"; echo "injected ${inj} at ${injected}"; }
@@ -119,7 +125,7 @@ SQL
   fi
   planid="$PLAN_ID"
   [ "$phase" = between ] && { fire; sleep 3; }
-  if [ "$inj" = retry_same_key ] || [ "$inj" = retry_new_key ]; then cell_client "$inj" "$planid" "$log"; else
+  if [ "$inj" = retry_same_key ] || [ "$inj" = retry_new_key ]; then cell_client "$inj" "$planid" "$log"; op="$OP_ID"; else
     mapply "$planid" --no-wait; op="$OP_ID"
     if [ -z "$op" ]; then   # the apply request failed (serve down)
       echo "apply request failed under injection; recovering and applying again"
@@ -140,43 +146,53 @@ SQL
     esac
   fi
   [ "$phase" = commit ] && { sleep 5; kill "$HOLD" 2>/dev/null; docker exec "${EXSTACK_CONTROL_NAME}" true >/dev/null 2>&1; ctl_sql "SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity WHERE query LIKE '%ledger_mirror IN EXCLUSIVE%' AND pid <> pg_backend_pid()" >/dev/null 2>&1; }
-  sleep "$SETTLE"; recover_all
+  sleep "$SETTLE"; recover_services
   # (the older out-of-band transaction of a non-transactional cell ends here, so the index build can finish or fail)
   [ -n "$HOLDER_PID" ] && { PGDATABASE="$db" psql_target "$PG" -Atc "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE query LIKE '%pg_sleep(90)%' AND pid <> pg_backend_pid()" >/dev/null 2>&1; kill "$HOLDER_PID" 2>/dev/null; }
   # follow the operation to rest
   local last="" cur st=""
   if [ -n "$op" ]; then
-    while [ $(( $(date +%s) - t0 )) -lt "$FOLLOW_MAX" ]; do
-      cur="$(op_state "$op" 2>/dev/null)"; [ "$cur" != "$last" ] && { echo "  [+$(( $(date +%s) - t0 ))s] $cur"; last="$cur"; }
+    while [ $(( $(mono) - t0 )) -lt "$FOLLOW_MAX" ]; do
+      cur="$(op_state "$op" 2>/dev/null)"; [ "$cur" != "$last" ] && { echo "  [+$(( $(mono) - t0 ))s] $cur"; last="$cur"; }
       case "${cur%% *}" in succeeded|failed|verification_failed|needs_attention|canceled) break ;; esac
+      # a clock step is undone when the operation rests or 90 s after the injection, whichever comes first
+      case "$inj" in clock_*) [ $(( $(mono) - t0 )) -gt 90 ] && clock_restore >/dev/null 2>&1 ;; esac
       sleep 2
     done
+    recover_all
   fi
-  local took=$(( $(date +%s) - t0 ))
+  local took=$(( $(mono) - t0 ))
   record_cell "$id" "$bundle" "$phase" "$inj" "$T" "$db" "$idm" "$op" "$took" "$dir" >&3
   exec 1>&3 3>&-
 }
 
 # a client that times out and retries: leg one is aborted client-side after 300 ms (the request may still be processed),
-# leg two repeats it with the SAME or a NEW Idempotency-Key; the question is whether two operations result
+# leg two repeats it with the SAME or a NEW Idempotency-Key; the question is whether two operations result.
+# The plan is bound to the CLI's client, so the REST calls carry the CLI's own access token (never printed).
 cell_client() { # inj planid log
-  local inj="$1" plan="$2" mode=same
+  local inj="$1" plan="$2" mode=same k1 k2 tok first second
   [ "$inj" = retry_new_key ] && mode=new
-  local r; r="$(human retry-apply "$plan" "$mode")"; echo "retry-apply ($mode key): $r"
-  OP_ID="$(jq -r '.first.op // .second.op // empty' <<<"$r")"
-  [ -z "$OP_ID" ] && OP_ID="$(jq -r '.second.op // empty' <<<"$r")"
-  # operations created for this plan
+  k1="idem-$(cat /proc/sys/kernel/random/uuid)"; k2="$k1"; [ "$mode" = new ] && k2="idem-$(cat /proc/sys/kernel/random/uuid)"
+  exdb whoami >/dev/null 2>&1   # refreshes the token if needed
+  tok="$(jq -r '.credentials | to_entries[0].value.accessToken' "${EXSTACK_STATE}/cli/credentials.json")"
+  curl -s -m 0.3 -o /dev/null -X POST -H "authorization: Bearer ${tok}" -H "idempotency-key: ${k1}" -H 'content-type: application/json' -d '{}' "${EXSTACK_PUBLIC_URL}/api/v1/plans/${plan}/apply"
+  first="aborted"
+  second="$(curl -s -X POST -H "authorization: Bearer ${tok}" -H "idempotency-key: ${k2}" -H 'content-type: application/json' -d '{}' "${EXSTACK_PUBLIC_URL}/api/v1/plans/${plan}/apply" | jq -c '{op: .id, state: .state, code: .code, already: .alreadyAccepted}')"
+  tok=""
+  echo "retry-apply (${mode} key): first=${first} second=${second}"
+  OP_ID="$(jq -r '.op // empty' <<<"$second")"
   echo "operations for the plan: $(ctl_sql "SELECT count(*) FROM operations.operations WHERE plan_id='${plan}'" 2>&1)"
 }
 
 record_cell() { # id bundle phase inj target db migid op took dir
   local id="$1" bundle="$2" phase="$3" inj="$4" T="$5" db="$6" mid="$7" op="$8" took="$9" dir="${10}"
   local store="-" rest="-" next="-" ptr="-" led tabs seq execs ops
+  local w; for w in $(seq 1 40); do stack_ready && break; sleep 1; done   # the REST view needs serve (a killed serve is restarted by recover_all)
   [ -n "$op" ] && store="$(op_state "$op" 2>/dev/null | sed 's/ kind=.*//')"
   [ -n "$op" ] && { local j; j="$(exdb_json operation show "$op" 2>/dev/null)"; rest="$(jq -r '.data.state + " apply=" + .data.applyOutcome + " verify=" + .data.verificationOutcome' <<<"$j" 2>/dev/null)"; ptr="$(jq -r '"retryable=" + (.data.retryable|tostring) + " next=" + (.data.nextAction|tostring) + " err=" + (.data.errorCode|tostring)' <<<"$j" 2>/dev/null)"; }
   led="$(ledger_count "$PG" "$db" "$mid")"; tabs="$(tables_in "$PG" "$db" | tr ',' '\n' | grep -v '^bulk_' | paste -sd+ -)"; [ -z "$tabs" ] && tabs="-"
   if [ "$bundle" = nontx ]; then execs="$(PGDATABASE="$db" psql_target "$PG" -Atc "SELECT count(*) FROM exponetdb.migration_events WHERE migration_id='${mid}' AND event='nontx_started'" 2>/dev/null)"
-  else execs="$(tail -n +"$((LOG0 + 1))" "$PGLOG" | grep -F "exponetdb_migrator@${db} " | grep -c "SELECT pg_sleep(${SLEEP_S})")"; fi
+  else execs="$(tail -n +"$((LOG0 + 1))" "$PGLOG" | grep -F "exponetdb_migrator@${db} " | grep -c "LOG:  execute .*: SELECT pg_sleep(${SLEEP_S})")"; fi
   ops="$(ctl_sql "SELECT count(*) FROM operations.operations o WHERE o.kind LIKE 'migration.%' AND o.subject->>'targetId' = '$(target_id "$T")'" 2>/dev/null)"
   # liveness: an independent change on the same target must complete
   local d2; d2="$(new_project "f-next-${RANDOM}")"
