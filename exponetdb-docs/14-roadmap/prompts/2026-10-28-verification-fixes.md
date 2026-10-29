@@ -20,7 +20,7 @@ still open are not repeated (see `R/verdicts.md`).
 
 ## 1. Summary
 
-Findings: **151** (P0 0, P1 17, P2 62, P3 72). **No P0 by the brief's definition** (no data loss, no secret exposure, no
+Findings: **160** (P0 0, P1 17, P2 63, P3 80). **No P0 by the brief's definition** (no data loss, no secret exposure, no
 way found to change production without the gates). Two P1s are outage-class and the owner may count them as P0:
 a holder of the plain `migrations.plan` scope can fill the Control Store disk until PostgreSQL PANICs, with rows
 that cannot be deleted (VC-001), and one allowlisted `sql_query` can make the kernel kill a backend and restart the
@@ -57,7 +57,7 @@ The headline results:
 | A | automated suites on the pinned toolchain | **PASS** with findings | all 18 CI jobs green; unit 10,383 and integration 1,716 tests, no drop; the only new skip is the prescribed one; `main` has no branch protection; tests depend on in-file order; `mcp:evals` NOT RUN |
 | B | the bundle system as a contract | **FAIL** | contract: 29 documented-versus-implemented differences; 817 executable cases (769 pass, 48 fail, each a finding); I2 and I15 PASS, I9 and I14 FAIL, the rest PARTIAL; I10 replay explained; failure matrix 31 cells (27 pass, 4 partial, 0 fail, nothing re-executed); the planner's risk text is wrong both ways |
 | C | operating it every day | **FAIL** | forward upgrade PASS, rollback impossible; Control Store restore works but RB-10 step 6 and RB-14 do not; backups measured at 7.6 GB; fail-closed answers 500 INTERNAL instead of typed errors; observability cannot alert on most failures |
-| D | security and abuse | **PARTIAL** | no P0: canaries clean, 3,377 authorization requests with no allow where deny expected, agents cannot approve, 15 of 18 hostile bundles denied at plan time; the SQL frame holds but two P1s surround it; SSRF/network NOT RUN or reviewed statically |
+| D | security and abuse | **PARTIAL** | no P0: canaries clean, 3,377 authorization requests with no allow where deny expected, agents cannot approve, 15 of 18 hostile bundles denied at plan time; the SQL frame holds but two P1s surround it; the client-metadata fetcher passed a code review and 241 validator cases (a dynamic SSRF/rebinding run was not done); forged evidence reaches production end to end and one migration id can carry two checksums on two targets (both P2) |
 | E | structure and systems | **done** | `E/structure.md` (ranked weaknesses), `E/proposals.md` (15 proposals `[OPEN]`), state machines, vocabulary, error audit, 72 doc claims (17 violated), recoverability paths |
 | F | readiness scorecard | **FAIL** | `F/readiness.md`: 3 PASS, 10 FAIL against the thirteen Wave 11 preconditions, and the list of what must be true before production |
 
@@ -70,12 +70,12 @@ Verdict meanings: PASS, FAIL, PARTIAL, NOT RUN (the block's own rows say which).
 | Block | P0 | P1 | P2 | P3 | Total |
 |---|---|---|---|---|---|
 | A | 0 | 0 | 2 | 3 | 5 |
-| B | 0 | 4 | 26 | 21 | 51 |
-| C | 0 | 7 | 18 | 15 | 40 |
-| D | 0 | 2 | 7 | 15 | 24 |
+| B | 0 | 4 | 25 | 21 | 50 |
+| C | 0 | 7 | 18 | 19 | 44 |
+| D | 0 | 2 | 9 | 19 | 30 |
 | E | 0 | 2 | 7 | 10 | 19 |
 | R | 0 | 2 | 2 | 8 | 12 |
-| all | 0 | 17 | 62 | 72 | 151 |
+| all | 0 | 17 | 63 | 80 | 160 |
 
 ## 2. Campaign facts
 
@@ -125,138 +125,147 @@ Verdict meanings: PASS, FAIL, PARTIAL, NOT RUN (the block's own rows say which).
 | VC-017 | P1 | ADD COLUMN serial/bigserial/identity rewrites the table under ACCESS EXCLUSIVE; lint and plan call it additive and brief | B |
 | VC-018 | P2 | main has no branch protection or required checks, and cancel-in-progress cancels CI of commits on main | A |
 | VC-019 | P2 | The agent-capabilities host test failed once in CI on the next main commit (NODE_OFFLINE after an injected crash); not reproduced | A |
-| VC-020 | P2 | Evidence rule is weaker than documented: any operation id counts, no divergence check on the evidence target, verification rows not cross-checked with the mirror | B |
-| VC-021 | P2 | The apply checksum depends on client-supplied project defaults: editing `defaults` after an apply makes applied bundles a non-overridable MIGRATION_CHECKSUM_MISMATCH | B |
-| VC-022 | P2 | Default `migration plan` and `migration apply` submit every local bundle; the request accepts 50 | B |
-| VC-023 | P2 | Ledger divergence is noticed only when someone plans: no periodic check, no finding, no suspension | B |
-| VC-024 | P2 | `generation` never changes: documented restore protections are inert, and a future bump switches the divergence check off and re-adopts the restored ledger | B |
-| VC-025 | P2 | Lint overrides, lint profile and invariants are taken from the plan request, not from an authoritative project record | B |
-| VC-026 | P2 | Lint and plan over a dependency chain are cubic: 800 chained bundles take 61 s, a 1,000-deep chain plans in 53 s, 5,000 would take hours | B |
-| VC-027 | P2 | `up.sql` can release the engine's own target lock: `SELECT pg_advisory_unlock_all();` is applied and the `EXDB` locks disappear while the migration runs | B (invariant I4, touches I8) |
-| VC-028 | P2 | The bundle store decides "applied elsewhere" from the Control Store mirror only: in the commit-to-mirror window other bytes under an applied id are accepted | B (I13) |
-| VC-029 | P2 | volatile_default_rewrite fires for stable and immutable defaults (now(), any unqualified function) and forces data_rewrite | B |
-| VC-030 | P2 | type_change_rewrite blocks every ALTER COLUMN TYPE including the no-rewrite cases; no lint-clean form exists | B |
-| VC-031 | P2 | The documented NOT NULL recipe cannot pass the planner: unsafe_not_null fires after the validated CHECK | B |
-| VC-032 | P2 | ADD CONSTRAINT ... UNIQUE USING INDEX is flagged like a scanning constraint | B |
-| VC-033 | P2 | A cheap statement's ACCESS EXCLUSIVE held through later slow statements of the same transactional bundle is reported as brief | B |
-| VC-034 | P2 | DETACH PARTITION ... CONCURRENTLY cannot be authored | B |
-| VC-035 | P2 | Lock-queue protections the docs promise are not delivered | B |
-| VC-036 | P2 | A killed or crash-looping process counts as live for 45 s, so a restart loop shorter than that reads operational | C |
-| VC-037 | P2 | A Control Store outage, a read-only store or a full disk is answered 500 INTERNAL, and pool exhaustion is reported as "unreachable" | C |
-| VC-038 | P2 | The shipped metrics cannot alert on most failures: every API request is route="/unmatched" and the documented operational metrics do not exist | C |
-| VC-039 | P2 | Backup and drill signals are not produced: the drill-finding generator is never run and the catalog is never refreshed on a schedule | C |
-| VC-040 | P2 | No signal exists for an expiring certificate: certificate_expiring and tls_expiring are documented and typed but nothing produces them | C |
-| VC-041 | P2 | Time-based checks mix the process clock with the database clock and there is no skew check | C |
-| VC-042 | P2 | Documented retention classes have no pruning code, and every drift check rewrites every open finding | C |
-| VC-043 | P2 | The audit gate is invisible to probes: a missing audit partition fails every mutation with a plain 500 while /healthz/ready stays ready | C |
-| VC-044 | P2 | A redeploy interrupts a running apply although upgrades.md says workers stop at step boundaries; Docker's default stop time is shorter than the 25 s timeout | C |
-| VC-045 | P2 | A refused recovery has already closed the needs_attention operation and released its lock domain | D |
-| VC-046 | P2 | migrations.ledger_mirror is rewritable in place by the worker; "insert-and-revert-only" is code convention only | D |
-| VC-047 | P2 | A request body of up to 32 MiB is read, parsed and validated before the permission check | D |
-| VC-048 | P2 | A single read floods the target's disk with temp files; the row cap does not bound the work | D |
-| VC-049 | P2 | The CLI prints most error `details` only with `--json`: `PLAN_STALE` does not say which binding changed | E |
-| VC-050 | P2 | The CLI recommends `operation retry-verification` for operations the server refuses | E |
-| VC-051 | P2 | A superseded `needs_attention` operation is recorded with verification outcome `failed` although verification never ran | E |
-| VC-052 | P2 | The documented repair of a broken `verify.sql` cannot be completed with the CLI | E |
-| VC-053 | P2 | RB-10 (Control Store down) leaves the ledger-mirror problem unaddressed | E |
-| VC-054 | P2 | A plan from before an upgrade, or a lost race, answers HTTP 500 `INTERNAL` instead of a catalog code | E |
-| VC-055 | P2 | A plan does not check that its own verification can run: a missing verifier credential parks the target after the commit | E |
-| VC-056 | P2 | Recovery by naming exists for two migration kinds only; every other operation that ends `needs_attention` with an unknown outcome still keeps its domain for ever (TC-005 neighbour) | R |
-| VC-057 | P2 | Planning a node revoke or decommission fails with 500 INTERNAL while any active plan body holds an escaped NUL (regression of the TC-019 fix) | R |
-| VC-058 | P2 | An approval 15 minutes after the plan expired was accepted and the production change ran; awaiting_approval never ends (stack reproduction of TC-034 / OD-64 and of the B1 approval-window finding) | B |
-| VC-059 | P2 | A lost COMMIT reply plus a target restart parks the operation as unknown with the change committed; it is never reconciled, and the only exit mislabels it | B |
-| VC-060 | P2 | The restic runbook does not apply globals and does not stop without them (TC-045 / D-07 not fixed) | C |
-| VC-061 | P2 | restore.execute does not re-check space (D-08 not fixed), and restore.prepare measures the engine directory, not the scratch directory | C |
-| VC-062 | P2 | Wrong key or deleted repository: backup verify needs 102 s and ends OUTCOME_UNKNOWN although the helper refused at once; errors carry no code | C |
-| VC-063 | P2 | pitr_random drills are refused until a wal.archive_status observation exists, and explicit pitr: plans stayed refused in one world | C |
-| VC-064 | P2 | After a restore, a production target the store never mirrored is not blocked, `ledger reconcile` says "nothing to reconcile" while status says "out of sync", and the next apply adopts the unknown row | C |
-| VC-065 | P2 | An old role keeps claiming and finishing operations after the schema moved ahead (503 not_ready, no log line) | C |
-| VC-066 | P2 | The upgrade runbook omits eleven steps: no pre-upgrade backup, outage window, drain, preflight or post-checks | C |
-| VC-067 | P2 | An unmet backup requirement on a production apply answers 500 INTERNAL, and nothing is logged | D |
-| VC-068 | P2 | The first-party CLI fails with PERMISSION_DENIED for everyone whose role binding is on an environment | D |
-| VC-069 | P2 | A sub-megabyte bundle can hold the server's CPU for 30 s or raise its memory by 620 MiB; the limits are not named | D |
-| VC-070 | P2 | A plan that stops part-way leaves the drift baseline behind: every later verified bundle reads as drift (34 findings, 6 critical) until a person accepts all of it | B |
-| VC-071 | P2 | ALTER COLUMN TYPE on a column a view reads: the plan is silent, the apply fails 0A000 after earlier bundles were applied, and the offered remedy does not fit | B |
-| VC-072 | P2 | A clone that takes the registered name is healthy, drift-clean and plannable; apply is refused only as PLAN_STALE without a cause | B |
-| VC-073 | P2 | A renamed or missing database turns `migration plan` into INTERNAL | B |
-| VC-074 | P2 | A hot standby behind the registered endpoint is healthy and plannable; the apply fails as OUTCOME_UNKNOWN | B |
-| VC-075 | P2 | Adding an endpoint of a different instance is applied without a check and suspends the affected targets within seconds; recovering a production target takes plan, approval and 50 s | B |
-| VC-076 | P2 | The documented database move has no executable path: a copy of a registered target is refused in every environment and nothing re-stamps the marker | B |
-| VC-077 | P2 | CREATE PUBLICATION (the standard supabase_realtime) in the legacy history makes the whole analysis incomplete; the operation ends verification_failed with a forward-fix remedy | B |
-| VC-078 | P2 | After a failed write path clears, the roles stay not_ready until their pooled sessions die; a database-level read-only default stops nothing but the heartbeat | C |
-| VC-079 | P2 | One MCP client can push serve far past its 512 MiB container limit: 1,000 concurrent requests, 98 percent rejected 429, RSS 156 to 583 MB | C |
-| VC-080 | P3 | third-party, licenses and ui-safety are part of `bun run verify` but no CI job runs them | A |
-| VC-081 | P3 | A local image build (smoke:image, docker build) needs BuildKit and no document says so | A |
-| VC-082 | P3 | Tests depend on the order of tests inside their file, so a single test cannot be run alone | A |
-| VC-083 | P3 | Edits that do not change the checksum are dropped by ingest, and three lints cannot fire on the server path | B |
-| VC-084 | P3 | c1 summary sentences are looser than c1: spacing, adjacency, formatters and case change the checksum | B |
-| VC-085 | P3 | The CLI reads a whole oversized bundle file into memory before cutting it | B |
-| VC-086 | P3 | Hotfix follow-up is unbuilt: no hotfix_without_evidence finding, no evidence mark | B |
-| VC-087 | P3 | The bundle store has no way to retire a bundle; `pending` lists every never-applied stored id forever | B |
-| VC-088 | P3 | A later migration that fails to execute ends the operation as verification_failed with error code VERIFICATION_FAILED | B |
-| VC-089 | P3 | Seven pinned settings are refused at top level but not guarded after each statement | B (I4) |
-| VC-090 | P3 | A string literal continued across a line comment is valid PostgreSQL and c1 N4, but libpg_query refuses it | B (I5) |
-| VC-091 | P3 | The lint report depends on the order the bundles are submitted in | B (I1) |
-| VC-092 | P3 | The CLI loader turns a symbolic link or directory named `verify.sql`/`up.sql` into an empty file, and reads an oversized file whole | B (I14) |
-| VC-093 | P3 | A deeply nested `migration.yaml` is refused with the YAML library's stack-overflow text, not a named limit | B (I14, I15) |
-| VC-094 | P3 | The limits of bundles are not announced in one place, and two bite below the documented ones | B (I15) |
-| VC-095 | P3 | The bundle store drops edits that do not change the checksum, although the documentation says it keeps them | B (I13; also reported statically by B1 a |
-| VC-096 | P3 | Lock facts and rules missing for several heavy statements | B |
-| VC-097 | P3 | Master-key rotation has no role order, and the wrong order takes serve out of service | C |
-| VC-098 | P3 | A data read runs on the target before its audit event is written | C |
-| VC-099 | P3 | The maintenance loop has no per-task deadline and tasks cannot renew their lease | C |
-| VC-100 | P3 | An oversized JSON request body is refused without naming the limit | C |
-| VC-101 | P3 | archive_mirror_rows binds neither generation, ids nor lease to the operation, and takes no row lock | D |
-| VC-102 | P3 | The three verify.sql files of the new bundles pass on broken bundles and none checks ownership | D |
-| VC-103 | P3 | POST /clusters/{id}/drills/offline with restoredAt ahead of the database clock is a 500 | D |
-| VC-104 | P3 | 24 of 45 Control Store bundles are not pinned, the three new ones among them | D |
-| VC-105 | P3 | migration.resume takes the operation it closes from the target's own ledger events (static reading only) | D |
-| VC-106 | P3 | The existence of node, backup repository and registry-plan subject ids is visible to callers without access | D |
-| VC-107 | P3 | Plan analysis text and advisor evidence reach agents and approvers without the `untrusted` marker | D |
-| VC-108 | P3 | A database client decides, through `application_name`, that ExponetDB must not cancel its session | D |
-| VC-109 | P3 | `packages.apply_update` is a node mutation outside the approval rule and outside the test that pins the catalog | D |
-| VC-110 | P3 | identity.md says every `critical` plan needs a fresh re-authentication to apply; the code enforces it only where a kind or policy rule declares it | D |
-| VC-111 | P3 | Six CLI commands declare scopes the API does not accept | D |
-| VC-112 | P3 | Allowlisted functions and views disclose server details to every data.read caller | D |
-| VC-113 | P3 | The Web editor's classifier calls EXPLAIN a read-only path that sql_query refuses | D |
-| VC-114 | P3 | Thirteen catalog error codes are documented and exposed but never produced | E |
-| VC-115 | P3 | 69 catalog codes carry no remedy; the operationally important ones are listed | E |
-| VC-116 | P3 | `drift.accept` is documented for "the Web App or the CLI"; the CLI has no command | E |
-| VC-117 | P3 | Break-glass cannot be activated from the CLI or, on this installation, at all; documents say otherwise | E |
-| VC-118 | P3 | Documents name commands, flags, states and rule ids that do not exist | E |
-| VC-119 | P3 | One program name for two programs with overlapping words (`exponetdb audit`, `exponetdb auth`, `exponetdb version`) | E |
-| VC-120 | P3 | Enum values that no code writes, and a Web label for an unreachable state | E |
-| VC-121 | P3 | Three documents give `operation.force_release` two different meanings, and building it as documented would not close the dead end | E |
-| VC-122 | P3 | Plan acceptance holds the plan row lock and a Control Store connection while it reads the managed target, on a pool of 10 shared with all of `serve` | E |
-| VC-123 | P3 | One word, several meanings across CLI, REST, Web App and docs: accept, apply, verify, reconcile, baseline, promote, recovery | E |
-| VC-124 | P3 | `migration.bundle.ingest` still stores a bundle with an unknown `dependsOn` silently (TC-008 residual) | R |
-| VC-125 | P3 | `HBA_WOULD_LOCK_OUT` tells the operator to "name it in protectedAccess", which cannot make the plan pass, and the CLI prints none of the details that name the access | R |
-| VC-126 | P3 | The node view reports "no restart pending" and no certificate expiry for state the agent never reports, and the certificate overview stays empty | R (remainder of TC-016) |
-| VC-127 | P3 | The total-budget refusal of a legacy import advises "import the history in several parts", a flow the import does not have | R (TC-021) |
-| VC-128 | P3 | No shipped test covers the apply-time pg_hba safety net for a lock-out the plan cannot judge, and the Control Plane outcome of an agent-side refusal is no longer asserted anywhere | R (TC-018) |
-| VC-129 | P3 | The new root-only check of `verify-units.sh` fails whenever it is run as root, and CI never runs it as root | R |
-| VC-130 | P3 | The test-infrastructure fixes TC-049, TC-050 and TC-054 have no regression guard | R |
-| VC-131 | P3 | Two statements about the model evals are stale after TC-050 | R |
-| VC-132 | P3 | Forbidden-statement refusals have one generic remediation and mislabel RESET ROLE | B |
-| VC-133 | P3 | Local `migration lint` and the server plan disagree, and a resume without --cleanup is denied with a generic rule | B |
-| VC-134 | P3 | A verification with zero runtime checks passes, and finished operations keep a stale error code | B |
-| VC-135 | P3 | A comment-only out-of-band change is not seen by the drift check | B |
-| VC-136 | P3 | A drill record carries no recovery point for latest, older and backup: targets, and no data comparison | C |
-| VC-137 | P3 | Latency: a drill's operation takes 2.1 times its RTO, and REST verify operations take 3.9 to 38 s for a 1 to 2 s engine run | C |
-| VC-138 | P3 | The CLI cannot drive restore runbook or a drill apply with an API key, and the reference does not say so; logical backup and expire have no Control Plane path | C |
-| VC-139 | P3 | S3 adoption refuses endpoint hosts under .test, .local, .internal, .example and .invalid with an unexplained VALIDATION_FAILED, and allows no port or http | C |
-| VC-140 | P3 | A second recovery by the same RB-10 text fails: the temporary superuser restore_admin persists in the restored store | C |
-| VC-141 | P3 | `plan apply --yes --json` waits silently for a step-up (no address, no code) | C |
-| VC-142 | P3 | RB-10 step 3 says the exported checkpoints show the size of the lost gap; hourly checkpoints cannot | C |
-| VC-143 | P3 | A restored awaiting_approval operation for a change that is already live is offered for approval | C |
-| VC-144 | P3 | Session cancel and terminate without an operator credential answer "credential needs rotation or repair" | D |
-| VC-145 | P3 | Lint allows server-file functions and untrusted-language functions; only database privileges stop them | D |
-| VC-146 | P3 | The observer role cannot read schemas of the managed scope; scratch-check says ready and the analysis returns seven expectations_unreadable items that look like ambiguity | B |
-| VC-147 | P3 | Refusal texts that name no id and no remedy | B |
-| VC-148 | P3 | `schema diff` prints columns, constraints and triggers without their table | B |
-| VC-149 | P3 | An established gateway session is never re-checked against the certificate's end, and a refused node leaves one info log line | C |
-| VC-150 | P3 | The audit export failure never says why | C |
-| VC-151 | P3 | Target TLS failures share one class, and a serve clock behind the certificates makes every target unreachable without naming the clock | C |
+| VC-020 | P2 | The apply checksum depends on client-supplied project defaults: editing `defaults` after an apply makes applied bundles a non-overridable MIGRATION_CHECKSUM_MISMATCH | B |
+| VC-021 | P2 | Default `migration plan` and `migration apply` submit every local bundle; the request accepts 50 | B |
+| VC-022 | P2 | Ledger divergence is noticed only when someone plans: no periodic check, no finding, no suspension | B |
+| VC-023 | P2 | `generation` never changes: documented restore protections are inert, and a future bump switches the divergence check off and re-adopts the restored ledger | B |
+| VC-024 | P2 | Lint overrides, lint profile and invariants are taken from the plan request, not from an authoritative project record | B |
+| VC-025 | P2 | Lint and plan over a dependency chain are cubic: 800 chained bundles take 61 s, a 1,000-deep chain plans in 53 s, 5,000 would take hours | B |
+| VC-026 | P2 | `up.sql` can release the engine's own target lock: `SELECT pg_advisory_unlock_all();` is applied and the `EXDB` locks disappear while the migration runs | B (invariant I4, touches I8) |
+| VC-027 | P2 | The bundle store decides "applied elsewhere" from the Control Store mirror only: in the commit-to-mirror window other bytes under an applied id are accepted | B (I13) |
+| VC-028 | P2 | volatile_default_rewrite fires for stable and immutable defaults (now(), any unqualified function) and forces data_rewrite | B |
+| VC-029 | P2 | type_change_rewrite blocks every ALTER COLUMN TYPE including the no-rewrite cases; no lint-clean form exists | B |
+| VC-030 | P2 | The documented NOT NULL recipe cannot pass the planner: unsafe_not_null fires after the validated CHECK | B |
+| VC-031 | P2 | ADD CONSTRAINT ... UNIQUE USING INDEX is flagged like a scanning constraint | B |
+| VC-032 | P2 | A cheap statement's ACCESS EXCLUSIVE held through later slow statements of the same transactional bundle is reported as brief | B |
+| VC-033 | P2 | DETACH PARTITION ... CONCURRENTLY cannot be authored | B |
+| VC-034 | P2 | Lock-queue protections the docs promise are not delivered | B |
+| VC-035 | P2 | A killed or crash-looping process counts as live for 45 s, so a restart loop shorter than that reads operational | C |
+| VC-036 | P2 | A Control Store outage, a read-only store or a full disk is answered 500 INTERNAL, and pool exhaustion is reported as "unreachable" | C |
+| VC-037 | P2 | The shipped metrics cannot alert on most failures: every API request is route="/unmatched" and the documented operational metrics do not exist | C |
+| VC-038 | P2 | Backup and drill signals are not produced: the drill-finding generator is never run and the catalog is never refreshed on a schedule | C |
+| VC-039 | P2 | No signal exists for an expiring certificate: certificate_expiring and tls_expiring are documented and typed but nothing produces them | C |
+| VC-040 | P2 | Time-based checks mix the process clock with the database clock and there is no skew check | C |
+| VC-041 | P2 | Documented retention classes have no pruning code, and every drift check rewrites every open finding | C |
+| VC-042 | P2 | The audit gate is invisible to probes: a missing audit partition fails every mutation with a plain 500 while /healthz/ready stays ready | C |
+| VC-043 | P2 | A redeploy interrupts a running apply although upgrades.md says workers stop at step boundaries; Docker's default stop time is shorter than the 25 s timeout | C |
+| VC-044 | P2 | A refused recovery has already closed the needs_attention operation and released its lock domain | D |
+| VC-045 | P2 | migrations.ledger_mirror is rewritable in place by the worker; "insert-and-revert-only" is code convention only | D |
+| VC-046 | P2 | A request body of up to 32 MiB is read, parsed and validated before the permission check | D |
+| VC-047 | P2 | A single read floods the target's disk with temp files; the row cap does not bound the work | D |
+| VC-048 | P2 | The CLI prints most error `details` only with `--json`: `PLAN_STALE` does not say which binding changed | E |
+| VC-049 | P2 | The CLI recommends `operation retry-verification` for operations the server refuses | E |
+| VC-050 | P2 | A superseded `needs_attention` operation is recorded with verification outcome `failed` although verification never ran | E |
+| VC-051 | P2 | The documented repair of a broken `verify.sql` cannot be completed with the CLI | E |
+| VC-052 | P2 | RB-10 (Control Store down) leaves the ledger-mirror problem unaddressed | E |
+| VC-053 | P2 | A plan from before an upgrade, or a lost race, answers HTTP 500 `INTERNAL` instead of a catalog code | E |
+| VC-054 | P2 | A plan does not check that its own verification can run: a missing verifier credential parks the target after the commit | E |
+| VC-055 | P2 | Recovery by naming exists for two migration kinds only; every other operation that ends `needs_attention` with an unknown outcome still keeps its domain for ever (TC-005 neighbour) | R |
+| VC-056 | P2 | Planning a node revoke or decommission fails with 500 INTERNAL while any active plan body holds an escaped NUL (regression of the TC-019 fix) | R |
+| VC-057 | P2 | An approval 15 minutes after the plan expired was accepted and the production change ran; awaiting_approval never ends (stack reproduction of TC-034 / OD-64 and of the B1 approval-window finding) | B |
+| VC-058 | P2 | A lost COMMIT reply plus a target restart parks the operation as unknown with the change committed; it is never reconciled, and the only exit mislabels it | B |
+| VC-059 | P2 | The restic runbook does not apply globals and does not stop without them (TC-045 / D-07 not fixed) | C |
+| VC-060 | P2 | restore.execute does not re-check space (D-08 not fixed), and restore.prepare measures the engine directory, not the scratch directory | C |
+| VC-061 | P2 | Wrong key or deleted repository: backup verify needs 102 s and ends OUTCOME_UNKNOWN although the helper refused at once; errors carry no code | C |
+| VC-062 | P2 | pitr_random drills are refused until a wal.archive_status observation exists, and explicit pitr: plans stayed refused in one world | C |
+| VC-063 | P2 | After a restore, a production target the store never mirrored is not blocked, `ledger reconcile` says "nothing to reconcile" while status says "out of sync", and the next apply adopts the unknown row | C |
+| VC-064 | P2 | An old role keeps claiming and finishing operations after the schema moved ahead (503 not_ready, no log line) | C |
+| VC-065 | P2 | The upgrade runbook omits eleven steps: no pre-upgrade backup, outage window, drain, preflight or post-checks | C |
+| VC-066 | P2 | An unmet backup requirement on a production apply answers 500 INTERNAL, and nothing is logged | D |
+| VC-067 | P2 | The first-party CLI fails with PERMISSION_DENIED for everyone whose role binding is on an environment | D |
+| VC-068 | P2 | A sub-megabyte bundle can hold the server's CPU for 30 s or raise its memory by 620 MiB; the limits are not named | D |
+| VC-069 | P2 | A plan that stops part-way leaves the drift baseline behind: every later verified bundle reads as drift (34 findings, 6 critical) until a person accepts all of it | B |
+| VC-070 | P2 | ALTER COLUMN TYPE on a column a view reads: the plan is silent, the apply fails 0A000 after earlier bundles were applied, and the offered remedy does not fit | B |
+| VC-071 | P2 | A clone that takes the registered name is healthy, drift-clean and plannable; apply is refused only as PLAN_STALE without a cause | B |
+| VC-072 | P2 | A renamed or missing database turns `migration plan` into INTERNAL | B |
+| VC-073 | P2 | A hot standby behind the registered endpoint is healthy and plannable; the apply fails as OUTCOME_UNKNOWN | B |
+| VC-074 | P2 | Adding an endpoint of a different instance is applied without a check and suspends the affected targets within seconds; recovering a production target takes plan, approval and 50 s | B |
+| VC-075 | P2 | The documented database move has no executable path: a copy of a registered target is refused in every environment and nothing re-stamps the marker | B |
+| VC-076 | P2 | CREATE PUBLICATION (the standard supabase_realtime) in the legacy history makes the whole analysis incomplete; the operation ends verification_failed with a forward-fix remedy | B |
+| VC-077 | P2 | After a failed write path clears, the roles stay not_ready until their pooled sessions die; a database-level read-only default stops nothing but the heartbeat | C |
+| VC-078 | P2 | One MCP client can push serve far past its 512 MiB container limit: 1,000 concurrent requests, 98 percent rejected 429, RSS 156 to 583 MB | C |
+| VC-079 | P2 | Forged evidence is accepted: two hand-written ledger rows and any operation id let production take a bundle staging never ran | D |
+| VC-080 | P2 | The same migration id with different bytes can be applied on two targets: the immutability check is made at plan time only | D |
+| VC-081 | P3 | third-party, licenses and ui-safety are part of `bun run verify` but no CI job runs them | A |
+| VC-082 | P3 | A local image build (smoke:image, docker build) needs BuildKit and no document says so | A |
+| VC-083 | P3 | Tests depend on the order of tests inside their file, so a single test cannot be run alone | A |
+| VC-084 | P3 | Edits that do not change the checksum are dropped by ingest, and three lints cannot fire on the server path | B |
+| VC-085 | P3 | c1 summary sentences are looser than c1: spacing, adjacency, formatters and case change the checksum | B |
+| VC-086 | P3 | The CLI reads a whole oversized bundle file into memory before cutting it | B |
+| VC-087 | P3 | Hotfix follow-up is unbuilt: no hotfix_without_evidence finding, no evidence mark | B |
+| VC-088 | P3 | The bundle store has no way to retire a bundle; `pending` lists every never-applied stored id forever | B |
+| VC-089 | P3 | A later migration that fails to execute ends the operation as verification_failed with error code VERIFICATION_FAILED | B |
+| VC-090 | P3 | Seven pinned settings are refused at top level but not guarded after each statement | B (I4) |
+| VC-091 | P3 | A string literal continued across a line comment is valid PostgreSQL and c1 N4, but libpg_query refuses it | B (I5) |
+| VC-092 | P3 | The lint report depends on the order the bundles are submitted in | B (I1) |
+| VC-093 | P3 | The CLI loader turns a symbolic link or directory named `verify.sql`/`up.sql` into an empty file, and reads an oversized file whole | B (I14) |
+| VC-094 | P3 | A deeply nested `migration.yaml` is refused with the YAML library's stack-overflow text, not a named limit | B (I14, I15) |
+| VC-095 | P3 | The limits of bundles are not announced in one place, and two bite below the documented ones | B (I15) |
+| VC-096 | P3 | The bundle store drops edits that do not change the checksum, although the documentation says it keeps them | B (I13; also reported statically by B1 a |
+| VC-097 | P3 | Lock facts and rules missing for several heavy statements | B |
+| VC-098 | P3 | Master-key rotation has no role order, and the wrong order takes serve out of service | C |
+| VC-099 | P3 | A data read runs on the target before its audit event is written | C |
+| VC-100 | P3 | The maintenance loop has no per-task deadline and tasks cannot renew their lease | C |
+| VC-101 | P3 | An oversized JSON request body is refused without naming the limit | C |
+| VC-102 | P3 | archive_mirror_rows binds neither generation, ids nor lease to the operation, and takes no row lock | D |
+| VC-103 | P3 | The three verify.sql files of the new bundles pass on broken bundles and none checks ownership | D |
+| VC-104 | P3 | POST /clusters/{id}/drills/offline with restoredAt ahead of the database clock is a 500 | D |
+| VC-105 | P3 | 24 of 45 Control Store bundles are not pinned, the three new ones among them | D |
+| VC-106 | P3 | migration.resume takes the operation it closes from the target's own ledger events (static reading only) | D |
+| VC-107 | P3 | The existence of node, backup repository and registry-plan subject ids is visible to callers without access | D |
+| VC-108 | P3 | Plan analysis text and advisor evidence reach agents and approvers without the `untrusted` marker | D |
+| VC-109 | P3 | A database client decides, through `application_name`, that ExponetDB must not cancel its session | D |
+| VC-110 | P3 | `packages.apply_update` is a node mutation outside the approval rule and outside the test that pins the catalog | D |
+| VC-111 | P3 | identity.md says every `critical` plan needs a fresh re-authentication to apply; the code enforces it only where a kind or policy rule declares it | D |
+| VC-112 | P3 | Six CLI commands declare scopes the API does not accept | D |
+| VC-113 | P3 | Allowlisted functions and views disclose server details to every data.read caller | D |
+| VC-114 | P3 | The Web editor's classifier calls EXPLAIN a read-only path that sql_query refuses | D |
+| VC-115 | P3 | Thirteen catalog error codes are documented and exposed but never produced | E |
+| VC-116 | P3 | 69 catalog codes carry no remedy; the operationally important ones are listed | E |
+| VC-117 | P3 | `drift.accept` is documented for "the Web App or the CLI"; the CLI has no command | E |
+| VC-118 | P3 | Break-glass cannot be activated from the CLI or, on this installation, at all; documents say otherwise | E |
+| VC-119 | P3 | Documents name commands, flags, states and rule ids that do not exist | E |
+| VC-120 | P3 | One program name for two programs with overlapping words (`exponetdb audit`, `exponetdb auth`, `exponetdb version`) | E |
+| VC-121 | P3 | Enum values that no code writes, and a Web label for an unreachable state | E |
+| VC-122 | P3 | Three documents give `operation.force_release` two different meanings, and building it as documented would not close the dead end | E |
+| VC-123 | P3 | Plan acceptance holds the plan row lock and a Control Store connection while it reads the managed target, on a pool of 10 shared with all of `serve` | E |
+| VC-124 | P3 | One word, several meanings across CLI, REST, Web App and docs: accept, apply, verify, reconcile, baseline, promote, recovery | E |
+| VC-125 | P3 | `migration.bundle.ingest` still stores a bundle with an unknown `dependsOn` silently (TC-008 residual) | R |
+| VC-126 | P3 | `HBA_WOULD_LOCK_OUT` tells the operator to "name it in protectedAccess", which cannot make the plan pass, and the CLI prints none of the details that name the access | R |
+| VC-127 | P3 | The node view reports "no restart pending" and no certificate expiry for state the agent never reports, and the certificate overview stays empty | R (remainder of TC-016) |
+| VC-128 | P3 | The total-budget refusal of a legacy import advises "import the history in several parts", a flow the import does not have | R (TC-021) |
+| VC-129 | P3 | No shipped test covers the apply-time pg_hba safety net for a lock-out the plan cannot judge, and the Control Plane outcome of an agent-side refusal is no longer asserted anywhere | R (TC-018) |
+| VC-130 | P3 | The new root-only check of `verify-units.sh` fails whenever it is run as root, and CI never runs it as root | R |
+| VC-131 | P3 | The test-infrastructure fixes TC-049, TC-050 and TC-054 have no regression guard | R |
+| VC-132 | P3 | Two statements about the model evals are stale after TC-050 | R |
+| VC-133 | P3 | Forbidden-statement refusals have one generic remediation and mislabel RESET ROLE | B |
+| VC-134 | P3 | Local `migration lint` and the server plan disagree, and a resume without --cleanup is denied with a generic rule | B |
+| VC-135 | P3 | A verification with zero runtime checks passes, and finished operations keep a stale error code | B |
+| VC-136 | P3 | A comment-only out-of-band change is not seen by the drift check | B |
+| VC-137 | P3 | A drill record carries no recovery point for latest, older and backup: targets, and no data comparison | C |
+| VC-138 | P3 | Latency: a drill's operation takes 2.1 times its RTO, and REST verify operations take 3.9 to 38 s for a 1 to 2 s engine run | C |
+| VC-139 | P3 | The CLI cannot drive restore runbook or a drill apply with an API key, and the reference does not say so; logical backup and expire have no Control Plane path | C |
+| VC-140 | P3 | S3 adoption refuses endpoint hosts under .test, .local, .internal, .example and .invalid with an unexplained VALIDATION_FAILED, and allows no port or http | C |
+| VC-141 | P3 | A second recovery by the same RB-10 text fails: the temporary superuser restore_admin persists in the restored store | C |
+| VC-142 | P3 | `plan apply --yes --json` waits silently for a step-up (no address, no code) | C |
+| VC-143 | P3 | RB-10 step 3 says the exported checkpoints show the size of the lost gap; hourly checkpoints cannot | C |
+| VC-144 | P3 | A restored awaiting_approval operation for a change that is already live is offered for approval | C |
+| VC-145 | P3 | Session cancel and terminate without an operator credential answer "credential needs rotation or repair" | D |
+| VC-146 | P3 | Lint allows server-file functions and untrusted-language functions; only database privileges stop them | D |
+| VC-147 | P3 | The observer role cannot read schemas of the managed scope; scratch-check says ready and the analysis returns seven expectations_unreadable items that look like ambiguity | B |
+| VC-148 | P3 | Refusal texts that name no id and no remedy | B |
+| VC-149 | P3 | `schema diff` prints columns, constraints and triggers without their table | B |
+| VC-150 | P3 | An established gateway session is never re-checked against the certificate's end, and a refused node leaves one info log line | C |
+| VC-151 | P3 | The audit export failure never says why | C |
+| VC-152 | P3 | Target TLS failures share one class, and a serve clock behind the certificates makes every target unreachable without naming the clock | C |
+| VC-153 | P3 | A plan with a malformed evidence verification id is created as allow and can never be applied; the refusal hides why | D |
+| VC-154 | P3 | Refused client-metadata fetches leave no audit event and no log line | D |
+| VC-155 | P3 | A revoked node that keeps calling the gateway is not audited and raises no finding | D |
+| VC-156 | P3 | The audit event of an environment update names the changed fields but not old and new values | D |
+| VC-157 | P3 | CLI exit codes: a dead target or node ends with exit 1 | C |
+| VC-158 | P3 | A second refusal of a stale plan loses the cause; `operation cancel` by another client names a plan | C |
+| VC-159 | P3 | A silent 15-minute wait on a queued node operation; slug versus id on `environment update` | C |
+| VC-160 | P3 | Web App: three moderate axe rules; transitions stay under reduced motion | C |
 
 ## 4. Findings
 
@@ -472,7 +481,7 @@ None found.
 - **Proposed fix:** treat serial types (smallserial, serial, bigserial, any schema qualification or case) and `CONSTR_IDENTITY` in ADD COLUMN as volatile: rewrite `table`, class `data_rewrite`, `volatile_default_rewrite`.
 - **Acceptance test:** a lint unit test that `ADD COLUMN s bigserial` and `ADD COLUMN s bigint GENERATED ALWAYS AS IDENTITY` yield `volatile_default_rewrite`, `data_rewrite`, rewrite `table`; an integration test on PostgreSQL 16/17/18 that fails if the relfilenode changes without that classification.
 
-### P2 (62)
+### P2 (63)
 
 #### VC-018 [P2] main has no branch protection or required checks, and cancel-in-progress cancels CI of commits on main
 
@@ -498,19 +507,7 @@ None found.
 - **Proposed fix:** `await eventually('node online', ...)` before the first post-crash inspection and keep 202 strict; split the 9-minute single test into steps.
 - **Acceptance test:** 10 consecutive runs on a disposable systemd host all green, plus a helper test with a stub gateway reporting offline for 3 s.
 
-#### VC-020 [P2] Evidence rule is weaker than documented: any operation id counts, no divergence check on the evidence target, verification rows not cross-checked with the mirror
-
-- **Area:** packages/migrations-engine/src/evidence.ts, kind.ts (#evidenceBindings), policy migration.staging-evidence
-- **Block:** B
-- **Reproduction:** Static; needs superuser write on the staging database. Take a migration M that production wants and staging never applied. On staging insert a schema_migrations row for M with the checksum production will submit and `operation_id` = the id of any operation in the Control Store. Insert a `passed` migration_verifications row with M's verify digest. Plan M for production.
-- **Expected:** Evidence `missing` or `unverified`. staging-production-policy.md §1.2 condition 3 needs a row produced by this installation and no LEDGER_DIVERGENCE on the evidence target. §6 lists "ledger row inserted by hand is not evidence".
-- **Actual:** "Known" is `operations.operations` looked up by id only (evidence.ts:181-190, 209, checked by the lead): any kind, target or project. No ledger-vs-mirror comparison on the evidence target (readEvidenceTarget, evidence.ts:98-125). Verification is read from the target, never from migrations.verification_mirror. The same weak attribution heals a hand-written row with a real operation id into the mirror (divergence.ts:46-48, records.ts:188-191). Acceptance (kind.ts:225-260) does not repeat condition 3.
-- **Evidence:** B/contract.md §2.5, §2.6, §3 DF-08, DF-09.
-- **Root cause:** Attribution by operation id alone. The mirror, which exists to catch tampering, is not consulted.
-- **Proposed fix:** An evidence row counts only if the mirror holds the same (target, generation, migration_id, checksum, operation_id). The operation must be a migration.apply or resume of that target whose plan lists the migration, and the verification id must be in verification_mirror. Add the live divergence check for the evidence target. Make operationsOfTarget require the plan to include the migration id.
-- **Acceptance test:** B/conformance/I12-promotion.int.test.ts row "forged evidence with a known operation id" (fails today). I07-adoption.int.test.ts row "hand-written ledger row with a real operation id of this target" (expects LEDGER_DIVERGENCE unrecorded).
-
-#### VC-021 [P2] The apply checksum depends on client-supplied project defaults: editing `defaults` after an apply makes applied bundles a non-overridable MIGRATION_CHECKSUM_MISMATCH
+#### VC-020 [P2] The apply checksum depends on client-supplied project defaults: editing `defaults` after an apply makes applied bundles a non-overridable MIGRATION_CHECKSUM_MISMATCH
 
 - **Area:** packages/migrations/src/format/projection.ts, migrations-engine/src/store.ts and planner.ts, CLI migration plan
 - **Block:** B
@@ -522,7 +519,7 @@ None found.
 - **Proposed fix:** Keep the project defaults in the registry, versioned and changed by a planned operation, and ignore or refuse the request's copy. Or materialize defaults into migration.yaml at `migration new` so the bundle is self-contained. No c2 needed.
 - **Acceptance test:** B/conformance/I02-content-identity.test.ts (pure: a project-default change must not change the checksum of an unchanged bundle of the same project; fails today). Plus a stack test that a changed default is refused or ignored with a clear code.
 
-#### VC-022 [P2] Default `migration plan` and `migration apply` submit every local bundle; the request accepts 50
+#### VC-021 [P2] Default `migration plan` and `migration apply` submit every local bundle; the request accepts 50
 
 - **Area:** apps/cli/src/commands/migration.ts, packages/contracts/src/rest/migrations.ts
 - **Block:** B
@@ -534,7 +531,7 @@ None found.
 - **Proposed fix:** Ask the server for the pending ids (`migration status` already knows them). Submit only those, plus stored ancestors by id. Document the limits in 04-migrations/.
 - **Acceptance test:** apps/cli test: 60 local bundles, 55 applied, `migration plan` submits only the pending ones and succeeds. I15-limits.test.ts compares every limit with its document.
 
-#### VC-023 [P2] Ledger divergence is noticed only when someone plans: no periodic check, no finding, no suspension
+#### VC-022 [P2] Ledger divergence is noticed only when someone plans: no periodic check, no finding, no suspension
 
 - **Area:** apps/server/src/composition/worker-tasks.ts, packages/migrations-engine/src/divergence.ts
 - **Block:** B
@@ -546,7 +543,7 @@ None found.
 - **Proposed fix:** A worker task every 10 min per active target (observer read plus compareLedger). It opens a critical finding `ledger_divergence` naming the ids and resolves it when the ledger agrees. Optionally suspend schema operations.
 - **Acceptance test:** Stack: hand-edit the ledger, wait one interval, expect a critical finding and an alertable audit or metric signal.
 
-#### VC-024 [P2] `generation` never changes: documented restore protections are inert, and a future bump switches the divergence check off and re-adopts the restored ledger
+#### VC-023 [P2] `generation` never changes: documented restore protections are inert, and a future bump switches the divergence check off and re-adopts the restored ledger
 
 - **Area:** packages/registry/src/register.ts:169, migrations-engine/src/divergence.ts:79, records.ts:170-210
 - **Block:** B
@@ -558,7 +555,7 @@ None found.
 - **Proposed fix:** A target with a mirror for an earlier generation and none for the current one is a divergence needing ledger.reconcile. Carry the mirror forward only through an explicit planned operation. Add the test before the bump is built.
 - **Acceptance test:** A variant of packages/migrations-engine/test/reconcile.int.test.ts: bump the generation, expect LEDGER_DIVERGENCE on the next plan and no mirror row written by a following apply.
 
-#### VC-025 [P2] Lint overrides, lint profile and invariants are taken from the plan request, not from an authoritative project record
+#### VC-024 [P2] Lint overrides, lint profile and invariants are taken from the plan request, not from an authoritative project record
 
 - **Area:** migrations-engine/src/planner.ts:474-495, contracts/src/rest/migrations.ts:197-208, policy catalog
 - **Block:** B
@@ -570,7 +567,7 @@ None found.
 - **Proposed fix:** Keep lintProfile, lint and invariants in the registry project record. Ignore or refuse the request's copy for a production plan. Add a policy rule requiring approval when a blocking rule was lowered.
 - **Acceptance test:** Stack: the request above on production is refused or yields `require`. A change of the registry record is audited.
 
-#### VC-026 [P2] Lint and plan over a dependency chain are cubic: 800 chained bundles take 61 s, a 1,000-deep chain plans in 53 s, 5,000 would take hours
+#### VC-025 [P2] Lint and plan over a dependency chain are cubic: 800 chained bundles take 61 s, a 1,000-deep chain plans in 53 s, 5,000 would take hours
 
 - **Area:** packages/migrations/src/lint/lint.ts (`parallel_object_overlap`), migrations-engine/planner.ts
 - **Block:** B
@@ -582,7 +579,7 @@ None found.
 - **Proposed fix:** compute `sharedObject` first (cheap, index by object name), and compute reachability once (memoised ancestor sets or a topological-index bitset); only pairs that share an object need an ancestor test.
 - **Acceptance test:** the ratio test above (t(400)/t(200) < 3.5) and a 5,000-bundle chain linted in under 30 s.
 
-#### VC-027 [P2] `up.sql` can release the engine's own target lock: `SELECT pg_advisory_unlock_all();` is applied and the `EXDB` locks disappear while the migration runs
+#### VC-026 [P2] `up.sql` can release the engine's own target lock: `SELECT pg_advisory_unlock_all();` is applied and the `EXDB` locks disappear while the migration runs
 
 - **Area:** packages/postgres/src/parser/migration.ts (`settingsCall`, function handling), migrations-engine/executor.ts, concurrency
 - **Block:** B (invariant I4, touches I8)
@@ -594,7 +591,7 @@ None found.
 - **Proposed fix:** deny `pg_advisory_*` (all lock and unlock functions) in top-level statements and verify after every statement that the engine's lock is still held by the session (one `pg_locks` read, like the ledger guard).
 - **Acceptance test:** the same int test: the lock count is unchanged during the migration, or the bundle is refused at lint time.
 
-#### VC-028 [P2] The bundle store decides "applied elsewhere" from the Control Store mirror only: in the commit-to-mirror window other bytes under an applied id are accepted
+#### VC-027 [P2] The bundle store decides "applied elsewhere" from the Control Store mirror only: in the commit-to-mirror window other bytes under an applied id are accepted
 
 - **Area:** packages/migrations-engine/src/store.ts (`appliedElsewhere`, `ingestBundles`)
 - **Block:** B (I13)
@@ -606,7 +603,7 @@ None found.
 - **Proposed fix:** treat an id with any pending or unreconciled operation, or any target whose `ledger_state` is not current, as applied; or read the evidence/ledger of the project's targets at ingest.
 - **Acceptance test:** the failing int case above.
 
-#### VC-029 [P2] volatile_default_rewrite fires for stable and immutable defaults (now(), any unqualified function) and forces data_rewrite
+#### VC-028 [P2] volatile_default_rewrite fires for stable and immutable defaults (now(), any unqualified function) and forces data_rewrite
 
 - **Area:** `packages/postgres/src/parser/migration.ts`, `packages/migrations/src/lint/lint.ts`
 - **Block:** B
@@ -618,7 +615,7 @@ None found.
 - **Proposed fix:** classify by `pg_proc.provolatile` from the target catalog (the planner already reads the catalog), or at least drop the stable names from the list and keep "unknown function = volatile" only offline.
 - **Acceptance test:** lint test that `ADD COLUMN c timestamptz NOT NULL DEFAULT now()` has no `volatile_default_rewrite` and observed class `additive`, while `DEFAULT clock_timestamp()` and `gen_random_uuid()` still fire.
 
-#### VC-030 [P2] type_change_rewrite blocks every ALTER COLUMN TYPE including the no-rewrite cases; no lint-clean form exists
+#### VC-029 [P2] type_change_rewrite blocks every ALTER COLUMN TYPE including the no-rewrite cases; no lint-clean form exists
 
 - **Area:** `packages/postgres/src/parser/migration.ts`, lint rule `type_change_rewrite`
 - **Block:** B
@@ -630,7 +627,7 @@ None found.
 - **Proposed fix:** have the planner pass column types as catalog facts and classify the known no-rewrite changes, keeping `possible` as the fallback.
 - **Acceptance test:** lint test with a catalog fact (varchar(200)) and `TYPE varchar(500)` yields no finding; an integration test that compares the classification with the relfilenode on PostgreSQL 16/17/18.
 
-#### VC-031 [P2] The documented NOT NULL recipe cannot pass the planner: unsafe_not_null fires after the validated CHECK
+#### VC-030 [P2] The documented NOT NULL recipe cannot pass the planner: unsafe_not_null fires after the validated CHECK
 
 - **Area:** `packages/migrations/src/lint/lint.ts`, `packages/migrations-engine/src/planner.ts`
 - **Block:** B
@@ -642,7 +639,7 @@ None found.
 - **Proposed fix:** read validated `CHECK (col IS NOT NULL)` constraints into `provenNotNull` at plan time; the check must also hold for a CHECK added by an earlier bundle of the same plan.
 - **Acceptance test:** integration test: a target with a validated NOT NULL CHECK plus the bundle `SET NOT NULL` produces no blocking finding; without the CHECK it still blocks.
 
-#### VC-032 [P2] ADD CONSTRAINT ... UNIQUE USING INDEX is flagged like a scanning constraint
+#### VC-031 [P2] ADD CONSTRAINT ... UNIQUE USING INDEX is flagged like a scanning constraint
 
 - **Area:** `packages/postgres/src/parser/migration.ts:925-932`, lint rule `add_constraint_without_not_valid`
 - **Block:** B
@@ -654,7 +651,7 @@ None found.
 - **Proposed fix:** if `indexname` is set, severity `high`, duration `brief`, `constraintValidated = false`.
 - **Acceptance test:** lint test: `ADD CONSTRAINT k UNIQUE USING INDEX i` has no finding; `ADD CONSTRAINT k UNIQUE (c)` still does.
 
-#### VC-033 [P2] A cheap statement's ACCESS EXCLUSIVE held through later slow statements of the same transactional bundle is reported as brief
+#### VC-032 [P2] A cheap statement's ACCESS EXCLUSIVE held through later slow statements of the same transactional bundle is reported as brief
 
 - **Area:** `packages/migrations/src/lint`, `packages/migrations-engine/src/analysis.ts`
 - **Block:** B
@@ -666,7 +663,7 @@ None found.
 - **Proposed fix:** in a transactional bundle, a lock of class ACCESS EXCLUSIVE or SHARE ROW EXCLUSIVE followed by a scanning or data-changing statement raises severity to `critical`, or add a rule like `lock_held_across_slow_statement`.
 - **Acceptance test:** lint test for h24 and h42 expecting the new finding; the split bundles (s06, s07, s08) stay clean.
 
-#### VC-034 [P2] DETACH PARTITION ... CONCURRENTLY cannot be authored
+#### VC-033 [P2] DETACH PARTITION ... CONCURRENTLY cannot be authored
 
 - **Area:** `packages/postgres/src/parser/migration.ts:1012-1019`, lint rules `needless_nontransactional`, `nontransactional_statement_in_transactional`
 - **Block:** B
@@ -678,7 +675,7 @@ None found.
 - **Proposed fix:** set `autocommitOnly` for `AT_DetachPartition` with `concurrent`; lock severity `low`.
 - **Acceptance test:** lint test: h45 gives the fixed error, h46 passes with no finding; an integration test applies h46 on a target.
 
-#### VC-035 [P2] Lock-queue protections the docs promise are not delivered
+#### VC-034 [P2] Lock-queue protections the docs promise are not delivered
 
 - **Area:** `packages/migrations-engine/src/planner.ts`, `packages/migrations/src/lint/rules.ts`, `packages/postgres/src/session.ts`
 - **Block:** B
@@ -690,7 +687,7 @@ None found.
 - **Proposed fix:** implement or correct the documents. For an ACCESS EXCLUSIVE statement on prod, read `pg_stat_activity` (sessions with `xact_start` older than N seconds on the affected relations) into the plan.
 - **Acceptance test:** an integration test with a long reader on the table: the plan carries the blocker; `lockTimeout > 60s` without an acknowledgement is a blocking finding.
 
-#### VC-036 [P2] A killed or crash-looping process counts as live for 45 s, so a restart loop shorter than that reads operational
+#### VC-035 [P2] A killed or crash-looping process counts as live for 45 s, so a restart loop shorter than that reads operational
 
 - **Area:** `packages/control-store/src/heartbeats.ts`, `packages/application/src/installation-health.ts`, `apps/server/src/composition/role.ts` (`liveWorkerCheck`), `roles/run-role.ts`
 - **Block:** C
@@ -702,7 +699,7 @@ None found.
 - **Proposed fix:** report instances started in the last 15 minutes in `workers.values` and degrade at 3 or more; add a process start-time gauge.
 - **Acceptance test:** register three worker rows within a minute without `markStopped`; `readInstallationHealth(...).workers.state` is `degraded` with reason `restart_loop`.
 
-#### VC-037 [P2] A Control Store outage, a read-only store or a full disk is answered 500 INTERNAL, and pool exhaustion is reported as "unreachable"
+#### VC-036 [P2] A Control Store outage, a read-only store or a full disk is answered 500 INTERNAL, and pool exhaustion is reported as "unreachable"
 
 - **Area:** `packages/control-store/src/errors.ts`, `apps/server/src/interfaces/http/request.ts` (`errorCodeOf`), `packages/contracts/src/errors.ts`, `apps/server/src/composition/role.ts`
 - **Block:** C
@@ -714,7 +711,7 @@ None found.
 - **Proposed fix:** map unavailable, timeout, read-only, full and pool errors to `CONTROL_PLANE_DEGRADED` with `reason`; classify the SQLSTATEs; give readiness its own connection and a write probe (`SHOW transaction_read_only`).
 - **Acceptance test:** integration tests with a read-only, an unreachable and a pool-starved store assert 503 with the reason, `not_ready` within one evaluation for read-only, and `ready` again after a pool spike clears.
 
-#### VC-038 [P2] The shipped metrics cannot alert on most failures: every API request is route="/unmatched" and the documented operational metrics do not exist
+#### VC-037 [P2] The shipped metrics cannot alert on most failures: every API request is route="/unmatched" and the documented operational metrics do not exist
 
 - **Area:** `apps/server/src/interfaces/http/app.ts`, `packages/observability`, `10-observability/self-observability.md` §3
 - **Block:** C
@@ -726,7 +723,7 @@ None found.
 - **Proposed fix:** record the matched route template after `next()`; register the §3 metrics; worker-refreshed gauges for targets and nodes by state, soonest certificate expiry, oldest waiting operation and last backup age; document the scrape set-up.
 - **Acceptance test:** three API calls produce three route-template series; a coverage test that every metric named in §3 is registered by some role.
 
-#### VC-039 [P2] Backup and drill signals are not produced: the drill-finding generator is never run and the catalog is never refreshed on a schedule
+#### VC-038 [P2] Backup and drill signals are not produced: the drill-finding generator is never run and the catalog is never refreshed on a schedule
 
 - **Area:** `packages/backups/src/findings.ts`, `apps/server/src/composition/worker-tasks.ts`, `packages/backups/src/protection.ts`, `09-backups-and-restore/{architecture,adoption}.md`
 - **Block:** C
@@ -738,7 +735,7 @@ None found.
 - **Proposed fix:** worker tasks `backups.findings` (5 min) and `backups.catalog` (10 min per cluster with a live repository), or amend the documents; findings for `catalog_stale` and `wal_archive_failing`.
 - **Acceptance test:** a failed drill record yields an open critical `backup_drill_failed` finding within one task interval; a stale catalog is refreshed without a person.
 
-#### VC-040 [P2] No signal exists for an expiring certificate: certificate_expiring and tls_expiring are documented and typed but nothing produces them
+#### VC-039 [P2] No signal exists for an expiring certificate: certificate_expiring and tls_expiring are documented and typed but nothing produces them
 
 - **Area:** `07-node-agent/enrollment.md:145-146`, `10-observability/health.md:121`, `packages/diagnostics/src/reducer.ts`, `packages/nodes`, `installation-health.ts`
 - **Block:** C
@@ -750,7 +747,7 @@ None found.
 - **Proposed fix:** worker task `certificates.check` opening subject findings for node certificates (24 h or less without renewal), gateway and CA expiry and target server certificates (30 and 7 days from the peer certificate); count offline nodes in the gateway component state; fix the contradicting document.
 - **Acceptance test:** a node certificate expiring in 6 h with an agent that cannot renew gives an open finding; `tls_expiring` appears for a target certificate with 20 days left.
 
-#### VC-041 [P2] Time-based checks mix the process clock with the database clock and there is no skew check
+#### VC-040 [P2] Time-based checks mix the process clock with the database clock and there is no skew check
 
 - **Area:** `packages/operations/src/plans.ts:166-176`, `accept.ts:179-184`, `packages/nodes/src/tokens.ts:79`, `views.ts:58-71`, `gateway.ts:119-125,279-285`, `packages/operations/src/driver.ts:96-110`
 - **Block:** C
@@ -762,7 +759,7 @@ None found.
 - **Proposed fix:** read the database time before hashing, or refuse creation when the process clock differs from the database by more than a bound; use `performance.now()` for lease belief; add the skew check with a readiness warning above 5 s.
 - **Acceptance test:** with a fake clock +1 day, creating a plan fails with a named error (or the stored `expires_at - clock_timestamp()` is at most the class limit); a stepped wall clock does not change the lease-abort decision.
 
-#### VC-042 [P2] Documented retention classes have no pruning code, and every drift check rewrites every open finding
+#### VC-041 [P2] Documented retention classes have no pruning code, and every drift check rewrites every open finding
 
 - **Area:** `02-control-plane/data-retention.md`, `packages/operations`, `packages/diagnostics/src/{drift,findings,snapshots}.ts`, `packages/auth/src/sessions.ts`, `worker-tasks.ts`
 - **Block:** C
@@ -774,7 +771,7 @@ None found.
 - **Proposed fix:** a `retention.prune` task per class with the documented bounds and audited summaries; update an open finding at most once a day or on state change.
 - **Acceptance test:** per-class tests that old rows go and referenced rows stay; 1,000 open findings produce at most 1 write per finding per day.
 
-#### VC-043 [P2] The audit gate is invisible to probes: a missing audit partition fails every mutation with a plain 500 while /healthz/ready stays ready
+#### VC-042 [P2] The audit gate is invisible to probes: a missing audit partition fails every mutation with a plain 500 while /healthz/ready stays ready
 
 - **Area:** `packages/audit/src/writer.ts`, `apps/server/src/composition/role.ts`, worker task `audit.partitions`
 - **Block:** C
@@ -786,7 +783,7 @@ None found.
 - **Proposed fix:** a readiness check requiring partitions for now and now + 7 d (warn under 30 days of margin); map `audit_append_failed` to `CONTROL_PLANE_DEGRADED` with reason `audit_unavailable`.
 - **Acceptance test:** detaching the current partition makes readiness degraded or not_ready within one interval and a mutation returns 503 with the reason.
 
-#### VC-044 [P2] A redeploy interrupts a running apply although upgrades.md says workers stop at step boundaries; Docker's default stop time is shorter than the 25 s timeout
+#### VC-043 [P2] A redeploy interrupts a running apply although upgrades.md says workers stop at step boundaries; Docker's default stop time is shorter than the 25 s timeout
 
 - **Area:** `apps/server/src/composition/operations-loop.ts:74-82`, `roles/run-role.ts:101-108`, `12-operations/{upgrades,deployment}.md`
 - **Block:** C
@@ -798,7 +795,7 @@ None found.
 - **Proposed fix:** on SIGTERM stop claiming, let the running step finish within a drain window while `not_ready`, set the stop grace period in the deployment record, add a drain step to `upgrades.md`.
 - **Acceptance test:** SIGTERM during a 60 s apply with a 120 s drain window ends `succeeded` with exit code 0; with a 5 s window the operation reaches a reconciled state and the heartbeat row is marked stopped.
 
-#### VC-045 [P2] A refused recovery has already closed the needs_attention operation and released its lock domain
+#### VC-044 [P2] A refused recovery has already closed the needs_attention operation and released its lock domain
 
 - **Area:** packages/operations (supersede.ts, driver.ts), bundle operation-supersession (fix of TC-005)
 - **Block:** D
@@ -810,7 +807,7 @@ None found.
 - **Proposed fix:** perform the close after the locks, bindings and admission succeed, or wrap it in a savepoint and roll back to it on refusal or wait.
 - **Acceptance test:** the same three cases with inverted assertions (the operation stays needs_attention and keeps its lock when the recovery is refused or waits).
 
-#### VC-046 [P2] migrations.ledger_mirror is rewritable in place by the worker; "insert-and-revert-only" is code convention only
+#### VC-045 [P2] migrations.ledger_mirror is rewritable in place by the worker; "insert-and-revert-only" is code convention only
 
 - **Area:** bundle migration-engine (frozen) and ledger-reconcile; `migrations.ledger_mirror`
 - **Block:** D
@@ -822,7 +819,7 @@ None found.
 - **Proposed fix:** a new additive bundle with a BEFORE UPDATE trigger that allows only `reverted_at`, `reverted_by_op` and `mirrored_at` to change (D0 tested `proposed_mirror_guard.sql`: forged updates refused, the engine upsert still works, the archive still deletes).
 - **Acceptance test:** worker UPDATE of checksum, generation or migration_id is refused; the three allowed columns pass; the engine's upsert and `archive_mirror_rows` still work.
 
-#### VC-047 [P2] A request body of up to 32 MiB is read, parsed and validated before the permission check
+#### VC-046 [P2] A request body of up to 32 MiB is read, parsed and validated before the permission check
 
 - **Area:** `apps/server` REST layer (`interfaces/http/api.ts`), MCP edge for the bundle tools
 - **Block:** D
@@ -834,7 +831,7 @@ None found.
 - **Proposed fix:** for routes whose `maxBodyBytes` exceeds the default, call `application.admit(caller, route.action)` (phase 1: client kind, human-only, scope, permission anywhere) before `readBody`; add a global in-flight cap or byte budget for large bodies; apply the same ordering in the MCP edge for `bundleBody` tools (the edge already rate-limits by tool class). Keep validation errors after authorization.
 - **Acceptance test:** a stub-Application test as in the reproduction asserting that for a principal without the permission (a) the status is 403, (b) neither `JSON.parse` nor the route schema ran (spy), (c) a 30 MiB body does not raise RSS above a few MiB; fails before the fix.
 
-#### VC-048 [P2] A single read floods the target's disk with temp files; the row cap does not bound the work
+#### VC-047 [P2] A single read floods the target's disk with temp files; the row cap does not bound the work
 
 - **Area:** `packages/postgres/src/bootstrap.ts` (`SETTINGS.reader`/`verifier`, `bootstrapScript`), `data.read`
 - **Block:** D
@@ -846,7 +843,7 @@ None found.
 - **Proposed fix:** add `temp_file_limit` (for example 1GB) to the reader and verifier role settings in both bootstrap generators and document it; existing clusters: `ALTER ROLE exponetdb_reader SET temp_file_limit = '1GB'`.
 - **Acceptance test:** integration test on PostgreSQL 16/17/18: the read above fails with SQLSTATE 53400 (`QUERY_FAILED`) within a few seconds and the temp directory stays under the limit (observed with 256 MB: 53400 after 1.2 s, peak 239 MB, against 1,569 MB without).
 
-#### VC-049 [P2] The CLI prints most error `details` only with `--json`: `PLAN_STALE` does not say which binding changed
+#### VC-048 [P2] The CLI prints most error `details` only with `--json`: `PLAN_STALE` does not say which binding changed
 
 - **Area:** `apps/cli/src/output/render.ts:150-210`
 - **Block:** E
@@ -858,7 +855,7 @@ None found.
 - **Proposed fix:** a per-code detail renderer driven by the catalog's `details` schema (print every scalar and id list, capped), tested against the generated catalog so a new code cannot ship without a rendering.
 - **Acceptance test:** for every catalog code with a `details` schema, `renderHuman` of a sample payload contains every id field of the payload (fails for nine or more codes today).
 
-#### VC-050 [P2] The CLI recommends `operation retry-verification` for operations the server refuses
+#### VC-049 [P2] The CLI recommends `operation retry-verification` for operations the server refuses
 
 - **Area:** `apps/cli/src/output/views.ts:365-380` (`operationNext`)
 - **Block:** E
@@ -870,7 +867,7 @@ None found.
 - **Proposed fix:** use `OperationRead.retryable`.
 - **Acceptance test:** a CLI unit test with `retryable:false` expects no `retry-verification` hint.
 
-#### VC-051 [P2] A superseded `needs_attention` operation is recorded with verification outcome `failed` although verification never ran
+#### VC-050 [P2] A superseded `needs_attention` operation is recorded with verification outcome `failed` although verification never ran
 
 - **Area:** `packages/operations/src/supersede.ts:49-66`
 - **Block:** E
@@ -882,7 +879,7 @@ None found.
 - **Proposed fix:** show `supersededBy` ("closed by <op>") in CLI and Web, or add a distinct terminal state (additive bundle, needs OD-58).
 - **Acceptance test:** closing a stuck operation exposes its closer in `operation show --output json` and the human view does not say "verification failed".
 
-#### VC-052 [P2] The documented repair of a broken `verify.sql` cannot be completed with the CLI
+#### VC-051 [P2] The documented repair of a broken `verify.sql` cannot be completed with the CLI
 
 - **Area:** `apps/cli` (no `ingest` command), `04-migrations/verification.md:419-433`, `failure-and-recovery.md` E10
 - **Block:** E
@@ -894,7 +891,7 @@ None found.
 - **Proposed fix:** `exponetdb migration ingest [paths…]` (class low, audited) listing the statuses `stored|unchanged|verify_revision|rewritten_unapplied`.
 - **Acceptance test:** E10 end to end through the CLI only, including the ingest step.
 
-#### VC-053 [P2] RB-10 (Control Store down) leaves the ledger-mirror problem unaddressed
+#### VC-052 [P2] RB-10 (Control Store down) leaves the ledger-mirror problem unaddressed
 
 - **Area:** `12-operations/control-store-runbook.md:129-130`
 - **Block:** E
@@ -906,7 +903,7 @@ None found.
 - **Proposed fix:** rewrite step 6 as a per-target loop with commands, scopes and the expected `LEDGER_DIVERGENCE` sequence; reference it from the upgrade-rollback path.
 - **Acceptance test:** a runbook-lab test of RB-10 on a stack with one staging target passes with only the documented commands.
 
-#### VC-054 [P2] A plan from before an upgrade, or a lost race, answers HTTP 500 `INTERNAL` instead of a catalog code
+#### VC-053 [P2] A plan from before an upgrade, or a lost race, answers HTTP 500 `INTERNAL` instead of a catalog code
 
 - **Area:** `packages/operations/src/errors.ts`, `accept.ts:192`, `apps/server/src/interfaces/http/request.ts:152-162`
 - **Block:** E
@@ -918,7 +915,7 @@ None found.
 - **Proposed fix:** map `operation_kind_unknown` to `PLAN_STALE` with binding `kindVersion`, `operation_state_changed` to `OPERATION_CONFLICT` / `PLAN_ALREADY_USED`, `idempotency_in_progress` to a 409.
 - **Acceptance test:** a contract test that every `InternalOperationCode` reachable from a route maps to a catalog code.
 
-#### VC-055 [P2] A plan does not check that its own verification can run: a missing verifier credential parks the target after the commit
+#### VC-054 [P2] A plan does not check that its own verification can run: a missing verifier credential parks the target after the commit
 
 - **Area:** `packages/migrations-engine/src/planner.ts`, `verification.ts`, registry credentials (role `verifier`)
 - **Block:** E
@@ -930,7 +927,7 @@ None found.
 - **Proposed fix:** add `verifierReady` (credential present for the cluster, and the problems `verifierProblems` reports) to the planner's facts; a policy rule denies a production plan when it is false and shows a warning finding otherwise.
 - **Acceptance test:** an engine integration test: a target without a verifier credential gives a plan with the finding (or a refusal on production); with the credential the plan is allowed. Fails before.
 
-#### VC-056 [P2] Recovery by naming exists for two migration kinds only; every other operation that ends `needs_attention` with an unknown outcome still keeps its domain for ever (TC-005 neighbour)
+#### VC-055 [P2] Recovery by naming exists for two migration kinds only; every other operation that ends `needs_attention` with an unknown outcome still keeps its domain for ever (TC-005 neighbour)
 
 - **Area:** `packages/operations/src/kinds.ts` (`supersedes` is optional), implemented only in `packages/migrations-engine/src/kind.ts` (`migration.apply`, by `resume`) and `reverify.ts` (`migration.verify`)
 - **Block:** R
@@ -942,7 +939,7 @@ None found.
 - **Proposed fix:** an operator action (human, step-up, audited) that closes a named `needs_attention` operation for any kind, or a `supersedes` for each kind that holds a domain.
 - **Acceptance test:** for each domain-holding kind a test that ends it `needs_attention` / `unknown` and then releases the domain through the action.
 
-#### VC-057 [P2] Planning a node revoke or decommission fails with 500 INTERNAL while any active plan body holds an escaped NUL (regression of the TC-019 fix)
+#### VC-056 [P2] Planning a node revoke or decommission fails with 500 INTERNAL while any active plan body holds an escaped NUL (regression of the TC-019 fix)
 
 - **Area:** `packages/nodes/src/plans.ts` (`nodeImpact`, query `nodes.plan.impact_plans`), `POST /nodes/{id}/revoke`, `POST /nodes/{id}/decommission`, CLI `node revoke` and `node decommission`
 - **Block:** R
@@ -954,7 +951,7 @@ None found.
 - **Proposed fix:** the same `replace(...)` guard (or read the node id from a column that is written at plan time instead of parsing every active body); add the NUL case to a shared helper so the next new query cannot forget it.
 - **Acceptance test:** the probe above becomes `http-nodes.int.test.ts` "plans a revoke while an active plan body holds an escaped NUL" (201 with the fix, 500 without); plus a grep-style check in the repository that every `plan_bodies` `::jsonb` cast goes through the guard.
 
-#### VC-058 [P2] An approval 15 minutes after the plan expired was accepted and the production change ran; awaiting_approval never ends (stack reproduction of TC-034 / OD-64 and of the B1 approval-window finding)
+#### VC-057 [P2] An approval 15 minutes after the plan expired was accepted and the production change ran; awaiting_approval never ends (stack reproduction of TC-034 / OD-64 and of the B1 approval-window finding)
 
 - **Area:** `packages/operations` accept and approvals, CLI `approval`
 - **Block:** B
@@ -966,7 +963,7 @@ None found.
 - **Proposed fix:** decide OD-64; at minimum refuse an approval after the plan's expiry and cancel the operation.
 - **Acceptance test:** `I9-approval.sh inspect` prints PASS.
 
-#### VC-059 [P2] A lost COMMIT reply plus a target restart parks the operation as unknown with the change committed; it is never reconciled, and the only exit mislabels it
+#### VC-058 [P2] A lost COMMIT reply plus a target restart parks the operation as unknown with the change committed; it is never reconciled, and the only exit mislabels it
 
 - **Area:** `packages/migrations-engine` (`kind.ts` reconcile, `reverify.ts`)
 - **Block:** B
@@ -978,7 +975,7 @@ None found.
 - **Proposed fix:** retry the reconcile on a timer; close as succeeded once the ledger shows applied and verification passed.
 - **Acceptance test:** after the restart the operation reaches `succeeded` without a human.
 
-#### VC-060 [P2] The restic runbook does not apply globals and does not stop without them (TC-045 / D-07 not fixed)
+#### VC-059 [P2] The restic runbook does not apply globals and does not stop without them (TC-045 / D-07 not fixed)
 
 - **Area:** `12-operations/backup-runbooks.md` (logical path), restic restore flow
 - **Block:** C
@@ -990,7 +987,7 @@ None found.
 - **Proposed fix:** stop before `pg_restore` when no `globals*.sql` exists; create the roles first; refuse to start the restored cluster after a failed restore.
 - **Acceptance test:** a runbook-lab test restoring a snapshot with a role grant ends `ok` with the roles present, and a snapshot without globals stops with a named message.
 
-#### VC-061 [P2] restore.execute does not re-check space (D-08 not fixed), and restore.prepare measures the engine directory, not the scratch directory
+#### VC-060 [P2] restore.execute does not re-check space (D-08 not fixed), and restore.prepare measures the engine directory, not the scratch directory
 
 - **Area:** `restore.prepare@1`, `restore.execute@1`
 - **Block:** C
@@ -1002,7 +999,7 @@ None found.
 - **Proposed fix:** repeat the checks at execute; measure `scratch/`.
 - **Acceptance test:** an execute with insufficient space is refused before any write.
 
-#### VC-062 [P2] Wrong key or deleted repository: backup verify needs 102 s and ends OUTCOME_UNKNOWN although the helper refused at once; errors carry no code
+#### VC-061 [P2] Wrong key or deleted repository: backup verify needs 102 s and ends OUTCOME_UNKNOWN although the helper refused at once; errors carry no code
 
 - **Area:** Control Plane `backup verify` and `backup refresh`, helper `backup.list`
 - **Block:** C
@@ -1014,7 +1011,7 @@ None found.
 - **Proposed fix:** map the helper refusals (`failed`, with a code); report `repository_missing`.
 - **Acceptance test:** a wrong key ends `failed` with a named code within seconds; a deleted repository reports `repository_missing`.
 
-#### VC-063 [P2] pitr_random drills are refused until a wal.archive_status observation exists, and explicit pitr: plans stayed refused in one world
+#### VC-062 [P2] pitr_random drills are refused until a wal.archive_status observation exists, and explicit pitr: plans stayed refused in one world
 
 - **Area:** drill selection, `backup refresh`
 - **Block:** C
@@ -1026,7 +1023,7 @@ None found.
 - **Proposed fix:** let the refresh record the archive's newest segment time, or name the missing observation in the reason.
 - **Acceptance test:** after a refresh a `pitr_random` plan is selectable; the refusal names the missing observation.
 
-#### VC-064 [P2] After a restore, a production target the store never mirrored is not blocked, `ledger reconcile` says "nothing to reconcile" while status says "out of sync", and the next apply adopts the unknown row
+#### VC-063 [P2] After a restore, a production target the store never mirrored is not blocked, `ledger reconcile` says "nothing to reconcile" while status says "out of sync", and the next apply adopts the unknown row
 
 - **Area:** `packages/migrations-engine/src/divergence.ts:44-47`, `reconcile.ts:176-178`
 - **Block:** C
@@ -1038,7 +1035,7 @@ None found.
 - **Proposed fix:** count a row as recorded only when `operation_migrations` says that operation applied it; one divergence function for status, plan and reconcile.
 - **Acceptance test:** restore a store older than a production apply whose operation row is `awaiting_approval`: `plan` answers `LEDGER_DIVERGENCE` and `ledger reconcile` produces a plan.
 
-#### VC-065 [P2] An old role keeps claiming and finishing operations after the schema moved ahead (503 not_ready, no log line)
+#### VC-064 [P2] An old role keeps claiming and finishing operations after the schema moved ahead (503 not_ready, no log line)
 
 - **Area:** `role.ts` (`compareSchema` at start and every 5 s), `operations-loop.ts`
 - **Block:** C
@@ -1050,7 +1047,7 @@ None found.
 - **Proposed fix:** stop claiming when the schema state is not `current`, and log it once; or document that additive releases rely on the old worker finishing.
 - **Acceptance test:** after `migrate`, an old-build worker claims no new operation and logs `schema_not_current`.
 
-#### VC-066 [P2] The upgrade runbook omits eleven steps: no pre-upgrade backup, outage window, drain, preflight or post-checks
+#### VC-065 [P2] The upgrade runbook omits eleven steps: no pre-upgrade backup, outage window, drain, preflight or post-checks
 
 - **Area:** `upgrades.md`, `deployment.md` §6, `deployments/2026-10-21-reos-01-studio-frame.md`
 - **Block:** C
@@ -1062,7 +1059,7 @@ None found.
 - **Proposed fix:** the one-page upgrade card from `README.md` §8 in `upgrades.md`; a `control-store status --against <build>` preflight; audit the migration.
 - **Acceptance test:** the runbook-lab test of the first P1 follows the card end to end.
 
-#### VC-067 [P2] An unmet backup requirement on a production apply answers 500 INTERNAL, and nothing is logged
+#### VC-066 [P2] An unmet backup requirement on a production apply answers 500 INTERNAL, and nothing is logged
 
 - **Area:** `packages/operations` (apply gate), `packages/contracts` (errors), `apps/server` (problem mapping)
 - **Block:** D
@@ -1074,7 +1071,7 @@ None found.
 - **Proposed fix:** pass `newerThan` into the error; log (warn) whenever `problemResponse` downgrades a catalog code to INTERNAL.
 - **Acceptance test:** an operations test: an unmet backup requirement gives `BACKUP_REQUIRED` with `details.newerThan`; a server test: details that do not match the catalog are logged and not turned into INTERNAL.
 
-#### VC-068 [P2] The first-party CLI fails with PERMISSION_DENIED for everyone whose role binding is on an environment
+#### VC-067 [P2] The first-party CLI fails with PERMISSION_DENIED for everyone whose role binding is on an environment
 
 - **Area:** `apps/cli` (`src/cli/remote.ts`), `installation.get` authorization
 - **Block:** D
@@ -1086,7 +1083,7 @@ None found.
 - **Proposed fix:** make the pre-flight optional or use a read the person always holds; or let any bound person read the installation.
 - **Acceptance test:** a CLI test with a server whose `GET /installation` is 403 and target routes 200: `target list` exits 0.
 
-#### VC-069 [P2] A sub-megabyte bundle can hold the server's CPU for 30 s or raise its memory by 620 MiB; the limits are not named
+#### VC-068 [P2] A sub-megabyte bundle can hold the server's CPU for 30 s or raise its memory by 620 MiB; the limits are not named
 
 - **Area:** planning path (`packages/migrations-engine` analysis, `packages/postgres` parser), plan route
 - **Block:** D
@@ -1098,7 +1095,7 @@ None found.
 - **Proposed fix:** cap statements, comment depth and tokens before analysis with named `MIGRATION_LIMIT_*` errors; time-box the analysis; document the values.
 - **Acceptance test:** one unit test per input class: a named limit error, under 2 s and 100 MiB.
 
-#### VC-070 [P2] A plan that stops part-way leaves the drift baseline behind: every later verified bundle reads as drift (34 findings, 6 critical) until a person accepts all of it
+#### VC-069 [P2] A plan that stops part-way leaves the drift baseline behind: every later verified bundle reads as drift (34 findings, 6 critical) until a person accepts all of it
 
 - **Area:** `packages/diagnostics` (`MigrationBaselineStore.record`), drift baseline, `drift.accept`
 - **Block:** B
@@ -1110,7 +1107,7 @@ None found.
 - **Proposed fix:** advance the baseline per verified bundle (ledger rows carry `fingerprint_after`) or accept a pre-fingerprint equal to the ledger head's `fingerprint_after`; offer per-finding or per-operation accept.
 - **Acceptance test:** integration: 3 bundles, the 3rd fails, the next plan applies: the drift check is clean; a GRANT made between the two plans is still reported.
 
-#### VC-071 [P2] ALTER COLUMN TYPE on a column a view reads: the plan is silent, the apply fails 0A000 after earlier bundles were applied, and the offered remedy does not fit
+#### VC-070 [P2] ALTER COLUMN TYPE on a column a view reads: the plan is silent, the apply fails 0A000 after earlier bundles were applied, and the offered remedy does not fit
 
 - **Area:** `packages/migrations/src/lint`, plan analysis, CLI operation text
 - **Block:** B
@@ -1122,7 +1119,7 @@ None found.
 - **Proposed fix:** a plan fact "objects depending on this column" with a blocking flag for views; show the failed statement's message; offer resume only for non-transactional bundles.
 - **Acceptance test:** the plan lists `crm_overview` and `mv_crm_pipeline` as blocking dependents; the failed operation shows the PostgreSQL message and no resume hint.
 
-#### VC-072 [P2] A clone that takes the registered name is healthy, drift-clean and plannable; apply is refused only as PLAN_STALE without a cause
+#### VC-071 [P2] A clone that takes the registered name is healthy, drift-clean and plannable; apply is refused only as PLAN_STALE without a cause
 
 - **Area:** registry identity check (database oid), plan, health, drift
 - **Block:** B
@@ -1134,7 +1131,7 @@ None found.
 - **Proposed fix:** compare the oid in the identity probe (condition, suspend) and refuse the plan; add `details.binding` to `PLAN_STALE`.
 - **Acceptance test:** after the swap `target show` is not healthy and plan fails with a typed `DATABASE_MISMATCH` naming recorded and observed oid.
 
-#### VC-073 [P2] A renamed or missing database turns `migration plan` into INTERNAL
+#### VC-072 [P2] A renamed or missing database turns `migration plan` into INTERNAL
 
 - **Area:** `apps/server` error mapping of `TARGET_SQL_ERROR`
 - **Block:** B
@@ -1146,7 +1143,7 @@ None found.
 - **Proposed fix:** map connection and catalog errors on the plan route to the unreachable code and keep the SQLSTATE in details.
 - **Acceptance test:** a plan against a renamed database returns the typed code, not 500.
 
-#### VC-074 [P2] A hot standby behind the registered endpoint is healthy and plannable; the apply fails as OUTCOME_UNKNOWN
+#### VC-073 [P2] A hot standby behind the registered endpoint is healthy and plannable; the apply fails as OUTCOME_UNKNOWN
 
 - **Area:** health probes, `migration.apply` error mapping
 - **Block:** B
@@ -1158,7 +1155,7 @@ None found.
 - **Proposed fix:** add `in_recovery` to the identity/activity probe and a `target_read_only` condition; classify 25006 before any statement.
 - **Acceptance test:** with the endpoint on a standby, health has a critical condition and the apply ends `failed/not_applied` with `TARGET_READ_ONLY`.
 
-#### VC-075 [P2] Adding an endpoint of a different instance is applied without a check and suspends the affected targets within seconds; recovering a production target takes plan, approval and 50 s
+#### VC-074 [P2] Adding an endpoint of a different instance is applied without a check and suspends the affected targets within seconds; recovering a production target takes plan, approval and 50 s
 
 - **Area:** `registry.endpoint.add`, health identity probe, `target.resume`
 - **Block:** B
@@ -1170,7 +1167,7 @@ None found.
 - **Proposed fix:** probe the endpoint at plan time with the cluster credentials, show the identity in the plan, deny on a different system identifier.
 - **Acceptance test:** planning an endpoint of an instance with another system identifier is denied with both identifiers named; no target changes state.
 
-#### VC-076 [P2] The documented database move has no executable path: a copy of a registered target is refused in every environment and nothing re-stamps the marker
+#### VC-075 [P2] The documented database move has no executable path: a copy of a registered target is refused in every environment and nothing re-stamps the marker
 
 - **Area:** `legacy-import.md` §5, target register, registry
 - **Block:** B
@@ -1182,7 +1179,7 @@ None found.
 - **Proposed fix:** a `target.rehome` plan (human, step-up, approval on prod) that adopts a decommissioned target's marker and increments the generation; or remove the sentence and document import-after-move.
 - **Acceptance test:** dump a baselined nonprod target into a new database, decommission the old target, run the documented command: the new database is the target with ledger and baseline kept, generation + 1.
 
-#### VC-077 [P2] CREATE PUBLICATION (the standard supabase_realtime) in the legacy history makes the whole analysis incomplete; the operation ends verification_failed with a forward-fix remedy
+#### VC-076 [P2] CREATE PUBLICATION (the standard supabase_realtime) in the legacy history makes the whole analysis incomplete; the operation ends verification_failed with a forward-fix remedy
 
 - **Area:** `migration import analyze`, replay admission, operation texts
 - **Block:** B
@@ -1194,7 +1191,7 @@ None found.
 - **Proposed fix:** allow plain table publications in the replay, or detect before replay in `scratch-check`; end an incomplete analysis in a state whose next step is "fix inputs and analyze again".
 - **Acceptance test:** a history with `CREATE PUBLICATION p FOR TABLE t` analyses to `open`; an incomplete report ends the operation with that next step.
 
-#### VC-078 [P2] After a failed write path clears, the roles stay not_ready until their pooled sessions die; a database-level read-only default stops nothing but the heartbeat
+#### VC-077 [P2] After a failed write path clears, the roles stay not_ready until their pooled sessions die; a database-level read-only default stops nothing but the heartbeat
 
 - **Area:** `packages/control-store/src/store.ts` (pool; `BEGIN ... READ WRITE` at line 158), heartbeat in `apps/server/src/composition/role.ts`
 - **Block:** C
@@ -1206,7 +1203,7 @@ None found.
 - **Proposed fix:** destroy the client on 25006 and other class 25 and 57 errors; run the heartbeat in a `BEGIN READ WRITE` transaction like every other write; document that `default_transaction_read_only` is not a freeze.
 - **Acceptance test:** set the default, terminate backends, reset it: all roles ready within one heartbeat interval without terminating backends; with the default on, a mutation fails closed or the roles stay ready (decide, then test).
 
-#### VC-079 [P2] One MCP client can push serve far past its 512 MiB container limit: 1,000 concurrent requests, 98 percent rejected 429, RSS 156 to 583 MB
+#### VC-078 [P2] One MCP client can push serve far past its 512 MiB container limit: 1,000 concurrent requests, 98 percent rejected 429, RSS 156 to 583 MB
 
 - **Area:** `apps/server/src/interfaces/mcp/edge.ts`, `interfaces/http/lifecycle.ts`, `12-operations/deployment.md` §2a
 - **Block:** C
@@ -1218,9 +1215,33 @@ None found.
 - **Proposed fix:** `maxConnections` plus a per-grant in-flight cap checked before the body is read; a global in-flight byte budget for bundle routes; document the container memory with the measured peak.
 - **Acceptance test:** 1,000 concurrent `tools/list` from one grant keep serve RSS under 350 MB and `/healthz/live` under 100 ms; 429 answers carry `Retry-After`.
 
-### P3 (72)
+#### VC-079 [P2] Forged evidence is accepted: two hand-written ledger rows and any operation id let production take a bundle staging never ran
 
-#### VC-080 [P3] third-party, licenses and ui-safety are part of `bun run verify` but no CI job runs them
+- **Area:** `packages/migrations-engine/src/evidence.ts`, `kind.ts` (`#evidenceBindings`), policy `migration.staging-evidence`
+- **Block:** D
+- **Reproduction:** `D/security/scripts/s7-promo-forged.sh <project dir> s7evi s7prd` (needs the s7 pair on the stack). As PostgreSQL superuser of the evidence database insert into `exponetdb.schema_migrations` a row for a bundle never applied there (the bundle's checksum, `operation_id` of the evidence target's genuine apply, `fingerprint_before` copied from the genuine row) and a passed row into `exponetdb.migration_verifications` (a well-formed `vfy_` id, the bundle's verify digest); then `exponetdb migration plan --target lab/platform/s7prd <id>` and `exponetdb plan apply <plan> --yes`. Variant F3 uses the id of a `registry.environment.create` operation as `operation_id`.
+- **Expected:** evidence missing or unverified; `staging-production-policy.md` §1.2 condition 3 and §6 ("a ledger row inserted by hand is not evidence").
+- **Actual:** evidence present, lineage match, decision `allow` with no failing rule (with the genuine operation id and with the id of a `registry.environment.create` operation; a NULL `fingerprint_before` gives `require`). The apply on the lab production target succeeded (applied, verified, ledger row on production). After the forgery `migration status` on the evidence target shows "Mirror: out of sync" and the next apply plan on that target is refused with `LEDGER_DIVERGENCE`; the evidence read consults neither. The precondition is write access to the evidence database's ledger (a database owner or superuser), which is outside ExponetDB's trust but inside what a hurried operator or a compromised staging admin can do; the owner may weigh it as P1 because it defeats a mandatory production gate end to end. Static side (agent B1, `B/contract.md` §2.5, §2.6, §3 DF-08, DF-09): "known" is `operations.operations` looked up by id only (`evidence.ts:181-190, 209`, any kind, target or project), verification is read from the target and never from `migrations.verification_mirror`, there is no ledger-versus-mirror comparison on the evidence target (`readEvidenceTarget`, `evidence.ts:98-125`), and the same weak attribution heals a hand-written row into the mirror (`divergence.ts:46-48`, `records.ts:188-191`); acceptance (`kind.ts:225-260`) does not repeat condition 3. The same weakness explains why a restored Control Store leaves a never-mirrored production target unblocked (`F/findings-S3.md`).
+- **Evidence:** `D/security/promotion-leftovers.md` section c; `D/security/scripts/s7-promo-forged.sh`; `B/contract.md`.
+- **Root cause:** attribution by operation id alone; the mirror, which exists to catch tampering, is not consulted.
+- **Proposed fix:** an evidence row counts only if the mirror holds the same (target, generation, migration_id, checksum, operation_id), the operation is a `migration.apply` or `resume` of that target whose plan lists the migration, and the verification id is in `verification_mirror`; run `compareLedger` on the evidence target and treat `LEDGER_DIVERGENCE` as no evidence; make `operationsOfTarget` require the plan to include the migration id.
+- **Acceptance test:** a stack test that inserts the rows of variants F2 and F3 and expects evidence unverified or missing and `deny` (fails today); a hand-written ledger row with a real operation id of this target is `LEDGER_DIVERGENCE` and unrecorded.
+
+#### VC-080 [P2] The same migration id with different bytes can be applied on two targets: the immutability check is made at plan time only
+
+- **Area:** `packages/migrations-engine/src/store.ts` (`ingestBundles`, `appliedElsewhere`), `kind.ts` (execute), `records.ts` (`writeMirror`)
+- **Block:** D
+- **Reproduction:** `D/security/scripts/s7-promo-immutability.sh` (concurrent) and `s7-promo-immutability2.sh` (sequential): the same id and directory name, a different `up.sql`; plan variant A for target t1 and variant B for t2 (both plans active); apply both at the same moment, or one after the other.
+- **Expected:** invariant I13: the same id with other bytes is refused everywhere; the second apply ends `MIGRATION_CHECKSUM_MISMATCH`.
+- **Actual:** both operations succeeded; the target ledgers hold the same migration id with two checksums (`b1c46e86...` and `5841ee62...`; the sequential run `30ac5dde...` and `98057fb0...`). The next plan of either variant on the other target is refused. Promotion is not affected (production compares the checksum with the evidence row). Ingestion of two variants of a new id at the same moment is clean (revisions 1 and 2, no 5xx); after an apply, REST and CLI refuse other bytes (409, exit 1); the dangling stored bundle of the first campaign (TC-008) no longer poisons planning.
+- **Evidence:** `D/security/promotion-leftovers.md` sections d and e.
+- **Root cause:** `appliedElsewhere` is read in `ingestBundles` (`store.ts:151-252`) at plan time; accept and execute do not repeat it; no unique claim of (project, migration id) to one checksum in the Control Store.
+- **Proposed fix:** a table keyed (project_id, migration_id) holding the first applied checksum, written in the same Control Store transaction as the first mirror row and compared at accept and at execute under the project bundle lock; or repeat `appliedElsewhere` in `#registryBindings`.
+- **Acceptance test:** a stack test with the two plans: the second apply ends `failed/not_applied` with `MIGRATION_CHECKSUM_MISMATCH` and the second ledger stays empty (fails today).
+
+### P3 (80)
+
+#### VC-081 [P3] third-party, licenses and ui-safety are part of `bun run verify` but no CI job runs them
 
 - **Area:** `.github/workflows/ci.yml`, `package.json` (`verify`)
 - **Block:** A
@@ -1232,7 +1253,7 @@ None found.
 - **Proposed fix:** add the three scripts after "Secret scan" (each under 2 s).
 - **Acceptance test:** a PR adding an unregistered copied file under `packages/ui` turns the `typescript` job red.
 
-#### VC-081 [P3] A local image build (smoke:image, docker build) needs BuildKit and no document says so
+#### VC-082 [P3] A local image build (smoke:image, docker build) needs BuildKit and no document says so
 
 - **Area:** `Dockerfile`, `package.json` (`smoke:image`), `local-development.md`, `deployment.md`
 - **Block:** A
@@ -1244,7 +1265,7 @@ None found.
 - **Proposed fix:** one sentence in `local-development.md` and `deployment.md`, plus a `docker buildx version` pre-check in `smoke:image`.
 - **Acceptance test:** `smoke:image` on a host without buildx fails within a second, naming the package.
 
-#### VC-082 [P3] Tests depend on the order of tests inside their file, so a single test cannot be run alone
+#### VC-083 [P3] Tests depend on the order of tests inside their file, so a single test cannot be run alone
 
 - **Area:** `packages/audit/test/golden.test.ts`, `packages/policy/test/version.test.ts`, `packages/secrets/test/envelope.test.ts` and `store.int.test.ts`, 51 integration files, `apps/design-system/test/patterns/ui-patterns.test.tsx`
 - **Block:** A
@@ -1256,7 +1277,7 @@ None found.
 - **Proposed fix:** build the state inside each test or in a describe-level `beforeAll`; derive golden expectations from the vector file; mark true scenario files with `describe.sequential` and a header comment; fix the leak in `ui-patterns.test.tsx`.
 - **Acceptance test:** the four `-t` commands above pass alone, and `vitest run --sequence.shuffle.tests` passes for `packages/audit`, `policy`, `secrets` and `design-system` with five seeds.
 
-#### VC-083 [P3] Edits that do not change the checksum are dropped by ingest, and three lints cannot fire on the server path
+#### VC-084 [P3] Edits that do not change the checksum are dropped by ingest, and three lints cannot fire on the server path
 
 - **Area:** migrations-engine/src/store.ts:184-190, migrations/src/lint/lint.ts:817-834, planner.ts:656-678
 - **Block:** B
@@ -1268,7 +1289,7 @@ None found.
 - **Proposed fix:** Compare the submitted source digest and metadata with the newest revision and store a metadata revision, or document the drop. Pass `ingested` from the store.
 - **Acceptance test:** Unit test of ingestBundles: a comment-only edit returns a distinct status or the documented `unchanged`. A lint test with `ingested` fed.
 
-#### VC-084 [P3] c1 summary sentences are looser than c1: spacing, adjacency, formatters and case change the checksum
+#### VC-085 [P3] c1 summary sentences are looser than c1: spacing, adjacency, formatters and case change the checksum
 
 - **Area:** exponetdb-docs/04-migrations/migration-bundles.md §3, CLAUDE.md, 04-migrations/README.md
 - **Block:** B
@@ -1280,7 +1301,7 @@ None found.
 - **Proposed fix:** One paragraph in §3 and the README: "where a separator already exists". A `migration lint` rule `checksum_sensitive_edit` comparing source digest with the ledger and naming the class. Recommend formatters off for applied files.
 - **Acceptance test:** A doc test that the three sentences quote N5. A CLI test of the lint rule.
 
-#### VC-085 [P3] The CLI reads a whole oversized bundle file into memory before cutting it
+#### VC-086 [P3] The CLI reads a whole oversized bundle file into memory before cutting it
 
 - **Area:** apps/cli/src/local/project.ts:127-131
 - **Block:** B
@@ -1292,7 +1313,7 @@ None found.
 - **Proposed fix:** Open the file and read at most limit + 1 bytes.
 - **Acceptance test:** CLI test with a sparse 2 GiB file: refused with file_too_large, peak RSS under 100 MiB.
 
-#### VC-086 [P3] Hotfix follow-up is unbuilt: no hotfix_without_evidence finding, no evidence mark
+#### VC-087 [P3] Hotfix follow-up is unbuilt: no hotfix_without_evidence finding, no evidence mark
 
 - **Area:** staging-production-policy.md §3, break-glass apply
 - **Block:** B
@@ -1304,7 +1325,7 @@ None found.
 - **Proposed fix:** Mark the ledger row source evidence break_glass, open the finding, resolve it from the evidence read.
 - **Acceptance test:** Stack: after a break-glass apply the finding exists; after the same migration is applied and verified on staging it resolves.
 
-#### VC-087 [P3] The bundle store has no way to retire a bundle; `pending` lists every never-applied stored id forever
+#### VC-088 [P3] The bundle store has no way to retire a bundle; `pending` lists every never-applied stored id forever
 
 - **Area:** migrations-engine/src/store.ts, reads.ts:178-185, migrations.bundle_revisions
 - **Block:** B
@@ -1316,7 +1337,7 @@ None found.
 - **Proposed fix:** An append-only `withdrawn` marker read by status and planning, plus a store doctor (dangling, orphaned, unreferenced). See E/proposals.md.
 - **Acceptance test:** Stack: ingest, withdraw; status no longer lists it as pending; planning it by id is refused with a clear code.
 
-#### VC-088 [P3] A later migration that fails to execute ends the operation as verification_failed with error code VERIFICATION_FAILED
+#### VC-089 [P3] A later migration that fails to execute ends the operation as verification_failed with error code VERIFICATION_FAILED
 
 - **Area:** migrations-engine/src/kind.ts:618-619, operations/src/driver.ts:412-422
 - **Block:** B
@@ -1328,7 +1349,7 @@ None found.
 - **Proposed fix:** Carry firstError as the operation's error code and detail when the stop was an execution failure. Fix planning-and-apply.md §9.
 - **Acceptance test:** engine.int.test.ts case: the second migration fails; the operation's errorCode is MIGRATION_EXECUTION_FAILED with migration id, statement index and SQLSTATE.
 
-#### VC-089 [P3] Seven pinned settings are refused at top level but not guarded after each statement
+#### VC-090 [P3] Seven pinned settings are refused at top level but not guarded after each statement
 
 - **Area:** packages/postgres/src/parser/migration.ts `ENGINE_SETTINGS` (line 116), `migration-facts.ts` `EngineGuards`
 - **Block:** B (I4)
@@ -1340,7 +1361,7 @@ None found.
 - **Proposed fix:** derive both from one list and read every listed setting in the guard query.
 - **Acceptance test:** the seven failing int cases.
 
-#### VC-090 [P3] A string literal continued across a line comment is valid PostgreSQL and c1 N4, but libpg_query refuses it
+#### VC-091 [P3] A string literal continued across a line comment is valid PostgreSQL and c1 N4, but libpg_query refuses it
 
 - **Area:** packages/postgres parser (libpg_query 16.7.3, 17.7.4, 18.1.5), `lexer.ts` `continuation`
 - **Block:** B (I5)
@@ -1352,7 +1373,7 @@ None found.
 - **Proposed fix:** document it in section 3 N4 and make the `parse_error` message say "string continuation across a comment is not supported"; or rebuild the bindings from a scanner that matches `scan.l`.
 - **Acceptance test:** the I5-edges test, or a documented-limit test.
 
-#### VC-091 [P3] The lint report depends on the order the bundles are submitted in
+#### VC-092 [P3] The lint report depends on the order the bundles are submitted in
 
 - **Area:** packages/migrations/src/lint/lint.ts (`parallel_object_overlap`)
 - **Block:** B (I1)
@@ -1364,7 +1385,7 @@ None found.
 - **Proposed fix:** sort bundles by id before the pair loop and name all partners (sorted).
 - **Acceptance test:** the I1 test.
 
-#### VC-092 [P3] The CLI loader turns a symbolic link or directory named `verify.sql`/`up.sql` into an empty file, and reads an oversized file whole
+#### VC-093 [P3] The CLI loader turns a symbolic link or directory named `verify.sql`/`up.sql` into an empty file, and reads an oversized file whole
 
 - **Area:** apps/cli/src/local/project.ts `readBundles`
 - **Block:** B (I14)
@@ -1376,7 +1397,7 @@ None found.
 - **Proposed fix:** reject non-regular entries with a named reason; open the file and read at most `limit + 1` bytes.
 - **Acceptance test:** the three tests.
 
-#### VC-093 [P3] A deeply nested `migration.yaml` is refused with the YAML library's stack-overflow text, not a named limit
+#### VC-094 [P3] A deeply nested `migration.yaml` is refused with the YAML library's stack-overflow text, not a named limit
 
 - **Area:** packages/migrations/src/format/yaml.ts
 - **Block:** B (I14, I15)
@@ -1388,7 +1409,7 @@ None found.
 - **Proposed fix:** reject a depth above 32 with `yaml_depth` before composing the document.
 - **Acceptance test:** the named test.
 
-#### VC-094 [P3] The limits of bundles are not announced in one place, and two bite below the documented ones
+#### VC-095 [P3] The limits of bundles are not announced in one place, and two bite below the documented ones
 
 - **Area:** exponetdb-docs/04-migrations/migration-bundles.md section 1 and 2, authoring-and-ci.md, contracts `MIGRATION_REQUEST_LIMITS`, `BUNDLE_INVALID_REASONS`
 - **Block:** B (I15)
@@ -1400,7 +1421,7 @@ None found.
 - **Proposed fix:** one table in `migration-bundles.md` section 1; a reason `parse_budget_exceeded`; see decision B2-D6.
 - **Acceptance test:** a docs test that parses the table and compares with the exported constants.
 
-#### VC-095 [P3] The bundle store drops edits that do not change the checksum, although the documentation says it keeps them
+#### VC-096 [P3] The bundle store drops edits that do not change the checksum, although the documentation says it keeps them
 
 - **Area:** packages/migrations-engine/src/store.ts (`ingestBundles`, "same" test), packages/migrations/src/lint/lint.ts (`comment_only_change`)
 - **Block:** B (I13; also reported statically by B1 as FB1-9)
@@ -1412,7 +1433,7 @@ None found.
 - **Proposed fix:** compare the source digest and the manifest/verify/down bytes as well, and store a `verify_revision` (or a `metadata_revision`) when they differ.
 - **Acceptance test:** the two I13 cases above.
 
-#### VC-096 [P3] Lock facts and rules missing for several heavy statements
+#### VC-097 [P3] Lock facts and rules missing for several heavy statements
 
 - **Area:** `packages/postgres/src/parser/migration.ts`
 - **Block:** B
@@ -1424,7 +1445,7 @@ None found.
 - **Proposed fix:** add the lock facts; separate attach with and without CHECK; optionally rules for non-concurrent REINDEX and DROP INDEX.
 - **Acceptance test:** statement-facts tests per statement kind; one assertion per lock mode proved in `pgcheck`.
 
-#### VC-097 [P3] Master-key rotation has no role order, and the wrong order takes serve out of service
+#### VC-098 [P3] Master-key rotation has no role order, and the wrong order takes serve out of service
 
 - **Area:** `08-auth-and-security/secrets.md` §3, `12-operations/deployment.md` §2, `composition/{role,commands}.ts`
 - **Block:** C
@@ -1436,7 +1457,7 @@ None found.
 - **Proposed fix:** document the order (all roles hold both keys and are ready before the rewrap); make the rewrap wait until every live process reports the new key id.
 - **Acceptance test:** a stack test of the rotation in the wrong order asserts the documented recovery.
 
-#### VC-098 [P3] A data read runs on the target before its audit event is written
+#### VC-099 [P3] A data read runs on the target before its audit event is written
 
 - **Area:** `packages/application/src/queries.ts:249-256,333-345`
 - **Block:** C
@@ -1448,7 +1469,7 @@ None found.
 - **Proposed fix:** write a `requested` event first and a `completed` event after (both phases exist).
 - **Acceptance test:** with the append failing, the read is not executed on the target.
 
-#### VC-099 [P3] The maintenance loop has no per-task deadline and tasks cannot renew their lease
+#### VC-100 [P3] The maintenance loop has no per-task deadline and tasks cannot renew their lease
 
 - **Area:** `apps/server/src/composition/worker-tasks.ts:338-370`, `packages/control-store/src/maintenance.ts:30-76`
 - **Block:** C
@@ -1460,7 +1481,7 @@ None found.
 - **Proposed fix:** a per-task deadline, lease renewal and a longest-running-task metric.
 - **Acceptance test:** a task that never resolves is abandoned at its deadline and the next task runs.
 
-#### VC-100 [P3] An oversized JSON request body is refused without naming the limit
+#### VC-101 [P3] An oversized JSON request body is refused without naming the limit
 
 - **Area:** `apps/server/src/interfaces/http/api.ts:2124-2145`, `request.ts:196-214`
 - **Block:** C
@@ -1472,7 +1493,7 @@ None found.
 - **Proposed fix:** the same detail in `readBody`.
 - **Acceptance test:** a 100 KB body to a 64 KiB route returns `errors[0] = {path: '/body', code: 'too_large'}`.
 
-#### VC-101 [P3] archive_mirror_rows binds neither generation, ids nor lease to the operation, and takes no row lock
+#### VC-102 [P3] archive_mirror_rows binds neither generation, ids nor lease to the operation, and takes no row lock
 
 - **Area:** bundle ledger-reconcile (`migrations.archive_mirror_rows`, SECURITY DEFINER)
 - **Block:** D
@@ -1484,7 +1505,7 @@ None found.
 - **Proposed fix:** FOR SHARE on the operation row, a lease test, bind generation (and ids) to the plan, use `IS DISTINCT FROM` in the reason test.
 - **Acceptance test:** a raw call for an operation that left `running` is refused; a call for ids or a generation outside the plan is refused.
 
-#### VC-102 [P3] The three verify.sql files of the new bundles pass on broken bundles and none checks ownership
+#### VC-103 [P3] The three verify.sql files of the new bundles pass on broken bundles and none checks ownership
 
 - **Area:** bundles operation-supersession, ledger-reconcile, offline-drill-record
 - **Block:** D
@@ -1496,7 +1517,7 @@ None found.
 - **Proposed fix:** assert proowner, prosecdef, proconfig, trigger tgtype/tgenabled and a body digest in each verify.sql (in a new bundle revision; the files are not frozen yet).
 - **Acceptance test:** the mutation script ends with every mutation failing the checks.
 
-#### VC-103 [P3] POST /clusters/{id}/drills/offline with restoredAt ahead of the database clock is a 500
+#### VC-104 [P3] POST /clusters/{id}/drills/offline with restoredAt ahead of the database clock is a 500
 
 - **Area:** packages/application/src/backups.ts:587-630, bundle offline-drill-record, error mapping (fix of TC-013)
 - **Block:** D
@@ -1508,7 +1529,7 @@ None found.
 - **Proposed fix:** validate restoredAt against the clock and map EXB06/EXM01 to typed errors.
 - **Acceptance test:** `http-backups.int.test.ts`: restoredAt one day ahead gives 400.
 
-#### VC-104 [P3] 24 of 45 Control Store bundles are not pinned, the three new ones among them
+#### VC-105 [P3] 24 of 45 Control Store bundles are not pinned, the three new ones among them
 
 - **Area:** packages/control-store/frozen-bundles.json, packages/control-store/test/immutable-bundles.test.ts
 - **Block:** D
@@ -1520,7 +1541,7 @@ None found.
 - **Proposed fix:** pin all deployed bundles; pin the three new ones as soon as they are deployed (see decision D0-05); lint the Control Store bundles in CI.
 - **Acceptance test:** the pin test lists the ids and fails on a one-byte edit of any of them.
 
-#### VC-105 [P3] migration.resume takes the operation it closes from the target's own ledger events (static reading only)
+#### VC-106 [P3] migration.resume takes the operation it closes from the target's own ledger events (static reading only)
 
 - **Area:** packages/migrations-engine (resume.ts:123, kind.ts:131-139, recovery.ts:14-35)
 - **Block:** D
@@ -1532,7 +1553,7 @@ None found.
 - **Proposed fix:** look it up with `stuckOperationOf`.
 - **Acceptance test:** a hostile event naming another same-target operation closes nothing.
 
-#### VC-106 [P3] The existence of node, backup repository and registry-plan subject ids is visible to callers without access
+#### VC-107 [P3] The existence of node, backup repository and registry-plan subject ids is visible to callers without access
 
 - **Area:** `packages/application` (`nodes.ts`, `backups.ts`, `registry.ts`, `application.ts` `#plan`/`#inline`); REST and MCP `node_status`
 - **Block:** D
@@ -1544,7 +1565,7 @@ None found.
 - **Proposed fix:** in `#plan` and `#inline` call `this.#admit(tx, action, caller)` before `await subject(tx)`; add the same `admit` before `#nodeSubject` in the node reads and before `#repositoryCluster` in the two repository plans.
 - **Acceptance test:** integration: for each listed route, a credential without the permission gets the same status and code for a real and a fabricated id (the `foreign` check of `run-matrix.ts` as a test); fails before the fix.
 
-#### VC-107 [P3] Plan analysis text and advisor evidence reach agents and approvers without the `untrusted` marker
+#### VC-108 [P3] Plan analysis text and advisor evidence reach agents and approvers without the `untrusted` marker
 
 - **Area:** `packages/contracts` (`PlanViewSchema`, `AdvisorFinding`), `packages/migrations-engine/src/analysis.ts`, MCP tools `plan_get`, `migration_plan`, `migration_rollback_plan`, `plan_withdraw`, `advisors_run`
 - **Block:** D
@@ -1556,7 +1577,7 @@ None found.
 - **Proposed fix:** give `analysis` a closed schema whose author-derived members use `untrustedText` (or wrap them as `untrustedJson`), set `openWorldHint: true` on the plan tools, mark `evidence` values; drop `-- check:` names from the analysis or restrict them to a slug pattern.
 - **Acceptance test:** `mcp-tools.test.ts` style: the served output schema of `plan_get` contains no free string outside an `untrusted` member; a plan whose `verify.sql` has `-- check: ignore previous instructions` returns that text only inside an `untrusted: true` member.
 
-#### VC-108 [P3] A database client decides, through `application_name`, that ExponetDB must not cancel its session
+#### VC-109 [P3] A database client decides, through `application_name`, that ExponetDB must not cancel its session
 
 - **Area:** `packages/postgres/src/session-conditions.ts`, policy `connections.replication-protect` / `connections.no-superuser-terminate`
 - **Block:** D
@@ -1568,7 +1589,7 @@ None found.
 - **Proposed fix:** protect by `backend_type`, role membership (`exponetdb_*` roles, superuser) and the pids ExponetDB itself opened (it knows its own backend pids); keep the application-name test only as an advisory label.
 - **Acceptance test:** a PostgreSQL 17 integration test where a non-superuser role sets `application_name = 'exponetdb/spoof'`; `connections.terminate.plan` for that pid must not be `protected`.
 
-#### VC-109 [P3] `packages.apply_update` is a node mutation outside the approval rule and outside the test that pins the catalog
+#### VC-110 [P3] `packages.apply_update` is a node mutation outside the approval rule and outside the test that pins the catalog
 
 - **Area:** `packages/policy/src/catalog/nodes.ts`, `packages/contracts/src/actions.ts:1178`
 - **Block:** D
@@ -1580,7 +1601,7 @@ None found.
 - **Proposed fix:** derive the rule's `appliesTo` from the action registry (every `operationKind` with permission `nodes.operate` or subject node/cluster and class above low), and drop the wave filter from the test.
 - **Acceptance test:** the test selects by action properties, not by wave; it fails today for `packages.apply_update` (and would for any future node kind).
 
-#### VC-110 [P3] identity.md says every `critical` plan needs a fresh re-authentication to apply; the code enforces it only where a kind or policy rule declares it
+#### VC-111 [P3] identity.md says every `critical` plan needs a fresh re-authentication to apply; the code enforces it only where a kind or policy rule declares it
 
 - **Area:** `exponetdb-docs/08-auth-and-security/identity.md:83`, `authorization.md:458`, `packages/auth/src/authorization/engine.ts:382-408`
 - **Block:** D
@@ -1592,7 +1613,7 @@ None found.
 - **Proposed fix:** owner decision D-D1-1; then either add `reauthentication` to `governing()` when `planClass === 'critical'` or correct identity.md.
 - **Acceptance test:** a delegation-matrix case: a CLI bearer applying a critical `postgres.roles.apply` plan on nonprod without a step-up receipt is refused `REAUTH_REQUIRED` (or the document is corrected and the test pins the documented behavior).
 
-#### VC-111 [P3] Six CLI commands declare scopes the API does not accept
+#### VC-112 [P3] Six CLI commands declare scopes the API does not accept
 
 - **Area:** `apps/cli/src/commands/registry.ts`, `migration.ts` (command registry feeding help and the agent reference)
 - **Block:** D
@@ -1604,7 +1625,7 @@ None found.
 - **Proposed fix:** a unit test over `COMMANDS` x `ACTIONS` (what the generator does) and corrected declarations.
 - **Acceptance test:** that test; fails today with the six commands.
 
-#### VC-112 [P3] Allowlisted functions and views disclose server details to every data.read caller
+#### VC-113 [P3] Allowlisted functions and views disclose server details to every data.read caller
 
 - **Area:** `allowlist.ts` (`inet_server_addr`, `inet_server_port`, `current_setting`), admission (`information_schema._pg_foreign_*`)
 - **Block:** D
@@ -1616,7 +1637,7 @@ None found.
 - **Proposed fix:** remove `inet_server_addr` and `inet_server_port`, restrict `current_setting` to a name allowlist, add `_pg_foreign_data_wrappers`/`_pg_foreign_servers`/`_pg_foreign_table_columns`/`_pg_foreign_tables` to the refused list.
 - **Acceptance test:** the four statements are refused with `QUERY_CONSTRUCT_UNSUPPORTED` on 16/17/18.
 
-#### VC-113 [P3] The Web editor's classifier calls EXPLAIN a read-only path that sql_query refuses
+#### VC-114 [P3] The Web editor's classifier calls EXPLAIN a read-only path that sql_query refuses
 
 - **Area:** `packages/diagnostics/src/sql-classification.ts`, `data.read`
 - **Block:** D
@@ -1628,7 +1649,7 @@ None found.
 - **Proposed fix:** report `readOnlyPath` per tool (query or explain) or add `explain_only`.
 - **Acceptance test:** `classifySql("EXPLAIN SELECT 1")` is not "admitted" for the query path.
 
-#### VC-114 [P3] Thirteen catalog error codes are documented and exposed but never produced
+#### VC-115 [P3] Thirteen catalog error codes are documented and exposed but never produced
 
 - **Area:** `packages/contracts/src/errors.ts`, `apps/cli/src/cli/exit.ts`, `apps/web/src/lib/i18n/messages/changes.ts`
 - **Block:** E
@@ -1640,7 +1661,7 @@ None found.
 - **Proposed fix:** delete them or mark them reserved in `error-model.md`; point the CLI and Web mappings at `POLICY_DENIED` rule ids.
 - **Acceptance test:** a test that fails when a catalog code has no emitter (with an allow-list of reserved codes).
 
-#### VC-115 [P3] 69 catalog codes carry no remedy; the operationally important ones are listed
+#### VC-116 [P3] 69 catalog codes carry no remedy; the operationally important ones are listed
 
 - **Area:** `packages/contracts/src/errors.ts` (`remediation`)
 - **Block:** E
@@ -1652,7 +1673,7 @@ None found.
 - **Proposed fix:** fill `remediation` for the about 20 operational codes; add the missing ids to their `details` schemas (`PLAN_ALREADY_USED.operationId`, `SCHEMA_FINGERPRINT_MISMATCH.expected/actual`, `TARGET_IDENTITY_MISMATCH.targetId`).
 - **Acceptance test:** a contract test listing codes without `remediation` and failing for any not on an allow-list.
 
-#### VC-116 [P3] `drift.accept` is documented for "the Web App or the CLI"; the CLI has no command
+#### VC-117 [P3] `drift.accept` is documented for "the Web App or the CLI"; the CLI has no command
 
 - **Area:** `apps/cli`, `03-database-model/drift-detection.md` §5, `02-control-plane/operations-engine.md` §2
 - **Block:** E
@@ -1664,7 +1685,7 @@ None found.
 - **Proposed fix:** the command (plan plus `--apply`), or correct the two sentences.
 - **Acceptance test:** the CLI reference lists `finding accept`; an e2e test accepts a drift finding.
 
-#### VC-117 [P3] Break-glass cannot be activated from the CLI or, on this installation, at all; documents say otherwise
+#### VC-118 [P3] Break-glass cannot be activated from the CLI or, on this installation, at all; documents say otherwise
 
 - **Area:** `04-migrations/staging-production-policy.md:179`, `02-control-plane/operations-engine.md` §8, `apps/cli`
 - **Block:** E
@@ -1676,7 +1697,7 @@ None found.
 - **Proposed fix:** say in the docs that this installation has no break-glass, or build the channel (owner decision OD-21).
 - **Acceptance test:** the command-existence check of the next finding.
 
-#### VC-118 [P3] Documents name commands, flags, states and rule ids that do not exist
+#### VC-119 [P3] Documents name commands, flags, states and rule ids that do not exist
 
 - **Area:** `04-migrations/concurrency.md:88-89`, `12-operations/bootstrap.md:136-140`, `12-operations/local-development.md:42`, `12-operations/backup-runbooks.md:24`, `04-migrations/verification.md:493`, `04-migrations/authoring-and-ci.md:80`, `02-control-plane/policy-engine.md` (rule table)
 - **Block:** E
@@ -1688,7 +1709,7 @@ None found.
 - **Proposed fix:** fix the places; add the check as a CI step.
 - **Acceptance test:** a script (E1's `cmdcheck.py` is the prototype) exits 1 on any unresolved command or flag in `exponetdb-docs/12-operations` and `04-migrations`; passes after the fix.
 
-#### VC-119 [P3] One program name for two programs with overlapping words (`exponetdb audit`, `exponetdb auth`, `exponetdb version`)
+#### VC-120 [P3] One program name for two programs with overlapping words (`exponetdb audit`, `exponetdb auth`, `exponetdb version`)
 
 - **Area:** `apps/cli` (bin `exponetdb`), `apps/server/src/main.ts`, runbooks
 - **Block:** E
@@ -1700,7 +1721,7 @@ None found.
 - **Proposed fix:** prefix server commands in the docs with `docker exec … exponetdb`, or rename the image entrypoint.
 - **Acceptance test:** the same CI check, with a table of which binary owns which word.
 
-#### VC-120 [P3] Enum values that no code writes, and a Web label for an unreachable state
+#### VC-121 [P3] Enum values that no code writes, and a Web label for an unreachable state
 
 - **Area:** `stepup.step_ups.state` (`expired`), `nodes.enrollment_tokens.state` (`expired`), `backups.restores.state` (`promoted`), `apps/web/src/lib/i18n/messages/wave9.ts:529`
 - **Block:** E
@@ -1712,7 +1733,7 @@ None found.
 - **Proposed fix:** drop unreachable values in an additive bundle, or add the sweeper; remove the label.
 - **Acceptance test:** a test that every value of a state `CHECK` is writable or documented as derived.
 
-#### VC-121 [P3] Three documents give `operation.force_release` two different meanings, and building it as documented would not close the dead end
+#### VC-122 [P3] Three documents give `operation.force_release` two different meanings, and building it as documented would not close the dead end
 
 - **Area:** `exponetdb-docs/04-migrations/concurrency.md:131`, `01-architecture/failure-model.md` (F11), `02-control-plane/operations-engine.md` §4.1
 - **Block:** E
@@ -1724,7 +1745,7 @@ None found.
 - **Proposed fix:** describe layers A, B and C once in `concurrency.md`; register one action per layer (`operation.close` for A, see `E/proposals.md` P-01; a layer-B release only if a stuck-session case is shown to exist); make the other two documents point to them.
 - **Acceptance test:** a documents check (P-08 part d): every action id named in `04-migrations/` and `01-architecture/failure-model.md` exists in the action registry and the documents agree on its effect (the action's registered description is quoted by a generated table).
 
-#### VC-122 [P3] Plan acceptance holds the plan row lock and a Control Store connection while it reads the managed target, on a pool of 10 shared with all of `serve`
+#### VC-123 [P3] Plan acceptance holds the plan row lock and a Control Store connection while it reads the managed target, on a pool of 10 shared with all of `serve`
 
 - **Area:** `packages/operations/src/accept.ts:150-190` (`acceptPlan`), `packages/operations/src/plans.ts:331-340` (`readPlan ... FOR UPDATE OF p`), `packages/migrations-engine/src/kind.ts:184-210` (`#liveBindings`), `packages/migrations-engine/src/planner.ts:575-638`, `apps/server/src/composition/role.ts:75`, `runtime.ts:56-62` (`poolMax = 10`)
 - **Block:** E
@@ -1738,7 +1759,7 @@ None found.
 
 ---
 
-#### VC-123 [P3] One word, several meanings across CLI, REST, Web App and docs: accept, apply, verify, reconcile, baseline, promote, recovery
+#### VC-124 [P3] One word, several meanings across CLI, REST, Web App and docs: accept, apply, verify, reconcile, baseline, promote, recovery
 
 - **Area:** `apps/cli`, `packages/contracts` (action ids), Web App message keys, `exponetdb-docs/02-control-plane`, `04-migrations`
 - **Block:** E
@@ -1750,7 +1771,7 @@ None found.
 - **Proposed fix:** rename or qualify the three risky pairs in CLI help, Web labels and the audit event names; add a generated glossary page and a test that every action id and message key is listed in it.
 - **Acceptance test:** a test that fails when a CLI command, action id or Web message key uses a glossary term in a sense the glossary does not list.
 
-#### VC-124 [P3] `migration.bundle.ingest` still stores a bundle with an unknown `dependsOn` silently (TC-008 residual)
+#### VC-125 [P3] `migration.bundle.ingest` still stores a bundle with an unknown `dependsOn` silently (TC-008 residual)
 
 - **Area:** `packages/migrations-engine/src/store.ts` (`ingestBundles`), local lint
 - **Block:** R
@@ -1762,7 +1783,7 @@ None found.
 - **Proposed fix:** a warning finding at ingest naming the ghost ids.
 - **Acceptance test:** ingest a dangling bundle and read the ingest answer: it names the ghost ids.
 
-#### VC-125 [P3] `HBA_WOULD_LOCK_OUT` tells the operator to "name it in protectedAccess", which cannot make the plan pass, and the CLI prints none of the details that name the access
+#### VC-126 [P3] `HBA_WOULD_LOCK_OUT` tells the operator to "name it in protectedAccess", which cannot make the plan pass, and the CLI prints none of the details that name the access
 
 - **Area:** `packages/contracts/src/errors.ts` (`HBA_WOULD_LOCK_OUT` remediation), `apps/cli/src/output/render.ts` (`NAMED_DETAILS`)
 - **Block:** R
@@ -1774,7 +1795,7 @@ None found.
 - **Proposed fix:** drop "or name it in protectedAccess" from the remediation; add the five detail keys to the text renderer (`role@database from address, rule N`).
 - **Acceptance test:** contract test that the remediation does not mention `protectedAccess`; CLI text test that the refusal prints the access and the rule.
 
-#### VC-126 [P3] The node view reports "no restart pending" and no certificate expiry for state the agent never reports, and the certificate overview stays empty
+#### VC-127 [P3] The node view reports "no restart pending" and no certificate expiry for state the agent never reports, and the certificate overview stays empty
 
 - **Area:** `packages/nodes/src/views.ts` (`clustersOf`), `packages/nodes/src/history.ts` (`reportedServerCertificates`), REST `GET /nodes/{id}`, CLI `node show`, MCP `node_status`
 - **Block:** R (remainder of TC-016)
@@ -1786,7 +1807,7 @@ None found.
 - **Proposed fix:** the agent reports its clusters in the heartbeat (additive protocol minor with a contract test), or make `pendingRestart` nullable (`null` = not reported) in the view, the OpenAPI shape, the CLI and the Web page.
 - **Acceptance test:** host scenario: after enrollment `GET /nodes/{id}` returns `pendingRestart` true after a pending-restart parameter is set and a non-null `serverCertificateExpiresAt`; a unit test that an unreported value is `null`, not `false`.
 
-#### VC-127 [P3] The total-budget refusal of a legacy import advises "import the history in several parts", a flow the import does not have
+#### VC-128 [P3] The total-budget refusal of a legacy import advises "import the history in several parts", a flow the import does not have
 
 - **Area:** `packages/migrations-engine/src/legacy-files.ts` (`MAX_TOTAL_PARSE_TOKENS` message), `exponetdb-docs/04-migrations/legacy-import.md`, `exponetdb-docs/12-operations/deployment.md` §2a
 - **Block:** R (TC-021)
@@ -1798,7 +1819,7 @@ None found.
 - **Proposed fix:** word the refusal as a limit ("raise `MAX_TOTAL_PARSE_TOKENS` after measuring, or contact the operator") and document the staged import if one exists; run `measure-analyze-memory.ts` with nine dense files under a 512 MiB cgroup and record the result.
 - **Acceptance test:** a docs test that every refusal text of `refuseOversizedLegacyFiles` names a documented action; the measurement gate of TC-021 (peak RSS below 350 MiB in a 512 MiB cgroup).
 
-#### VC-128 [P3] No shipped test covers the apply-time pg_hba safety net for a lock-out the plan cannot judge, and the Control Plane outcome of an agent-side refusal is no longer asserted anywhere
+#### VC-129 [P3] No shipped test covers the apply-time pg_hba safety net for a lock-out the plan cannot judge, and the Control Plane outcome of an agent-side refusal is no longer asserted anywhere
 
 - **Area:** `apps/server/test/host/hba.host.test.ts`, `apps/server/test/agent-capabilities.host.test.ts`, `agent/node/internal/capabilities/capabilities_pgit_test.go`
 - **Block:** R (TC-018)
@@ -1810,7 +1831,7 @@ None found.
 - **Proposed fix:** add the R2 pgit test to `capabilities_pgit_test.go`, and a host scenario that plans a `samehost` reject against a derived network access and expects `failed / not_applied` and a restored file.
 - **Acceptance test:** the pgit test above (passes with the check, fails with `matchAccess` ignored for network accesses); the host scenario asserts `[state, applyOutcome] == ['failed','not_applied']` and an unchanged `pg_hba.conf`.
 
-#### VC-129 [P3] The new root-only check of `verify-units.sh` fails whenever it is run as root, and CI never runs it as root
+#### VC-130 [P3] The new root-only check of `verify-units.sh` fails whenever it is run as root, and CI never runs it as root
 
 - **Area:** `agent/node/packaging/verify-units.sh` (TC-039)
 - **Block:** R
@@ -1822,7 +1843,7 @@ None found.
 - **Proposed fix:** compare numeric ids: `[ "$(stat -c %u "$dir")" = "$(awk -F: '$1=="exponetdb-node"{print $3}' "$root/etc/passwd")" ]`; run the script once as root in CI (the go job can use `sudo`).
 - **Acceptance test:** `sudo bash agent/node/packaging/verify-units.sh` exits 0 on a clean Ubuntu 24.04 host and exits 1 when the tmpfiles line is changed to mode `0750`.
 
-#### VC-130 [P3] The test-infrastructure fixes TC-049, TC-050 and TC-054 have no regression guard
+#### VC-131 [P3] The test-infrastructure fixes TC-049, TC-050 and TC-054 have no regression guard
 
 - **Area:** `vitest.shared.ts`, `apps/server/test/mcp-evals.model.test.ts`, `apps/server/test/visual-regression.e2e.test.ts`
 - **Block:** R
@@ -1834,7 +1855,7 @@ None found.
 - **Proposed fix:** a tooling test that spawns vitest with `TZ=Europe/Berlin` on one date test (or asserts every config carries `TZ=UTC`); a test that runs the evals config without a key (14 skipped, exit 0); a unit test of `setHint()`.
 - **Acceptance test:** deleting the TZ line, or restoring the throw in `mcp-evals.model.test.ts`, turns `bun run test` red in UTC.
 
-#### VC-131 [P3] Two statements about the model evals are stale after TC-050
+#### VC-132 [P3] Two statements about the model evals are stale after TC-050
 
 - **Area:** `tooling/checks/verify-host.ts`, `vitest.shared.ts`
 - **Block:** R
@@ -1846,7 +1867,7 @@ None found.
 - **Proposed fix:** name `EXDB_EVAL_ANTHROPIC_API_KEY`, fix the comment, check the name in a tooling test.
 - **Acceptance test:** a tooling test that the key name printed by `verify:host` appears in `mcp-evals.model.test.ts`.
 
-#### VC-132 [P3] Forbidden-statement refusals have one generic remediation and mislabel RESET ROLE
+#### VC-133 [P3] Forbidden-statement refusals have one generic remediation and mislabel RESET ROLE
 
 - **Area:** `packages/migrations/src/lint` (forbidden statements), CLI output
 - **Block:** B
@@ -1858,7 +1879,7 @@ None found.
 - **Proposed fix:** per-statement remediation text and the right statement name.
 - **Acceptance test:** a lint test per forbidden statement asserting its own remediation.
 
-#### VC-133 [P3] Local `migration lint` and the server plan disagree, and a resume without --cleanup is denied with a generic rule
+#### VC-134 [P3] Local `migration lint` and the server plan disagree, and a resume without --cleanup is denied with a generic rule
 
 - **Area:** `apps/cli` (`migration lint`, `migration resume`), policy `migration.lint-errors`
 - **Block:** B
@@ -1870,7 +1891,7 @@ None found.
 - **Proposed fix:** align the CLI default with the server profile or print the profile; add a hint to the resume denial.
 - **Acceptance test:** a CLI test that the same bundle gets the same blocking result locally and on the server; the resume denial names `--cleanup`.
 
-#### VC-134 [P3] A verification with zero runtime checks passes, and finished operations keep a stale error code
+#### VC-135 [P3] A verification with zero runtime checks passes, and finished operations keep a stale error code
 
 - **Area:** `packages/migrations-engine` (verification), operations
 - **Block:** B
@@ -1882,7 +1903,7 @@ None found.
 - **Proposed fix:** report `verified (no runtime checks)` distinctly; clear the code on a final state.
 - **Acceptance test:** a test that an operation with zero checks reads `unchecked`, and that a reconciled operation has no `errorCode`.
 
-#### VC-135 [P3] A comment-only out-of-band change is not seen by the drift check
+#### VC-136 [P3] A comment-only out-of-band change is not seen by the drift check
 
 - **Area:** `packages/postgres` fingerprint `fp1`, drift
 - **Block:** B
@@ -1894,7 +1915,7 @@ None found.
 - **Proposed fix:** document it in `drift-detection.md`; a `fp2` through an ADR if comments should count.
 - **Acceptance test:** a docs test listing the object classes outside the fingerprint.
 
-#### VC-136 [P3] A drill record carries no recovery point for latest, older and backup: targets, and no data comparison
+#### VC-137 [P3] A drill record carries no recovery point for latest, older and backup: targets, and no data comparison
 
 - **Area:** drill records, `restore.execute` checks
 - **Block:** C
@@ -1906,7 +1927,7 @@ None found.
 - **Proposed fix:** record the last replayed commit time for every selection and run a count or fingerprint check.
 - **Acceptance test:** every drill record names the recovery point.
 
-#### VC-137 [P3] Latency: a drill's operation takes 2.1 times its RTO, and REST verify operations take 3.9 to 38 s for a 1 to 2 s engine run
+#### VC-138 [P3] Latency: a drill's operation takes 2.1 times its RTO, and REST verify operations take 3.9 to 38 s for a 1 to 2 s engine run
 
 - **Area:** drill and verify operations (node job polling)
 - **Block:** C
@@ -1918,7 +1939,7 @@ None found.
 - **Proposed fix:** push the result, shorten the discard delay.
 - **Acceptance test:** verify operation time is under 2 times the engine run.
 
-#### VC-138 [P3] The CLI cannot drive restore runbook or a drill apply with an API key, and the reference does not say so; logical backup and expire have no Control Plane path
+#### VC-139 [P3] The CLI cannot drive restore runbook or a drill apply with an API key, and the reference does not say so; logical backup and expire have no Control Plane path
 
 - **Area:** `apps/cli`, `15-cli/reference.md`
 - **Block:** C
@@ -1930,7 +1951,7 @@ None found.
 - **Proposed fix:** mark human-only commands in the reference and in `--help`; decide whether drills can be driven from a headless CLI.
 - **Acceptance test:** the reference lists the human-only commands.
 
-#### VC-139 [P3] S3 adoption refuses endpoint hosts under .test, .local, .internal, .example and .invalid with an unexplained VALIDATION_FAILED, and allows no port or http
+#### VC-140 [P3] S3 adoption refuses endpoint hosts under .test, .local, .internal, .example and .invalid with an unexplained VALIDATION_FAILED, and allows no port or http
 
 - **Area:** S3 repository adoption
 - **Block:** C
@@ -1942,7 +1963,7 @@ None found.
 - **Proposed fix:** name the rule in the error and document the allowed forms.
 - **Acceptance test:** the refusal names the rule.
 
-#### VC-140 [P3] A second recovery by the same RB-10 text fails: the temporary superuser restore_admin persists in the restored store
+#### VC-141 [P3] A second recovery by the same RB-10 text fails: the temporary superuser restore_admin persists in the restored store
 
 - **Area:** `control-store-runbook.md:106-110`
 - **Block:** C
@@ -1954,7 +1975,7 @@ None found.
 - **Proposed fix:** a fresh name per recovery plus a step to drop or rename it.
 - **Acceptance test:** two consecutive RB-10 restores in the lab succeed with the text as written.
 
-#### VC-141 [P3] `plan apply --yes --json` waits silently for a step-up (no address, no code)
+#### VC-142 [P3] `plan apply --yes --json` waits silently for a step-up (no address, no code)
 
 - **Area:** `apps/cli` `plan apply`
 - **Block:** C
@@ -1966,7 +1987,7 @@ None found.
 - **Proposed fix:** as Expected, plus a `--timeout-wait` covering the step-up wait.
 - **Acceptance test:** `plan apply --json` on a plan with a `reauth` requirement exits non-zero within 5 s with the step-up id.
 
-#### VC-142 [P3] RB-10 step 3 says the exported checkpoints show the size of the lost gap; hourly checkpoints cannot
+#### VC-143 [P3] RB-10 step 3 says the exported checkpoints show the size of the lost gap; hourly checkpoints cannot
 
 - **Area:** `control-store-runbook.md:114-120`, `worker-tasks.ts:194-199`
 - **Block:** C
@@ -1978,7 +1999,7 @@ None found.
 - **Proposed fix:** state the cadence in RB-10, or export a checkpoint per N events.
 - **Acceptance test:** a doc check that RB-10 names the checkpoint interval and the resulting gap granularity.
 
-#### VC-143 [P3] A restored awaiting_approval operation for a change that is already live is offered for approval
+#### VC-144 [P3] A restored awaiting_approval operation for a change that is already live is offered for approval
 
 - **Area:** approvals list and page, `operations-engine.md`
 - **Block:** C
@@ -1990,7 +2011,7 @@ None found.
 - **Proposed fix:** an RB-10 step to cancel `awaiting_approval` operations older than the dump after the reconcile; show the binding state on the approval page.
 - **Acceptance test:** after the documented step the approvals list is empty.
 
-#### VC-144 [P3] Session cancel and terminate without an operator credential answer "credential needs rotation or repair"
+#### VC-145 [P3] Session cancel and terminate without an operator credential answer "credential needs rotation or repair"
 
 - **Area:** `packages/diagnostics/src/connections.ts` (lines 225-228, 493-496)
 - **Block:** D
@@ -2002,7 +2023,7 @@ None found.
 - **Proposed fix:** a distinct code and message; register an operator credential in the lab bootstrap.
 - **Acceptance test:** cancel on a cluster without the credential returns the new code.
 
-#### VC-145 [P3] Lint allows server-file functions and untrusted-language functions; only database privileges stop them
+#### VC-146 [P3] Lint allows server-file functions and untrusted-language functions; only database privileges stop them
 
 - **Area:** `packages/migrations-engine` lint (`forbidden_statement`)
 - **Block:** D
@@ -2014,7 +2035,7 @@ None found.
 - **Proposed fix:** forbid `pg_read_file`, `pg_read_binary_file`, `pg_ls_dir`, `pg_stat_file`, `lo_import`, `lo_export` and untrusted languages in lint.
 - **Acceptance test:** a lint test per name.
 
-#### VC-146 [P3] The observer role cannot read schemas of the managed scope; scratch-check says ready and the analysis returns seven expectations_unreadable items that look like ambiguity
+#### VC-147 [P3] The observer role cannot read schemas of the managed scope; scratch-check says ready and the analysis returns seven expectations_unreadable items that look like ambiguity
 
 - **Area:** `migration import scratch-check`, analysis
 - **Block:** B
@@ -2026,7 +2047,7 @@ None found.
 - **Proposed fix:** an `observer_visibility` check listing schemas of the scope the observer cannot use.
 - **Acceptance test:** with USAGE missing, scratch-check fails that check naming the three schemas.
 
-#### VC-147 [P3] Refusal texts that name no id and no remedy
+#### VC-148 [P3] Refusal texts that name no id and no remedy
 
 - **Area:** CLI errors `TARGET_REGISTRATION_REFUSED`, `cluster endpoint retire --reason`, `LEDGER_DIVERGENCE`, `PLAN_STALE`
 - **Block:** B
@@ -2038,7 +2059,7 @@ None found.
 - **Proposed fix:** include the other target's id or path (when readable) and the documented next step; one reason format for all `--reason` flags.
 - **Acceptance test:** a golden test of the CLI text for each code contains an id and a next step.
 
-#### VC-148 [P3] `schema diff` prints columns, constraints and triggers without their table
+#### VC-149 [P3] `schema diff` prints columns, constraints and triggers without their table
 
 - **Area:** CLI `schema diff` renderer
 - **Block:** B
@@ -2050,7 +2071,7 @@ None found.
 - **Proposed fix:** print `schema.parent.name` when `parent` is set.
 - **Acceptance test:** a renderer test with a column name present in two tables shows both parents.
 
-#### VC-149 [P3] An established gateway session is never re-checked against the certificate's end, and a refused node leaves one info log line
+#### VC-150 [P3] An established gateway session is never re-checked against the certificate's end, and a refused node leaves one info log line
 
 - **Area:** `apps/server/src/interfaces/gateway/agent-listener.ts`, `packages/nodes/src/gateway.ts:265,497`, RB-13
 - **Block:** C
@@ -2062,7 +2083,7 @@ None found.
 - **Proposed fix:** check `notAfter` per request; log `agent.refused` at warn with node id and reason (`expired`, `superseded`, `revoked`); count refusals in a metric.
 - **Acceptance test:** a node past its certificate end is refused on an open session at its next request, with `reason=expired` in a warn log and a metric increment.
 
-#### VC-150 [P3] The audit export failure never says why
+#### VC-151 [P3] The audit export failure never says why
 
 - **Area:** `packages/audit/src/checkpoints.ts:96-100`, worker task `audit.export`
 - **Block:** C
@@ -2074,17 +2095,113 @@ None found.
 - **Proposed fix:** log the error class and message (no secrets) and the sink kind.
 - **Acceptance test:** an export to a missing bucket logs `cause=NoSuchBucket sink=s3`.
 
-#### VC-151 [P3] Target TLS failures share one class, and a serve clock behind the certificates makes every target unreachable without naming the clock
+#### VC-152 [P3] Target TLS failures share one class, and a serve clock behind the certificates makes every target unreachable without naming the clock
 
 - **Area:** `packages/postgres/src/errors.ts`, diagnostics health reducer, clock handling
 - **Block:** C
 - **Reproduction:** `C/stack/scripts/fc9-target-tls.sh` (lab-CA certificates: expired, other name, 5 days left) and `kt1-serve-clock.sh` (serve at -2 h).
 - **Expected:** classes `tls_expired`, hostname, untrusted CA; `tls_expiring` at 30 and 7 days (`health.md:121`).
 - **Actual:** expired and wrong-name both give `unreachable`, probes `failed:target_tls_failed`, `migration plan` gives `TARGET_TLS_FAILED` (once `TARGET_UNAVAILABLE` on the second try), no finding, no worker log. The 5-day certificate is healthy with no condition. With serve 2 h behind, every plan fails `TARGET_TLS_FAILED` (fresh certificates are "not yet valid") with no hint of the clock.
-- **Evidence:** `C/stack/fail-closed-results.md` step 9; `C/stack/keys-certs-time-results.md` steps 6 and 11; logs `fc9.out`, `kt1.out`.
+- **Evidence:** `C/stack/fail-closed-results.md` step 9; `C/stack/keys-certs-time-results.md` steps 6 and 11; logs `fc9.out`, `kt1.out`. **Also (S7):** the first call after a TLS failure gives `TARGET_TLS_FAILED` with no remedy and empty details; later calls and `target show` (Health: unreachable) say `TARGET_UNAVAILABLE` "cannot connect" because the circuit breaker (3 failures in 60 s, open 30 s) is cause-less (`packages/postgres/src/budget.ts`, `CircuitBreaker.check`); a certificate with 2 days left works with no finding, health condition or log line (`D/security/network-review.md` section 4).
 - **Root cause:** one class for all TLS verify errors; no skew self-check.
 - **Proposed fix:** keep the verify reason code in the probe; produce `tls_expiring`; add the process-versus-database clock-skew check.
 - **Acceptance test:** an expired certificate shows `tlsReason=expired`; a serve clock 10 minutes off the database turns readiness degraded with `clock_skew`.
+
+#### VC-153 [P3] A plan with a malformed evidence verification id is created as allow and can never be applied; the refusal hides why
+
+- **Area:** `packages/migrations-engine/src/kind.ts` (`#content`), `apps/cli/src/output/render.ts`
+- **Block:** D
+- **Reproduction:** forge evidence as above with a verification id that is not `vfy_` + ULID (the first try of `s7-promo-forged.sh`); plan for production; `plan apply --yes`.
+- **Expected:** plan creation refuses or marks the evidence unverified; the apply refusal says what is wrong.
+- **Actual:** plan active and `allow`; apply: `PLAN_STALE` with `changedBindings [{binding: "content", actual: "invalid"}]`; the CLI prints only "Create a new plan."; a new plan has the same defect.
+- **Evidence:** `D/security/promotion-leftovers.md` (smaller observations).
+- **Root cause:** plan content parsed leniently at plan time, strictly at apply (`kind.ts:109-115`).
+- **Proposed fix:** validate the evidence binding with the apply-time schema when building the plan; print `changedBindings` in the human renderer.
+- **Acceptance test:** a unit test: evidence with a malformed verification id gives a plan error or unverified, not allow.
+
+#### VC-154 [P3] Refused client-metadata fetches leave no audit event and no log line
+
+- **Area:** `packages/auth/src/oauth/registry.ts` (`discoverCimdClient`, `cimdRefresher`), `authorize.ts`
+- **Block:** D
+- **Reproduction:** `D/security/scripts/s7-cimd-local.sh` (ten `GET /oauth/authorize` with a client_id URL at loopback, the metadata address, a name resolving to loopback, an unresolvable name); count `oauth.client*` audit rows and serve journal lines.
+- **Expected:** `address_refused`, `redirect_refused` and `tls_failed` are the signature of an SSRF probe and should be visible to an administrator.
+- **Actual:** all ten answer `client_unknown` (good: no oracle); 0 audit rows, 0 log lines; only the rate counter moved. (The fetcher itself passed the review: it resolves once, checks all answers, pins the connection to the first address, refuses redirects and reads at most 5 KiB, so rebinding is impossible; 241 unit cases with 0 failures.)
+- **Evidence:** `D/security/network-review.md` section 3.
+- **Root cause:** `discoverCimdClient` catches `CLIENT_METADATA_INVALID` and returns undefined; `MetadataFetchError.reason` is dropped.
+- **Proposed fix:** a warn log line `oauth.cimd_refused` with reason and host (host only, bounded) and a counter by reason.
+- **Acceptance test:** an integration test: an authorize request with `https://localtest.me/c.json` yields one log record with `reason=address_refused`.
+
+#### VC-155 [P3] A revoked node that keeps calling the gateway is not audited and raises no finding
+
+- **Area:** `apps/server/src/interfaces/gateway/agent-listener.ts`, `packages/nodes`
+- **Block:** D
+- **Reproduction:** `D/security/scripts/s7-gateway-revoked.sh` (revoke the only node, watch 30 s, count audit rows).
+- **Expected:** a revoked identity that still presents its certificate is an incident signal in audit or as a finding.
+- **Actual:** every request is refused (403 `NODE_CERTIFICATE_REFUSED`, 4 to 11 ms; `NODE_REVOKED` on node calls), logged as `agent.refused` at info with the node id; audit has the revocation and nothing about the later refusals; the agent retries with growing backoff and does not say to re-enroll.
+- **Evidence:** `D/security/network-review.md` section 5.
+- **Root cause:** refusals are only logged (`agent-listener.ts`, notable codes at info).
+- **Proposed fix:** a worker task turning N refusals of a revoked node in a window into one finding `revoked_node_active` (ids only); name the remedy in the 403 body.
+- **Acceptance test:** a stack test: revoke, wait one interval, expect the finding and an audit event.
+
+#### VC-156 [P3] The audit event of an environment update names the changed fields but not old and new values
+
+- **Area:** `packages/registry/src/kinds.ts` (`EnvironmentUpdateKind.run`)
+- **Block:** D
+- **Reproduction:** re-point production's `evidenceFrom` (`D/security/scripts/s7-promo-alias.sh`, A2); read `audit.audit_events` where `action = 'registry.environment.update'`. One person with `registry.manage` and one passkey step-up can do this, with no second approval or cooling period (decision S7-D1).
+- **Expected:** the long-lived audit record shows which environment became production's evidence source.
+- **Actual:** `changes ["evidenceFrom"]`, revision, environmentId; before and after only in the plan (`analysis.before`).
+- **Evidence:** `D/security/promotion-leftovers.md` (a2).
+- **Root cause:** the audit call passes `Object.keys(changes)`.
+- **Proposed fix:** include before and after of the security-relevant fields (tier, evidenceFrom).
+- **Acceptance test:** an integration test on the audit event of an `evidenceFrom` change.
+
+#### VC-157 [P3] CLI exit codes: a dead target or node ends with exit 1
+
+- **Area:** `apps/cli/src/cli/exit.ts`
+- **Block:** C
+- **Reproduction:** `C/ui/scripts/s7-cli-sweep.sh` cases `net-target-down`, `net-target-drift`, `ref3-backup-run`, `net-backup-refresh-nodedown`.
+- **Expected:** a script tells "target down" from "bad arguments" from "policy refused" without parsing JSON (the brief and E1 expect 5 for unreachable).
+- **Actual:** `TARGET_UNAVAILABLE`, `TARGET_TLS_FAILED`, `NODE_OFFLINE`, `NODE_REVOKED` and `FEATURE_NOT_ACTIVATED` exit 1; exit 5 is only for the ExponetDB server (`TRANSPORT_FAILED`). Confirms E1's fall-through prediction on 12 cases.
+- **Evidence:** `C/ui/cli-sweep.md` section 1.
+- **Root cause:** `exit.ts` maps 33 of 129 codes.
+- **Proposed fix:** map target and node connectivity codes to a documented exit (for example 7) and `FEATURE_NOT_ACTIVATED` to 4; document in `15-cli`.
+- **Acceptance test:** an `apps/cli` test: each code exits with the documented value.
+
+#### VC-158 [P3] A second refusal of a stale plan loses the cause; `operation cancel` by another client names a plan
+
+- **Area:** `packages/operations` (accept), `packages/application` (operation cancel)
+- **Block:** C
+- **Reproduction:** sweep cases `ref-plan-stale` (text first, then JSON on the same plan) and `ref2-cancel-awaiting`.
+- **Expected:** every stale refusal names the changed binding and a remedy; a cancel by someone else says the operation belongs to another client.
+- **Actual:** the first call gives `PLAN_STALE` with remedy and `changedBindings`; the plan is then invalidated and the next call says "The plan is invalidated; it cannot be applied. Plan again." without remedy, binding or id. `operation cancel op_...` of another client answers `PLAN_BINDING_ACTOR` "Only the identity and client that created the plan may use it."
+- **Evidence:** `C/ui/cli-sweep.md` section 3, items 1 and 2.
+- **Root cause:** invalidation overwrites the reason; cancel reuses the plan-binding error.
+- **Proposed fix:** store `invalidated_reason` with the changed bindings and return it; a dedicated `OPERATION_NOT_OWNED` for cancel.
+- **Acceptance test:** an integration test: two consecutive applies of a stale plan return the same `changedBindings`.
+
+#### VC-159 [P3] A silent 15-minute wait on a queued node operation; slug versus id on `environment update`
+
+- **Area:** `apps/cli` (`backup refresh`, `node inspect`, `--wait`), environment update
+- **Block:** C
+- **Reproduction:** stop the agent, run `exponetdb backup refresh <cluster>` within a minute (cases `net-backup-refresh-nodedown`, `net-node-stopped`); `exponetdb environment update lab <env id> --evidence-from <id>`.
+- **Expected:** an overdue node heartbeat is reported at once; flags that take a slug say so.
+- **Actual:** the operation is queued, the CLI prints "queued · apply not_started · verify pending" and waits the default 15 minutes; a minute later the same command returns `NODE_OFFLINE` immediately. `--evidence-from` needs a slug (the error quotes `^[a-z][a-z0-9-]{0,38}$`) while the positional argument takes an id.
+- **Evidence:** `C/ui/cli-sweep.md` section 3, items 3 and 4.
+- **Root cause:** node-bound plan steps do not check heartbeat age; contract error text.
+- **Proposed fix:** refuse planning when the last heartbeat is older than the offline threshold; say "environment slug" in help and error.
+- **Acceptance test:** a CLI test: `backup refresh` with a stopped agent returns `NODE_OFFLINE` within 5 s once the threshold passed.
+
+#### VC-160 [P3] Web App: three moderate axe rules; transitions stay under reduced motion
+
+- **Area:** `apps/web` (shell, node page, target overview, access/people)
+- **Block:** C
+- **Reproduction:** `C/ui/scripts/s7-web-a11y.mjs` (19 pages, 3 widths, 2 colour schemes = 114 loads).
+- **Expected:** no axe violation; `prefers-reduced-motion` removes motion.
+- **Actual:** `region` on 12 pages (selector `#_r_h_`), `heading-order` on the target overview and node page, `landmark-unique` on Access/People (one binding-form landmark per person with the same label); 32 to 50 elements keep a transition under `reduce`. 0 serious or critical, 0 contrast, 0 overflow at 390 px; the Apply button is reachable by keyboard (Tab 25) with a visible focus.
+- **Evidence:** `C/ui/web-a11y.md`.
+- **Root cause:** a node outside `main`; heading levels; a non-unique `aria-label`.
+- **Proposed fix:** a landmark or `role=status` for that node; fix the heading levels; the person's name in the label; `transition: none` under `reduce`.
+- **Acceptance test:** the Web App's axe test over these routes with zero violations.
 
 
 ## 5. Suggested order of work
@@ -2184,8 +2301,8 @@ every tester's "not checked" list.
 
 | Item | Reason | What it would take |
 |---|---|---|
-| SSRF through client-metadata-document, client registration and webhook URLs, redirects, DNS rebinding, TLS downgrade at the OAuth edge, a wrong CA (Block D "Network") | a safety classifier stopped the tester S4 after the hostile-input cases; the lead did not push around the stop. S7 reviewed the code and tested the validators as pure functions instead (`D/security/network-review.md`, if it landed) | a dedicated session with the owner's confirmation that these tests are wanted, on the disposable stack |
-| Promotion attacks: alias swap, applied-but-not-verified evidence, verified-then-restored evidence target, concurrent uploads of one id | S4 ran out of its budget before them; S7 took part of them (`D/security/promotion-leftovers.md`) | the stack of `D/infra` and a second person for the approval cases |
+| A dynamic SSRF run (DNS rebinding server, redirects to private addresses on the wire, TLS downgrade at the OAuth edge, a wrong CA) | a safety classifier stopped the tester S4 after the hostile-input cases; the lead did not push around the stop. S7 then reviewed all nine outbound places in code and tested the validators as pure functions (241 cases, 0 failures) and ran the product's own refusal tests on the stack (`D/security/network-review.md`) | a dedicated session with the owner's confirmation that these tests are wanted, on the disposable stack |
+| Promotion and immutability: the verified-then-restored evidence target, an old plan after a policy change, the MCP wire run of the immutability check | S7 covered the other 11 of 14 items (`D/security/promotion-leftovers.md`); these three need a restore of the evidence database and a policy change mid-run | the stack of `D/infra` and an owner-approved policy edit |
 | Product-managed backup, drills and a node agent inside the dress rehearsal; reconcile and PITR on a production-tier target | the rehearsal stack had no node agent; plain `pg_basebackup` + WAL archive was used (S2 covered the product path at 7.6 GB on another stack) | one stack with agent, adopted pgBackRest repository and a production-tier target |
 | PostgreSQL 16 and 18 repeats of the backup, restore and drill numbers; the product-reported achievable RPO | the lab image has PostgreSQL 17 only; posix repositories are never counted off-host | an S3 pgBackRest repository and the other two majors in the lab image |
 | A 7.7 GB restic restore from S3; Control Plane-level checks of the deleted-stop-segment case; applying a drill from the CLI | time; a drill apply needs a browser re-authentication | an hour and an owner browser |

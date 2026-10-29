@@ -1,14 +1,3 @@
-### [P2] Evidence rule is weaker than documented: any operation id counts, no divergence check on the evidence target, verification rows not cross-checked with the mirror
-- **Area:** packages/migrations-engine/src/evidence.ts, kind.ts (#evidenceBindings), policy migration.staging-evidence
-- **Block:** B
-- **Reproduction:** Static; needs superuser write on the staging database. Take a migration M that production wants and staging never applied. On staging insert a schema_migrations row for M with the checksum production will submit and `operation_id` = the id of any operation in the Control Store. Insert a `passed` migration_verifications row with M's verify digest. Plan M for production.
-- **Expected:** Evidence `missing` or `unverified`. staging-production-policy.md §1.2 condition 3 needs a row produced by this installation and no LEDGER_DIVERGENCE on the evidence target. §6 lists "ledger row inserted by hand is not evidence".
-- **Actual:** "Known" is `operations.operations` looked up by id only (evidence.ts:181-190, 209, checked by the lead): any kind, target or project. No ledger-vs-mirror comparison on the evidence target (readEvidenceTarget, evidence.ts:98-125). Verification is read from the target, never from migrations.verification_mirror. The same weak attribution heals a hand-written row with a real operation id into the mirror (divergence.ts:46-48, records.ts:188-191). Acceptance (kind.ts:225-260) does not repeat condition 3.
-- **Evidence:** B/contract.md §2.5, §2.6, §3 DF-08, DF-09.
-- **Root cause:** Attribution by operation id alone. The mirror, which exists to catch tampering, is not consulted.
-- **Proposed fix:** An evidence row counts only if the mirror holds the same (target, generation, migration_id, checksum, operation_id). The operation must be a migration.apply or resume of that target whose plan lists the migration, and the verification id must be in verification_mirror. Add the live divergence check for the evidence target. Make operationsOfTarget require the plan to include the migration id.
-- **Acceptance test:** B/conformance/I12-promotion.int.test.ts row "forged evidence with a known operation id" (fails today). I07-adoption.int.test.ts row "hand-written ledger row with a real operation id of this target" (expects LEDGER_DIVERGENCE unrecorded).
-
 ### [P2] The apply checksum depends on client-supplied project defaults: editing `defaults` after an apply makes applied bundles a non-overridable MIGRATION_CHECKSUM_MISMATCH
 - **Area:** packages/migrations/src/format/projection.ts, migrations-engine/src/store.ts and planner.ts, CLI migration plan
 - **Block:** B

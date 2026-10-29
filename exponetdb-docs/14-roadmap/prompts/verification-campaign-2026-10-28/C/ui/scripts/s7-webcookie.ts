@@ -2,7 +2,7 @@
 // cookies to a 0600 file, for the headless browser. Run on the server:  EXSTACK_OWNER_FILE=<owner.json> bun --conditions=@exponetdb/source s7-webcookie.ts <out>
 // (the file lives in packages/stack-kit of the stack's checkout while it runs; it imports ./human.ts). Prints only the cookie NAMES.
 import { chmodSync, writeFileSync } from 'node:fs'
-import { Human } from './human.ts'
+import { Human } from '../human.ts'
 
 const out = process.argv[2] ?? '/srv/work/s7/web-cookies.json'
 const human = Human.load()

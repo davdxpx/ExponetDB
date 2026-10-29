@@ -59,7 +59,7 @@
 - **Reproduction:** `C/stack/scripts/fc9-target-tls.sh` (lab-CA certificates: expired, other name, 5 days left) and `kt1-serve-clock.sh` (serve at -2 h).
 - **Expected:** classes `tls_expired`, hostname, untrusted CA; `tls_expiring` at 30 and 7 days (`health.md:121`).
 - **Actual:** expired and wrong-name both give `unreachable`, probes `failed:target_tls_failed`, `migration plan` gives `TARGET_TLS_FAILED` (once `TARGET_UNAVAILABLE` on the second try), no finding, no worker log. The 5-day certificate is healthy with no condition. With serve 2 h behind, every plan fails `TARGET_TLS_FAILED` (fresh certificates are "not yet valid") with no hint of the clock.
-- **Evidence:** `C/stack/fail-closed-results.md` step 9; `C/stack/keys-certs-time-results.md` steps 6 and 11; logs `fc9.out`, `kt1.out`.
+- **Evidence:** `C/stack/fail-closed-results.md` step 9; `C/stack/keys-certs-time-results.md` steps 6 and 11; logs `fc9.out`, `kt1.out`. **Also (S7):** the first call after a TLS failure gives `TARGET_TLS_FAILED` with no remedy and empty details; later calls and `target show` (Health: unreachable) say `TARGET_UNAVAILABLE` "cannot connect" because the circuit breaker (3 failures in 60 s, open 30 s) is cause-less (`packages/postgres/src/budget.ts`, `CircuitBreaker.check`); a certificate with 2 days left works with no finding, health condition or log line (`D/security/network-review.md` section 4).
 - **Root cause:** one class for all TLS verify errors; no skew self-check.
 - **Proposed fix:** keep the verify reason code in the probe; produce `tls_expiring`; add the process-versus-database clock-skew check.
 - **Acceptance test:** an expired certificate shows `tlsReason=expired`; a serve clock 10 minutes off the database turns readiness degraded with `clock_skew`.

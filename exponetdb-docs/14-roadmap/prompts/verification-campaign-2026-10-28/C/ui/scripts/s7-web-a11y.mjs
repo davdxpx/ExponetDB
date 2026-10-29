@@ -11,6 +11,10 @@ const ids = JSON.parse(readFileSync(idsFile, 'utf8'))
 const cookies = JSON.parse(readFileSync(cookieFile, 'utf8'))
 const AXE = readFileSync('/srv/work/s1/src/node_modules/.bun/axe-core@4.13.0/node_modules/axe-core/axe.min.js', 'utf8')
 const ORIGIN = 'http://localhost:58480'
+const COOKIE_HEADER = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+// the product binds a web session to the User-Agent it was created with (the scripted owner uses this one): another UA lands on /login
+const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36'
+const ctxOptions = (extra) => ({ ...extra, userAgent: UA, extraHTTPHeaders: { cookie: COOKIE_HEADER } })
 mkdirSync(`${OUT}/shots`, { recursive: true })
 
 const PAGES = [
@@ -41,12 +45,13 @@ const browser = await chromium.launch({ headless: true })
 const results = []
 for (const scheme of SCHEMES) {
   for (const width of WIDTHS) {
-    const context = await browser.newContext({
+    const context = await browser.newContext(ctxOptions({
       viewport: { width, height: width === 390 ? 844 : width === 768 ? 1024 : 900 },
       colorScheme: scheme,
       reducedMotion: 'no-preference',
-    })
-    await context.addCookies(cookies.map((c) => ({ name: c.name, value: c.value, url: ORIGIN, secure: true, httpOnly: !c.name.includes('csrf'), sameSite: 'Lax' })))
+    }))
+        // the app's CSP blocks an inline script tag; an init script (CDP) is not subject to it
+    await context.addInitScript(AXE)
     const page = await context.newPage()
     const errors = []
     page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 160)) })
@@ -55,14 +60,13 @@ for (const scheme of SCHEMES) {
       errors.length = 0
       const rec = { page: name, path: path.replace(/(pln|op|nod)_[0-9A-Z]{26}/g, '$1_…'), width, scheme }
       try {
-        const resp = await page.goto(`${ORIGIN}${path}`, { waitUntil: 'networkidle', timeout: 30000 })
+        const resp = await page.goto(`${ORIGIN}${path}`, { waitUntil: 'load', timeout: 30000 })
         rec.status = resp?.status() ?? null
-        await page.waitForTimeout(600)
+        await page.waitForTimeout(1500)
         rec.url = page.url().replace(ORIGIN, '').replace(/(pln|op|nod)_[0-9A-Z]{26}/g, '$1_…')
         rec.title = (await page.title()).slice(0, 80)
         rec.h1 = (await page.locator('h1').first().textContent({ timeout: 1500 }).catch(() => null))?.trim().slice(0, 80) ?? null
         rec.overflowX = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
-        await page.addScriptTag({ content: AXE })
         const axe = await page.evaluate(async () => {
           // eslint-disable-next-line no-undef
           const r = await axe.run(document, { resultTypes: ['violations'] })
@@ -83,9 +87,8 @@ for (const scheme of SCHEMES) {
 // keyboard walk and reduced motion at 1440 light
 const keyboard = []
 {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light', reducedMotion: 'no-preference' })
-  await context.addCookies(cookies.map((c) => ({ name: c.name, value: c.value, url: ORIGIN, secure: true, httpOnly: !c.name.includes('csrf'), sameSite: 'Lax' })))
-  const page = await context.newPage()
+  const context = await browser.newContext(ctxOptions({ viewport: { width: 1440, height: 900 }, colorScheme: 'light', reducedMotion: 'no-preference' }))
+    const page = await context.newPage()
   for (const [name, path, primary] of [
     ['plan', `/changes/plans/${ids.plan}`, /apply/i],
     ['plan-prod', `/changes/plans/${ids.planProd}`, /apply/i],
@@ -94,8 +97,8 @@ const keyboard = []
   ]) {
     const rec = { page: name, stops: [], primaryReachedAt: null, focusInvisible: 0 }
     try {
-      await page.goto(`${ORIGIN}${path}`, { waitUntil: 'networkidle', timeout: 30000 })
-      await page.waitForTimeout(500)
+      await page.goto(`${ORIGIN}${path}`, { waitUntil: 'load', timeout: 30000 })
+      await page.waitForTimeout(1200)
       await page.evaluate(() => { document.body.setAttribute('tabindex', '-1'); document.body.focus(); document.body.removeAttribute('tabindex') })
       const buttons = await page.evaluate(() => [...document.querySelectorAll('button, a[href], [role=button]')].filter((e) => e.offsetParent !== null).map((e) => (e.getAttribute('aria-label') || e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40)).slice(0, 80))
       rec.visibleControls = buttons.length
@@ -126,12 +129,11 @@ const keyboard = []
 const reduced = []
 {
   for (const mode of ['no-preference', 'reduce']) {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light', reducedMotion: mode })
-    await context.addCookies(cookies.map((c) => ({ name: c.name, value: c.value, url: ORIGIN, secure: true, httpOnly: !c.name.includes('csrf'), sameSite: 'Lax' })))
-    const page = await context.newPage()
+    const context = await browser.newContext(ctxOptions({ viewport: { width: 1440, height: 900 }, colorScheme: 'light', reducedMotion: mode }))
+        const page = await context.newPage()
     for (const [name, path] of [['overview', '/'], ['plan', `/changes/plans/${ids.plan}`], ['operation', `/changes/operations/${ids.operation}`]]) {
-      await page.goto(`${ORIGIN}${path}`, { waitUntil: 'networkidle', timeout: 30000 }).catch(() => {})
-      await page.waitForTimeout(400)
+      await page.goto(`${ORIGIN}${path}`, { waitUntil: 'load', timeout: 30000 }).catch(() => {})
+      await page.waitForTimeout(1200)
       const r = await page.evaluate(() => {
         let animated = 0, transitions = 0, longest = 0
         for (const el of document.querySelectorAll('*')) {
