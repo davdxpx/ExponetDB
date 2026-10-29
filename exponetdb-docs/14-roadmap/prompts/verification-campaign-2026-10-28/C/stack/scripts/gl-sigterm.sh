@@ -17,7 +17,8 @@ t0; systemctl start $(_stk_unit serve); for i in $(seq 1 60); do [ "$(hc $S)" = 
 echo "== serve: SIGTERM with a request in flight that cannot finish (store paused 20 s): how long until exit?"
 bearer
 ( REST_T=40 rest GET /api/v1/targets | head -1 > $L6/gl-st-inflight.out ) &
-docker pause $EXSTACK_CONTROL_NAME >/dev/null; sleep 1; echo "serve (store paused): $(stopwatch $(_stk_unit serve))"; docker unpause $EXSTACK_CONTROL_NAME >/dev/null; wait; echo "in-flight request result: $(cat $L6/gl-st-inflight.out)"
+IP=$!
+docker pause $EXSTACK_CONTROL_NAME >/dev/null; sleep 1; echo "serve (store paused): $(stopwatch $(_stk_unit serve))"; docker unpause $EXSTACK_CONTROL_NAME >/dev/null; wait $IP; echo "in-flight request result: $(cat $L6/gl-st-inflight.out)"
 logs_since serve "-1 min" | jq -rc 'select(.msg|test("process\\.")) | [.ts,.msg,.ok,.exitCode,.reason]|@tsv' | tail -4
 systemctl start $(_stk_unit serve); for i in $(seq 1 60); do [ "$(hc $S)" = 200 ] && break; sleep 1; done
 echo "== gateway with the node connected $(now)"

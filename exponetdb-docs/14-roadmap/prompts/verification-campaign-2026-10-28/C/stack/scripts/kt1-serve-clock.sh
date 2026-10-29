@@ -4,7 +4,7 @@
 O=$L6/kt1.out; : >$O; exec > >(tee -a $O) 2>&1
 set +e
 ft() { echo "$2" >/srv/work/s6/ft-$1; sleep 1.5; }
-T="$(add_target s6clk pg16)"; dir="$(new_project s6clk)"
+T="$(add_target s6clkb pg16)"; dir="$(new_project s6clkb)"
 mkb "$dir" clk-a <<<'CREATE TABLE public.clk_a (id int primary key);' >/dev/null
 bearer
 echo "DB clock vs serve (offset 0): $(ctl_sql 'select clock_timestamp()') | $(date -u +%T)"

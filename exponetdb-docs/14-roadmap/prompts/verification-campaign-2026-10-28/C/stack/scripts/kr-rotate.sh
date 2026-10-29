@@ -4,10 +4,12 @@
 O=$L6/kr.out; : >$O; exec > >(tee -a $O) 2>&1
 set +e
 E=${EXSTACK_STATE}/env; W6=$(mktemp -d /dev/shm/s6rot.XXXX); chmod 700 $W6
-getkr() { grep "^EXPONETDB_KEYRING=" $E/$1.env | cut -d= -f2-; }
+getkr() { grep "^EXPONETDB_KEYRING=" $E/$1.env | cut -d= -f2- | sed "s/^'//; s/'\$//"; }   # the env files quote the JSON with single quotes
 setkr() { # role keyring-json
-  grep -v '^EXPONETDB_KEYRING=' $E/$1.env >$W6/$1.new; echo "EXPONETDB_KEYRING=$2" >>$W6/$1.new; cat $W6/$1.new >$E/$1.env
+  grep -v '^EXPONETDB_KEYRING=' $E/$1.env >$W6/$1.new; echo "EXPONETDB_KEYRING='$2'" >>$W6/$1.new; cat $W6/$1.new >$E/$1.env
 }
+for r in serve worker gateway; do cp -p $E/$r.env $L6/$r.env.s6orig 2>/dev/null; done   # secrets: stay on the server, 0600
+chmod 600 $L6/*.s6orig
 kstatus() { ( set -a; . $E/serve.env; set +a; EXPONETDB_KEYRING="$1" EXPONETDB_LOG_LEVEL=warn node_run keyring status 2>&1 | jq -c '[.keys[]? | {keyId, status, references, removable}] // .' 2>/dev/null | head -c 600 ); echo; }
 getkr worker >$W6/k1.json
 bearer
