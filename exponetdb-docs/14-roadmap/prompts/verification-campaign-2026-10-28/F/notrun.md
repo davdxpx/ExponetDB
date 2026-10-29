@@ -1,0 +1,27 @@
+
+## 6. What could not be run, and why
+
+"NOT RUN" is an answer only with its reason and what it would take. Rows come from the lead and from
+every tester's "not checked" list.
+
+| Item | Reason | What it would take |
+|---|---|---|
+| SSRF through client-metadata-document, client registration and webhook URLs, redirects, DNS rebinding, TLS downgrade at the OAuth edge, a wrong CA (Block D "Network") | a safety classifier stopped the tester S4 after the hostile-input cases; the lead did not push around the stop. S7 reviewed the code and tested the validators as pure functions instead (`D/security/network-review.md`, if it landed) | a dedicated session with the owner's confirmation that these tests are wanted, on the disposable stack |
+| Promotion attacks: alias swap, applied-but-not-verified evidence, verified-then-restored evidence target, concurrent uploads of one id | S4 ran out of its budget before them; S7 took part of them (`D/security/promotion-leftovers.md`) | the stack of `D/infra` and a second person for the approval cases |
+| Product-managed backup, drills and a node agent inside the dress rehearsal; reconcile and PITR on a production-tier target | the rehearsal stack had no node agent; plain `pg_basebackup` + WAL archive was used (S2 covered the product path at 7.6 GB on another stack) | one stack with agent, adopted pgBackRest repository and a production-tier target |
+| PostgreSQL 16 and 18 repeats of the backup, restore and drill numbers; the product-reported achievable RPO | the lab image has PostgreSQL 17 only; posix repositories are never counted off-host | an S3 pgBackRest repository and the other two majors in the lab image |
+| A 7.7 GB restic restore from S3; Control Plane-level checks of the deleted-stop-segment case; applying a drill from the CLI | time; a drill apply needs a browser re-authentication | an hour and an owner browser |
+| Under-load numbers of the DDL hazard matrix on 10 million rows and on PostgreSQL 16 and 18 | the 3 hour run was written (`B/ddl-hazard/pgbench/run.sh`) and dry-run at 100k rows only | `PG_VERSION=17 ROWS=10000000 ./run.sh` on a disposable server, per major |
+| Web App: 1440/768/390 px screenshots in light and dark, keyboard and screen reader pass, the list at 10,000 rows | no passkey browser session on the stack; the screen-reader pass needs a person with assistive technology (S7 ran an automated axe pass if it could, see `C/ui/web-a11y.md`) | a Playwright matrix in CI and one hour of a person with a screen reader |
+| Real-browser reproductions of TC-035 and TC-038 at 390 px; Chromium measurements for TC-066 and TC-067 | unit and code level only | the same Playwright matrix |
+| Host scenarios for TC-069, TC-070 (agent half), TC-071 (GAP-08/10/12), TC-072 and TC-075 (clock change, reboot, disk-full on the agent state) | need a systemd host with a clock change and a reboot; the node agent's own clock cannot be moved with libfaketime (a Go binary) | a disposable VM where the clock may be stepped (and never the Control Store's: see the clock finding) |
+| The 4 hour approval window itself | the Control Store refuses to age an operation row | a test hook or a real 4 hour wait |
+| 5,000 bundles in one project; concurrent applies at scale; 1,000 distinct MCP grants; `audit verify` speed on a long valid chain | time and size: 800 chained bundles already take 61 s to lint; the synthetic audit rows broke the chain | the lint fix first, then the run |
+| Non-transactional variants: redeploy during a non-transactional apply, disk-full on a non-transactional apply (the data statement is refused by lint), Control Store WAL-full beyond the PANIC | the plan is denied by lint or the volume setup was not isolated | a bundle shaped for each case and a separate WAL volume |
+| A node job that was dispatched and then vanished; the agent's clock guard | no way to drop a dispatched job without touching the agent binary | an agent test hook |
+| Traefik and Docker health effects, the kernel kill of serve at 512 MiB | the stack used systemd without a cgroup limit | containers with the production limits (deployment.md §2a) |
+| A backup catalog entry and a pgBackRest chain inside the upgrade rehearsal; the Web App session after a restore; owner recovery codes after keyring loss; loss of the Coolify project together with the store | outside what one agent could build in the budget | a longer rehearsal on the owner's deployment layout |
+| `mcp:evals` model layers B to D | needs `EXDB_EVAL_ANTHROPIC_API_KEY` of the owner (14 tests report NOT RUN by design) | the owner's key; about 20 minutes and token cost |
+| Cross-browser (Firefox, Safari) and Lighthouse; `tr_TR.UTF-8` locale for the determinism test | not installed; the Turkish case rules were forced by patching `toLowerCase` | a Playwright matrix; `locale-gen tr_TR.UTF-8` |
+| The plan hash on four runtimes at engine level (only the library level was compared on Node 24.22.1, Bun 1.4.4, Node 26.5.0, Bun 1.3.14) | the engine needs the pinned toolchain; the plan hash holds `id` and `createdAt` by design (B2-D1) | decide what invariant I1 means first |
+| Anything against the live installation beyond three side-effect-free reads (`auth status`, `node list`, `node show`, to confirm the certificate renewal) | the brief forbids plans, advisors and applies there; no other read was needed | n/a |

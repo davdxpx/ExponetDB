@@ -1,0 +1,19 @@
+# Order of the P1 findings inside the severity P1 (substring of the title, most important first).
+# P0-candidates and data-trust first, then installation wedges, then recovery runbooks, then hostile input, then the parser blind spot.
+A full Control Store disk is a PostgreSQL PANIC
+One allowlisted read crashes the target PostgreSQL
+A clock step leaves the audit chain refusing every event
+A drill passes, and the restore succeeds
+`backup.verify` passes a repository with a deleted WAL segment
+`needs_attention` has no exit for any operation kind
+`needs_attention` with apply outcome `unknown`
+One lock-blocked operation starves every younger operation
+The documented rollback of an upgrade dies at once
+RB-10 step 6 is empty for managed targets
+RB-14 (keyring lost) cannot be executed
+A data read never returns when its backend dies
+Nested block comments freeze the serving process
+Memory is bounded per parse, not per request
+Another quadratic regular expression over bundle text
+CREATE TABLE ... (id serial PRIMARY KEY
+ADD COLUMN serial/bigserial/identity rewrites the table

@@ -70,7 +70,7 @@
 - **Reproduction:** lint h45 (transactional) and h46 (`transactional: false`); `pgcheck/02-more-checks.sh` (h45 part) and h45 in 01.
 - **Expected:** h45 refused at lint with `nontransactional_statement_in_transactional`; h46 accepted.
 - **Actual:** h45: no lint finding, policy `require`, then PostgreSQL fails at apply ("cannot run inside a transaction block"). h46: `needless_nontransactional` (fixed error, not lowerable). The statement works in autocommit, so the engine can never run it.
-- **Evidence:** `results/hazard-strict-plan-large.json` (h45, h46); `pgcheck-01` (h45); `pgcheck-02` (h45)
+- **Evidence:** `results/hazard-strict-plan-large.json` (h45, h46); `pgcheck-01` (h45); `pgcheck-02` (h45) Also `F/findings-B2.md` (agent B2 found it as the only miss of a 40-statement server-oracle sweep: the plan is accepted and the server fails the apply atomically).
 - **Root cause:** the `concurrent` field of the PartitionCmd is ignored, so the statement is never `autocommitOnly`.
 - **Proposed fix:** set `autocommitOnly` for `AT_DetachPartition` with `concurrent`; lock severity `low`.
 - **Acceptance test:** lint test: h45 gives the fixed error, h46 passes with no finding; an integration test applies h46 on a target.

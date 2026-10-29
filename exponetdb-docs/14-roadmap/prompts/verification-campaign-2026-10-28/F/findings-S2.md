@@ -4,21 +4,10 @@
 - **Reproduction:** on a 7.7 GB PostgreSQL 17 dataset with a 1 Hz marker table: `pg_switch_wal()`, wait for the archive, delete (or flip 16 bytes in) the newest archived segment, run `restore.execute` to the end of the archive, and `POST /clusters/{id}/drills {selection: {kind: "latest"}}` (scripts in `C/backup-restore/`, section 5 and 6 of `C/backup-restore.md`).
 - **Expected:** the restore or the drill fails, because replay did not reach the end of the archive the plan counted on.
 - **Actual:** the helper restore succeeded and all its checks passed with 12 rows missing (segment deleted) or 4 rows missing (segment corrupted). The Control Plane drill `latest` ended `passed` with `measuredRtoSeconds` 35, and the label-scoped `backup verify` also passed. The drill configures no data check (`fingerprint` and `ledger_head` are `not_run`). S2's caveat: the newest segment holds commits here because `archive_timeout=0`; with `archive_timeout=60` and background WAL noise it usually holds none, but a real workload can hit the same condition.
-- **Evidence:** `C/backup-restore.md` §5, §6, §10; `C/backup-restore-numbers.md`; scripts and the log index in `C/backup-restore/`.
+- **Evidence:** `C/backup-restore.md` §5, §6, §10; `C/backup-restore-numbers.md`; scripts and the log index in `C/backup-restore/`. Also R1 (static): the same comparison at `selection.ts:98` and `kinds.ts:1356` ("The restore drill's replay-reached-end check compares with the START of the newest segment").
 - **Root cause:** `replayShort` compares the reached LSN with `walTo = segmentLsn(c.maxSegment)`, the START of the newest segment (`selection.ts:97-98`, `kinds.ts:1348-1356`, checked by the lead), not with the archive end the node reports; the drill adds no row-count or checksum comparison with the source. R1 found the same comparison statically.
 - **Proposed fix:** compare with the archive end the node reports (`last_archived_wal`, or the end of the newest segment) and add a mandatory data check (count or checksum from the source) before a drill can be `passed`.
 - **Acceptance test:** delete or flip the newest archived segment; the drill must end `failed` with a named reason, and the helper restore must not report success.
-
-### [P1] backup.verify passes after any deleted WAL segment, including the stop segment of the newest backup, which then cannot be restored
-- **Area:** `packages/backups` (`backup.verify`), helper, `wal_coverage.gaps`
-- **Block:** C
-- **Reproduction:** delete a WAL segment in the middle, the newest one, and the stop segment of the newest full backup, one at a time; run the whole-repository `backup.verify` and the label-scoped verify; then restore (`C/backup-restore.md` §5, §6).
-- **Expected:** verification fails (or reports a gap) whenever the archive is not continuous or the backup's stop segment is missing.
-- **Actual:** all three positions give `verifyErrors 0` and `passed`. For the stop segment, whole-repo and label verify say 0 errors, yet the restore dies with `FATAL: WAL ends before end of online backup`. The Control Plane's label-scoped verify also passed with the newest segment deleted.
-- **Evidence:** `C/backup-restore.md` §5, §6; `F/findings-R1.md` first P1 (the same defect at small scale).
-- **Root cause:** pgBackRest 2.60 reports no gaps and the helper computes none; `wal_coverage.gaps` is never written, so `wal_gap` can never fire.
-- **Proposed fix:** compute WAL continuity and the presence of each backup's stop segment in the helper (or run a restore-to-end-of-archive dry run) and fail the verify.
-- **Acceptance test:** for each of the three positions the verify ends `failed` with the segment name; a continuous archive still passes.
 
 ### [P2] The restic runbook does not apply globals and does not stop without them (TC-045 / D-07 not fixed)
 - **Area:** `12-operations/backup-runbooks.md` (logical path), restic restore flow

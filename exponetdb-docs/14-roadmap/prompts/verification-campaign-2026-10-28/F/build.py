@@ -54,7 +54,15 @@ def main():
     entries = []
     for p in sorted(HERE.glob('findings-*.md')):
         entries += parse(p)
-    entries.sort(key=lambda e: SEV.index(e['sev']))  # stable: keeps part order inside a severity
+    rank = [l.strip() for l in (HERE / 'rank.txt').read_text().splitlines() if l.strip() and not l.startswith('#')] if (HERE / 'rank.txt').exists() else []
+
+    def rank_of(e):
+        for i, r in enumerate(rank):
+            if r in e['title']:
+                return i
+        return len(rank)
+
+    entries.sort(key=lambda e: (SEV.index(e['sev']), rank_of(e) if e['sev'] == 'P1' else 0))  # stable: keeps part order otherwise
     counts = {s: sum(1 for e in entries if e['sev'] == s) for s in SEV}
     for i, e in enumerate(entries, 1):
         e['id'] = f'VC-{i:03d}'

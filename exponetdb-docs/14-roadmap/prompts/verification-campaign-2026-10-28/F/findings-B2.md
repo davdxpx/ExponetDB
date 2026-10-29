@@ -1,10 +1,3 @@
-# Findings of agent B2 (executable bundle conformance tests), block B
-
-Tree under test `d51da5d0` (fix PR #46). Tests: `B/conformance/` (run with `B/conformance/run.sh`, results in
-`B/conformance/RESULTS.md`). Times were measured on a shared machine with a load average of 9 to 14 on 8 cores
-(`node --liftoff-only`, Node 24.22.1); they are upper bounds, the shapes (quadratic, cubic) are what matters.
-A "failing test" below is the acceptance test of the finding: it fails on `d51da5d0` and must pass after the fix.
-
 ### [P1] Nested block comments freeze the serving process: PostgreSQL's scanner is quadratic on `/*/*/*`, and comments are free in every bound
 - **Area:** packages/postgres parser (`parse.ts` `parseWith`, `lexer.ts` `countTokens`), packages/migrations/lint, `application/migrations.ts` `lint`/`plan` (in-process), `migrations-engine/reads.ts` `lintProject`
 - **Block:** B
@@ -48,17 +41,6 @@ A "failing test" below is the acceptance test of the finding: it fails on `d51da
 - **Root cause:** `migration.ts:700-725` `settingsCall` looks only at `set_config`; no function is denied, and `readEngineGuards` (`migration-facts.ts:240-290`) does not read the lock.
 - **Proposed fix:** deny `pg_advisory_*` (all lock and unlock functions) in top-level statements and verify after every statement that the engine's lock is still held by the session (one `pg_locks` read, like the ledger guard).
 - **Acceptance test:** the same int test: the lock count is unchanged during the migration, or the bundle is refused at lint time.
-
-### [P2] The classifier does not know `ALTER TABLE ... DETACH PARTITION ... CONCURRENTLY`: it cannot run in a transaction block, and the engine cannot express it either way
-- **Area:** packages/postgres/src/parser/migration.ts (`alterTable`, `autocommitOnly`), migrations/lint
-- **Block:** B (I4)
-- **Reproduction:** `fixtures/detach-partition-concurrently.sql`; `lintBundles` with `transactional: true` and `false`. Tests: `I4-atomicity.pure.test.ts` ("detach partition concurrently: refused in a transactional bundle", "... accepted in a non-transactional bundle as the only statement"), `I4-classifier-vs-server.int.test.ts` (server oracle), `I4-atomicity.int.test.ts` (DETACH ...).
-- **Expected:** `migration-bundles.md` section 5: the parser classifies statements that cannot run in a transaction block; a transactional bundle holding one is `nontransactional_statement_in_transactional`, a non-transactional bundle may carry it alone.
-- **Actual:** of 40 statements swept against PostgreSQL 16, 17 and 18 (each inside `BEGIN ... ROLLBACK` as oracle) this is the only one the server refuses in a transaction block (SQLSTATE 25001) that the classifier calls ordinary (`autocommit 0`). In a transactional bundle no `nontransactional_statement_in_transactional` fires: on a non-production target the plan is accepted and the apply fails on the server (`MIGRATION_EXECUTION_FAILED`, `not_applied`, atomic, all three majors). In a non-transactional bundle the blocking `needless_nontransactional` fires (plus `compatibility_understated` whatever is declared), so the statement cannot be run through the engine at all.
-- **Evidence:** `B/conformance/I4-classifier-vs-server.int.test.ts`, `B/conformance/I4-atomicity.pure.test.ts`, `B/conformance/fixtures/detach-partition-concurrently.sql`
-- **Root cause:** `migration.ts` sets `autocommitOnly` for CONCURRENTLY index statements (line 1102, 1580), VACUUM (2002), REINDEX/CLUSTER (2024, 2045); the `AlterTableCmd` subtypes `AT_DetachPartition` (with `concurrent`) and `AT_DetachPartitionFinalize` are not handled.
-- **Proposed fix:** set `d.autocommitOnly = true` for a detach with `concurrent` and for finalize.
-- **Acceptance test:** the three tests above.
 
 ### [P3] Seven pinned settings are refused at top level but not guarded after each statement
 - **Area:** packages/postgres/src/parser/migration.ts `ENGINE_SETTINGS` (line 116), `migration-facts.ts` `EngineGuards`

@@ -1,14 +1,3 @@
-### [P1] needs_attention without an exit: rollback, ledger.reconcile, drift.accept, import replay and every unknown apply outcome hold the target's schema lock for good
-- **Area:** packages/operations (claim, transitions), packages/application/src/views.ts, kinds migration.rollback, ledger.reconcile, drift.accept, migration.import.replay
-- **Block:** B
-- **Reproduction:** Static reading; the stack steps are the acceptance test. (1) Apply and verify migration M. Plan `migration rollback` for M and apply it. Stop the target PostgreSQL after the rollback committed and before its verification. Restart it after the worker gave up. The operation goes verifying, then needs_attention. (2) Same with drift.accept and ledger.reconcile (their `verify` returns `error` when the live read fails). (3) Unknown outcome: apply a transactional bundle, drop the connection between COMMIT and the reply, keep the target unreachable beyond the 120 s reconcile deadline. reconcile() returns unknown, then needs_reconciliation, then needs_attention with applyOutcome unknown. Then run `exponetdb operation show <op>` (`retryable: false`), `operation retry-verification <op>` (OPERATION_NOT_RETRYABLE), and plan any migration on the target.
-- **Expected:** A documented way out for an authorised human from the CLI and the Web App. The schema domain is released when the operation is closed (operations-engine.md §4.1; concurrency.md §4 names `operation.force_release` for this).
-- **Actual:** Retry is offered only to migration.apply / resume / baseline / verify with applyOutcome applied or partially_applied (views.ts:270-297). The worker claims needs_attention only on that predicate plus a recorded request (leases.ts:56-60, checked by the lead). Only MigrationApplyKind (resume, kind.ts:131) and MigrationVerifyKind (reverify.ts:380) implement `supersedes`. migration.verify refuses a reverted migration (reverify.ts:136) and needs a ledger row. Locks are released only on a terminal transition (transitions.ts:177-198). `operation.force_release` exists only as an action-registry, permission and UI-string entry (contracts/src/actions.ts:1052; no route, no kind, no CLI; the lead's grep found no other use outside generated files). Every later plan for the target waits behind `target:<id>:schema` (driver.ts:178-222).
-- **Evidence:** B/contract.md §2.2, §2.7 (I9), §3 DF-02, DF-19.
-- **Root cause:** The TC-005/OD-58 recovery was built for the applied-change kinds only. The generic exit stayed "remains planned" (operations-engine.md:378).
-- **Proposed fix:** Build `operation.force_release` as a planned, audited, human-only operation (re-auth, names the operation and domain, records the asserted outcome). Alternatively add retry/supersede per `verifies = true` kind, plus "reconcile again" (needs_attention to needs_reconciliation) for an unknown outcome.
-- **Acceptance test:** B/conformance/I09-exits.test.ts (pure: for every kind with verifies = true and every reachable needs_attention outcome pair a terminal state is reachable through an exit that REST and CLI expose; fails today for 4 kinds and for `unknown`). Plus I09-exits.int.test.ts (stack: the three reproductions end with the domain released and the next plan accepted).
-
 ### [P2] Evidence rule is weaker than documented: any operation id counts, no divergence check on the evidence target, verification rows not cross-checked with the mirror
 - **Area:** packages/migrations-engine/src/evidence.ts, kind.ts (#evidenceBindings), policy migration.staging-evidence
 - **Block:** B
@@ -41,17 +30,6 @@
 - **Root cause:** The CLI cannot know what is pending without the server, and submits everything.
 - **Proposed fix:** Ask the server for the pending ids (`migration status` already knows them). Submit only those, plus stored ancestors by id. Document the limits in 04-migrations/.
 - **Acceptance test:** apps/cli test: 60 local bundles, 55 applied, `migration plan` submits only the pending ones and succeeds. I15-limits.test.ts compares every limit with its document.
-
-### [P2] Approval window (4 h default) is not implemented: an operation in awaiting_approval never expires
-- **Area:** packages/operations (accept, states), packages/auth/src/approvals.ts
-- **Block:** B
-- **Reproduction:** Static. Accept a production plan that needs an approval and wait 25 h. Also accept 20 such plans with one agent client, then a 21st.
-- **Expected:** operations-engine.md §3.3: the apply request may wait up to the approval window (default 4 h, max 24 h). §4.1: awaiting_approval to canceled on rejected, window elapsed, withdrawn.
-- **Actual:** Nothing expires it (worker-tasks.ts:186-314 has plans.expire only; the lead found no approval expiry task). Exits: a human approver rejects (approvals.ts:562), or the applying actor and client only cancels (application.ts:1960-2000). After 20 pending operations of one actor and client the next accept is APPROVALS_PENDING_LIMIT (accept.ts:129-148). An agent client that left 20 plans unattended is locked out until a human rejects each. This is the same class as the first campaign's TC-034 / OD-64, which the fix left open.
-- **Evidence:** B/contract.md §3 DF-01.
-- **Root cause:** Documented, unbuilt.
-- **Proposed fix:** A worker task that cancels awaiting_approval operations older than the policy window (OPERATION_CANCELLED, audited). Let any holder of plans.approve cancel a pending approval on the same terms as reject.
-- **Acceptance test:** Stack test with the window at 2 s: the operation becomes canceled, the audit event exists, the 21st accept succeeds afterwards.
 
 ### [P2] Ledger divergence is noticed only when someone plans: no periodic check, no finding, no suspension
 - **Area:** apps/server/src/composition/worker-tasks.ts, packages/migrations-engine/src/divergence.ts

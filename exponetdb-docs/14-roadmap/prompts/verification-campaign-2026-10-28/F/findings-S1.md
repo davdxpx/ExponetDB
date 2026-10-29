@@ -15,7 +15,7 @@
 - **Reproduction:** `B/failure/I9-approval.sh create`, wait 16 minutes, `I9-approval.sh inspect`.
 - **Expected:** a typed refusal and an expired or canceled operation.
 - **Actual:** after the plan's expiry the operation was still `awaiting_approval` (nextAction approve). `approval show` printed an Expires time in the past and no warning. `human approve` returned 200, the operation went `queued`, then `succeeded applied/passed` on the production target. The 4 h approval window itself could not be tested (the Control Store refuses to age an operation row).
-- **Evidence:** `B/failure/RESULTS.md` section 2.
+- **Evidence:** `B/failure/RESULTS.md` section 2. Static side (agent B1, `B/contract.md` §3 DF-01): nothing expires an `awaiting_approval` operation (`worker-tasks.ts:186-314` has `plans.expire` only); after 20 pending operations of one actor and client the next accept is `APPROVALS_PENDING_LIMIT` (`accept.ts:129-148`), so an agent client that left 20 plans unattended is locked out until a human rejects each; the exits are a human reject or the applying actor and client cancelling (`approvals.ts:562`, `application.ts:1960-2000`).
 - **Root cause:** documented but unbuilt; OD-64 is open.
 - **Proposed fix:** decide OD-64; at minimum refuse an approval after the plan's expiry and cancel the operation.
 - **Acceptance test:** `I9-approval.sh inspect` prints PASS.
