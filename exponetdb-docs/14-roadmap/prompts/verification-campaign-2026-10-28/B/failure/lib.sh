@@ -59,3 +59,20 @@ fresh_target() { # slug pgNN [prod]
   add_target "i${RUN_TAG}$1" "${2:-pg17}" "${3:-nonprod}" 2>>"${S1_LOGS}/fresh-target.log"
 }
 target_db() { echo "lab_${1#lab/platform/}"; }   # lab/platform/slug -> lab_slug
+
+# COMMIT that never returns: with synchronous_standby_names naming a standby that does not exist, a commit that wrote
+# flushes its WAL locally and then waits (wait_event SyncRep) for an acknowledgement that never comes. The change IS
+# committed and visible, the client has no reply: the situation of "connection lost between COMMIT and the reply".
+syncrep_on()  { psql_target "${1:?pg16}" -q -c "ALTER SYSTEM SET synchronous_standby_names = 'ghost_standby'" -c "SELECT pg_reload_conf()" >/dev/null; }
+syncrep_off() { # works with the cluster running or stopped
+  local name="${1:?pg16}" major; major="$(_stk_major "$name")"
+  if psql_target "$name" -Atc 'select 1' >/dev/null 2>&1; then
+    psql_target "$name" -q -c "ALTER SYSTEM RESET synchronous_standby_names" -c "SELECT pg_reload_conf()" >/dev/null
+  else
+    sed -i '/synchronous_standby_names/d' "/var/lib/postgresql/${major}/${EXSTACK_CLUSTER_NAME}/postgresql.auto.conf" 2>/dev/null
+  fi
+}
+syncrep_waiting() { # pgNN db -> number of sessions stuck in a commit wait
+  PGDATABASE="$2" psql_target "$1" -Atc "SELECT count(*) FROM pg_stat_activity WHERE wait_event = 'SyncRep' AND pid <> pg_backend_pid()" 2>/dev/null || echo 0
+}
+

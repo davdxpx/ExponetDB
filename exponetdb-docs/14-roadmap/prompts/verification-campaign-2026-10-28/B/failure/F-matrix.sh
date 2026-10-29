@@ -6,14 +6,16 @@
 #   F-matrix.sh run [name-regex]                        all planned cells whose "bundle:phase:injection" matches
 #
 #   bundle     tx | nontx        (the same four statements; nontx runs them in autocommit, alone in its plan)
-#   phase      before_plan | between | lock | mid | commit | verify
+#   phase      before_plan | between | lock | mid | incommit | commit | verify
 #   injection  kill9_worker kill9_serve kill9_gateway kill9_agent sigterm_worker sigterm_serve control_restart
 #              pg_immediate terminate_backend net_drop net_delay retry_same_key retry_new_key
 #
 # The bundle: `SELECT nextval('public.exec_seq')` (a counter that survives rollback: it counts how often the first
 # statement STARTED, so a second start is an automatic re-execution), CREATE TABLE f_a, `SELECT pg_sleep(8)` (the
 # mid-statement window), CREATE TABLE f_b. Phase triggers read the Control Store (operation state) and the target
-# (pg_stat_activity, ledger) every ~50 ms. "commit": the mirror table of the Control Store is locked by an
+# (pg_stat_activity, ledger) every ~50 ms. "incommit": synchronous_standby_names names a standby that does not exist, so the
+# COMMIT is flushed and visible but never returns to the client (the connection is lost "between COMMIT and the reply").
+# "commit": the mirror table of the Control Store is locked by an
 # out-of-band session, which holds the worker between the target's commit and the mirror write; "verify": the target
 # database carries 1500 tables so the verification takes seconds.
 #
@@ -45,6 +47,7 @@ recover_all() {
   local c r
   docker start "${EXSTACK_CONTROL_NAME}" >/dev/null 2>&1; _stk_wait_control >/dev/null 2>&1
   pg_lsclusters -h | awk -v v="$PGMAJOR" -v c="${EXSTACK_CLUSTER_NAME}" '$1==v && $2==c && $4!="online" {print "down"}' | grep -q down && systemctl start "postgresql@${PGMAJOR}-${EXSTACK_CLUSTER_NAME}.service"
+  syncrep_off "$PG"
   for r in gateway worker serve agent; do systemctl is-active --quiet "$(_stk_unit "$r")" || systemctl start "$(_stk_unit "$r")"; done
   local i; for i in $(seq 1 60); do stack_ready && break; sleep 1; done
 }
@@ -71,6 +74,7 @@ GRANT SELECT ON public.f_a, public.f_b TO lab_owner;
 SQL
 )"
   [ "$phase" = verify ] && bloat "$PG" "$db" 1500
+  [ "$phase" = incommit ] && syncrep_on "$PG"
   [ "$phase" = commit ] && { # hold the mirror write
     docker exec -i -e PGPASSWORD="$(cat "${EXSTACK_STATE}/control.superuser")" "${EXSTACK_CONTROL_NAME}" psql -X -q -h 127.0.0.1 -U "$(_stk_super)" -d exponetdb_control -c "BEGIN; LOCK TABLE migrations.ledger_mirror IN EXCLUSIVE MODE; SELECT pg_sleep(900); COMMIT" >/dev/null 2>&1 &
     HOLD=$!; sleep 1; }
@@ -100,6 +104,9 @@ SQL
       lock)   inject_on_state "$op" running "fire" 60 ;;
       mid)    local k=0; while [ $k -lt 400 ]; do
                 [ "$(PGDATABASE="$db" psql_target "$PG" -Atc "SELECT count(*) FROM pg_stat_activity WHERE query LIKE '%pg_sleep(${SLEEP_S})%' AND pid <> pg_backend_pid()" 2>/dev/null)" = 1 ] && { fire; break; }
+                sleep 0.05; k=$((k+1)); done ;;
+      incommit) local k=0; while [ $k -lt 1200 ]; do
+                [ "$(syncrep_waiting "$PG" "$db")" -ge 1 ] && { fire; break; }
                 sleep 0.05; k=$((k+1)); done ;;
       commit) local k=0; while [ $k -lt 1200 ]; do
                 [ "$(ledger_count "$PG" "$db" "$idm")" = 1 ] && { fire; break; }
@@ -178,7 +185,8 @@ SQL
 # ----- the planned cells (priority order; edit or pass a regex to `run`) ----------------------------------
 CELLS=(
   tx:mid:kill9_worker tx:commit:kill9_worker tx:verify:kill9_worker nontx:mid:kill9_worker nontx:verify:kill9_worker
-  tx:mid:pg_immediate tx:verify:pg_immediate nontx:mid:pg_immediate tx:commit:pg_immediate
+  tx:mid:pg_immediate tx:verify:pg_immediate nontx:mid:pg_immediate tx:commit:pg_immediate tx:incommit:pg_immediate
+  tx:incommit:kill9_worker tx:incommit:terminate_backend tx:incommit:control_restart
   tx:mid:kill9_serve tx:verify:kill9_serve tx:between:kill9_serve
   tx:mid:kill9_agent tx:mid:kill9_gateway
   tx:mid:terminate_backend nontx:mid:terminate_backend

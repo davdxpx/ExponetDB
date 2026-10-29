@@ -98,34 +98,39 @@ SQL
   verdict_parked rollback "$op"
 }
 
-sc_unknown() { # B1 P1 (3) / E1 P1 #2: unknown apply outcome (the connection dies DURING COMMIT; the target stays away past the reconcile deadline)
+sc_unknown() { # B1 P1 (3) / E1 P1 #2: unknown apply outcome (the connection dies between COMMIT and the reply; the target stays away past the reconcile deadline)
   local log="${OUT}/unknown.log"
-  local T db dir id op
+  local T db dir id op sc=unknown; [ "${ROLLED_BACK:-0}" = 1 ] && sc=unknown_rolledback
   T="$(fresh_target 9un "$PG")"; db="$(target_db "$T")"; dir="$(new_project i9un-${RUN_TAG})"
-  # a deferred constraint trigger makes COMMIT itself take 25 s: the window in which the outcome is unknowable
-  PGDATABASE="$db" psql_target "$PG" -q -c "CREATE TABLE public.trig_tbl (id int); CREATE FUNCTION public.slow_commit() RETURNS trigger LANGUAGE plpgsql AS \$\$ BEGIN PERFORM pg_sleep(25); RETURN NULL; END \$\$; CREATE CONSTRAINT TRIGGER slow AFTER INSERT ON public.trig_tbl DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.slow_commit(); GRANT INSERT ON public.trig_tbl TO lab_owner"
-  id="$(mkb "$dir" slow-commit <<'SQL'
-INSERT INTO public.trig_tbl VALUES (1);
+  id="$(mkb "$dir" commit-hangs <<'SQL'
 CREATE TABLE public.u1 (id int PRIMARY KEY);
 GRANT SELECT ON public.u1 TO lab_owner;
 SQL
 )"
-  mplan "$dir" "$T" || { verdict I9.unknown NOT_RUN "plan refused: ${PLAN_STATE}"; return; }
+  mplan "$dir" "$T" || { verdict "I9.${sc}" NOT_RUN "plan refused: ${PLAN_STATE}"; return; }
+  syncrep_on "$PG"
   mapply "$PLAN_ID" --no-wait; op="$OP_ID"
-  local k=0; while [ $k -lt 1200 ]; do
-    [ "$(PGDATABASE="$db" psql_target "$PG" -Atc "SELECT count(*) FROM pg_stat_activity WHERE query = 'COMMIT' AND state = 'active' AND pid <> pg_backend_pid()" 2>/dev/null)" -ge 1 ] && break
-    sleep 0.05; k=$((k+1)); done
-  [ $k -ge 1200 ] && { verdict I9.unknown NOT_RUN "the COMMIT window was not seen; op: $(op_state "$op")"; return; }
+  local k=0; while [ $k -lt 1200 ]; do [ "$(syncrep_waiting "$PG" "$db")" -ge 1 ] && break; sleep 0.05; k=$((k+1)); done
+  if [ $k -ge 1200 ]; then syncrep_off "$PG"; verdict "I9.${sc}" NOT_RUN "the COMMIT wait was not seen; op: $(op_state "$op")"; return; fi
+  echo "  COMMIT is waiting for a standby that does not exist; ledger row visible: $(ledger_count "$PG" "$db" "$id")"
   local pid; pid="$(head -1 "/var/lib/postgresql/16/${EXSTACK_CLUSTER_NAME}/postmaster.pid")"
   kill -QUIT "$pid"; sleep 1; systemctl stop "postgresql@16-${EXSTACK_CLUSTER_NAME}.service"
-  echo "  target killed DURING COMMIT at $(date -u +%T) and kept down; op: $(op_state "$op")"
+  echo "  target killed between COMMIT and the reply at $(date -u +%T), kept down; op: $(op_state "$op")"
   follow "$op" 420
-  systemctl start "postgresql@16-${EXSTACK_CLUSTER_NAME}.service"; sleep 5
+  syncrep_off "$PG"; systemctl start "postgresql@16-${EXSTACK_CLUSTER_NAME}.service"; sleep 5
   echo "  target back; ledger rows for the bundle: $(ledger_count "$PG" "$db" "$id"); tables: $(tables_in "$PG" "$db")"
+  if [ "${ROLLED_BACK:-0}" = 1 ]; then
+    # the other possible truth (the engine cannot tell the two apart while the target is away): the commit never became durable.
+    # Simulated here by removing the change and its ledger row by hand as superuser, so the target says "not applied".
+    PGDATABASE="$db" psql_target "$PG" -q -c "ALTER TABLE exponetdb.schema_migrations DISABLE TRIGGER ALL; ALTER TABLE exponetdb.migration_verifications DISABLE TRIGGER ALL; DELETE FROM exponetdb.migration_verifications WHERE migration_id='${id}'; DELETE FROM exponetdb.schema_migrations WHERE migration_id='${id}'; ALTER TABLE exponetdb.schema_migrations ENABLE TRIGGER ALL; ALTER TABLE exponetdb.migration_verifications ENABLE TRIGGER ALL; DROP TABLE public.u1"
+    echo "  (simulated rollback) ledger rows now: $(ledger_count "$PG" "$db" "$id"); tables: $(tables_in "$PG" "$db")"
+  fi
   park_probe "$op" "$T" "$dir"
-  echo "migration verify <id>: $(cd "$dir" && exdb_json migration verify "$id" --target "$T" | jq -c '{rc:.status, code:.error.code}')"
-  verdict_parked unknown "$op"
+  echo "migration verify <id> (the change IS in the ledger): $(cd "$dir" && exdb_json migration verify "$id" --target "$T" | jq -c '{rc:.status, code:.error.code}')"
+  verdict_parked "$sc" "$op"
 }
+
+sc_unknown_rolledback() { ROLLED_BACK=1 sc_unknown; }
 
 sc_reconcile() { # E1 / B1 P1 (2): ledger.reconcile whose verification cannot read the target
   local log="${OUT}/reconcile.log"
@@ -194,15 +199,19 @@ sc_supersede() { # D0 P2: a refused recovery has already closed the needs_attent
   local log="${OUT}/supersede.log"
   local T db dir id N V
   T="$(fresh_target 9ss "$PG")"; db="$(target_db "$T")"; dir="$(new_project i9ss-${RUN_TAG})"
-  # M is applied but its verification cannot run (the check reads a table that is not there): N parks in needs_attention
-  id="$(VERIFY_SQL='-- check: reads a table that does not exist
-SELECT count(*) >= 0 AS ok FROM public.s1_missing;' mkb "$dir" parked <<'SQL'
+  # M is applied but its check cannot run (an out-of-band session holds ACCESS EXCLUSIVE on the table it reads): N parks in needs_attention
+  PGDATABASE="$db" psql_target "$PG" -q -c "CREATE TABLE public.locked (id int); GRANT SELECT ON public.locked TO exponetdb_verifier, exponetdb_reader, exponetdb_observer, lab_owner"
+  PGDATABASE="$db" psql_target "$PG" -q -c "BEGIN; LOCK TABLE public.locked IN ACCESS EXCLUSIVE MODE; SELECT pg_sleep(600); COMMIT" >/dev/null 2>&1 &
+  local holder=$!; sleep 1
+  id="$(VERIFY_SQL='-- check: reads a table another session holds exclusively
+SELECT count(*) >= 0 AS ok FROM public.locked;' mkb "$dir" parked <<'SQL'
 CREATE TABLE public.s1 (id int PRIMARY KEY);
 GRANT SELECT ON public.s1 TO lab_owner;
 SQL
 )"
   mplan "$dir" "$T"; echo "plan: ${PLAN_STATE}"
   mapply "$PLAN_ID" --wait; N="$OP_ID"
+  PGDATABASE="$db" psql_target "$PG" -Atc "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE query LIKE '%pg_sleep(600)%' AND pid <> pg_backend_pid()" >/dev/null 2>&1; kill "$holder" 2>/dev/null
   echo "N = $N : $(op_state "$N")   locks: $(ctl_sql "SELECT string_agg(domain_key, ',') FROM operations.operation_locks WHERE operation_id='${N}'")"
   [ "$(op_state "$N" | cut -d' ' -f1)" = needs_attention ] || { verdict I9.supersede NOT_RUN "N is not parked: $(op_state "$N")"; return; }
   # the recovery: a verify revision that can pass, then `migration verify` (which names N and closes it when it starts).
