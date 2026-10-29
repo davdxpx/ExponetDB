@@ -30,7 +30,7 @@ The headline results:
 
 - **The answer to the question is: not yet.** Of thirteen Wave 11 preconditions (`F/readiness.md`), three are
   PASS (verification order, secrets in the tested sinks, backups and ledger readable without ExponetDB), ten are
-  FAIL; none is only UNPROVEN, but section 6 lists what was not run.
+  FAIL; none is UNPROVEN, but section 6 lists what was not run.
 - **What is good, with evidence:** the single-writer lock, atomicity of a bundle (47 statement cases), the order of
   applied and verified, the audit chain, no secret in 15 sinks (136 canaries), containment of host-reaching
   statements, a fast and exact restore engine (7.6 GB: full 19 s, PITR 40 to 57 s, drills with a product RTO equal
@@ -913,7 +913,7 @@ None found.
 - **Reproduction:** (probe, run) `probe1.ts`: `isErrorCode('operation_kind_unknown') === false`, `isErrorCode('operation_state_changed') === false`; `errorCodeOf` maps both to `INTERNAL`. (static) `acceptPlan` returns `operation_kind_unknown` when `kind.version !== plan.kindVersion`; a concurrent second request with the same `Idempotency-Key` throws `idempotency_in_progress` (`idempotency.ts:72`). Stack step: create a plan, change a kind's `version` in a build, apply the old plan; send two requests with one key.
 - **Expected:** `upgrades.md:29` (`[DECIDED]`): such plans "expire with `PLAN_STALE` (reason `engine_version`)"; a duplicate in-flight request gets a retryable 409.
 - **Actual:** 500 with the generic message; only the log has the cause.
-- **Evidence:** `E/errors.md` §4; `E/docs-claims.md` DC-049.
+- **Evidence:** `E/errors.md` §4; `E/docs-claims.md` DC-049. **Limit of this finding (S3, stack):** across the real upgrade pair `d0229550` to `d51da5d0` a pending plan applied normally (no `PLAN_STALE`, no 500) because no operation kind's version changed (only the policy version hash did); the 500 path is therefore a static finding for the day a kind's `version` changes, and the lost-race case (`idempotency_in_progress`) is also static (`C/upgrade/README.md` §5.3).
 - **Root cause:** internal operation codes have no mapping to catalog codes.
 - **Proposed fix:** map `operation_kind_unknown` to `PLAN_STALE` with binding `kindVersion`, `operation_state_changed` to `OPERATION_CONFLICT` / `PLAN_ALREADY_USED`, `idempotency_in_progress` to a 409.
 - **Acceptance test:** a contract test that every `InternalOperationCode` reachable from a route maps to a catalog code.
