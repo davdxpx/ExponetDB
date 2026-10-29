@@ -1,0 +1,305 @@
+{
+ "label": "unit-run1",
+ "total": {
+  "files": 512,
+  "filesFailed": 0,
+  "total": 10383,
+  "passed": 10383,
+  "failed": 0,
+  "pending": 0,
+  "todo": 0,
+  "suiteFailures": 0
+ },
+ "packages": {
+  "apps/cli": {
+   "files": 6,
+   "filesFailed": 0,
+   "total": 173,
+   "passed": 173,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "apps/design-system": {
+   "files": 16,
+   "filesFailed": 0,
+   "total": 1662,
+   "passed": 1662,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "apps/server": {
+   "files": 10,
+   "filesFailed": 0,
+   "total": 190,
+   "passed": 190,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "apps/web": {
+   "files": 168,
+   "filesFailed": 0,
+   "total": 2501,
+   "passed": 2501,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/application": {
+   "files": 4,
+   "filesFailed": 0,
+   "total": 77,
+   "passed": 77,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/audit": {
+   "files": 2,
+   "filesFailed": 0,
+   "total": 46,
+   "passed": 46,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/auth": {
+   "files": 9,
+   "filesFailed": 0,
+   "total": 125,
+   "passed": 125,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/backups": {
+   "files": 4,
+   "filesFailed": 0,
+   "total": 36,
+   "passed": 36,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/contracts": {
+   "files": 21,
+   "filesFailed": 0,
+   "total": 221,
+   "passed": 221,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/control-store": {
+   "files": 2,
+   "filesFailed": 0,
+   "total": 27,
+   "passed": 27,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/diagnostics": {
+   "files": 10,
+   "filesFailed": 0,
+   "total": 168,
+   "passed": 168,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/icons": {
+   "files": 2,
+   "filesFailed": 0,
+   "total": 8,
+   "passed": 8,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/kernel": {
+   "files": 6,
+   "filesFailed": 0,
+   "total": 196,
+   "passed": 196,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/migrations": {
+   "files": 8,
+   "filesFailed": 0,
+   "total": 331,
+   "passed": 331,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/migrations-engine": {
+   "files": 7,
+   "filesFailed": 0,
+   "total": 70,
+   "passed": 70,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/nodes": {
+   "files": 3,
+   "filesFailed": 0,
+   "total": 37,
+   "passed": 37,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/observability": {
+   "files": 2,
+   "filesFailed": 0,
+   "total": 82,
+   "passed": 82,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/operations": {
+   "files": 1,
+   "filesFailed": 0,
+   "total": 12,
+   "passed": 12,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/policy": {
+   "files": 9,
+   "filesFailed": 0,
+   "total": 118,
+   "passed": 118,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/postgres": {
+   "files": 11,
+   "filesFailed": 0,
+   "total": 1322,
+   "passed": 1322,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/registry": {
+   "files": 1,
+   "filesFailed": 0,
+   "total": 8,
+   "passed": 8,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/sdk": {
+   "files": 2,
+   "filesFailed": 0,
+   "total": 89,
+   "passed": 89,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/secrets": {
+   "files": 2,
+   "filesFailed": 0,
+   "total": 61,
+   "passed": 61,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/testkit": {
+   "files": 3,
+   "filesFailed": 0,
+   "total": 12,
+   "passed": 12,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/tokens": {
+   "files": 4,
+   "filesFailed": 0,
+   "total": 198,
+   "passed": 198,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/ui": {
+   "files": 61,
+   "filesFailed": 0,
+   "total": 521,
+   "passed": 521,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/ui-data": {
+   "files": 41,
+   "filesFailed": 0,
+   "total": 775,
+   "passed": 775,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "packages/ui-patterns": {
+   "files": 90,
+   "filesFailed": 0,
+   "total": 1141,
+   "passed": 1141,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  },
+  "tooling": {
+   "files": 7,
+   "filesFailed": 0,
+   "total": 176,
+   "passed": 176,
+   "failed": 0,
+   "pending": 0,
+   "todo": 0,
+   "suiteFailures": 0
+  }
+ }
+}

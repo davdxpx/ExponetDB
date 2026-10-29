@@ -15,8 +15,9 @@ say() { printf '[down] %s\n' "$*" >&2; }
 # things the failure-injection scripts may have left behind
 iptables -D OUTPUT -j EXSTACK_FAIL 2>/dev/null; iptables -F EXSTACK_FAIL 2>/dev/null; iptables -X EXSTACK_FAIL 2>/dev/null
 tc qdisc del dev lo root 2>/dev/null
-for m in $(findmnt -rn -o TARGET | grep "^${EXSTACK_ROOT}/loop" | sort -r); do umount -l "$m" 2>/dev/null; done
-timedatectl set-ntp true 2>/dev/null
+docker rm -f "${EXSTACK_CONTROL_NAME}" >/dev/null 2>&1
+for m in $(findmnt -rn -o TARGET | grep "^${EXSTACK_ROOT}/" | sort -r); do umount -l "$m" 2>/dev/null; done
+clock_restore 2>/dev/null; timedatectl set-ntp true 2>/dev/null
 
 say "services"
 for r in serve worker gateway; do systemctl disable --now "${EXSTACK_UNIT_PREFIX}-${r}.service" 2>/dev/null; rm -f "/etc/systemd/system/${EXSTACK_UNIT_PREFIX}-${r}.service"; done

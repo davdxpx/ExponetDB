@@ -48,11 +48,21 @@ phase says which; `registry` is the one to adapt.
 
 ## Helpers (stack-env.sh)
 
-`exdb` (CLI as the owner), `exdb_json`, `human` (act as the person: `call`, `apply <plan> [--approve]`,
-`approve <operation>`, `stepup <id> <code>`, `consent <url> <scopes>`), `psql_target pgNN`, `psql_control`,
-`ctl_sql "SELECT ..."`, `op_state <operation id>`, `target_id lab/platform/staging`, `stack_id <key>`,
-`kill_role serve|worker|gateway|agent|helper|control [SIGNAL]`, `start_role`, `stop_role`, `restart_role`,
-`restart_cp`, `pg_restart pgNN immediate|fast|smart`, `stack_status`, `stack_ready`, `journal <role>`.
+`exdb` (CLI as the owner), `exdb_json`, `cli_login` (sign the CLI in again with every scope), `human` (act as the
+person: `call`, `apply <plan> [--approve]`, `approve <operation>`, `retry-apply <plan> same|new` (Idempotency-Key retry),
+`stepup <id> <code>`, `consent <url> <scopes>`), `psql_target pgNN`, `psql_control`, `ctl_sql "SELECT ..."`,
+`op_state <operation id>`, `target_id lab/platform/staging`, `stack_id <key>`, `kill_role
+serve|worker|gateway|agent|helper|control [SIGNAL]`, `start_role`, `stop_role`, `restart_role`, `restart_cp`,
+`pg_restart pgNN immediate|fast|smart`, `stack_status`, `stack_ready`, `journal <role>`.
+
+Test authoring: `new_project NAME`, `mkb DIR SLUG [--nontransactional] < up.sql` (`VERIFY_SQL`, `DOWN_SQL` optional),
+`mplan DIR TARGET` (sets `PLAN_ID`, `PLAN_STATE`), `mapply [PLAN] [--no-wait]` (sets `OP_ID`), `ledger pgNN db`,
+`add_target SLUG pgNN [prod]` (a fresh environment, database and target in about 8 s: tests that leave a target
+blocked take a new one; the list endpoints page at 50, the seed follows the cursor).
+
+Failure injection: `net_block PORT [drop|reject]` / `net_unblock`, `net_delay MS [LOSS%]` / `net_clear` (netem on the
+loopback), `clock_jump +-SECONDS` / `clock_restore`, `bloat pgNN db [n]` (n tables, so a verification takes seconds),
+`inject_on_state OP STATE "cmd"` (runs `cmd` the moment the operation row shows STATE).
 
 Control Store loss and restore (`control-store-runbook.md` section 3 and RB-10), reusable by other tests:
 

@@ -32,7 +32,7 @@ ledger_count() { # pgNN db migration_id  -> 0|1
   PGDATABASE="$2" psql_target "$1" -Atc "SELECT count(*) FROM exponetdb.schema_migrations WHERE migration_id='$3'" 2>/dev/null || echo "?"
 }
 event_summary() { # pgNN db migration_id -> "kind,kind,..." from the target's event log
-  PGDATABASE="$2" psql_target "$1" -Atc "SELECT coalesce(string_agg(event_kind, ',' ORDER BY event_seq), '-') FROM exponetdb.migration_events WHERE migration_id='$3'" 2>/dev/null || echo "?"
+  PGDATABASE="$2" psql_target "$1" -Atc "SELECT coalesce(string_agg(event, ',' ORDER BY event_seq), '-') FROM exponetdb.migration_events WHERE migration_id='$3'" 2>/dev/null || echo "?"
 }
 
 # lint summary of a project dir: "rc=1 blocking=error:forbidden_statement,warn:table_without_grant warnings=3"

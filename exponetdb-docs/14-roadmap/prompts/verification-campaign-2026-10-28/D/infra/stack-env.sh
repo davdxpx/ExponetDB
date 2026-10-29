@@ -21,6 +21,7 @@
 #   pg_restart pg17 [immediate|fast|smart]   restart a target cluster (immediate = SIGQUIT, like pg_ctl -m immediate)
 #   net_block <port> [drop|reject] / net_unblock   block (or restore) loopback TCP to a port for every process (chain EXSTACK_FAIL; stack-down removes it)
 #   net_delay <ms> [loss%]      netem delay/loss on lo (affects the whole loopback); net_clear removes it
+#   clock_jump <seconds> / clock_restore   step the server clock (NTP off) and put it back exactly (monotonic uptime reference)
 #   human ...                    act as the owner (human.ts): call, apply, approve, stepup, device-approve
 #   op_state <operation id>      state / applyOutcome / verificationOutcome of an operation from the Control Store
 #   journal <role> [args]        journalctl of a role's unit
@@ -378,5 +379,26 @@ cli_login() {
   human consent "$url" $scopes >&2
   wait "$pid" || { sed 's/code=[^& ]*/code=<r>/' "$outfile" >&2; _stk_die "CLI login failed"; return 1; }
   chmod -R go-rwx "$cfg"
+}
+
+# --- the server clock ------------------------------------------------------------------------------------------
+# clock_jump +10800 / -10800 : stops NTP and steps the clock. The true time is remembered once (wall clock and
+# monotonic uptime), so clock_restore puts back real time however long the test took, then NTP is switched on again.
+clock_jump() {
+  local ref="${EXSTACK_STATE}/clock.ref"
+  [ -s "$ref" ] || printf '%s %s\n' "$(date +%s)" "$(cut -d' ' -f1 /proc/uptime)" >"$ref"
+  timedatectl set-ntp false
+  date -s "@$(( $(date +%s) + ${1:?seconds} ))" >/dev/null
+  _stk_log "clock stepped by ${1}s: now $(date -u +%T)"
+}
+clock_restore() {
+  local ref="${EXSTACK_STATE}/clock.ref" r0 u0 u1
+  if [ -s "$ref" ]; then
+    read -r r0 u0 <"$ref"; u1="$(cut -d' ' -f1 /proc/uptime)"
+    date -s "@$(python3 -c "print(int($r0 + $u1 - $u0))")" >/dev/null
+    rm -f "$ref"
+  fi
+  timedatectl set-ntp true
+  _stk_log "clock restored: $(date -u +%T) (NTP on)"
 }
 

@@ -59,7 +59,7 @@ vitest JSON reports (`unit-*.summary.json`) and the logs.
 | 17 | gofmt, `go vet` (plain, `e2e`, `pgit`, `pglab`), `go test -tags e2e -run E2E` (go) | PASS | as root and as non-root `runner` |
 | 18 | `go test -race -count=1 ./...` (go) | PASS | 960 passed, 0 skipped, 0 failed (old: 955) |
 | 19 | bounded fuzzing (journal, helper x2, pg_hba splice), govulncheck (go) | PASS | no crash, no reachable vulnerability |
-| 20 | release build + `verify-units.sh` (go) | PASS as CI runs it (non-root); **FAIL as root** | the root-only branch of `verify-units.sh` is broken and never runs in CI, finding A-1 |
+| 20 | release build + `verify-units.sh` (go) | PASS as CI runs it (non-root); **FAIL as root** | the root-only branch of `verify-units.sh` is broken and never runs in CI (finding "verify-units.sh root") |
 | 21 | node-pg: Go wire client and capabilities, tag `pgit`, race, PG 16/17/18 clusters under systemd | PASS | 88 s |
 | 22 | node-pg: agent-capabilities host test (1 long test, real agent and helper, systemd restart) | PASS | 568 s here. It FAILED once in CI on the next main commit, see "Flakiness" |
 | 23 | host scenarios, all 11, one fresh cluster and Control Store each (node-host-scenarios) | PASS | 11/11, 42 tests; every run record says `passed`, 0 failed tests, 0 lab problems |
@@ -72,7 +72,8 @@ vitest JSON reports (`unit-*.summary.json`) and the logs.
 | 30 | `mcp:evals` (owner-run, needs `EXDB_EVAL_ANTHROPIC_API_KEY`) | NOT RUN | needs the owner's own model key; not part of `verify` or CI by design; without a key the 14 tasks now skip with the reason (TC-050) |
 | 31 | unit, run 2, files shuffled (`--sequence.shuffle.files --sequence.seed=20261028`) | PASS | 10,383 tests, **0 tests differ** from run 1 |
 | 32 | integration, run 2, files shuffled (same flags) | PASS | 1,716 tests, **0 tests differ** from run 1 |
-| 33 | EXTRA unit and integration, files **and tests** shuffled (seed 20261029) | see "Order dependence" | |
+| 33 | EXTRA unit, files **and tests inside a file** shuffled (`--sequence.shuffle.files --sequence.shuffle.tests --sequence.seed=20261029`) | FAIL (informational) | 5 tests in 4 files differ from run 1 (see "Order dependence") |
+| 34 | EXTRA integration, same flags | FAIL (informational) | 265 tests in 51 of 105 files fail: the integration files are sequential scenarios |
 
 The execution order really changed in run 2 (first files by start time differ in every package I
 compared, for example `packages/postgres` starts with `migration-analysis` in run 1 and with
@@ -157,7 +158,7 @@ regression screenshots of a failed run" (skipped because nothing failed). No job
 
 Which are required: **none**. `gh api repos/davdxpx/ExponetDB/branches/main/protection` answers 404
 "Branch not protected", `repos/.../rulesets` is `[]`, `branches/main` says
-`required_status_checks: {contexts: [], enforcement_level: off}`. CI is advisory; finding A-2.
+`required_status_checks: {contexts: [], enforcement_level: off}`. CI is advisory (finding "main unprotected").
 
 History of `main` (last 14 runs): `d51da5d0` success; `a0fda7ca`, `92a416f4`, `4573c09a`,
 `d0229550` **cancelled** (the next push cancelled them: `concurrency: cancel-in-progress: true`
@@ -169,16 +170,45 @@ under test is the first green one since 2026-10-26. The next main commit `c89bbe
 Not run by CI at all (all passed here): `third-party`, `licenses`, `ui-safety` (they sit in `verify`
 only), `mcp:evals`.
 
-## Order dependence and flakiness
+## Order dependence (item 2)
 
-- Run 1 (normal) against run 2 (files shuffled, seed `20261028`): 0 differing tests in the unit suite
-  (10,376 distinct names each) and 0 in the integration suite (1,716 each). Nothing to re-run alone.
-- EXTRA, not asked for: files and tests shuffled (`--sequence.shuffle.files --sequence.shuffle.tests`,
-  seed `20261029`); see the section "Run 3" below.
+**What was asked** (file order shuffled, `--sequence.shuffle.files --sequence.seed=20261028`, unit and
+integration against the normal-order run 1): **0 tests differ** in both suites (10,376 distinct names
+each in the unit suite, 1,716 in the integration suite; every status `passed`). No order dependence
+between files, and nothing to re-run alone.
 
-## Flakiness
+**Extra, because the file level proved nothing is hiding** (run 3, `--sequence.shuffle.tests` added,
+seed `20261029`, turbo `--continue`). The tests inside a file run in declaration order by default, and
+a number of them rely on that. Classification by re-running each failing file alone (default order,
+the same seed shuffled, and the single test with `-t`; `run3-classification.txt`):
 
-(see below; filled when the repeated runs finished)
+| Test (file) | Default order | Same seed shuffled | Alone (`-t`) | Class |
+|---|---|---|---|---|
+| `packages/audit/test/golden.test.ts`: "relations: sameHashAs and differsFrom hold as stated" and "the chain of ac1-001 and ac1-002 links" | 30/30 pass | 2 fail | fails | test bug: a golden-vector test reads values stored by earlier tests |
+| `packages/policy/test/version.test.ts`: "pv1-003: same rules listed in the other order..." | 18/18 pass | 1 fails | fails | same |
+| `packages/secrets/test/envelope.test.ts`: "se1-008: the data key of se1-001 rewrapped..." | 31/31 pass | 1 fails | fails | same |
+| `packages/secrets/test/store.int.test.ts`: "re-wraps every data key under the new key..." (`expected 2 to be greater than 5`) | 11/11 pass | 1 fails | fails | test bug: counts data keys that earlier tests created |
+| `apps/design-system/test/patterns/ui-patterns.test.tsx`: "says \"Could not load suggestions\"..." | 32/32 pass (3 runs) | passes alone; **fails 1 of 3** package runs with the seed | passes | flaky under shuffle/load (typed key sequence with `waitFor` 3 s; a previous test's popover is still mounted in the failure DOM) |
+| 50 further integration files (22 in `apps/server`, 7 in `packages/auth`, 6 in `packages/migrations-engine`, 4 in `packages/audit`, 3 each in `packages/registry` and `packages/control-store`, 2 each in `packages/diagnostics` and `packages/operations`, 1 in `packages/nodes`) | pass | 264 tests fail | n/a | by design these files are one scenario after another (tests share the database state of their predecessors); the list is `int-run3-failing-files.tsv` |
+
+Consequence for people: the default order is the contract. A test cannot be run alone with `-t` for
+these files (one golden-vector test fails when run alone), `--sequence.shuffle.tests`, `test.concurrent` and
+retries cannot be used, and the failing-test rerun that this block recommends does not work for them.
+Finding "tests depend on in-file order" (severity P3).
+
+## Flakiness (commit under test and its successor)
+
+- `agent-capabilities.host.test.ts` (one 9-minute test, real agent and helper under systemd, repeated
+  SIGKILL restarts): passed in CI on `d51da5d0`, passed on vc-1 three times (568, 568, 567 s), and
+  **failed once in CI on the next commit `c89bbe1a`** (run 40761095455, job "Node agent on PostgreSQL
+  16, 17, 18 (systemd)") with `expected [503, 'NODE_OFFLINE'] to deeply equal [202, undefined]` at
+  `agent-capabilities.host.test.ts:724`, the first `inspect()` after the crash-injection restarts. That
+  commit changes nothing of the node agent (CLI views, parser, contracts, docs), so I classify it as a
+  test race, not reproduced here (3 passes of 3). Finding "agent-capabilities host test flake".
+- Nothing else failed in two normal and one shuffled-files run of unit and integration, in the
+  eleven host scenarios, the lab jobs or the e2e run.
+- The design-system "Could not load suggestions" test above is the only unit test I saw fail without a
+  code change (1 of 3 with the shuffle seed).
 
 ## Deliberately not committed
 

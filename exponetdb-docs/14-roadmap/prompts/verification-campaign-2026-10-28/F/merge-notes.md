@@ -19,3 +19,13 @@
 | E1 P1 "needs_attention has no exit for any kind" + E1 P1 "unknown outcome" | B1 P1 "needs_attention without an exit" | same engine gap; B1's evidence (B/contract.md DF-02, DF-19) is added to E1's |
 | B1 P2 "ledger divergence is noticed only when someone plans" | E1 P2 "ledger divergence is not monitored" | same |
 | B1 P2 "approval window not implemented" | first campaign TC-034 / OD-64 (still open) | link, do not duplicate |
+
+## More duplicates and corrections (lead, 2026-10-29)
+
+| Keep | Drop or fold in | Why |
+|---|---|---|
+| R2 P3 "root-only branch of verify-units.sh always fails as root" | A's third finding (same file and line; A reproduced it independently: fails as root, passes unprivileged as in CI) | same defect; A's evidence is added to R2's finding |
+| B2 P2 "DETACH PARTITION CONCURRENTLY unclassified" | B3 P2 "DETACH PARTITION ... CONCURRENTLY cannot be authored" | same defect, found by two agents |
+| E1 P1 needs_attention (no exit) | B1 P1; plus D0 P2 and R1 P2 "recovery closes before its own checks" stay separate (different defect: ordering) | same engine gap |
+| C1 P2 "no certificate expiry signal" | the TC-042 / OD-62 item in F/decisions-R2.md | link, do not duplicate |
+| Corrected count | D0 "27 unpinned bundles" | 45 directories, 21 pinned, 24 unpinned (E2 recount, lead re-checked) |

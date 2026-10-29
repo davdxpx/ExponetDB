@@ -8,10 +8,10 @@
 #   bundle     tx | nontx        (the same four statements; nontx runs them in autocommit, alone in its plan)
 #   phase      before_plan | between | lock | mid | incommit | commit | verify
 #   injection  kill9_worker kill9_serve kill9_gateway kill9_agent sigterm_worker sigterm_serve control_restart
-#              pg_immediate terminate_backend net_drop net_delay retry_same_key retry_new_key
+#              pg_immediate pg_fast terminate_backend net_drop net_delay clock_fwd3h clock_back3h retry_same_key retry_new_key
 #
 # The bundle: `SELECT nextval('public.exec_seq')` (a counter that survives rollback: it counts how often the first
-# statement STARTED, so a second start is an automatic re-execution), CREATE TABLE f_a, `SELECT pg_sleep(8)` (the
+# statement STARTED; superseded by the server log, see below) a second start is an automatic re-execution), CREATE TABLE f_a, `SELECT pg_sleep(8)` (the
 # mid-statement window), CREATE TABLE f_b. Phase triggers read the Control Store (operation state) and the target
 # (pg_stat_activity, ledger) every ~50 ms. "incommit": synchronous_standby_names names a standby that does not exist, so the
 # COMMIT is flushed and visible but never returns to the client (the connection is lost "between COMMIT and the reply").
@@ -25,7 +25,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 PG=pg16; PGPORT=$(_stk_port "$PG"); PGMAJOR=16
 OUT="${S1_LOGS}/F"; mkdir -p "$OUT"; RESULTS="${OUT}/RESULTS.tsv"
-SLEEP_S=8; SETTLE="${SETTLE:-15}"; FOLLOW_MAX="${FOLLOW_MAX:-300}"
+SLEEP_S=8; SETTLE="${SETTLE:-10}"; FOLLOW_MAX="${FOLLOW_MAX:-300}"
 
 # ----- injections -------------------------------------------------------------------------------------
 inj_kill9_worker()      { kill_role worker KILL; }
@@ -39,10 +39,14 @@ inj_pg_immediate()      { pg_restart "$PG" immediate; }
 inj_terminate_backend() { psql_target "$PG" -Atc "SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity WHERE usename='exponetdb_migrator' AND pid <> pg_backend_pid()" >/dev/null; }
 inj_net_drop()          { net_block "$PGPORT" drop; ( sleep 45; net_unblock ) >/dev/null 2>&1 & }
 inj_net_delay()         { net_delay 400 20; ( sleep 45; net_clear ) >/dev/null 2>&1 & }
+inj_clock_fwd3h()       { clock_jump 10800; }
+inj_clock_back3h()      { clock_jump -10800; }
+inj_pg_fast()           { pg_restart "$PG" fast; }
 inj_retry_same_key()    { :; }   # handled by the client leg (see cell_client)
 inj_retry_new_key()     { :; }
 
 recover_all() {
+  clock_restore >/dev/null 2>&1
   net_unblock >/dev/null 2>&1; net_clear >/dev/null 2>&1
   local c r
   docker start "${EXSTACK_CONTROL_NAME}" >/dev/null 2>&1; _stk_wait_control >/dev/null 2>&1
@@ -63,9 +67,24 @@ cell() {
   T="$(fresh_target "$slug" "$PG")" || { echo "NOT_RUN no target" >&3; return; }
   db="$(target_db "$T")"; dir="$(new_project "f-${slug}")"
   PGDATABASE="$db" psql_target "$PG" -q -c "CREATE SEQUENCE public.exec_seq; GRANT USAGE ON SEQUENCE public.exec_seq TO lab_owner"
-  local flags=(); [ "$bundle" = nontx ] && flags=(--nontransactional)
+  # executions are counted from the server log (a sequence skips 32 values after a crash): every statement of this database is logged
+  psql_target "$PG" -q -c "ALTER DATABASE ${db} SET log_statement = 'all'"
+  PGLOG="/var/log/postgresql/postgresql-${PGMAJOR}-${EXSTACK_CLUSTER_NAME}.log"; LOG0=$(wc -l <"$PGLOG")
+  if [ "$bundle" = nontx ]; then
+    # The policy refuses procedural SQL (nextval, pg_sleep) in a non-transactional bundle, so: DDL only. The mid-statement
+    # window is a CREATE INDEX CONCURRENTLY that waits for an out-of-band transaction older than it; executions are counted
+    # from the target's event log (nontx_started).
+    idm="$(VERIFY_SQL='-- check: both tables exist
+SELECT count(*) >= 0 AS ok FROM public.f_b;' mkb "$dir" "cell-${bundle}" --nontransactional <<'SQL'
+CREATE TABLE public.f_a (id int PRIMARY KEY);
+CREATE INDEX CONCURRENTLY f_a_idx ON public.f_a (id);
+CREATE TABLE public.f_b (id int PRIMARY KEY);
+GRANT SELECT ON public.f_a, public.f_b TO lab_owner;
+SQL
+)"
+  else
   idm="$(VERIFY_SQL='-- check: both tables exist
-SELECT count(*) >= 0 AS ok FROM public.f_b;' mkb "$dir" "cell-${bundle}" "${flags[@]}" <<SQL
+SELECT count(*) >= 0 AS ok FROM public.f_b;' mkb "$dir" "cell-${bundle}" <<SQL
 SELECT nextval('public.exec_seq');
 CREATE TABLE public.f_a (id int PRIMARY KEY);
 SELECT pg_sleep(${SLEEP_S});
@@ -73,11 +92,17 @@ CREATE TABLE public.f_b (id int PRIMARY KEY);
 GRANT SELECT ON public.f_a, public.f_b TO lab_owner;
 SQL
 )"
+  fi
   [ "$phase" = verify ] && bloat "$PG" "$db" 1500
   [ "$phase" = incommit ] && syncrep_on "$PG"
   [ "$phase" = commit ] && { # hold the mirror write
     docker exec -i -e PGPASSWORD="$(cat "${EXSTACK_STATE}/control.superuser")" "${EXSTACK_CONTROL_NAME}" psql -X -q -h 127.0.0.1 -U "$(_stk_super)" -d exponetdb_control -c "BEGIN; LOCK TABLE migrations.ledger_mirror IN EXCLUSIVE MODE; SELECT pg_sleep(900); COMMIT" >/dev/null 2>&1 &
     HOLD=$!; sleep 1; }
+  local HOLDER_PID=""
+  if [ "$bundle" = nontx ] && [ "$phase" != verify ]; then   # an older transaction: the CIC waits for it (up to 90 s)
+    PGDATABASE="$db" psql_target "$PG" -q -c "BEGIN; SELECT txid_current(); SELECT pg_sleep(90); COMMIT" >/dev/null 2>&1 &
+    HOLDER_PID=$!; sleep 1
+  fi
   local t0; t0=$(date +%s)
   echo "== cell ${id} target ${T} bundle ${idm}"
   local injected="no"
@@ -102,8 +127,8 @@ SQL
     fi
     case "$phase" in
       lock)   inject_on_state "$op" running "fire" 60 ;;
-      mid)    local k=0; while [ $k -lt 400 ]; do
-                [ "$(PGDATABASE="$db" psql_target "$PG" -Atc "SELECT count(*) FROM pg_stat_activity WHERE query LIKE '%pg_sleep(${SLEEP_S})%' AND pid <> pg_backend_pid()" 2>/dev/null)" = 1 ] && { fire; break; }
+      mid)    local k=0 q="%pg_sleep(${SLEEP_S})%"; [ "$bundle" = nontx ] && q="CREATE INDEX CONCURRENTLY%"; while [ $k -lt 400 ]; do
+                [ "$(PGDATABASE="$db" psql_target "$PG" -Atc "SELECT count(*) FROM pg_stat_activity WHERE query LIKE '${q}' AND state = 'active' AND pid <> pg_backend_pid()" 2>/dev/null)" = 1 ] && { fire; break; }
                 sleep 0.05; k=$((k+1)); done ;;
       incommit) local k=0; while [ $k -lt 1200 ]; do
                 [ "$(syncrep_waiting "$PG" "$db")" -ge 1 ] && { fire; break; }
@@ -116,6 +141,8 @@ SQL
   fi
   [ "$phase" = commit ] && { sleep 5; kill "$HOLD" 2>/dev/null; docker exec "${EXSTACK_CONTROL_NAME}" true >/dev/null 2>&1; ctl_sql "SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity WHERE query LIKE '%ledger_mirror IN EXCLUSIVE%' AND pid <> pg_backend_pid()" >/dev/null 2>&1; }
   sleep "$SETTLE"; recover_all
+  # (the older out-of-band transaction of a non-transactional cell ends here, so the index build can finish or fail)
+  [ -n "$HOLDER_PID" ] && { PGDATABASE="$db" psql_target "$PG" -Atc "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE query LIKE '%pg_sleep(90)%' AND pid <> pg_backend_pid()" >/dev/null 2>&1; kill "$HOLDER_PID" 2>/dev/null; }
   # follow the operation to rest
   local last="" cur st=""
   if [ -n "$op" ]; then
@@ -147,8 +174,9 @@ record_cell() { # id bundle phase inj target db migid op took dir
   local store="-" rest="-" next="-" ptr="-" led tabs seq execs ops
   [ -n "$op" ] && store="$(op_state "$op" 2>/dev/null | sed 's/ kind=.*//')"
   [ -n "$op" ] && { local j; j="$(exdb_json operation show "$op" 2>/dev/null)"; rest="$(jq -r '.data.state + " apply=" + .data.applyOutcome + " verify=" + .data.verificationOutcome' <<<"$j" 2>/dev/null)"; ptr="$(jq -r '"retryable=" + (.data.retryable|tostring) + " next=" + (.data.nextAction|tostring) + " err=" + (.data.errorCode|tostring)' <<<"$j" 2>/dev/null)"; }
-  led="$(ledger_count "$PG" "$db" "$mid")"; tabs="$(tables_in "$PG" "$db" | tr ',' '+')"
-  seq="$(PGDATABASE="$db" psql_target "$PG" -Atc "SELECT CASE WHEN is_called THEN last_value ELSE 0 END FROM public.exec_seq" 2>/dev/null)"; execs="${seq:-?}"
+  led="$(ledger_count "$PG" "$db" "$mid")"; tabs="$(tables_in "$PG" "$db" | tr ',' '\n' | grep -v '^bulk_' | paste -sd+ -)"; [ -z "$tabs" ] && tabs="-"
+  if [ "$bundle" = nontx ]; then execs="$(PGDATABASE="$db" psql_target "$PG" -Atc "SELECT count(*) FROM exponetdb.migration_events WHERE migration_id='${mid}' AND event='nontx_started'" 2>/dev/null)"
+  else execs="$(tail -n +"$((LOG0 + 1))" "$PGLOG" | grep -F "exponetdb_migrator@${db} " | grep -c "SELECT pg_sleep(${SLEEP_S})")"; fi
   ops="$(ctl_sql "SELECT count(*) FROM operations.operations o WHERE o.kind LIKE 'migration.%' AND o.subject->>'targetId' = '$(target_id "$T")'" 2>/dev/null)"
   # liveness: an independent change on the same target must complete
   local d2; d2="$(new_project "f-next-${RANDOM}")"
@@ -185,20 +213,19 @@ SQL
 # ----- the planned cells (priority order; edit or pass a regex to `run`) ----------------------------------
 CELLS=(
   tx:mid:kill9_worker tx:commit:kill9_worker tx:verify:kill9_worker nontx:mid:kill9_worker nontx:verify:kill9_worker
-  tx:mid:pg_immediate tx:verify:pg_immediate nontx:mid:pg_immediate tx:commit:pg_immediate tx:incommit:pg_immediate
-  tx:incommit:kill9_worker tx:incommit:terminate_backend tx:incommit:control_restart
-  tx:mid:kill9_serve tx:verify:kill9_serve tx:between:kill9_serve
-  tx:mid:kill9_agent tx:mid:kill9_gateway
-  tx:mid:terminate_backend nontx:mid:terminate_backend
-  tx:mid:control_restart tx:commit:control_restart tx:verify:control_restart nontx:mid:control_restart
+  tx:mid:pg_immediate nontx:mid:pg_immediate tx:verify:pg_immediate tx:incommit:pg_immediate tx:mid:pg_fast
+  tx:mid:kill9_serve tx:between:kill9_serve tx:mid:kill9_agent tx:mid:kill9_gateway
+  tx:incommit:kill9_worker tx:incommit:terminate_backend tx:mid:terminate_backend
+  tx:mid:control_restart tx:commit:control_restart tx:incommit:control_restart
   tx:mid:net_drop tx:verify:net_drop tx:mid:net_delay
   tx:mid:sigterm_worker nontx:mid:sigterm_worker tx:between:sigterm_serve
-  tx:before_plan:kill9_worker tx:before_plan:kill9_serve tx:between:kill9_worker tx:lock:kill9_worker tx:lock:pg_immediate
   tx:mid:retry_same_key tx:mid:retry_new_key
+  tx:mid:clock_fwd3h tx:between:clock_fwd3h tx:before_plan:clock_back3h tx:mid:clock_back3h nontx:mid:clock_fwd3h
+  tx:before_plan:kill9_worker tx:between:kill9_worker tx:lock:kill9_worker
 )
 
 case "${1:-list}" in
   cell) shift; cell "$@" ;;
   list) printf '%s\n' "${CELLS[@]}" ;;
-  run) shift; re="${1:-.}"; for c in "${CELLS[@]}"; do [[ "$c" =~ $re ]] || continue; IFS=: read -r b p i <<<"$c"; cell "$b" "$p" "$i"; done ;;
+  run) shift; re="${1:-.}"; for c in "${CELLS[@]}"; do [[ "$c" =~ $re ]] || continue; [ "${FORCE:-0}" = 1 ] || ! grep -q "^${c}	" "$RESULTS" 2>/dev/null || continue; IFS=: read -r b p i <<<"$c"; cell "$b" "$p" "$i"; done ;;
 esac

@@ -201,8 +201,6 @@ sc_supersede() { # D0 P2: a refused recovery has already closed the needs_attent
   T="$(fresh_target 9ss "$PG")"; db="$(target_db "$T")"; dir="$(new_project i9ss-${RUN_TAG})"
   # M is applied but its check cannot run (an out-of-band session holds ACCESS EXCLUSIVE on the table it reads): N parks in needs_attention
   PGDATABASE="$db" psql_target "$PG" -q -c "CREATE TABLE public.locked (id int); GRANT SELECT ON public.locked TO exponetdb_verifier, exponetdb_reader, exponetdb_observer, lab_owner"
-  PGDATABASE="$db" psql_target "$PG" -q -c "BEGIN; LOCK TABLE public.locked IN ACCESS EXCLUSIVE MODE; SELECT pg_sleep(600); COMMIT" >/dev/null 2>&1 &
-  local holder=$!; sleep 1
   id="$(VERIFY_SQL='-- check: reads a table another session holds exclusively
 SELECT count(*) >= 0 AS ok FROM public.locked;' mkb "$dir" parked <<'SQL'
 CREATE TABLE public.s1 (id int PRIMARY KEY);
@@ -210,6 +208,8 @@ GRANT SELECT ON public.s1 TO lab_owner;
 SQL
 )"
   mplan "$dir" "$T"; echo "plan: ${PLAN_STATE}"
+  PGDATABASE="$db" psql_target "$PG" -q -c "BEGIN; LOCK TABLE public.locked IN ACCESS EXCLUSIVE MODE; SELECT pg_sleep(600); COMMIT" >/dev/null 2>&1 &
+  local holder=$!; sleep 1
   mapply "$PLAN_ID" --wait; N="$OP_ID"
   PGDATABASE="$db" psql_target "$PG" -Atc "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE query LIKE '%pg_sleep(600)%' AND pid <> pg_backend_pid()" >/dev/null 2>&1; kill "$holder" 2>/dev/null
   echo "N = $N : $(op_state "$N")   locks: $(ctl_sql "SELECT string_agg(domain_key, ',') FROM operations.operation_locks WHERE operation_id='${N}'")"
@@ -223,7 +223,7 @@ SQL
   V="$(jq -r '.data.id // empty' "${log}.v.json")"; echo "recovery operation V = ${V:-none} ($(jq -c '{s:.status,e:.error.code}' "${log}.v.json"))"
   [ -z "$V" ] && { systemctl start "$(_stk_unit worker)"; verdict I9.supersede NOT_RUN "the recovery was not accepted: $(jq -c .error "${log}.v.json")"; return; }
   echo "V: $(op_state "$V")"
-  local gid; gid="$(human call GET /api/v1/me/grants | jq -r '[.body.items[] | select(.clientId=="exponetdb-cli")][0].id')"
+  local gid; gid="$(human call GET /api/v1/me/grants | jq -r '[.body.items[] | select(.client.clientId=="exponetdb-cli" and .state=="active")] | first | .id')"
   echo "revoking the CLI grant $gid: $(human call POST "/api/v1/me/grants/${gid}/revoke" '{}' | jq -c '.status')"
   systemctl start "$(_stk_unit worker)"
   follow "$V" 120 >/dev/null; echo "V after dispatch: $(op_state "$V")"
@@ -231,6 +231,10 @@ SQL
   nstate="$(op_state "$N")"; nlocks="$(ctl_sql "SELECT count(*) FROM operations.operation_locks WHERE operation_id='${N}'")"
   echo "N after the refused recovery: $nstate ; locks held by N: $nlocks"
   cli_login 2>&1 | tail -1
+  case "$(op_state "$V" | cut -d' ' -f1)" in
+    failed|canceled) ;;
+    *) verdict I9.supersede NOT_RUN "the recovery V was not refused (V ended $(op_state "$V" | cut -d' ' -f1)); N ended ${nstate%% *}: the closing of N by a successful migration.verify is the documented TC-005 path"; return ;;
+  esac
   case "${nstate%% *}" in
     needs_attention) verdict I9.supersede PASS "the refused recovery left N in needs_attention with its lock (V: $(op_state "$V" | cut -d' ' -f1))" ;;
     verification_failed|failed|canceled) verdict I9.supersede FAIL "V was refused ($(op_state "$V" | cut -d' ' -f1)) but N ended '${nstate%% *}' with ${nlocks} lock(s): the recovery closed N without doing anything" ;;

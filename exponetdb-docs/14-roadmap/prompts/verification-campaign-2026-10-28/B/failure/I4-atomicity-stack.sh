@@ -290,10 +290,16 @@ CREATE TABLE c_b (i int);
 SQL
 case_ nontx_midfail            false - <<'SQL'
 CREATE TABLE c_a (i int);
+CREATE INDEX CONCURRENTLY c_a_i ON c_a (i);
 CREATE TABLE c_b (i int, i int);
 SQL
 case_ nontx_first_statement_fails false - <<'SQL'
 CREATE TABLE c_b (i int, i int);
+CREATE INDEX CONCURRENTLY c_b_i ON c_b (i);
+SQL
+case_ nontx_cic_invalid_index  false - <<'SQL'
 CREATE TABLE c_a (i int);
+INSERT INTO c_a VALUES (1), (1);
+CREATE UNIQUE INDEX CONCURRENTLY c_a_u ON c_a (i);
 SQL
 echo "I4: ${N} cases ran; raw logs in ${OUT}"

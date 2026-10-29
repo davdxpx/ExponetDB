@@ -52,4 +52,72 @@ All runs `succeeded`; for every run the restored cluster was started again by ha
 Restore of 7.6 GB into the scratch root: 8.4 s (about 900 MB/s, page-cache assisted). `restore.prepare` answered in 0.08 to 0.1 s with `spaceRequiredBytes` 7,595,789,229 and `walContinuous: null` (the node does not judge WAL continuity, see section 6).
 The product-reported `recoveryReachedAt` is the commit time of the last replayed transaction; it lies 0.8 ms to 3.5 ms before the requested target in every PITR run, as it must.
 
-(sections 3 onward are appended below as they are measured)
+
+## 3. The Control Plane at 7.6 GB (REST owner session, serve/gateway/worker in process, agent and helper as systemd units)
+
+Repository adopted (`l1_physical`, pgBackRest, posix), ownership `adopted_runs`, `backup refresh` 2.9 s, five backups mirrored.
+
+**Product verification** (`POST /clusters/{id}/backups/{id}/verify`, label scoped `pgbackrest verify`): all five `succeeded / passed`. The engine run takes 1 to 2 s per backup
+(`backup runs`: STARTED/FINISHED 1 s apart); the REST operation needs 3.9 to 35.7 s because the node job is polled (see finding about polling).
+
+**Drills (REST `POST /clusters/{id}/drills`, human session with fresh re-authentication).** Product values from `GET /drills` and `GET /restores`; the stopwatch is the outside sampler
+`watch.log` (0.5 s samples of "pgbackrest restore process / scratch postmaster / scratch directory exists"), restore start to scratch postmaster gone:
+
+| selection | source (restore record) | outcome | RTO reported (`measuredRtoSeconds`) | RTO by stopwatch | phases (restore / recover / verify) | apply accepted to operation `succeeded` |
+|---|---|---|---|---|---|---|
+| `latest` | newest full, WAL 2/9000000 .. 4/D4000000 (about 6 GB of WAL after it) | passed | **105 s** | 104.3 s | 8.5 / 92.2 / 4.2 s | 217.9 s |
+| `older` | the differential, WAL 1/EE000000 .. 4/D4000000 | passed | **112 s** | 111.7 s | 9 / 99 / 5 s | 219.7 s |
+| `backup:<oldest full>` | WAL 1/7C000000 .. 4/D4000000 (about 12 GB of WAL) | passed | **131 s** | 130.7 s | 7.4 / 122 / - s | 220.0 s |
+| `pitr_random`, `pitr:<T1>`, `pitr:<T3>` | - | **plan refused, 409** `REGISTRY_CONFLICT` reason `no_backup_selectable` / `point_in_time_outside_window` (see finding F-S2-2) | - | - | - | - |
+
+The reported RTO equals the stopwatch to within 1 s in all three drills: the number is real. It is the time from the start of the restore to the end of verification; the operation as a whole needs 2.1 times as long, because the
+worker only issues the `discard` step about 108 s after the verification ended (the 7.6 GB scratch directory stays on disk for that time). RTO scales with the WAL that must be replayed (65 MB/s here), not with the data size: 105 s for 6 GB of WAL, 131 s for 12 GB.
+A drill record carries `selection`, `mode control_plane`, `outcome`, `measuredRtoSeconds`, `startedAt`, `finishedAt` and `restoreId`; the restore record carries phases, source walFrom/walTo and the checks.
+It does **not** carry the recovery point that was reached (no LSN, no commit time): the only statement is the check `recovery_target_reached passed: "recovery ended and the cluster was promoted"`. The RPO a drill achieved is therefore not measurable from the product's records (it is from the helper's `run.status`: `recoveryReachedAt`).
+The checks a drill runs through the Control Plane are `recovery_target_reached`, `probe_simple`, `probe_extended`, `amcheck` (`not_run`: "177 indexes checked in 1 of 3 databases; amcheck is missing in the others"), `fingerprint` and `ledger_head` (`not_run`: "needs a Control Plane read of the scratch cluster (not in V1)"); **no row count or data comparison is configured**, so a drill passes with an unverified data set (see section 5).
+
+**Offline runbook (C-35).** `GET /clusters/{id}/restore-runbook?repository=` (6,209 bytes, 7 placeholders, digest `sha256:...`, no secret in the script). Run by `postgres` into an empty directory with `CIPHER_PASS_FILE`:
+**101.5 s** for the whole script on the same host (end of the archive, 502 marker rows = source, 40,000,000 accounts). `POST /clusters/{id}/drills/offline` now returns **201** (`mode offline_runbook`, `outcome attested`, `measuredRtoSeconds null`, listed by `drill list`: "MODE: offline (attested)"; TC-013 is fixed);
+the wrong digest answers 422 `VALIDATION_FAILED` ("The request does not match the contract.", without naming the digest as the cause).
+
+**CLI as a real process** (`bun apps/cli/src/main.ts`, API key of a service account with role `operator`): `backup overview`, `backup list`, `backup repositories`, `backup runs`, `drill list` work in text and JSON (0.3 to 0.4 s each).
+`drill plan --selection latest` produces a plan with `decision deny`, exit code 4 `PLAN_DENIED: Policy denies this plan; it cannot be applied.` (restore apply is human only, restore.md section 8, so a CLI driven by an API key can plan but never run a drill;
+a human needs the browser re-authentication). `restore runbook` with the same key: exit 3 `PERMISSION_DENIED` (`restore.runbook.get` is `humanOnly`), while `restore.execute` cannot even be delegated to a key (`SCOPE_NOT_DELEGABLE`). Neither is stated in `15-cli/reference.md`
+(it lists the scope `restore.plan` for the runbook). So a real passing drill from the CLI as a process could not be produced in this lab; drills were run through REST with the owner session, exactly the calls the Web App makes.
+
+## 4. Restore on another host from the repository only
+
+`s2-host2` is a second container (same image, no cluster, no ExponetDB agent) with the repository mounted **read-only** and only the cipher passphrase file and the downloaded runbook:
+
+| target | wall | result |
+|---|---|---|
+| end of archive (default type) | **101.0 s** | 502 = 502 marker rows, md5 of `blobs` and `docs` equal, 40,000,000 accounts, TPC-B sums equal |
+| `RESTORE_TYPE=time`, T3 (marker 324) | 20.9 s | 324 = 324, md5 of the marker rows equal |
+| `RESTORE_TYPE=time`, T1 (marker 199) | 25.5 s | 199 = 199, equal |
+
+The repository was not modified by the restore (read-only mount). PASS.
+
+## 5. Failure cases at 7.7 GB (newest full `20261029-190316F`, 263 to 273 archived segments after its stop segment)
+
+Helper level (`backup.verify`, `restore.execute` of the end of the archive with `row_counts` on the marker table); the Control Plane level follows in section 6.
+`verifyErrors` of the whole-repository verify; "label" is the label-scoped verify of the newest full, the only form the Control Plane runs.
+
+| damage | whole repo `backup.verify` | label-scoped verify | restore to the end of the archive | data |
+|---|---|---|---|---|
+| 16 bytes flipped in a data file of the newest full | `failed`, verifyErrors 4 ("invalid checksum ...16427.zst", "checksum invalid: 1") 16.8 s | `failed` 4 (1.4 s) | `failed`, exit 29, 23 s: `ERROR: [029]: ... zst error: [-20] Data corruption detected` | nothing restored, scratch left until discard (`restore.discard` 0.6 s) |
+| 16 bytes flipped in a MIDDLE WAL segment (not holding commits) | `failed`, 2 to 3 (17.9 s) | `succeeded` 0 (outside the backup's range) | `execute` ended `succeeded` at the process level, recovery "reached 5/66816678 ... promoted"; the marker `row_counts` check **failed** ("1 of 4 tables are outside their bounds") | rows after the hole missing |
+| middle WAL segment DELETED | **`succeeded`, 0** (16.8 s) | `succeeded` 0 | recovery ended at the hole, `recovery_target_reached passed`, `row_counts failed` | rows after the hole missing |
+| newest WAL segment DELETED (it held the last 12 commits) | **`succeeded`, 0** | `succeeded` 0 | **`succeeded`, all checks passed** (with the marker row_counts omitted, as the Control Plane does) | **12 committed rows missing (656 of 668)** |
+| newest WAL segment corrupted (16 bytes flipped; it held the last commits) | `failed`, 2 (17.9 s) | `succeeded` 0 | **`succeeded`, all checks passed**, reached `5/F30020D0` inside the damaged segment | **4 committed rows missing (652 of 656)** |
+| the STOP segment of the newest full DELETED | **`succeeded`, 0** | **`succeeded` 0** | `failed` in 11 s: `FATAL: WAL ends before end of online backup` | the newest full cannot be restored at all, while verify says it is fine |
+
+So the corrected `backup.verify` now catches corruption of backup files and of WAL files (TC-011 fixed) but still passes **every deleted WAL segment**, including the stop segment of a backup (the residual R1 found; reproduced at 7.7 GB with all three positions).
+The newest-segment cases are the dangerous ones: the restore reports success and loses committed data; the Control Plane compares the reached position with the start of the newest segment, which these runs exceed (section 6).
+
+**Wrong cipher passphrase** (host configuration changed): `backup.list`, `backup.verify`, `backup.run` answer at once `{"code":"failed","message":"pgBackRest's catalog is not readable"}` (the run never starts, nothing is left); `restore.prepare` answers `refusals: ["engine_cannot_read"]`
+(and still assigns a port); `pgbackrest info` says `FormatError: key/value found outside of section` (the file is read as plain text). WAL archiving to the encrypted repository keeps going only with the right key: with the wrong key `archive-push` failed (`failed_count` rose to 6 within 20 s).
+After the configuration was restored: `check` clean. Safe state: yes (nothing was written). Way forward: restore the key from the offline copy; the message does not say "wrong key", only "catalog not readable".
+
+**Repository deleted** (archive and backup directories moved away): `backup.list` answers **`{"backups":0}` with no error** (an empty list for a repository that does not exist; `pgbackrest info` says `status: error (missing stanza path)`);
+`backup.verify` / `backup.run` are refused `precondition_failed: the stanza does not belong to cluster 17/exdbnode (system identifier)` and `restore.prepare` says `system_identifier_mismatch`: both texts describe a foreign stanza, not a missing repository.
+Archiving fails (`failed_count` 6, `last_failed_wal` named). Moving the directories back: `check` clean, archiving resumes, no backlog.
