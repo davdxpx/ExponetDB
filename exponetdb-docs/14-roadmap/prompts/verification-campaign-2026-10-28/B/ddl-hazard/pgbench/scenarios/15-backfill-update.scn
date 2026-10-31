@@ -1,7 +1,0 @@
-DESC="One unbounded UPDATE of every row vs 20,000-row batches with a pause"
-HAZARD=( "tx|UPDATE public.orders SET payload = jsonb_build_object('v', 2);" )
-SAFE=( "batched;size=20000;sleep=0.05|UPDATE public.orders SET payload = jsonb_build_object('v', 2) WHERE id >= :lo AND id < :hi;" )
-CLEANUP=""
-SAFE_ENGINE=no
-SAFE_NOTE="a migration bundle is one transaction (no COMMIT, DO and loops are refused): batches run outside the engine"
-FIXTURES="h25 / (external job)"

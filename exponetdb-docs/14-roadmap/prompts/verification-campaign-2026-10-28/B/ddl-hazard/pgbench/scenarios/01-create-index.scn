@@ -1,5 +1,0 @@
-DESC="CREATE INDEX vs CREATE INDEX CONCURRENTLY on orders(customer_id)"
-HAZARD=( "tx|CREATE INDEX idx_orders_customer ON public.orders (customer_id);" )
-SAFE=( "nt|CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_customer ON public.orders (customer_id);" )
-CLEANUP="DROP INDEX IF EXISTS public.idx_orders_customer;"
-FIXTURES="h01 / s01"

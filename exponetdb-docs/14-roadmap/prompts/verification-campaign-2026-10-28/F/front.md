@@ -90,5 +90,12 @@ Verdict meanings: PASS, FAIL, PARTIAL, NOT RUN (the block's own rows say which).
   restic 0.16.4 (`D/infra/bootstrap.sh`). Some explorations ran on Bun 1.3.14 / Node 26.5 on the lead's machine and are labelled exploratory.
 - **Severity:** P0 data loss, security, production outage; P1 wrong result, blocked core flow, or anything that makes a production apply,
   restore or upgrade unsafe or unrecoverable; P2 degraded, workaround exists; P3 polish.
+- **What is not in the repository:** the campaign's scripts, test sources, fixtures and the findings parts (about 23,000 lines: the
+  executable conformance cases `B/conformance/`, the stack kit `D/infra/` with `stack-up.sh` and `bootstrap.sh`, the failure-injection,
+  backup, upgrade and security drivers, the authorization and SQL-guard harnesses, `F/build.py`) were kept out of the pull request to keep it
+  to documents. Findings cite them by path (for example `C/stack/scripts/fc3-disk.sh`). They are on the owner's machine in
+  `~/exdb-vc-raw/evidence-scripts-and-parts-2026-10-28.tgz`; to use them, extract the archive into the evidence folder
+  (`tar xzf ~/exdb-vc-raw/evidence-scripts-and-parts-2026-10-28.tgz -C exponetdb-docs/14-roadmap/prompts/verification-campaign-2026-10-28/`),
+  which restores every cited path. They can be published as a separate pull request on request.
 - **Disposable stack:** `D/infra/stack-up.sh` builds a complete ExponetDB (Control Store, serve, worker, gateway, a node agent, targets on
   PostgreSQL 16/17/18) from any commit in about 4 minutes; the fix session can use it for the stack steps of the acceptance tests.

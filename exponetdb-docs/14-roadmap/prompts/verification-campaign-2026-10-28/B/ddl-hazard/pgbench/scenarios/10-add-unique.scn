@@ -1,6 +1,0 @@
-DESC="ADD CONSTRAINT UNIQUE (ref) vs unique index CONCURRENTLY + ADD CONSTRAINT ... USING INDEX"
-HAZARD=( "tx|ALTER TABLE public.orders ADD CONSTRAINT orders_ref_key UNIQUE (ref);" )
-SAFE=( "nt|CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS orders_ref_uidx ON public.orders (ref);"
-       "tx|ALTER TABLE public.orders ADD CONSTRAINT orders_ref_key UNIQUE USING INDEX orders_ref_uidx;" )
-CLEANUP="ALTER TABLE public.orders DROP CONSTRAINT IF EXISTS orders_ref_key; DROP INDEX IF EXISTS public.orders_ref_uidx;"
-FIXTURES="h17 / s14,s15"

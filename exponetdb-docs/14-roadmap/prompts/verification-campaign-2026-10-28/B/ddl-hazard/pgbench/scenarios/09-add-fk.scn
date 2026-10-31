@@ -1,6 +1,0 @@
-DESC="Validated foreign key order_items -> orders vs NOT VALID + VALIDATE"
-HAZARD=( "tx|ALTER TABLE public.order_items ADD CONSTRAINT order_items_order_fk FOREIGN KEY (order_id) REFERENCES public.orders (id);" )
-SAFE=( "tx|ALTER TABLE public.order_items ADD CONSTRAINT order_items_order_fk FOREIGN KEY (order_id) REFERENCES public.orders (id) NOT VALID;"
-       "tx|ALTER TABLE public.order_items VALIDATE CONSTRAINT order_items_order_fk;" )
-CLEANUP="ALTER TABLE public.order_items DROP CONSTRAINT IF EXISTS order_items_order_fk;"
-FIXTURES="h16 / s12,s13"

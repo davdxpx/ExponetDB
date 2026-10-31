@@ -1,6 +1,0 @@
-DESC="DDL queued behind a 25 s reader: default lock_timeout 5 s vs 300 ms with retries"
-BLOCKER="BEGIN; SELECT count(*) FROM public.orders WHERE id < 1000; SELECT pg_sleep(25); COMMIT;"
-HAZARD=( "tx|ALTER TABLE public.orders ADD COLUMN q1 integer;" )
-SAFE=( "tx;lt=300;retry=60|ALTER TABLE public.orders ADD COLUMN q1 integer;" )
-CLEANUP="ALTER TABLE public.orders DROP COLUMN IF EXISTS q1;"
-FIXTURES="h05 / s04 (any ACCESS EXCLUSIVE statement)"

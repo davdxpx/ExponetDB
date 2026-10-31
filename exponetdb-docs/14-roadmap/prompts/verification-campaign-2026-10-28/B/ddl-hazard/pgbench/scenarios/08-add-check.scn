@@ -1,6 +1,0 @@
-DESC="Validated CHECK vs CHECK NOT VALID + VALIDATE"
-HAZARD=( "tx|ALTER TABLE public.orders ADD CONSTRAINT orders_amount_pos CHECK (amount >= 0);" )
-SAFE=( "tx|ALTER TABLE public.orders ADD CONSTRAINT orders_amount_pos CHECK (amount >= 0) NOT VALID;"
-       "tx|ALTER TABLE public.orders VALIDATE CONSTRAINT orders_amount_pos;" )
-CLEANUP="ALTER TABLE public.orders DROP CONSTRAINT IF EXISTS orders_amount_pos;"
-FIXTURES="h15 / s09,s10"
