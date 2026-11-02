@@ -6113,11 +6113,11 @@
                   "type": "integer"
                 },
                 "schema": {
-                  "pattern": "^[A-Za-z_][A-Za-z0-9_$]{0,62}$",
+                  "pattern": "^[a-z_][a-z0-9_]{0,62}$",
                   "type": "string"
                 },
                 "table": {
-                  "pattern": "^[A-Za-z_][A-Za-z0-9_$]{0,62}$",
+                  "pattern": "^[a-z_][a-z0-9_]{0,62}$",
                   "type": "string"
                 }
               },

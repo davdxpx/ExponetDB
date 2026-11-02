@@ -944,6 +944,22 @@ describe('backups through REST, the worker and a simulated node', () => {
     })
     expect(counted.operation.state).toBe('succeeded')
     expect(startedRowCounts).toEqual(bounds)
+    // VC-004 review: bounds the node would refuse are refused at planning, never after the start.
+    for (const bad of [
+      { database: 'app', schema: 'public', table: 'Orders', min: 1, max: 2 },
+      { database: 'app', schema: 'pub$lic', table: 'orders', min: 1, max: 2 },
+      { database: 'app', schema: 'public', table: 'orders', min: 3, max: 2 },
+    ]) {
+      const refused = await owner.browser.call('POST', `/api/v1/clusters/${w.clusterId}/drills`, {
+        repositoryId,
+        selection: { kind: 'latest' },
+        rowCounts: [bad],
+      })
+      expect([refused.status, refused.body?.code], JSON.stringify(bad)).toEqual([
+        422,
+        'VALIDATION_FAILED',
+      ])
+    }
     await node.stop()
   })
 

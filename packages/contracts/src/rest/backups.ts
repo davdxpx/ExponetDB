@@ -552,13 +552,17 @@ export const DrillPlanRequestSchema = z
     }),
     rowCounts: z
       .array(
-        z.strictObject({
-          database: z.string().regex(/^[A-Za-z_][A-Za-z0-9_$-]{0,62}$/),
-          schema: z.string().regex(/^[A-Za-z_][A-Za-z0-9_$]{0,62}$/),
-          table: z.string().regex(/^[A-Za-z_][A-Za-z0-9_$]{0,62}$/),
-          min: z.int().min(0),
-          max: z.int().min(0),
-        }),
+        // The node's own rules (NodeCapRestoreExecuteArgs), so a bound it would refuse is refused
+        // at planning, not after the run row exists (VC-004 review).
+        z
+          .strictObject({
+            database: z.string().regex(/^[A-Za-z_][A-Za-z0-9_$-]{0,62}$/),
+            schema: z.string().regex(/^[a-z_][a-z0-9_]{0,62}$/),
+            table: z.string().regex(/^[a-z_][a-z0-9_]{0,62}$/),
+            min: z.int().min(0),
+            max: z.int().min(0),
+          })
+          .refine((b) => b.min <= b.max, { message: 'min must not exceed max' }),
       )
       .max(32)
       .optional()

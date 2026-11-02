@@ -83,7 +83,8 @@ Rules:
   that reached only that segment's start never read it (deleted or
   unreadable), and the check `recovery_target_reached` fails the drill. A
   drill request may carry `rowCounts` (database, schema, table, `min`,
-  `max`; at most 32): the node counts those tables in the restored cluster
+  `max`; at most 32; schema and table names in lower case, `min` at most
+  `max`, refused at planning otherwise): the node counts those tables in the restored cluster
   (check `row_counts`) and a table outside its bounds fails the drill. A
   drill without them passes on replay, probes and `amcheck` only and its
   record says `row_counts` is not configured ([OD-60](../00-product/open-decisions.md#od-60-how-strict-a-drill-is-about-amcheck)).
