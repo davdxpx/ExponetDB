@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { MIGRATION_BODY_LIMIT_BYTES } from '@exponetdb/contracts'
+import {
+  BUNDLE_FILE_LIMITS,
+  MIGRATION_BODY_LIMIT_BYTES,
+  MIGRATION_REQUEST_LIMITS,
+} from '@exponetdb/contracts'
+import { describe, expect, it } from 'vitest'
 import {
   MAX_COMMENT_DEPTH,
   MAX_COMMENT_RUN,
@@ -9,9 +14,8 @@ import {
   MAX_PARSE_BYTES,
   MAX_PARSE_TOKENS,
   MAX_REQUEST_PARSE_TOKENS,
-} from '@exponetdb/postgres/parser'
-import { describe, expect, it } from 'vitest'
-import { MAX_YAML_FLOW_DEPTH } from '../src/format/yaml.ts'
+  MAX_YAML_FLOW_DEPTH,
+} from '../src/limits.ts'
 
 /**
  * VC-095: the limits of bundles are announced in one table of migration-bundles.md; a value that
@@ -58,6 +62,21 @@ describe('the table of bundle limits in migration-bundles.md (VC-095)', () => {
   ])('%s is documented as %s', (name, value, text) => {
     expect(value).toBeGreaterThan(0)
     expect(documented(name)).toBe(text)
+  })
+
+  it('documents the size of every bundle file', () => {
+    const row = documented('BUNDLE_FILE_LIMITS')
+    const size = (bytes: number) => (bytes >= MIB ? `${bytes / MIB} MiB` : `${bytes / 1024} KiB`)
+    for (const [name, bytes] of Object.entries(BUNDLE_FILE_LIMITS)) {
+      expect(row, name).toContain(`\`${name}\``)
+      expect(row, name).toContain(size(bytes))
+    }
+  })
+
+  it('names the number of bundles of a request', () => {
+    expect(documented('MIGRATION_REQUEST_LIMITS')).toContain(
+      String(MIGRATION_REQUEST_LIMITS.bundles),
+    )
   })
 
   it('names the body limit of a bundle request', () => {
