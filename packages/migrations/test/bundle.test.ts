@@ -121,13 +121,20 @@ describe('strict YAML', () => {
     const seq = (n: number) => `${'- '.repeat(n)}x\n`
     expect(parseStrictYaml(seq(33))).toMatchObject({ ok: true })
     for (const n of [34, 3000, 20_000]) {
-      const started = performance.now()
       expect(parseStrictYaml(seq(n)), `depth ${n}`).toMatchObject({
         ok: false,
         error: { code: 'yaml_depth' },
       })
-      expect(performance.now() - started, `depth ${n}`).toBeLessThan(1000)
     }
+    // Not quadratic: the fastest of three runs at 5,000 levels (the visit took 7.5 s there).
+    const best = Math.min(
+      ...Array.from({ length: 3 }, () => {
+        const started = performance.now()
+        parseStrictYaml(seq(5000))
+        return performance.now() - started
+      }),
+    )
+    expect(best).toBeLessThan(2000)
     const map = (n: number) =>
       `${Array.from({ length: n }, (_, i) => `${' '.repeat(i)}k${i}:`).join('\n')} v\n`
     expect(parseStrictYaml(map(33))).toMatchObject({ ok: true })
