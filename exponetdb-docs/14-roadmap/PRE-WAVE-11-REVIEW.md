@@ -906,9 +906,23 @@ finding is wrong. Owner decisions are in [`open-decisions.md`](../00-product/ope
 | VC-123 an accept holds the plan lock while it reads the target | PARTLY IMPLEMENTED (a 30 s deadline on the live check, the check is told to stop and closes its session, then `TARGET_UNAVAILABLE`); NOT BUILT: reading the target before the transaction, one check at a time per target | `packages/operations/test/accept-deadline.int.test.ts` | |
 | VC-146 server-file and untrusted-language functions | IMPLEMENTED (`forbidden_statement`, found lexically also in bodies), TESTED LOCALLY | `packages/migrations/test/lint.test.ts` | [analysis.md](../04-migrations/analysis.md) |
 
+### VC-1h. Group F: the planner's honesty (branch `fix/verification-campaign-group-f`, stacked on group E)
+
+| Finding | Status | Regression artifact | Document |
+|---|---|---|---|
+| VC-016 `CREATE TABLE (id serial ...)` can never be applied | IMPLEMENTED (serial, serial2/4/8, smallserial, bigserial are expected as int2/int4/int8, NOT NULL, with a default), TESTED LOCALLY at the analysis; the apply on PostgreSQL 16/17/18 (`serial-columns.int`) is written, see the run note | `packages/postgres/test/migration-analysis.test.ts`, `packages/migrations-engine/test/serial-columns.int.test.ts` | [analysis.md](../04-migrations/analysis.md) |
+| VC-017 `ADD COLUMN serial/identity` called brief | IMPLEMENTED (table rewrite, `data_rewrite`, critical lock, `volatile_default_rewrite`), TESTED LOCALLY; the relfilenode proof is in `serial-columns.int` | same | [analysis.md](../04-migrations/analysis.md) |
+| VC-028 stable defaults called a rewrite | PARTLY IMPLEMENTED (`now()`, `statement_timestamp()`, `transaction_timestamp()`, `current_timestamp` are no rewrite; an unknown function stays volatile: no `provolatile` read) | `migration-analysis.test.ts`, `lint.test.ts` | [analysis.md](../04-migrations/analysis.md) |
+| VC-030 the NOT NULL recipe cannot pass | IMPLEMENTED (validated `CHECK (col IS NOT NULL)` read from the catalog and tracked within a request), TESTED LOCALLY; the catalog read on PostgreSQL 16/17/18 is `proven-not-null.int` | `lint.test.ts`, `packages/postgres/test/proven-not-null.int.test.ts` | [analysis.md](../04-migrations/analysis.md) |
+| VC-031 `USING INDEX` flagged like a scan | IMPLEMENTED | `migration-analysis.test.ts` | |
+| VC-032 a lock held across a slow statement is brief | IMPLEMENTED (rule `lock_held_across_slow_statement`) | `lint.test.ts` | [analysis.md](../04-migrations/analysis.md) |
+| VC-033 `DETACH PARTITION CONCURRENTLY` cannot be authored | IMPLEMENTED (autocommit-only, low lock), TESTED LOCALLY; NOT EXECUTED: applying it on a target | `migration-analysis.test.ts` | |
+| VC-029 type change blocks every case, VC-070 a view reads the column, VC-097 missing lock facts | DEFERRED (need old column types and dependent views as catalog facts and a lint-level override of the statement class) | | [open-decisions.md](../00-product/open-decisions.md) |
+| VC-020, VC-024 project settings have no server home; per-finding acknowledgement | DECIDED (registry project record; catalog facts instead of acknowledgements), NOT BUILT | | [open-decisions.md](../00-product/open-decisions.md) |
+
 ### VC-1a. Groups not started yet
 
-Groups F, H, I and the closing documents of section 5 of the fix prompt get their own branches
+Groups H, I and the closing documents of section 5 of the fix prompt get their own branches
 and pull requests.
 
 ### VC-2. Review history (append-only)
@@ -923,3 +937,4 @@ and pull requests.
 | 2026-11-02 | `fix/verification-campaign-group-d` | group D: VC-065, VC-043, VC-010, VC-011 (decided under the delegation), VC-141, VC-143 |
 | 2026-11-02 | `fix/verification-campaign-group-g` | group G: VC-063, VC-023, VC-045, VC-102, VC-027, VC-080, VC-079, VC-153, VC-022, VC-069, VC-071, VC-073, VC-074, VC-075 (decided), VC-106, VC-136; VC-087 deferred; VC-108 moved to group E |
 | 2026-11-02 | `fix/verification-campaign-group-e` | group E: VC-013, VC-014, VC-015, VC-068, VC-095, VC-094, VC-086, VC-093, VC-101, VC-046, VC-146; VC-078 partly; VC-123 and the MCP edge open |
+| 2026-11-02 | `fix/verification-campaign-group-f` | group F: VC-016, VC-017, VC-028 (static), VC-030, VC-031, VC-032, VC-033; VC-029, VC-070, VC-097, VC-020, VC-024 deferred or decided |
