@@ -174,10 +174,12 @@ describe('gaps in the WAL archive', () => {
     expect((await listCoverage(serve, w.clusterId))[0]?.gapEnds).toEqual([
       '000000010000000000000007',
     ])
-    // The next listing has no gapEnds (the node could not list): the gap is not forgotten.
+    // The next listing has no gapEnds (the node could not list): the gap is not forgotten, and the
+    // archive up to its newest segment is not proven continuous either (VC-005 review).
     await reconcile(w, listing(w), null)
     expect((await listCoverage(serve, w.clusterId))[0]?.gapEnds).toEqual([
       '000000010000000000000007',
+      '000000010000000000000009',
     ])
     // A listing without holes clears it.
     await reconcile(
@@ -188,6 +190,32 @@ describe('gaps in the WAL archive', () => {
       null,
     )
     expect((await listCoverage(serve, w.clusterId))[0]?.gapEnds).toEqual([])
+  })
+
+  // VC-005 review: a first listing the node could not make was stored as '[]', a continuity claim.
+  it('never records an archive the node could not list as continuous, also the first time', async () => {
+    const w = await world()
+    await reconcile(w, listing(w), null)
+    expect((await listCoverage(serve, w.clusterId))[0]?.gapEnds).toEqual([
+      '000000010000000000000009',
+    ])
+  })
+
+  it('keeps the newest 64 gaps, the ones newer backups depend on', async () => {
+    const w = await world()
+    const ends = Array.from(
+      { length: 70 },
+      (_, i) => `00000001000000000000${(0x10 + i).toString(16).toUpperCase().padStart(4, '0')}`,
+    )
+    await reconcile(
+      w,
+      listing(w, {
+        archive: [{ id: '17-1', min: WAL_START, max: '000000010000000000000060', gapEnds: ends }],
+      }),
+      null,
+    )
+    const kept = (await listCoverage(serve, w.clusterId))[0]?.gapEnds ?? []
+    expect([kept.length, kept[0], kept[63]]).toEqual([64, ends[6], ends[69]])
   })
 })
 

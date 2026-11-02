@@ -468,7 +468,9 @@ func (e *engineRun) pgbrVerify(ctx context.Context) {
 		// pgbackrest verify; the node lists the archive itself.
 		gaps, listed := e.archiveGapsAfter(ctx, e.str("label"))
 		if !listed {
-			e.note("the archive could not be listed for WAL gaps")
+			// Not proven free of holes is no pass (VC-005 review).
+			gaps++
+			e.note("the archive could not be listed for WAL gaps; the verification does not pass without it")
 		}
 		n := reported + gaps
 		e.outcome.VerifyErrors = &n

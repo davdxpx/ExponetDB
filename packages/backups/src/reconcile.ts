@@ -385,25 +385,31 @@ export async function reconcileCatalog(tx: Tx, input: ReconcileInput): Promise<R
       archivedAtMs <= nowMs + FUTURE_TOLERANCE_MS
         ? archived.lastArchivedAt
         : null
-    // VC-005: where the archive resumes after missing segments, as the node listed it. A listing
-    // the node could not make (no gapEnds) keeps what was known; it never claims continuity.
+    // VC-005: where the archive resumes after missing segments, as the node listed it, the newest
+    // 64 (the holes newer backups depend on). A listing the node could not make (no gapEnds) keeps
+    // the holes known before and adds an `unlisted` end at the newest segment: nothing before it
+    // is proven continuous, also on a first listing (VC-005 review).
     const gaps =
       a.gapEnds === undefined
         ? null
         : JSON.stringify(
             a.gapEnds
               .filter((end) => SEGMENT.test(end) && segmentTimeline(end) === timeline)
-              .slice(0, 64)
+              .slice(-64)
               .map((end) => ({ to: end })),
           )
+    const unlisted = JSON.stringify(max === null ? [] : [{ to: max, unlisted: true }])
     await tx.query(
       'backups.wal_coverage.upsert',
       `INSERT INTO backups.wal_coverage (repository_id, archive_id, timeline, min_segment, max_segment, max_archived_at, gaps, observed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, coalesce($7::jsonb, '[]'::jsonb), now())
+       VALUES ($1, $2, $3, $4, $5, $6, coalesce($7::jsonb, $8::jsonb), now())
        ON CONFLICT (repository_id, archive_id, timeline) DO UPDATE
           SET min_segment = EXCLUDED.min_segment, max_segment = EXCLUDED.max_segment,
               max_archived_at = EXCLUDED.max_archived_at,
-              gaps = CASE WHEN $7::jsonb IS NULL THEN backups.wal_coverage.gaps ELSE EXCLUDED.gaps END,
+              gaps = CASE WHEN $7::jsonb IS NULL
+                          THEN coalesce((SELECT jsonb_agg(g) FROM jsonb_array_elements(backups.wal_coverage.gaps) g
+                                          WHERE NOT g ? 'unlisted'), '[]'::jsonb) || $8::jsonb
+                          ELSE EXCLUDED.gaps END,
               observed_at = now()`,
       [
         repositoryId,
@@ -413,6 +419,7 @@ export async function reconcileCatalog(tx: Tx, input: ReconcileInput): Promise<R
         max,
         maxArchivedAt,
         gaps,
+        unlisted,
       ],
     )
   }

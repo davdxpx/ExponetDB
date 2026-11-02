@@ -142,7 +142,10 @@ function listing(host: Host): JsonObject {
       postgresMajor: 17,
       error: false,
     })),
-    archive: [{ id: '17-1', min: '000000010000000000000003', max: '000000010000000000000009' }],
+    // The node listed the archive and found no hole (VC-005: an unlisted archive is not continuous).
+    archive: [
+      { id: '17-1', min: '000000010000000000000003', max: '000000010000000000000009', gapEnds: [] },
+    ],
     truncated: false,
   }
 }

@@ -213,12 +213,12 @@ func pgbrListResult(s *pgbrStanza, engineVersion string, gaps map[string][]strin
 			{Name: "max", Value: optPattern(segmentRE, a.Max, true)},
 		}
 		if ends, listed := gaps[a.ID]; listed {
+			// The newest 64: a newer backup's continuity depends on the latest holes (VC-005 review).
+			if len(ends) > 64 {
+				ends, truncated = ends[len(ends)-64:], true
+			}
 			list := canon.Array{}
 			for _, end := range ends {
-				if len(list) == 64 {
-					truncated = true
-					break
-				}
 				list = append(list, canon.String(end))
 			}
 			item = append(item, canon.Member{Name: "gapEnds", Value: list})

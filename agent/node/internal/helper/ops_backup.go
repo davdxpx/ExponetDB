@@ -1480,7 +1480,7 @@ func (h *Helper) pgbrArchiveGaps(ctx context.Context, repo *repository, u engine
 		}
 		out, err := h.sup().runAs(ctx, execSpec{UID: u.UID, GID: u.GID, Path: PgBackRest,
 			Args:     pgbrRepoLsArgs(h.path(repo.pgbrConfig), includeOf(h, repo), repo.stanza(), repo.repoIndex(), a.ID),
-			Optional: optional, Bind: bind, Timeout: 60 * time.Second})
+			Optional: optional, Bind: bind, Timeout: 60 * time.Second, MaxOutput: listingMaxOutput})
 		if err != nil || out.ExitCode != 0 {
 			continue
 		}
