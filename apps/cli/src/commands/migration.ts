@@ -123,7 +123,7 @@ function findingRow(f: LintFinding): string[] {
   const where = [f.file, f.line === null ? null : `line ${f.line}`]
     .filter((x) => x !== null)
     .join(' ')
-  return [f.level, f.rule, dash(f.migrationId), where || '-', f.message]
+  return [f.level, f.blocking ? 'yes' : '-', f.rule, dash(f.migrationId), where || '-', f.message]
 }
 
 const local = (spec: Omit<CommandSpec, 'locality' | 'effect' | 'group'>): CommandSpec => ({
@@ -373,6 +373,7 @@ const localCommands: readonly CommandSpec[] = [
             kind: 'table',
             columns: [
               { title: 'LEVEL' },
+              { title: 'BLOCKS' },
               { title: 'RULE' },
               { title: 'MIGRATION' },
               { title: 'WHERE' },

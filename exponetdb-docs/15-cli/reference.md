@@ -749,7 +749,7 @@ Runs: against the server; effect: read; action: `project.get`; scopes: `targets.
 
 | Argument or flag | Meaning |
 |---|---|
-| `project` (required) | A project id (prj_…). |
+| `project` (required) | A project id (prj_…) or path (product/project). |
 
 ### project create
 
@@ -786,7 +786,7 @@ Runs: against the server; effect: plan; action: `registry.project.update.plan`; 
 
 | Argument or flag | Meaning |
 |---|---|
-| `project` (required) | A project id. |
+| `project` (required) | A project id (prj_…) or path (product/project). |
 | `--name <text>` | Display name. |
 | `--execution-role <name=role>` | Execution roles (name=PostgreSQL role). |
 | `--trusted-extensions <a,b>` | Extensions a bundle may require. |
@@ -808,7 +808,7 @@ Runs: against the server; effect: read; action: `project.execution_roles.get`; s
 
 | Argument or flag | Meaning |
 |---|---|
-| `project` (required) | A project id (prj_…). |
+| `project` (required) | A project id (prj_…) or path (product/project). |
 
 ### project execution-roles set
 
@@ -822,7 +822,7 @@ Runs: against the server; effect: plan; action: `registry.execution_role_binding
 
 | Argument or flag | Meaning |
 |---|---|
-| `project` (required) | A project id. |
+| `project` (required) | A project id (prj_…) or path (product/project). |
 | `--environment <env>` | An environment of the project's product (id or slug). Required unless --file is given. |
 | `--role <alias=role>` | A binding (alias=PostgreSQL role); repeat for each alias. |
 | `--clear` | Remove every binding: the project map applies again. |
@@ -844,7 +844,7 @@ Runs: against the server; effect: plan; action: `registry.execution_role_excepti
 
 | Argument or flag | Meaning |
 |---|---|
-| `project` (required) | A project id. |
+| `project` (required) | A project id (prj_…) or path (product/project). |
 | `--environment <env>` | An environment of the project's product (id or slug). Required unless --file is given. |
 | `--role <role>` | The PostgreSQL role. Required unless --file is given. |
 | `--reason <text>` | Why the role needs BYPASSRLS (20 to 1000 characters). Required unless --file is given. |
@@ -867,7 +867,7 @@ Runs: against the server; effect: plan; action: `registry.execution_role_excepti
 
 | Argument or flag | Meaning |
 |---|---|
-| `project` (required) | A project id. |
+| `project` (required) | A project id (prj_…) or path (product/project). |
 | `exception` (required) | The exception (rxe_…). |
 | `--reason <text>` | Why it is revoked (up to 1000 characters). Required unless --file is given. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |

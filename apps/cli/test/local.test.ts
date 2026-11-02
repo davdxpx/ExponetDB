@@ -161,6 +161,17 @@ describe('migration lint scope (TC-041)', () => {
     expect(unknown.stderr).toContain('01ZZZZZZZZZZZZZZZZZZZZZZZZ')
   })
 
+  it('marks the blocking rows in the table (TC-052)', async () => {
+    const { old, fresh } = await setup()
+    const r = await cli(['migration', 'lint', name(old)])
+    expect(r.stdout).toMatch(/\bBLOCKS\b/)
+    const row = r.stdout.split('\n').find((l) => l.includes('security_definer_without_search_path'))
+    expect(row).toMatch(/\byes\b/)
+    // A warning that does not block under this tier says so.
+    const clean = await cli(['migration', 'lint', name(fresh), '--tier', 'nonprod'])
+    expect(clean.stdout).not.toMatch(/\byes\b/)
+  })
+
   it('--since selects the bundle and everything that depends on it', async () => {
     const { old, fresh } = await setup()
     const since = await cli(['migration', 'lint', '--since', fresh.data.migrationId, '--json'])
