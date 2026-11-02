@@ -2007,8 +2007,8 @@ History:
   the kernel killed the backend and the postmaster restarted every session of the cluster
   (about 4 s, no data loss). PostgreSQL has no per-query memory limit and `work_mem` does not
   bound an aggregate. The fix of 2026-11-02 refuses a size argument of `repeat`, `lpad`, `rpad`,
-  `array_fill` and the widths of `format` that is not a constant of at most 10,000
-  (`size_argument`), and a read whose backend dies now ends at once (VC-012). What remains: rows
+  `array_fill`, the widths of `format` and the length of a `char(n)` or `bit(n)` cast that is
+  not a constant of at most 10,000 (`size_argument`), and a read whose backend dies now ends at once (VC-012). What remains: rows
   times values (`array_agg` of ordinary column values over a large join, a recursive CTE that
   doubles a string) can still exhaust the target's memory. Is that residual accepted, and does
   such a restart count as P0 (outage) or P1?
@@ -2016,7 +2016,10 @@ History:
   row-count rule on `generate_series` does not bound memory (any table or self-join is a row
   source of the same size), and the existing long-read tests use it as their slow statement;
   the rule is left to this decision. `verify.sql` checks are reviewed bundle content with their
-  own receive bound and are not under the size rule.
+  own receive bound and are not under the size rule; the receive bound limits what the worker
+  holds, not the server's memory, so an `array_agg(repeat(…))` in a `verify.sql` on staging (where
+  no approval is required) has the same effect on the verifier's cluster. Extending the rule to
+  `verify.sql` (code `VERIFY_CONSTRUCT_UNSUPPORTED`) is part of this decision.
 - **Options.** (a) accept the residual; (b) also record a memory limit of the target's
   PostgreSQL (cgroup limit or `vm.overcommit_memory=2`) as a registry fact for every target that
   allows `data.read`, and warn (or refuse agent reads) where it is missing, so an exhaustion

@@ -4,7 +4,8 @@ import { type JsonNode, names, nodeType, walk } from './parse.ts'
  * The largest size a data read may ask a value-building function for
  * (VC-002, [sql-execution-security.md §2.4](../../../../exponetdb-docs/03-database-model/sql-execution-security.md#24-wave-7-implementation)):
  * the count of `repeat`, the length of `lpad` and `rpad`, the elements of
- * `array_fill` and every width of a `format` string. PostgreSQL has no
+ * `array_fill`, every width of a `format` string and the length of a cast to
+ * `char(n)` or `bit(n)` (both pad the value to `n`). PostgreSQL has no
  * per-query memory limit, and `work_mem` does not bound an aggregate of such
  * values: `array_agg(repeat('x', 100000000))` over 100 rows asked for about
  * 10 GB within a second and made the kernel restart the target's cluster.
@@ -58,6 +59,25 @@ function formatBounded(value: unknown): boolean {
   return true
 }
 
+/** Types whose cast pads a value to its length (`'x'::char(10000000)` is 10 MB). */
+const PADDED_TYPES: ReadonlySet<string> = new Set(['bpchar', 'bit'])
+
+/** What a cast to `char(n)` or `bit(n)` refuses, or `undefined` when `n` is bounded. */
+function castRefusal(typeName: unknown): string | undefined {
+  if (typeof typeName !== 'object' || typeName === null) return undefined
+  const t = typeName as JsonNode
+  const parts = names(t['names'])
+  const name = parts?.[parts.length - 1]
+  if (name === undefined || !PADDED_TYPES.has(name)) return undefined
+  const typmods = Array.isArray(t['typmods']) ? t['typmods'] : []
+  return typmods.every((m) => {
+    const v = integerConstant(m)
+    return v !== undefined && v <= MAX_SIZE_ARGUMENT
+  })
+    ? undefined
+    : `char(n), bit(n): n of at most ${MAX_SIZE_ARGUMENT} (the value is padded to n)`
+}
+
 /** What a call of `name` with `args` refuses, or `undefined` when its size is bounded. */
 function callRefusal(name: string, args: readonly unknown[]): string | undefined {
   const index = SIZED.get(name)
@@ -92,6 +112,11 @@ export function sizeArgumentRefusal(
   let found: { construct: string; body: JsonNode } | undefined
   walk(root, (type, body) => {
     if (found !== undefined) return false
+    if (type === 'TypeCast') {
+      const construct = castRefusal(body['typeName'])
+      if (construct !== undefined) found = { construct, body }
+      return true
+    }
     if (type !== 'FuncCall') return true
     const parts = names(body['funcname'])
     const name = parts?.[parts.length - 1]

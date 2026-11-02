@@ -268,8 +268,9 @@ values.
   VC-002, 2026-11-02) A data read may ask a value-building function only
   for a constant size of at most 10,000: the count of `repeat`, the length
   of `lpad` and `rpad`, the elements of `array_fill` (an `ARRAY[...]` of
-  integer constants) and every width of a `format` string (a constant
-  format, no `*` width). A column, a parameter or an expression as the
+  integer constants), every width of a `format` string (a constant
+  format, no `*` width) and the length of a cast to `char(n)` or `bit(n)`
+  (both pad the value to `n`). A column, a parameter or an expression as the
   size is refused as `QUERY_CONSTRUCT_UNSUPPORTED` (reason
   `size_argument`). PostgreSQL has no per-query memory limit: an aggregate
   of huge built values made the kernel restart the target's cluster. The

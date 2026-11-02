@@ -305,6 +305,7 @@ describe('size arguments of value-building functions (VC-002)', () => {
     'SELECT array_fill(0, ARRAY[3, 4])',
     'SELECT array_fill(0, ARRAY[100, 100], ARRAY[1, 1])',
     "SELECT format('%s.%I %-20s %3$s %%', 'a', 'b', 'c')",
+    "SELECT 'x'::char(10), CAST('1' AS bit(8)), 'y'::char, 'z'::varchar(100000)",
   ]
   const UNBOUNDED: readonly (readonly [string, string])[] = [
     [
@@ -343,6 +344,22 @@ describe('size arguments of value-building functions (VC-002)', () => {
     [
       "SELECT format(a.f, 'x') FROM public.t a",
       'format: a constant format with widths of at most 10000',
+    ],
+    [
+      "SELECT array_agg('x'::char(10000000)) FROM generate_series(1, 1000) AS g",
+      'char(n), bit(n): n of at most 10000 (the value is padded to n)',
+    ],
+    [
+      "SELECT CAST('1' AS bit(80000000))",
+      'char(n), bit(n): n of at most 10000 (the value is padded to n)',
+    ],
+    [
+      "SELECT 'x'::character(20000)",
+      'char(n), bit(n): n of at most 10000 (the value is padded to n)',
+    ],
+    [
+      "SELECT 'x'::pg_catalog.bpchar(20000)",
+      'char(n), bit(n): n of at most 10000 (the value is padded to n)',
     ],
   ]
 
