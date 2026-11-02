@@ -1,7 +1,6 @@
 import { BlockList, isIP } from 'node:net'
 import { buildProblem, type ErrorCode, isErrorCode } from '@exponetdb/contracts'
 import type { RequestId } from '@exponetdb/kernel'
-import { SecretError } from '@exponetdb/secrets'
 
 /**
  * Request-level helpers of the authenticated interfaces: cookies, the client
@@ -149,12 +148,21 @@ export class HttpRefusal extends Error {
   }
 }
 
+/**
+ * A `SecretError` for a master key that is not loaded (a lost or partial keyring, RB-14). The
+ * interfaces layer may not import `@exponetdb/secrets`, so the error is recognized by its name
+ * and fields.
+ */
+function keyUnavailable(error: unknown): { readonly keyId: string | undefined } | undefined {
+  if (!(error instanceof Error) || error.name !== 'SecretError') return undefined
+  if (!('code' in error) || error.code !== 'secret_key_unavailable') return undefined
+  return { keyId: 'keyId' in error && typeof error.keyId === 'string' ? error.keyId : undefined }
+}
+
 /** The catalog code of an error from the application, auth or operations layers; anything else is internal. */
 export function errorCodeOf(error: unknown): ErrorCode {
-  // VC-011: a secret whose master key is not loaded (a lost or partial keyring, RB-14).
-  if (error instanceof SecretError && error.code === 'secret_key_unavailable') {
-    return 'SECRET_KEY_UNAVAILABLE'
-  }
+  // VC-011
+  if (keyUnavailable(error) !== undefined) return 'SECRET_KEY_UNAVAILABLE'
   if (
     error instanceof Error &&
     'code' in error &&
@@ -175,9 +183,8 @@ export function detailsOf(
     return undefined
   }
   if (code === 'SECRET_KEY_UNAVAILABLE') {
-    return error instanceof SecretError && error.keyId !== undefined
-      ? { keyId: error.keyId }
-      : undefined
+    const keyId = keyUnavailable(error)?.keyId
+    return keyId === undefined ? undefined : { keyId }
   }
   if (code === 'RATE_LIMITED') {
     // The wait of the Retry-After header, also in the body (MCP has no header).
