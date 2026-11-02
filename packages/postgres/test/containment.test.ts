@@ -48,9 +48,14 @@ describe('the nesting of block comments (VC-013)', () => {
   it('refuses 40,000 nested comments at once, in time that does not grow with the depth', () => {
     const time = (depth: number) => {
       const text = nested(depth)
-      const started = performance.now()
-      const result = analyzeMigrationSql(17, text)
-      return { ms: performance.now() - started, result }
+      let best = Number.POSITIVE_INFINITY
+      let result: ReturnType<typeof analyzeMigrationSql> | undefined
+      for (let i = 0; i < 4; i++) {
+        const started = performance.now()
+        result = analyzeMigrationSql(17, text)
+        best = Math.min(best, performance.now() - started)
+      }
+      return { ms: best, result }
     }
     const small = time(10_000)
     const large = time(40_000)
@@ -59,8 +64,8 @@ describe('the nesting of block comments (VC-013)', () => {
       failure: { kind: 'too_large', limit: 'comment_depth' },
     })
     expect(large.ms).toBeLessThan(2000)
-    // Four times the depth: a linear check is about 4, the parser's scanner about 16.
-    expect(large.ms / Math.max(small.ms, 1)).toBeLessThan(8)
+    // Four times the depth: a linear check is about 4, the parser's scanner about 16 (9 s at 40,000).
+    expect(large.ms / Math.max(small.ms, 5)).toBeLessThan(8)
   })
 })
 

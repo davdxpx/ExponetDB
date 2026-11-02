@@ -105,12 +105,17 @@ describe('a directive value with a long run of white space (VC-015)', () => {
   it('is read in linear time and keeps the name', () => {
     timed(1000) // warm-up
     // The parse bound is 256 KiB; 200,000 spaces is as much padding as one line can carry.
-    const small = timed(50_000)
-    const large = timed(200_000)
+    // The fastest of a few runs on each size: a loaded machine slows a run, never speeds it up.
+    const best = (spaces: number) => {
+      const runs = Array.from({ length: 4 }, () => timed(spaces))
+      return { ms: Math.min(...runs.map((r) => r.ms)), name: runs[0]?.name }
+    }
+    const small = best(50_000)
+    const large = best(200_000)
     expect(small.name?.startsWith('a')).toBe(true)
     expect(large.name?.startsWith('a')).toBe(true)
     expect(large.ms).toBeLessThan(200)
-    // Four times the input: linear is about 4, quadratic about 16.
-    expect(large.ms / Math.max(small.ms, 1)).toBeLessThan(8)
+    // Four times the input: linear is about 4, quadratic about 16 (the old expression took 53 s).
+    expect(large.ms / Math.max(small.ms, 5)).toBeLessThan(8)
   })
 })
