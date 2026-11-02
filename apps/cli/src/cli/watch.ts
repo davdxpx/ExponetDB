@@ -29,6 +29,24 @@ export const WAIT_FLAGS: readonly FlagSpec[] = [
   },
 ]
 
+/**
+ * The wait flags of a command that only plans: they take effect with `--apply`, and a plan alone
+ * applies nothing (TC-057; the shared wording suggested that waiting meant applying).
+ */
+export const PLAN_WAIT_FLAGS: readonly FlagSpec[] = WAIT_FLAGS.map((f) => {
+  if (f.name === 'wait') {
+    return {
+      ...f,
+      description:
+        'With --apply: wait until applied and verified (the default). Without --apply nothing is applied.',
+    }
+  }
+  if (f.name === 'no-wait') {
+    return { ...f, description: 'With --apply: return once the server accepted the operation.' }
+  }
+  return { ...f, description: 'With --apply: how long to wait for the outcome (default 15m).' }
+})
+
 const FINAL = new Set<Operation['state']>([
   'succeeded',
   'failed',

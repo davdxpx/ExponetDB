@@ -10,7 +10,7 @@ import { must } from '../cli/remote.ts'
 import { stepUpHeader } from '../cli/stepup.ts'
 import type { CommandInput, CommandSpec, FlagSpec, Remote, RunContext } from '../cli/types.ts'
 import { UsageError } from '../cli/usage.ts'
-import { WAIT_FLAGS, watchOperation } from '../cli/watch.ts'
+import { PLAN_WAIT_FLAGS, WAIT_FLAGS, watchOperation } from '../cli/watch.ts'
 import { CliError } from '../errors.ts'
 import { checkNewPrivateFile, createNewPrivateFile } from '../files.ts'
 import { ago, dash, header } from '../output/format.ts'
@@ -203,7 +203,7 @@ function nodeChange(
           'Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old).',
       },
       { name: 'apply', type: 'boolean', description: 'Apply the plan at once and wait.' },
-      ...WAIT_FLAGS,
+      ...PLAN_WAIT_FLAGS,
     ],
     locality: 'remote',
     effect: 'plan',

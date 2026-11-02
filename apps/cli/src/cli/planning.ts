@@ -8,7 +8,7 @@ import { applyPlan, planResult } from './apply.ts'
 import { must } from './remote.ts'
 import type { ArgSpec, CommandInput, CommandSpec, FlagSpec, Remote, RunContext } from './types.ts'
 import { UsageError } from './usage.ts'
-import { WAIT_FLAGS } from './watch.ts'
+import { PLAN_WAIT_FLAGS } from './watch.ts'
 
 /**
  * Commands that make a plan through the REST API
@@ -128,7 +128,7 @@ export function planCommand<Id extends PlanOperation>(spec: PlanCommandSpec<Id>)
           : f,
       ),
       ...(offersFile ? [FILE_FLAG] : []),
-      ...(offersApply ? [APPLY_FLAG, ...WAIT_FLAGS] : []),
+      ...(offersApply ? [APPLY_FLAG, ...PLAN_WAIT_FLAGS] : []),
     ],
     locality: 'remote',
     effect: 'plan',

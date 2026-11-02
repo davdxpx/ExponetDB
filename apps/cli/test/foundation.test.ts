@@ -325,13 +325,36 @@ describe('the human renderer names the data of a refusal (TC-022)', () => {
   })
 })
 
+describe('the help of a plan command (TC-057)', () => {
+  it('says --wait applies to --apply only, and that a plan alone applies nothing', async () => {
+    for (const path of [
+      ['node', 'postgres', 'reload'],
+      ['project', 'update'],
+    ]) {
+      const help = (await cli([...path, '--help'])).stdout
+      expect(help, path.join(' ')).toMatch(/--wait[^\n]*--apply/)
+      expect(help, path.join(' ')).toContain('Without --apply nothing is applied')
+    }
+  })
+
+  it('keeps the plain wording for a command that applies at once', async () => {
+    const help = (await cli(['migration', 'apply', '--help'])).stdout
+    expect(help).toMatch(/--wait\s+Wait until applied and verified \(the default\)/)
+  })
+})
+
 describe('a refused node plan names the capability, the field and the reason (TC-056)', () => {
   const terminal = { columns: 100, color: false, ascii: false, quiet: false }
   const refused = (code: string, details: unknown, remediation?: string) =>
     renderHuman(
       result({
         command: 'node postgres roles',
-        error: { code, message: 'refused', ...(remediation === undefined ? {} : { remediation }), details },
+        error: {
+          code,
+          message: 'refused',
+          ...(remediation === undefined ? {} : { remediation }),
+          details,
+        },
       }),
       terminal,
     ).err
