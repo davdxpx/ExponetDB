@@ -90,7 +90,7 @@ startup; problems name the variable and a reason, never a value.
 | `EXPONETDB_CONTROL_STORE_VOLUME_BYTES` | serve (optional, OD-70) | the Control Store volume's size in bytes (at least 1 GiB): installation health warns at 80 % (`control_store_volume`) and bundle ingest is refused at 90 % (`CONTROL_STORE_VOLUME_FULL`), measured as the database's own size; absent: neither, and health lists the component as not observed. Anything that is not a whole number of at least 1 GiB refuses the start |
 | `EXPONETDB_BACKUP_EXECUTION`, `EXPONETDB_RESTORE_EXECUTION` | serve, worker (optional, Wave 9 Part B) | whether engine runs may execute ([`../09-backups-and-restore/adoption.md` §5](../09-backups-and-restore/adoption.md#5-activation)): backups `disabled` (default), `nonprod` or `all`; restores `disabled` (default), `scratch` (drills only) or `all` (also recovery into a new cluster). Set both processes to the same value; an unknown value refuses the start. Catalog reads need neither |
 | `EXPONETDB_INTERNAL_LISTEN` | serve, worker, gateway | default `127.0.0.1:9464`: `/healthz/detail`, `/metrics`; the container health probe asks it |
-| `EXPONETDB_SHUTDOWN_TIMEOUT_MS` | serve, worker, gateway | default 25000 |
+| `EXPONETDB_SHUTDOWN_TIMEOUT_MS` | serve, worker, gateway | default 25000 (1000 to 300000): the drain window on SIGTERM; the role is not ready at once, claims nothing new and lets the running step finish; the heartbeat is marked stopped also when the window runs out. **[DECIDED]** (VC-043, 2026-11-02) the worker runs with 120000 and its container's stop grace period lies above the value (130 s), or a redeploy cuts a running apply ([`upgrades.md` §1.1](./upgrades.md#11-the-upgrade-card)) |
 | `EXPONETDB_AUDIT_EXPORT_DIR` or `EXPONETDB_AUDIT_S3_*` | worker | checkpoint export sink: a directory (development) or S3-compatible storage (`ENDPOINT`, `REGION`, `BUCKET`, optional `PREFIX`, `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, optional `OBJECT_LOCK_MODE` and `OBJECT_LOCK_DAYS`); without one, worker readiness is degraded |
 | `EXPONETDB_LOG_LEVEL`, `EXPONETDB_OTLP_ENDPOINT` | all (OTLP: roles, migrate, prune) | |
 | `EXPONETDB_GATEWAY_LISTEN` | gateway (optional, Wave 5) | the private agent listener, e.g. `10.8.2.2:7443`: HTTP/2 over TLS 1.3 with client certificates ([`../07-node-agent/control-plane.md` §5](../07-node-agent/control-plane.md#5-gateway)). Unset: no agent listener. Set: the gateway opens it once the agent PKI exists (`exponetdb node-pki init`) and is not ready until then (check `agent_listener`). Never on a public interface |
@@ -342,7 +342,8 @@ owner's pgBackRest setup, adopted then owned in Part B of Wave 9 (OD-52).
   the image tag is the version, never `latest`.
 - Run the separate Control Store migration resource once, as `exdb_migrate`,
   then deploy `worker`, `serve` and `gateway` from the same image digest.
-  No runtime resource receives the migration credential (§3).
+  No runtime resource receives the migration credential (§3). The steps,
+  checks and the rollback are the card of [`upgrades.md` §1.1](./upgrades.md#11-the-upgrade-card).
 - Agent releases are separate artifacts with their own version and a
   compatibility range with the server ([`upgrades.md`](./upgrades.md)).
 
