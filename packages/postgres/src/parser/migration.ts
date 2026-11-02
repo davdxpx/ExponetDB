@@ -1,4 +1,5 @@
 import { encodeUtf8 } from '@exponetdb/kernel'
+import { lex, statementBodies } from './lexer.ts'
 import type { SupportedMajor } from './majors.ts'
 import {
   type JsonNode,
@@ -111,6 +112,8 @@ export type ForbiddenReason =
   | 'ledger_schema'
   | 'cursor_or_prepared'
   | 'privileged'
+  | 'server_file_function'
+  | 'untrusted_language'
 
 /** Parameters the executor pins; reviewed SQL never changes them, not even with SET LOCAL (G6 order §23). */
 export const ENGINE_SETTINGS: ReadonlySet<string> = new Set([
@@ -665,6 +668,54 @@ function draft(kind: string): Draft {
     underivedParts: false,
     details: {},
   }
+}
+
+/**
+ * Functions that read or write the database server's files (VC-146). Reviewed SQL never reaches
+ * the server's file system; only the migrator role's missing privileges stopped these before.
+ */
+export const SERVER_FILE_FUNCTIONS: ReadonlySet<string> = new Set([
+  'pg_read_file',
+  'pg_read_binary_file',
+  'pg_ls_dir',
+  'pg_stat_file',
+  'lo_import',
+  'lo_export',
+])
+
+/** Languages whose functions run with the server's rights (`pg_language.lanpltrusted = false`). */
+export const UNTRUSTED_LANGUAGES: ReadonlySet<string> = new Set([
+  'plpythonu',
+  'plpython2u',
+  'plpython3u',
+  'plperlu',
+  'pltclu',
+  'c',
+  'internal',
+])
+
+/**
+ * The first server-file function a statement calls, found lexically (identifiers followed by
+ * `(`, so a comment, a string literal or a longer name does not count), through up to two levels
+ * of bodies: a `DO` block or a function body is one literal to the SQL parser.
+ */
+function serverFileCall(text: string, depth = 0): string | undefined {
+  const tokens = lex(text).filter((t) => t.kind !== 'space' && t.kind !== 'comment')
+  for (const [i, token] of tokens.entries()) {
+    if (token.kind !== 'ident' && token.kind !== 'qident') continue
+    const raw = text.slice(token.start, token.end)
+    const name = token.kind === 'qident' ? raw.slice(1, -1) : raw.toLowerCase()
+    const next = tokens[i + 1]
+    if (SERVER_FILE_FUNCTIONS.has(name) && next !== undefined && text[next.start] === '(') {
+      return name
+    }
+  }
+  if (depth >= 2) return undefined
+  for (const body of statementBodies(text)) {
+    const found = serverFileCall(body, depth + 1)
+    if (found !== undefined) return found
+  }
+  return undefined
 }
 
 function forbid(d: Draft, reason: ForbiddenReason, detail: string): Draft {
@@ -1278,6 +1329,9 @@ function createFunction(d: Draft, body: JsonNode): void {
   }
   void setArg
   const language = str(nodeType(opts.get('language'))?.body['sval'])
+  if (language !== null && UNTRUSTED_LANGUAGES.has(language.toLowerCase())) {
+    d.forbidden = { reason: 'untrusted_language', detail: language.toLowerCase().slice(0, 64) }
+  }
   const as = nodeType(opts.get('as'))
   let bodyText: string | null = null
   if (as?.type === 'List') {
@@ -1935,7 +1989,15 @@ function classify(statement: ParsedStatement, trusted: ReadonlySet<string>): Dra
     case 'DoStmt': {
       d.kind = 'DO'
       d.procedural = true
-      const as = nodeType(defElems(body['args']).get('as'))
+      const doArgs = defElems(body['args'])
+      const doLanguage = str(nodeType(doArgs.get('language'))?.body['sval'])
+      if (doLanguage !== null && UNTRUSTED_LANGUAGES.has(doLanguage.toLowerCase())) {
+        d.forbidden = {
+          reason: 'untrusted_language',
+          detail: doLanguage.toLowerCase().slice(0, 64),
+        }
+      }
+      const as = nodeType(doArgs.get('as'))
       const code = str(as?.body['sval']) ?? ''
       if (DYNAMIC_SQL.test(code)) d.details.dynamicSql = true
       d.conditional =
@@ -2202,6 +2264,10 @@ export function analyzeMigrationSql(
         }
       }
       throw error
+    }
+    if (d.forbidden === null) {
+      const called = serverFileCall(text.slice(statement.start, statement.end))
+      if (called !== undefined) d.forbidden = { reason: 'server_file_function', detail: called }
     }
     if (d.compatibility.length === 0) d.compatibility.push('unknown')
     const at = positions[index] ?? { line: 1, column: 1, byteOffset: 0 }

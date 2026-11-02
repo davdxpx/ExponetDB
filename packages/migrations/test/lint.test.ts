@@ -174,6 +174,59 @@ describe('content the engine refuses', () => {
     expect(finding(r, 'security_definer_without_search_path')?.blocking).toBe(true)
   })
 
+  describe('server-file functions and untrusted languages (VC-146)', () => {
+    const forbidden = (up: string) => finding(lint([bundle({ up })]), 'forbidden_statement')
+
+    it.each([
+      'pg_read_file',
+      'pg_read_binary_file',
+      'pg_ls_dir',
+      'pg_stat_file',
+      'lo_import',
+      'lo_export',
+    ])('refuses %s, qualified or not, in a statement and inside a body', (name) => {
+      expect(forbidden(`SELECT ${name}('/etc/passwd');`), name).toMatchObject({ blocking: true })
+      expect(
+        forbidden(`SELECT pg_catalog.${name}('/etc/passwd');`),
+        `pg_catalog.${name}`,
+      ).toBeDefined()
+      expect(forbidden(`SELECT "${name}"('/etc/passwd');`), `"${name}"`).toBeDefined()
+      expect(
+        forbidden(`DO $$ BEGIN PERFORM ${name.toUpperCase()}('/etc/passwd'); END $$;`),
+        `DO ${name}`,
+      ).toBeDefined()
+      expect(
+        forbidden(
+          `CREATE FUNCTION public.f() RETURNS text LANGUAGE sql AS 'SELECT ${name}(''/x'')';`,
+        ),
+        `function ${name}`,
+      ).toBeDefined()
+    })
+
+    it.each(['plpython3u', 'plpythonu', 'plperlu', 'pltclu', 'c', 'internal'])(
+      'refuses the untrusted language %s in CREATE FUNCTION and DO',
+      (language) => {
+        expect(
+          forbidden(`CREATE FUNCTION public.f() RETURNS int LANGUAGE ${language} AS 'x';`),
+        ).toMatchObject({ blocking: true })
+        if (language !== 'c' && language !== 'internal') {
+          expect(forbidden(`DO LANGUAGE ${language} $$ x $$;`)).toMatchObject({ blocking: true })
+        }
+      },
+    )
+
+    it('does not refuse the name in a comment, a string or an identifier that only contains it', () => {
+      expect(forbidden(`-- pg_read_file('/x')\nSELECT 1;`)).toBeUndefined()
+      expect(forbidden(`SELECT 'pg_read_file(' AS note;`)).toBeUndefined()
+      expect(forbidden('SELECT my_pg_read_file_wrapper(1);')).toBeUndefined()
+      expect(
+        forbidden(
+          'CREATE FUNCTION public.f() RETURNS int LANGUAGE plpgsql AS $$ BEGIN RETURN 1; END $$;',
+        ),
+      ).toBeUndefined()
+    })
+  })
+
   it('names the limit when block comments nest too deep, without parsing the file (VC-013)', () => {
     const depth = 40_000
     const started = performance.now()
