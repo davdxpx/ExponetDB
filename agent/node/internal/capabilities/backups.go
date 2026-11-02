@@ -57,7 +57,8 @@ func (h helperEffect) Run(ctx context.Context, job *verify.Job, run *agent.Run) 
 
 // startRefused marks the helper's definite refusal of a run start (VC-061): the helper starts a
 // run's unit last, so any refusal but outcome_unknown (systemd-run did not answer) or replayed
-// (an earlier call may have started it) means no unit runs. The Control Plane reads the prefix
+// (an earlier call or an existing run directory: it may have started) means no unit runs. A
+// refusal the helper makes once a unit may run must use one of these two codes. The Control Plane reads the prefix
 // (control-plane.md §9.4) and ends the operation at once instead of waiting for the run.
 func startRefused(effect string, err error) error {
 	var refusal *helperproto.ErrorBody

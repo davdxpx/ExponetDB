@@ -521,7 +521,9 @@ func (h *Helper) startRun(ctx context.Context, job *verify.Job, p startPlan) (ca
 	}
 	defer runs.Close()
 	if info, err := runs.Lstat(p.runID); err != nil || info.Kind != fsafe.KindNone {
-		return nil, refuse(CodePreconditionFailed, "run %s was started already", p.runID)
+		// replayed, never precondition_failed: the run's unit may be running, and the agent states
+		// only refusals that prove no unit runs as start_refused (VC-061).
+		return nil, refuse(CodeReplayed, "run %s was started already", p.runID)
 	}
 	var scratchRoot *fsafe.Dir
 	if p.newScratch || p.scratchDir != "" {

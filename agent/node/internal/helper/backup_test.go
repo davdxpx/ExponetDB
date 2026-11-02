@@ -333,9 +333,10 @@ func TestBackupRunStartsAFixedUnit(t *testing.T) {
 	if info, _ := os.Lstat(work); ownerOf(info) != b.uid {
 		t.Fatal("the work directory is not the engine user's")
 	}
-	// The same run id again, by another job: refused, nothing started.
+	// The same run id again, by another job: refused, nothing started. The run exists, so the
+	// refusal is replayed, which the agent never states as a start that did not begin (VC-061).
 	b.setUnit(UnitName(runA), "")
-	b.mustRefuse(OpBackupRun, b.job("backup.run", runArgs(runA, "full", pgbrRepo())), CodePreconditionFailed)
+	b.mustRefuse(OpBackupRun, b.job("backup.run", runArgs(runA, "full", pgbrRepo())), CodeReplayed)
 	if len(b.run.find(SystemdRun, "--unit=")) != 1 {
 		t.Fatal("a second start of one run id ran")
 	}

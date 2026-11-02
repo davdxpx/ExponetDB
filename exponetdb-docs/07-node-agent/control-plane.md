@@ -436,8 +436,8 @@ host may have changed.
 (`start_run`: `backup.run`, `backup.verify`, `backup.expire`,
 `restore.execute`, `restore.verify`) journals its effect step before it asks
 the root helper, but the helper starts the run's unit last: when it refuses
-with any code but `outcome_unknown` (systemd-run did not answer) or `replayed`,
-no unit runs. The agent then states the excerpt
+with any code but `outcome_unknown` (systemd-run did not answer) or `replayed`
+(an earlier call, or a run directory that exists already: it may run), no unit runs. The agent then states the excerpt
 `start_refused (<helper code>): <message>`, and the Control Plane judges that
 statement as stopped before the effect point (`not_applied`,
 `NODE_CAPABILITY_FAILED` with `detail.reason` = the helper code; a backup kind
