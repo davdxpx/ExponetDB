@@ -190,6 +190,11 @@ export function errorCodeOf(error: unknown): ErrorCode {
     if (error.name === 'ControlStoreError' && CONTROL_STORE_DEGRADED.has(error.code)) {
       return 'CONTROL_PLANE_DEGRADED'
     }
+    // The audit gate (VC-042): when the chain cannot be appended (a missing partition) every
+    // mutation fails; the Control Plane is degraded, and the cause stays in the journal.
+    if (error.name === 'AuditWriteError' && error.code === 'audit_append_failed') {
+      return 'CONTROL_PLANE_DEGRADED'
+    }
     const mapped =
       error.name === 'OperationError' ? INTERNAL_OPERATION_CODES[error.code] : undefined
     if (mapped !== undefined) return mapped

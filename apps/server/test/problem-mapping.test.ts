@@ -64,6 +64,24 @@ describe('a refusal the catalog knows answers its code', () => {
     }
   })
 
+  it('maps an audit append that failed to CONTROL_PLANE_DEGRADED, and leaves an invalid event a bug (VC-042)', async () => {
+    const failed = Object.assign(new Error('The audit event could not be written.'), {
+      name: 'AuditWriteError',
+      code: 'audit_append_failed',
+    })
+    // Every mutation fails when the audit chain cannot be written (a missing partition): the
+    // Control Plane is degraded, not broken; the journal keeps the cause.
+    expect(await answer(failed)).toMatchObject({
+      status: 503,
+      body: { code: 'CONTROL_PLANE_DEGRADED' },
+    })
+    const invalid = Object.assign(new Error('x'), {
+      name: 'AuditWriteError',
+      code: 'audit_event_invalid',
+    })
+    expect((await answer(invalid)).status).toBe(500)
+  })
+
   it('leaves what is a bug as INTERNAL', async () => {
     const error = Object.assign(new Error('query failed'), {
       name: 'ControlStoreError',
