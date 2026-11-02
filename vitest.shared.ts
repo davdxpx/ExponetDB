@@ -167,7 +167,8 @@ export const conformanceConfig = defineConfig({
 // Model evals (`*.model.test.ts`, apps/server; Wave 7 order §29 layers B and
 // C): a model works on the eval tasks through `/mcp` of the test composition
 // with the owner's own key (`EXDB_EVAL_ANTHROPIC_API_KEY`). Never part of
-// `verify` or CI; without the key every task fails as NOT RUN, never green.
+// `verify` or CI; without the key every task is skipped with the NOT RUN message (exit 0), so a
+// run without a key is visible as skipped and never reported as passed.
 export const modelEvalsConfig = defineConfig({
   ...sharedConfig,
   test: {
