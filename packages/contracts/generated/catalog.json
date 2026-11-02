@@ -11811,6 +11811,31 @@
       "type": "https://db.exponet.cloud/errors/conflict"
     },
     {
+      "code": "SECRET_KEY_UNAVAILABLE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/SECRET_KEY_UNAVAILABLE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "keyId": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "keyId"
+        ],
+        "type": "object"
+      },
+      "group": "generic",
+      "message": "A master key this request needs is not in the keyring the server loaded; the values it protects cannot be read (RB-14).",
+      "retryable": false,
+      "status": 503,
+      "title": "Master key unavailable",
+      "type": "https://db.exponet.cloud/errors/secret-key-unavailable"
+    },
+    {
       "code": "CONTROL_STORE_VOLUME_FULL",
       "details": {
         "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",

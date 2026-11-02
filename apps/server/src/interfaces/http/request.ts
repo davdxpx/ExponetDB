@@ -1,6 +1,7 @@
 import { BlockList, isIP } from 'node:net'
 import { buildProblem, type ErrorCode, isErrorCode } from '@exponetdb/contracts'
 import type { RequestId } from '@exponetdb/kernel'
+import { SecretError } from '@exponetdb/secrets'
 
 /**
  * Request-level helpers of the authenticated interfaces: cookies, the client
@@ -150,6 +151,10 @@ export class HttpRefusal extends Error {
 
 /** The catalog code of an error from the application, auth or operations layers; anything else is internal. */
 export function errorCodeOf(error: unknown): ErrorCode {
+  // VC-011: a secret whose master key is not loaded (a lost or partial keyring, RB-14).
+  if (error instanceof SecretError && error.code === 'secret_key_unavailable') {
+    return 'SECRET_KEY_UNAVAILABLE'
+  }
   if (
     error instanceof Error &&
     'code' in error &&
@@ -168,6 +173,11 @@ export function detailsOf(
 ): unknown {
   if (!(error instanceof Error)) {
     return undefined
+  }
+  if (code === 'SECRET_KEY_UNAVAILABLE') {
+    return error instanceof SecretError && error.keyId !== undefined
+      ? { keyId: error.keyId }
+      : undefined
   }
   if (code === 'RATE_LIMITED') {
     // The wait of the Retry-After header, also in the body (MCP has no header).

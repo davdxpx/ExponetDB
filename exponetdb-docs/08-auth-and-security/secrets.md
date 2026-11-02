@@ -155,10 +155,35 @@ ExponetDB table for key material and plaintext.
 V1 secrets that live outside the Control Store are Coolify environment secrets of
 the ExponetDB resource: the keyring, the Control Store connection strings per
 role. Their backup is part of the Coolify backup (REOSA's HB3 covers Coolify
-secrets in its restic backup) **and** an offline copy with the owner. Losing the
-keyring means losing all encrypted secrets: the documented recovery is to rotate
-every PostgreSQL credential through the node agent (which does not need the old
-password) and re-enroll nothing (agent keys are on the hosts).
+secrets in its restic backup) **and** an offline copy with the owner.
+
+**[DECIDED]** (verification campaign fix VC-011, 2026-11-02, under the owner's
+delegation) Losing the keyring with no copy left **is a new installation**. The
+recovery this section promised before (rotate every PostgreSQL credential
+through the node agent) cannot run: a node job is signed with the job key, and
+the job key, the node CA key, every target credential, the TOTP seeds and the
+role verifiers are wrapped by the lost keys; the store is append-only and no
+command marks a secret lost. What a role does without a key: it refuses to start
+without a keyring (exit 2) or with a different one (exit 3, `keyring_mismatch`);
+with a new keyring whose ids differ it runs not ready, reads that need no secret
+work, and a request that needs a lost key answers 503 `SECRET_KEY_UNAVAILABLE`
+naming the key id. Therefore:
+
+- **Custody.** The keyring exists in three places: the platform's secret store
+  of the resource, an offline copy with the owner, and a second offline copy in
+  another place (sealed). A key rotation is complete only when both offline
+  copies hold the new keyring.
+- **Yearly restore test.** Once a year, and after every rotation, a person starts
+  a role against a restored copy of the Control Store with an offline copy of the
+  keyring: `exponetdb keyring status` must show no missing key. The result is
+  recorded in the deployment records.
+- **If every copy is gone** (RB-14): keep the old Control Store read-only for its
+  audit and history; set up a new installation (new keyring, `control-store
+  migrate`, owner enrollment), register the servers and clusters again, submit
+  new credentials for the ExponetDB roles (set by a person on each cluster),
+  enroll the nodes again, and adopt each target's ledger (registration finds the
+  `exponetdb` schema; the ledger in the target is the truth). Nothing on the
+  targets is lost: their ledgers live in the targets.
 
 ## 6. Future
 

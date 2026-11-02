@@ -1444,6 +1444,16 @@ export const ERRORS = {
     title: 'Conflict',
     message: 'The resource changed (If-Match did not match).',
   },
+  SECRET_KEY_UNAVAILABLE: {
+    group: 'generic',
+    status: 503,
+    retryable: false,
+    title: 'Master key unavailable',
+    message:
+      'A master key this request needs is not in the keyring the server loaded; the values it protects cannot be read (RB-14).',
+    // VC-011: key ids are not secret; the keyring status names the same id.
+    details: z.strictObject({ keyId: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/) }).optional(),
+  },
   CONTROL_STORE_VOLUME_FULL: {
     group: 'generic',
     status: 507,
