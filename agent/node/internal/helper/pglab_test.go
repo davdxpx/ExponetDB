@@ -524,8 +524,8 @@ func TestPglab(t *testing.T) {
 	if str(st, "state") != "succeeded" || !strings.HasSuffix(full, "F") {
 		t.Fatalf("full backup: %v", st)
 	}
-	// A second start of the same run id is refused.
-	if _, refusal := l.call(OpBackupRun, "backup.run", runArgsOf(l.cluster(), l.repo(), runFull, "full")); refusal == nil || refusal.Code != CodePreconditionFailed {
+	// A second start of the same run id is refused, replayed: the run exists (VC-061 review).
+	if _, refusal := l.call(OpBackupRun, "backup.run", runArgsOf(l.cluster(), l.repo(), runFull, "full")); refusal == nil || refusal.Code != CodeReplayed {
 		t.Fatalf("second start: %+v", refusal)
 	}
 
