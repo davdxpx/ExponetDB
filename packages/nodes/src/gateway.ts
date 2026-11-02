@@ -71,6 +71,8 @@ export interface AgentGatewayDeps {
 export interface Presented {
   readonly nodeId: string
   readonly certificate: Uint8Array
+  /** The certificate's `notAfter`, when the TLS layer reported it (checked on every request). */
+  readonly expiresAtMs?: number
 }
 
 const sleepFor = (ms: number, signal?: AbortSignal) =>
