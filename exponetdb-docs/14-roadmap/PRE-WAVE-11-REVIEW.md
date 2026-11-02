@@ -837,9 +837,20 @@ finding is wrong. Owner decisions are in [`open-decisions.md`](../00-product/ope
 | VC-058 (and VC-007) an unknown outcome is never reconciled again | IMPLEMENTED (a reconcile again every five minutes), TESTED LOCALLY on PostgreSQL 17 with synthetic kinds; NOT EXECUTED: the stack reproduction `F-matrix.sh cell tx incommit pg_immediate` | `driver.int.test.ts` | [operations-engine.md §4.2](../02-control-plane/operations-engine.md#42-workers-and-leases) |
 | VC-064 an old worker keeps claiming after the schema moved ahead | IMPLEMENTED, TESTED LOCALLY; NOT EXECUTED: `C/upgrade/scripts/91-inflight-across-migrate.sh` on a stack | `apps/server/test/operations-loop.test.ts` | [operations-engine.md §4.2](../02-control-plane/operations-engine.md#42-workers-and-leases) |
 
+### VC-1c. Group C: backup and restore truth (branch `fix/verification-campaign-group-c`, stacked on group B)
+
+| Finding | Status | Regression artifact | Document |
+|---|---|---|---|
+| VC-004 a drill passes with the newest segment's rows missing | IMPLEMENTED (a replay must pass into the newest archived segment; the row-count bounds the plan carries reach the node), TESTED LOCALLY; OD-60 decided under the delegation. NOT EXECUTED: the 7.7 GB stack drill with the newest segment deleted | `apps/server/test/http-backups.int.test.ts` (replay at the segment's start fails; bounds carried) | [restore.md](../09-backups-and-restore/restore.md) |
+| VC-005 `backup.verify` passes every deleted WAL segment | IMPLEMENTED (the node lists the archive with `pgbackrest repo-ls` and reports `gapEnds`; verify fails on a hole after the backup; the mirror keeps the gaps), TESTED LOCALLY with pgBackRest 2.60.0 and PostgreSQL 17 (pglab) | `agent/node/internal/helper/walgaps_test.go`, `pglab_test.go` step 8b, `packages/backups/test/reconcile.int.test.ts` | [architecture.md](../09-backups-and-restore/architecture.md) |
+| VC-060 `restore.execute` does not re-check space; prepare measures the engine directory | IMPLEMENTED, TESTED LOCALLY (unit and pglab) | `agent/node/internal/helper/space_test.go` | [restore.md](../09-backups-and-restore/restore.md) |
+| VC-061 a wrong key or a deleted repository: 102 s and `OUTCOME_UNKNOWN`, codes without names | IMPLEMENTED (helper codes `repository_unreadable`, `repository_missing`; the agent's `start_refused` statement; `BACKUP_REPOSITORY_UNAVAILABLE` with a reason at once), TESTED LOCALLY (unit, pglab, HTTP: the refused verify ends in under a second); NOT EXECUTED: the stack reproduction with a changed key and a moved repository | `agent/node/internal/capabilities/backups_test.go`, `agent/node/internal/helper/repository_state_test.go`, `packages/nodes/test/capability.test.ts`, `http-backups.int.test.ts` | [control-plane.md §9.4](../07-node-agent/control-plane.md), [backup-runbooks.md](../12-operations/backup-runbooks.md) |
+| VC-062 `pitr_random` refused until some inspection recorded the archive status | IMPLEMENTED (the refresh records `wal.archive_status@1`; the archiver's segment inside the repository is a lower bound; `archive_time_unknown`), TESTED LOCALLY on PostgreSQL 17; the second world of the campaign (explicit `pitr:` refused) is explained by the exact-segment rule, NOT EXECUTED on a stack | `packages/backups/test/selection.test.ts`, `reconcile.int.test.ts`, `http-backups.int.test.ts` | [architecture.md](../09-backups-and-restore/architecture.md) |
+| VC-059 the restic runbook neither applies the globals nor stops without them | IMPLEMENTED, TESTED LOCALLY in a lab (root, PostgreSQL 17, restic): a role grant restores `ok`, no globals stops before anything is created, a failed `pg_restore` stops the cluster. NOT EXECUTED: the 7.7 GB snapshot and the S3 repository | `packages/backups/test/runbook-restic.lab.test.ts` | [backup-runbooks.md §3.2](../12-operations/backup-runbooks.md) |
+
 ### VC-1a. Groups not started yet
 
-Groups C to I and the closing documents of section 5 of the fix prompt get their own branches
+Groups D to I and the closing documents of section 5 of the fix prompt get their own branches
 and pull requests.
 
 ### VC-2. Review history (append-only)
@@ -848,3 +859,4 @@ and pull requests.
 |---|---|---|
 | 2026-11-02 | (this branch) | section opened; group A: VC-012, VC-002, VC-003, VC-001; OD-68 to OD-70 added |
 | 2026-11-02 | `fix/verification-campaign-group-b` | group B: VC-044, VC-006, VC-055, VC-007, VC-049, D0-01, VC-008, VC-057 (OD-64), VC-058, VC-064; delegated decisions recorded in open-decisions.md |
+| 2026-11-02 | `fix/verification-campaign-group-c` | group C: VC-004 (OD-60), VC-005, VC-060, VC-061, VC-062, VC-059 |
