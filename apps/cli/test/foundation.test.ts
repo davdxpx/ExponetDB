@@ -292,6 +292,25 @@ describe('the human renderer names the data of a refusal (TC-022)', () => {
     )
   })
 
+  it('says what made a plan stale and which ledger rows disagree (VC-153)', () => {
+    const stale = refused('PLAN_STALE', {
+      planId: 'pln_01M5X840BP8JXGEQGS0PHPTB58',
+      changedBindings: [
+        { binding: 'content', actual: 'invalid' },
+        { binding: 'fingerprint', hint: 'x\u001b[31mred' },
+      ],
+    })
+    expect(stale).toContain('  changed: content (actual: invalid)')
+    expect(stale.some((l) => l.startsWith('  changed: fingerprint'))).toBe(true)
+    expect(stale.join('\n')).not.toMatch(/\u001b/)
+    expect(refused('LEDGER_DIVERGENCE', { unrecorded: [A], missing: [B] })).toEqual(
+      expect.arrayContaining([`  unrecorded: ${A}`, `  missing: ${B}`]),
+    )
+    expect(refused('CLUSTER_IDENTITY_MISMATCH', { pinned: '1', observed: '2' })).toEqual(
+      expect.arrayContaining(['  pinned: 1', '  observed: 2']),
+    )
+  })
+
   it('cuts a long list and keeps hostile text inert', () => {
     const many = Array.from({ length: 8 }, (_, i) => `01M5X840BP8JXGEQGS0PHPTB5${i}`)
     const lines = refused('MIGRATION_DEPENDENCY_MISSING', { missing: many })
