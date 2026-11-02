@@ -16993,6 +16993,7 @@
               "NOT_FOUND",
               "CONFLICT",
               "RATE_LIMITED",
+              "AUDIT_CLOCK_SKEW",
               "CONTROL_PLANE_DEGRADED",
               "INTERNAL"
             ]

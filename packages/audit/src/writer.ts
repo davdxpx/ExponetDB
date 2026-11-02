@@ -4,7 +4,12 @@ import {
   AuditEventInputSchema,
   type StoredAuditEvent,
 } from '@exponetdb/contracts'
-import { AUDIT_CHAIN_LOCK, ControlStoreError, type Tx } from '@exponetdb/control-store'
+import {
+  AUDIT_CHAIN_LOCK,
+  ControlStoreError,
+  type Queryable,
+  type Tx,
+} from '@exponetdb/control-store'
 import { type Clock, InvariantError, isId, newId, toJsonValue } from '@exponetdb/kernel'
 import { auditChainHash, genesisPrevHash } from './chain.ts'
 
@@ -33,6 +38,44 @@ export class AuditWriteError extends Error {
     )
     this.code = code
   }
+}
+
+/**
+ * The chain head lies more than a minute ahead of the database clock (a clock
+ * step forward and back, VC-003): the chain guard refuses every event until the
+ * clock passes the head, so every audited mutation stops. Nothing is broken in
+ * the chain; the catalog code names the cause and both times.
+ */
+export class AuditClockSkewError extends Error {
+  override readonly name = 'AuditClockSkewError'
+  readonly code = 'AUDIT_CLOCK_SKEW'
+  readonly details: { readonly headAt: string; readonly databaseNow: string }
+  constructor(details: { readonly headAt: string; readonly databaseNow: string }) {
+    super('The newest audit event lies ahead of the database clock; the change is refused.')
+    this.details = details
+  }
+}
+
+const UTC_US = `'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'`
+
+/** The head-ahead test of the chain guard (`audit-chain` bundle): more than a minute ahead. */
+const HEAD_AHEAD = `h.occurred_at > clock_timestamp() + interval '1 minute'`
+
+/** The skew a probe sees (readiness): the head's time and the database clock, or `undefined`. */
+export async function auditClockSkew(
+  q: Queryable,
+): Promise<{ readonly headAt: string; readonly databaseNow: string } | undefined> {
+  const { rows } = await q.query(
+    'audit.clock_skew',
+    `SELECT to_char(h.occurred_at AT TIME ZONE 'UTC', ${UTC_US}) AS head_at,
+            to_char(clock_timestamp() AT TIME ZONE 'UTC', ${UTC_US}) AS db_now
+       FROM (SELECT a.occurred_at FROM audit.audit_events a ORDER BY a.seq DESC LIMIT 1) h
+      WHERE ${HEAD_AHEAD}`,
+  )
+  const row = rows[0]
+  return row === undefined
+    ? undefined
+    : { headAt: row.text('head_at'), databaseNow: row.text('db_now') }
 }
 
 export interface AppendedAuditEvent {
@@ -64,8 +107,10 @@ export async function appendAuditEvent(
     const head = await tx.query(
       'audit.append.head',
       `SELECT h.seq, h.hash,
-              to_char(greatest(clock_timestamp(), h.occurred_at) AT TIME ZONE 'UTC',
-                      'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS now
+              to_char(greatest(clock_timestamp(), h.occurred_at) AT TIME ZONE 'UTC', ${UTC_US}) AS now,
+              coalesce(${HEAD_AHEAD}, false) AS ahead,
+              to_char(h.occurred_at AT TIME ZONE 'UTC', ${UTC_US}) AS head_at,
+              to_char(clock_timestamp() AT TIME ZONE 'UTC', ${UTC_US}) AS db_now
          FROM (SELECT 1) AS one
          LEFT JOIN LATERAL (SELECT a.seq, a.hash, a.occurred_at FROM audit.audit_events a
                              ORDER BY a.seq DESC LIMIT 1) h ON true`,
@@ -73,6 +118,12 @@ export async function appendAuditEvent(
     const row = head.rows[0]
     if (row === undefined) {
       throw new ControlStoreError('control_store_invalid_result')
+    }
+    if (row.bool('ahead')) {
+      throw new AuditClockSkewError({
+        headAt: row.text('head_at'),
+        databaseNow: row.text('db_now'),
+      })
     }
     const headSeq = row.intOrNull('seq')
     let prevHash: string
@@ -126,7 +177,11 @@ export async function appendAuditEvent(
     )
     return { seq: event.seq, id: event.id, occurredAt: event.occurredAt, hash: hashed.value.hash }
   } catch (error) {
-    if (error instanceof AuditWriteError || error instanceof InvariantError) {
+    if (
+      error instanceof AuditWriteError ||
+      error instanceof AuditClockSkewError ||
+      error instanceof InvariantError
+    ) {
       throw error
     }
     throw new AuditWriteError('audit_append_failed', { cause: error })

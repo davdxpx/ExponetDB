@@ -1,3 +1,4 @@
+import { auditClockSkew } from '@exponetdb/audit'
 import {
   type BundleSet,
   beat,
@@ -148,6 +149,13 @@ export async function composeRole(
         }
         return status.missing.length > 0 ? fail('keyring_missing_key') : pass()
       },
+    },
+    {
+      // VC-003: a chain head ahead of the clock stops every audited change, reads go on.
+      name: 'audit_chain',
+      severity: 'degrading',
+      run: async () =>
+        (await auditClockSkew(store)) === undefined ? pass() : warn('audit_clock_skew'),
     },
     {
       name: 'heartbeat',

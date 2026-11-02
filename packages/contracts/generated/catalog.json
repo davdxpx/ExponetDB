@@ -11612,6 +11612,41 @@
       "type": "https://db.exponet.cloud/errors/rate-limited"
     },
     {
+      "code": "AUDIT_CLOCK_SKEW",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/AUDIT_CLOCK_SKEW",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "databaseNow": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "headAt": {
+            "description": "RFC 3339 UTC timestamp ending in Z.",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "headAt",
+          "databaseNow"
+        ],
+        "type": "object"
+      },
+      "group": "generic",
+      "message": "The newest audit event lies ahead of the database clock, so no audited change can be recorded. Nothing was changed.",
+      "remediation": "Correct the clock of the Control Store host (NTP). Audited changes resume once the database clock passes headAt; until then reads keep working. See RB-16 in incident-model.md.",
+      "retryable": true,
+      "status": 503,
+      "title": "Audit chain ahead of the clock",
+      "type": "https://db.exponet.cloud/errors/audit-clock-skew"
+    },
+    {
       "code": "CONTROL_PLANE_DEGRADED",
       "details": null,
       "group": "generic",

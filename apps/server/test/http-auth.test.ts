@@ -1,3 +1,4 @@
+import { AuditClockSkewError } from '@exponetdb/audit'
 import {
   AUTH_ROUTES,
   actionDefinition,
@@ -334,6 +335,17 @@ describe('cookies and problems', () => {
     const body: unknown = await unknown.json()
     expect(body).toMatchObject({ code: 'INTERNAL' })
     expect(JSON.stringify(body)).not.toContain('boom')
+  })
+
+  it('names an audit chain ahead of the clock as 503 AUDIT_CLOCK_SKEW with both times, not 500 (VC-003)', async () => {
+    const requestId = expectOk(parseId('req', 'req_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z'), 'request id')
+    const details = {
+      headAt: '2026-10-29T22:46:19.123456Z',
+      databaseNow: '2026-10-29T19:52:00.000001Z',
+    }
+    const skewed = problemResponse(requestId, new AuditClockSkewError(details))
+    expect(skewed.status).toBe(503)
+    expect(await skewed.json()).toMatchObject({ code: 'AUDIT_CLOCK_SKEW', details })
   })
 
   it('the Web App CSP allows no inline script and no other origin', () => {

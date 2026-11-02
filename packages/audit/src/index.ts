@@ -79,6 +79,8 @@ export {
 export {
   type AppendedAuditEvent,
   type AppendOptions,
+  AuditClockSkewError,
   AuditWriteError,
   appendAuditEvent,
+  auditClockSkew,
 } from './writer.ts'
