@@ -91,6 +91,8 @@ export interface MigrationPlanContext {
   readonly installationId: string
   /** serve's connector: observer sessions only. */
   readonly connector: Connector
+  /** OD-70 (b): the configured Control Store volume; inline bundles are refused at 90 %. */
+  readonly volumeBytes?: number | undefined
 }
 
 interface ProjectSettings {
@@ -598,6 +600,7 @@ export async function planMigrationApply(
       defaults: request.defaults ?? {},
       ...(request.source === undefined ? {} : { source: request.source }),
       identityId: actor.identityId,
+      ...(ctx.volumeBytes === undefined ? {} : { volumeBytes: ctx.volumeBytes }),
     })
     for (const item of ingested) chosen.set(item.revision.migrationId, item.revision)
   }

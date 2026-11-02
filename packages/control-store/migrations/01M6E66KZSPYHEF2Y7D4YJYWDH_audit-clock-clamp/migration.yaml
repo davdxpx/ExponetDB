@@ -1,0 +1,25 @@
+schema: exponetdb.migration/v1
+id: 01M6E66KZSPYHEF2Y7D4YJYWDH
+name: audit-clock-clamp
+description: |
+  Verification campaign VC-003, owner decision OD-69 (b), bounded to 24 h: a
+  clock step forward and back left the chain head ahead of the database clock,
+  and the chain guard refused every event until the clock passed the head, so
+  every audited mutation stopped. The guard function (audit.chain_guard) is
+  replaced with the text of the audit-chain bundle plus one condition: while
+  the head is at most 24 hours ahead, an event may take the head's own time if
+  its seq has a row in the new append-only table audit.clock_skew_marks,
+  written in the same transaction (database time within a minute of the
+  clock). ac1 and exponetdb.audit/v1 do not change. Time still never runs
+  backwards along the chain; beyond 24 hours the guard still refuses
+  (AUDIT_CLOCK_SKEW). Additive: one table, its triggers and grants; the trigger,
+  the hash rule and every earlier verify.sql stay as they are.
+dependsOn:
+  - 01M6DV2NQJDYWP4GXT46DTRK2S
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

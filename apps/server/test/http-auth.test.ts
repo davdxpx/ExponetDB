@@ -152,6 +152,8 @@ describe('served routes (Wave 2 and 4 to 9)', () => {
       'planBackupRun',
       // OD-54 (a): adopting an external cluster by the node agent.
       'planClusterAgentAdoption',
+      // OD-68 (b): the declared memory limit of a cluster.
+      'planClusterMemoryLimit',
       'planClusterRetirement',
       'planDatabaseRetirement',
       'planDrill',
@@ -162,6 +164,8 @@ describe('served routes (Wave 2 and 4 to 9)', () => {
       'planForceRelease',
       'planRestore',
       'planRestoreDiscard',
+      // OD-70 (d): the purge of bundle revisions no plan references.
+      'planRevisionPurge',
       'planServerRetirement',
       'planSessionTermination',
       'recordOfflineDrill',

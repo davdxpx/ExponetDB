@@ -1134,6 +1134,8 @@ export const ERRORS = {
             'repository_engine_below_floor',
             // VC-062: no wal.archive_status@1 time for the archive yet; a catalog refresh records it.
             'archive_time_unknown',
+            // OD-70 (d): no revision of the project is unreferenced and older than 90 days.
+            'nothing_to_purge',
             // OD-54 (a), registry.cluster.adopt_agent: only an external cluster is adopted, by
             // an enrolled node that is live (active or degraded, with a recent heartbeat).
             'cluster_not_external',
@@ -1390,6 +1392,8 @@ export const ERRORS = {
     message: 'Data reads are disabled on this target or tier for this client.',
     remediation:
       'The data.read policy rule of the target decides who reads its rows; by default production rows are for people only. Read a non-production target, or ask a person to run the read.',
+    // OD-68 (b): an agent reads rows only where the cluster declared a memory limit.
+    details: z.strictObject({ reason: z.enum(['target_memory_unlimited']) }).optional(),
   },
   STATEMENT_NOT_AVAILABLE: {
     group: 'queries_and_diagnostics',
@@ -1436,6 +1440,18 @@ export const ERRORS = {
     retryable: false,
     title: 'Conflict',
     message: 'The resource changed (If-Match did not match).',
+  },
+  CONTROL_STORE_VOLUME_FULL: {
+    group: 'generic',
+    status: 507,
+    retryable: false,
+    title: 'Control Store volume full',
+    message:
+      'The Control Store fills nine tenths of its configured volume; bundles are not stored until there is room (RB-17).',
+    // OD-70 (b): the database's own size and the configured volume (EXPONETDB_CONTROL_STORE_VOLUME_BYTES).
+    details: z
+      .strictObject({ usedBytes: z.int().min(0), volumeBytes: z.int().positive() })
+      .optional(),
   },
   RATE_LIMITED: {
     group: 'generic',

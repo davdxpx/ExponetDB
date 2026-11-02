@@ -276,6 +276,22 @@ production database is placed. A cluster therefore also carries a
   data reads (database-level actions use the target's tier, §5 of
   authorization.md). It changes who may *place* it.
 
+**[DECIDED]** ([OD-68](../00-product/open-decisions.md#od-68-memory-of-a-data-read-on-the-target) (b),
+2026-11-02) A cluster also carries a **declared memory limit**, a registry
+fact with the same authority: `memoryLimit` is `cgroup` (the PostgreSQL
+service runs under a memory limit), `overcommit` (the host runs
+`vm.overcommit_memory=2`), `none` or `null` (undeclared). A person declares
+it through the plan `POST /clusters/{id}/memory-limit`
+(`registry.cluster.declare_memory_limit`, class `high`, re-authentication,
+production authority whichever value: the declaration lets agents read rows).
+Without `cgroup` or `overcommit`, a row read of the cluster's targets carries
+the warning `target_memory_unlimited` for a person and is refused
+`DATA_READ_NOT_PERMITTED` for an agent: PostgreSQL has no per-query memory
+limit, and an exhausted server without one restarts every session of the
+cluster. Like the declared tier, it is never removed, a retired cluster keeps
+it, and the Control Store guard admits each declaration only from its own
+operation (bundle `cluster-memory-limit`).
+
 Tests: `apps/server/test/http-registry-tier.int.test.ts`,
 `packages/auth/test/registry-tier.test.ts`,
 `packages/control-store/test/registry-schema.int.test.ts`.

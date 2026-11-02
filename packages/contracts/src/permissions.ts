@@ -34,7 +34,7 @@ export const PERMISSIONS = {
   'plans.approve': { covers: 'approve plans (Web App)', humanOnly: true },
   'operations.recover': {
     covers:
-      "force recovery of the Operations Engine's own state: release a lock domain held by a lost worker (operation.force_release)",
+      "force recovery of the Control Plane's own state: release a lock domain held by a lost worker (operation.force_release); purge bundle revisions no plan references (migration.revisions.purge, OD-70)",
     humanOnly: true,
   },
   'breakglass.activate': { covers: 'activate break-glass', humanOnly: true },

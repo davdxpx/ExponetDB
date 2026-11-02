@@ -298,7 +298,7 @@ takes the same lock and refuses, whatever the writer did:
 
 | SQLSTATE | Refusal |
 |---|---|
-| `EXA02` | the row does not continue the chain: not the next `seq`, a `prev_hash` that is not the head's hash (or the genesis value of this installation for `seq` 1), a time before the head's or more than one minute ahead of the database clock |
+| `EXA02` | the row does not continue the chain: not the next `seq`, a `prev_hash` that is not the head's hash (or the genesis value of this installation for `seq` 1), a time before the head's or more than one minute ahead of the database clock, unless the head itself is at most 24 hours ahead, the event takes exactly the head's time and `audit.clock_skew_marks` holds its `seq` with a database time within a minute of the clock (OD-69 (b), bundle `audit-clock-clamp`; ac1 and `exponetdb.audit/v1` are unchanged) |
 | `EXA03` | `hash` is not `audit.ac1(prev_hash, event)` |
 | `EXA04` | a query column (`seq`, `event_id`, `action`, `phase`, `occurred_at`, actor, operation and plan ids) differs from the event |
 

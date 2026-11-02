@@ -771,6 +771,20 @@ export const ACTIONS = {
         'operations-engine.md §4.1 (VC-006: the exit of needs_attention for every kind); applied through plan.apply',
     },
   ),
+  'migration.revisions.purge.plan': record(
+    'Plan purging bundle revisions no plan references',
+    'project',
+    perm('operations.recover'),
+    scopeOf('operations.recover'),
+    {
+      clientKinds: HUMAN,
+      humanOnly: true,
+      // OD-70 (d), built by the verification campaign fixes (2026-11-02), with the last wave's routes.
+      wave: '9',
+      basis:
+        'control-store-runbook.md RB-17 (OD-70 (d): revisions are append-only; never-planned ones older than 90 days may go); applied through plan.apply',
+    },
+  ),
   'migration.resume.plan': record(
     'Plan resuming a non-transactional bundle',
     'target',
@@ -1078,6 +1092,19 @@ export const ACTIONS = {
       tierSemantics: 'subject',
       basis:
         'operations-engine.md §2, concurrency.md; permission operations.recover decided by the owner before G1',
+    },
+  ),
+  'migration.revisions.purge': adminOperation(
+    'Purge bundle revisions no plan references',
+    fixed('high'),
+    'project',
+    'operations.recover',
+    {
+      reauthentication: true,
+      reauthWithinSeconds: 300,
+      wave: '9',
+      basis:
+        'OD-70 (d): the Control Store frees the bytes of never-planned revisions older than 90 days; the database refuses any other delete',
     },
   ),
   'connections.cancel': operation(
@@ -1666,6 +1693,11 @@ export const ACTIONS = {
     'cluster',
     { tierSemantics: 'production', wave: '8' },
   ),
+  'registry.cluster.declare_memory_limit.plan': registryPlan(
+    "Plan the declaration of the memory limit of a cluster's PostgreSQL (OD-68)",
+    'cluster',
+    { tierSemantics: 'production', wave: '9' },
+  ),
   // ----- Wave 9 Part A: execution roles for adopted schemas (ADR-0034) -----
   // A project's environment: the environment's tier ('subject'), never production authority
   // for a nonprod environment; human only like every registry change; re-authentication.
@@ -1722,6 +1754,18 @@ export const ACTIONS = {
       tierSemantics: 'subject',
       wave: '9',
       basis: 'ADR-0034 §2: human only, registry.manage at the environment’s tier',
+    },
+  ),
+  'registry.cluster.declare_memory_limit': registryKind(
+    "Declare whether a cluster's PostgreSQL runs under a memory limit (OD-68); production authority whichever value",
+    fixed('high'),
+    'cluster',
+    {
+      ...REAUTH,
+      tierSemantics: 'production',
+      wave: '9',
+      basis:
+        'OD-68 (b), 2026-11-02: the declaration lets agents read rows of the cluster, so it is a production decision like the declared tier',
     },
   ),
   'registry.cluster.declare_tier': registryKind(

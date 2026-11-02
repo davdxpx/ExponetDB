@@ -207,6 +207,9 @@ describe('Wave 4 registry contracts', () => {
       // OD-54 (a): adopting an external cluster by the node agent, whatever its tier.
       'registry.cluster.adopt_agent',
       'registry.cluster.adopt_agent.plan',
+      // OD-68 (b): the declared memory limit lets agents read rows, whatever its value.
+      'registry.cluster.declare_memory_limit',
+      'registry.cluster.declare_memory_limit.plan',
       'registry.cluster.declare_tier',
       'registry.cluster.declare_tier.plan',
       'registry.cluster.register',

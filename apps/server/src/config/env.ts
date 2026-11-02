@@ -76,6 +76,7 @@ const VARIABLES: Readonly<Record<string, Spec>> = {
   EXPONETDB_GATEWAY_LISTEN: { programs: ['gateway'] },
   // Wave 9 Part B (adoption.md §5): engine runs are off until an operator turns them on.
   EXPONETDB_BACKUP_EXECUTION: { programs: ['serve', 'worker'] },
+  EXPONETDB_CONTROL_STORE_VOLUME_BYTES: { programs: ['serve'] },
   EXPONETDB_RESTORE_EXECUTION: { programs: ['serve', 'worker'] },
 }
 
@@ -147,6 +148,8 @@ export interface ServeConfig extends RoleConfig {
   readonly clientRegistration: 'open' | 'review'
   /** Absent: both disabled. */
   readonly backupExecution?: BackupExecutionConfig
+  /** OD-70 (b): the Control Store's volume size in bytes; absent: not checked, health says so. */
+  readonly controlStoreVolumeBytes?: number
 }
 
 /** `exponetdb bootstrap owner` and `exponetdb auth recover-owner`: the serve login and the public URL. */
@@ -478,7 +481,19 @@ export function serveConfig(env: Env): ServeConfig {
     mcpAllowedOrigins: [...new Set(allowed)],
     clientRegistration: registration === 'review' ? 'review' : 'open',
     backupExecution: backupExecution(r),
+    ...volumeBytes(r),
   })
+}
+
+/** A positive whole number of bytes, at least 1 GiB; anything else is refused, never ignored. */
+function volumeBytes(r: Reader): { controlStoreVolumeBytes?: number } {
+  const raw = r.raw('EXPONETDB_CONTROL_STORE_VOLUME_BYTES')
+  if (raw === undefined) return {}
+  const n = Number(raw)
+  if (!/^[0-9]{1,16}$/.test(raw) || !Number.isSafeInteger(n) || n < 1024 ** 3) {
+    r.invalid('EXPONETDB_CONTROL_STORE_VOLUME_BYTES')
+  }
+  return { controlStoreVolumeBytes: n }
 }
 
 export function authOperatorConfig(env: Env): AuthOperatorConfig {

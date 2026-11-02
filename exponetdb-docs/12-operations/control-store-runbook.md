@@ -153,10 +153,29 @@ full. Nothing committed is lost.
    and the audit events `migration.bundle.ingested` (every ingest is audited
    since this fix; one identity stores at most 64 MiB of bundle bytes in 24
    hours, more answers `RATE_LIMITED`). A hostile identity: RB-11.
-5. **Prevent.** Alert on the host's disk use (the product has no Control
-   Store disk signal yet), keep WAL on its own volume where the platform
-   allows it, and leave free space for at least a day of the quota per
-   active identity. Thresholds, a disk component in installation health, a
-   restart policy and an audited purge of never-planned revisions are owner
-   decision
-   [OD-70](../00-product/open-decisions.md#od-70-control-store-disk-and-bundle-ingest).
+5. **Prevent.** Set `EXPONETDB_CONTROL_STORE_VOLUME_BYTES` on serve to the
+   Control Store volume's size: installation health then shows the component
+   `control_store_volume` (degraded from 80 %, reason
+   `volume_above_80_percent`), and from 90 % bundle ingest answers 507
+   `CONTROL_STORE_VOLUME_FULL` while everything else goes on (**[DECIDED]**
+   [OD-70](../00-product/open-decisions.md#od-70-control-store-disk-and-bundle-ingest)
+   (b), built 2026-11-02). The share is the database's own size: WAL and
+   other files on the volume are not counted, so still alert on the host's
+   disk use. Keep WAL on its own volume where the platform allows it, and
+   leave free space for at least a day of the quota per active identity.
+6. **Free space** (**[DECIDED]** OD-70 (d)). Revisions no plan references and
+   older than 90 days can be purged by a person with `operations.recover`:
+   `POST /api/v1/projects/{id}/bundle-revisions/purge` with a reason plans
+   `migration.revisions.purge` (it lists the revisions and their bytes), and
+   `POST /api/v1/plans/{id}/apply` with re-authentication lets the worker
+   delete exactly those (audited `migration.revisions.purged`). The database
+   refuses any other delete. Recent hostile ingests are younger than 90 days:
+   for them grow the volume (step 2). A delete frees space inside the
+   database but does not shrink its files, so `pg_database_size` and the
+   volume component (and with them `CONTROL_STORE_VOLUME_FULL`) stay where
+   they were until the table is rewritten: in a maintenance window, as the
+   Control Store owner, `VACUUM (FULL) migrations.bundle_revisions` (it holds
+   an `ACCESS EXCLUSIVE` lock on the table while it runs: no ingest and no
+   migration plan meanwhile). The plans tables are locked by the purge itself
+   only while it deletes (at most 5 s of waiting, then it fails and deletes
+   nothing).

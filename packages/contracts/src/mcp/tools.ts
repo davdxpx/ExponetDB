@@ -375,7 +375,8 @@ export const MCP_TOOLS = [
   },
   {
     name: 'sql_query',
-    toolVersion: 1,
+    // 2: OD-68 (b), the result's warnings (target_memory_unlimited).
+    toolVersion: 2,
     title: 'Run read-only SQL',
     description:
       'Runs exactly one read-only statement on a target in a read-only transaction and returns typed rows (capped, truncation shown). Writes are refused: schema and data changes go through migration_plan. Requires data.read for the target tier; on production targets row reads may be limited to humans.' +

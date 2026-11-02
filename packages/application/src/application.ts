@@ -139,7 +139,13 @@ import {
   type SessionId,
   toJsonValue,
 } from '@exponetdb/kernel'
-import { type ReviewFile, reviewFiles } from '@exponetdb/migrations-engine'
+import {
+  PURGE_AGE_DAYS,
+  purgeableRevisions,
+  REVISION_PURGE_KIND,
+  type ReviewFile,
+  reviewFiles,
+} from '@exponetdb/migrations-engine'
 import {
   type AssertedOutcome,
   beginIdempotent,
@@ -162,6 +168,7 @@ import {
 import { PolicyEngine } from '@exponetdb/policy'
 import {
   applyRegistryPlan,
+  getProject,
   type RegistryAcceptContext,
   type RegistryActor,
   RegistryError,
@@ -237,6 +244,11 @@ export interface ApplicationDeps {
    * each plan. Absent: both disabled.
    */
   readonly backupExecution?: () => ExecutionSettings
+  /**
+   * OD-70 (b): the Control Store's volume size (`EXPONETDB_CONTROL_STORE_VOLUME_BYTES`). Ingest
+   * is refused at 90 %; installation health warns at 80 %. Absent: neither, and health says so.
+   */
+  readonly controlStoreVolumeBytes?: number
   /** The running release (`GET /installation`). */
   readonly installation: {
     readonly version: string
@@ -625,7 +637,7 @@ export class Application {
     this.backups = new BackupUseCases(host, {
       execution: deps.backupExecution ?? (() => EXECUTION_DISABLED),
     })
-    this.migrations = new MigrationUseCases(host)
+    this.migrations = new MigrationUseCases(host, { volumeBytes: deps.controlStoreVolumeBytes })
     this.queries = new QueryUseCases({
       store: deps.auth.store,
       clock: deps.policy.clock,
@@ -1186,7 +1198,9 @@ export class Application {
     if (sources === undefined) {
       throw new AuthError('CONTROL_PLANE_DEGRADED')
     }
-    return readInstallationHealth(this.#d.auth.store, this.#d.policy.clock, sources)
+    return readInstallationHealth(this.#d.auth.store, this.#d.policy.clock, sources, {
+      volumeBytes: this.#d.controlStoreVolumeBytes,
+    })
   }
 
   /**
@@ -2213,6 +2227,88 @@ export class Application {
         )
       },
       async (tx) => ({ kind: 'plan', subject: subjectOf((await stuck(tx)).plan) }),
+    )
+  }
+
+  /**
+   * OD-70 (d): plans the purge of a project's bundle revisions that no plan references and that
+   * are older than {@link PURGE_AGE_DAYS} days. The plan lists them with their bytes; `plan.apply`
+   * (re-authentication) lets the worker delete exactly those.
+   */
+  async planRevisionPurge(
+    caller: Caller,
+    projectId: string,
+    body: { readonly reason: string },
+    idempotency?: { readonly key: string; readonly requestHash: string },
+  ): Promise<PlanView> {
+    const reason = body.reason.trim()
+    if (reason.length === 0) {
+      throw new RegistryError('VALIDATION_FAILED', {
+        errors: [
+          { path: '/reason', code: 'too_small', message: 'Say why the revisions are purged.' },
+        ],
+      })
+    }
+    return this.#plan(
+      caller,
+      'migration.revisions.purge.plan',
+      idempotency,
+      (c) => registryActor(planActor(c)),
+      async (tx, actor) => {
+        const revisions = await purgeableRevisions(tx, projectId)
+        if (revisions.length === 0) {
+          throw new RegistryError('REGISTRY_CONFLICT', { reason: 'nothing_to_purge' })
+        }
+        const content: JsonObject = {
+          projectId,
+          reason,
+          revisions: revisions.map((r) => ({ ...r })),
+        }
+        const policy = await new PolicyEngine({
+          registry: this.#d.policy.registry,
+          providers: [],
+          codeVersion: this.#d.policy.codeVersion,
+          clock: this.#d.policy.clock,
+        }).evaluate({
+          request: {
+            kind: REVISION_PURGE_KIND,
+            principal: {
+              kind: 'human',
+              identityId: actor.identityId,
+              client: actor.client ?? 'web',
+            },
+            subject: {},
+            content,
+          },
+          settings: await readPolicySettings(tx, {}),
+        })
+        return createPlan(
+          tx,
+          {
+            kind: REVISION_PURGE_KIND,
+            kindVersion: 1,
+            actionClass: 'high',
+            actor: registryOperationActor(actor),
+            subject: { projectId },
+            content,
+            analysis: {
+              revisions: revisions.length,
+              bytes: revisions.reduce((n, r) => n + r.bytes, 0),
+              olderThanDays: PURGE_AGE_DAYS,
+              effect:
+                'these revisions are deleted from the Control Store; a revision a plan names by the time of the apply stays',
+            },
+            policy,
+          },
+          { clock: this.#d.policy.clock },
+        )
+      },
+      async (tx) => {
+        if (!isId('prj', projectId) || (await getProject(tx, projectId)) === undefined) {
+          throw new RegistryError('NOT_FOUND')
+        }
+        return { kind: 'project', projectId }
+      },
     )
   }
 

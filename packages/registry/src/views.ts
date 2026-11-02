@@ -107,6 +107,7 @@ export function clusterView(c: ClusterRecord, health: HealthSummary | null = nul
     systemIdentifier: c.systemIdentifier,
     derivedTier: c.derivedTier,
     declaredTier: c.declaredTier,
+    memoryLimit: c.memoryLimit,
     health,
     retiredAt: c.retiredAt,
   }

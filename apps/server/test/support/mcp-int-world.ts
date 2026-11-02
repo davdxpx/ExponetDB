@@ -443,6 +443,13 @@ export async function mcpWorld(
   })
   await observation.verifyCredentials()
   await planAndApply(`/api/v1/clusters/${ids.cluster}/confirm`, {}, { reauth: true })
+  // OD-68 (b): agents read rows only of a cluster whose PostgreSQL runs under a declared memory
+  // limit; the test server is a disposable container, declared as a cgroup-limited one.
+  await planAndApply(
+    `/api/v1/clusters/${ids.cluster}/memory-limit`,
+    { memoryLimit: 'cgroup' },
+    { reauth: true },
+  )
   await owner.reauth()
   for (const role of ['migrator', 'reader', 'verifier'] as const) {
     await owner.browser.call('POST', `/api/v1/clusters/${ids.cluster}/credentials/${role}`, {

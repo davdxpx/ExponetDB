@@ -150,6 +150,20 @@ describe('Wave 3A authentication configuration', () => {
     ).toEqual([{ variable: 'EXPONETDB_RESTORE_EXECUTION', reason: 'invalid' }])
   })
 
+  it('reads the Control Store volume size, and refuses anything but whole bytes of at least 1 GiB (OD-70)', () => {
+    expect(serveConfig(serveBase).controlStoreVolumeBytes).toBeUndefined()
+    expect(
+      serveConfig({ ...serveBase, EXPONETDB_CONTROL_STORE_VOLUME_BYTES: '21474836480' })
+        .controlStoreVolumeBytes,
+    ).toBe(20 * 1024 ** 3)
+    for (const bad of ['20G', '-1', '1000', '1.5e10']) {
+      expect(
+        problems(() => serveConfig({ ...serveBase, EXPONETDB_CONTROL_STORE_VOLUME_BYTES: bad })),
+        bad,
+      ).toEqual([{ variable: 'EXPONETDB_CONTROL_STORE_VOLUME_BYTES', reason: 'invalid' }])
+    }
+  })
+
   it('the auth operator commands use the serve login and the public origin', () => {
     expect(
       authOperatorConfig({

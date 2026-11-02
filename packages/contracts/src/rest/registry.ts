@@ -289,6 +289,17 @@ export const ClusterDeclaredTierRequestSchema = z
   })
   .meta({ id: 'ClusterDeclaredTierRequest' })
 
+/** OD-68 (b): the memory limit a person declares for the cluster's PostgreSQL. */
+export const ClusterMemoryLimitRequestSchema = z
+  .strictObject({
+    memoryLimit: z.enum(['cgroup', 'overcommit', 'none']).meta({
+      description:
+        'cgroup: the PostgreSQL service runs under a memory limit (systemd MemoryMax, a container limit); overcommit: the host runs vm.overcommit_memory=2; none: neither. A limit makes an exhausting read end one backend with an error instead of a restart of the cluster.',
+    }),
+  })
+  .meta({ id: 'ClusterMemoryLimitRequest' })
+export type ClusterMemoryLimitRequest = z.infer<typeof ClusterMemoryLimitRequestSchema>
+
 export const EndpointRetireRequestSchema = z
   .strictObject({ reason: ReasonSchema.optional() })
   .meta({ id: 'EndpointRetireRequest' })

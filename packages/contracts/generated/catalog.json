@@ -1727,6 +1727,37 @@
       "wave": "9"
     },
     {
+      "basis": "control-store-runbook.md RB-17 (OD-70 (d): revisions are append-only; never-planned ones older than 90 days may go); applied through plan.apply",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "migration.revisions.purge.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "operations.recover"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "operations.recover"
+      },
+      "subject": "project",
+      "tierSemantics": "none",
+      "title": "Plan purging bundle revisions no plan references",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
       "basis": "resources.md, tool-catalog.md",
       "class": {
         "class": "read",
@@ -2710,6 +2741,38 @@
       "title": "Release a lock domain held by a lost worker",
       "verification": "required",
       "wave": "6"
+    },
+    {
+      "basis": "OD-70 (d): the Control Store frees the bytes of never-planned revisions older than 90 days; the database refuses any other delete",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "migration.revisions.purge",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "operations.recover"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "operations.recover"
+      },
+      "subject": "project",
+      "tierSemantics": "none",
+      "title": "Purge bundle revisions no plan references",
+      "verification": "required",
+      "wave": "9"
     },
     {
       "basis": "operations-engine.md §2",
@@ -5882,6 +5945,37 @@
       "wave": "8"
     },
     {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.cluster.declare_memory_limit.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "production",
+      "title": "Plan the declaration of the memory limit of a cluster's PostgreSQL (OD-68)",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
       "basis": "ADR-0034; credentials-and-roles.md §3",
       "class": {
         "class": "read",
@@ -6099,6 +6193,38 @@
       "subject": "project",
       "tierSemantics": "subject",
       "title": "Revoke an execution-role exception: plans that bound it become stale",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "OD-68 (b), 2026-11-02: the declaration lets agents read rows of the cluster, so it is a production decision like the declared tier",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.cluster.declare_memory_limit",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "production",
+      "title": "Declare whether a cluster's PostgreSQL runs under a memory limit (OD-68); production authority whichever value",
       "verification": "required",
       "wave": "9"
     },
@@ -11066,6 +11192,7 @@
               "no_backup_selectable",
               "repository_engine_below_floor",
               "archive_time_unknown",
+              "nothing_to_purge",
               "cluster_not_external",
               "node_not_served"
             ]
@@ -11537,7 +11664,24 @@
     },
     {
       "code": "DATA_READ_NOT_PERMITTED",
-      "details": null,
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/DATA_READ_NOT_PERMITTED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "enum": [
+              "target_memory_unlimited"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
       "group": "queries_and_diagnostics",
       "message": "Data reads are disabled on this target or tier for this client.",
       "remediation": "The data.read policy rule of the target decides who reads its rows; by default production rows are for people only. Read a non-production target, or ask a person to run the read.",
@@ -11664,6 +11808,38 @@
       "status": 409,
       "title": "Conflict",
       "type": "https://db.exponet.cloud/errors/conflict"
+    },
+    {
+      "code": "CONTROL_STORE_VOLUME_FULL",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/CONTROL_STORE_VOLUME_FULL",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "usedBytes": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "volumeBytes": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "usedBytes",
+          "volumeBytes"
+        ],
+        "type": "object"
+      },
+      "group": "generic",
+      "message": "The Control Store fills nine tenths of its configured volume; bundles are not stored until there is room (RB-17).",
+      "retryable": false,
+      "status": 507,
+      "title": "Control Store volume full",
+      "type": "https://db.exponet.cloud/errors/control-store-volume-full"
     },
     {
       "code": "RATE_LIMITED",
@@ -11849,7 +12025,7 @@
       "id": "plans.approve"
     },
     {
-      "covers": "force recovery of the Operations Engine's own state: release a lock domain held by a lost worker (operation.force_release)",
+      "covers": "force recovery of the Control Plane's own state: release a lock domain held by a lost worker (operation.force_release); purge bundle revisions no plan references (migration.revisions.purge, OD-70)",
       "humanOnly": true,
       "id": "operations.recover"
     },
