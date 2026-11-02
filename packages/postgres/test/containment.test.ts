@@ -3,10 +3,11 @@ import {
   analyzeMigrationSql,
   loadParser,
   MAX_COMMENT_DEPTH,
+  MAX_COMMENT_RUN,
   MAX_MIGRATION_STATEMENTS,
   parseWith,
 } from '../src/parser/index.ts'
-import { commentDepth } from '../src/parser/lexer.ts'
+import { commentDepth, commentRun } from '../src/parser/lexer.ts'
 import { SUPPORTED_MAJORS } from '../src/versions.ts'
 
 /**
@@ -19,8 +20,9 @@ beforeAll(async () => {
   for (const major of SUPPORTED_MAJORS) await loadParser(major)
 })
 
+// Spaced, as real nested comments are: unspaced `/*/*/*` is also one long run of operator characters.
 const nested = (depth: number, tail = 'SELECT 1;') =>
-  `${'/*'.repeat(depth)}${'*/'.repeat(depth)}\n${tail}\n`
+  `${'/* '.repeat(depth)}${' */'.repeat(depth)}\n${tail}\n`
 
 describe('the nesting of block comments (VC-013)', () => {
   it('counts the depth of real comments only, not the markers inside literals or line comments', () => {
@@ -66,6 +68,45 @@ describe('the nesting of block comments (VC-013)', () => {
     expect(large.ms).toBeLessThan(2000)
     // Four times the depth: a linear check is about 4, the parser's scanner about 16 (9 s at 40,000).
     expect(large.ms / Math.max(small.ms, 5)).toBeLessThan(8)
+  })
+})
+
+/**
+ * The cost in PostgreSQL's scanner is not the nesting: every `/*` rescans the whole run of
+ * operator characters that follows it (scan.l `xcstart`, `yyless(2)`), so a run of closed
+ * comments `/**\/` repeated is quadratic at depth 1 (the review of group E: 6.8 s at 160 KB).
+ */
+describe('comment starts inside one run of operator characters (VC-013)', () => {
+  it('counts the starts of each maximal operator run, not the markers in separate runs', () => {
+    expect(commentRun('/**/'.repeat(5), 100)).toBe(5)
+    expect(commentRun('+/**/'.repeat(5), 100)).toBe(5)
+    expect(commentRun('/**/ '.repeat(500), 100)).toBe(1)
+    expect(commentRun(`/*${'*'.repeat(500)}/`, 100)).toBe(1)
+    expect(commentRun(`SELECT 1; /* a */ /* b */`, 100)).toBe(1)
+  })
+
+  it.each([
+    ['closed comments in a row', (n: number) => `${'/**/'.repeat(n)}\nSELECT 1;\n`],
+    ['comments between operators', (n: number) => `SELECT 1 ${'+/**/'.repeat(n)} 1;\n`],
+  ])('refuses %s past the limit, at once', (_name, build) => {
+    for (const major of SUPPORTED_MAJORS) {
+      expect(parseWith(major, build(MAX_COMMENT_RUN))).toMatchObject({ ok: true })
+      expect(parseWith(major, build(MAX_COMMENT_RUN + 2))).toMatchObject({
+        ok: false,
+        failure: { kind: 'too_large', limit: 'comment_run' },
+      })
+    }
+    const started = performance.now()
+    const refused = analyzeMigrationSql(17, build(40_000))
+    expect(performance.now() - started).toBeLessThan(2000)
+    expect(refused).toMatchObject({ ok: false, failure: { limit: 'comment_run' } })
+  })
+
+  it('lets ordinary comments through: banners, spaced comments and many separate ones', () => {
+    const banner = `/*${'*'.repeat(200)}*/\n/* ${'-'.repeat(200)} */\nSELECT 1;\n`
+    expect(parseWith(17, banner)).toMatchObject({ ok: true })
+    expect(parseWith(17, `${'/**/ '.repeat(5000)}SELECT 1;`)).toMatchObject({ ok: true })
+    expect(parseWith(17, `${'/* c */\n'.repeat(5000)}SELECT 1;`)).toMatchObject({ ok: true })
   })
 })
 

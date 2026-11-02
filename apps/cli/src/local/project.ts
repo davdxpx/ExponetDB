@@ -103,7 +103,8 @@ async function readUpTo(file: string, max: number): Promise<Uint8Array> {
       if (bytesRead === 0) break
       filled += bytesRead
     }
-    return buffer.subarray(0, filled)
+    // A copy: a view would keep the whole limit-sized buffer alive for every small file.
+    return buffer.slice(0, filled)
   } finally {
     await handle.close()
   }

@@ -179,7 +179,11 @@ export class MigrationApplyKind implements OperationKind {
   }
 
   /** The fast staleness check with a fresh observer session (planning-and-apply.md §4.1 step 3). */
-  async #liveBindings(content: PlanContent, target: TargetRecord): Promise<ChangedBinding[]> {
+  async #liveBindings(
+    content: PlanContent,
+    target: TargetRecord,
+    signal?: AbortSignal,
+  ): Promise<ChangedBinding[]> {
     const project = await projectRegistry(this.#deps.store, content.projectId)
     let opened: Awaited<ReturnType<Connector['forTarget']>>
     try {
@@ -191,6 +195,10 @@ export class MigrationApplyKind implements OperationKind {
     } catch {
       return [{ binding: 'target', actual: 'unreachable' }]
     }
+    // The accept stopped waiting (its deadline): the read stops with it, the session closes.
+    const stop = () => void opened.session.close().catch(() => undefined)
+    if (signal?.aborted === true) stop()
+    signal?.addEventListener('abort', stop, { once: true })
     try {
       const { state, digest } = await opened.session.readOnly(
         async (tx) => ({
@@ -217,6 +225,7 @@ export class MigrationApplyKind implements OperationKind {
     } catch (error) {
       return [{ binding: 'target', actual: errorCodeOf(error).toLowerCase().slice(0, 64) }]
     } finally {
+      signal?.removeEventListener('abort', stop)
       await opened.session.close()
     }
   }
@@ -269,7 +278,10 @@ export class MigrationApplyKind implements OperationKind {
     }
   }
 
-  async checkBindings(plan: PlanRecord): Promise<readonly ChangedBinding[]> {
+  async checkBindings(
+    plan: PlanRecord,
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly ChangedBinding[]> {
     let content: PlanContent
     try {
       content = this.#content(plan)
@@ -279,7 +291,7 @@ export class MigrationApplyKind implements OperationKind {
     }
     const registry = await this.#registryBindings(content)
     if (registry.changed.length > 0 || registry.target === undefined) return registry.changed
-    const live = await this.#liveBindings(content, registry.target)
+    const live = await this.#liveBindings(content, registry.target, options.signal)
     if (live.length > 0) return live
     return this.#evidenceBindings(content)
   }

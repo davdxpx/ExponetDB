@@ -117,6 +117,23 @@ describe('strict YAML', () => {
     })
   })
 
+  it('refuses block collections nested deeper than 32 too, at once (the review of group E)', () => {
+    const seq = (n: number) => `${'- '.repeat(n)}x\n`
+    expect(parseStrictYaml(seq(33))).toMatchObject({ ok: true })
+    for (const n of [34, 3000, 20_000]) {
+      const started = performance.now()
+      expect(parseStrictYaml(seq(n)), `depth ${n}`).toMatchObject({
+        ok: false,
+        error: { code: 'yaml_depth' },
+      })
+      expect(performance.now() - started, `depth ${n}`).toBeLessThan(1000)
+    }
+    const map = (n: number) =>
+      `${Array.from({ length: n }, (_, i) => `${' '.repeat(i)}k${i}:`).join('\n')} v\n`
+    expect(parseStrictYaml(map(33))).toMatchObject({ ok: true })
+    expect(parseStrictYaml(map(34))).toMatchObject({ ok: false, error: { code: 'yaml_depth' } })
+  })
+
   it('uses the YAML 1.2 core schema (yes and on stay strings)', () => {
     expect(parseStrictYaml('a: yes\nb: on\nc: true\n')).toEqual({
       ok: true,

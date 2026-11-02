@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { EXIT } from '../src/cli/exit.ts'
 import { referenceMarkdown } from '../src/cli/reference.ts'
 import { COMMANDS } from '../src/commands/index.ts'
+import { currentProject, readBundles } from '../src/local/project.ts'
 import { run } from '../src/main.ts'
 import { testIo } from './support.ts'
 
@@ -81,6 +82,14 @@ describe('the bundle loader (VC-086, VC-093)', () => {
     expect(r.code).not.toBe(0)
     expect(r.stdout + r.stderr).toMatch(/too_large|too large|file_too_large|limit/i)
     expect(grown).toBeLessThan(200 * 1024 * 1024)
+  })
+
+  it('keeps a small file as a small buffer, not a view into a limit-sized one', async () => {
+    await bundle(async () => undefined)
+    const loaded = await readBundles(await currentProject(join(dir, 'repo')))
+    const files = loaded.flatMap((b) => [...b.input.files.values()])
+    expect(files.length).toBeGreaterThan(0)
+    for (const bytes of files) expect(bytes.buffer.byteLength).toBeLessThan(1024 * 1024)
   })
 
   it('refuses a link in place of a bundle file by name, and does not follow it', async () => {

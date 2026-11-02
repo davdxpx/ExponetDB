@@ -1,5 +1,5 @@
 import { encodeUtf8 } from '@exponetdb/kernel'
-import { commentDepth, countTokens, statementBodies } from './lexer.ts'
+import { commentDepth, commentRun, countTokens, statementBodies } from './lexer.ts'
 import type { SupportedMajor } from './majors.ts'
 
 /**
@@ -68,7 +68,7 @@ export function parsePlpgsql(text: string): unknown {
     return undefined
   // The PL/pgSQL parser reads the body: its tokens, not the one literal they are outside.
   if (countTokens(text, MAX_PARSE_TOKENS, 'standard', true) > MAX_PARSE_TOKENS) return undefined
-  if (commentDepth(text, MAX_COMMENT_DEPTH) > MAX_COMMENT_DEPTH) return undefined
+  if (scannerLimit(text) !== undefined) return undefined
   try {
     return binding.parsePlPgSQLSync(text)
   } catch {
@@ -116,6 +116,20 @@ export const MAX_PARSE_TOKENS = 200_000
 export const MAX_COMMENT_DEPTH = 32
 
 /**
+ * The most `/*` starts in one run of operator characters (VC-013): the scanner rescans the rest of
+ * the run for each one, so the cost of a file is its comment starts times the length of their
+ * runs; 32 starts bound it to 32 times the bytes (`/*****\/` banners count as one).
+ */
+export const MAX_COMMENT_RUN = 32
+
+/** Which scanner bound a text breaks before it is parsed, if any. */
+export function scannerLimit(text: string): 'comment_depth' | 'comment_run' | undefined {
+  if (commentDepth(text, MAX_COMMENT_DEPTH) > MAX_COMMENT_DEPTH) return 'comment_depth'
+  if (commentRun(text, MAX_COMMENT_RUN) > MAX_COMMENT_RUN) return 'comment_run'
+  return undefined
+}
+
+/**
  * The most statements one migration file may hold (VC-068): classifying a statement costs CPU in
  * the serving process, and 200,000 tokens allow far more statements than any real file has.
  */
@@ -137,7 +151,7 @@ export const MAX_REQUEST_PARSE_TOKENS = 400_000
  */
 export function exceedsParseWork(text: string, depth = 0): boolean {
   if (countTokens(text, MAX_PARSE_TOKENS) > MAX_PARSE_TOKENS) return true
-  if (commentDepth(text, MAX_COMMENT_DEPTH) > MAX_COMMENT_DEPTH) return true
+  if (scannerLimit(text) !== undefined) return true
   if (depth >= 2) return false
   return statementBodies(text).some((body) => exceedsParseWork(body, depth + 1))
 }
@@ -157,7 +171,13 @@ export type ParseFailure =
   /** A bound of the parse was exceeded; `limit` names it. */
   | {
       readonly kind: 'too_large'
-      readonly limit: 'bytes' | 'tokens' | 'comment_depth' | 'statements' | 'request_tokens'
+      readonly limit:
+        | 'bytes'
+        | 'tokens'
+        | 'comment_depth'
+        | 'comment_run'
+        | 'statements'
+        | 'request_tokens'
     }
   /** A syntax error (or the parser's resource limit, e.g. nesting): `position` is a string index. */
   | { readonly kind: 'syntax'; readonly position: number | null; readonly resource: boolean }
@@ -258,8 +278,9 @@ export function parseWith(
   if (countTokens(text, MAX_PARSE_TOKENS) > MAX_PARSE_TOKENS) {
     return { ok: false, failure: { kind: 'too_large', limit: 'tokens' } }
   }
-  if (commentDepth(text, MAX_COMMENT_DEPTH) > MAX_COMMENT_DEPTH) {
-    return { ok: false, failure: { kind: 'too_large', limit: 'comment_depth' } }
+  const scanner = scannerLimit(text)
+  if (scanner !== undefined) {
+    return { ok: false, failure: { kind: 'too_large', limit: scanner } }
   }
   const binding = loaded.get(major)
   if (binding === undefined) {

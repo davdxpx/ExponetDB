@@ -50,15 +50,23 @@ export interface AcceptDependencies {
  * them, the whole pool of `serve`, for the length of a TCP timeout: past this the accept is
  * refused `TARGET_UNAVAILABLE` and the plan stays active.
  */
-export const BINDING_CHECK_DEADLINE_MS = 15_000
+export const BINDING_CHECK_DEADLINE_MS = 30_000
 
-async function withDeadline<T>(work: Promise<T>, ms: number): Promise<T | typeof DEADLINE> {
+async function withDeadline<T>(
+  start: (signal: AbortSignal) => Promise<T>,
+  ms: number,
+): Promise<T | typeof DEADLINE> {
   let timer: ReturnType<typeof setTimeout> | undefined
+  const controller = new AbortController()
+  const work = start(controller.signal)
   try {
     return await Promise.race([
       work,
       new Promise<typeof DEADLINE>((resolve) => {
-        timer = setTimeout(() => resolve(DEADLINE), ms)
+        timer = setTimeout(() => {
+          controller.abort()
+          resolve(DEADLINE)
+        }, ms)
       }),
     ])
   } finally {
@@ -220,7 +228,7 @@ export async function acceptPlan(
     return { status: 'refused', error: new OperationError('operation_kind_unknown') }
   }
   const checked = await withDeadline(
-    kind.checkBindings(plan),
+    (signal) => kind.checkBindings(plan, { signal }),
     deps.bindingDeadlineMs ?? BINDING_CHECK_DEADLINE_MS,
   )
   if (checked === DEADLINE) {

@@ -25,6 +25,39 @@ afterAll(async () => {
   await db?.drop()
 })
 
+describe('the abandoned live binding check (the review of group E)', () => {
+  it('is told to stop when the deadline passes, and a late answer is ignored', async () => {
+    let seen: AbortSignal | undefined
+    let answer: (v: readonly { binding: string }[]) => void = () => undefined
+    const slow = syntheticKind('synthetic.deadline.signal', {
+      bindings: (signal) => {
+        seen = signal
+        return new Promise((resolve) => {
+          answer = resolve
+        })
+      },
+    })
+    const plan = await newPlan(as('exdb_serve'), { kind: slow.kind })
+    const refused = await as('exdb_serve').transaction('test.accept.signal', (tx) =>
+      acceptPlan(
+        tx,
+        { planId: plan.planId, actor: human },
+        {
+          kinds: new KindRegistry([slow]),
+          clock: systemClock,
+          systemActor: serveActor,
+          recheckPolicy: async () => ({ status: 'proceed', requirements: [] }),
+          bindingDeadlineMs: 100,
+        },
+      ),
+    )
+    expect(refused).toMatchObject({ status: 'refused', error: { code: 'TARGET_UNAVAILABLE' } })
+    expect(seen?.aborted).toBe(true)
+    answer([{ binding: 'late' }]) // settles after the accept ended: nothing is waiting for it
+    await new Promise((r) => setTimeout(r, 20))
+  })
+})
+
 describe('the live binding check of an accept (VC-123)', () => {
   it('is refused TARGET_UNAVAILABLE within the deadline, releases the plan and leaves it active', async () => {
     const plan = await newPlan(as('exdb_serve'), { kind: kind.kind })

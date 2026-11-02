@@ -490,10 +490,21 @@ export function lintBundles(inputs: readonly BundleInput[], ctx: LintContext): L
     const downBytes = input.files.get('down.sql')
     if (downBytes !== undefined) {
       const down = normalizeSqlSource(downBytes)
-      const downAnalysis = analyzeMigrationSql(ctx.major, down.ok ? down.value : '', {
-        trustedExtensions: trusted,
-      })
-      if (!downAnalysis.ok) {
+      // down.sql is analysed and kept in the report like up.sql: it shares the request's budget.
+      const downText = down.ok ? down.value : ''
+      const downTokens = countTokens(downText, requestBudget + 1)
+      const downOver = parsedTokens + downTokens > requestBudget
+      if (!downOver) parsedTokens += downTokens
+      const downAnalysis = downOver
+        ? undefined
+        : analyzeMigrationSql(ctx.major, downText, { trustedExtensions: trusted })
+      if (downAnalysis === undefined) {
+        emit(
+          'parse_error',
+          `This request's bundles are over the shared parse budget (request_tokens: ${requestBudget} tokens): lint or plan fewer bundles at a time.`,
+          { file: 'down.sql', line: null, column: null },
+        )
+      } else if (!downAnalysis.ok) {
         emit('parse_error', `down.sql does not parse with the PostgreSQL ${ctx.major} grammar.`, {
           file: 'down.sql',
           line: downAnalysis.line,

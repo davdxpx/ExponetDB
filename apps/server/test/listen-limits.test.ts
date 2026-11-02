@@ -34,8 +34,11 @@ describe('the connection cap of a listener (VC-078)', () => {
     const sockets: Socket[] = []
     try {
       sockets.push(await open(listener.port), await open(listener.port))
-      const third = await open(listener.port).catch(() => undefined)
-      if (third !== undefined) {
+      // Past the cap the server drops the connection: it never connects, or it is closed at once.
+      const third = await open(listener.port).catch(() => 'refused' as const)
+      if (third === 'refused') {
+        expect(third).toBe('refused')
+      } else {
         sockets.push(third)
         expect(await closedWithin(third, 2000)).toBe(true)
       }

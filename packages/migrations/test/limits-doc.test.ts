@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { MIGRATION_BODY_LIMIT_BYTES } from '@exponetdb/contracts'
 import {
   MAX_COMMENT_DEPTH,
+  MAX_COMMENT_RUN,
   MAX_MIGRATION_PARSE_BYTES,
   MAX_MIGRATION_STATEMENTS,
   MAX_PARSE_BYTES,
@@ -42,6 +43,7 @@ describe('the table of bundle limits in migration-bundles.md (VC-095)', () => {
     ],
     ['MAX_PARSE_TOKENS', MAX_PARSE_TOKENS, MAX_PARSE_TOKENS.toLocaleString('en-US')],
     ['MAX_COMMENT_DEPTH', MAX_COMMENT_DEPTH, String(MAX_COMMENT_DEPTH)],
+    ['MAX_COMMENT_RUN', MAX_COMMENT_RUN, String(MAX_COMMENT_RUN)],
     [
       'MAX_MIGRATION_STATEMENTS',
       MAX_MIGRATION_STATEMENTS,

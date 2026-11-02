@@ -79,7 +79,7 @@ export interface SyntheticBehavior {
   readonly execute?: (ctx: ExecutionContext) => Promise<ExecutionOutcome>
   readonly verify?: () => Promise<'passed' | 'failed' | 'partial' | 'error'>
   readonly reconcile?: () => Promise<'applied' | 'not_applied' | 'unknown'>
-  readonly bindings?: () => Promise<readonly { binding: string }[]>
+  readonly bindings?: (signal?: AbortSignal) => Promise<readonly { binding: string }[]>
   readonly verifies?: boolean
 }
 
@@ -105,7 +105,8 @@ export function syntheticKind(
       const named = isJsonObject(content) ? content['supersedes'] : undefined
       return isJsonArray(named) ? named.filter((d) => typeof d === 'string') : []
     },
-    checkBindings: async () => (behavior.bindings === undefined ? [] : behavior.bindings()),
+    checkBindings: async (_plan, options) =>
+      behavior.bindings === undefined ? [] : behavior.bindings(options?.signal),
     async execute(ctx) {
       calls.execute += 1
       return behavior.execute === undefined ? 'applied' : behavior.execute(ctx)

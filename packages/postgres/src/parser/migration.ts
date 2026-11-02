@@ -680,20 +680,48 @@ export const SERVER_FILE_FUNCTIONS: ReadonlySet<string> = new Set([
   'pg_read_binary_file',
   'pg_ls_dir',
   'pg_stat_file',
+  'pg_ls_logdir',
+  'pg_ls_waldir',
+  'pg_ls_tmpdir',
+  'pg_ls_archive_statusdir',
+  'pg_ls_logicalmapdir',
+  'pg_ls_logicalsnapdir',
+  'pg_ls_replslotdir',
+  'pg_file_write',
+  'pg_file_rename',
+  'pg_file_unlink',
+  'pg_logdir_ls',
   'lo_import',
   'lo_export',
 ])
 
-/** Languages whose functions run with the server's rights (`pg_language.lanpltrusted = false`). */
-export const UNTRUSTED_LANGUAGES: ReadonlySet<string> = new Set([
-  'plpythonu',
-  'plpython2u',
-  'plpython3u',
-  'plperlu',
-  'pltclu',
-  'c',
-  'internal',
+/**
+ * The languages a reviewed function may be written in: the trusted ones, an allowlist (a
+ * denylist of `plpython3u`, `plperlu`, … misses `plsh`, `plr`, `plrust` and whatever an
+ * extension adds). Anything else runs with the server's rights or is not known to be sandboxed.
+ */
+export const TRUSTED_LANGUAGES: ReadonlySet<string> = new Set([
+  'sql',
+  'plpgsql',
+  'plperl',
+  'pltcl',
+  'plv8',
 ])
+
+/** A quoted identifier's name: `""` is one quote, and `U&"…"` decodes `\XXXX`, `\+XXXXXX` and `\\`. */
+function quotedIdentName(raw: string): string {
+  if (/^u&"/i.test(raw)) {
+    return raw
+      .slice(3, -1)
+      .replace(/\\(?:\+([0-9a-fA-F]{6})|([0-9a-fA-F]{4})|\\)/g, (m, long, short) => {
+        if (m === '\\\\') return '\\'
+        const code = Number.parseInt(long ?? short, 16)
+        return code > 0x10ffff ? m : String.fromCodePoint(code)
+      })
+      .replaceAll('""', '"')
+  }
+  return raw.slice(1, -1).replaceAll('""', '"')
+}
 
 /**
  * The first server-file function a statement calls, found lexically (identifiers followed by
@@ -705,7 +733,7 @@ function serverFileCall(text: string, depth = 0): string | undefined {
   for (const [i, token] of tokens.entries()) {
     if (token.kind !== 'ident' && token.kind !== 'qident') continue
     const raw = text.slice(token.start, token.end)
-    const name = token.kind === 'qident' ? raw.slice(1, -1) : raw.toLowerCase()
+    const name = token.kind === 'qident' ? quotedIdentName(raw) : raw.toLowerCase()
     const next = tokens[i + 1]
     if (SERVER_FILE_FUNCTIONS.has(name) && next !== undefined && text[next.start] === '(') {
       return name
@@ -1330,7 +1358,7 @@ function createFunction(d: Draft, body: JsonNode): void {
   }
   void setArg
   const language = str(nodeType(opts.get('language'))?.body['sval'])
-  if (language !== null && UNTRUSTED_LANGUAGES.has(language.toLowerCase())) {
+  if (language !== null && !TRUSTED_LANGUAGES.has(language.toLowerCase())) {
     d.forbidden = { reason: 'untrusted_language', detail: language.toLowerCase().slice(0, 64) }
   }
   const as = nodeType(opts.get('as'))
@@ -1992,7 +2020,7 @@ function classify(statement: ParsedStatement, trusted: ReadonlySet<string>): Dra
       d.procedural = true
       const doArgs = defElems(body['args'])
       const doLanguage = str(nodeType(doArgs.get('language'))?.body['sval'])
-      if (doLanguage !== null && UNTRUSTED_LANGUAGES.has(doLanguage.toLowerCase())) {
+      if (doLanguage !== null && !TRUSTED_LANGUAGES.has(doLanguage.toLowerCase())) {
         d.forbidden = {
           reason: 'untrusted_language',
           detail: doLanguage.toLowerCase().slice(0, 64),

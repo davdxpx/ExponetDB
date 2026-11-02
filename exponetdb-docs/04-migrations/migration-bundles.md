@@ -59,14 +59,18 @@ CLI, REST, MCP and the server's own planning:
 | Parse bytes of a migration file | 4 MiB | `too_large` / `bytes` | `MAX_MIGRATION_PARSE_BYTES` |
 | Tokens of one parse (comments and space free) | 200,000 | `too_large` / `tokens` | `MAX_PARSE_TOKENS` |
 | Nesting of block comments | 32 | `too_large` / `comment_depth` | `MAX_COMMENT_DEPTH` |
+| `/*` starts inside one run of operator characters | 32 | `too_large` / `comment_run` | `MAX_COMMENT_RUN` |
 | Statements of one migration file | 10,000 | `too_large` / `statements` | `MAX_MIGRATION_STATEMENTS` |
 | Tokens shared by the bundles of one lint or plan request | 400,000 | `parse_error` finding, `request_tokens` | `MAX_REQUEST_PARSE_TOKENS` |
 | Nesting of YAML flow collections (`[`, `{`) | 32 | `yaml_depth` | `MAX_YAML_FLOW_DEPTH` |
 | Bundles per request / body of a bundle request | 50 / 32 MiB | `too_large` | `MIGRATION_REQUEST_LIMITS`, `MIGRATION_BODY_LIMIT_BYTES` |
 
-PostgreSQL's own scanner is quadratic in the nesting of block comments (546 ms at 10,000
-levels, 9 s at 40,000), and the analysis of each bundle is kept in the lint report (about 650
-bytes per token), which is why the nesting and the request total are bounded and not only
+PostgreSQL's own scanner rescans, for every `/*`, the whole run of operator characters that
+follows it (`xcstart`, `yyless(2)`), so its cost is the comment starts times the length of their
+run: nested `/*/*/*` and, as the review of group E found, closed comments in a row
+(`/**/` repeated) are quadratic, 546 ms at 10,000 starts and 9 s at 40,000. Both the nesting and
+the starts per run are therefore bounded, and the analysis of each bundle is kept in the lint
+report (about 650 bytes per token), which is why the request total is bounded and not only
 one parse. Lint and plan analyse in the serving process; a time-box (a worker thread with a
 deadline) is not built, so these bounds are what protects it. The request's bytes are counted
 as they arrive and an unauthorized caller's body is not read at all (large routes ask for the
