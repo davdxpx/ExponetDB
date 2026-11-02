@@ -225,6 +225,29 @@ describe('archive times of a repository', () => {
     }
   })
 
+  // VC-062 review: after a major upgrade (stanza-upgrade) the stanza keeps the old archive id; WAL
+  // names restart, so the new cluster's segment lies inside the old archive's range too.
+  it("gives the archiver's time only to the current archive id, never to an older major's", async () => {
+    const w = await world()
+    await reconcile(
+      w,
+      listing(w, {
+        archive: [
+          { id: '16-1', min: '000000010000000000000001', max: '000000010000000000000090' },
+          { id: '17-2', min: '000000010000000000000001', max: '000000010000000000000009' },
+        ],
+      }),
+      { lastArchivedWal: '000000010000000000000005', lastArchivedAt: '2026-10-21T01:00:00.000Z' },
+    )
+    const byId = Object.fromEntries(
+      (await listCoverage(serve, w.clusterId)).map((c) => [
+        c.archiveId,
+        c.maxArchivedAt?.toISOString() ?? null,
+      ]),
+    )
+    expect(byId).toEqual({ '16-1': null, '17-2': '2026-10-21T01:00:00.000Z' })
+  })
+
   it('records no time when the archiver is ahead of what this repository lists (a lagging copy)', async () => {
     const w = await world()
     await reconcile(w, listing(w), {

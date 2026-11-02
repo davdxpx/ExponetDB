@@ -351,6 +351,11 @@ export async function reconcileCatalog(tx: Tx, input: ReconcileInput): Promise<R
     await resolve(tx, clusterId, 'backup_catalog_divergence', key('backup_catalog_divergence'))
   }
 
+  // The archiver writes into the current archive id only: the highest database id (pgBackRest's
+  // `<major>-<db id>`, raised by stanza-upgrade). WAL names restart after a major upgrade, so an
+  // older id's range can hold the archiver's segment name too (VC-062 review).
+  const dbIdOf = (id: string) => Number(id.slice(id.indexOf('-') + 1))
+  const current = Math.max(...result.archive.map((a) => dbIdOf(a.id)).filter(Number.isFinite))
   for (const a of result.archive) {
     const timeline = segmentTimeline(a.min) ?? segmentTimeline(a.max)
     if (timeline === null || !/^[0-9]{1,2}-[0-9]{1,5}$/.test(a.id)) continue
@@ -368,6 +373,7 @@ export async function reconcileCatalog(tx: Tx, input: ReconcileInput): Promise<R
     const last = archived?.lastArchivedWal ?? null
     const maxArchivedAt =
       archived !== null &&
+      dbIdOf(a.id) === current &&
       max !== null &&
       min !== null &&
       last !== null &&
