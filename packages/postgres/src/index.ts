@@ -146,6 +146,7 @@ export {
   extensionFacts,
   extensionPlacements,
   installedExtensions,
+  provenNotNullColumns,
   REACHES_PROTECTED_ROLE,
   type RelationSize,
   readEngineGuards,

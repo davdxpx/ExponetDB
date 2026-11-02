@@ -343,6 +343,134 @@ describe('the manifest against the content', () => {
   })
 })
 
+describe('the NOT NULL recipe and stable defaults on a large table (VC-030, VC-028)', () => {
+  const large: CatalogFacts = {
+    source: 'live',
+    observedAt: '2026-10-12T00:00:00Z',
+    relations: new Map([['public.lead', { relkind: 'r', bytes: 2 ** 31, rows: 10_000_000 }]]),
+  }
+  const check =
+    'ALTER TABLE public.lead ADD CONSTRAINT lead_note_nn CHECK (note IS NOT NULL) NOT VALID;\n'
+  const validate = 'ALTER TABLE public.lead VALIDATE CONSTRAINT lead_note_nn;\n'
+  const setNotNull = 'ALTER TABLE public.lead ALTER COLUMN note SET NOT NULL;\n'
+
+  it('lets SET NOT NULL pass after a validated CHECK (IS NOT NULL) of the same bundle', () => {
+    const r = lint([bundle({ up: check + validate + setNotNull })], { catalog: large })
+    expect(finding(r, 'unsafe_not_null')).toBeUndefined()
+  })
+
+  it('still blocks it without the CHECK, with a CHECK that was never validated, or on another column', () => {
+    expect(
+      finding(lint([bundle({ up: setNotNull })], { catalog: large }), 'unsafe_not_null'),
+    ).toMatchObject({ blocking: true })
+    expect(
+      finding(lint([bundle({ up: check + setNotNull })], { catalog: large }), 'unsafe_not_null'),
+    ).toMatchObject({ blocking: true })
+    const other = 'ALTER TABLE public.lead ALTER COLUMN title SET NOT NULL;\n'
+    expect(
+      finding(
+        lint([bundle({ up: check + validate + other })], { catalog: large }),
+        'unsafe_not_null',
+      ),
+    ).toMatchObject({ blocking: true })
+  })
+
+  it('takes a validated CHECK added by an earlier bundle of the same request', () => {
+    const first = bundle({ up: check + validate })
+    const r = lint([first, bundle({ up: setNotNull })], { catalog: large })
+    expect(finding(r, 'unsafe_not_null')).toBeUndefined()
+  })
+
+  it('takes a validated CHECK the target already has', () => {
+    const proven: CatalogFacts = { ...large, provenNotNull: new Set(['public.lead.note']) }
+    expect(
+      finding(lint([bundle({ up: setNotNull })], { catalog: proven }), 'unsafe_not_null'),
+    ).toBeUndefined()
+  })
+
+  it.each(['now()', 'current_timestamp', 'statement_timestamp()', 'transaction_timestamp()'])(
+    'does not call the stable default %s a table rewrite',
+    (expression) => {
+      const r = lint(
+        [
+          bundle({
+            up: `ALTER TABLE public.lead ADD COLUMN seen timestamptz NOT NULL DEFAULT ${expression};\n`,
+          }),
+        ],
+        { catalog: large },
+      )
+      expect(finding(r, 'volatile_default_rewrite')).toBeUndefined()
+      expect(r.bundles[0]?.compatibility.observed).toBe('additive')
+    },
+  )
+
+  it.each(['clock_timestamp()', 'gen_random_uuid()', 'random()', 'timeofday()'])(
+    'still calls the volatile default %s a table rewrite',
+    (expression) => {
+      const column = expression === 'gen_random_uuid()' ? 'uuid' : 'text'
+      const r = lint(
+        [
+          bundle({
+            up: `ALTER TABLE public.lead ADD COLUMN seen ${column} DEFAULT ${expression}::${column};\n`,
+          }),
+        ],
+        { catalog: large },
+      )
+      expect(finding(r, 'volatile_default_rewrite'), expression).toBeDefined()
+    },
+  )
+})
+
+describe('an exclusive lock held across a slow statement (VC-032)', () => {
+  const large: CatalogFacts = {
+    source: 'live',
+    observedAt: '2026-10-12T00:00:00Z',
+    relations: new Map([['public.lead', { relkind: 'r', bytes: 2 ** 31, rows: 10_000_000 }]]),
+  }
+  const addColumn = 'ALTER TABLE public.lead ADD COLUMN flag boolean;\n'
+  const backfill = 'UPDATE public.lead SET flag = false WHERE id > 0;\n'
+  const validate = 'ALTER TABLE public.lead VALIDATE CONSTRAINT lead_c;\n'
+
+  it('flags a backfill after an ACCESS EXCLUSIVE statement of the same transactional bundle', () => {
+    const r = lint([bundle({ up: addColumn + backfill })], { catalog: large })
+    expect(finding(r, 'lock_held_across_slow_statement')).toMatchObject({
+      blocking: true,
+      statementIndex: 1,
+    })
+  })
+
+  it('flags a validation after one, and names the table', () => {
+    const r = lint([bundle({ up: addColumn + validate })], { catalog: large })
+    expect(finding(r, 'lock_held_across_slow_statement')?.message).toContain('public.lead')
+  })
+
+  it('stays clean when the statements are split into bundles, or the table is small', () => {
+    expect(
+      finding(
+        lint([bundle({ up: addColumn }), bundle({ up: backfill })], { catalog: large }),
+        'lock_held_across_slow_statement',
+      ),
+    ).toBeUndefined()
+    const small: CatalogFacts = {
+      ...large,
+      relations: new Map([['public.lead', { relkind: 'r', bytes: 1024, rows: 10 }]]),
+    }
+    expect(
+      finding(
+        lint([bundle({ up: addColumn + backfill })], { catalog: small }),
+        'lock_held_across_slow_statement',
+      ),
+    ).toBeUndefined()
+  })
+
+  it('does not flag a slow statement on another table', () => {
+    const r = lint([bundle({ up: `${addColumn}UPDATE public.other SET x = 1 WHERE id > 0;\n` })], {
+      catalog: large,
+    })
+    expect(finding(r, 'lock_held_across_slow_statement')).toBeUndefined()
+  })
+})
+
 describe('lock risk with and without live catalog facts', () => {
   const catalog = (bytes: number): CatalogFacts => ({
     source: 'live',

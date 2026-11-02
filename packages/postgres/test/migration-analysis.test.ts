@@ -207,8 +207,15 @@ describe('locks, rewrites and compatibility (analysis.md §2, §3)', () => {
       ['CREATE INDEX CONCURRENTLY i ON public.t (a)', 'SHARE UPDATE EXCLUSIVE', 'low', 'additive'],
       ['CREATE UNIQUE INDEX i ON public.t (a)', 'SHARE', 'high', 'potentially_breaking'],
       ['ALTER TABLE public.t ADD COLUMN c int', 'ACCESS EXCLUSIVE', 'high', 'additive'],
+      // now() is STABLE: evaluated once, no rewrite (VC-028); clock_timestamp() is volatile.
       [
         'ALTER TABLE public.t ADD COLUMN c timestamptz DEFAULT now()',
+        'ACCESS EXCLUSIVE',
+        'high',
+        'additive',
+      ],
+      [
+        'ALTER TABLE public.t ADD COLUMN c timestamptz DEFAULT clock_timestamp()',
         'ACCESS EXCLUSIVE',
         'critical',
         'data_rewrite',

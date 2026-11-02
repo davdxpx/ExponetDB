@@ -324,6 +324,18 @@ export interface StatementDetails {
     readonly table: { readonly schema: string | null; readonly name: string }
   }
   readonly notNullWithoutProof?: readonly string[]
+  /** `ADD CONSTRAINT … CHECK (column IS NOT NULL)`: the column it proves not null once validated (VC-030). */
+  readonly checkNotNull?: {
+    readonly table: { readonly schema: string | null; readonly name: string }
+    readonly column: string
+    readonly name: string | null
+    readonly validated: boolean
+  }
+  /** `VALIDATE CONSTRAINT name` on a table (VC-030). */
+  readonly validatesConstraint?: {
+    readonly table: { readonly schema: string | null; readonly name: string }
+    readonly name: string
+  }
   readonly constraintValidated?: boolean
   readonly volatileDefault?: boolean
   readonly typeChange?: boolean
@@ -434,6 +446,16 @@ function serialType(value: unknown): string | null {
   return SERIAL_TYPES[parts[0] as string] ?? null
 }
 
+/** The column of `column IS NOT NULL` (a bare column, nothing else in the expression), or null. */
+function notNullCheckColumn(expr: unknown): string | null {
+  const test = nodeType(expr)
+  if (test?.type !== 'NullTest' || test.body['nulltesttype'] !== 'IS_NOT_NULL') return null
+  const ref = nodeType(test.body['arg'])
+  if (ref?.type !== 'ColumnRef') return null
+  const parts = names(ref.body['fields'])
+  return parts !== undefined && parts.length === 1 ? (parts[0] as string) : null
+}
+
 /** A `TypeName` → its name as written (schema.name, array suffix) and typmods. */
 function typeName(value: unknown): { name: string; typmods: string | null } | null {
   const n = nodeType(value)
@@ -532,11 +554,14 @@ function referencedNames(node: unknown, cap = 512): string[] {
   return [...out]
 }
 
+/**
+ * Built-in functions whose default needs no rewrite (STABLE or IMMUTABLE, evaluated once for the
+ * existing rows, PostgreSQL 11 and later): VC-028 found `DEFAULT now()` called a table rewrite.
+ */
+const STABLE_DEFAULTS = new Set(['now', 'statement_timestamp', 'transaction_timestamp'])
+
 const VOLATILE_DEFAULTS = new Set([
-  'now',
   'clock_timestamp',
-  'statement_timestamp',
-  'transaction_timestamp',
   'random',
   'gen_random_uuid',
   'uuid_generate_v4',
@@ -550,8 +575,10 @@ function volatileExpression(expr: unknown): boolean {
   walk(expr, (type, body) => {
     if (type === 'FuncCall') {
       const n = qualifiedName(body['funcname'])
+      const builtin = n !== null && (n.schema === null || n.schema === 'pg_catalog')
+      const stable = builtin && STABLE_DEFAULTS.has(n.name)
       // Unknown functions may be volatile: a rewrite cannot be ruled out.
-      if (n === null || VOLATILE_DEFAULTS.has(n.name) || n.schema !== 'pg_catalog') {
+      if (!stable && (n === null || VOLATILE_DEFAULTS.has(n.name) || n.schema !== 'pg_catalog')) {
         volatile = true
       }
     }
@@ -1053,6 +1080,15 @@ function alterTable(d: Draft, body: JsonNode): void {
           severity = 'critical'
         }
         d.details.constraintValidated = !notValid && !usingIndex
+        const proved = contype === 'CONSTR_CHECK' ? notNullCheckColumn(k['raw_expr']) : null
+        if (proved !== null) {
+          d.details.checkNotNull = {
+            table: rel,
+            column: proved,
+            name: conname,
+            validated: !notValid,
+          }
+        }
         d.compatibility.push('potentially_breaking')
         break
       }
@@ -1061,6 +1097,7 @@ function alterTable(d: Draft, body: JsonNode): void {
         severity = 'low'
         duration = 'scan'
         if (colname !== null) {
+          d.details.validatesConstraint = { table: rel, name: colname }
           d.expectations.push({
             kind: 'constraint',
             schema: rel.schema,

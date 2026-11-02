@@ -679,6 +679,7 @@ export async function planMigrationApply(
           { relkind: v.relkind, bytes: v.bytes, rows: v.rows },
         ]),
       ),
+      provenNotNull: state.provenNotNull,
     },
   })
   const requirementsUnmet = new Set<'postgres' | 'extensions' | 'execution_role'>()

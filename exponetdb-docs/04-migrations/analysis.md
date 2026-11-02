@@ -164,9 +164,10 @@ blocker.
 | `unknown_dependency` / `dependency_cycle` | error | yes | DAG errors |
 | `parallel_object_overlap` | warn | yes | two unordered migrations touch the same object |
 | `create_index_without_concurrently` | warn | no (yes above size threshold) | blocking index build on a non-trivial table |
-| `unsafe_not_null` | warn | yes above size threshold | `SET NOT NULL` without a validated proving CHECK |
+| `unsafe_not_null` | warn | yes above size threshold | `SET NOT NULL` without a validated proving CHECK; **[DECIDED]** (VC-030) a validated `CHECK (column IS NOT NULL)` counts when the target already has it (read from the catalog at plan time) or an earlier statement of the same request added it valid, or added it `NOT VALID` and validated it |
 | `add_constraint_without_not_valid` | warn | yes above size threshold | validated constraint added to a non-trivial table |
-| `volatile_default_rewrite` | warn | yes above size threshold | |
+| `volatile_default_rewrite` | warn | yes above size threshold | **[DECIDED]** (verification campaign VC-016/017/028, 2026-11-02) `ADD COLUMN` with `serial`, `smallserial`, `bigserial` or an `IDENTITY` column rewrites the table and is classified so; `DEFAULT now()`, `statement_timestamp()`, `transaction_timestamp()` and `current_timestamp` are STABLE and do not (an unknown function still counts as volatile: there is no per-function `provolatile` read yet) |
+| `lock_held_across_slow_statement` | warn | yes above size threshold | **[DECIDED]** (VC-032) an `ACCESS EXCLUSIVE` or `SHARE ROW EXCLUSIVE` lock taken by one statement of a transactional bundle is held until `COMMIT`; a later backfill, validation or index build on the same table lengthens it. Split the bundle |
 | `type_change_rewrite` | warn | yes above size threshold | |
 | `drop_without_expand_contract` | warn | no | `DROP COLUMN` in the same migration that stops using it, or without a prior deprecation migration |
 | `rename_in_place` | warn | no | rename breaks running code; prefer add+copy+drop |
