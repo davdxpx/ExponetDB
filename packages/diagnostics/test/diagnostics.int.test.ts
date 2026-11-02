@@ -1020,7 +1020,7 @@ describe('a repeated sighting of an open finding (VC-041)', () => {
       (
         await h.worker.query(
           'test.vc041.versions',
-          `SELECT dedup_key, xmin::text AS version, occurrences FROM observation.findings
+          `SELECT dedup_key, xmin::text || '/' || xmax::text AS version, occurrences FROM observation.findings
             WHERE target_id = $1 AND dedup_key LIKE 'vc041:%' AND state = 'open'`,
           [target.targetId],
         )

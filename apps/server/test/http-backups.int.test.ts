@@ -698,6 +698,21 @@ describe('backups through REST, the worker and a simulated node', () => {
     expect(policy.operation.state).toBe('succeeded')
     await findingsPass()
     expect(await openFindings(w.clusterId)).toContain('backup_drill_never_run')
+    // Seen again by the next task run, the open finding is not written again (the review of group H).
+    const version = async () =>
+      (
+        await db.asSuperuser((c) =>
+          c.query(
+            `SELECT xmin::text || '/' || xmax::text || '/' || occurrences AS v FROM observation.subject_findings
+              WHERE cluster_id = $1 AND code = 'backup_drill_never_run' AND state = 'open'`,
+            [w.clusterId],
+          ),
+        )
+      ).rows[0]?.v
+    const before = await version()
+    expect(before).toBeDefined()
+    await findingsPass()
+    expect(await version()).toBe(before)
     const catalog = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/backups`)
     const backupId = catalog.body.backups[0].id as string
     // A drill from an unverified backup is denied by restore.source-verified.
