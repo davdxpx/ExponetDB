@@ -411,6 +411,29 @@ function qualifiedName(value: unknown): { schema: string | null; name: string } 
   return { schema: parts.length > 1 ? (parts[parts.length - 2] as string) : null, name }
 }
 
+/**
+ * The integer type a `serial` shorthand stands for (VC-016): PostgreSQL expands the type name
+ * after the raw parse into an integer column, NOT NULL, with a `nextval` default. Only the bare
+ * lower-case name is the shorthand; `"serial"` and a qualified name are types.
+ */
+const SERIAL_TYPES: Readonly<Record<string, string>> = {
+  smallserial: 'pg_catalog.int2',
+  serial2: 'pg_catalog.int2',
+  serial: 'pg_catalog.int4',
+  serial4: 'pg_catalog.int4',
+  bigserial: 'pg_catalog.int8',
+  serial8: 'pg_catalog.int8',
+}
+
+function serialType(value: unknown): string | null {
+  const n = nodeType(value)
+  const body = n?.type === 'TypeName' ? n.body : obj(value)
+  const parts = names(body['names'])
+  if (parts === undefined || parts.length !== 1 || bool(body['setof'])) return null
+  if (list(body['arrayBounds']).length > 0) return null
+  return SERIAL_TYPES[parts[0] as string] ?? null
+}
+
 /** A `TypeName` → its name as written (schema.name, array suffix) and typmods. */
 function typeName(value: unknown): { name: string; typmods: string | null } | null {
   const n = nodeType(value)
@@ -845,10 +868,12 @@ function alterTable(d: Draft, body: JsonNode): void {
       case 'AT_AddColumn': {
         const col = obj(def?.body)
         const name = str(col['colname'])
-        const t = typeName(col['typeName'])
-        let notNull = false
-        let hasDefault = false
-        let volatileDefault = false
+        const serial = serialType(col['typeName'])
+        const t = serial === null ? typeName(col['typeName']) : { name: serial, typmods: null }
+        // A serial column is NOT NULL with a volatile default: the table is rewritten (VC-017).
+        let notNull = serial !== null
+        let hasDefault = serial !== null
+        let volatileDefault = serial !== null
         for (const k of list(col['constraints'])) {
           const ck = nodeType(k)
           const contype = str(ck?.body['contype'])
@@ -859,7 +884,9 @@ function alterTable(d: Draft, body: JsonNode): void {
           }
           if (contype === 'CONSTR_IDENTITY' || contype === 'CONSTR_GENERATED') {
             hasDefault = true
-            if (contype === 'CONSTR_GENERATED') volatileDefault = true
+            // An identity column fills its sequence for every existing row, like a stored
+            // generated column: the table is rewritten (VC-017).
+            volatileDefault = true
           }
         }
         if (bool(cmd.body['missing_ok'])) d.conditionalForm = true
@@ -981,6 +1008,7 @@ function alterTable(d: Draft, body: JsonNode): void {
         const contype = str(k['contype'])
         const conname = str(k['conname'])
         const notValid = bool(k['skip_validation'])
+        let usingIndex = false
         if (conname !== null) {
           d.objects.push({
             kind: 'constraint',
@@ -1014,6 +1042,9 @@ function alterTable(d: Draft, body: JsonNode): void {
           }
           severity = notValid ? 'medium' : 'high'
           duration = notValid ? 'brief' : 'scan'
+        } else if (str(k['indexname']) !== null) {
+          // USING INDEX attaches an index that already exists: no scan, a brief lock (VC-031).
+          usingIndex = true
         } else if (contype === 'CONSTR_PRIMARY' || contype === 'CONSTR_UNIQUE') {
           duration = 'scan'
           severity = 'critical'
@@ -1021,7 +1052,7 @@ function alterTable(d: Draft, body: JsonNode): void {
           duration = 'scan'
           severity = 'critical'
         }
-        d.details.constraintValidated = !notValid
+        d.details.constraintValidated = !notValid && !usingIndex
         d.compatibility.push('potentially_breaking')
         break
       }
@@ -1102,6 +1133,13 @@ function alterTable(d: Draft, body: JsonNode): void {
         d.underivedParts = true
         break
       case 'AT_DetachPartition':
+        // CONCURRENTLY cannot run in a transaction block and takes only a SHARE UPDATE
+        // EXCLUSIVE lock on the parent (VC-033).
+        if (bool(obj(def?.body)['concurrent'])) {
+          d.autocommitOnly = true
+          lock = 'SHARE UPDATE EXCLUSIVE'
+          severity = 'low'
+        }
         d.compatibility.push('destructive')
         d.underivedParts = true
         break
@@ -1416,9 +1454,10 @@ function createTable(d: Draft, body: JsonNode, rel: { schema: string | null; nam
     const el = nodeType(e)
     if (el?.type === 'ColumnDef') {
       const name = str(el.body['colname'])
-      const t = typeName(el.body['typeName'])
-      let notNull = false
-      let hasDefault = false
+      const serial = serialType(el.body['typeName'])
+      const t = serial === null ? typeName(el.body['typeName']) : { name: serial, typmods: null }
+      let notNull = serial !== null
+      let hasDefault = serial !== null
       for (const k of list(el.body['constraints'])) {
         const contype = str(nodeType(k)?.body['contype'])
         if (contype === 'CONSTR_NOTNULL' || contype === 'CONSTR_PRIMARY') notNull = true
