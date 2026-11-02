@@ -181,7 +181,7 @@ export async function appliedElsewhere(
       WHERE t.project_id = $1 AND om.migration_id = $2 AND item ->> 'migrationId' = $2
         AND item ->> 'checksum' IS NOT NULL
         AND (om.apply_outcome IN ('applied', 'partially_applied', 'unknown')
-             OR o.state IN ('running', 'needs_reconciliation', 'needs_attention'))
+             OR o.state IN ('running', 'verifying', 'needs_reconciliation', 'needs_attention'))
       ORDER BY 2, 1`,
     [projectId, migrationId],
   )

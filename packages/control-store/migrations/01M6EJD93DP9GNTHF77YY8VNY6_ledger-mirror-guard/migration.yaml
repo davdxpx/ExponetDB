@@ -3,14 +3,18 @@ id: 01M6EJD93DP9GNTHF77YY8VNY6
 name: ledger-mirror-guard
 description: |
   Verification campaign VC-045 and VC-102. The worker held table-wide UPDATE on
-  migrations.ledger_mirror, so a compromised or buggy worker could rewrite the rows
-  the divergence check compares a target's ledger against; a trigger now lets an
-  update change only reverted_at, reverted_by_op and mirrored_at (the three columns
-  a revert records; the engine's upsert changes nothing else). And
+  migrations.ledger_mirror, so a buggy worker (or one with a stolen session) could
+  rewrite the rows the divergence check compares a target's ledger against; a trigger
+  now lets an update change only reverted_at, reverted_by_op and mirrored_at (the
+  three columns a revert records; the engine's upsert changes nothing else). The
+  worker still holds INSERT on the mirror, the progress rows and the verification
+  mirror: the guard closes in-place rewriting, not a worker that inserts rows (that
+  worker also holds the migrator's secrets). And
   migrations.archive_mirror_rows, the only way a mirror row leaves the table, checked
   its operation at call time only: it now locks the operation row FOR SHARE, requires
   the lease to hold, binds the generation and the ids to the operation's plan (every
-  id of a plan that lists all of them, at most the planned count otherwise) and
+  id of a plan that lists all of them, at most the planned count in total otherwise)
+  and
   refuses a missing reason as an unknown one. Additive: one trigger and the
   replacement of one function with the same signature and grants; the earlier
   verify.sql files stay true.

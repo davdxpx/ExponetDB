@@ -11,3 +11,8 @@ SELECT pg_get_functiondef('migrations.archive_mirror_rows(text, text, integer, t
    AND has_function_privilege('exdb_worker', 'migrations.archive_mirror_rows(text, text, integer, text[], text)', 'EXECUTE')
    AND NOT has_function_privilege('exdb_serve', 'migrations.archive_mirror_rows(text, text, integer, text[], text)', 'EXECUTE')
    AND NOT has_function_privilege('public', 'migrations.archive_mirror_rows(text, text, integer, text[], text)', 'EXECUTE') AS ok;
+
+-- check: archive_mirror_rows sums the rows it archived over the calls of the operation
+SELECT pg_get_functiondef('migrations.archive_mirror_rows(text, text, integer, text[], text)'::regprocedure) LIKE '%ledger_mirror_history h%'
+   AND EXISTS (SELECT FROM pg_catalog.pg_indexes WHERE schemaname = 'migrations'
+                  AND indexname = 'operation_migrations_by_migration') AS ok;

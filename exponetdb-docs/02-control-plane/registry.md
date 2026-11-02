@@ -136,7 +136,10 @@ the adoption is applied, node capabilities stay unavailable for it.
   `system_identifier` is refused `CLUSTER_IDENTITY_MISMATCH` naming both; the plan
   shows `probe: matches` or, for an address that cannot be reached,
   `probe: unreachable`; a pending cluster has no identity to compare and is not
-  probed. The apply does not probe again (the plan expires in minutes).
+  probed. The apply does not probe again (the plan expires in minutes). The probe is one TLS and
+  authentication attempt (bounded by the connect timeout) to an address the planner chose,
+  made inside the planning request: the permission to plan an endpoint is an administrator's,
+  and a refusal other than "unreachable" (TLS, credential) is returned as it is.
 - Credentials: the person runs the role bootstrap SQL (no password; psql
   `\password` sets each one) and submits each password once through the
   write-only endpoint (Web App, re-authentication). `serve` encrypts it at

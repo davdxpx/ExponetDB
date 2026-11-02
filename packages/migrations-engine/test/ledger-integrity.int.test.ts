@@ -2,7 +2,12 @@ import { readLedgerRows } from '@exponetdb/postgres'
 import { serverFor, superuserClient } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { ledgerDivergence } from '../src/divergence.ts'
-import { ledgerDivergenceOf, planLedgerReconcile, planMigrationVerify } from '../src/index.ts'
+import {
+  ledgerDivergenceOf,
+  planLedgerReconcile,
+  planMigrationRollback,
+  planMigrationVerify,
+} from '../src/index.ts'
 import { writeMirror } from '../src/records.ts'
 import { migrationWorld, type Target, type World } from './world.ts'
 
@@ -118,13 +123,13 @@ describe('a ledger row counts as recorded only when the operation listed its mig
   it('a row the operation did list is healed (a crash between the commit and the mirror)', async () => {
     const { t, m3 } = await threeMigrations('li-b')
     // The mirror misses the row of the last apply, as after a crash before the mirror write.
-    await w.h.worker
-      .query(
+    await expect(
+      w.h.worker.query(
         'test.integrity.heal',
         `DELETE FROM migrations.ledger_mirror WHERE target_id = $1 AND migration_id = $2`,
         [t.record.targetId, m3.id],
-      )
-      .catch(() => undefined)
+      ),
+    ).rejects.toBeDefined()
     // The worker cannot delete a mirror row (VC-045 keeps it so): the superuser plays the crash.
     await w.h.db.asSuperuser((c) =>
       c.query('DELETE FROM migrations.ledger_mirror WHERE target_id = $1 AND migration_id = $2', [
@@ -141,6 +146,69 @@ describe('a ledger row counts as recorded only when the operation listed its mig
     } finally {
       await live.session.close()
     }
+  })
+})
+
+describe('a target the store never mirrored is compared with an empty mirror (VC-063)', () => {
+  it('blocks planning and can be reconciled when a ledger row has no operation behind it', async () => {
+    const { t, base } = await threeMigrations('li-n')
+    // A Control Store restored from before the target's first apply: no mirror, no state. The
+    // operations of the target are known (they are in the dump), a hand-written row is not.
+    await w.h.db.asSuperuser(async (c) => {
+      await c.query('DELETE FROM migrations.ledger_mirror WHERE target_id = $1', [
+        t.record.targetId,
+      ])
+      await c.query('DELETE FROM migrations.ledger_state WHERE target_id = $1', [t.record.targetId])
+    })
+    const stranger = w.ulid()
+    await asSuperuser(t, handRow(base.id, stranger, `, operation_id = 'op_${w.ulid()}'`))
+    expect(await refusal(w.plan(t, { migrationIds: [base.id as never] }))).toMatchObject({
+      code: 'LEDGER_DIVERGENCE',
+      details: { unrecorded: [stranger] },
+    })
+    const plan = await w.h.serve.transaction('test.integrity.never', (tx) =>
+      planLedgerReconcile(tx, w.ctx, w.a, t.record.targetId, {
+        decision: 'adopt_target',
+        note: 'The Control Store was restored from before the first apply.',
+      }),
+    )
+    expect(
+      (plan.body['content'] as { divergence: { unrecorded: string[] } }).divergence.unrecorded,
+    ).toEqual([stranger])
+  })
+})
+
+describe('listed is not applied (VC-063)', () => {
+  it('a hand-written row quoting an operation that planned the migration but never reached it is unrecorded', async () => {
+    const t = await w.registerTarget('li-o', 'nonprod')
+    const base = await applied(t, 'items', [], 'CREATE TABLE public.items (id int PRIMARY KEY);\n')
+    const bad = w.ulid()
+    const never = w.ulid()
+    const op = await w.apply(
+      await w.plan(t, {
+        bundles: [
+          w.bundle({
+            id: bad,
+            name: 'bad',
+            up: 'ALTER TABLE public.no_such ADD COLUMN x int;\n',
+            dependsOn: [base.id],
+          }),
+          w.bundle({
+            id: never,
+            name: 'never',
+            up: 'CREATE TABLE public.never_reached (id int);\n',
+            dependsOn: [bad],
+          }),
+        ],
+      }),
+    )
+    expect(op).toMatchObject({ state: 'failed' })
+    // The operation listed `never` in its progress, but applied nothing of it.
+    await asSuperuser(t, handRow(base.id, never, `, operation_id = '${op.operationId}'`))
+    expect(await refusal(w.plan(t, { migrationIds: [base.id as never] }))).toMatchObject({
+      code: 'LEDGER_DIVERGENCE',
+      details: { unrecorded: [never] },
+    })
   })
 })
 
@@ -259,9 +327,100 @@ describe('archive_mirror_rows moves only what its running operation is entitled 
     // The lease ran out: the worker no longer owns the operation.
     await running('-1 minute')
     expect(await call(generation, [m3.id], 'missing')).toBe('EXM01')
-    // What the plan names, under a live lease, is accepted (the row was moved already: 0).
+    // What the plan names was archived by the operation itself (the apply above succeeded); the
+    // plan's count is used up, so a further call is refused even for the id it names (below, the
+    // same with a count the plan does not list by id).
     await running('5 minutes')
-    expect(await call(generation, [m3.id], 'missing')).toBe(0)
+    expect(await call(generation, [m3.id], 'missing')).toBe('EXM01')
+  })
+})
+
+describe('archive_mirror_rows counts over all calls of the operation (VC-102)', () => {
+  it('refuses more rows than the plan counted, however the calls are split', async () => {
+    const { t, base } = await threeMigrations('li-p')
+    // 300 mirror rows the target does not have (a restore): more than a plan lists by id (256).
+    await w.h.db.asSuperuser((c) =>
+      c.query(
+        `INSERT INTO migrations.ledger_mirror
+           (target_id, generation, migration_id, origin, name, checksum, applied_seq, applied_at,
+            operation_id, plan_id, fingerprint_before, fingerprint_after)
+         SELECT target_id, generation, 'ghost' || g, origin, 'ghost', checksum, 1000 + g, applied_at,
+                operation_id, plan_id, fingerprint_before, fingerprint_after
+           FROM migrations.ledger_mirror, generate_series(1, 300) g
+          WHERE target_id = $1 AND migration_id = $2`,
+        [t.record.targetId, base.id],
+      ),
+    )
+    const plan = await w.h.serve.transaction('test.integrity.cumulative.plan', (tx) =>
+      planLedgerReconcile(tx, w.ctx, w.a, t.record.targetId, {
+        decision: 'adopt_target',
+        note: 'Three hundred rows of the mirror are not in the restored target.',
+      }),
+    )
+    expect(
+      (plan.body['content'] as { counts: { missing: number } }).counts.missing,
+    ).toBeGreaterThanOrEqual(300)
+    const op = await w.apply(plan)
+    expect(op).toMatchObject({ state: 'succeeded' })
+    // The operation archived what the plan counted. It is running again, as it would be mid-way.
+    await w.h.db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE operations.operations SET state = 'running', lease_owner = 'prc_01ARZ3NDEKTSV4RRFFQ69G5FAV',
+                lease_expires_at = clock_timestamp() + interval '5 minutes' WHERE operation_id = $1`,
+        [op.operationId],
+      )
+      await c.query('COMMIT')
+    })
+    const outcome = await w.h.worker
+      .transaction('test.integrity.cumulative.call', (tx) =>
+        tx.query(
+          'test.integrity.cumulative.raw',
+          'SELECT migrations.archive_mirror_rows($1, $2, $3, $4::text[], $5) AS moved',
+          [op.operationId, t.record.targetId, t.record.generation, [base.id], 'missing'],
+        ),
+      )
+      .then((r) => r.rows[0]?.int('moved'))
+      .catch((e: unknown) => sqlstateOf(e))
+    expect(outcome).toBe('EXM01')
+  })
+})
+
+describe('a rollback is not planned on a copy of the database (VC-071)', () => {
+  it('refuses a plan when the database behind the name is not the one registered', async () => {
+    const t = await w.registerTarget('li-q', 'nonprod')
+    const id = w.ulid()
+    expect(
+      await w.apply(
+        await w.plan(t, {
+          bundles: [
+            w.bundle({
+              id,
+              name: 'rolled',
+              up: 'CREATE TABLE public.rolled (id int);\n',
+              down: 'DROP TABLE public.rolled;\n',
+            }),
+          ],
+        }),
+      ),
+    ).toMatchObject({ state: 'succeeded' })
+    // The name now reaches another database object (a dump restored under the same name).
+    await w.h.db.asSuperuser((c) =>
+      c.query(
+        `UPDATE registry.databases SET observed_oid = observed_oid + 7 WHERE database_id = $1`,
+        [t.record.placement?.databaseId],
+      ),
+    )
+    const error = await refusal(
+      w.h.serve.transaction('test.integrity.rollback', (tx) =>
+        planMigrationRollback(tx, w.ctx, w.a, t.record.targetId, id),
+      ),
+    )
+    expect(error).toMatchObject({
+      code: 'TARGET_IDENTITY_MISMATCH',
+      details: { reason: 'database_oid' },
+    })
   })
 })
 
@@ -393,6 +552,49 @@ describe('evidence is produced by this installation, never written by hand (VC-0
     )
   })
 
+  it('does not take a failed verification that was edited to passed on the evidence database', async () => {
+    const staging = await w.registerTarget('ev-f-stg', 'nonprod')
+    const production = await w.registerTarget('ev-f-prd', 'prod', 'ev-f-stg')
+    const id = w.ulid()
+    const failed = await w.apply(
+      await w.plan(staging, {
+        bundles: [
+          w.bundle({
+            id,
+            name: 'unverified',
+            up: 'CREATE TABLE public.unverified (id int);\n',
+            verify: '-- check: always fails\nSELECT false AS ok;\n',
+          }),
+        ],
+      }),
+    )
+    expect(failed).toMatchObject({ state: 'verification_failed' })
+    const before = await w.plan(production, { migrationIds: [id as never] })
+    expect(evidenceOf(before)).not.toBe('present')
+    // The mirror holds the verification as it was written: failed. The edit changes the live row only.
+    await asSuperuser(staging, [
+      {
+        sql: `UPDATE exponetdb.migration_verifications SET status = 'passed' WHERE migration_id = $1`,
+        params: [id],
+      },
+    ])
+    const after = await w.plan(production, { migrationIds: [id as never] })
+    expect(evidenceOf(after)).not.toBe('present')
+    expect(after.decision).not.toBe('allow')
+  })
+
+  it('does not take a ledger row whose fingerprint or revert state was edited after it was mirrored', async () => {
+    const p = await pair('ev-g')
+    await asSuperuser(p.staging, [
+      {
+        sql: `UPDATE exponetdb.schema_migrations SET fingerprint_before = NULL WHERE migration_id = $1`,
+        params: [p.genuine.id],
+      },
+    ])
+    const plan = await w.plan(p.production, { migrationIds: [p.genuine.id as never] })
+    expect(evidenceOf(plan)).not.toBe('present')
+  })
+
   it('still binds the evidence of a genuine apply and verification', async () => {
     const p = await pair('ev-d')
     const plan = await w.plan(p.production, { migrationIds: [p.genuine.id as never] })
@@ -427,5 +629,27 @@ describe('the same id with other bytes is refused at every apply, not only at pl
     } finally {
       await live.session.close()
     }
+  })
+
+  it('refuses them through the operation progress too, when the mirror lacks the applied row', async () => {
+    const t1 = await w.registerTarget('im-c', 'nonprod')
+    const t2 = await w.registerTarget('im-d', 'nonprod')
+    const id = w.ulid()
+    const variant = (up: string) => w.bundle({ id, name: 'shared2', up })
+    const planA = await w.plan(t1, {
+      bundles: [variant('CREATE TABLE public.shared2 (id int);\n')],
+    })
+    const planB = await w.plan(t2, {
+      bundles: [variant('CREATE TABLE public.shared2 (id int, extra text);\n')],
+    })
+    expect(await w.apply(planA)).toMatchObject({ state: 'succeeded' })
+    // The window between the target commit and the mirror write: only the progress says it was applied.
+    await w.h.db.asSuperuser((c) =>
+      c.query('DELETE FROM migrations.ledger_mirror WHERE target_id = $1 AND migration_id = $2', [
+        t1.record.targetId,
+        id,
+      ]),
+    )
+    expect(await w.apply(planB)).toMatchObject({ state: 'failed', applyOutcome: 'not_applied' })
   })
 })

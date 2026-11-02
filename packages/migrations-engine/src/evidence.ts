@@ -150,7 +150,7 @@ export async function evidenceTrust(
   migrations: readonly { readonly migrationId: string }[],
 ): Promise<{
   rowTrusted(row: LedgerRecord): boolean
-  verificationTrusted(verificationId: string): boolean
+  verificationTrusted(v: VerificationRecord): boolean
 }> {
   const concerned = read.ledger.filter((r) =>
     migrations.some((m) => m.migrationId === r.migrationId),
@@ -158,9 +158,30 @@ export async function evidenceTrust(
   const recorded = await recordedRows(q, evidenceTargetId, concerned)
   const divergent =
     (await compareWithMirror(q, evidenceTargetId, read.generation, read.ledger)) !== null
+  // The mirror's own copy of what evidence reads (the checksum is compared by the divergence
+  // check): a live column edited by hand disagrees with it and the row is no evidence (VC-079).
+  const { rows: mirroredRows } = await q.query(
+    'migrations.evidence.mirrored_rows',
+    `SELECT migration_id, verify_digest, fingerprint_before, reverted_at IS NOT NULL AS reverted
+       FROM migrations.ledger_mirror
+      WHERE target_id = $1 AND generation = $2
+        AND migration_id = ANY (ARRAY(SELECT jsonb_array_elements_text($3::jsonb)))`,
+    [evidenceTargetId, read.generation, JSON.stringify(concerned.map((r) => r.migrationId))],
+  )
+  const mirrorOf = new Map(
+    mirroredRows.map((r) => [
+      r.text('migration_id'),
+      {
+        verifyDigest: r.textOrNull('verify_digest'),
+        fingerprintBefore: r.textOrNull('fingerprint_before'),
+        reverted: r.bool('reverted'),
+      },
+    ]),
+  )
+  // The mirror's verifications are immutable: the live row must be the one mirrored under its id.
   const { rows } = await q.query(
     'migrations.evidence.mirrored_verifications',
-    `SELECT verification_id FROM migrations.verification_mirror
+    `SELECT verification_id, migration_id, verify_digest, status FROM migrations.verification_mirror
       WHERE target_id = $1 AND generation = $2
         AND verification_id = ANY (ARRAY(SELECT jsonb_array_elements_text($3::jsonb)))`,
     [
@@ -169,10 +190,37 @@ export async function evidenceTrust(
       JSON.stringify(read.verifications.map((v) => v.verificationId)),
     ],
   )
-  const mirrored = new Set(rows.map((r) => r.text('verification_id')))
+  const mirroredVerifications = new Map(
+    rows.map((r) => [
+      r.text('verification_id'),
+      {
+        migrationId: r.text('migration_id'),
+        verifyDigest: r.textOrNull('verify_digest'),
+        status: r.text('status'),
+      },
+    ]),
+  )
   return {
-    rowTrusted: (row) => !divergent && recorded.has(recordKey(row.operationId, row.migrationId)),
-    verificationTrusted: (id) => mirrored.has(id),
+    rowTrusted: (row) => {
+      const mirror = mirrorOf.get(row.migrationId)
+      return (
+        !divergent &&
+        recorded.has(recordKey(row.operationId, row.migrationId)) &&
+        mirror !== undefined &&
+        mirror.verifyDigest === row.verifyDigest &&
+        mirror.fingerprintBefore === row.fingerprintBefore &&
+        mirror.reverted === (row.revertedAt !== null)
+      )
+    },
+    verificationTrusted: (v) => {
+      const mirror = mirroredVerifications.get(v.verificationId)
+      return (
+        mirror !== undefined &&
+        mirror.migrationId === v.migrationId &&
+        mirror.verifyDigest === v.verifyDigest &&
+        mirror.status === v.status
+      )
+    },
   }
 }
 
@@ -240,7 +288,7 @@ export async function collectEvidence(
         : latest(read.verifications, m.migrationId)
     if (row !== undefined && row.revertedAt === null && trust.rowTrusted(row)) {
       status =
-        v === undefined || v.status !== 'passed' || !trust.verificationTrusted(v.verificationId)
+        v === undefined || v.status !== 'passed' || !trust.verificationTrusted(v)
           ? 'unverified'
           : v.verifyDigest === m.verifyDigest
             ? 'present'

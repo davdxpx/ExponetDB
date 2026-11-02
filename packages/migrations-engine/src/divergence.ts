@@ -130,9 +130,12 @@ export async function recordedRows(
        JOIN operations.operations o ON o.operation_id = r.operation_id
        JOIN operations.plans p ON p.plan_id = o.plan_id
       WHERE p.target_id = $2
-        AND (o.kind IN ('migration.baseline', 'migration.import.replay')
+        AND ((o.kind = 'migration.baseline' AND o.apply_outcome IN ('applied', 'partially_applied', 'unknown'))
              OR EXISTS (SELECT FROM migrations.operation_migrations m
-                         WHERE m.operation_id = o.operation_id AND m.migration_id = r.migration_id))`,
+                         WHERE m.operation_id = o.operation_id AND m.migration_id = r.migration_id
+                           AND (m.apply_outcome IN ('applied', 'partially_applied', 'unknown')
+                                OR o.state IN ('running', 'verifying', 'needs_reconciliation',
+                                               'needs_attention'))))`,
     [
       JSON.stringify(
         rows.map((r) => ({ operation_id: r.operationId, migration_id: r.migrationId })),
@@ -145,8 +148,8 @@ export async function recordedRows(
 
 /**
  * The one comparison for status, plan, reconcile and the mirror write (VC-063): `null` when the
- * ledger agrees or the target was never mirrored. At another generation than the mirror's every
- * live row is unadopted.
+ * ledger agrees. A target never mirrored is compared with an empty mirror. At another generation
+ * than the mirror's every live row is unadopted.
  */
 export async function compareWithMirror(
   q: Queryable,
@@ -156,7 +159,13 @@ export async function compareWithMirror(
   shown = SHOWN,
 ): Promise<{ readonly divergence: LedgerDivergence; readonly mirrorRows: number } | null> {
   const state = await readMirrorState(q, targetId, generation)
-  if (state.kind === 'never') return null
+  if (state.kind === 'never') {
+    // Nothing mirrored is an empty mirror (the mirror write starts from one): a ledger with rows no
+    // operation of the target wrote is a divergence, as after a restored Control Store (VC-063).
+    const recorded = await recordedRows(q, targetId, live)
+    const divergence = compareLedger([], live, recorded, shown)
+    return divergence === null ? null : { divergence, mirrorRows: 0 }
+  }
   if (state.kind === 'other_generation') {
     return live.length === 0
       ? null

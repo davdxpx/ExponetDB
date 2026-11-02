@@ -17,9 +17,9 @@ CREATE TRIGGER ledger_mirror_update_guard BEFORE UPDATE ON migrations.ledger_mir
   FOR EACH ROW EXECUTE FUNCTION migrations.ledger_mirror_guard();
 
 -- VC-102: the rows the named, still running, leased ledger.reconcile operation of this target is
--- entitled to move. The plan lists at most 16 ids per class and the counts of all: a plan that lists
--- them all binds every id, a larger one the number (the operation recomputes the divergence under
--- the digest the plan carries).
+-- entitled to move. The plan lists at most 256 ids per class and the counts of all: a plan that lists
+-- them all binds every id, a larger one the number, summed over all calls of the operation (the
+-- operation recomputes the divergence under the digest the plan carries).
 CREATE OR REPLACE FUNCTION migrations.archive_mirror_rows(
   p_operation text, p_target text, p_generation integer, p_ids text[], p_reason text
 ) RETURNS integer
@@ -50,6 +50,8 @@ BEGIN
   shown := body -> 'content' -> 'divergence' -> (CASE p_reason WHEN 'missing' THEN 'missing' ELSE 'checksumDiffers' END);
   total := (body -> 'content' -> 'counts' ->> (CASE p_reason WHEN 'missing' THEN 'missing' ELSE 'checksumDiffers' END))::integer;
   IF shown IS NULL OR total IS NULL OR cardinality(p_ids) > total
+     OR (SELECT count(*) FROM migrations.ledger_mirror_history h
+          WHERE h.operation_id = p_operation AND h.reason = p_reason) + cardinality(p_ids) > total
      OR (jsonb_array_length(shown) = total
          AND EXISTS (SELECT FROM unnest(p_ids) AS i WHERE NOT shown ? i)) THEN
     RAISE EXCEPTION USING ERRCODE = 'EXM01', MESSAGE = 'the ids are not the ones the plan names';
@@ -67,3 +69,7 @@ BEGIN
   RETURN moved;
 END
 $fn$;
+
+-- appliedElsewhere and the recorded-rows check look an operation's progress up by migration id.
+CREATE INDEX IF NOT EXISTS operation_migrations_by_migration
+  ON migrations.operation_migrations (migration_id);

@@ -64,7 +64,9 @@ target `S`:
    operation of `S` listed the migration (its progress in the Control Store), `S`'s
    ledger agrees with its mirror in the Control Store (one divergence on `S` is
    no evidence at all: the mirror exists to catch tampering), and the passing
-   verification is one the Control Store mirrored. Two hand-written rows quoting
+   verification is one the Control Store mirrored, unchanged (the live row equals the mirror's copy
+   in migration, verify digest and status; the ledger row equals it in verify digest,
+   `fingerprint_before` and revert state). Two hand-written rows quoting
    a genuine or unrelated operation id are therefore `missing` or `unverified`,
    and the plan is denied. The apply re-checks the same rules, and the very
    verification the plan bound.

@@ -297,7 +297,7 @@ describe('the human renderer names the data of a refusal (TC-022)', () => {
       planId: 'pln_01M5X840BP8JXGEQGS0PHPTB58',
       changedBindings: [
         { binding: 'content', actual: 'invalid' },
-        { binding: 'fingerprint', hint: 'x\u001b[31mred' },
+        { binding: 'fingerprint\u001b[31mred', actual: 'x\u001b[0m' },
       ],
     })
     expect(stale).toContain('  changed: content (actual: invalid)')

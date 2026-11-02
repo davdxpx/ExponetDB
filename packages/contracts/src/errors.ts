@@ -1018,7 +1018,7 @@ export const ERRORS = {
     retryable: false,
     title: 'Target identity mismatch',
     message:
-      'The identity marker in the database does not match the expected target; the target was suspended.',
+      'The database does not match the expected target (its identity marker, or its database object); a mismatched marker suspends the target.',
     // VC-071: a copy of the database carries the same marker but is another database object.
     details: z
       .strictObject({

@@ -258,7 +258,7 @@ export class MigrationApplyKind implements OperationKind {
           // A newer verification of the staging run is fine when it passed; it must be one this
           // installation mirrored, as the bound one had to be (VC-079).
           !trust.rowTrusted(row) ||
-          !trust.verificationTrusted(latest.verificationId)
+          !trust.verificationTrusted(latest)
         ) {
           return [{ binding: 'evidence', actual: 'no_longer_present' }]
         }
@@ -1098,7 +1098,6 @@ export function stateChanges(
   return changed
 }
 
-/** The operation's verification outcome from its per-migration rows. */
 /** How many migrations from the start are applied and verified without a gap (VC-069). */
 export function verifiedPrefix(progress: readonly Progress[]): number {
   const byPosition = [...progress].sort((a, b) => a.position - b.position)
@@ -1111,6 +1110,7 @@ export function verifiedPrefix(progress: readonly Progress[]): number {
   return n
 }
 
+/** The operation's verification outcome from its per-migration rows. */
 export function aggregate(
   progress: readonly Progress[],
   planned: number,
