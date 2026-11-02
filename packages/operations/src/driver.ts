@@ -320,6 +320,58 @@ async function drive(
     )
   }
 
+  if (operation.state === 'needs_attention' && claim.next === 'reconcile') {
+    // VC-058: an outcome that was unknown is reconciled again; nothing runs again.
+    await step(store, id, 'reconcile', 'step_started')
+    const outcome = await withLease(store, claim, options, (signal) =>
+      kind.reconcile(context(plan, id, signal, options.workerId)).catch((error: unknown) => {
+        report(options, operation, 'reconcile', error)
+        return 'unknown' as const
+      }),
+    )
+    await step(store, id, 'reconcile', 'step_finished', outcome)
+    if (outcome === 'unknown') {
+      await store.query(
+        'operations.lease.drop_attention',
+        `UPDATE operations.operations SET lease_owner = NULL, lease_expires_at = NULL
+          WHERE operation_id = $1 AND lease_owner = $2 AND state = 'needs_attention'`,
+        [id, options.workerId],
+      )
+      return {
+        status: 'done',
+        operation: (await readOperation(store, id)) ?? operation,
+        takenOver: claim.takenOver,
+      }
+    }
+    operation = await store.transaction('operations.driver.reconciled_again', (tx) =>
+      transitionOperation(
+        tx,
+        outcome === 'applied'
+          ? {
+              operationId: id,
+              from: 'needs_attention',
+              to: 'verifying',
+              applyOutcome: 'applied',
+              verificationOutcome: 'pending',
+              lease,
+              actor: WORKER_ACTOR,
+              detail: { reason: 'reconciled_again' },
+            }
+          : {
+              operationId: id,
+              from: 'needs_attention',
+              to: 'failed',
+              applyOutcome: 'not_applied',
+              verificationOutcome: 'not_applicable',
+              lease,
+              actor: WORKER_ACTOR,
+              detail: { reason: 'reconciled_again' },
+            },
+        clock,
+      ),
+    )
+  }
+
   if (operation.state === 'needs_reconciliation') {
     await step(store, id, 'reconcile', 'step_started')
     const outcome = await withLease(store, claim, options, (signal) =>

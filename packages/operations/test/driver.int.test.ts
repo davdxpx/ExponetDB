@@ -674,3 +674,67 @@ describe('the approval window', () => {
     expect(rows[0]?.text('code')).toBe('APPROVAL_EXPIRED')
   })
 })
+
+// VC-058, VC-007: an unknown outcome parked in needs_attention after one reconcile and was never
+// looked at again, even once the target answered; the change was committed (or not) all along.
+describe('an unknown outcome is reconciled again later', () => {
+  const age = (id: string) =>
+    db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE operations.operations SET updated_at = clock_timestamp() - interval '6 minutes'
+          WHERE operation_id = $1`,
+        [id],
+      )
+      await c.query('COMMIT')
+    })
+  const parked = async (name: string, later: 'applied' | 'not_applied' | 'unknown') => {
+    let answer: 'applied' | 'not_applied' | 'unknown' = 'unknown'
+    const kind = syntheticKind(name, {
+      execute: async () => 'unknown',
+      reconcile: async () => answer,
+    })
+    const id = await queue(kind, [`target:${target()}:schema`])
+    await run(kind)
+    expect(await readOperation(as('exdb_worker'), id)).toMatchObject({
+      state: 'needs_attention',
+      applyOutcome: 'unknown',
+    })
+    // Not again at once: the next attempt waits five minutes.
+    expect(await run(kind)).toEqual({ status: 'idle' })
+    answer = later
+    await age(id)
+    return { kind, id }
+  }
+
+  it('verifies and succeeds once the ledger shows the change applied, running nothing again', async () => {
+    const { kind, id } = await parked('synthetic.lateapplied', 'applied')
+    expect(await run(kind)).toMatchObject({
+      status: 'done',
+      operation: { operationId: id, state: 'succeeded', applyOutcome: 'applied' },
+    })
+    expect(kind.calls).toEqual({ execute: 1, verify: 1, reconcile: 2 })
+    expect(await heldLocks(as('exdb_worker'), id)).toEqual([])
+  })
+
+  it('fails as not applied once the target shows nothing was applied', async () => {
+    const { kind, id } = await parked('synthetic.latenot', 'not_applied')
+    expect(await run(kind)).toMatchObject({
+      status: 'done',
+      operation: { operationId: id, state: 'failed', applyOutcome: 'not_applied' },
+    })
+    expect(await heldLocks(as('exdb_worker'), id)).toEqual([])
+  })
+
+  it('keeps needing attention, unleased, while the outcome stays unknown', async () => {
+    const { kind, id } = await parked('synthetic.lateunknown', 'unknown')
+    await run(kind)
+    expect(await readOperation(as('exdb_worker'), id)).toMatchObject({
+      state: 'needs_attention',
+      applyOutcome: 'unknown',
+      leaseOwner: null,
+    })
+    expect(kind.calls.execute).toBe(1)
+  })
+})

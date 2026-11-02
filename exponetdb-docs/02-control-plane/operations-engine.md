@@ -423,6 +423,22 @@ starves younger operations of other domains, and a waiter writes no event
 until its blocker lets the domain go (before: two event rows per waiter
 every poll).
 
+**[DECIDED]** (verification campaign fix VC-064, 2026-11-02) A worker
+claims nothing while its readiness check `schema` does not pass (a Control
+Store migrated by a newer build, `schema_newer`; or one not migrated yet):
+it logs `operations.claim_paused` once with the reason and
+`operations.claim_resumed` when the schema is its own again. An operation
+it already runs finishes.
+
+**[DECIDED]** (verification campaign fix VC-058, VC-007, 2026-11-02) An
+operation in `needs_attention` whose apply outcome is `unknown` is claimed
+again five minutes after it last changed, and its kind's read-only
+`reconcile` runs again (never the change): `applied` moves it to
+`verifying` and on, `not_applied` ends it `failed` / `not_applied`, and
+`unknown` leaves it as it was, unleased, for the next attempt. For a
+migration the target's ledger decides, so a lost COMMIT reply followed by a
+target restart reconciles once the target answers.
+
 If a worker dies, its lease expires. Another worker takes the operation over and
 **does not resume blindly**: it calls the kind's `reconcile` with the recorded
 steps. For a migration, reconciliation reads the target ledger (was the ledger

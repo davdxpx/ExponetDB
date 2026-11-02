@@ -19,6 +19,12 @@ import {
  * transition (`operation_lease_lost`).
  */
 export const LEASE_MS = 30_000
+/**
+ * How long an operation in `needs_attention` with an unknown outcome waits
+ * before its reconcile runs again (VC-058): the target may have answered by
+ * then, and the ledger tells whether the change is there.
+ */
+export const RECONCILE_RETRY_SECONDS = 300
 export const LEASE_RENEW_MS = 10_000
 
 /** `closed`: a person's force release ended the operation in the claim; nothing is left to drive. */
@@ -62,7 +68,10 @@ export async function claimNextOperation(
                -- A person released it (VC-006): it is closed, whatever its kind.
                OR (state = 'needs_attention'
                    AND EXISTS (SELECT 1 FROM recovery.force_releases f
-                                WHERE f.operation_id = operations.operation_id AND f.started_at IS NULL)))
+                                WHERE f.operation_id = operations.operation_id AND f.started_at IS NULL))
+               -- An outcome nobody could determine is reconciled again now and then (VC-058).
+               OR (state = 'needs_attention' AND apply_outcome = 'unknown'
+                   AND updated_at < clock_timestamp() - make_interval(secs => $2::double precision)))
           AND (lease_expires_at IS NULL OR lease_expires_at < clock_timestamp())
           AND kind = ANY($1::text[])
           -- VC-008: a queued operation whose last attempt waited for a domain is not claimed again
@@ -80,7 +89,7 @@ export async function claimNextOperation(
         ORDER BY created_at, operation_id
         LIMIT 1
           FOR UPDATE SKIP LOCKED`,
-      [options.kinds],
+      [options.kinds, RECONCILE_RETRY_SECONDS],
     )
     const row = rows[0]
     if (row === undefined) {
@@ -136,6 +145,10 @@ export async function claimNextOperation(
       if (released !== undefined) {
         return { operation: released, next: 'closed', takenOver, retried: false }
       }
+    }
+    if (operation.state === 'needs_attention' && operation.applyOutcome === 'unknown') {
+      // Its reconcile runs again (read-only); the change never does.
+      return { operation, next: 'reconcile', takenOver, retried: false }
     }
     const retried = operation.state === 'needs_attention'
     if (retried) {
