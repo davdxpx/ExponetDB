@@ -281,6 +281,11 @@ export const WORKER_TASKS: readonly TaskDefinition[] = [
     run: (ctx) => ctx.observation?.checkDrift() ?? Promise.resolve('observation_off'),
   },
   {
+    name: 'ledger.watch',
+    intervalSeconds: 10 * MINUTE,
+    run: (ctx) => ctx.observation?.watchLedgers() ?? Promise.resolve('observation_off'),
+  },
+  {
     name: 'health.partitions',
     intervalSeconds: 6 * HOUR,
     run: (ctx) => ctx.observation?.partitions() ?? Promise.resolve('observation_off'),

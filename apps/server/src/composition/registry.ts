@@ -11,6 +11,7 @@ import {
   maintainStatementPartitions,
   RegistrationSnapshotStore,
   recordDriftFailure,
+  recordLedgerWatch,
   rollupStatements,
   runDriftCheck,
   sampleStatements,
@@ -19,6 +20,7 @@ import {
   targetsToSample,
 } from '@exponetdb/diagnostics'
 import type { Clock } from '@exponetdb/kernel'
+import { divergenceDetails, ledgerDivergenceOf } from '@exponetdb/migrations-engine'
 import { rotationOwner } from '@exponetdb/nodes'
 import { describeError, type Logger } from '@exponetdb/observability'
 import { KindRegistry, type OperationKind, WORKER_ACTOR } from '@exponetdb/operations'
@@ -192,6 +194,8 @@ export interface ObservationTasks {
   sampleHealth(): Promise<string | undefined>
   /** Scheduled drift checks of the targets that are due. */
   checkDrift(): Promise<string | undefined>
+  /** VC-022: every active or suspended target's ledger against its mirror; a finding while they differ. */
+  watchLedgers(): Promise<string | undefined>
   /** Health sample partitions ahead and expired ones dropped. */
   partitions(): Promise<string | undefined>
   /** Wave 9 Part B: one statement sample of every active or suspended target (performance.md §2). */
@@ -297,6 +301,41 @@ export function observationTasks(
         })
       }
       return due.length === 0 ? 'none_due' : undefined
+    },
+    async watchLedgers() {
+      const ids = await targetsToSample(rt.store)
+      let failed = 0
+      for (const id of ids) {
+        const target = await findTarget(rt.store, id)
+        if (target === undefined || target.placement === null) continue
+        try {
+          const divergence = await ledgerDivergenceOf(
+            { store: rt.store, connector: probes },
+            target,
+          )
+          await recordLedgerWatch(
+            rt.store,
+            rt.clock,
+            target.targetId,
+            divergence === null
+              ? null
+              : {
+                  counts: {
+                    missing: divergence.missing.length,
+                    checksumDiffers: divergence.checksumDiffers.length,
+                    unrecorded: divergence.unrecorded.length,
+                  },
+                  details: divergenceDetails(divergence),
+                },
+          )
+        } catch (error) {
+          // A target that cannot be read is the health sample's to say; the watch never reads it as agreeing.
+          failed++
+          logger.warn('ledger.watch_failed', { targetId: id, ...describeError(error) })
+        }
+      }
+      if (failed > 0) throw new TaskFailure('ledger_watch_incomplete')
+      return ids.length === 0 ? 'no_targets' : undefined
     },
     async partitions() {
       await maintainSamplePartitions(rt.store, options.retentionDays ?? 14)

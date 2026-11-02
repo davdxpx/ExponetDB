@@ -177,6 +177,22 @@ export async function resolveFinding(
   return rowCount === 1
 }
 
+/** Resolves the open finding with this key (a condition that cleared); the ids it resolved. */
+export async function resolveFindingByKey(
+  tx: Tx,
+  targetId: string,
+  dedupKey: string,
+  resolution: Resolution,
+): Promise<readonly string[]> {
+  const { rows } = await tx.query(
+    'observation.findings.resolve_by_key',
+    `UPDATE observation.findings SET state = 'resolved', resolution = $3
+      WHERE target_id = $1 AND dedup_key = $2 AND state = 'open' RETURNING finding_id`,
+    [targetId, dedupKey, resolution],
+  )
+  return rows.map((r) => r.text('finding_id'))
+}
+
 export async function openFindings(
   q: Queryable,
   targetId: string,
