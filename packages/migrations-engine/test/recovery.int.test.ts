@@ -338,47 +338,57 @@ describe('the baseline after a rollback (TC-006)', () => {
   })
 })
 
-describe('a non-transactional bundle killed mid-way (E4)', () => {
-  it('is completed by migration.resume with cleanup, which closes the stuck operation', async () => {
-    const { t, base } = await targetWithBase('rec-b')
-    const id = w.ulid()
-    const plan = await w.plan(t, {
-      bundles: [
-        w.bundle({
-          id,
-          name: 'nt-kill',
-          up: 'CREATE TABLE public.nt_side (id int);\nCREATE INDEX CONCURRENTLY nt_kill_idx ON public.items (id);\n',
-          transactional: false,
-          dependsOn: [base],
-        }),
-      ],
-      defaults: { ...DEFAULTS, lockTimeout: '60s' },
-    })
-    // An older snapshot holds the concurrent index build waiting; its backend is then terminated.
-    const holder = await superuserClient(pg17, t.database)
-    const watcher = await superuserClient(pg17, t.database)
-    let running: Promise<Awaited<ReturnType<World['apply']>>> | undefined
-    try {
-      await holder.query('BEGIN ISOLATION LEVEL REPEATABLE READ')
-      await holder.query('SELECT 1')
-      running = w.apply(plan)
-      for (let i = 0; i < 300; i++) {
-        const r = await watcher.query(
-          `SELECT pg_terminate_backend(pid) AS done FROM pg_stat_activity
+const NT_KILL_UP =
+  'CREATE TABLE public.nt_side (id int);\nCREATE INDEX CONCURRENTLY nt_kill_idx ON public.items (id);\n'
+
+/** A non-transactional bundle whose concurrent index build is killed: the operation is needs_attention. */
+async function stuckNontx(slug: string) {
+  const { t, base } = await targetWithBase(slug)
+  const id = w.ulid()
+  const plan = await w.plan(t, {
+    bundles: [
+      w.bundle({
+        id,
+        name: 'nt-kill',
+        up: NT_KILL_UP,
+        transactional: false,
+        dependsOn: [base],
+      }),
+    ],
+    defaults: { ...DEFAULTS, lockTimeout: '60s' },
+  })
+  // An older snapshot holds the concurrent index build waiting; its backend is then terminated.
+  const holder = await superuserClient(pg17, t.database)
+  const watcher = await superuserClient(pg17, t.database)
+  let running: Promise<Awaited<ReturnType<World['apply']>>> | undefined
+  try {
+    await holder.query('BEGIN ISOLATION LEVEL REPEATABLE READ')
+    await holder.query('SELECT 1')
+    running = w.apply(plan)
+    for (let i = 0; i < 300; i++) {
+      const r = await watcher.query(
+        `SELECT pg_terminate_backend(pid) AS done FROM pg_stat_activity
             WHERE datname = current_database() AND usename = 'exponetdb_migrator'
               AND wait_event_type = 'Lock' AND query ILIKE '%CONCURRENTLY%'`,
-        )
-        if (r.rows.some((x) => x.done === true)) break
-        await new Promise((resolve) => setTimeout(resolve, 100))
-      }
-    } finally {
-      await holder.query('ROLLBACK').catch(() => undefined)
-      await holder.end()
-      await watcher.end()
+      )
+      if (r.rows.some((x) => x.done === true)) break
+      await new Promise((resolve) => setTimeout(resolve, 100))
     }
-    const stuck = await (running as Promise<Awaited<ReturnType<World['apply']>>>)
-    expect(stuck).toMatchObject({ state: 'needs_attention', applyOutcome: 'unknown' })
-    expect(await lockCount(stuck.operationId)).toBe(1)
+  } finally {
+    await holder.query('ROLLBACK').catch(() => undefined)
+    await holder.end()
+    await watcher.end()
+  }
+  const stuck = await (running as Promise<Awaited<ReturnType<World['apply']>>>)
+  expect(stuck).toMatchObject({ state: 'needs_attention', applyOutcome: 'unknown' })
+  expect(await lockCount(stuck.operationId)).toBe(1)
+  return { t, base, id, stuck }
+}
+
+describe('a non-transactional bundle killed mid-way (E4)', () => {
+  it('is completed by migration.resume with cleanup, which closes the stuck operation', async () => {
+    const { t, base, id, stuck } = await stuckNontx('rec-b')
+    expect(base).toBeDefined()
 
     const resumePlan = await w.h.serve.transaction('test.recovery.resume', (tx) =>
       planMigrationResume(tx, w.ctx, w.a, t.record.targetId, id, { cleanup: true }),
@@ -427,5 +437,52 @@ describe('a non-transactional bundle killed mid-way (E4)', () => {
       }),
     )
     expect(next).toMatchObject({ state: 'succeeded' })
+  })
+
+  it('does not close an operation of another target that a hostile ledger event names (VC-106)', async () => {
+    const { t, base, id, stuck } = await stuckNontx('rec-hostile')
+    // Another target applied the very same bundle successfully; its operation id is planted in the
+    // event log of the stuck migration on the first target (its plan lists the migration too).
+    const other = await w.registerTarget('rec-hostile-b', 'nonprod')
+    expect(
+      await w.apply(
+        await w.plan(other, { bundles: [w.bundle({ id: base, name: 'items', up: BASE_UP })] }),
+      ),
+    ).toMatchObject({ state: 'succeeded' })
+    const foreign = await w.apply(
+      await w.plan(other, {
+        bundles: [
+          w.bundle({
+            id,
+            name: 'nt-kill',
+            up: NT_KILL_UP,
+            transactional: false,
+            dependsOn: [base],
+          }),
+        ],
+        defaults: { ...DEFAULTS, lockTimeout: '60s' },
+      }),
+    )
+    expect(foreign).toMatchObject({ state: 'succeeded' })
+    const c = await superuserClient(pg17, t.database)
+    try {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE exponetdb.migration_events SET operation_id = $2 WHERE migration_id = $1`,
+        [id, foreign.operationId],
+      )
+      await c.query('COMMIT')
+    } finally {
+      await c.end()
+    }
+    await expect(
+      w.h.serve.transaction('test.recovery.hostile', (tx) =>
+        planMigrationResume(tx, w.ctx, w.a, t.record.targetId, id, { cleanup: true }),
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    // The stuck operation of the first target still holds it: nothing was closed.
+    expect(await w.operation(stuck.operationId)).toMatchObject({ state: 'needs_attention' })
+    expect(await lockCount(stuck.operationId)).toBe(1)
   })
 })
