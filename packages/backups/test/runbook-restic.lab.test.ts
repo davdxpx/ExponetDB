@@ -47,8 +47,11 @@ const passFile = join(lab, 'restic-pass')
 const port = 55481
 const ROWS = 321
 
-/** The node's dump directory of one snapshot: the databases and, unless `globals` is false, the roles. */
-function snapshot(name: string, globals: boolean): string {
+/**
+ * The node's dump directory of one snapshot: the databases and, unless `globals` is false, the
+ * roles; `extra` adds files (a damaged dump, a crafted globals file).
+ */
+function snapshot(name: string, globals: boolean, extra: Record<string, string> = {}): string {
   const dir = join(lab, name)
   mkdirSync(dir)
   execFileSync('chown', ['postgres', dir])
@@ -66,6 +69,10 @@ function snapshot(name: string, globals: boolean): string {
     ])
     expect(g.status, g.stderr).toBe(0)
   }
+  for (const [file, text] of Object.entries(extra)) {
+    writeFileSync(join(dir, file), text)
+    execFileSync('chown', ['postgres', join(dir, file)])
+  }
   const b = asPostgres('restic', ['backup', '--tag', 'exponetdb', '--json', dir], {
     RESTIC_REPOSITORY: repo,
     RESTIC_PASSWORD_FILE: passFile,
@@ -81,6 +88,8 @@ function snapshot(name: string, globals: boolean): string {
 
 let withGlobals = ''
 let withoutGlobals = ''
+let damagedSecondDump = ''
+let shellEscape = ''
 
 beforeAll(() => {
   if (!available) {
@@ -132,6 +141,11 @@ beforeAll(() => {
   expect(made.status, made.stderr).toBe(0)
   withGlobals = snapshot('dump-with-globals', true)
   withoutGlobals = snapshot('dump-without-globals', false)
+  // VC-059 review: a second dump that cannot be read, and a globals file that runs a shell command.
+  damagedSecondDump = snapshot('dump-damaged', true, { 'zz.dump': 'not a dump' })
+  shellEscape = snapshot('dump-shell', false, {
+    'globals.sql': `\\! touch ${join(lab, 'escaped')}\nCREATE ROLE s2_owner;\n`,
+  })
 }, 300_000)
 
 afterAll(() => {
@@ -141,6 +155,8 @@ afterAll(() => {
     join(lab, 'restored-ok'),
     join(lab, 'restored-none'),
     join(lab, 'restored-bad'),
+    join(lab, 'restored-damaged'),
+    join(lab, 'restored-shell'),
   ]) {
     if (existsSync(join(dir, 'postmaster.pid')))
       asPostgres(`${PG}/pg_ctl`, ['-D', dir, '-m', 'immediate', 'stop'])
@@ -210,6 +226,21 @@ describe('the generated restic runbook restores a logical snapshot with its role
     expect(run.status).not.toBe(0)
     expect(run.stderr).toContain('no globals')
     expect(existsSync(join(lab, 'restored-none', 'PG_VERSION'))).toBe(false)
+  }, 300_000)
+
+  it('reads every dump before anything is created: a damaged second dump restores nothing (review)', () => {
+    const run = restore('restored-damaged', 55485, { SNAPSHOT: damagedSecondDump })
+    expect(run.status).not.toBe(0)
+    expect(run.stderr).toContain('unreadable dump')
+    expect(existsSync(join(lab, 'restored-damaged', 'PG_VERSION'))).toBe(false)
+  }, 300_000)
+
+  it('refuses a globals file with a psql shell escape (review)', () => {
+    const run = restore('restored-shell', 55486, { SNAPSHOT: shellEscape })
+    expect(run.status).not.toBe(0)
+    expect(run.stderr).toContain('meta-command')
+    expect(existsSync(join(lab, 'escaped'))).toBe(false)
+    expect(existsSync(join(lab, 'restored-shell', 'PG_VERSION'))).toBe(false)
   }, 300_000)
 
   it('never leaves a half-restored cluster running when pg_restore fails', () => {

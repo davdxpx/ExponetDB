@@ -183,10 +183,13 @@ roles. A snapshot without one, or with more than one, stops the script
 before anything is created, with a message that names the manual step
 (dump the roles from the source or write the `CREATE ROLE` statements and
 run again with `GLOBALS_FILE=<file>`); a globals file that creates
-tablespaces stops it too (remove those lines). When a `pg_restore` fails the
+tablespaces stops it too (remove those lines), and so does one holding a psql
+meta-command pg_dumpall does not write (any backslash outside the `\connect`,
+`\restrict` and `\unrestrict` lines: psql would run `\!` on the host). Every
+dump is read (`pg_restore --list`) before any cluster is created. When a `pg_restore` fails the
 script stops the cluster and says it holds a partial restore: a
-half-restored cluster never keeps running. The roles have no passwords; set
-them before any client connects. A lab test restores a snapshot with a role
+half-restored cluster never keeps running. The node dumps roles without
+passwords (`--no-role-passwords`); set them before any client connects. A lab test restores a snapshot with a role
 grant and checks the roles and the grant
 (`packages/backups/test/runbook-restic.lab.test.ts`).
 
