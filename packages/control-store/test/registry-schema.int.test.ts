@@ -801,6 +801,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M6DV2NQJDYWP4GXT46DTRK2S',
         // OD-69 (b), verification campaign VC-003 (2026-11-02): a marked event at the head's time.
         '01M6E66KZSPYHEF2Y7D4YJYWDH',
+        // OD-70 (d), verification campaign VC-001 (2026-11-02): purge never-planned bundle revisions.
+        '01M6E7DFZVEYRCA07SCYAA2PB6',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

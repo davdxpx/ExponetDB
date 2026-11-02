@@ -162,6 +162,8 @@ describe('served routes (Wave 2 and 4 to 9)', () => {
       'planForceRelease',
       'planRestore',
       'planRestoreDiscard',
+      // OD-70 (d): the purge of bundle revisions no plan references.
+      'planRevisionPurge',
       'planServerRetirement',
       'planSessionTermination',
       'recordOfflineDrill',

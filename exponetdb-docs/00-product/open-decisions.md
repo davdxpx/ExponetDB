@@ -2084,7 +2084,8 @@ History:
 - **Recommendation.** Confirm (1) to (3); (b) with a configured size; (d) with re-authentication;
   (e) only if (2) is not enough; P1 (control plane, not data plane), but the owner may weigh
   `reos-01`, where the Control Store shares a host with other services.
-- **Blocks.** Nothing built beyond the confirmation part.
+- **Built.** 2026-11-02 on `fix/verification-campaign-group-a-followups`: (b) `EXPONETDB_CONTROL_STORE_VOLUME_BYTES`, the installation health component `control_store_volume` and the refusal `CONTROL_STORE_VOLUME_FULL` (507) at 90 %, measured as the database's own size (a lower bound: WAL and other files are not counted); (c) the restart policy `unless-stopped` and a WAL volume in the deployment rules (`deployment.md` §1); (d) the planned operation `migration.revisions.purge` (`POST /projects/{id}/bundle-revisions/purge`, permission `operations.recover`, human only, re-authentication; REST only, no CLI command or Web App page yet) and the additive bundle `migration-revision-purge`, whose guard refuses every other delete of a revision.
+- **Blocks.** Nothing.
 
 ## Decisions of the verification campaign fixes (2026-11-02, under the owner's delegation)
 
@@ -2097,6 +2098,7 @@ under that delegation here, with the option and the reason; the owner can revisi
 | OD-68, D2-D1 | (b): a registry memory fact, a warning and refused agent reads where it is missing; `verify.sql` under the size rule; P1 | the guard cannot bound rows times values; a memory-limited server ends one backend instead of the cluster |
 | OD-69 | (b): clamp a skewed audit event to the head's time, bounded to 24 h | keeps the chain writable through a short step without bridging it |
 | OD-70, S6-D2, C1-D2 | the built audit and quota confirmed; a configured volume component; restart policy and WAL volume in the deployment record; a human-only purge of unreferenced revisions older than 90 days; no general REST rate limit; P1 | the disk is the control plane's, not the data plane's; the quota closes the low-privilege path |
+| OD-70 (d), permission | the purge uses `operations.recover` (human only), not a new permission | it is recovery of the Control Plane's own state like `operation.force_release`; a new permission would change every role definition for one admin action |
 | OD-64, B1-D3 | four hours from the apply request; later approvals refused, the worker cancels | the documented window; dispatch re-checks bindings anyway |
 | B1-D4 | `operation.force_release`, as defined before G1 (a `high` planned operation, a person, re-authentication at apply), as the exit of `needs_attention` for every kind, with a stated outcome and a reason, rather than per-kind retry rules | one action closes the dead end for every kind, present and future |
 | D0-01 | a production `migration.verify` that names a stuck operation needs an approval and a fresh re-authentication | closing an operation on production is a recovery like `migration.resume` |

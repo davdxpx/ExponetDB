@@ -277,8 +277,14 @@ describe('operation.force_release (owner decision before G1)', () => {
         (d.scope.kind === 'fixed' && d.scope.scope === 'operations.recover')
       )
     })
-    // VC-006: the plan of the release needs the same permission; nothing else does.
-    expect([...users].sort()).toEqual(['operation.force_release', 'operation.force_release.plan'])
+    // VC-006: the plan of the release needs the same permission; OD-70 (d): the purge of
+    // never-planned bundle revisions and its plan, recovery of the Control Store; nothing else.
+    expect([...users].sort()).toEqual([
+      'migration.revisions.purge',
+      'migration.revisions.purge.plan',
+      'operation.force_release',
+      'operation.force_release.plan',
+    ])
   })
 
   it('no longer uses registry.manage, which stays with registry writes and credential.rotate', () => {

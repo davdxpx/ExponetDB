@@ -776,6 +776,15 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         idempotency(call),
       ),
     ),
+  planRevisionPurge: async (app, call) =>
+    value(
+      await app.planRevisionPurge(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        call.body as { reason: string },
+        idempotency(call),
+      ),
+    ),
   getInstallation: async (app, call) => value(await app.installation(caller(call))),
   // ----- /api/v1: the Wave 8 reads (order §9) -----
   getInstallationHealth: async (app, call) => value(await app.installationHealth(caller(call))),

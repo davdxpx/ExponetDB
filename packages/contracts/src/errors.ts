@@ -1134,6 +1134,8 @@ export const ERRORS = {
             'repository_engine_below_floor',
             // VC-062: no wal.archive_status@1 time for the archive yet; a catalog refresh records it.
             'archive_time_unknown',
+            // OD-70 (d): no revision of the project is unreferenced and older than 90 days.
+            'nothing_to_purge',
             // OD-54 (a), registry.cluster.adopt_agent: only an external cluster is adopted, by
             // an enrolled node that is live (active or degraded, with a recent heartbeat).
             'cluster_not_external',

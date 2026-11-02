@@ -212,7 +212,7 @@ its permissions explicitly, and a new permission is never granted implicitly.
 | `nodes.plan` | plan node/cluster operations |
 | `nodes.operate` | apply node/cluster plans |
 | `plans.approve` | approve plans (human only, Web App) |
-| `operations.recover` | force recovery of the Operations Engine's own state: `operation.force_release` releases a lock domain held by a lost worker (human only, re-authentication) |
+| `operations.recover` | force recovery of the Control Plane's own state: `operation.force_release` releases a lock domain held by a lost worker; **[DECIDED]** ([OD-70](../00-product/open-decisions.md#od-70-control-store-disk-and-bundle-ingest) (d), 2026-11-02) `migration.revisions.purge` frees the Control Store of bundle revisions no plan references and that are older than 90 days (human only, re-authentication) |
 | `breakglass.activate` | activate break-glass (human only) |
 | `audit.read` | audit events |
 | `registry.manage` | registry writes, enrollment tokens, credentials submission; tier-aware since Wave 8 (§5.1) |

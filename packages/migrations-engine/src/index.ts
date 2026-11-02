@@ -37,6 +37,14 @@ export {
 export { refuseOversizedLegacyFiles } from './legacy-files.ts'
 export { type MigrationPlanContext, planMigrationApply } from './planner.ts'
 export {
+  PURGE_AGE_DAYS,
+  PURGE_MAX,
+  type PurgeableRevision,
+  purgeableRevisions,
+  REVISION_PURGE_KIND,
+  RevisionPurgeKind,
+} from './purge.ts'
+export {
   bundleFile,
   bundleView,
   layerFrom,

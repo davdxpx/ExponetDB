@@ -163,3 +163,11 @@ full. Nothing committed is lost.
    other files on the volume are not counted, so still alert on the host's
    disk use. Keep WAL on its own volume where the platform allows it, and
    leave free space for at least a day of the quota per active identity.
+6. **Free space** (**[DECIDED]** OD-70 (d)). Revisions no plan references and
+   older than 90 days can be purged by a person with `operations.recover`:
+   `POST /api/v1/projects/{id}/bundle-revisions/purge` with a reason plans
+   `migration.revisions.purge` (it lists the revisions and their bytes), and
+   `POST /api/v1/plans/{id}/apply` with re-authentication lets the worker
+   delete exactly those (audited `migration.revisions.purged`). The database
+   refuses any other delete. Recent hostile ingests are younger than 90 days:
+   for them grow the volume (step 2).

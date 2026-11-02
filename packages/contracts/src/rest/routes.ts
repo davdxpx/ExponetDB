@@ -852,6 +852,30 @@ export const ROUTES = [
     ],
   },
   {
+    operationId: 'planRevisionPurge',
+    method: 'post',
+    path: '/projects/{projectId}/bundle-revisions/purge',
+    summary:
+      'Plan purging the bundle revisions of a project that no plan references and that are older than 90 days (migration.revisions.purge, OD-70): the plan lists them; applied through POST /plans/{id}/apply (re-authentication), the worker deletes exactly those, and the database refuses any other.',
+    action: 'migration.revisions.purge.plan',
+    pathParams: z.strictObject({ projectId: ProjectIdSchema }),
+    body: z.strictObject({
+      reason: untrustedText(
+        1000,
+        'Why the revisions are purged; recorded in the plan and the audit, permanent.',
+      ),
+    }),
+    // Literal here: the shared plan constants are declared further down.
+    response: { status: 201, schema: PlanViewSchema },
+    errors: [
+      'CSRF_FAILED',
+      'IDEMPOTENCY_KEY_REUSED',
+      'NOT_FOUND',
+      'REGISTRY_CONFLICT',
+      'VALIDATION_FAILED',
+    ],
+  },
+  {
     operationId: 'listPlans',
     method: 'get',
     path: '/plans',

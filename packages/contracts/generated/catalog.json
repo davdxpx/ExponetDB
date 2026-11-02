@@ -1727,6 +1727,37 @@
       "wave": "9"
     },
     {
+      "basis": "control-store-runbook.md RB-17 (OD-70 (d): revisions are append-only; never-planned ones older than 90 days may go); applied through plan.apply",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "migration.revisions.purge.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "operations.recover"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "operations.recover"
+      },
+      "subject": "project",
+      "tierSemantics": "none",
+      "title": "Plan purging bundle revisions no plan references",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
       "basis": "resources.md, tool-catalog.md",
       "class": {
         "class": "read",
@@ -2710,6 +2741,38 @@
       "title": "Release a lock domain held by a lost worker",
       "verification": "required",
       "wave": "6"
+    },
+    {
+      "basis": "OD-70 (d): the Control Store frees the bytes of never-planned revisions older than 90 days; the database refuses any other delete",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "migration.revisions.purge",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "operations.recover"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "operations.recover"
+      },
+      "subject": "project",
+      "tierSemantics": "none",
+      "title": "Purge bundle revisions no plan references",
+      "verification": "required",
+      "wave": "9"
     },
     {
       "basis": "operations-engine.md §2",
@@ -11066,6 +11129,7 @@
               "no_backup_selectable",
               "repository_engine_below_floor",
               "archive_time_unknown",
+              "nothing_to_purge",
               "cluster_not_external",
               "node_not_served"
             ]
@@ -11881,7 +11945,7 @@
       "id": "plans.approve"
     },
     {
-      "covers": "force recovery of the Operations Engine's own state: release a lock domain held by a lost worker (operation.force_release)",
+      "covers": "force recovery of the Control Plane's own state: release a lock domain held by a lost worker (operation.force_release); purge bundle revisions no plan references (migration.revisions.purge, OD-70)",
       "humanOnly": true,
       "id": "operations.recover"
     },

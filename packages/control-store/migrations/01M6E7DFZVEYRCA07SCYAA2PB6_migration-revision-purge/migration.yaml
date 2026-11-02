@@ -1,0 +1,26 @@
+schema: exponetdb.migration/v1
+id: 01M6E7DFZVEYRCA07SCYAA2PB6
+name: migration-revision-purge
+description: |
+  Owner decision OD-70 (d), verification campaign VC-001: bundle revisions are
+  append-only for every login, so bytes a holder of migrations.plan stored
+  could never leave the Control Store. A person may purge the revisions of a
+  project that no plan references and that were ingested more than 90 days ago
+  (migration.revisions.purge, a planned operation with re-authentication). The
+  worker calls migrations.purge_revisions, which takes the plans tables in
+  SHARE ROW EXCLUSIVE mode, sets a transaction-local flag and deletes exactly
+  the revisions it is given; the trigger bundle_revisions_immutable now skips
+  a delete while that flag is set, and the new trigger
+  bundle_revisions_purge_guard refuses every such delete of a referenced or
+  younger revision, so no login can delete one, also with the flag. Updates
+  stay refused (new trigger bundle_revisions_no_update). Additive: the
+  trigger names of the migration-engine bundle and its verify.sql stay true.
+dependsOn:
+  - 01M6E66KZSPYHEF2Y7D4YJYWDH
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql
