@@ -237,6 +237,11 @@ export interface ApplicationDeps {
    * each plan. Absent: both disabled.
    */
   readonly backupExecution?: () => ExecutionSettings
+  /**
+   * OD-70 (b): the Control Store's volume size (`EXPONETDB_CONTROL_STORE_VOLUME_BYTES`). Ingest
+   * is refused at 90 %; installation health warns at 80 %. Absent: neither, and health says so.
+   */
+  readonly controlStoreVolumeBytes?: number
   /** The running release (`GET /installation`). */
   readonly installation: {
     readonly version: string
@@ -625,7 +630,7 @@ export class Application {
     this.backups = new BackupUseCases(host, {
       execution: deps.backupExecution ?? (() => EXECUTION_DISABLED),
     })
-    this.migrations = new MigrationUseCases(host)
+    this.migrations = new MigrationUseCases(host, { volumeBytes: deps.controlStoreVolumeBytes })
     this.queries = new QueryUseCases({
       store: deps.auth.store,
       clock: deps.policy.clock,
@@ -1186,7 +1191,9 @@ export class Application {
     if (sources === undefined) {
       throw new AuthError('CONTROL_PLANE_DEGRADED')
     }
-    return readInstallationHealth(this.#d.auth.store, this.#d.policy.clock, sources)
+    return readInstallationHealth(this.#d.auth.store, this.#d.policy.clock, sources, {
+      volumeBytes: this.#d.controlStoreVolumeBytes,
+    })
   }
 
   /**

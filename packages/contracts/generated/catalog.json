@@ -11666,6 +11666,38 @@
       "type": "https://db.exponet.cloud/errors/conflict"
     },
     {
+      "code": "CONTROL_STORE_VOLUME_FULL",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/CONTROL_STORE_VOLUME_FULL",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "usedBytes": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "volumeBytes": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "usedBytes",
+          "volumeBytes"
+        ],
+        "type": "object"
+      },
+      "group": "generic",
+      "message": "The Control Store fills nine tenths of its configured volume; bundles are not stored until there is room (RB-17).",
+      "retryable": false,
+      "status": 507,
+      "title": "Control Store volume full",
+      "type": "https://db.exponet.cloud/errors/control-store-volume-full"
+    },
+    {
       "code": "RATE_LIMITED",
       "details": {
         "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",

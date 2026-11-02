@@ -1437,6 +1437,18 @@ export const ERRORS = {
     title: 'Conflict',
     message: 'The resource changed (If-Match did not match).',
   },
+  CONTROL_STORE_VOLUME_FULL: {
+    group: 'generic',
+    status: 507,
+    retryable: false,
+    title: 'Control Store volume full',
+    message:
+      'The Control Store fills nine tenths of its configured volume; bundles are not stored until there is room (RB-17).',
+    // OD-70 (b): the database's own size and the configured volume (EXPONETDB_CONTROL_STORE_VOLUME_BYTES).
+    details: z
+      .strictObject({ usedBytes: z.int().min(0), volumeBytes: z.int().positive() })
+      .optional(),
+  },
   RATE_LIMITED: {
     group: 'generic',
     status: 429,

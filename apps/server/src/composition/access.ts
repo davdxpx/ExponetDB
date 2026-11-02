@@ -214,6 +214,9 @@ export function composeAccess(
     },
     // Wave 9 Part B: whether planned backup and restore runs may execute (read at each plan).
     backupExecution: () => config.backupExecution ?? { backups: 'disabled', restores: 'disabled' },
+    ...(config.controlStoreVolumeBytes === undefined
+      ? {}
+      : { controlStoreVolumeBytes: config.controlStoreVolumeBytes }),
     // Client metadata documents go through the hardened fetcher only (oauth.md §7).
     oauth: { network: oauth.systemNetwork() },
     // A denial's audit event is written after the denial (audit.md §2); a failure is logged.

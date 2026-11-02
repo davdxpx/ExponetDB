@@ -153,10 +153,13 @@ full. Nothing committed is lost.
    and the audit events `migration.bundle.ingested` (every ingest is audited
    since this fix; one identity stores at most 64 MiB of bundle bytes in 24
    hours, more answers `RATE_LIMITED`). A hostile identity: RB-11.
-5. **Prevent.** Alert on the host's disk use (the product has no Control
-   Store disk signal yet), keep WAL on its own volume where the platform
-   allows it, and leave free space for at least a day of the quota per
-   active identity. Thresholds, a disk component in installation health, a
-   restart policy and an audited purge of never-planned revisions are owner
-   decision
-   [OD-70](../00-product/open-decisions.md#od-70-control-store-disk-and-bundle-ingest).
+5. **Prevent.** Set `EXPONETDB_CONTROL_STORE_VOLUME_BYTES` on serve to the
+   Control Store volume's size: installation health then shows the component
+   `control_store_volume` (degraded from 80 %, reason
+   `volume_above_80_percent`), and from 90 % bundle ingest answers 507
+   `CONTROL_STORE_VOLUME_FULL` while everything else goes on (**[DECIDED]**
+   [OD-70](../00-product/open-decisions.md#od-70-control-store-disk-and-bundle-ingest)
+   (b), built 2026-11-02). The share is the database's own size: WAL and
+   other files on the volume are not counted, so still alert on the host's
+   disk use. Keep WAL on its own volume where the platform allows it, and
+   leave free space for at least a day of the quota per active identity.

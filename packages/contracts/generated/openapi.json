@@ -9248,7 +9248,8 @@
               "keyring",
               "maintenance",
               "data_reads",
-              "audit_chain"
+              "audit_chain",
+              "control_store_volume"
             ]
           },
           "observedAt": {
@@ -17039,6 +17040,7 @@
               "VALIDATION_FAILED",
               "NOT_FOUND",
               "CONFLICT",
+              "CONTROL_STORE_VOLUME_FULL",
               "RATE_LIMITED",
               "AUDIT_CLOCK_SKEW",
               "CONTROL_PLANE_DEGRADED",

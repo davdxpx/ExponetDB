@@ -68,7 +68,12 @@ export interface IngestInput {
   readonly identityId: string
   /** The identity's quota; {@link INGEST_DAILY_BYTES} unless a caller (a test) names another. */
   readonly dailyBytes?: number
+  /** The configured Control Store volume (OD-70 (b)); absent: not checked. */
+  readonly volumeBytes?: number
 }
+
+/** OD-70 (b): ingest stops when the Control Store database fills this share of its volume. */
+export const VOLUME_REFUSE_PERCENT = 90
 
 /**
  * The bundle bytes one identity may store in 24 hours (VC-001; the value is
@@ -181,6 +186,19 @@ export async function ingestBundles(tx: Tx, input: IngestInput): Promise<Ingeste
     'SELECT pg_advisory_xact_lock(1163412546, hashtext($1))',
     [`bundle-quota/${input.identityId}`],
   )
+  if (input.volumeBytes !== undefined) {
+    const size = await tx.query(
+      'migrations.store.volume_used',
+      'SELECT pg_database_size(current_database())::bigint AS n',
+    )
+    const usedBytes = Number(size.rows[0]?.text('n') ?? '0')
+    if (usedBytes * 100 >= input.volumeBytes * VOLUME_REFUSE_PERCENT) {
+      throw new MigrationError('CONTROL_STORE_VOLUME_FULL', {
+        usedBytes,
+        volumeBytes: input.volumeBytes,
+      })
+    }
+  }
   const usage = (await tx.query('migrations.store.quota_used', QUOTA_USED, [input.identityId]))
     .rows[0]
   let used = usage === undefined ? 0 : Number(usage.text('used'))

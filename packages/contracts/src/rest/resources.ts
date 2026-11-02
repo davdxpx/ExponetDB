@@ -2071,6 +2071,8 @@ export const InstallationComponentSchema = z
           'maintenance',
           'data_reads',
           'audit_chain',
+          // OD-70 (b): the Control Store database against EXPONETDB_CONTROL_STORE_VOLUME_BYTES.
+          'control_store_volume',
         ],
       }),
     state: ControlPlaneHealthStateSchema,
