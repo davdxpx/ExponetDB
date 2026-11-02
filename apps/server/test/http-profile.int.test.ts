@@ -299,6 +299,16 @@ describe('the own display name', () => {
       expect(r.status, JSON.stringify(displayName)).toBe(422)
       expect(r.body.code).toBe('VALIDATION_FAILED')
     }
+    // A body over the route's limit names the limit (VC-101), not a bare validation failure.
+    const big = await alice.browser.call('PUT', '/api/v1/me/profile', {
+      displayName: 'x',
+      revision: 1,
+      padding: 'y'.repeat(100 * 1024),
+    })
+    expect(big.status, big.text).toBe(422)
+    expect(big.body.details.errors).toEqual([
+      expect.objectContaining({ path: '/body', code: 'too_large' }),
+    ])
     // Another person's identity cannot even be named: the body is strict.
     const other = await alice.browser.call('PUT', '/api/v1/me/profile', {
       displayName: 'Hijack',
@@ -556,6 +566,26 @@ describe('the own picture', () => {
     const again = await alice.browser.call('DELETE', '/api/v1/me/avatar')
     expect(again.status).toBe(200)
     expect(again.body.revision).toBe(removed.body.revision)
+  })
+})
+
+describe('a large request body is read only after the permission is checked (VC-046)', () => {
+  const route = () => `/api/v1/projects/${newId('prj', Date.now())}/bundles`
+
+  it('answers 403 to a caller without the permission, whatever the body is and however large', async () => {
+    const small = await alice.browser.call('POST', route(), { not: 'a bundle request' })
+    expect(small.status, small.text).toBe(403)
+    // Over the 32 MiB limit: not "too_large", not a schema detail; the body is never buffered.
+    const big = await alice.browser.call('POST', route(), { padding: 'y'.repeat(33 * 1024 * 1024) })
+    expect(big.status, big.text).toBe(403)
+    expect(big.body.code).not.toBe('VALIDATION_FAILED')
+  })
+
+  it('validates the body of a caller who may send it, after the permission', async () => {
+    await owner.reauth()
+    const r = await owner.browser.call('POST', route(), { not: 'a bundle request' })
+    expect(r.status, r.text).toBe(422)
+    expect(r.body.code).toBe('VALIDATION_FAILED')
   })
 })
 

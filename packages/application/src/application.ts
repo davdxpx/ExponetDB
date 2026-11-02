@@ -821,6 +821,15 @@ export class Application {
     }
   }
 
+  /**
+   * Phase 1 of an action's authorization (client kind, human-only, a grant anywhere), for the
+   * interface to ask before it reads a large request body (VC-046). The use case authorizes again
+   * against the subject.
+   */
+  async admitAction(caller: Caller, action: string): Promise<void> {
+    await this.#admit(this.#d.auth.store, action, caller)
+  }
+
   /** Phase 1 only, for lists whose items are filtered by the caller's scopes. */
   async #admit(
     q: Parameters<Authorizer['admit']>[0],

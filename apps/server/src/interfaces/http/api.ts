@@ -162,6 +162,7 @@ import type { Context, Hono } from 'hono'
 import { existenceFloor } from '../existence.ts'
 import { authenticateBearer, authorizationHeaders } from './bearer.ts'
 import type { HttpEnv } from './env.ts'
+import { InFlight, LARGE_BODIES_IN_FLIGHT } from './in-flight.ts'
 import {
   clearCookie,
   clientAddress,
@@ -170,7 +171,6 @@ import {
   parseCookies,
   problemResponse,
   readLimitedBytes,
-  readLimitedText,
   setCookie,
 } from './request.ts'
 
@@ -2155,8 +2155,18 @@ async function readBody(c: Context<Env>, route: RouteContract): Promise<unknown>
     throw new HttpRefusal('VALIDATION_FAILED')
   }
   // Counted as it arrives: a chunked or mislabeled body never grows past the limit.
-  const raw = await readLimitedText(c.req.raw, route.maxBodyBytes ?? DEFAULT_BODY_LIMIT_BYTES)
-  if (raw === undefined) {
+  const limit = route.maxBodyBytes ?? DEFAULT_BODY_LIMIT_BYTES
+  const bytes = await readLimitedBytes(c.req.raw, limit)
+  if (bytes === undefined) {
+    // The limit is named (VC-101), as it is for a raw body.
+    throw new HttpRefusal('VALIDATION_FAILED', {
+      errors: [{ path: '/body', code: 'too_large', message: `At most ${limit} bytes.` }],
+    })
+  }
+  let raw: string
+  try {
+    raw = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
     throw new HttpRefusal('VALIDATION_FAILED')
   }
   let parsed: unknown
@@ -2172,6 +2182,7 @@ async function readBody(c: Context<Env>, route: RouteContract): Promise<unknown>
 export const OAUTH_BINDING_COOKIE = '__Host-exdb_oauth'
 
 export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
+  const largeBodies = new InFlight(LARGE_BODIES_IN_FLIGHT)
   const challenge = (
     response: Response,
     error?: 'invalid_token' | 'insufficient_scope',
@@ -2198,7 +2209,10 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
     const publicCeremony = definition.permission.kind === 'public'
     const mutating = route.method !== 'get'
     const path = `${base}${honoPath(route.path)}`
-    const serveRoute = async (c: Context<Env>): Promise<Response> => {
+    const serveRoute = async (
+      c: Context<Env>,
+      hold: { release?: () => void },
+    ): Promise<Response> => {
       const requestId = c.get('requestId')
       const fail = (error: unknown, retryAfterSeconds?: number) => {
         const planId = c.req.param('planId')
@@ -2262,6 +2276,42 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
             return fail(new HttpRefusal('CSRF_FAILED'))
           }
         }
+        const userAgent = c.req.header('user-agent')
+        let current: SessionContext | undefined
+        // VC-046: a route that takes a large body (bundles, plans, legacy imports) authenticates
+        // and asks for the action's permission anywhere before it reads a byte of it: a caller
+        // without the permission gets 403 and no buffering, parsing or schema detail.
+        if (
+          !publicCeremony &&
+          (route.maxBodyBytes ?? DEFAULT_BODY_LIMIT_BYTES) > DEFAULT_BODY_LIMIT_BYTES
+        ) {
+          if (bearer === undefined) {
+            current = await deps.application.authenticate(sessionCookie, userAgent)
+            if (current === undefined) {
+              const refused = fail(
+                new HttpRefusal(
+                  sessionCookie === undefined ? 'UNAUTHENTICATED' : 'SESSION_EXPIRED',
+                ),
+              )
+              return base === REST_API_BASE_PATH ? challenge(refused) : refused
+            }
+            if (
+              mutating &&
+              !verifyCsrf(current, c.req.header(CSRF_HEADER), cookies.get(CSRF_COOKIE))
+            ) {
+              return fail(new HttpRefusal('CSRF_FAILED'))
+            }
+          }
+          const early =
+            bearer ?? (current === undefined ? undefined : sessionCaller(current, requestId))
+          if (early !== undefined) await deps.application.admitAction(early, route.action)
+          // Only a few large bodies at once (VC-078): the rest is answered before a byte is read.
+          const release = largeBodies.enter()
+          if (release === undefined) {
+            return fail(Object.assign(new HttpRefusal('RATE_LIMITED'), { retryAfterSeconds: 1 }), 1)
+          }
+          hold.release = release
+        }
         let rawBody: unknown
         let raw: { bytes: Uint8Array; mediaType: string } | undefined
         try {
@@ -2286,9 +2336,7 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
             )
           }
         }
-        const userAgent = c.req.header('user-agent')
-        let current: SessionContext | undefined
-        if (!publicCeremony && bearer === undefined) {
+        if (!publicCeremony && bearer === undefined && current === undefined) {
           current = await deps.application.authenticate(sessionCookie, userAgent)
           if (current === undefined) {
             const refused = fail(
@@ -2425,7 +2473,13 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
     }
     app.on(route.method.toUpperCase(), path, async (c) => {
       const started = performance.now()
-      const response = await serveRoute(c)
+      const hold: { release?: () => void } = {}
+      let response: Response
+      try {
+        response = await serveRoute(c, hold)
+      } finally {
+        hold.release?.()
+      }
       // One time class for "not there", concealed or real (existence.ts).
       if (response.status === 404) await existenceFloor(started)
       return response
