@@ -88,6 +88,7 @@ export {
   GRAMMARS,
   type JsonNode,
   loadParser,
+  MAX_COMMENT_DEPTH,
   MAX_MIGRATION_PARSE_BYTES,
   MAX_PARSE_BYTES,
   MAX_PARSE_TOKENS,

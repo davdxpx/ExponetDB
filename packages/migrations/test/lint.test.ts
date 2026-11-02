@@ -174,6 +174,15 @@ describe('content the engine refuses', () => {
     expect(finding(r, 'security_definer_without_search_path')?.blocking).toBe(true)
   })
 
+  it('names the limit when block comments nest too deep, without parsing the file (VC-013)', () => {
+    const depth = 40_000
+    const started = performance.now()
+    const r = lint([bundle({ up: `${'/*'.repeat(depth)}${'*/'.repeat(depth)}\nSELECT 1;` })])
+    expect(performance.now() - started).toBeLessThan(2000)
+    expect(finding(r, 'parse_error')).toMatchObject({ file: 'up.sql', blocking: true })
+    expect(finding(r, 'parse_error')?.message).toContain('comment_depth')
+  })
+
   it('reports a parse error with the grammar and the position', () => {
     const r = lint([bundle({ up: 'CREATE TABLE public.ok (id int);\nCREATE TABEL x (id int);' })])
     expect(finding(r, 'parse_error')).toMatchObject({ file: 'up.sql', line: 2, blocking: true })

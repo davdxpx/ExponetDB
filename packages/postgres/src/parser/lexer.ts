@@ -92,6 +92,32 @@ export function countTokens(
   return count
 }
 
+/**
+ * The deepest nesting of block comments in the text, counted without keeping the tokens and
+ * stopping once it passes `max` (VC-013). Markers inside literals and line comments are not
+ * comments. PostgreSQL's own scanner is quadratic in this depth, so a text is checked before it
+ * is handed to it.
+ */
+export function commentDepth(text: string, max: number, mode: LexMode = 'standard'): number {
+  let deepest = 0
+  scan(text, mode, (kind, start, end) => {
+    if (kind !== 'comment' || text[start] !== '/') return true
+    let depth = 0
+    for (let j = start; j < end; j++) {
+      if (text[j] === '/' && text[j + 1] === '*') {
+        depth++
+        j++
+        if (depth > deepest) deepest = depth
+      } else if (text[j] === '*' && text[j + 1] === '/') {
+        depth--
+        j++
+      }
+    }
+    return deepest <= max
+  })
+  return deepest
+}
+
 const ESCAPES: Readonly<Record<string, string>> = { b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' }
 
 /** The character an `E''` backslash escape stands for, and where the text goes on. */

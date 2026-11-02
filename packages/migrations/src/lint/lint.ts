@@ -460,7 +460,9 @@ export function lintBundles(inputs: readonly BundleInput[], ctx: LintContext): L
         'parse_error',
         analysis.failure.kind === 'syntax'
           ? `up.sql does not parse with the PostgreSQL ${ctx.major} grammar${analysis.failure.resource ? ' (parser resource limit)' : ''}.`
-          : `up.sql: ${analysis.failure.kind}.`,
+          : analysis.failure.kind === 'too_large'
+            ? `up.sql is over a parser limit (${analysis.failure.limit}): see the bundle limits.`
+            : `up.sql: ${analysis.failure.kind}.`,
         { file: 'up.sql', line: analysis.line, column: analysis.column },
       )
     } else {

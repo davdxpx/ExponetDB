@@ -1,5 +1,5 @@
 import { encodeUtf8 } from '@exponetdb/kernel'
-import { countTokens, statementBodies } from './lexer.ts'
+import { commentDepth, countTokens, statementBodies } from './lexer.ts'
 import type { SupportedMajor } from './majors.ts'
 
 /**
@@ -68,6 +68,7 @@ export function parsePlpgsql(text: string): unknown {
     return undefined
   // The PL/pgSQL parser reads the body: its tokens, not the one literal they are outside.
   if (countTokens(text, MAX_PARSE_TOKENS, 'standard', true) > MAX_PARSE_TOKENS) return undefined
+  if (commentDepth(text, MAX_COMMENT_DEPTH) > MAX_COMMENT_DEPTH) return undefined
   try {
     return binding.parsePlPgSQLSync(text)
   } catch {
@@ -107,6 +108,14 @@ export const MAX_MIGRATION_PARSE_BYTES = 4 * 1024 * 1024
 export const MAX_PARSE_TOKENS = 200_000
 
 /**
+ * The deepest nesting of block comments one parse is given (VC-013). The comments are free in the
+ * byte and token bounds, and PostgreSQL's scanner is quadratic in their nesting (546 ms at 10,000
+ * levels, 9 s at 40,000), so a 160 KB file held a thread for 38 s. 32 levels is far beyond any
+ * real use.
+ */
+export const MAX_COMMENT_DEPTH = 32
+
+/**
  * Whether a parse of the text, or of a body in it (a dollar-quoted body is
  * parsed on its own: a `DO` block's PL/pgSQL, a function's SQL), up to two
  * levels down, would be given more than {@link MAX_PARSE_TOKENS} tokens: the
@@ -114,6 +123,7 @@ export const MAX_PARSE_TOKENS = 200_000
  */
 export function exceedsParseWork(text: string, depth = 0): boolean {
   if (countTokens(text, MAX_PARSE_TOKENS) > MAX_PARSE_TOKENS) return true
+  if (commentDepth(text, MAX_COMMENT_DEPTH) > MAX_COMMENT_DEPTH) return true
   if (depth >= 2) return false
   return statementBodies(text).some((body) => exceedsParseWork(body, depth + 1))
 }
@@ -130,7 +140,8 @@ export function dollarBody(literal: string): string | undefined {
 export type ParseFailure =
   | { readonly kind: 'nul' }
   | { readonly kind: 'empty' }
-  | { readonly kind: 'too_large' }
+  /** A bound of the parse was exceeded; `limit` names it. */
+  | { readonly kind: 'too_large'; readonly limit: 'bytes' | 'tokens' | 'comment_depth' }
   /** A syntax error (or the parser's resource limit, e.g. nesting): `position` is a string index. */
   | { readonly kind: 'syntax'; readonly position: number | null; readonly resource: boolean }
 
@@ -224,11 +235,14 @@ export function parseWith(
   if (text.includes('\u0000')) {
     return { ok: false, failure: { kind: 'nul' } }
   }
-  if (
-    encodeUtf8(text).length > maxBytes ||
-    countTokens(text, MAX_PARSE_TOKENS) > MAX_PARSE_TOKENS
-  ) {
-    return { ok: false, failure: { kind: 'too_large' } }
+  if (encodeUtf8(text).length > maxBytes) {
+    return { ok: false, failure: { kind: 'too_large', limit: 'bytes' } }
+  }
+  if (countTokens(text, MAX_PARSE_TOKENS) > MAX_PARSE_TOKENS) {
+    return { ok: false, failure: { kind: 'too_large', limit: 'tokens' } }
+  }
+  if (commentDepth(text, MAX_COMMENT_DEPTH) > MAX_COMMENT_DEPTH) {
+    return { ok: false, failure: { kind: 'too_large', limit: 'comment_depth' } }
   }
   const binding = loaded.get(major)
   if (binding === undefined) {
