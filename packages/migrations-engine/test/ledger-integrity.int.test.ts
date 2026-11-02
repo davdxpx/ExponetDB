@@ -2,7 +2,7 @@ import { readLedgerRows } from '@exponetdb/postgres'
 import { serverFor, superuserClient } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { ledgerDivergence } from '../src/divergence.ts'
-import { ledgerDivergenceOf, planLedgerReconcile } from '../src/index.ts'
+import { ledgerDivergenceOf, planLedgerReconcile, planMigrationVerify } from '../src/index.ts'
 import { writeMirror } from '../src/records.ts'
 import { migrationWorld, type Target, type World } from './world.ts'
 
@@ -373,6 +373,24 @@ describe('evidence is produced by this installation, never written by hand (VC-0
     const plan = await w.plan(p.production, { migrationIds: [p.forgedId as never] })
     expect(evidenceOf(plan)).not.toBe('present')
     expect(plan.decision).not.toBe('allow')
+  })
+
+  it('keeps the evidence when staging was verified again: the newer mirrored verification counts', async () => {
+    const p = await pair('ev-e')
+    expect(evidenceOf(await w.plan(p.production, { migrationIds: [p.genuine.id as never] }))).toBe(
+      'present',
+    )
+    // A person verifies the migration on staging again: a newer, passed, mirrored verification.
+    // (The apply-time check of the plan made before it is covered by mcp-plans.int.test.ts.)
+    const again = await w.apply(
+      await w.h.serve.transaction('test.integrity.reverify', (tx) =>
+        planMigrationVerify(tx, w.ctx, w.a, p.staging.record.targetId, p.genuine.id, {}),
+      ),
+    )
+    expect(again).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
+    expect(evidenceOf(await w.plan(p.production, { migrationIds: [p.genuine.id as never] }))).toBe(
+      'present',
+    )
   })
 
   it('still binds the evidence of a genuine apply and verification', async () => {

@@ -255,8 +255,8 @@ export class MigrationApplyKind implements OperationKind {
           latest.status !== 'passed' ||
           latest.verifyDigest !== m.verifyDigest ||
           bound === undefined ||
-          // The verification the plan bound, not another one written since (VC-079).
-          latest.verificationId !== bound ||
+          // A newer verification of the staging run is fine when it passed; it must be one this
+          // installation mirrored, as the bound one had to be (VC-079).
           !trust.rowTrusted(row) ||
           !trust.verificationTrusted(latest.verificationId)
         ) {
