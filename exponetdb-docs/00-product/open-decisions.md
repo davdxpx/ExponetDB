@@ -2081,6 +2081,21 @@ History:
   `reos-01`, where the Control Store shares a host with other services.
 - **Blocks.** Nothing built beyond the confirmation part.
 
+## Decisions of the verification campaign fixes (2026-11-02, under the owner's delegation)
+
+On 2026-11-02 the owner told the fix session of the verification campaign of 2026-10-28
+"I confirm the decisions, you can decide as expert". The session records every decision it took
+under that delegation here, with the option and the reason; the owner can revisit any of them.
+
+| Source | Decision | Reason |
+|---|---|---|
+| OD-68, D2-D1 | (b): a registry memory fact, a warning and refused agent reads where it is missing; `verify.sql` under the size rule; P1 | the guard cannot bound rows times values; a memory-limited server ends one backend instead of the cluster |
+| OD-69 | (b): clamp a skewed audit event to the head's time, bounded to 24 h | keeps the chain writable through a short step without bridging it |
+| OD-70, S6-D2, C1-D2 | the built audit and quota confirmed; a configured volume component; restart policy and WAL volume in the deployment record; a human-only purge of unreferenced revisions older than 90 days; no general REST rate limit; P1 | the disk is the control plane's, not the data plane's; the quota closes the low-privilege path |
+| OD-64, B1-D3 | four hours from the apply request; later approvals refused, the worker cancels | the documented window; dispatch re-checks bindings anyway |
+| B1-D4 | `operation.force_release` as the exit of `needs_attention` for every kind (human, Web App, re-authentication 300 s, a stated outcome and a reason) rather than per-kind retry rules | one action closes the dead end for every kind, present and future |
+| D0-01 | a production `migration.verify` that names a stuck operation needs an approval and a fresh re-authentication | closing an operation on production is a recovery like `migration.resume` |
+
 ## Owner decisions of the Wave 9 Part B order (2026-10-26)
 
 The owner's Wave 9 Part B implementation order of 2026-10-26 (backup,
