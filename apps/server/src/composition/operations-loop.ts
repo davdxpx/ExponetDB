@@ -32,9 +32,25 @@ export function operationsLoop(
   let timer: NodeJS.Timeout | undefined
   let running: Promise<void> = Promise.resolve()
 
+  let paused: string | undefined
+
   async function tick(): Promise<void> {
     if (stopped || kinds.names().length === 0) {
       return
+    }
+    // VC-064: a Control Store migrated by another build is not this build's; nothing is claimed.
+    const schema = services.readiness.latest().checks.find((c) => c.name === 'schema')
+    if (schema !== undefined && schema.status !== 'pass') {
+      const reason = schema.reason ?? 'schema_not_current'
+      if (paused !== reason) {
+        paused = reason
+        runtime.logger.warn('operations.claim_paused', { reason })
+      }
+      return
+    }
+    if (paused !== undefined) {
+      paused = undefined
+      runtime.logger.info('operations.claim_resumed', {})
     }
     try {
       const result = await processNextOperation(services.store, {
