@@ -48,11 +48,15 @@ const SETTINGS: Readonly<Record<AccessRole, readonly (readonly [string, string])
   reader: [
     ['default_transaction_read_only', 'on'],
     ['idle_in_transaction_session_timeout', '30s'],
+    // The row cap does not bound the work: a set-returning function is materialized before the
+    // first row (2.2 GB of temp files in 14 s). Superuser-only setting (VC-047).
+    ['temp_file_limit', '1GB'],
   ],
   verifier: [
     ['default_transaction_read_only', 'on'],
     ['search_path', ''],
     ['idle_in_transaction_session_timeout', '30s'],
+    ['temp_file_limit', '1GB'],
   ],
   operator: [
     ['statement_timeout', '30s'],
