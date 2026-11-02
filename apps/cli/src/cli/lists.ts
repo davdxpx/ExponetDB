@@ -2,6 +2,7 @@ import type { ApiError, Operations } from '@exponetdb/sdk'
 import type { CommandResult } from '../output/model.ts'
 import { exitFor } from './exit.ts'
 import type { FlagSpec, Remote } from './types.ts'
+import { UsageError } from './usage.ts'
 
 /**
  * Paged listings ([`15-cli/README.md` §4](../../../../exponetdb-docs/15-cli/README.md#4-output-contract-exponetdbcli-outputv1)):
@@ -10,6 +11,17 @@ import type { FlagSpec, Remote } from './types.ts'
  * makes the result partial: the items shown are never the complete list,
  * the error is reported and the exit code is not 0.
  */
+const MAX_ITEMS = 10_000
+
+/** `--limit`: a whole number from 1 to 10000, never clamped silently (TC-064). */
+export function limitOf(flags: Readonly<Record<string, unknown>>): number {
+  const limit = Number(flags['limit'] ?? 50)
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_ITEMS) {
+    throw new UsageError(`--limit is a whole number from 1 to ${MAX_ITEMS}.`)
+  }
+  return limit
+}
+
 export const LIST_FLAGS: readonly FlagSpec[] = [
   { name: 'limit', type: 'number', description: 'Items to show (1 to 10000).', default: 50 },
   { name: 'all', type: 'boolean', description: 'Every page (at most 10000 items).' },
@@ -50,8 +62,7 @@ export async function collect<Id extends ListId>(
   /** Keeps only these items, before the limit counts them (a filter the route does not have). */
   keep?: (item: ItemOf<Id>) => boolean,
 ): Promise<Listing<ItemOf<Id>>> {
-  const max =
-    flags['all'] === true ? 10_000 : Math.min(10_000, Math.max(1, Number(flags['limit'] ?? 50)))
+  const max = flags['all'] === true ? MAX_ITEMS : limitOf(flags)
   const cursor = typeof flags['cursor'] === 'string' ? flags['cursor'] : undefined
   const items: ItemOf<Id>[] = []
   let nextCursor: string | null = null
@@ -135,8 +146,7 @@ export async function collectField<
   pageMax = 200,
 ): Promise<Listing<ElementOf<ResponseOf<Id>, K>> & { readonly first: ResponseOf<Id> | undefined }> {
   type Item = ElementOf<ResponseOf<Id>, K>
-  const max =
-    flags['all'] === true ? 10_000 : Math.min(10_000, Math.max(1, Number(flags['limit'] ?? 50)))
+  const max = flags['all'] === true ? MAX_ITEMS : limitOf(flags)
   const cursor = typeof flags['cursor'] === 'string' ? flags['cursor'] : undefined
   const items: Item[] = []
   let first: ResponseOf<Id> | undefined

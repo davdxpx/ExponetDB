@@ -94,13 +94,20 @@ export function header(
 }
 
 /** A count line under a list: "2 targets", or what is known about a partial list. */
+export function plural(noun: string): string {
+  if (/[^aeiou]y$/.test(noun)) return `${noun.slice(0, -1)}ies`
+  return /(s|x|z|ch|sh)$/.test(noun) ? `${noun}es` : `${noun}s`
+}
+
 export function countLine(n: number, noun: string, partial: boolean): Block {
-  const plural = n === 1 ? noun : `${noun}s`
+  const plural_ = n === 1 ? noun : plural(noun)
   return {
     kind: 'text',
     tone: partial ? 'warn' : 'muted',
     lines: [
-      partial ? `${n} ${plural} shown; the list is incomplete (see the error).` : `${n} ${plural}`,
+      partial
+        ? `${n} ${plural_} shown; the list is incomplete (see the error).`
+        : `${n} ${plural_}`,
     ],
   }
 }

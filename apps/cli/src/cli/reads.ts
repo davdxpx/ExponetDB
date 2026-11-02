@@ -1,5 +1,5 @@
 import type { OperationId, Operations } from '@exponetdb/sdk'
-import { countLine, header } from '../output/format.ts'
+import { countLine, header, plural } from '../output/format.ts'
 import { type Block, type Column, type CommandResult, result } from '../output/model.ts'
 import {
   type ArrayField,
@@ -71,7 +71,7 @@ export function listCommand<Id extends ListId>(spec: ListSpec<Id>): CommandSpec 
           kind: 'table',
           columns,
           rows: listing.items.map((i) => row(i, now)),
-          empty: empty ?? `No ${noun}s you may read.`,
+          empty: empty ?? `No ${plural(noun)} you may read.`,
         },
         countLine(listing.items.length, noun, listing.partial),
       ]
@@ -156,7 +156,7 @@ export function fieldListCommand<
           kind: 'table',
           columns,
           rows: listing.items.map((i) => row(i, now)),
-          empty: empty ?? `No ${noun}s you may read.`,
+          empty: empty ?? `No ${plural(noun)} you may read.`,
         },
         countLine(listing.items.length, noun, listing.partial),
       ]
