@@ -815,6 +815,7 @@
               "registry.database.retire.plan",
               "registry.database.retire",
               "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_memory_limit.plan",
               "project.execution_roles.get",
               "registry.execution_role_binding.set.plan",
               "registry.execution_role_binding.set",
@@ -822,6 +823,7 @@
               "registry.execution_role_exception.declare",
               "registry.execution_role_exception.revoke.plan",
               "registry.execution_role_exception.revoke",
+              "registry.cluster.declare_memory_limit",
               "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
@@ -4926,6 +4928,22 @@
             ],
             "type": "string"
           },
+          "memoryLimit": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cgroup",
+                  "overcommit",
+                  "none"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "OD-68 (b): whether its PostgreSQL runs under a memory limit (a cgroup limit, vm.overcommit_memory=2, or none), declared by a person with production authority; null while undeclared. Without a limit, data reads of its targets carry the warning target_memory_unlimited and agent reads are refused."
+          },
           "postgresVersion": {
             "anyOf": [
               {
@@ -5130,6 +5148,24 @@
         },
         "required": [
           "declaredTier"
+        ],
+        "type": "object"
+      },
+      "ClusterMemoryLimitRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "memoryLimit": {
+            "description": "cgroup: the PostgreSQL service runs under a memory limit (systemd MemoryMax, a container limit); overcommit: the host runs vm.overcommit_memory=2; none: neither. A limit makes an exhausting read end one backend with an error instead of a restart of the cluster.",
+            "enum": [
+              "cgroup",
+              "overcommit",
+              "none"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "memoryLimit"
         ],
         "type": "object"
       },
@@ -14168,6 +14204,7 @@
               "registry.database.retire.plan",
               "registry.database.retire",
               "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_memory_limit.plan",
               "project.execution_roles.get",
               "registry.execution_role_binding.set.plan",
               "registry.execution_role_binding.set",
@@ -14175,6 +14212,7 @@
               "registry.execution_role_exception.declare",
               "registry.execution_role_exception.revoke.plan",
               "registry.execution_role_exception.revoke",
+              "registry.cluster.declare_memory_limit",
               "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
@@ -15023,6 +15061,7 @@
               "registry.database.retire.plan",
               "registry.database.retire",
               "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_memory_limit.plan",
               "project.execution_roles.get",
               "registry.execution_role_binding.set.plan",
               "registry.execution_role_binding.set",
@@ -15030,6 +15069,7 @@
               "registry.execution_role_exception.declare",
               "registry.execution_role_exception.revoke.plan",
               "registry.execution_role_exception.revoke",
+              "registry.cluster.declare_memory_limit",
               "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
@@ -15934,6 +15974,7 @@
               "registry.database.retire.plan",
               "registry.database.retire",
               "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_memory_limit.plan",
               "project.execution_roles.get",
               "registry.execution_role_binding.set.plan",
               "registry.execution_role_binding.set",
@@ -15941,6 +15982,7 @@
               "registry.execution_role_exception.declare",
               "registry.execution_role_exception.revoke.plan",
               "registry.execution_role_exception.revoke",
+              "registry.cluster.declare_memory_limit",
               "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
@@ -16380,6 +16422,7 @@
               "registry.database.retire.plan",
               "registry.database.retire",
               "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_memory_limit.plan",
               "project.execution_roles.get",
               "registry.execution_role_binding.set.plan",
               "registry.execution_role_binding.set",
@@ -16387,6 +16430,7 @@
               "registry.execution_role_exception.declare",
               "registry.execution_role_exception.revoke.plan",
               "registry.execution_role_exception.revoke",
+              "registry.cluster.declare_memory_limit",
               "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
@@ -18074,6 +18118,17 @@
                 "type": "null"
               }
             ]
+          },
+          "warnings": {
+            "description": "OD-68 (b): target_memory_unlimited when the target's cluster has no declared memory limit: a read that builds large values can make the kernel restart the whole cluster.",
+            "items": {
+              "enum": [
+                "target_memory_unlimited"
+              ],
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
           }
         },
         "required": [
@@ -28184,6 +28239,109 @@
           "NOT_FOUND",
           "PERMISSION_DENIED",
           "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
+      }
+    },
+    "/clusters/{clusterId}/memory-limit": {
+      "post": {
+        "operationId": "planClusterMemoryLimit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClusterMemoryLimitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan the declaration of whether the cluster's PostgreSQL runs under a memory limit (OD-68); needs registry.manage:prod whichever value, applied through plan.apply.",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "registry.cluster.declare_memory_limit.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"

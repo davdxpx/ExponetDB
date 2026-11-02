@@ -828,6 +828,14 @@ export const QueryResultSchema = z
     rlsRelations: z.array(name(127, 'Relation with RLS enabled.')),
     durationMs: z.int().min(0),
     statementDigest: Sha256DigestSchema,
+    warnings: z
+      .array(z.enum(['target_memory_unlimited']))
+      .max(8)
+      .optional()
+      .meta({
+        description:
+          "OD-68 (b): target_memory_unlimited when the target's cluster has no declared memory limit: a read that builds large values can make the kernel restart the whole cluster.",
+      }),
   })
   .meta({ id: 'QueryResult' })
 
@@ -1869,6 +1877,10 @@ export const ClusterSchema = z
     declaredTier: TierSchema.nullable().optional().meta({
       description:
         'The intended tier a person declared with production authority (OD-22); null while undeclared, which counts as prod for registry authority.',
+    }),
+    memoryLimit: z.enum(['cgroup', 'overcommit', 'none']).nullable().optional().meta({
+      description:
+        'OD-68 (b): whether its PostgreSQL runs under a memory limit (a cgroup limit, vm.overcommit_memory=2, or none), declared by a person with production authority; null while undeclared. Without a limit, data reads of its targets carry the warning target_memory_unlimited and agent reads are refused.',
     }),
     health: HealthSummarySchema.nullable(),
     retiredAt: TimestampSchema.nullable().optional().meta({

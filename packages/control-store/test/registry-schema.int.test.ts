@@ -803,6 +803,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M6E66KZSPYHEF2Y7D4YJYWDH',
         // OD-70 (d), verification campaign VC-001 (2026-11-02): purge never-planned bundle revisions.
         '01M6E7DFZVEYRCA07SCYAA2PB6',
+        // OD-68 (b), verification campaign VC-002 (2026-11-02): a cluster's declared memory limit.
+        '01M6E85HQ7B2KDHHWMDP3AGA5M',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

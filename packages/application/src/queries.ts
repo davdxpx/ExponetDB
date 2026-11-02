@@ -26,6 +26,8 @@ import { type Clock, type IdentityId, newId } from '@exponetdb/kernel'
 import {
   evaluateRegistryPolicy,
   findTarget,
+  type MemoryLimit,
+  memoryLimited,
   RegistryError,
   type RegistryPolicyContext,
   type TargetRecord,
@@ -111,6 +113,19 @@ type Kind = 'query' | 'explain'
 type Refused = Extract<DataReadOutcome, { kind: 'refused' }>
 
 /** An agent unless a person reads through the Web App or the first-party CLI (OD-13). */
+/** The declared memory limit of the target's cluster (OD-68 (b)); null without a placement. */
+async function clusterMemoryLimit(q: Queryable, target: TargetRecord): Promise<MemoryLimit | null> {
+  const clusterId = target.placement?.clusterId
+  if (clusterId === undefined) return null
+  const { rows } = await q.query(
+    'application.data_read.memory_limit',
+    'SELECT memory_limit FROM registry.clusters WHERE cluster_id = $1',
+    [clusterId],
+  )
+  const value = rows[0]?.textOrNull('memory_limit') ?? null
+  return value === 'cgroup' || value === 'overcommit' || value === 'none' ? value : null
+}
+
 function callerClassOf(parties: ReadParties): 'agent' | 'human' {
   return parties.actor.kind === 'human' &&
     (parties.client.kind === 'web' || parties.client.kind === 'cli')
@@ -291,6 +306,8 @@ export class QueryUseCases {
     outcome: Exclude<DataReadOutcome, Refused>
     queryId: string
     statement: NormalizedStatement
+    /** OD-68 (b): the target's cluster has no declared memory limit. */
+    memoryUnlimited: boolean
   }> {
     const kind: Kind = action === 'query.run' ? 'query' : 'explain'
     const target = await this.#target(action, caller, ref)
@@ -336,6 +353,18 @@ export class QueryUseCases {
       // EXPLAIN ANALYZE executes the statement (ADR-0028 §4): never for an agent.
       return refuse({ kind: 'refused', code: 'QUERY_NOT_READ_ONLY', reason: 'explain_analyze' })
     }
+    // OD-68 (b): a read that builds large values can make the kernel restart a cluster that runs
+    // without a memory limit; there an agent reads no rows, and a person is warned.
+    const memoryUnlimited =
+      kind === 'query' && !memoryLimited(await clusterMemoryLimit(this.#h.store, target))
+    if (memoryUnlimited && callerClass === 'agent') {
+      return refuse({
+        kind: 'refused',
+        code: 'DATA_READ_NOT_PERMITTED',
+        reason: 'target_memory_unlimited',
+        details: { reason: 'target_memory_unlimited' },
+      })
+    }
     const request: DataReadRequest = {
       kind,
       sql: body.sql,
@@ -370,7 +399,7 @@ export class QueryUseCases {
     }
     if (outcome.kind === 'refused') return refuse(outcome)
     await record(outcome)
-    return { outcome, queryId, statement: prepared.statement }
+    return { outcome, queryId, statement: prepared.statement, memoryUnlimited }
   }
 
   /** `sql_query` and `POST /targets/{target}/queries`. */
@@ -380,7 +409,7 @@ export class QueryUseCases {
     body: QueryRequest,
     options: ReadOptions,
   ): Promise<QueryResult> {
-    const { outcome, queryId, statement } = await this.#read(
+    const { outcome, queryId, statement, memoryUnlimited } = await this.#read(
       'query.run',
       caller,
       ref,
@@ -400,6 +429,7 @@ export class QueryUseCases {
       ...rest,
       durationMs: Math.trunc(rest.durationMs),
       statementDigest: statement.digest,
+      ...(memoryUnlimited ? { warnings: ['target_memory_unlimited'] } : {}),
     } as QueryResult
   }
 

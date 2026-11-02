@@ -52,6 +52,7 @@ import {
   ClusterConfirmRequestSchema,
   ClusterDeclaredTierRequestSchema,
   ClusterIdSchema,
+  ClusterMemoryLimitRequestSchema,
   ClusterRegisterRequestSchema,
   ClusterRetireRequestSchema,
   ConnectionCancelRequestSchema,
@@ -1281,6 +1282,15 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         caller(call),
         clusterId(call),
         ClusterDeclaredTierRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planClusterMemoryLimit: async (app, call) =>
+    value(
+      await app.registry.planClusterMemoryLimit(
+        caller(call),
+        clusterId(call),
+        ClusterMemoryLimitRequestSchema.parse(call.body),
         idempotency(call),
       ),
     ),

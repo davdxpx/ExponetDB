@@ -87,7 +87,8 @@
       "1": "sha256:1fb1bee63fa9bcc545e90d6bcaa72b1b4b9b85a183e2c2b6c95f5457e47a4722"
     },
     "sql_query": {
-      "1": "sha256:e50e6cf41b0061671097b96fa4024e8368daad442ddbae474c3669044a28dc30"
+      "1": "sha256:e50e6cf41b0061671097b96fa4024e8368daad442ddbae474c3669044a28dc30",
+      "2": "sha256:93f2a3143088bd67ab7f1b763cb34a50ca1014e44354e54b86101392cb39ab6e"
     },
     "table_stats": {
       "1": "sha256:3c32f9c2fa8c05663b2490c458ad0ce0b5c0a2da06babb0bc43f51de0b08cf82"

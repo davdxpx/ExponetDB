@@ -2031,7 +2031,8 @@ History:
   aggregates in agent reads.
 - **Recommendation.** (b); P1 (no data loss, no gate bypass; agent reads of production are
   `humans_only` by default, OD-13).
-- **Blocks.** Nothing built here.
+- **Built.** 2026-11-02 on `fix/verification-campaign-group-a-followups`: the size rule refuses a `verify.sql` check (`VERIFY_CONSTRUCT_UNSUPPORTED`, `size_argument`); the cluster's declared memory limit (`cgroup`, `overcommit`, `none`; bundle `cluster-memory-limit`, `POST /clusters/{id}/memory-limit`, production authority); a row read of a cluster without a declared limit warns a person (`warnings: ["target_memory_unlimited"]`) and refuses an agent (`DATA_READ_NOT_PERMITTED`, `details.reason`); `sql_query` at toolVersion 2. Until the owner declares the limits of existing clusters, agents read no rows of them.
+- **Blocks.** Nothing.
 
 ## OD-69. Audit chain and clock skew
 

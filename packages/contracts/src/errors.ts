@@ -1392,6 +1392,8 @@ export const ERRORS = {
     message: 'Data reads are disabled on this target or tier for this client.',
     remediation:
       'The data.read policy rule of the target decides who reads its rows; by default production rows are for people only. Read a non-production target, or ask a person to run the read.',
+    // OD-68 (b): an agent reads rows only where the cluster declared a memory limit.
+    details: z.strictObject({ reason: z.enum(['target_memory_unlimited']) }).optional(),
   },
   STATEMENT_NOT_AVAILABLE: {
     group: 'queries_and_diagnostics',

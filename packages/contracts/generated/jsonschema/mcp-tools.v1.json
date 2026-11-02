@@ -2772,7 +2772,7 @@
     {
       "_meta": {
         "cloud.exponet.db/action": "query.run",
-        "cloud.exponet.db/toolVersion": 1
+        "cloud.exponet.db/toolVersion": 2
       },
       "annotations": {
         "destructiveHint": false,
@@ -3013,6 +3013,17 @@
                 "type": "null"
               }
             ]
+          },
+          "warnings": {
+            "description": "OD-68 (b): target_memory_unlimited when the target's cluster has no declared memory limit: a read that builds large values can make the kernel restart the whole cluster.",
+            "items": {
+              "enum": [
+                "target_memory_unlimited"
+              ],
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
           }
         },
         "required": [

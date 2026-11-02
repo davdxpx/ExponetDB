@@ -5945,6 +5945,37 @@
       "wave": "8"
     },
     {
+      "basis": "resources.md (Registry): registry changes create a plan",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.cluster.declare_memory_limit.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "production",
+      "title": "Plan the declaration of the memory limit of a cluster's PostgreSQL (OD-68)",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
       "basis": "ADR-0034; credentials-and-roles.md §3",
       "class": {
         "class": "read",
@@ -6162,6 +6193,38 @@
       "subject": "project",
       "tierSemantics": "subject",
       "title": "Revoke an execution-role exception: plans that bound it become stale",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
+      "basis": "OD-68 (b), 2026-11-02: the declaration lets agents read rows of the cluster, so it is a production decision like the declared tier",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "registry.cluster.declare_memory_limit",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "production",
+      "title": "Declare whether a cluster's PostgreSQL runs under a memory limit (OD-68); production authority whichever value",
       "verification": "required",
       "wave": "9"
     },
@@ -11601,7 +11664,24 @@
     },
     {
       "code": "DATA_READ_NOT_PERMITTED",
-      "details": null,
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/DATA_READ_NOT_PERMITTED",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "enum": [
+              "target_memory_unlimited"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "type": "object"
+      },
       "group": "queries_and_diagnostics",
       "message": "Data reads are disabled on this target or tier for this client.",
       "remediation": "The data.read policy rule of the target decides who reads its rows; by default production rows are for people only. Read a non-production target, or ask a person to run the read.",

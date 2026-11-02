@@ -85,6 +85,7 @@ export {
 export {
   ClusterAdoptAgentKind,
   ClusterConfirmKind,
+  ClusterDeclareMemoryLimitKind,
   ClusterDeclareTierKind,
   ClusterRegisterKind,
   ClusterRetireKind,
@@ -108,6 +109,7 @@ export {
   observeClusterIdentity,
   planClusterAdoptAgent,
   planClusterConfirm,
+  planClusterDeclareMemoryLimit,
   planClusterDeclareTier,
   planClusterRegister,
   planClusterRetire,
@@ -185,6 +187,7 @@ export type {
   TargetState,
   Tier,
 } from './records.ts'
+export { MEMORY_LIMITS, type MemoryLimit, memoryLimited } from './records.ts'
 export { TargetRegisterKind } from './register.ts'
 export {
   type BackupBindings,

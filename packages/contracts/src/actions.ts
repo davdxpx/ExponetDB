@@ -1693,6 +1693,11 @@ export const ACTIONS = {
     'cluster',
     { tierSemantics: 'production', wave: '8' },
   ),
+  'registry.cluster.declare_memory_limit.plan': registryPlan(
+    "Plan the declaration of the memory limit of a cluster's PostgreSQL (OD-68)",
+    'cluster',
+    { tierSemantics: 'production', wave: '9' },
+  ),
   // ----- Wave 9 Part A: execution roles for adopted schemas (ADR-0034) -----
   // A project's environment: the environment's tier ('subject'), never production authority
   // for a nonprod environment; human only like every registry change; re-authentication.
@@ -1749,6 +1754,18 @@ export const ACTIONS = {
       tierSemantics: 'subject',
       wave: '9',
       basis: 'ADR-0034 §2: human only, registry.manage at the environment’s tier',
+    },
+  ),
+  'registry.cluster.declare_memory_limit': registryKind(
+    "Declare whether a cluster's PostgreSQL runs under a memory limit (OD-68); production authority whichever value",
+    fixed('high'),
+    'cluster',
+    {
+      ...REAUTH,
+      tierSemantics: 'production',
+      wave: '9',
+      basis:
+        'OD-68 (b), 2026-11-02: the declaration lets agents read rows of the cluster, so it is a production decision like the declared tier',
     },
   ),
   'registry.cluster.declare_tier': registryKind(

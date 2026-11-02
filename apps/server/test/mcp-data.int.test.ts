@@ -131,6 +131,41 @@ describe('data reads through /mcp and REST', () => {
     expect(rest.body.statementDigest).toBe(result['statementDigest'])
   })
 
+  // OD-68 (b): a read that builds large values can make the kernel restart a cluster that runs
+  // without a memory limit. There agents read no rows and a person's result carries a warning.
+  it('refuses agent reads and warns people where the cluster declares no memory limit', async () => {
+    const declare = (memoryLimit: string) =>
+      w.planAndApply(
+        `/api/v1/clusters/${w.ids.cluster}/memory-limit`,
+        { memoryLimit },
+        { reauth: true },
+      )
+    const statement = { target: w.ids.stagingTarget, sql: 'SELECT id FROM public.accounts' }
+    const limited = await agent.call('sql_query', statement)
+    expect(limited.isError, limited.content[0]?.text.slice(0, 300)).toBeUndefined()
+    expect(limited.structuredContent?.['warnings']).toBeUndefined()
+    await declare('none')
+    try {
+      const cluster = await w.owner.browser.call('GET', `/api/v1/clusters/${w.ids.cluster}`)
+      expect([cluster.status, cluster.body.memoryLimit], cluster.text).toEqual([200, 'none'])
+      const refused = await agent.call('sql_query', statement)
+      refusedWith(refused, 'DATA_READ_NOT_PERMITTED')
+      expect(refused.content[0]?.text).toContain('target_memory_unlimited')
+      const person = await w.rest(
+        cliToken,
+        'POST',
+        `/api/v1/targets/${w.ids.stagingTarget}/queries`,
+        {
+          sql: statement.sql,
+        },
+      )
+      expect([person.status, person.body.warnings]).toEqual([200, ['target_memory_unlimited']])
+    } finally {
+      await declare('cgroup')
+    }
+    expect((await agent.call('sql_query', statement)).isError).toBeUndefined()
+  })
+
   it('keeps production rows for people (humans_only): a tool error for the agent, rows for the CLI', async () => {
     const r = await prodAgent.request('tools/call', {
       name: 'sql_query',
