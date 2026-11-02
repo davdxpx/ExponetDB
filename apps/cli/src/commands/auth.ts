@@ -440,17 +440,17 @@ export const authCommands: readonly CommandSpec[] = [
         blocks: [
           {
             kind: 'table',
-            columns: [
-              { title: 'PRESET' },
-              { title: 'DEVICE FLOW' },
-              { title: 'SUMMARY', flexible: true },
-            ],
-            rows: items.map((i) => [i.preset, i.deviceFlow ? 'yes' : 'no', i.summary]),
+            columns: [{ title: 'PRESET' }, { title: 'DEVICE FLOW' }],
+            rows: items.map((i) => [i.preset, i.deviceFlow ? 'yes' : 'no']),
           },
-          // The scopes wrap, so a long list is never cut at the terminal width.
+          // The summary and the scopes wrap, so a long list is never cut at the terminal width.
           ...items.map((i) => ({
             kind: 'text' as const,
-            lines: [`${i.preset}:`, ...wrapWords(i.scopes, 100).map((l) => `  ${l}`)],
+            lines: [
+              `${i.preset}:`,
+              ...wrapWords(i.summary.split(' '), 100).map((l) => `  ${l}`),
+              ...wrapWords(i.scopes, 100).map((l) => `  ${l}`),
+            ],
           })),
         ],
       })
