@@ -212,7 +212,7 @@ describe('what the scan cannot follow (the verification review of follow-up 2)',
     expect(countTokens(select, MAX_PARSE_TOKENS)).toBeGreaterThan(MAX_PARSE_TOKENS)
     expect(parseWith(17, select, 4 * 1024 * 1024)).toEqual({
       ok: false,
-      failure: { kind: 'too_large' },
+      failure: { kind: 'too_large', limit: 'tokens' },
     })
     expect(exceedsParseWork(select)).toBe(true)
     // A body is one token to the SQL parser, and its own parse to the PL/pgSQL one.
