@@ -1051,6 +1051,8 @@ describe('the daily ingest quota of an identity', () => {
     const wait = (refused as { details: { retryAfterSeconds: number } }).details.retryAfterSeconds
     expect(wait).toBeGreaterThan(0)
     expect(wait).toBeLessThanOrEqual(24 * 3600)
+    // The HTTP layer sets Retry-After from the error's own property.
+    expect(refused).toMatchObject({ retryAfterSeconds: wait })
     const stored = await h.serve.query(
       'test.quota.stored',
       'SELECT count(*)::int AS n FROM migrations.bundle_revisions WHERE migration_id = $1',

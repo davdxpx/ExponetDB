@@ -109,7 +109,9 @@ export class MigrationUseCases {
         identityId: this.#h.identityOf(caller),
       })
       // Stored revisions are permanent: the write is audited with it, or not made (VC-001).
+      // Nothing stored is no change, and no event (the chain is permanent too).
       const fresh = ingested.filter((i) => i.status !== 'unchanged')
+      if (fresh.length === 0) return ingested
       await appendAuditEvent(
         tx,
         {

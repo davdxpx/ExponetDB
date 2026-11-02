@@ -547,6 +547,23 @@ describe('migrations over REST', () => {
       result: { status: 'succeeded' },
     })
     expect(audit.rows[0]?.e.changes.bytes).toBeGreaterThan(0)
+    // Re-submitting stored bytes changes nothing and writes no event (the chain is permanent too).
+    const count = async () =>
+      (
+        await db.asSuperuser((c) =>
+          c.query(
+            `SELECT count(*)::int AS n FROM audit.audit_events WHERE action = 'migration.bundle.ingested'`,
+          ),
+        )
+      ).rows[0]?.n
+    const before = await count()
+    const again = await owner.browser.call('POST', `/api/v1/projects/${ids.project}/bundles`, {
+      bundles: [b],
+      defaults: DEFAULTS,
+    })
+    expect(again.status).toBe(200)
+    expect(again.body.items).toEqual([expect.objectContaining({ status: 'unchanged' })])
+    expect(await count()).toBe(before)
   })
 
   it('plans on staging, applies through plan.apply, verifies and reads the ledger back live', async () => {

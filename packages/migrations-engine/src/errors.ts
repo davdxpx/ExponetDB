@@ -11,10 +11,14 @@ export class MigrationError extends Error {
   override readonly name = 'MigrationError'
   readonly code: ErrorCode
   readonly details: JsonObject | undefined
+  /** The wait of a `RATE_LIMITED` refusal, which the HTTP layer sends as `Retry-After`. */
+  readonly retryAfterSeconds: number | undefined
 
   constructor(code: ErrorCode, details?: JsonObject, options: { cause?: unknown } = {}) {
     super(errorDefinition(code).message, options.cause === undefined ? undefined : options)
     this.code = code
     this.details = details
+    const wait = details?.['retryAfterSeconds']
+    this.retryAfterSeconds = typeof wait === 'number' ? wait : undefined
   }
 }
