@@ -805,3 +805,32 @@ finding is wrong. Owner decisions are in [`open-decisions.md`](../00-product/ope
 | Date | Commit | Change |
 |---|---|---|
 | 2026-10-28 | (this branch) | section opened; TC-003, TC-004, TC-005, TC-006, TC-008, TC-022, TC-007, TC-001, TC-002, TC-009, TC-010, TC-011, TC-012, TC-013, TC-030, TC-014, TC-015, TC-016, TC-018, TC-019, TC-021, TC-031, TC-032, TC-033, TC-039, TC-042, TC-068, TC-026, TC-029, TC-049, TC-050, TC-051, TC-054, TC-028, TC-035, TC-036, TC-038 |
+
+## Verification campaign fixes – Parallel Session
+
+| | |
+|---|---|
+| Branches | one per group of section 5 of the fix prompt; group A is `fix/verification-campaign-2026-10-28`, based on `origin/main` `cb70f23b` (the campaign tested `d51da5d0`) |
+| Source | [the fix prompt](./prompts/2026-10-28-verification-fixes.md) and its [evidence](./prompts/verification-campaign-2026-10-28/README.md): 160 findings (P0 0, P1 17, P2 63, P3 80) |
+| Toolchain of the runs | Ubuntu 24.04 on WSL2, UTC, Node 24.22.1, Bun 1.4.4, Go 1.26.10 (`bun run toolchain` passes); own PostgreSQL 16, 17 and 18 containers from `tooling/dev` |
+| Rule | One commit per finding, tests first (red against the unfixed source, recorded in the commit), nothing merged or deployed by this session |
+
+### VC-1. Group A: installation wedges and the two P0-borderline items
+
+| Finding | Status | Regression artifact | Document |
+|---|---|---|---|
+| VC-012 a data read never returns when its backend dies | IMPLEMENTED, TESTED LOCALLY on PostgreSQL 16, 17 and 18 (red before: no result 5 s after `pg_terminate_backend` on every major, no result 20 s into a partition) | `packages/diagnostics/test/data-read.int.test.ts` (terminated backend, a connection that ends without a message, a partition ended by the hard deadline; the next read works); the campaign's `mcp-sql-corpus.int.test.ts` "terminated" case answers both reads in 0.4 s | [sql-execution-security.md §2.4](../03-database-model/sql-execution-security.md#24-wave-7-implementation) |
+| VC-002 one allowlisted read restarts the target's cluster | IMPLEMENTED (the size rule), TESTED LOCALLY on the three grammars and PostgreSQL 16, 17 and 18; the residual and the registry memory fact are owner decision [OD-68](../00-product/open-decisions.md#od-68-memory-of-a-data-read-on-the-target); the proposed `generate_series` rule is not built (OD-68 says why) | `packages/postgres/test/admission.test.ts` (16 refused and 7 admitted shapes per grammar), `data-read.int.test.ts` (the campaign's statement refused); `bomb.ts` scenario 3 on a PostgreSQL 17 container limited to 3 GiB: refused in 43 ms, no OOM kill, no restart | [sql-execution-security.md §2.4](../03-database-model/sql-execution-security.md#24-wave-7-implementation) |
+| VC-003 a clock step leaves the audit chain refusing every event | IMPLEMENTED (typed `AUDIT_CLOCK_SKEW`, readiness check `audit_chain`, RB-16), TESTED LOCALLY on PostgreSQL 17; tolerate, clamp or repair is owner decision [OD-69](../00-product/open-decisions.md#od-69-audit-chain-and-clock-skew). NOT EXECUTED: the clock step on a stack (`F-matrix.sh ... clock_fwd3h`); the test writes the future head directly | `packages/audit/test/clock-skew.int.test.ts`, `apps/server/test/http-auth.test.ts` (503 with both times, not 500) | [error-model.md §3](../02-control-plane/error-model.md#3-catalog), [self-observability.md](../10-observability/self-observability.md), [incident-model.md](../12-operations/incident-model.md) RB-16 |
+| VC-001 a full Control Store disk, caused by a holder of `migrations.plan` | PARTLY IMPLEMENTED: every ingest audited, 64 MiB per identity per 24 h, RB-17; TESTED LOCALLY on PostgreSQL 17. Owner decision [OD-70](../00-product/open-decisions.md#od-70-control-store-disk-and-bundle-ingest): the quota value, a disk component in installation health, restart policy and WAL volume, the purge path, a REST rate limit, P0 or P1. NOT EXECUTED: `fc3-disk.sh` on a stack with a loop-mounted volume | `packages/migrations-engine/test/engine.int.test.ts` (the quota), `apps/server/test/http-migrations.int.test.ts` (the audit event) | [resources.md](../06-rest-api/resources.md), [control-store-runbook.md §5](../12-operations/control-store-runbook.md#5-rb-17-control-store-disk-full-enospc) |
+
+### VC-1a. Groups not started on this branch
+
+Groups B to I and the closing documents of section 5 of the fix prompt get their own branches
+and pull requests; nothing of them is changed here.
+
+### VC-2. Review history (append-only)
+
+| Date | Commit | Change |
+|---|---|---|
+| 2026-11-02 | (this branch) | section opened; group A: VC-012, VC-002, VC-003, VC-001; OD-68 to OD-70 added |
