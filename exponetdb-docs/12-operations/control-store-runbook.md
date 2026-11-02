@@ -128,3 +128,35 @@ Trigger: Control Plane `down` (every role not ready with
    passwords changed; start worker, serve, gateway; all must become ready.
 6. **Reconcile** ledger mirrors against target ledgers (from Wave 4, F30); in
    Wave 2 there are no managed targets.
+
+## 5. RB-17 Control Store disk full (`ENOSPC`)
+
+**[DECIDED]** (verification campaign fix VC-001, 2026-11-02; measured on a
+disposable stack, 420 MB volume.) Trigger: every role not ready, the
+Control Store container exited, and its log shows
+`PANIC: could not write to file "pg_wal/xlogtemp…": No space left on device`
+followed by `shutting down due to startup process failure`. PostgreSQL stops
+on a failed WAL write, and a plain restart fails again while the volume is
+full. Nothing committed is lost.
+
+1. **Do not delete files** under the data directory or `pg_wal`, and do not
+   try to `DELETE` rows: `migrations.bundle_revisions` and the audit tables are
+   append-only and refuse it for every login, the superuser included.
+2. **Grow the volume** (or move the data directory to a larger one), then
+   start the container. On the stack PostgreSQL accepted connections 1.4 s
+   after the start and the roles were ready 2.4 s later without a restart.
+3. **Integrity.** `control-store status` must be `current` and `audit verify`
+   must pass.
+4. **Find what filled it.** Bundle bytes by identity over the last day, as a
+   runtime login such as `exdb_serve`:
+   `SELECT ingested_by, count(*), sum(octet_length(up_sql) + octet_length(manifest_yaml) + coalesce(octet_length(verify_sql), 0) + coalesce(octet_length(down_sql), 0)) AS bytes FROM migrations.bundle_revisions WHERE ingested_at > now() - interval '1 day' GROUP BY 1 ORDER BY 3 DESC`,
+   and the audit events `migration.bundle.ingested` (every ingest is audited
+   since this fix; one identity stores at most 64 MiB of bundle bytes in 24
+   hours, more answers `RATE_LIMITED`). A hostile identity: RB-11.
+5. **Prevent.** Alert on the host's disk use (the product has no Control
+   Store disk signal yet), keep WAL on its own volume where the platform
+   allows it, and leave free space for at least a day of the quota per
+   active identity. Thresholds, a disk component in installation health, a
+   restart policy and an audited purge of never-planned revisions are owner
+   decision
+   [OD-70](../00-product/open-decisions.md#od-70-control-store-disk-and-bundle-ingest).

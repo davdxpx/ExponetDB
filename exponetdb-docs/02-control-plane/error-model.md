@@ -297,6 +297,7 @@ later without changes).
 | `NOT_FOUND` | 404 | no | |
 | `CONFLICT` | 409 | no | Generic optimistic concurrency failure. (`If-Match` is not used: registry and access changes are plans bound to the resource's `revision` and fail with `PLAN_STALE`; [REST architecture §2](../06-rest-api/architecture.md).) |
 | `RATE_LIMITED` | 429 | yes | `Retry-After` header. Optional `details.retryAfterSeconds` (positive whole seconds, the same wait; an MCP tool error has no header, so it carries the wait there). |
+| `AUDIT_CLOCK_SKEW` | 503 | yes | The newest audit event lies more than a minute ahead of the database clock (a clock step forward and back): the chain guard refuses every event until the clock passes it, so no audited change can be recorded; reads keep working. `details.headAt`, `details.databaseNow`. [DECIDED] (VC-003, 2026-11-02; RB-16, [OD-69](../00-product/open-decisions.md#od-69-audit-chain-and-clock-skew)). |
 | `CONTROL_PLANE_DEGRADED` | 503 | yes | Control Store unavailable or ExponetDB not ready. Distinct from `TARGET_UNAVAILABLE` (C-29). |
 | `INTERNAL` | 500 | yes | Unexpected; `requestId` correlates with logs. Never contains stack traces. |
 

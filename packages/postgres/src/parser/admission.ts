@@ -16,6 +16,7 @@ import {
   parseWith,
   walk,
 } from './parse.ts'
+import { sizeArgumentRefusal } from './size-arguments.ts'
 
 /**
  * Parser-based admission of untrusted read SQL
@@ -78,6 +79,7 @@ export type AdmissionReason =
   | 'relation_kind'
   | 'output_columns'
   | 'explain_option'
+  | 'size_argument'
 
 export interface RelationRef {
   readonly schema: string | null
@@ -596,6 +598,16 @@ export function admitReadSync(major: SupportedMajor, text: string): Admission {
   if (statementClass === 'select') statementClass = selectClass(target.node)
   const refusal = checkTree(major, { SelectStmt: target.node }, {}, collected, parsed.indexOf, 0)
   if (refusal !== undefined) return refusal
+  // Data reads only: a verify.sql check is reviewed bundle content with its own receive bound.
+  const unbounded = sizeArgumentRefusal({ SelectStmt: target.node })
+  if (unbounded !== undefined) {
+    const position = location(unbounded.body, parsed.indexOf)
+    return refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'size_argument', {
+      construct: unbounded.construct,
+      statement: 0,
+      ...(position === undefined ? {} : { position }),
+    })
+  }
   return {
     ok: true,
     major,

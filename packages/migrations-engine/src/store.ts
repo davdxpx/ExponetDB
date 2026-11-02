@@ -66,7 +66,26 @@ export interface IngestInput {
   readonly defaults: unknown
   readonly source?: SourceClaim
   readonly identityId: string
+  /** The identity's quota; {@link INGEST_DAILY_BYTES} unless a caller (a test) names another. */
+  readonly dailyBytes?: number
 }
+
+/**
+ * The bundle bytes one identity may store in 24 hours (VC-001; the value is
+ * [OD-70](../../../exponetdb-docs/00-product/open-decisions.md#od-70-control-store-disk-and-bundle-ingest)).
+ * Revisions are permanent (the table is append-only), so a holder of
+ * `migrations.plan` could otherwise fill the Control Store's disk with a few
+ * requests until PostgreSQL stops. Re-submitting stored bytes costs nothing.
+ */
+export const INGEST_DAILY_BYTES = 64 * 1024 * 1024
+
+// shortcut: a scan of the identity's revisions of the last day (no index on ingested_by); index it
+// in a new bundle once bundle_revisions holds more than some 100,000 rows.
+const QUOTA_USED = `SELECT coalesce(sum(octet_length(manifest_yaml) + octet_length(up_sql)
+          + coalesce(octet_length(verify_sql), 0) + coalesce(octet_length(down_sql), 0)), 0)::bigint AS used,
+        ceil(extract(epoch FROM min(ingested_at) + interval '1 day' - clock_timestamp()))::int AS wait
+   FROM migrations.bundle_revisions
+  WHERE ingested_by = $1 AND ingested_at > clock_timestamp() - interval '1 day'`
 
 const COLUMNS = `project_id, migration_id, revision, name, checksum, verify_digest, rollback_digest,
   source_digest, bundle_digest, transactional, depends_on, manifest, defaults, manifest_yaml, up_sql,
@@ -155,6 +174,17 @@ export async function ingestBundles(tx: Tx, input: IngestInput): Promise<Ingeste
       ],
     })
   }
+  const quota = input.dailyBytes ?? INGEST_DAILY_BYTES
+  // One identity's ingests one at a time, so two requests cannot both pass the quota.
+  await tx.query(
+    'migrations.store.quota_lock',
+    'SELECT pg_advisory_xact_lock(1163412546, hashtext($1))',
+    [`bundle-quota/${input.identityId}`],
+  )
+  const usage = (await tx.query('migrations.store.quota_used', QUOTA_USED, [input.identityId]))
+    .rows[0]
+  let used = usage === undefined ? 0 : Number(usage.text('used'))
+  const wait = usage?.intOrNull('wait') ?? 24 * 3600
   const seen = new Set<string>()
   const out: IngestedItem[] = []
   for (const bundle of input.bundles) {
@@ -219,6 +249,14 @@ export async function ingestBundles(tx: Tx, input: IngestInput): Promise<Ingeste
       }
     }
     const files = submissionInput(bundle, defaults.value).files
+    const bytes = ['migration.yaml', 'up.sql', 'verify.sql', 'down.sql'].reduce(
+      (n, name) => n + (files.get(name)?.byteLength ?? 0),
+      0,
+    )
+    if (used + bytes > quota) {
+      throw new MigrationError('RATE_LIMITED', { retryAfterSeconds: Math.max(1, wait) })
+    }
+    used += bytes
     const revision = (newest?.revision ?? 0) + 1
     const source =
       input.source === undefined

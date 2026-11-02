@@ -146,6 +146,15 @@ async function typeNames(
 /** How often a cancel is sent again while a canceled read has not ended. */
 const CANCEL_RESEND_MS = 250
 
+/**
+ * How long past its statement timeout a read may take before it is
+ * abandoned (VC-012): the session is closed, so its connection and the
+ * caller's slot are free, and the read answers `TARGET_UNAVAILABLE`. The
+ * server ends the statement by itself; this bounds a peer that never
+ * answers (a dead backend, a partition).
+ */
+const DATA_READ_GRACE_MS = 10_000
+
 /** Maps a server error of the read to the catalog: never its message. */
 function failure(error: unknown, canceled: boolean): DataReadOutcome {
   if (!(error instanceof TargetError)) throw error
@@ -201,8 +210,18 @@ export async function executeDataRead(
   if (signal?.aborted === true) return refused('QUERY_CANCELED')
   signal?.addEventListener('abort', onAbort, { once: true })
   const started = Date.now()
+  let deadline: ReturnType<typeof setTimeout> | undefined
+  const abandoned = new Promise<DataReadOutcome>((resolve) => {
+    deadline = setTimeout(() => {
+      // TARGET_UNAVAILABLE carries no catalog details: the cause travels as the reason.
+      void session
+        .close()
+        .catch(() => undefined)
+        .then(() => resolve(refused('TARGET_UNAVAILABLE', undefined, 'read_deadline')))
+    }, request.statementTimeoutMs + DATA_READ_GRACE_MS)
+  })
   try {
-    return await session.readOnly(
+    const running = session.readOnly(
       async () => {
         await session.query(
           sql`SELECT pg_catalog.set_config('application_name', $1, true),
@@ -313,9 +332,13 @@ export async function executeDataRead(
       },
       { statementTimeoutMs: request.statementTimeoutMs, lockTimeoutMs: LOCK_TIMEOUT_MS },
     )
+    // The abandoned read settles once its socket is gone; nothing waits for it.
+    running.catch(() => undefined)
+    return await Promise.race([running, abandoned])
   } catch (error) {
     return failure(error, canceled)
   } finally {
+    clearTimeout(deadline)
     clearInterval(resend)
     signal?.removeEventListener('abort', onAbort)
   }

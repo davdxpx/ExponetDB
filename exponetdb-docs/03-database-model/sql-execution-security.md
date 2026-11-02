@@ -255,6 +255,27 @@ values.
   ONLY`, `SELECT 1`, `SET LOCAL` statement, lock (1 s) and idle (30 s)
   timeouts and, on PostgreSQL 17 and 18, `transaction_timeout`; a cursor
   with bind parameters, `FETCH FORWARD <cap + 1>`, `ROLLBACK`, close.
+  **[DECIDED]** (verification campaign fix VC-012, 2026-11-02) A read
+  whose backend dies (terminated, killed by the kernel, or a partition)
+  never hangs its caller: the cursor of a broken session is not closed
+  through the server (its socket is destroyed), a cursor close the server
+  does not answer within 1 s breaks the session, and a read that has not
+  ended 10 s after its statement timeout is abandoned: its session is
+  closed, the cluster's reader slot is free, and the read answers
+  `TARGET_UNAVAILABLE` (reason `read_deadline`). The same close rule holds
+  for engine cursors and `verify.sql` checks.
+- **Size of built values.** **[DECIDED]** (verification campaign fix
+  VC-002, 2026-11-02) A data read may ask a value-building function only
+  for a constant size of at most 10,000: the count of `repeat`, the length
+  of `lpad` and `rpad`, the elements of `array_fill` (an `ARRAY[...]` of
+  integer constants), every width of a `format` string (a constant
+  format, no `*` width) and the length of a cast to `char(n)` or `bit(n)`
+  (both pad the value to `n`). A column, a parameter or an expression as the
+  size is refused as `QUERY_CONSTRUCT_UNSUPPORTED` (reason
+  `size_argument`). PostgreSQL has no per-query memory limit: an aggregate
+  of huge built values made the kernel restart the target's cluster. The
+  rule bounds one value only; rows times values is the residual of
+  [OD-68](../00-product/open-decisions.md#od-68-memory-of-a-data-read-on-the-target).
 - **Values.** Typed by type oid (booleans, integers, `int8` as a number
   when exact and as a string beyond 2^53, floats, `numeric` and other
   exact types as strings, JSON parsed up to 64 KiB, `bytea` as

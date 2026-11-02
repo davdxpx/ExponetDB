@@ -603,6 +603,13 @@ export class Application {
       inline: (caller, action, idempotency, subject, create) =>
         this.#inline(caller as Caller, action, idempotency, subject, create),
       identityOf: (caller) => identityOf(caller as Caller),
+      auditParties: (caller) => {
+        const c = caller as Caller
+        return {
+          ...denialParties(c),
+          ...(c.requestId === undefined ? {} : { request: { requestId: c.requestId } }),
+        }
+      },
       planActor: (caller) => planActor(caller as Caller),
       restrictions: (caller) => restrictionsOf(caller as Caller),
       withStepUp: (tx, caller, bound) => this.#withStepUp(tx, caller as Caller, bound),

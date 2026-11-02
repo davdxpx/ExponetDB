@@ -294,6 +294,95 @@ describe.each(SUPPORTED_MAJORS.map((m) => [m]))(
   },
 )
 
+describe('size arguments of value-building functions (VC-002)', () => {
+  // One read asked for ~10 GB within a second and made the kernel restart the target's
+  // cluster: a value-building function's size must be a small constant.
+  const BOUNDED: readonly string[] = [
+    "SELECT repeat('-', 40)",
+    "SELECT pg_catalog.repeat('ab', 10000)",
+    "SELECT lpad(a.x::text, 10, '0'), rpad(a.y, 8) FROM public.t a",
+    "SELECT lpad('a', -3)",
+    'SELECT array_fill(0, ARRAY[3, 4])',
+    'SELECT array_fill(0, ARRAY[100, 100], ARRAY[1, 1])',
+    "SELECT format('%s.%I %-20s %3$s %%', 'a', 'b', 'c')",
+    "SELECT 'x'::char(10), CAST('1' AS bit(8)), 'y'::char, 'z'::varchar(100000)",
+  ]
+  const UNBOUNDED: readonly (readonly [string, string])[] = [
+    [
+      "SELECT array_agg(repeat('x', 100000000)) FROM generate_series(1, 100)",
+      'repeat(…, n): n must be a constant of at most 10000',
+    ],
+    ["SELECT repeat('x', 10001)", 'repeat(…, n): n must be a constant of at most 10000'],
+    [
+      "SELECT pg_catalog.repeat('x', 3000000000)",
+      'repeat(…, n): n must be a constant of at most 10000',
+    ],
+    ["SELECT repeat('x', $1)", 'repeat(…, n): n must be a constant of at most 10000'],
+    ["SELECT repeat('x', '7')", 'repeat(…, n): n must be a constant of at most 10000'],
+    [
+      "SELECT repeat('x', a.n) FROM public.t a",
+      'repeat(…, n): n must be a constant of at most 10000',
+    ],
+    ["SELECT repeat('x', 5 * 5)", 'repeat(…, n): n must be a constant of at most 10000'],
+    ["SELECT lpad('a', 100000000)", 'lpad(…, n): n must be a constant of at most 10000'],
+    ["SELECT rpad('a', 100000000, 'b')", 'rpad(…, n): n must be a constant of at most 10000'],
+    ['SELECT array_fill(0, ARRAY[100000, 100000])', 'array_fill(…, dims): at most 10000 elements'],
+    ["SELECT array_fill(0, '{3}'::int[])", 'array_fill(…, dims): at most 10000 elements'],
+    [
+      'SELECT array_fill(0, ARRAY[a.n]) FROM public.t a',
+      'array_fill(…, dims): at most 10000 elements',
+    ],
+    ["SELECT format('%100000000s', 'x')", 'format: a constant format with widths of at most 10000'],
+    [
+      "SELECT format('%*s', 100000000, 'x')",
+      'format: a constant format with widths of at most 10000',
+    ],
+    [
+      "SELECT format('%1$*2$s', 'x', 100000000)",
+      'format: a constant format with widths of at most 10000',
+    ],
+    [
+      "SELECT format(a.f, 'x') FROM public.t a",
+      'format: a constant format with widths of at most 10000',
+    ],
+    [
+      "SELECT array_agg('x'::char(10000000)) FROM generate_series(1, 1000) AS g",
+      'char(n), bit(n): n of at most 10000 (the value is padded to n)',
+    ],
+    [
+      "SELECT CAST('1' AS bit(80000000))",
+      'char(n), bit(n): n of at most 10000 (the value is padded to n)',
+    ],
+    [
+      "SELECT 'x'::character(20000)",
+      'char(n), bit(n): n of at most 10000 (the value is padded to n)',
+    ],
+    [
+      "SELECT 'x'::pg_catalog.bpchar(20000)",
+      'char(n), bit(n): n of at most 10000 (the value is padded to n)',
+    ],
+  ]
+
+  it.each(SUPPORTED_MAJORS.flatMap((m) => BOUNDED.map((t) => [m, t] as const)))(
+    'admits on %i: %s',
+    (major, text) => {
+      expect(admitReadSync(major, text)).toMatchObject({ ok: true })
+    },
+  )
+
+  it.each(SUPPORTED_MAJORS.flatMap((m) => UNBOUNDED.map(([t, c]) => [m, t, c] as const)))(
+    'refuses on %i: %s',
+    (major, text, construct) => {
+      expect(admitReadSync(major, text)).toMatchObject({
+        ok: false,
+        code: 'QUERY_CONSTRUCT_UNSUPPORTED',
+        reason: 'size_argument',
+        construct,
+      })
+    },
+  )
+})
+
 describe('secret-bearing catalogs (Wave 7 review)', () => {
   // The reader and the verifier are members of pg_read_all_data, which PostgreSQL lets read
   // every relation, system catalogs included: the parser refuses these by name, in every spelling.

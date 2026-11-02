@@ -257,6 +257,11 @@ const READ_BATCH_ROWS = 25
 const RECEIVE_SLACK_BYTES = 1024 * 1024
 /** The receive bound of one verify.sql check: its `detail` is truncated anyway. */
 const CHECK_RECEIVE_BYTES = 4 * 1024 * 1024
+/**
+ * How long a cursor's close may wait for the server (VC-012): pg-cursor's
+ * close() waits for a ReadyForQuery that a dead connection never sends.
+ */
+const CURSOR_CLOSE_MS = 1000
 
 /** Characters of text in one raw row (array or object of server text values). */
 function textLength(row: unknown): number {
@@ -651,9 +656,40 @@ export class TargetSession {
         truncated: rows.length > maxRows,
       }
     } catch (error) {
-      throw mapDriverError(error, 'query')
+      const mapped = mapDriverError(error, 'query')
+      if (mapped.code === 'TARGET_UNAVAILABLE') {
+        this.#broken = true
+      }
+      throw mapped
     } finally {
-      await cursor.close().catch(() => undefined)
+      await this.#closeCursor(cursor)
+    }
+  }
+
+  /**
+   * Closes a cursor without ever waiting on a dead connection: a broken
+   * session's socket is destroyed instead, and a close the server does not
+   * answer within {@link CURSOR_CLOSE_MS} breaks the session.
+   */
+  async #closeCursor(cursor: Cursor): Promise<void> {
+    if (!this.usable) {
+      destroy(this.#client)
+      return
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const closed = await Promise.race([
+      cursor.close().then(
+        () => true,
+        () => false,
+      ),
+      new Promise<false>((resolve) => {
+        timer = setTimeout(() => resolve(false), CURSOR_CLOSE_MS)
+      }),
+    ])
+    clearTimeout(timer)
+    if (!closed) {
+      this.#broken = true
+      destroy(this.#client)
     }
   }
 
@@ -750,7 +786,7 @@ export class TargetSession {
       }
     } finally {
       guard.stop()
-      if (!guard.tripped()) await cursor.close().catch(() => undefined)
+      if (!guard.tripped()) await this.#closeCursor(cursor)
     }
     await this.query(
       outcome.status === 'error'
@@ -847,7 +883,7 @@ export class TargetSession {
       throw mapped
     } finally {
       guard.stop()
-      if (!guard.tripped()) await cursor.close().catch(() => undefined)
+      if (!guard.tripped()) await this.#closeCursor(cursor)
     }
   }
 

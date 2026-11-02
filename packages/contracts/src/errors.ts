@@ -1411,6 +1411,17 @@ export const ERRORS = {
     // The same time as the Retry-After header of a REST answer, for MCP, which has no header.
     details: z.strictObject({ retryAfterSeconds: z.int().positive() }).optional(),
   },
+  AUDIT_CLOCK_SKEW: {
+    group: 'generic',
+    status: 503,
+    retryable: true,
+    title: 'Audit chain ahead of the clock',
+    message:
+      'The newest audit event lies ahead of the database clock, so no audited change can be recorded. Nothing was changed.',
+    remediation:
+      'Correct the clock of the Control Store host (NTP). Audited changes resume once the database clock passes headAt; until then reads keep working. See RB-16 in incident-model.md.',
+    details: z.strictObject({ headAt: TimestampSchema, databaseNow: TimestampSchema }),
+  },
   CONTROL_PLANE_DEGRADED: {
     group: 'generic',
     status: 503,

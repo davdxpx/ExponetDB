@@ -18,6 +18,8 @@ import type { TestServer, TestTargets } from './servers.ts'
  *   protocol), then forward nothing more from that client: simple queries
  *   work, parameterized ones hang (the 2026-09-24 pooler signature);
  * - `delay`: add latency to every chunk;
+ * - `partition`: forward nothing more in either direction and keep both
+ *   sockets open (no FIN reaches the client: a network partition);
  * - `cut()`: drop every open connection.
  */
 export type ProxyMode =
@@ -26,6 +28,7 @@ export type ProxyMode =
   | { readonly kind: 'blackhole' }
   | { readonly kind: 'hang_extended' }
   | { readonly kind: 'delay'; readonly ms: number }
+  | { readonly kind: 'partition' }
 
 const SSL_REQUEST = 80877103
 
@@ -129,12 +132,15 @@ export class FaultProxy {
     this.#track(upstream)
     const delay = () => (this.#mode.kind === 'delay' ? this.#mode.ms : 0)
     const send = (target: TLSSocket, chunk: Buffer) => {
+      if (this.#mode.kind === 'partition') return
       const ms = delay()
       if (ms > 0) setTimeout(() => target.write(chunk), ms)
       else target.write(chunk)
     }
     upstream.on('data', (chunk: Buffer) => send(client, chunk))
-    upstream.on('close', () => client.destroy())
+    upstream.on('close', () => {
+      if (this.#mode.kind !== 'partition') client.destroy()
+    })
     client.on('close', () => upstream.destroy())
     // Client → server: frame messages after the startup packet to see `Parse`.
     let started = false

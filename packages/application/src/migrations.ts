@@ -1,3 +1,4 @@
+import { appendAuditEvent } from '@exponetdb/audit'
 import { AuthError } from '@exponetdb/auth'
 import type {
   BundleFile,
@@ -100,13 +101,35 @@ export class MigrationUseCases {
     await this.#project('migration.bundle.ingest', caller, projectId)
     const items = await this.#h.store.transaction('application.migrations.ingest', async (tx) => {
       await this.#h.authorize(tx, 'migration.bundle.ingest', caller, { kind: 'project', projectId })
-      return ingestBundles(tx, {
+      const ingested = await ingestBundles(tx, {
         projectId,
         bundles: request.bundles,
         defaults: request.defaults ?? {},
         ...(request.source === undefined ? {} : { source: request.source }),
         identityId: this.#h.identityOf(caller),
       })
+      // Stored revisions are permanent: the write is audited with it, or not made (VC-001).
+      // Nothing stored is no change, and no event (the chain is permanent too).
+      const fresh = ingested.filter((i) => i.status !== 'unchanged')
+      if (fresh.length === 0) return ingested
+      await appendAuditEvent(
+        tx,
+        {
+          action: 'migration.bundle.ingested',
+          phase: 'completed',
+          ...this.#h.auditParties(caller),
+          refs: { migrationIds: ingested.map((i) => i.revision.migrationId as never) },
+          changes: {
+            projectId,
+            stored: fresh.length,
+            unchanged: ingested.length - fresh.length,
+            bytes: fresh.reduce((n, i) => n + revisionBytes(i.revision), 0),
+          },
+          result: { status: 'succeeded' },
+        },
+        { clock: this.#h.clock },
+      )
+      return ingested
     })
     return {
       items: items.map((i) => ({
@@ -441,4 +464,9 @@ export class MigrationUseCases {
       file,
     )) as unknown as BundleFile
   }
+}
+
+/** The bytes a stored revision holds (its four files). */
+function revisionBytes(r: { readonly files: Readonly<Record<string, Uint8Array | null>> }): number {
+  return Object.values(r.files).reduce((n, f) => n + (f?.byteLength ?? 0), 0)
 }
