@@ -343,17 +343,20 @@ owner's pgBackRest setup, adopted then owned in Part B of Wave 9 (OD-52).
   No runtime resource receives the migration credential (§3).
 - Agent releases are separate artifacts with their own version and a
   compatibility range with the server ([`upgrades.md`](./upgrades.md)).
-- **[DECIDED]** (owner, 2026-11-02) The release image is also published to a
-  **private** package on the GitHub Container Registry,
+- **[DECIDED]** (owner, 2026-11-02) The release image is also published to the
+  GitHub Container Registry as a **public** package,
   `ghcr.io/davdxpx/exponetdb:<commit>`, by the manual workflow
   [`publish-image`](../../.github/workflows/publish-image.yml): the same
   build as the CI `image` job, the non-root check and the role-start smoke
-  test on that image, the push, and a final step that fails the run if an
-  anonymous client can read the manifest. A merge pushes nothing (private
-  packages count against the account's package storage). This is not a public
-  release ([OD-19](../00-product/open-decisions.md#od-19-exponetdb-license)).
-  **[PLANNED]** `reos-01` pulls from it after the owner has logged in to
-  `ghcr.io` there with a read-only token (`read:packages`); until then the
+  test on that image, the push, and a final step that warns while an
+  anonymous client cannot read the manifest. A merge pushes nothing. The
+  pushed image is the runtime stage only: Node.js and the bundled server and
+  Web App of that commit. Public to pull is not a license: the code stays
+  proprietary, all rights reserved
+  ([OD-19](../00-product/open-decisions.md#od-19-exponetdb-license)).
+  **[PLANNED]** A new package starts private and the registry has no API to
+  change that: the owner sets it to public once in the package settings after
+  the first push. `reos-01` then pulls without a login; until then the
   loopback registry stays the release path.
 
 ## 6a. Rolling out `/mcp` (Wave 7)

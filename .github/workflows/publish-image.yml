@@ -1,14 +1,14 @@
-# Publishes the release image of one commit to the private GitHub Container
-# Registry (exponetdb-docs/12-operations/deployment.md §6).
+# Publishes the release image of one commit to the GitHub Container Registry
+# (exponetdb-docs/12-operations/deployment.md §6).
 #
 # Manual only: a release is built when the owner asks for it, as with the
-# loopback registry before, and a merge pushes nothing. Private packages count
-# against the account's package storage, so there is no push per commit.
+# loopback registry before, and a merge pushes nothing.
 #
 # The tag is the commit (never `latest`); the image label
-# `org.opencontainers.image.revision` carries the same commit. The workflow
-# cannot set a package's visibility, so its last step fails the run if an
-# anonymous client can read the image.
+# `org.opencontainers.image.revision` carries the same commit. The package is
+# public so `reos-01` pulls without a login. A new package starts private and
+# the registry has no API to change that, so the last step only warns until
+# the owner has set the package to public once.
 #
 # Only the official checkout action is used (pinned like every action, see
 # ci.yml); the image is built, tested and pushed with the runner's Docker.
@@ -29,7 +29,7 @@ env:
 
 jobs:
   publish:
-    name: Image (build, smoke test, push to ghcr.io, private check)
+    name: Image (build, smoke test, push to ghcr.io, public check)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -66,21 +66,21 @@ jobs:
             echo "- digest: \`${digest}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
 
-      # A private package refuses an anonymous read (no token, 401, 403 or 404);
-      # only a readable manifest means it is public. Set the package to private
-      # in its settings if this step fails (the registry offers no API for it).
-      - name: The package is private
+      # An anonymous client can read the manifest of a public package only.
+      # Anything else (no token, 401, 403, 404) means the package is still
+      # private: reos-01 could not pull it yet.
+      - name: The package is public (reos-01 pulls without a login)
         run: |
           accept='application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'
           repo="${IMAGE#ghcr.io/}"
+          settings="https://github.com/users/${GITHUB_REPOSITORY_OWNER}/packages/container/${repo#*/}/settings"
           token="$(curl -sS "https://ghcr.io/token?service=ghcr.io&scope=repository:${repo}:pull" | jq -r '.token // empty')"
-          if [ -z "${token}" ]; then
-            echo "::warning::no anonymous token for ${repo}; treated as private, check the package settings once"
+          status=none
+          if [ -n "${token}" ]; then
+            status="$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${token}" -H "Accept: ${accept}" "https://ghcr.io/v2/${repo}/manifests/${GITHUB_SHA}")"
+          fi
+          if [ "${status}" != 200 ]; then
+            echo "::warning::${IMAGE} is not readable anonymously yet (${status}). Set its visibility to Public once: ${settings}"
             exit 0
           fi
-          status="$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${token}" -H "Accept: ${accept}" "https://ghcr.io/v2/${repo}/manifests/${GITHUB_SHA}")"
-          if [ "${status}" = 200 ]; then
-            echo "::error::${IMAGE} is public (anonymous read returned 200). Set the package to private: https://github.com/users/davdxpx/packages/container/exponetdb/settings"
-            exit 1
-          fi
-          echo "anonymous read refused (${status}): the package is private"
+          echo "anonymous read works: the package is public"
