@@ -260,9 +260,13 @@ export function presentedOf(stream: ServerHttp2Stream): Presented | undefined {
   }
 }
 
-/** Whether the certificate of a session that is still open has passed its end. */
+/**
+ * Whether the certificate of a session that is still open has passed its end. A verified
+ * certificate whose end cannot be read is refused too: a check that can be skipped is no check.
+ */
 export function certificateExpired(presented: Presented | undefined, nowMs: number): boolean {
-  return presented?.expiresAtMs !== undefined && presented.expiresAtMs <= nowMs
+  if (presented === undefined) return false
+  return presented.expiresAtMs === undefined || presented.expiresAtMs <= nowMs
 }
 
 /** Bytes of request bodies buffered across all streams. */

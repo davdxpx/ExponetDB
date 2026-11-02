@@ -1,6 +1,6 @@
 import { OperationError } from '@exponetdb/operations'
 import { describe, expect, it } from 'vitest'
-import { errorCodeOf, problemResponse } from '../src/interfaces/http/request.ts'
+import { errorCodeOf, hasInternalCause, problemResponse } from '../src/interfaces/http/request.ts'
 
 /**
  * VC-066, VC-053, VC-036: a refusal the catalog knows answers its code, never 500. Details that do
@@ -88,5 +88,26 @@ describe('a refusal the catalog knows answers its code', () => {
       code: 'control_store_query_failed',
     })
     expect((await answer(error)).status).toBe(500)
+  })
+})
+
+/**
+ * The review of group H: a Control Store outage or a missing audit partition is answered
+ * CONTROL_PLANE_DEGRADED, but the catch blocks logged only an `INTERNAL` answer, so the cause of
+ * that 503 left no line. Whatever is answered from an internal cause is logged.
+ */
+describe('which answers have an internal cause worth a journal line', () => {
+  const named = (name: string, code: string) => Object.assign(new Error(code), { name, code })
+
+  it('are the mapped ones as well as INTERNAL itself', () => {
+    expect(hasInternalCause(named('ControlStoreError', 'control_store_timeout'))).toBe(true)
+    expect(hasInternalCause(named('AuditWriteError', 'audit_append_failed'))).toBe(true)
+    expect(hasInternalCause(new OperationError('operation_state_changed'))).toBe(true)
+    expect(hasInternalCause(new Error('driver'))).toBe(true)
+  })
+
+  it('are not a refusal the catalog names', () => {
+    expect(hasInternalCause(named('AuthError', 'PERMISSION_DENIED'))).toBe(false)
+    expect(hasInternalCause(new OperationError('BACKUP_REQUIRED'))).toBe(false)
   })
 })
