@@ -9102,6 +9102,17 @@
       "type": "https://db.exponet.cloud/errors/approval-not-pending"
     },
     {
+      "code": "APPROVAL_EXPIRED",
+      "details": null,
+      "group": "plans_and_operations",
+      "message": "The operation waited for an approval longer than the approval window (4 hours); it is canceled and nothing ran.",
+      "remediation": "Plan the change again and approve the new plan within the window.",
+      "retryable": false,
+      "status": 409,
+      "title": "Approval window passed",
+      "type": "https://db.exponet.cloud/errors/approval-expired"
+    },
+    {
       "code": "APPROVAL_DUPLICATE",
       "details": null,
       "group": "plans_and_operations",

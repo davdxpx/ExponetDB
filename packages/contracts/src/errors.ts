@@ -241,6 +241,15 @@ export const ERRORS = {
     title: 'No approval pending',
     message: 'The operation does not await an approval.',
   },
+  APPROVAL_EXPIRED: {
+    group: 'plans_and_operations',
+    status: 409,
+    retryable: false,
+    title: 'Approval window passed',
+    message:
+      'The operation waited for an approval longer than the approval window (4 hours); it is canceled and nothing ran.',
+    remediation: 'Plan the change again and approve the new plan within the window.',
+  },
   APPROVAL_DUPLICATE: {
     group: 'plans_and_operations',
     status: 409,

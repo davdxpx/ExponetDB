@@ -817,6 +817,26 @@ describe('OD-9 approvals', () => {
     expect(await caught(decide(s, operationId, p.planHash, true))).toBe('APPROVAL_NOT_PENDING')
   })
 
+  // VC-057 / OD-64: an approval 15 minutes after the plan expired was accepted and the change ran.
+  it('refuses an approval after the approval window (4 hours) and leaves the operation for the expiry task', async () => {
+    const adminSession = await signIn(h, admin)
+    const s = await signIn(h, owner)
+    const { plan: p, operationId } = await syntheticOperation(humanActor(s), 'test.standard')
+    // The row is aged as the database itself cannot be: the guard refuses to move created_at.
+    await h.db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE operations.operations SET created_at = clock_timestamp() - interval '4 hours 1 minute'
+          WHERE operation_id = $1`,
+        [operationId],
+      )
+      await c.query('COMMIT')
+    })
+    expect(await caught(decide(adminSession, operationId, p.planHash))).toBe('APPROVAL_EXPIRED')
+    expect(await state(operationId)).toBe('awaiting_approval')
+  })
+
   it('a self-approval the policy forbids is denied', async () => {
     const s = await signIn(h, owner)
     const forbid = await plan((tx) =>

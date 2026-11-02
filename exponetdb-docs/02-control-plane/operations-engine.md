@@ -276,6 +276,13 @@ When a plan requires approval, the *apply request* may wait in
 `awaiting_approval` for up to the **approval window** (default 4 h, maximum 24 h).
 All live bindings are re-checked when execution actually starts, so a late
 approval of a now-stale plan ends in `PLAN_STALE` without executing anything.
+**[DECIDED]** (verification campaign fix VC-057, OD-64, 2026-11-02, under
+the owner's delegation) The window is four hours from the apply request,
+fixed (no setting yet). An approval after it is refused (`APPROVAL_EXPIRED`),
+and the worker task `operations.approvals_expire` (every minute) cancels the
+operation (`canceled`, error `APPROVAL_EXPIRED`, nothing ran), which also
+frees its place in the caller's queue of at most 20 waiting approvals. The
+plan's own lifetime (§3.3 above) ends at acceptance.
 
 ### 3.4 Plan states
 

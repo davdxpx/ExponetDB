@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   acceptPlan,
   claimNextOperation,
+  expireAwaitingApprovals,
   heldLocks,
   KindRegistry,
   type OperationKind,
@@ -14,7 +15,16 @@ import {
   transitionOperation,
   WORKER_ACTOR,
 } from '../src/index.ts'
-import { human, newPlan, serveActor, sleep, stores, syntheticKind, target } from './support.ts'
+import {
+  decision,
+  human,
+  newPlan,
+  serveActor,
+  sleep,
+  stores,
+  syntheticKind,
+  target,
+} from './support.ts'
 
 /**
  * The worker loop with synthetic kinds against PostgreSQL 17: every path of
@@ -596,5 +606,71 @@ describe('a force release closes an operation that needs attention, of any kind'
     await release(s3.id, 'unknown')
     expect(await run(s3.kind)).toMatchObject({ status: 'idle' })
     expect((await readOperation(as('exdb_worker'), s3.id))?.state).toBe('verification_failed')
+  })
+})
+
+// VC-057 / OD-64: nothing ended an operation awaiting approval.
+describe('the approval window', () => {
+  it('cancels an operation that awaited approval for more than four hours, and only that one', async () => {
+    const kind = syntheticKind('synthetic.approval')
+    const needsApproval = async () =>
+      newPlan(as('exdb_serve'), {
+        kind: kind.kind,
+        domains: [`target:${target()}:schema`],
+        decision: await decision('require', [
+          { kind: 'approval', count: 1, permission: 'plans.approve' },
+        ]),
+      })
+    const plan = await needsApproval()
+    const accept = (planId: string) =>
+      as('exdb_serve').transaction('test.accept.approval', (tx) =>
+        acceptPlan(
+          tx,
+          { planId: planId as never, actor: human },
+          {
+            kinds: new KindRegistry([kind]),
+            clock: systemClock,
+            systemActor: serveActor,
+            recheckPolicy: async () => ({
+              status: 'proceed',
+              requirements: [{ kind: 'approval', count: 1, permission: 'plans.approve' }],
+            }),
+          },
+        ),
+      )
+    const old = await accept(plan.planId)
+    const fresh = await accept((await needsApproval()).planId)
+    if (old.status !== 'accepted' || fresh.status !== 'accepted') throw new Error('not accepted')
+    expect([old.operation.state, fresh.operation.state]).toEqual([
+      'awaiting_approval',
+      'awaiting_approval',
+    ])
+    await db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE operations.operations SET created_at = clock_timestamp() - interval '4 hours 1 minute'
+          WHERE operation_id = $1`,
+        [old.operation.operationId],
+      )
+      await c.query('COMMIT')
+    })
+    const ended = await as('exdb_worker').transaction('test.approvals.expire', (tx) =>
+      expireAwaitingApprovals(tx, WORKER_ACTOR, { clock: systemClock }),
+    )
+    expect(ended).toBe(1)
+    expect((await readOperation(as('exdb_worker'), old.operation.operationId))?.state).toBe(
+      'canceled',
+    )
+    expect((await readOperation(as('exdb_worker'), fresh.operation.operationId))?.state).toBe(
+      'awaiting_approval',
+    )
+    const { rows } = await as('exdb_worker').query(
+      'test.approvals.expired',
+      `SELECT detail ->> 'errorCode' AS code FROM operations.operation_events
+        WHERE operation_id = $1 AND to_state = 'canceled'`,
+      [old.operation.operationId],
+    )
+    expect(rows[0]?.text('code')).toBe('APPROVAL_EXPIRED')
   })
 })

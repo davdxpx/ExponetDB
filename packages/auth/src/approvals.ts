@@ -15,8 +15,10 @@ import {
   type OperationId,
 } from '@exponetdb/kernel'
 import {
+  APPROVAL_WINDOW_SECONDS,
   type ChangedBinding,
   type OperationRecord,
+  PAST_APPROVAL_WINDOW,
   type PlanRecord,
   readOperation,
   readPlan,
@@ -156,6 +158,15 @@ async function pendingOperation(
   }
   if (operation.state !== 'awaiting_approval') {
     throw new AuthError('APPROVAL_NOT_PENDING')
+  }
+  // VC-057, OD-64: past the approval window the request is over, even before the worker cancels it.
+  const late = await tx.query(
+    'auth.approvals.window',
+    `SELECT 1 FROM operations.operations WHERE operation_id = $2 AND ${PAST_APPROVAL_WINDOW}`,
+    [APPROVAL_WINDOW_SECONDS, operationId],
+  )
+  if (late.rows.length > 0) {
+    throw new AuthError('APPROVAL_EXPIRED')
   }
   const plan = await readPlan(tx, operation.planId)
   if (plan === undefined) {

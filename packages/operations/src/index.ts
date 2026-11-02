@@ -7,6 +7,11 @@ export {
 } from './accept.ts'
 export { type OperationActor, sameCaller, WORKER_ACTOR } from './actors.ts'
 export {
+  APPROVAL_WINDOW_SECONDS,
+  expireAwaitingApprovals,
+  PAST_APPROVAL_WINDOW,
+} from './approval-window.ts'
+export {
   type DispatchAdmission,
   type DriverOptions,
   type DriverResult,
@@ -32,6 +37,7 @@ export {
   type OperationKind,
 } from './kinds.ts'
 export {
+  type AssertedOutcome,
   type Claim,
   type ClaimOptions,
   claimNextOperation,

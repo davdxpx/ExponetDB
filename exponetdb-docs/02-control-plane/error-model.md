@@ -148,6 +148,7 @@ later without changes).
 | `REAUTH_REQUIRED` | 401 | no | Fresh passkey/TOTP proof needed. |
 | `APPROVAL_COOLING_PERIOD` | 409 | yes | A `critical` self-approval is in its cooling period ([OD-9](../00-product/open-decisions.md#od-9-approval-model-for-a-one-person-organization)); apply again after `details.notBefore` with a fresh re-authentication (Wave 3A). |
 | `SELF_APPROVAL_UNACKNOWLEDGED` | 422 | no | An approval of one's own plan must carry the explicit acknowledgement (Wave 3A). |
+| `APPROVAL_EXPIRED` | 409 | no | [DECIDED] (VC-057, OD-64, 2026-11-02): the operation waited for an approval longer than the approval window (4 hours from the apply request); it is canceled by the worker and an approval is refused. |
 | `APPROVAL_NOT_PENDING` | 409 | no | Approving or rejecting an operation that does not await approval (Wave 3A). |
 | `APPROVAL_DUPLICATE` | 409 | no | The same person decides twice on one operation (Wave 3A). |
 | `BREAK_GLASS_REQUIRED` | 403 | no | Only a break-glass grant can override `details.rules`. |
