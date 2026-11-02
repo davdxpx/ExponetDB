@@ -319,7 +319,8 @@ stateDiagram-v2
   verifying --> verification_failed: verification failed or partial
   verifying --> needs_attention: verification could not run (timeout, target unreachable)
   needs_attention --> verifying: operator retries verification
-  needs_attention --> verification_failed: a recovery plan that names it supersedes it
+  needs_attention --> verification_failed: a recovery plan that names it supersedes it, or a force release
+  needs_attention --> failed: a force release of a change found not applied
   succeeded --> [*]
   failed --> [*]
   verification_failed --> [*]
@@ -378,8 +379,28 @@ recovery's domains, or is not a valid id is left alone. Nothing is
 re-executed (C-16), and a plan whose named operation is no longer in
 `needs_attention` is stale (`PLAN_STALE`, binding `operation`). The retry
 (`operation.retry_verification`) stays for an applied change whose
-verification only needs another run. `operation.force_release`, for an
-operation no recovery plan covers, remains planned.
+verification only needs another run. **[DECIDED]** (verification campaign
+fix VC-006, VC-055, VC-007, 2026-11-02, under the owner's delegation)
+`operation.force_release` closes an operation in `needs_attention` of any
+kind, for which no retry and no recovery plan exists, or whose outcome
+stayed `unknown`: a person with `operations.recover` on the plan's subject,
+in the Web App with a fresh re-authentication (300 s; the CLI's step-up
+receipts cover `plan.apply` and the token reveal only, and the operation
+page is the place that shows what happened), states what happened to the
+change (`applied`, `not_applied`, `unknown`) and why
+(`POST /operations/{id}/force-release`, audited `operation.force_release`
+with the reason). serve records it in `recovery.force_releases` (it may not
+move an operation that started); the worker claims the operation, closes it
+under its lease and releases its domains, running nothing again: a change
+the person found not applied ends `failed` / `not_applied` (the edge
+`operations.release_transition_allowed`, bundle `operation-force-release`),
+any other ends `verification_failed` (applied, or partly applied for an
+`unknown` outcome) with a failed verification. The closing event names the
+person, the stated outcome, the reason and the outcomes the operation had.
+Another state answers `OPERATION_NOT_RELEASABLE`. A production
+`migration.verify` that names a stuck operation (and so closes it) needs an
+approval and a fresh re-authentication (rule
+`migration.verify-supersedes-production`, decision D0-01).
 
 ### 4.2 Workers and leases
 

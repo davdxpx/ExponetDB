@@ -1,6 +1,6 @@
 import type { Operation } from '@exponetdb/sdk'
 import { describe, expect, it } from 'vitest'
-import { operationBlocks } from '../src/output/views.ts'
+import { operationBlocks, operationNext } from '../src/output/views.ts'
 
 /**
  * `operation show` for a migration the pre-commit gate (L0) rolled back: the
@@ -57,5 +57,34 @@ describe('operation show: the L0 gate of a rolled-back migration', () => {
 
   it('says nothing about a gate when none was recorded', () => {
     expect(linesOf(failedByGate()).filter((l) => l.includes('L0 gate'))).toEqual([])
+  })
+})
+
+// VC-049: the hint sent the operator to retry-verification for kinds the server refuses (409).
+describe('the next step of an operation that needs attention', () => {
+  const stuck = (
+    over: Partial<Operation & { retryable: boolean }>,
+  ): Operation & { retryable?: boolean } => ({
+    ...failedByGate(),
+    kind: 'backup.run',
+    state: 'needs_attention',
+    applyOutcome: 'applied',
+    verificationOutcome: 'error',
+    nextAction: 'inspect',
+    ...over,
+  })
+
+  it('offers retry-verification only when the server says the operation is retryable', () => {
+    const id = 'op_01M61X63D5HKCSD5HSRY5JH14P'
+    expect(operationNext(stuck({ retryable: true }))).toContain(
+      `exponetdb operation retry-verification ${id}`,
+    )
+    for (const retryable of [false, undefined]) {
+      const next = operationNext(stuck({ ...(retryable === undefined ? {} : { retryable }) }))
+      expect(next.join('\n')).not.toContain('retry-verification')
+      expect(next).toContain(
+        'Release it on its page in the Web App once you know what happened to the change (operation.force_release).',
+      )
+    }
   })
 })

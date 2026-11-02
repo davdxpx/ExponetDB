@@ -86,6 +86,13 @@ function changesAnswer(world: ChangesWorld, sent: Sent): Response | Promise<Resp
   if (m !== null && method === 'POST' && !world.needsProof()) {
     return json(200, world.cancelAnswer(decodeURIComponent(m[1] ?? '')))
   }
+  m = /^\/api\/v1\/operations\/([^/]+)\/force-release$/.exec(p)
+  if (m !== null && method === 'POST' && !world.needsProof()) {
+    const released = world.operations.get(decodeURIComponent(m[1] ?? ''))
+    return released === undefined
+      ? json(404, { code: 'OPERATION_NOT_FOUND', message: 'No such operation.' })
+      : json(202, released)
+  }
   if (p === '/api/v1/projects' && method === 'GET') {
     return json(200, { items: world.projects, nextCursor: null })
   }

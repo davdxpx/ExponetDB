@@ -156,6 +156,7 @@ later without changes).
 | `OPERATION_CONFLICT` | 409 | yes | Exclusivity domain held by `details.blockingOperationId` and the request asked not to wait (`wait: false`, used by inline-plan actions); by default an accepted operation waits in `queued` with `waitingFor` instead. |
 | `OPERATION_NOT_CANCELABLE` | 409 | no | Wave 6: only an operation that has not started (`awaiting_approval`, `queued`) can be canceled; `details.state` names the state it is in. A running operation is never interrupted. |
 | `OPERATION_NOT_RETRYABLE` | 409 | no | Wave 6: only an operation in `needs_attention` whose change was applied and whose verification errored or never finished (`error`, `pending`) can be verified again; `details.state` names the state it is in. |
+| `OPERATION_NOT_RELEASABLE` | 409 | no | [DECIDED] (VC-006, 2026-11-02): only an operation in `needs_attention` can be force-released (`operation.force_release`); `details.state` names the state it is in. |
 | `OPERATION_CANCELLED` | 409 | no | |
 | `OUTCOME_UNKNOWN` | 409 | no | Operation in `needs_reconciliation`; do not retry, wait for reconciliation. |
 | `PRECONDITION_FAILED` | 412 | no | Inline-plan precondition token no longer matches (object changed). |

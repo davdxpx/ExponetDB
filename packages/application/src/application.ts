@@ -141,6 +141,7 @@ import {
 } from '@exponetdb/kernel'
 import { type ReviewFile, reviewFiles } from '@exponetdb/migrations-engine'
 import {
+  type AssertedOutcome,
   beginIdempotent,
   completeIdempotent,
   type KindRegistry,
@@ -149,6 +150,7 @@ import {
   type PlanSubject,
   readPlan,
   releaseIdempotent,
+  requestForceRelease,
   requestVerificationRetry,
   type StoredActionClass,
   transitionOperation,
@@ -2079,6 +2081,90 @@ export class Application {
           client: { clientId: actor.clientId ?? null, kind: actor.client ?? 'web' },
           refs: { operationId: operationId as OperationId, planId: plan.planId },
           changes: { from: state, to: 'verifying' },
+          result: { status: 'succeeded' },
+        },
+        { clock: this.#d.policy.clock },
+      )
+    })
+    return operationView(this.#d.auth.store, operationId, this.publicOrigin)
+  }
+
+  /**
+   * Closes an operation in `needs_attention`, of any kind (VC-006, VC-055,
+   * VC-007; `operation.force_release`, operations-engine.md §4.1): a person
+   * with `operations.recover` on the plan's subject, in the Web App with a
+   * fresh re-authentication, states what happened to the change and why.
+   * serve records the request, audited; the worker closes the operation
+   * under its lease (`failed` when the person found the change not
+   * applied, else `verification_failed`), runs nothing again and releases
+   * its domains. A caller who may not read the operation gets
+   * `OPERATION_NOT_FOUND`.
+   */
+  async forceReleaseOperation(
+    caller: Caller,
+    operationId: string,
+    body: { readonly outcome: AssertedOutcome; readonly reason: string },
+  ): Promise<OperationView> {
+    const reason = body.reason.trim()
+    if (reason.length === 0) {
+      throw new RegistryError('VALIDATION_FAILED', {
+        errors: [
+          { path: '/reason', code: 'too_small', message: 'Say why the operation is released.' },
+        ],
+      })
+    }
+    await this.#d.auth.store.transaction('application.operation.force_release', async (tx) => {
+      const { rows } = isId('op', operationId)
+        ? await tx.query(
+            'application.operation.for_release',
+            `SELECT kind, plan_id, state FROM operations.operations WHERE operation_id = $1 FOR UPDATE`,
+            [operationId],
+          )
+        : { rows: [] }
+      const row = rows[0]
+      const planId = row?.textOrNull('plan_id') ?? null
+      const plan = planId === null ? undefined : await readPlan(tx, planId)
+      if (
+        row === undefined ||
+        plan === undefined ||
+        !(await this.#mayRead(tx, caller, 'operation.get', row.text('kind'), {
+          kind: 'plan',
+          subject: subjectOf(plan),
+        }))
+      ) {
+        throw new AuthError('OPERATION_NOT_FOUND')
+      }
+      await this.#authorize(
+        tx,
+        'operation.force_release',
+        caller,
+        { kind: 'plan', subject: subjectOf(plan) },
+        plan.kind,
+      )
+      const state = row.text('state')
+      if (state !== 'needs_attention') {
+        throw new RegistryError('OPERATION_NOT_RELEASABLE', { state })
+      }
+      const actor = actorFor(caller, 'operation.force_release')
+      await requestForceRelease(tx, operationId, actor.identityId, {
+        outcome: body.outcome,
+        reason,
+      })
+      await appendAuditEvent(
+        tx,
+        {
+          action: 'operation.force_release',
+          phase: 'requested',
+          actor: {
+            kind: actor.kind ?? 'human',
+            identityId: actor.identityId,
+            label: actor.label as never,
+            reauthAt: actor.reauthAt,
+          },
+          client: { clientId: actor.clientId ?? null, kind: actor.client ?? 'web' },
+          refs: { operationId: operationId as OperationId, planId: plan.planId },
+          reason,
+          changes: { from: state, outcome: body.outcome },
           result: { status: 'succeeded' },
         },
         { clock: this.#d.policy.clock },

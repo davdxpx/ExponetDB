@@ -36,6 +36,7 @@ import {
   TargetRefSchema,
   TierSchema,
   TimestampSchema,
+  untrustedText,
 } from '../common.ts'
 import type { ErrorCode } from '../errors.ts'
 import { DependencyRefSchema, ExecutionRoleAliasSchema } from '../manifest/migration.ts'
@@ -824,6 +825,24 @@ export const ROUTES = [
     body: z.strictObject({}),
     response: { status: 202, schema: OperationSchema },
     errors: ['CSRF_FAILED', 'OPERATION_NOT_FOUND', 'OPERATION_NOT_RETRYABLE'],
+  },
+  {
+    operationId: 'forceReleaseOperation',
+    method: 'post',
+    path: '/operations/{operationId}/force-release',
+    summary:
+      'Close an operation that needs attention (VC-006): a person states what happened to its change and why; the worker closes it, runs nothing again and releases its exclusivity domains. Web App only (fresh re-authentication).',
+    action: 'operation.force_release',
+    pathParams: z.strictObject({ operationId: OperationIdSchema }),
+    body: z.strictObject({
+      outcome: z.enum(['applied', 'not_applied', 'unknown']),
+      reason: untrustedText(
+        1000,
+        'Why it is released and how the outcome was checked; recorded in the audit, permanent.',
+      ),
+    }),
+    response: { status: 202, schema: OperationSchema },
+    errors: ['CSRF_FAILED', 'OPERATION_NOT_FOUND', 'OPERATION_NOT_RELEASABLE'],
   },
   {
     operationId: 'listPlans',

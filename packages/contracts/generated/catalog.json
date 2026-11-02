@@ -9279,6 +9279,43 @@
       "type": "https://db.exponet.cloud/errors/operation-not-retryable"
     },
     {
+      "code": "OPERATION_NOT_RELEASABLE",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/OPERATION_NOT_RELEASABLE",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "awaiting_approval",
+              "queued",
+              "running",
+              "verifying",
+              "needs_reconciliation",
+              "needs_attention",
+              "succeeded",
+              "failed",
+              "verification_failed",
+              "canceled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "type": "object"
+      },
+      "group": "plans_and_operations",
+      "message": "Only an operation that needs attention can be force-released; any other state has its own exit or is finished.",
+      "remediation": "Read the operation: a queued or awaiting operation can be canceled, a running one finishes or is reconciled by the worker.",
+      "retryable": false,
+      "status": 409,
+      "title": "Operation cannot be force-released",
+      "type": "https://db.exponet.cloud/errors/operation-not-releasable"
+    },
+    {
       "code": "OPERATION_CANCELLED",
       "details": null,
       "group": "plans_and_operations",

@@ -10,6 +10,7 @@ import {
   type OperationKind,
   processNextOperation,
   readOperation,
+  requestForceRelease,
   transitionOperation,
   WORKER_ACTOR,
 } from '../src/index.ts'
@@ -495,5 +496,105 @@ describe('a recovery operation closes the needs_attention operation that holds i
       status: 'done',
       operation: { state: 'succeeded' },
     })
+  })
+})
+
+// VC-006, VC-055, VC-007: needs_attention had an exit for four migration kinds only and kept its
+// domains for ever. A person's force release closes it for any kind, runs nothing again and frees
+// the domains; the person states what the outcome was.
+describe('a force release closes an operation that needs attention, of any kind', () => {
+  const stuck = async (name: string, behavior: Parameters<typeof syntheticKind>[1]) => {
+    const tgt = target()
+    const kind = syntheticKind(name, behavior)
+    const id = await queue(kind, [`target:${tgt}:schema`])
+    await run(kind)
+    expect((await readOperation(as('exdb_worker'), id))?.state).toBe('needs_attention')
+    return { kind, id, tgt }
+  }
+  const release = async (id: string, outcome: 'applied' | 'not_applied' | 'unknown') => {
+    await db.asSuperuser((c) =>
+      c.query(
+        `INSERT INTO auth.identities (identity_id, kind, state, display_name) VALUES ($1, 'service', 'invited', 'release test')
+         ON CONFLICT (identity_id) DO NOTHING`,
+        [human.identityId],
+      ),
+    )
+    await as('exdb_serve').transaction('test.release', (tx) =>
+      requestForceRelease(tx, id, human.identityId as string, {
+        outcome,
+        reason: 'The change was checked by hand on the target.',
+      }),
+    )
+  }
+  const closing = async (id: string) => {
+    const { rows } = await as('exdb_worker').query(
+      'test.release.detail',
+      `SELECT detail::text AS d FROM operations.operation_events
+        WHERE operation_id = $1 AND kind = 'transition' ORDER BY event_id DESC LIMIT 1`,
+      [id],
+    )
+    return JSON.parse(rows[0]?.text('d') ?? '{}') as Record<string, unknown>
+  }
+
+  it('closes an applied change whose verification errored as unverified, frees the domain, runs nothing', async () => {
+    const s1 = await stuck('synthetic.relverify', { verify: async () => 'error' })
+    await release(s1.id, 'applied')
+    expect(await run(s1.kind)).toMatchObject({ status: 'done' })
+    expect(await readOperation(as('exdb_worker'), s1.id)).toMatchObject({
+      state: 'verification_failed',
+      applyOutcome: 'applied',
+      leaseOwner: null,
+    })
+    expect(await heldLocks(as('exdb_worker'), s1.id)).toEqual([])
+    // Nothing ran again: one execute, one verify, as before the release.
+    expect(s1.kind.calls).toEqual({ execute: 1, verify: 1, reconcile: 0 })
+    expect(await closing(s1.id)).toMatchObject({
+      reason: 'force_release',
+      releasedBy: human.identityId,
+      assertedOutcome: 'applied',
+      previousApplyOutcome: 'applied',
+      previousVerificationOutcome: 'error',
+    })
+    // The domain is free: the next operation on the target runs.
+    const next = syntheticKind('synthetic.relnext')
+    await queue(next, [`target:${s1.tgt}:schema`])
+    expect(await run(next)).toMatchObject({ status: 'done', operation: { state: 'succeeded' } })
+  })
+
+  it('closes an unknown outcome the person found not applied as failed, not applied', async () => {
+    const s2 = await stuck('synthetic.relunknown', {
+      execute: async () => 'unknown',
+      reconcile: async () => 'unknown',
+    })
+    await release(s2.id, 'not_applied')
+    await run(s2.kind)
+    expect(await readOperation(as('exdb_worker'), s2.id)).toMatchObject({
+      state: 'failed',
+      applyOutcome: 'not_applied',
+      verificationOutcome: 'not_applicable',
+    })
+    expect(await heldLocks(as('exdb_worker'), s2.id)).toEqual([])
+    expect(await closing(s2.id)).toMatchObject({
+      assertedOutcome: 'not_applied',
+      previousApplyOutcome: 'unknown',
+    })
+  })
+
+  it('records one open request per operation, and a finished operation is never touched', async () => {
+    const s3 = await stuck('synthetic.reltwice', { verify: async () => 'error' })
+    await release(s3.id, 'unknown')
+    await release(s3.id, 'unknown')
+    const { rows } = await as('exdb_worker').query(
+      'test.release.count',
+      'SELECT count(*)::int AS n FROM recovery.force_releases WHERE operation_id = $1',
+      [s3.id],
+    )
+    expect(rows[0]?.int('n')).toBe(1)
+    await run(s3.kind)
+    expect((await readOperation(as('exdb_worker'), s3.id))?.state).toBe('verification_failed')
+    // A request recorded later for the finished operation changes nothing.
+    await release(s3.id, 'unknown')
+    expect(await run(s3.kind)).toMatchObject({ status: 'idle' })
+    expect((await readOperation(as('exdb_worker'), s3.id))?.state).toBe('verification_failed')
   })
 })

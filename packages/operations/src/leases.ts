@@ -21,7 +21,8 @@ import {
 export const LEASE_MS = 30_000
 export const LEASE_RENEW_MS = 10_000
 
-export type NextStep = 'start' | 'reconcile' | 'verify'
+/** `closed`: a person's force release ended the operation in the claim; nothing is left to drive. */
+export type NextStep = 'start' | 'reconcile' | 'verify' | 'closed'
 
 export interface Claim {
   readonly operation: OperationRecord
@@ -129,6 +130,12 @@ export async function claimNextOperation(
         },
         { clock: options.clock },
       )
+    }
+    if (operation.state === 'needs_attention') {
+      const released = await closeReleased(tx, operation, options)
+      if (released !== undefined) {
+        return { operation: released, next: 'closed', takenOver, retried: false }
+      }
     }
     const retried = operation.state === 'needs_attention'
     if (retried) {
@@ -240,4 +247,93 @@ export async function requestVerificationRetry(
      ON CONFLICT (operation_id) WHERE started_at IS NULL DO NOTHING`,
     [operationId, requestedBy],
   )
+}
+
+/** What the person who force-releases an operation states about its change. */
+export type AssertedOutcome = 'applied' | 'not_applied' | 'unknown'
+
+/**
+ * Records a person's force release of an operation in `needs_attention`
+ * (VC-006, `operation.force_release`,
+ * [operations-engine.md §4.1](../../../exponetdb-docs/02-control-plane/operations-engine.md#41-state-machine)).
+ * serve may not move an operation that started; the worker claims it and
+ * closes it under its lease, running nothing again. An open request is kept,
+ * never doubled.
+ */
+export async function requestForceRelease(
+  q: Queryable,
+  operationId: string,
+  requestedBy: string,
+  request: { readonly outcome: AssertedOutcome; readonly reason: string },
+): Promise<void> {
+  await q.query(
+    'operations.release.request',
+    `INSERT INTO recovery.force_releases (operation_id, requested_by_identity_id, asserted_outcome, reason)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (operation_id) WHERE started_at IS NULL DO NOTHING`,
+    [operationId, requestedBy, request.outcome, request.reason],
+  )
+}
+
+/**
+ * Closes a claimed `needs_attention` operation whose force release is open:
+ * `failed` / `not_applied` when the person found the change not applied,
+ * otherwise `verification_failed` (applied or partly applied, never verified;
+ * an `unknown` outcome becomes `partially_applied`, as a supersession does).
+ * The transition releases the domains; the event names who released it,
+ * why, and the outcomes it had. `undefined` when no request is open.
+ */
+async function closeReleased(
+  tx: Parameters<Parameters<ControlStore['transaction']>[1]>[0],
+  operation: OperationRecord,
+  options: ClaimOptions,
+): Promise<OperationRecord | undefined> {
+  const started = await tx.query(
+    'operations.release.start',
+    `UPDATE recovery.force_releases SET started_at = clock_timestamp()
+      WHERE operation_id = $1 AND started_at IS NULL
+      RETURNING requested_by_identity_id, asserted_outcome, reason`,
+    [operation.operationId],
+  )
+  const request = started.rows[0]
+  if (request === undefined) return undefined
+  const asserted = request.text('asserted_outcome')
+  const detail = {
+    reason: 'force_release',
+    releasedBy: request.text('requested_by_identity_id'),
+    assertedOutcome: asserted,
+    note: request.text('reason'),
+    previousApplyOutcome: operation.applyOutcome,
+    previousVerificationOutcome: operation.verificationOutcome,
+  }
+  return asserted === 'not_applied'
+    ? transitionOperation(
+        tx,
+        {
+          operationId: operation.operationId,
+          from: 'needs_attention',
+          to: 'failed',
+          applyOutcome: 'not_applied',
+          verificationOutcome: 'not_applicable',
+          lease: { owner: options.workerId },
+          actor: WORKER_ACTOR,
+          detail,
+        },
+        { clock: options.clock },
+      )
+    : transitionOperation(
+        tx,
+        {
+          operationId: operation.operationId,
+          from: 'needs_attention',
+          to: 'verification_failed',
+          applyOutcome:
+            operation.applyOutcome === 'unknown' ? 'partially_applied' : operation.applyOutcome,
+          verificationOutcome: 'failed',
+          lease: { owner: options.workerId },
+          actor: WORKER_ACTOR,
+          detail,
+        },
+        { clock: options.clock },
+      )
 }

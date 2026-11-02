@@ -146,6 +146,9 @@ export async function processNextOperation(
   if (claim === undefined) {
     return { status: 'idle' }
   }
+  if (claim.next === 'closed') {
+    return { status: 'done', operation: claim.operation, takenOver: claim.takenOver }
+  }
   const kind = options.kinds.get(claim.operation.kind)
   const plan =
     claim.operation.planId === null ? undefined : await readPlan(store, claim.operation.planId)

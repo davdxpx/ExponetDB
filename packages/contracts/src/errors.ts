@@ -330,6 +330,30 @@ export const ERRORS = {
       ]),
     }),
   },
+  OPERATION_NOT_RELEASABLE: {
+    group: 'plans_and_operations',
+    status: 409,
+    retryable: false,
+    title: 'Operation cannot be force-released',
+    message:
+      'Only an operation that needs attention can be force-released; any other state has its own exit or is finished.',
+    remediation:
+      'Read the operation: a queued or awaiting operation can be canceled, a running one finishes or is reconciled by the worker.',
+    details: z.strictObject({
+      state: z.enum([
+        'awaiting_approval',
+        'queued',
+        'running',
+        'verifying',
+        'needs_reconciliation',
+        'needs_attention',
+        'succeeded',
+        'failed',
+        'verification_failed',
+        'canceled',
+      ]),
+    }),
+  },
   OPERATION_CANCELLED: {
     group: 'plans_and_operations',
     status: 409,

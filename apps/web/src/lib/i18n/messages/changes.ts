@@ -156,6 +156,18 @@ export const changesMessages = {
   'changes.cancel.action': 'Cancel operation',
   'changes.cancel.hint': 'Only the person or client that applied the plan can cancel it.',
   'changes.cancel.done': 'Operation {id} is canceled.',
+  'changes.release.button': 'Release operation',
+  'changes.release.title': 'Release this operation?',
+  'changes.release.description':
+    'Ends an operation that needs attention: ExponetDB runs nothing again and frees what it holds on the target, so the next change can start. Say what happened to its change and why; both are kept in the audit log for good.',
+  'changes.release.action': 'Release operation',
+  'changes.release.outcome': 'What happened to the change',
+  'changes.release.applied': 'Applied (checked on the target)',
+  'changes.release.notApplied': 'Not applied (checked on the target)',
+  'changes.release.unknown': 'Not known',
+  'changes.release.reason': 'Why, and how you checked',
+  'changes.release.reasonMissing': 'Say why the operation is released.',
+  'changes.release.done': 'Operation {id} is released.',
   // The promotion view.
   'changes.promotion.title': 'Promotion',
   'changes.promotion.description':

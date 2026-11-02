@@ -3538,6 +3538,15 @@ export interface Operations {
     readonly body: never
     readonly response: void
   }
+  forceReleaseOperation: {
+    readonly params: { readonly operationId: string }
+    readonly query: Record<string, never>
+    readonly body: {
+      readonly outcome: "applied" | "not_applied" | "unknown"
+      readonly reason: string
+    }
+    readonly response: Operation
+  }
   getAuditChain: {
     readonly params: Record<string, never>
     readonly query: Record<string, never>
@@ -4682,6 +4691,7 @@ export const OPERATIONS = {
   disableOAuthClient: { method: "POST", path: "/oauth-clients/{oauthClientId}/disable", status: 200, wave: "3B", action: "oauth.client.disable", shape: "object" },
   explainQuery: { method: "POST", path: "/targets/{target}/explain", status: 200, wave: "7", action: "query.explain", shape: "object" },
   exportAuditEvents: { method: "GET", path: "/audit-events/export", status: 200, wave: "8", action: "audit.export", shape: "none" },
+  forceReleaseOperation: { method: "POST", path: "/operations/{operationId}/force-release", status: 202, wave: "6", action: "operation.force_release", shape: "object" },
   getAuditChain: { method: "GET", path: "/audit-events/chain", status: 200, wave: "8", action: "audit.chain.get", shape: "object" },
   getBackupOverview: { method: "GET", path: "/backups/overview", status: 200, wave: "9", action: "backup.overview", shape: "object" },
   getBackupPolicy: { method: "GET", path: "/clusters/{clusterId}/backup-policy", status: 200, wave: "9", action: "backup.policy.get", shape: "object" },

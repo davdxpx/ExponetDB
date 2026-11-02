@@ -767,6 +767,14 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         OperationIdSchema.parse(field(call.params, 'operationId')),
       ),
     ),
+  forceReleaseOperation: async (app, call) =>
+    value(
+      await app.forceReleaseOperation(
+        caller(call),
+        OperationIdSchema.parse(field(call.params, 'operationId')),
+        call.body as { outcome: 'applied' | 'not_applied' | 'unknown'; reason: string },
+      ),
+    ),
   getInstallation: async (app, call) => value(await app.installation(caller(call))),
   // ----- /api/v1: the Wave 8 reads (order §9) -----
   getInstallationHealth: async (app, call) => value(await app.installationHealth(caller(call))),
