@@ -68,6 +68,13 @@ describe('error catalog', () => {
     }
   })
 
+  // VC-010: after a Control Store restore every touched target answers LEDGER_DIVERGENCE, and
+  // nothing named the way out.
+  it('names the command that clears a ledger divergence', () => {
+    expect(def('LEDGER_DIVERGENCE').remediation).toContain('exponetdb migration ledger reconcile')
+    expect(def('LEDGER_DIVERGENCE').remediation).toContain('/ledger/reconcile-plans')
+  })
+
   it('declares strict details schemas: unknown members are refused', () => {
     for (const c of ERROR_CODES) {
       const schema = def(c).details

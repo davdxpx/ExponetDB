@@ -7,6 +7,7 @@ import {
   ROUTE_LIST,
 } from '@exponetdb/contracts'
 import { expectOk, parseId } from '@exponetdb/kernel'
+import { SecretError } from '@exponetdb/secrets'
 import { describe, expect, it } from 'vitest'
 import { HANDLERS, servedRoutes } from '../src/interfaces/http/api.ts'
 import {
@@ -352,6 +353,21 @@ describe('cookies and problems', () => {
     const skewed = problemResponse(requestId, new AuditClockSkewError(details))
     expect(skewed.status).toBe(503)
     expect(await skewed.json()).toMatchObject({ code: 'AUDIT_CLOCK_SKEW', details })
+  })
+
+  // VC-011: a secret whose master key is not in the loaded keyring answered 500 INTERNAL (plans,
+  // the owner's password sign-in). It names the cause and the key id (ids are not secret).
+  it('names a master key missing from the keyring as 503 SECRET_KEY_UNAVAILABLE, not 500 (VC-011)', async () => {
+    const requestId = expectOk(parseId('req', 'req_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z'), 'request id')
+    const missing = problemResponse(
+      requestId,
+      new SecretError('secret_key_unavailable', { keyId: 'k1' }),
+    )
+    expect(missing.status).toBe(503)
+    expect(await missing.json()).toMatchObject({
+      code: 'SECRET_KEY_UNAVAILABLE',
+      details: { keyId: 'k1' },
+    })
   })
 
   it('the Web App CSP allows no inline script and no other origin', () => {

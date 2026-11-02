@@ -371,6 +371,38 @@ describe('operator commands', () => {
         verifications: [],
         installationId: report.installationId,
       })
+      // VC-065: the migration is audited, naming what it applied; a run that applies nothing
+      // writes no event (the chain is permanent).
+      const audited = await empty.asSuperuser((c) =>
+        c.query(
+          `SELECT event::jsonb AS e FROM audit.audit_events WHERE action = 'control_store.migrated' ORDER BY seq`,
+        ),
+      )
+      expect(audited.rows).toHaveLength(1)
+      expect(audited.rows[0]?.e).toMatchObject({
+        actor: { kind: 'system' },
+        changes: { applied: report.applied.length, engineVersion: expect.any(String) },
+      })
+      // The preflight of an upgrade (control-store status of the new build): nothing pending here.
+      const preflight = io({ EXPONETDB_CONTROL_STORE_URL: empty.url('exdb_gateway') })
+      expect(await runCommand(['control-store', 'status'], preflight.io)).toBe(0)
+      expect(JSON.parse(preflight.out.join(''))).toMatchObject({ status: 'current', pending: [] })
+      // A store a newer build migrated: the status names the unknown bundles and the remedy.
+      await empty.asSuperuser((c) =>
+        c.query(
+          `INSERT INTO control.schema_migrations (migration_id, name, checksum, verify_digest, rollback_digest,
+             bundle_digest, dependencies, apply_duration_ms, engine_version, pg_version_num)
+           VALUES ('7ZZZZZZZZZZZZZZZZZZZZZZZZZ', 'from-a-newer-build', $1, $1, $1, $1, '{}', 1, 'newer', 170000)`,
+          [`sha256:c1:${'0'.repeat(64)}`],
+        ),
+      )
+      const newer = io({ EXPONETDB_CONTROL_STORE_URL: empty.url('exdb_gateway') })
+      expect(await runCommand(['control-store', 'status'], newer.io)).toBe(1)
+      expect(JSON.parse(newer.out.join(''))).toMatchObject({
+        status: 'newer',
+        unknown: ['7ZZZZZZZZZZZZZZZZZZZZZZZZZ'],
+        remedy: 'deploy_the_newer_image_or_restore_the_pre_upgrade_dump',
+      })
       const wrong = io({ EXPONETDB_CONTROL_STORE_URL: empty.url('exdb_serve') })
       expect(await runCommand(['control-store', 'migrate'], wrong.io)).toBe(1)
       expect(wrong.err.join('')).toContain('migrate_wrong_role')

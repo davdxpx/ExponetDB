@@ -615,6 +615,9 @@ export const ERRORS = {
     retryable: false,
     title: 'Ledger divergence',
     message: 'The target ledger and the Control Store mirror disagree; schema changes are blocked.',
+    // VC-010: after a Control Store restore (RB-10 step 6) or a hand change on the target.
+    remediation:
+      'If the target ledger is the truth (after a Control Store restore or a change made by hand), plan adopting it: exponetdb migration ledger reconcile --target and --note (POST /targets/{id}/ledger/reconcile-plans), apply that plan, then plan the change again.',
     details: z.strictObject({
       missing: z
         .array(untrustedText(210, 'A mirrored migration id the target ledger no longer has.'))
@@ -1440,6 +1443,16 @@ export const ERRORS = {
     retryable: false,
     title: 'Conflict',
     message: 'The resource changed (If-Match did not match).',
+  },
+  SECRET_KEY_UNAVAILABLE: {
+    group: 'generic',
+    status: 503,
+    retryable: false,
+    title: 'Master key unavailable',
+    message:
+      'A master key this request needs is not in the keyring the server loaded; the values it protects cannot be read (RB-14).',
+    // VC-011: key ids are not secret; the keyring status names the same id.
+    details: z.strictObject({ keyId: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/) }).optional(),
   },
   CONTROL_STORE_VOLUME_FULL: {
     group: 'generic',

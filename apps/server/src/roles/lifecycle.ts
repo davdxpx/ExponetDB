@@ -100,6 +100,38 @@ export function shutdownSignal(logger: Logger): Promise<string> {
   })
 }
 
+export interface ShutdownSteps {
+  markStopping(): void
+  closePublic(): Promise<void>
+  /** Stops claiming and lets the running step finish (the drain). */
+  stopLoops(): Promise<void>
+  /** Marks the heartbeat stopped, closes the pool, wipes the keyring. */
+  stopServices(): Promise<void>
+  closeInternal(): Promise<void>
+}
+
+/**
+ * A role's shutdown on SIGTERM (VC-043): not ready at once, no new claims, the running step
+ * drains within `drainMs`. The services stop also when the drain ran out (the heartbeat is
+ * marked stopped; a step cut short is reconciled after the restart), each within `afterMs`.
+ * True when everything finished in time.
+ */
+export async function shutdown(
+  steps: ShutdownSteps,
+  options: { readonly drainMs: number; readonly afterMs: number },
+): Promise<boolean> {
+  steps.markStopping()
+  const drained = await bounded(async () => {
+    await steps.closePublic()
+    await steps.stopLoops()
+  }, options.drainMs)
+  const stopped = await bounded(async () => {
+    await steps.stopServices()
+    await steps.closeInternal()
+  }, options.afterMs)
+  return drained && stopped
+}
+
 /** Runs `steps` bounded by `timeoutMs`; reports whether they finished in time. */
 export async function bounded(steps: () => Promise<void>, timeoutMs: number): Promise<boolean> {
   let timer: NodeJS.Timeout | undefined

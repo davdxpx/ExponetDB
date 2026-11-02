@@ -10,23 +10,85 @@
 
 - Releases are SemVer; contracts are versioned separately
   ([`../01-architecture/versioning.md`](../01-architecture/versioning.md)).
-- **Control Store migrations follow expand/contract**: a release only adds
-  (expand); removals (contract) ship one release later, after no running code
-  reads the old shape. Therefore rolling back the application by one release
-  works without a schema rollback.
-- A server binary refuses to start against a Control Store schema newer than it
-  knows (no silent downgrade).
-- Upgrade order: the separate one-shot Control Store migration resource
-  (`control-store migrate` with the `exdb_migrate` login) runs once first,
-  then `worker`, `serve` and `gateway` are deployed from the same image
-  digest; no runtime role holds the migration credential, and a role whose
-  schema is pending stays not ready
-  ([`deployment.md` §3, §6](./deployment.md#6-releases)). In-flight
-  operations survive because workers stop at step boundaries and reconcile
-  on start ([`../02-control-plane/operations-engine.md`](../02-control-plane/operations-engine.md)).
-- Plans created by the previous version stay valid only if their plan schema
-  version is supported by the new one; otherwise they expire with
-  `PLAN_STALE` (reason `engine_version`).
+- Control Store bundles are additive (expand); removals (contract) ship one
+  release later, after no running code reads the old shape.
+- **[DECIDED]** (verification campaign fix VC-065, 2026-11-02) **The schema
+  change is one way.** A role refuses to start against a Control Store that a
+  newer build migrated (`process.start_refused`, reason `schema_newer`, remedy
+  `deploy_the_newer_image_or_restore_the_pre_upgrade_dump`): starting the old
+  image is no rollback (it exits 0.3 s after its start, a restart loop under
+  `restart: unless-stopped`). The rollback is restoring the pre-upgrade dump
+  (§1.1, step 9).
+- No runtime role holds the migration credential; a role whose schema is
+  pending, or whose store a newer build migrated, stays not ready
+  ([`deployment.md` §3, §6](./deployment.md#6-releases)).
+- **[OBSERVED]** (verification campaign, 2026-10-28) A plan created by the
+  previous release and not yet applied is applied by the new one: the apply
+  re-evaluates the policy and compares the decision and the requirements, not
+  the policy version hash. A plan whose kind version the new release does not
+  support expires with `PLAN_STALE`.
+
+### 1.1 The upgrade card
+
+Measured on a disposable stack (2026-10-28, three runs, no image pull):
+`migrate` 0.8 to 1.0 s; **every running role goes not ready about 2 s after
+the migration commits** and stays so until it is redeployed; serve (Web App,
+REST, MCP) is down 16 to 18 s, the gateway 15 to 16 s (its graceful stop waits
+for the agents' long polls), the worker 2 to 3 s; the node agents reconnect
+about 6 s after the gateway.
+
+**Before**
+
+1. **Release notes and agents.** The node agent is not part of a server
+   upgrade: check that each node's reported version is in the release's
+   supported agent range (`exponetdb node list`).
+2. **Preflight.** From the **new** image, with a runtime login (for example
+   `exdb_gateway`), run `exponetdb control-store status` against the live
+   store: `pending` lists the bundles `migrate` will apply (`current` with an
+   empty list: no migration). It changes nothing.
+3. **Window.** Choose a time nothing depends on the Control Plane for a
+   minute (above).
+4. **Drain.** Wait until no operation is `running` or `verifying`
+   (`exponetdb operation list --state running`, then `--state verifying`), or
+   let the worker drain: on SIGTERM it stops claiming at once and lets the
+   running step finish within `EXPONETDB_SHUTDOWN_TIMEOUT_MS` (**[DECIDED]**
+   VC-043: set it to 120000 on the worker and the container's stop grace
+   period above it, for example 130 s; Docker's default 10 s cuts any step).
+   A step cut short is reconciled after the restart; the heartbeat is marked
+   stopped either way.
+5. **Backup.** Dump the Control Store (`pg_dumpall` of the resource, or the
+   provider's dump), copy it off the host, check it (`gzip -t`) and restore it
+   once into a scratch resource with `psql -v ON_ERROR_STOP=1` before you go
+   on. This dump is the rollback.
+
+**Upgrade**
+
+6. Run the one-shot migration resource once (`exponetdb control-store
+   migrate`, login `exdb_migrate`). Record its exit status and its output:
+   exit 0 and `state.status: current`, `applied` naming the bundles. It is
+   audited (`control_store.migrated`, the bundles and the release).
+7. Deploy `worker`, `serve` and `gateway` from the same image digest.
+
+**After**
+
+8. `exponetdb control-store status`: `current`, `pending` empty;
+   `exponetdb keyring status`: nothing missing or mismatched;
+   `exponetdb audit verify`: ok; `GET /api/v1/installation/health`; every
+   node `active`; one nonprod read and one nonprod plan and apply succeed.
+
+**If it goes wrong**
+
+9. **Do not start the old image** (it refuses, see above). The owner decides
+   within the window: roll forward (fix, a newer image) or restore. Restore:
+   RB-10 with the pre-upgrade dump (about 7 s for a 1.25 MB dump on the
+   stack); everything written after the dump is lost (audit events,
+   operations, plans, revisions, ledger-mirror rows). Then sign in again
+   (sessions after the dump are gone), reconcile every target the new release
+   touched (RB-10 step 6), and expect the node agents to reconnect within
+   about a minute.
+10. Write the deployment record: the image digest, the migration output, the
+    restart policy, the volumes and `EXPONETDB_CONTROL_STORE_VOLUME_BYTES`
+    ([`deployment.md` §1](./deployment.md#1-topology)), the downtime, any rollback.
 
 ## 2. Node agent
 
