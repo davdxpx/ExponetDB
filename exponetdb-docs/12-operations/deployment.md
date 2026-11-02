@@ -343,6 +343,18 @@ owner's pgBackRest setup, adopted then owned in Part B of Wave 9 (OD-52).
   No runtime resource receives the migration credential (§3).
 - Agent releases are separate artifacts with their own version and a
   compatibility range with the server ([`upgrades.md`](./upgrades.md)).
+- **[DECIDED]** (owner, 2026-11-02) The release image is also published to a
+  **private** package on the GitHub Container Registry,
+  `ghcr.io/davdxpx/exponetdb:<commit>`, by the manual workflow
+  [`publish-image`](../../.github/workflows/publish-image.yml): the same
+  build as the CI `image` job, the non-root check and the role-start smoke
+  test on that image, the push, and a final step that fails the run if an
+  anonymous client can read the manifest. A merge pushes nothing (private
+  packages count against the account's package storage). This is not a public
+  release ([OD-19](../00-product/open-decisions.md#od-19-exponetdb-license)).
+  **[PLANNED]** `reos-01` pulls from it after the owner has logged in to
+  `ghcr.io` there with a read-only token (`read:packages`); until then the
+  loopback registry stays the release path.
 
 ## 6a. Rolling out `/mcp` (Wave 7)
 

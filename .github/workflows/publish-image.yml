@@ -1,0 +1,86 @@
+# Publishes the release image of one commit to the private GitHub Container
+# Registry (exponetdb-docs/12-operations/deployment.md §6).
+#
+# Manual only: a release is built when the owner asks for it, as with the
+# loopback registry before, and a merge pushes nothing. Private packages count
+# against the account's package storage, so there is no push per commit.
+#
+# The tag is the commit (never `latest`); the image label
+# `org.opencontainers.image.revision` carries the same commit. The workflow
+# cannot set a package's visibility, so its last step fails the run if an
+# anonymous client can read the image.
+#
+# Only the official checkout action is used (pinned like every action, see
+# ci.yml); the image is built, tested and pushed with the runner's Docker.
+name: publish-image
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-image
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/davdxpx/exponetdb
+
+jobs:
+  publish:
+    name: Image (build, smoke test, push to ghcr.io, private check)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      # Same build as the `image` job of ci.yml: base images are pinned by
+      # digest in the Dockerfile, the commit is the only input that varies.
+      - name: Build the image
+        run: docker build --build-arg EXPONETDB_BUILD_COMMIT="${GITHUB_SHA}" -t "${IMAGE}:${GITHUB_SHA}" .
+
+      - name: Image runs as a non-root user
+        run: test "$(docker image inspect "${IMAGE}:${GITHUB_SHA}" --format '{{.Config.User}}')" = node
+
+      # The image that is pushed is the image that was tested.
+      - name: Role-start smoke test (bootstrap, migrate, serve, worker, gateway, shutdown)
+        run: bash tooling/smoke/roles.sh "${IMAGE}:${GITHUB_SHA}"
+
+      - name: Push to ghcr.io
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "${REGISTRY_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          docker push "${IMAGE}:${GITHUB_SHA}"
+          digest="$(docker image inspect "${IMAGE}:${GITHUB_SHA}" --format '{{index .RepoDigests 0}}')"
+          {
+            echo "### Image"
+            echo
+            echo "- tag: \`${IMAGE}:${GITHUB_SHA}\`"
+            echo "- digest: \`${digest}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      # A private package refuses an anonymous read (no token, 401, 403 or 404);
+      # only a readable manifest means it is public. Set the package to private
+      # in its settings if this step fails (the registry offers no API for it).
+      - name: The package is private
+        run: |
+          accept='application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'
+          repo="${IMAGE#ghcr.io/}"
+          token="$(curl -sS "https://ghcr.io/token?service=ghcr.io&scope=repository:${repo}:pull" | jq -r '.token // empty')"
+          if [ -z "${token}" ]; then
+            echo "::warning::no anonymous token for ${repo}; treated as private, check the package settings once"
+            exit 0
+          fi
+          status="$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${token}" -H "Accept: ${accept}" "https://ghcr.io/v2/${repo}/manifests/${GITHUB_SHA}")"
+          if [ "${status}" = 200 ]; then
+            echo "::error::${IMAGE} is public (anonymous read returned 200). Set the package to private: https://github.com/users/davdxpx/packages/container/exponetdb/settings"
+            exit 1
+          fi
+          echo "anonymous read refused (${status}): the package is private"
