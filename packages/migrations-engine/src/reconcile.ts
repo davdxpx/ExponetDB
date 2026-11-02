@@ -19,12 +19,7 @@ import {
   type TargetRecord,
 } from '@exponetdb/registry'
 import { type MigrationKindDeps, projectRegistry } from './deps.ts'
-import {
-  compareLedger,
-  type LedgerDivergence,
-  operationsOfTarget,
-  readMirrorFacts,
-} from './divergence.ts'
+import { compareWithMirror, type LedgerDivergence } from './divergence.ts'
 import { MigrationError } from './errors.ts'
 import type { MigrationPlanContext } from './planner.ts'
 import { type Fence, fenced, insertMirrorRow, LeaseLost } from './records.ts'
@@ -116,16 +111,7 @@ async function fullDivergence(
   target: Pick<TargetRecord, 'targetId' | 'generation'>,
   live: readonly LedgerRecord[],
 ): Promise<{ divergence: LedgerDivergence; mirrorRows: number } | null> {
-  const mirror = await readMirrorFacts(q, target.targetId, target.generation)
-  if (mirror === undefined) return null
-  const mirrored = new Set(mirror.map((r) => r.migrationId))
-  const known = await operationsOfTarget(
-    q,
-    target.targetId,
-    live.filter((r) => !mirrored.has(r.migrationId)).map((r) => r.operationId),
-  )
-  const divergence = compareLedger(mirror, live, known, ALL)
-  return divergence === null ? null : { divergence, mirrorRows: mirror.length }
+  return compareWithMirror(q, target.targetId, target.generation, live, ALL)
 }
 
 export async function planLedgerReconcile(

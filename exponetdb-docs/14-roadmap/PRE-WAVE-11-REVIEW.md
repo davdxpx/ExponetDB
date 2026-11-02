@@ -869,9 +869,28 @@ finding is wrong. Owner decisions are in [`open-decisions.md`](../00-product/ope
 | VC-141 a second RB-10 recovery fails on `restore_admin` | DOCUMENTED (a fresh superuser name per recovery, its login taken away afterwards) | | [control-store-runbook.md §4](../12-operations/control-store-runbook.md) |
 | VC-143 hourly checkpoints cannot size the lost gap | DOCUMENTED (what the checkpoints prove; the gap is a time span) | | [control-store-runbook.md §4](../12-operations/control-store-runbook.md) |
 
+### VC-1f. Group G: evidence, ledger and drift integrity (branch `fix/verification-campaign-group-g`, stacked on group D)
+
+| Finding | Status | Regression artifact | Document |
+|---|---|---|---|
+| VC-063 a never-mirrored production target is not blocked; reconcile says "nothing to reconcile" | IMPLEMENTED (recorded = an operation of the target applied or is applying the migration; a never-mirrored target is compared with an empty mirror; one comparison for status, plans, reconcile, the watch and the mirror write), TESTED LOCALLY; NOT EXECUTED: the restore scenario on a stack | `packages/migrations-engine/test/ledger-integrity.int.test.ts` | [ledger.md §5](../04-migrations/ledger.md) |
+| VC-023 `generation` never changes; a bump would switch the check off | IMPLEMENTED (a mirror of another generation is a divergence, nothing is mirrored for it), TESTED LOCALLY; the bump itself is NOT BUILT | `ledger-integrity.int.test.ts` | [ledger.md §5](../04-migrations/ledger.md) |
+| VC-045 the mirror is rewritable in place; VC-102 `archive_mirror_rows` unbound | IMPLEMENTED (bundle `ledger-mirror-guard`: revert-only trigger `EXM03`, the function bound to a running `ledger.reconcile` and the plan's ids), TESTED LOCALLY | `ledger-integrity.int.test.ts` | [ledger.md §5](../04-migrations/ledger.md) |
+| VC-027, VC-080 other bytes under an applied id | IMPLEMENTED (`appliedElsewhere` counts in-flight operations; repeated at execute under an advisory lock per id), TESTED LOCALLY; NOT EXECUTED: the concurrent variant `s7-promo-immutability.sh` | `ledger-integrity.int.test.ts` | [ledger.md §5](../04-migrations/ledger.md) |
+| VC-079, VC-153 forged evidence; a malformed verification id is allow and never applies | IMPLEMENTED (operation listing, mirror agreement and a mirrored verification at plan and apply; the CLI prints `changedBindings`), TESTED LOCALLY; NOT EXECUTED: `s7-promo-forged.sh` | `ledger-integrity.int.test.ts`, `apps/cli/test/foundation.test.ts` | [staging-production-policy.md §1.2](../04-migrations/staging-production-policy.md) |
+| VC-022 divergence only noticed when someone plans | IMPLEMENTED (worker task `ledger.watch`, 10 min; critical finding `ledger_divergence`, audit `ledger.divergence.detected`/`cleared`), TESTED LOCALLY | `packages/diagnostics/test/diagnostics.int.test.ts`, `ledger-integrity.int.test.ts` | [ledger.md §5](../04-migrations/ledger.md) |
+| VC-069 a part-way plan leaves the drift baseline behind | IMPLEMENTED (the last verified prefix is the expected schema, from the plan start), TESTED LOCALLY | `packages/migrations-engine/test/baseline-prefix.int.test.ts` | [drift-detection.md §7](../03-database-model/drift-detection.md) |
+| VC-071 a clone is plannable; VC-073 a standby is plannable | IMPLEMENTED as typed refusals at plan and apply of the apply and rollback kinds (`TARGET_IDENTITY_MISMATCH` with both database oids, `TARGET_READ_ONLY`; `3D000` is `TARGET_UNAVAILABLE`), TESTED LOCALLY; NOT BUILT: the same check in the baseline and the import replay, a health condition and a surfaced clone in the Web App; NOT EXECUTED: `traps_logical.sh`, the standby trap | `units.test.ts`, `packages/postgres/test/adapter.test.ts` | [error-model.md §3](../02-control-plane/error-model.md) |
+| VC-074 an endpoint of another instance is applied unchecked | IMPLEMENTED (the plan probes the address; another `system_identifier` is refused naming both; an unreachable address is planned and says so; no probe at apply), TESTED LOCALLY | `packages/registry/test/registry.int.test.ts` | [registry.md](../02-control-plane/registry.md) |
+| VC-075 the documented database move has no path | DECIDED as documentation (import after the move; no `target.rehome`) | | [legacy-import.md §5](../04-migrations/legacy-import.md) |
+| VC-087 hotfix follow-up is unbuilt | DEFERRED with the reason in open-decisions.md (needs a ledger source column and the waived break-glass flow) | | [open-decisions.md](../00-product/open-decisions.md) |
+| VC-106 `migration.resume` takes its operation from the managed database | IMPLEMENTED (the operation must be an apply of this target that lists the migration, and the stuck one when there is one), TESTED LOCALLY | `packages/migrations-engine/test/recovery.int.test.ts` | [failure-and-recovery.md](../04-migrations/failure-and-recovery.md) |
+| VC-136 comment-only change is not seen by drift | DOCUMENTED (`fp1` does not cover comments; `fp2` through an ADR) | | [drift-detection.md §6.1](../03-database-model/drift-detection.md) |
+| VC-108 plan analysis reaches agents without the `untrusted` marker | MOVED to group E (hostile input and containment: the MCP output schemas) | | |
+
 ### VC-1a. Groups not started yet
 
-Groups D to I and the closing documents of section 5 of the fix prompt get their own branches
+Groups E, F, H, I and the closing documents of section 5 of the fix prompt get their own branches
 and pull requests.
 
 ### VC-2. Review history (append-only)
@@ -884,3 +903,4 @@ and pull requests.
 | 2026-11-02 | `fix/verification-campaign-group-c` | independent review of group C (no critical or high finding): a started run refused `replayed`; the archive time bound to the current archive id; an unlisted archive never continuous, a 64 MiB listing, the newest gaps, a log's missing last segment; every dump read first and psql meta-commands refused in the restic runbook; drill bounds checked at planning; an unreadable free space named |
 | 2026-11-02 | `fix/verification-campaign-group-a-followups` | the delegated decisions of group A built: OD-69 (b), OD-70 (b) to (d), OD-68 (b) |
 | 2026-11-02 | `fix/verification-campaign-group-d` | group D: VC-065, VC-043, VC-010, VC-011 (decided under the delegation), VC-141, VC-143 |
+| 2026-11-02 | `fix/verification-campaign-group-g` | group G: VC-063, VC-023, VC-045, VC-102, VC-027, VC-080, VC-079, VC-153, VC-022, VC-069, VC-071, VC-073, VC-074, VC-075 (decided), VC-106, VC-136; VC-087 deferred; VC-108 moved to group E |

@@ -11061,19 +11061,78 @@
     },
     {
       "code": "TARGET_IDENTITY_MISMATCH",
-      "details": null,
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/TARGET_IDENTITY_MISMATCH",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "observedOid": {
+            "pattern": "^[0-9]{1,10}$",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "database_oid"
+            ],
+            "type": "string"
+          },
+          "recordedOid": {
+            "pattern": "^[0-9]{1,10}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "recordedOid",
+          "observedOid"
+        ],
+        "type": "object"
+      },
       "group": "targets_clusters_nodes",
-      "message": "The identity marker in the database does not match the expected target; the target was suspended.",
+      "message": "The database does not match the expected target (its identity marker, or its database object); a mismatched marker suspends the target.",
       "retryable": false,
       "status": 409,
       "title": "Target identity mismatch",
       "type": "https://db.exponet.cloud/errors/target-identity-mismatch"
     },
     {
-      "code": "CLUSTER_IDENTITY_MISMATCH",
+      "code": "TARGET_READ_ONLY",
       "details": null,
       "group": "targets_clusters_nodes",
+      "message": "The PostgreSQL behind the target is a standby (in recovery) or read-only; nothing was written.",
+      "remediation": "Check which instance the endpoints of the cluster reach: the primary is the one that is not in recovery. After a promotion, plan the change again.",
+      "retryable": false,
+      "status": 409,
+      "title": "Target is read-only",
+      "type": "https://db.exponet.cloud/errors/target-read-only"
+    },
+    {
+      "code": "CLUSTER_IDENTITY_MISMATCH",
+      "details": {
+        "$comment": "Generated from packages/contracts by tooling/generators. Do not edit.",
+        "$id": "https://db.exponet.cloud/schemas/errors/CLUSTER_IDENTITY_MISMATCH",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "observed": {
+            "pattern": "^[0-9]{1,20}$",
+            "type": "string"
+          },
+          "pinned": {
+            "pattern": "^[0-9]{1,20}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pinned",
+          "observed"
+        ],
+        "type": "object"
+      },
+      "group": "targets_clusters_nodes",
       "message": "The cluster system identifier does not match the pinned value.",
+      "remediation": "The address reaches another PostgreSQL instance than the one this cluster is pinned to; check the host and the port. Nothing was written.",
       "retryable": false,
       "status": 409,
       "title": "Cluster identity mismatch",

@@ -296,6 +296,11 @@ describe('error mapping', () => {
     ],
     [{ code: '42P01', severity: 'ERROR', message: 'relation does not exist' }, 'QUERY_PARSE_ERROR'],
     [{ code: '08006', severity: 'FATAL', message: 'x' }, 'TARGET_UNAVAILABLE'],
+    // VC-072: a renamed or dropped database is an unavailable target, not TARGET_SQL_ERROR (500).
+    [
+      { code: '3D000', severity: 'FATAL', message: 'database "x" does not exist' },
+      'TARGET_UNAVAILABLE',
+    ],
     [
       {
         code: '23505',

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compareLedger } from '../src/divergence.ts'
+import { compareLedger, recordKey } from '../src/divergence.ts'
 import {
   aggregate,
   type PlanContent,
@@ -10,6 +10,7 @@ import {
   serverVersion,
   stateChanges,
 } from '../src/index.ts'
+import { assertWritable } from '../src/target.ts'
 
 describe('version ranges of requires', () => {
   it('compares dotted numeric versions and fails closed on anything else', () => {
@@ -192,8 +193,20 @@ describe('the ledger against its mirror (ledger.md §5)', () => {
     expect(compareLedger([row('A')], [row('A')], new Set())).toBeNull()
     // Committed on the target, crashed before the mirror: the operation is known.
     expect(
-      compareLedger([row('A')], [row('A'), row('B', 'c', 'op_b')], new Set(['op_b'])),
+      compareLedger(
+        [row('A')],
+        [row('A'), row('B', 'c', 'op_b')],
+        new Set([recordKey('op_b', 'B')]),
+      ),
     ).toBeNull()
+    // VC-063: the same operation id on a migration it never listed is no proof.
+    expect(
+      compareLedger(
+        [row('A')],
+        [row('A'), row('B', 'c', 'op_b')],
+        new Set([recordKey('op_b', 'A')]),
+      ),
+    ).toEqual({ missing: [], checksumDiffers: [], unrecorded: ['B'] })
   })
 
   it('names missing, changed and unrecorded rows', () => {
@@ -201,7 +214,7 @@ describe('the ledger against its mirror (ledger.md §5)', () => {
       compareLedger(
         [row('A'), row('B'), row('C')],
         [row('A', 'other'), row('C', 'c', 'op_x'), row('D', 'c', 'op_unknown')],
-        new Set(['op_a']),
+        new Set([recordKey('op_a', 'A')]),
       ),
     ).toEqual({ missing: ['B'], checksumDiffers: ['A', 'C'], unrecorded: ['D'] })
   })
@@ -219,5 +232,30 @@ describe('the procedural classification on the wire (OD-55 (c))', () => {
     const facts = MigrationPlanContentSchema.shape.facts
     const reasons = facts.shape.proceduralReasons.unwrap().element.options
     expect([...reasons]).toEqual([...PROCEDURAL_REASONS])
+  })
+})
+
+// VC-073 and VC-071: a change is refused before any statement on a standby and on a copy of the database.
+describe('a target that takes no writes', () => {
+  const state = (inRecovery: boolean, databaseOid: string) => ({ inRecovery, databaseOid })
+
+  it('is refused as TARGET_READ_ONLY while the PostgreSQL behind it is in recovery', () => {
+    expect(() => assertWritable(state(true, '16517'), '16517')).toThrowError(
+      expect.objectContaining({ code: 'TARGET_READ_ONLY' }),
+    )
+  })
+
+  it('is refused as TARGET_IDENTITY_MISMATCH naming both oids when a copy took the name', () => {
+    expect(() => assertWritable(state(false, '32766'), '16517')).toThrowError(
+      expect.objectContaining({
+        code: 'TARGET_IDENTITY_MISMATCH',
+        details: { reason: 'database_oid', recordedOid: '16517', observedOid: '32766' },
+      }),
+    )
+  })
+
+  it('takes a primary with the recorded oid, and a target whose oid was never recorded', () => {
+    expect(() => assertWritable(state(false, '16517'), '16517')).not.toThrow()
+    expect(() => assertWritable(state(false, '16517'), null)).not.toThrow()
   })
 })

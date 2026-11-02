@@ -130,7 +130,16 @@ the adoption is applied, node capabilities stay unavailable for it.
   IP host names the DNS name of its certificate. An address names one
   cluster registry-wide. An endpoint is never edited: a changed address is a
   new endpoint, then the old one is retired; the last direct endpoint of a
-  cluster with live targets cannot be retired.
+  cluster with live targets cannot be retired. **[DECIDED]** (verification
+  campaign VC-074, 2026-11-02) Planning an endpoint of a confirmed cluster
+  probes the address with the cluster's observer credential: another
+  `system_identifier` is refused `CLUSTER_IDENTITY_MISMATCH` naming both; the plan
+  shows `probe: matches` or, for an address that cannot be reached,
+  `probe: unreachable`; a pending cluster has no identity to compare and is not
+  probed. The apply does not probe again (the plan expires in minutes). The probe is one TLS and
+  authentication attempt (bounded by the connect timeout) to an address the planner chose,
+  made inside the planning request: the permission to plan an endpoint is an administrator's,
+  and a refusal other than "unreachable" (TLS, credential) is returned as it is.
 - Credentials: the person runs the role bootstrap SQL (no password; psql
   `\password` sets each one) and submits each password once through the
   write-only endpoint (Web App, re-authentication). `serve` encrypts it at

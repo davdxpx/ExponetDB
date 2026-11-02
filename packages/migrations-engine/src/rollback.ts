@@ -57,7 +57,7 @@ import {
   writeVerificationMirror,
 } from './records.ts'
 import { readRevision, revisionsOf } from './store.ts'
-import { ledgerHashOf, readTargetState } from './target.ts'
+import { assertWritable, ledgerHashOf, readTargetState } from './target.ts'
 import { verifyMigration } from './verification.ts'
 
 /**
@@ -132,6 +132,8 @@ export async function planMigrationRollback(
   } finally {
     await opened.session.close()
   }
+  // A standby takes no writes and a copy of the database is another database (VC-073, VC-071).
+  assertWritable(state, target.placement?.databaseOid ?? null)
   const row = state.ledger.find((r) => r.migrationId === migrationId)
   if (row === undefined || row.origin !== 'exponetdb') throw new MigrationError('NOT_FOUND')
   if (row.revertedAt !== null) throw new MigrationError('MIGRATION_REVERTED', { migrationId })
@@ -416,6 +418,8 @@ export class MigrationRollbackKind implements OperationKind {
         ),
       )
       const changed: ChangedBinding[] = []
+      if (state.databaseOid !== c.target.databaseOid)
+        changed.push({ binding: 'database', actual: 'changed' })
       if (state.ledgerStateHash !== c.expectedState.ledgerStateHash)
         changed.push({ binding: 'ledger', actual: 'changed' })
       if (state.fingerprint !== c.expectedState.schemaFingerprint)
@@ -508,9 +512,12 @@ export class MigrationRollbackKind implements OperationKind {
           { sizes: false },
         ),
       )
+      // Before any statement: a standby takes no writes (VC-073), a copy is another database (VC-071).
+      if (state.inRecovery) return { outcome: 'not_applied', errorCode: 'TARGET_READ_ONLY' }
       if (
         state.ledgerStateHash !== c.expectedState.ledgerStateHash ||
-        state.fingerprint !== c.expectedState.schemaFingerprint
+        state.fingerprint !== c.expectedState.schemaFingerprint ||
+        state.databaseOid !== c.target.databaseOid
       ) {
         return {
           outcome: 'not_applied',
