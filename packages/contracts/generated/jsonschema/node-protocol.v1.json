@@ -308,6 +308,17 @@
           "items": {
             "additionalProperties": false,
             "properties": {
+              "gapEnds": {
+                "description": "VC-005: where the archive resumes after missing segments, from the node listing the segment names; absent when the archive could not be listed.",
+                "items": {
+                  "description": "The first segment present after missing ones.",
+                  "maxLength": 24,
+                  "type": "string",
+                  "untrusted": true
+                },
+                "maxItems": 64,
+                "type": "array"
+              },
               "id": {
                 "description": "Archive id (major-version and history id).",
                 "maxLength": 32,

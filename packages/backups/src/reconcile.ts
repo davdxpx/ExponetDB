@@ -47,6 +47,8 @@ export interface ListResult {
     readonly id: string
     readonly min: string | null
     readonly max: string | null
+    /** VC-005: absent when the node could not list the archive. */
+    readonly gapEnds?: readonly string[]
   }[]
   readonly truncated: boolean
 }
@@ -363,13 +365,26 @@ export async function reconcileCatalog(tx: Tx, input: ReconcileInput): Promise<R
       archivedAtMs <= nowMs + FUTURE_TOLERANCE_MS
         ? archived.lastArchivedAt
         : null
+    // VC-005: where the archive resumes after missing segments, as the node listed it. A listing
+    // the node could not make (no gapEnds) keeps what was known; it never claims continuity.
+    const gaps =
+      a.gapEnds === undefined
+        ? null
+        : JSON.stringify(
+            a.gapEnds
+              .filter((end) => SEGMENT.test(end) && segmentTimeline(end) === timeline)
+              .slice(0, 64)
+              .map((end) => ({ to: end })),
+          )
     await tx.query(
       'backups.wal_coverage.upsert',
-      `INSERT INTO backups.wal_coverage (repository_id, archive_id, timeline, min_segment, max_segment, max_archived_at, observed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, now())
+      `INSERT INTO backups.wal_coverage (repository_id, archive_id, timeline, min_segment, max_segment, max_archived_at, gaps, observed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, coalesce($7::jsonb, '[]'::jsonb), now())
        ON CONFLICT (repository_id, archive_id, timeline) DO UPDATE
           SET min_segment = EXCLUDED.min_segment, max_segment = EXCLUDED.max_segment,
-              max_archived_at = EXCLUDED.max_archived_at, observed_at = now()`,
+              max_archived_at = EXCLUDED.max_archived_at,
+              gaps = CASE WHEN $7::jsonb IS NULL THEN backups.wal_coverage.gaps ELSE EXCLUDED.gaps END,
+              observed_at = now()`,
       [
         repositoryId,
         a.id,
@@ -377,6 +392,7 @@ export async function reconcileCatalog(tx: Tx, input: ReconcileInput): Promise<R
         a.min !== null && SEGMENT.test(a.min) ? a.min : null,
         max,
         maxArchivedAt,
+        gaps,
       ],
     )
   }

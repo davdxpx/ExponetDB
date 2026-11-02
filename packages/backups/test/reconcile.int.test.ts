@@ -156,6 +156,41 @@ afterAll(async () => {
   await db?.drop()
 })
 
+// VC-005: backups.wal_coverage.gaps was never written, so wal_gap and walContinuous could not fire.
+describe('gaps in the WAL archive', () => {
+  it('records the gaps the node reports and keeps them when a later listing could not list the archive', async () => {
+    const w = await world()
+    const holed = listing(w, {
+      archive: [
+        {
+          id: '17-1',
+          min: WAL_START,
+          max: '000000010000000000000009',
+          gapEnds: ['000000010000000000000007'],
+        },
+      ],
+    })
+    await reconcile(w, holed, null)
+    expect((await listCoverage(serve, w.clusterId))[0]?.gapEnds).toEqual([
+      '000000010000000000000007',
+    ])
+    // The next listing has no gapEnds (the node could not list): the gap is not forgotten.
+    await reconcile(w, listing(w), null)
+    expect((await listCoverage(serve, w.clusterId))[0]?.gapEnds).toEqual([
+      '000000010000000000000007',
+    ])
+    // A listing without holes clears it.
+    await reconcile(
+      w,
+      listing(w, {
+        archive: [{ id: '17-1', min: WAL_START, max: '000000010000000000000009', gapEnds: [] }],
+      }),
+      null,
+    )
+    expect((await listCoverage(serve, w.clusterId))[0]?.gapEnds).toEqual([])
+  })
+})
+
 describe('archive times of a repository', () => {
   it('takes the archiver time only for the exact newest segment of the repository', async () => {
     const w = await world()

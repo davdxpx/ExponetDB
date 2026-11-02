@@ -1312,6 +1312,14 @@ const BackupListResult = z
           id: untrustedText(32, 'Archive id (major-version and history id).'),
           min: untrustedText(24, 'Oldest WAL segment.').nullable(),
           max: untrustedText(24, 'Newest WAL segment.').nullable(),
+          gapEnds: z
+            .array(untrustedText(24, 'The first segment present after missing ones.'))
+            .max(64)
+            .optional()
+            .meta({
+              description:
+                'VC-005: where the archive resumes after missing segments, from the node listing the segment names; absent when the archive could not be listed.',
+            }),
         }),
       )
       .max(16),

@@ -1406,6 +1406,12 @@ func pgbrBase(config, include, stanza string, repo int) []string {
 	return append(args, "--stanza="+stanza, "--repo="+strconv.Itoa(repo))
 }
 
+// pgbrRepoLsArgs is the fixed argv that lists one archive id's files (VC-005).
+func pgbrRepoLsArgs(config, include, stanza string, repo int, archiveID string) []string {
+	return append(pgbrBase(config, include, stanza, repo), "--output=json", "--log-level-console=off",
+		"--log-level-stderr=off", "repo-ls", "--recurse", "archive/"+stanza+"/"+archiveID)
+}
+
 // pgbrInfoArgs is the fixed argv of pgBackRest's catalog read.
 func pgbrInfoArgs(config, include, stanza string, repo int, set string) []string {
 	args := append(pgbrBase(config, include, stanza, repo), "--output=json", "--log-level-console=off", "--log-level-stderr=off")
@@ -1413,6 +1419,30 @@ func pgbrInfoArgs(config, include, stanza string, repo int, set string) []string
 		args = append(args, "--set="+set)
 	}
 	return append(args, "info")
+}
+
+// pgbrArchiveGaps lists each archive id of the stanza and returns its gap ends; an id that cannot
+// be listed is left out (reported as not listed).
+func (h *Helper) pgbrArchiveGaps(ctx context.Context, repo *repository, u engineUser, s *pgbrStanza) map[string][]string {
+	optional, bind := pgbrWritable(repo.pgbrPaths)
+	gaps := map[string][]string{}
+	for _, a := range s.Archive {
+		if !archiveIDRE.MatchString(a.ID) {
+			continue
+		}
+		out, err := h.sup().runAs(ctx, execSpec{UID: u.UID, GID: u.GID, Path: PgBackRest,
+			Args:     pgbrRepoLsArgs(h.path(repo.pgbrConfig), includeOf(h, repo), repo.stanza(), repo.repoIndex(), a.ID),
+			Optional: optional, Bind: bind, Timeout: 60 * time.Second})
+		if err != nil || out.ExitCode != 0 {
+			continue
+		}
+		segments, err := archiveSegments(out.Stdout)
+		if err != nil {
+			continue
+		}
+		gaps[a.ID] = walGapEnds(segments)
+	}
+	return gaps
 }
 
 func (h *Helper) pgbrInfo(ctx context.Context, repo *repository, u engineUser) (*pgbrStanza, *Refusal) {
@@ -1472,7 +1502,7 @@ func backupList(ctx context.Context, h *Helper, job *verify.Job) (canon.Object, 
 		if r != nil {
 			return nil, r
 		}
-		return pgbrListResult(s, version), nil
+		return pgbrListResult(s, version, h.pgbrArchiveGaps(ctx, repo, u, s)), nil
 	}
 	out, r := h.resticRead(ctx, repo, u, []string{"snapshots", "--json", "--no-lock", "--no-cache", "--tag", "exponetdb"})
 	if r != nil {

@@ -2100,6 +2100,7 @@ under that delegation here, with the option and the reason; the owner can revisi
 | B1-D4 | `operation.force_release`, as defined before G1 (a `high` planned operation, a person, re-authentication at apply), as the exit of `needs_attention` for every kind, with a stated outcome and a reason, rather than per-kind retry rules | one action closes the dead end for every kind, present and future |
 | D0-01 | a production `migration.verify` that names a stuck operation needs an approval and a fresh re-authentication | closing an operation on production is a recovery like `migration.resume` |
 | OD-60, S2-D2 | (a) for `amcheck`; a drill may carry row-count bounds (`row_counts`); without them it passes without a data check and says so; a short replay fails it | a mandatory data check needs bounds only the person knows; the replay end catches the deleted segment without one |
+| S2-D1, D-R1-2 | the node computes WAL gaps itself (a `repo-ls` listing) and `backup.verify` fails on a gap after the start of the backups it verifies | pgBackRest's verify does not report a missing segment between two others; nothing else can see it |
 
 ## Owner decisions of the Wave 9 Part B order (2026-10-26)
 

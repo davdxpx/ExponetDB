@@ -76,7 +76,7 @@ Rules:
 | `backup_repositories` (`bkr_`) | cluster, engine, engine version, location (bucket/path, provider), encryption key reference (never the key), lock retention, credentials reference, health (`ok`/`degraded`/`failed` + checked_at) |
 | `backup_policies` | cluster, schedule per kind (full, incremental/differential, logical), retention per kind, `archive_timeout`, RPO/RTO objectives per environment, drill cadence |
 | `backups` (`bkp_`) | repository, engine label, kind, started/finished, LSN start/stop, timeline, size, PostgreSQL major, `system_identifier`, databases contained (logical), verification state + time, source operation |
-| `wal_coverage` | repository, timeline, earliest and latest archived LSN and time, gaps |
+| `wal_coverage` | repository, timeline, earliest and latest archived LSN and time, gaps (**[DECIDED]** VC-005, 2026-11-02: the node lists the archive's segment names with `pgbackrest repo-ls`, since pgBackRest reports only the oldest and newest segment, and `backup.list@1` reports `gapEnds` per archive id; a listing the node could not make keeps the gaps known before and never claims continuity; `wal_gap` and `walContinuous` follow from them) |
 | `restores` (`rst_`) | source (backup or point in time), destination, purpose (`drill`, `recovery`, `clone`), plan, timings per phase, verification results, disposal |
 
 The mirror is refreshed by `backup.list@1` after every backup job and on a

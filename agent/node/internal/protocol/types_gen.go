@@ -98,6 +98,9 @@ type CapBackupListResult struct {
 
 // CapBackupListResultArchiveItem is part of an exponetdb.node/v1 message.
 type CapBackupListResultArchiveItem struct {
+	// VC-005: where the archive resumes after missing segments, from the node
+	// listing the segment names; absent when the archive could not be listed.
+	GapEnds []string `json:"gapEnds,omitempty"`
 	// Archive id (major-version and history id).
 	ID string `json:"id"`
 	// Newest WAL segment.

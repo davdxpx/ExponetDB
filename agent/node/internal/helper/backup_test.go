@@ -1373,7 +1373,7 @@ func FuzzEngineOutputs(f *testing.F) {
 			return
 		}
 		if s, err := parsePgbrInfo(info, "main"); err == nil {
-			if err := sv.ValidateResult("backup.list@1", pgbrListResult(s, "2.60.0")); err != nil {
+			if err := sv.ValidateResult("backup.list@1", pgbrListResult(s, "2.60.0", nil)); err != nil {
 				t.Fatalf("pgBackRest list: %v", err)
 			}
 			_ = pgbrSurvivors(s, 1, nil)
