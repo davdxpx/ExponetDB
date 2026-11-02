@@ -421,6 +421,122 @@ describe('the NOT NULL recipe and stable defaults on a large table (VC-030, VC-0
   )
 })
 
+describe('the review of group F: the recipe, the proof and the lock rule', () => {
+  const large: CatalogFacts = {
+    source: 'live',
+    observedAt: '2026-10-12T00:00:00Z',
+    relations: new Map([['public.lead', { relkind: 'r', bytes: 2 ** 31, rows: 10_000_000 }]]),
+  }
+  const blocking = (r: LintReport) =>
+    [...r.findings, ...r.bundles.flatMap((b) => b.findings)].filter((f) => f.blocking)
+
+  it('lets the three-bundle NOT NULL recipe pass with nothing blocking', () => {
+    const id1 = ulid()
+    const id2 = ulid()
+    const id3 = ulid()
+    const r = lint(
+      [
+        bundle({
+          id: id1,
+          up: 'ALTER TABLE public.lead ADD CONSTRAINT lead_note_nn CHECK (note IS NOT NULL) NOT VALID;\n',
+          declared: 'potentially_breaking',
+        }),
+        bundle({
+          id: id2,
+          up: 'ALTER TABLE public.lead VALIDATE CONSTRAINT lead_note_nn;\n',
+          declared: 'potentially_breaking',
+          dependsOn: [id1],
+        }),
+        bundle({
+          id: id3,
+          up: 'ALTER TABLE public.lead ALTER COLUMN note SET NOT NULL;\n',
+          declared: 'potentially_breaking',
+          dependsOn: [id2],
+        }),
+      ],
+      { catalog: large },
+    )
+    expect(blocking(r).map((f) => f.rule)).toEqual([])
+  })
+
+  it('does not call a SET NOT NULL the lint accepts as proven a slow statement', () => {
+    const proven: CatalogFacts = { ...large, provenNotNull: new Set(['public.lead.note']) }
+    const r = lint(
+      [
+        bundle({
+          up: 'ALTER TABLE public.lead ADD COLUMN x int;\nALTER TABLE public.lead ALTER COLUMN note SET NOT NULL;\n',
+        }),
+      ],
+      { catalog: proven },
+    )
+    expect(finding(r, 'lock_held_across_slow_statement')).toBeUndefined()
+  })
+
+  it('does not call a table created by an earlier bundle of the request large', () => {
+    const first = ulid()
+    const r = lint(
+      [
+        bundle({ id: first, up: 'CREATE TABLE public.roles (id int PRIMARY KEY);\n' }),
+        bundle({
+          up: 'ALTER TABLE public.roles ADD COLUMN d text;\nINSERT INTO public.roles SELECT 1, null;\n',
+          dependsOn: [first],
+        }),
+      ],
+      { catalog: large },
+    )
+    expect(blocking(r).map((f) => f.rule)).not.toContain('lock_held_across_slow_statement')
+  })
+
+  it('does not flag a single-row INSERT, and does not double-count a rewrite', () => {
+    const one = lint(
+      [
+        bundle({
+          up: 'ALTER TABLE public.lead ADD COLUMN x int;\nINSERT INTO public.lead (id) VALUES (1);\n',
+        }),
+      ],
+      { catalog: large },
+    )
+    expect(finding(one, 'lock_held_across_slow_statement')).toBeUndefined()
+    const twice = lint(
+      [
+        bundle({
+          up: 'ALTER TABLE public.lead ADD COLUMN x int;\nALTER TABLE public.lead ADD COLUMN s bigserial;\n',
+        }),
+      ],
+      { catalog: large },
+    )
+    expect(finding(twice, 'lock_held_across_slow_statement')).toBeUndefined()
+  })
+
+  it('takes a proof back when the constraint is dropped', () => {
+    const r = lint(
+      [
+        bundle({
+          up: [
+            'ALTER TABLE public.lead ADD CONSTRAINT lead_note_nn CHECK (note IS NOT NULL);',
+            'ALTER TABLE public.lead DROP CONSTRAINT lead_note_nn;',
+            'ALTER TABLE public.lead ALTER COLUMN note SET NOT NULL;',
+          ].join('\n'),
+        }),
+      ],
+      { catalog: large },
+    )
+    expect(finding(r, 'unsafe_not_null')).toMatchObject({ blocking: true })
+  })
+
+  it('prints the statement number the other messages print (0-based)', () => {
+    const r = lint(
+      [
+        bundle({
+          up: 'ALTER TABLE public.lead ADD COLUMN x int;\nUPDATE public.lead SET x = 1 WHERE id > 0;\n',
+        }),
+      ],
+      { catalog: large },
+    )
+    expect(finding(r, 'lock_held_across_slow_statement')?.message).toContain('statement 0')
+  })
+})
+
 describe('an exclusive lock held across a slow statement (VC-032)', () => {
   const large: CatalogFacts = {
     source: 'live',

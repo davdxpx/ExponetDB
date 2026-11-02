@@ -76,6 +76,8 @@ describe.each([16, 17, 18] as const)('serial and identity columns on PostgreSQL 
           w.bundle({
             name: 'add-seq',
             up: `ALTER TABLE public.rw ADD COLUMN seq ${column};\n`,
+            // A rewriting statement is data_rewrite; declaring less is the fixed error the plan shows.
+            declared: 'data_rewrite',
             dependsOn: [base],
           }),
         ],
@@ -87,7 +89,12 @@ describe.each([16, 17, 18] as const)('serial and identity columns on PostgreSQL 
       ).perMigration[0]?.statements[0]
       expect(statement?.rewrite).toBe('table')
       expect(statement?.compatibility).toBe('data_rewrite')
-      await w.apply(plan)
+      // It applies and verifies (an identity column is NOT NULL; the structural check once rolled it back).
+      expect(await w.apply(plan)).toMatchObject({
+        state: 'succeeded',
+        applyOutcome: 'applied',
+        verificationOutcome: 'passed',
+      })
       // The classification is the truth: the file node changed.
       expect(await filenode()).not.toBe(before)
     },

@@ -324,19 +324,26 @@ export interface StatementDetails {
     readonly table: { readonly schema: string | null; readonly name: string }
   }
   readonly notNullWithoutProof?: readonly string[]
-  /** `ADD CONSTRAINT … CHECK (column IS NOT NULL)`: the column it proves not null once validated (VC-030). */
-  readonly checkNotNull?: {
+  /** Every `ADD CONSTRAINT … CHECK (column IS NOT NULL)` of the statement: what it proves once validated (VC-030). */
+  readonly checksNotNull?: readonly {
     readonly table: { readonly schema: string | null; readonly name: string }
     readonly column: string
     readonly name: string | null
     readonly validated: boolean
-  }
-  /** `VALIDATE CONSTRAINT name` on a table (VC-030). */
-  readonly validatesConstraint?: {
+  }[]
+  /** Every `VALIDATE CONSTRAINT name` of the statement (VC-030). */
+  readonly validatesConstraints?: readonly {
     readonly table: { readonly schema: string | null; readonly name: string }
     readonly name: string
-  }
+  }[]
+  /** Every `DROP CONSTRAINT name` of the statement: a proof it gave is gone. */
+  readonly droppedConstraints?: readonly {
+    readonly table: { readonly schema: string | null; readonly name: string }
+    readonly name: string
+  }[]
   readonly constraintValidated?: boolean
+  /** An `INSERT … VALUES` (no query), which is not a slow statement. */
+  readonly insertValuesOnly?: boolean
   readonly volatileDefault?: boolean
   readonly typeChange?: boolean
   readonly dropColumn?: boolean
@@ -425,8 +432,10 @@ function qualifiedName(value: unknown): { schema: string | null; name: string } 
 
 /**
  * The integer type a `serial` shorthand stands for (VC-016): PostgreSQL expands the type name
- * after the raw parse into an integer column, NOT NULL, with a `nextval` default. Only the bare
- * lower-case name is the shorthand; `"serial"` and a qualified name are types.
+ * after the raw parse into an integer column, NOT NULL, with a `nextval` default. The shorthand is
+ * the bare one-part name, case-sensitive: PostgreSQL compares the string, so a quoted `"serial"`
+ * is the shorthand too (the raw tree does not tell them apart), while `"Serial"` and a qualified
+ * name are types.
  */
 const SERIAL_TYPES: Readonly<Record<string, string>> = {
   smallserial: 'pg_catalog.int2',
@@ -915,6 +924,9 @@ function alterTable(d: Draft, body: JsonNode): void {
             // generated column: the table is rewritten (VC-017).
             volatileDefault = true
           }
+          // PostgreSQL makes an identity column implicitly NOT NULL (attnotnull); the structural
+          // verification compared false and rolled the apply back (the review of group F).
+          if (contype === 'CONSTR_IDENTITY') notNull = true
         }
         if (bool(cmd.body['missing_ok'])) d.conditionalForm = true
         if (name !== null) {
@@ -1069,8 +1081,9 @@ function alterTable(d: Draft, body: JsonNode): void {
           }
           severity = notValid ? 'medium' : 'high'
           duration = notValid ? 'brief' : 'scan'
-        } else if (str(k['indexname']) !== null) {
-          // USING INDEX attaches an index that already exists: no scan, a brief lock (VC-031).
+        } else if (str(k['indexname']) !== null && contype === 'CONSTR_UNIQUE') {
+          // UNIQUE USING INDEX attaches an index that already exists: no scan, a brief lock
+          // (VC-031). PRIMARY KEY USING INDEX still scans: the key columns are made NOT NULL.
           usingIndex = true
         } else if (contype === 'CONSTR_PRIMARY' || contype === 'CONSTR_UNIQUE') {
           duration = 'scan'
@@ -1079,15 +1092,15 @@ function alterTable(d: Draft, body: JsonNode): void {
           duration = 'scan'
           severity = 'critical'
         }
-        d.details.constraintValidated = !notValid && !usingIndex
+        // Every command counts: a scanning constraint next to a USING INDEX one still scans.
+        d.details.constraintValidated =
+          (d.details.constraintValidated ?? false) || (!notValid && !usingIndex)
         const proved = contype === 'CONSTR_CHECK' ? notNullCheckColumn(k['raw_expr']) : null
         if (proved !== null) {
-          d.details.checkNotNull = {
-            table: rel,
-            column: proved,
-            name: conname,
-            validated: !notValid,
-          }
+          d.details.checksNotNull = [
+            ...(d.details.checksNotNull ?? []),
+            { table: rel, column: proved, name: conname, validated: !notValid },
+          ]
         }
         d.compatibility.push('potentially_breaking')
         break
@@ -1097,7 +1110,10 @@ function alterTable(d: Draft, body: JsonNode): void {
         severity = 'low'
         duration = 'scan'
         if (colname !== null) {
-          d.details.validatesConstraint = { table: rel, name: colname }
+          d.details.validatesConstraints = [
+            ...(d.details.validatesConstraints ?? []),
+            { table: rel, name: colname },
+          ]
           d.expectations.push({
             kind: 'constraint',
             schema: rel.schema,
@@ -1111,6 +1127,10 @@ function alterTable(d: Draft, body: JsonNode): void {
         break
       case 'AT_DropConstraint':
         if (colname !== null) {
+          d.details.droppedConstraints = [
+            ...(d.details.droppedConstraints ?? []),
+            { table: rel, name: colname },
+          ]
           d.objects.push({
             kind: 'constraint',
             schema: rel.schema,
@@ -2131,6 +2151,13 @@ function classify(statement: ParsedStatement, trusted: ReadonlySet<string>): Dra
         | 'merge'
       d.kind = verb.toUpperCase()
       d.details.dataChange = verb
+      // `INSERT … VALUES (…)` writes the rows it names and reads nothing (the lock rule, VC-032).
+      if (verb === 'insert') {
+        const select = nodeType(body['selectStmt'])
+        if (select?.type === 'SelectStmt' && Array.isArray(select.body['valuesLists'])) {
+          d.details.insertValuesOnly = true
+        }
+      }
       if (rel !== null) {
         d.objects.push({ kind: 'table', ...rel, action: 'write' })
         d.locks.push({

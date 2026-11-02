@@ -1,3 +1,4 @@
+import { analyzeMigrationSql, loadParser } from '@exponetdb/postgres/parser'
 import { describe, expect, it } from 'vitest'
 import { compareLedger, recordKey } from '../src/divergence.ts'
 import {
@@ -10,6 +11,7 @@ import {
   serverVersion,
   stateChanges,
 } from '../src/index.ts'
+import { readBack } from '../src/resume.ts'
 import { assertWritable } from '../src/target.ts'
 
 describe('version ranges of requires', () => {
@@ -257,5 +259,27 @@ describe('a target that takes no writes', () => {
   it('takes a primary with the recorded oid, and a target whose oid was never recorded', () => {
     expect(() => assertWritable(state(false, '16517'), '16517')).not.toThrow()
     expect(() => assertWritable(state(false, '16517'), null)).not.toThrow()
+  })
+})
+
+describe('the readback of a failed DETACH PARTITION ... CONCURRENTLY (the review of group F)', () => {
+  it('is ambiguous, never failed_without_effect: a half-done detach leaves the partition pending', async () => {
+    await loadParser(17)
+    const analysis = analyzeMigrationSql(
+      17,
+      'ALTER TABLE public.p DETACH PARTITION public.c CONCURRENTLY;',
+    )
+    if (!analysis.ok) throw new Error('does not parse')
+    // The reader answers nothing: the readback must not need the catalog to be careful.
+    const reader = { query: async () => [] } as never
+    const log = {
+      originalOperationId: 'op_01M6EQRJQVZSSRPXN13CT3ZBS2',
+      startedSeq: '1',
+      digest: 'sha256:x',
+      next: 0,
+      failed: { sqlstate: '57014', gate: null },
+    }
+    const back = await readBack(reader, analysis.statements, log, ['public'])
+    expect(back.state).toBe('ambiguous')
   })
 })
