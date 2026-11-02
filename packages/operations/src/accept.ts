@@ -40,7 +40,35 @@ export interface AcceptDependencies {
    * stay unmet: fail closed.
    */
   readonly requirementMet?: (requirement: Requirement, plan: PlanRecord) => Promise<boolean>
+  /** How long the kind's live binding check may take under the plan's row lock (default {@link BINDING_CHECK_DEADLINE_MS}). */
+  readonly bindingDeadlineMs?: number
 }
+
+/**
+ * The live reads of a kind's binding check (the managed target) run while the plan's row lock and a
+ * Control Store connection are held (VC-123). A target that never answers must not hold ten of
+ * them, the whole pool of `serve`, for the length of a TCP timeout: past this the accept is
+ * refused `TARGET_UNAVAILABLE` and the plan stays active.
+ */
+export const BINDING_CHECK_DEADLINE_MS = 15_000
+
+async function withDeadline<T>(work: Promise<T>, ms: number): Promise<T | typeof DEADLINE> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      work,
+      new Promise<typeof DEADLINE>((resolve) => {
+        timer = setTimeout(() => resolve(DEADLINE), ms)
+      }),
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+    // The abandoned check may still fail later: nothing is waiting for it.
+    work.catch(() => undefined)
+  }
+}
+
+const DEADLINE = Symbol('binding check deadline')
 
 export type AcceptResult =
   | {
@@ -191,7 +219,14 @@ export async function acceptPlan(
   if (kind === undefined || kind.version !== plan.kindVersion) {
     return { status: 'refused', error: new OperationError('operation_kind_unknown') }
   }
-  const changed = await kind.checkBindings(plan)
+  const checked = await withDeadline(
+    kind.checkBindings(plan),
+    deps.bindingDeadlineMs ?? BINDING_CHECK_DEADLINE_MS,
+  )
+  if (checked === DEADLINE) {
+    return { status: 'refused', error: new OperationError('TARGET_UNAVAILABLE') }
+  }
+  const changed = checked
   if (changed.length > 0) {
     return invalidate(tx, plan, changed, deps)
   }
