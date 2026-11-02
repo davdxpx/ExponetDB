@@ -362,10 +362,12 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
     })
 
     it('bounds what the worker holds: one huge value is refused, wide rows stop at the byte budget', async () => {
-      // 30 MB in one cell: past the receive bound (twice the budget plus 1 MiB) before it is whole.
-      const huge = await read("SELECT pg_catalog.repeat('x', 30000000) AS v", {
-        maxBytes: 1024 * 1024,
-      })
+      // 4 MB in one cell: past the receive bound (twice the budget plus 1 MiB) before it is whole.
+      // Built from a stored 20 kB value: repeat() takes only a small constant (VC-002).
+      const huge = await read(
+        "SELECT pg_catalog.string_agg(a.note, '') AS v FROM public.accounts a, pg_catalog.generate_series(1, 200) AS g WHERE a.id = 2",
+        { maxBytes: 1024 * 1024 },
+      )
       expect(huge).toEqual({
         kind: 'refused',
         code: 'QUERY_RESULT_TOO_LARGE',
@@ -373,7 +375,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       })
       // 200 rows of 100 kB under a 1 MiB budget: fetched in batches, cut by bytes, never all held.
       const wide = await read(
-        "SELECT g, pg_catalog.repeat('y', 100000) AS v FROM pg_catalog.generate_series(1, 200) AS g",
+        'SELECT g, a.note || a.note || a.note || a.note || a.note AS v FROM public.accounts a, pg_catalog.generate_series(1, 200) AS g WHERE a.id = 2',
         { maxBytes: 1024 * 1024 },
       )
       expect(wide).toMatchObject({
@@ -383,6 +385,19 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       })
       // The first batch (25 rows, 2.5 MB of text) already passes the budget: no second fetch.
       if (wide.kind === 'query') expect(wide.rows.length).toBeLessThanOrEqual(25)
+    })
+
+    // VC-002: ~10 GB asked within a second; on a memory-limited server the kernel killed the
+    // backend and the postmaster restarted every session of the cluster.
+    it('refuses the aggregate of huge built values before it runs (VC-002)', async () => {
+      expect(
+        await read("SELECT array_agg(repeat('x', 100000000)) FROM generate_series(1, 100) AS g"),
+      ).toEqual({
+        kind: 'refused',
+        code: 'QUERY_CONSTRUCT_UNSUPPORTED',
+        details: { construct: 'repeat(…, n): n must be a constant of at most 10000' },
+        reason: 'size_argument',
+      })
     })
 
     it('contains comment and dollar-quote tricks as the single read they are', async () => {

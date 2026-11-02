@@ -264,6 +264,17 @@ values.
   closed, the cluster's reader slot is free, and the read answers
   `TARGET_UNAVAILABLE` (reason `read_deadline`). The same close rule holds
   for engine cursors and `verify.sql` checks.
+- **Size of built values.** **[DECIDED]** (verification campaign fix
+  VC-002, 2026-11-02) A data read may ask a value-building function only
+  for a constant size of at most 10,000: the count of `repeat`, the length
+  of `lpad` and `rpad`, the elements of `array_fill` (an `ARRAY[...]` of
+  integer constants) and every width of a `format` string (a constant
+  format, no `*` width). A column, a parameter or an expression as the
+  size is refused as `QUERY_CONSTRUCT_UNSUPPORTED` (reason
+  `size_argument`). PostgreSQL has no per-query memory limit: an aggregate
+  of huge built values made the kernel restart the target's cluster. The
+  rule bounds one value only; rows times values is the residual of
+  [OD-68](../00-product/open-decisions.md#od-68-memory-of-a-data-read-on-the-target).
 - **Values.** Typed by type oid (booleans, integers, `int8` as a number
   when exact and as a string beyond 2^53, floats, `numeric` and other
   exact types as strings, JSON parsed up to 64 KiB, `bytea` as
