@@ -9,6 +9,7 @@ import {
 } from '@exponetdb/postgres'
 import {
   createDatabase,
+  FaultProxy,
   loginPassword,
   matrix,
   provisionRoles,
@@ -483,5 +484,134 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       expect(await victim).toEqual({ kind: 'refused', code: 'QUERY_CANCELED' })
       expect(await bystander).toMatchObject({ kind: 'query', rows: [[20000000]] })
     }, 60_000)
+
+    /** Settles within `ms` or reports that it did not (a hung read never settles). */
+    function within<T>(ms: number, promise: Promise<T>): Promise<T | 'no result'> {
+      return Promise.race([
+        promise,
+        new Promise<'no result'>((resolve) => setTimeout(() => resolve('no result'), ms).unref()),
+      ])
+    }
+
+    async function waitActive(applicationName: string): Promise<number> {
+      const watcher = await superuserClient(server, database)
+      try {
+        for (let i = 0; i < 200; i++) {
+          const seen = await watcher.query(
+            "SELECT pid FROM pg_stat_activity WHERE application_name = $1 AND state = 'active'",
+            [applicationName],
+          )
+          if (seen.rows[0] !== undefined) return seen.rows[0].pid as number
+          await new Promise((resolve) => setTimeout(resolve, 50))
+        }
+        throw new Error(`no active backend for ${applicationName}`)
+      } finally {
+        await watcher.end()
+      }
+    }
+
+    // VC-012: pg-cursor's close() on a dead connection waits for a ReadyForQuery that never comes.
+    it('ends a read whose backend is terminated with TARGET_UNAVAILABLE within seconds, and the next read works (VC-012)', async () => {
+      const id = 'req_01M4S9000000000000000000AD'
+      const session = await open(server, database, 'reader')
+      const pending = executeDataRead(
+        session,
+        request('SELECT count(*) FROM generate_series(1, 1000000000000) a', {
+          requestId: id,
+          statementTimeoutMs: 60_000,
+        }),
+      )
+      const pid = await waitActive(`exponetdb/query/${id}`)
+      const killer = await superuserClient(server, 'postgres')
+      try {
+        await killer.query('SELECT pg_terminate_backend($1)', [pid])
+      } finally {
+        await killer.end()
+      }
+      expect(await within(5000, pending)).toEqual({ kind: 'refused', code: 'TARGET_UNAVAILABLE' })
+      expect(await within(5000, session.close())).toBeUndefined()
+      expect(await read('SELECT 1 AS one')).toMatchObject({ kind: 'query', rows: [[1]] })
+    }, 30_000)
+
+    // The client side of a backend the kernel killed (an OOM kill): the socket ends without a message.
+    it('ends a read whose connection dies without a message with TARGET_UNAVAILABLE within seconds (VC-012)', async () => {
+      const t = testTargets()
+      const proxy = await FaultProxy.start(t, server)
+      try {
+        const id = 'req_01M4S9000000000000000000AE'
+        const session = await TargetSession.open({
+          endpoint: {
+            host: '127.0.0.1',
+            port: proxy.port,
+            tlsServerName: t.serverName,
+            caPem: t.caPem,
+          },
+          database,
+          role: 'reader',
+          user: ROLE_NAMES.reader,
+          password: loginPassword(ROLE_NAMES.reader),
+          applicationName: 'exponetdb/test/reader',
+        })
+        const pending = executeDataRead(
+          session,
+          request('SELECT count(*) FROM generate_series(1, 1000000000000) a', {
+            requestId: id,
+            statementTimeoutMs: 60_000,
+          }),
+        )
+        const pid = await waitActive(`exponetdb/query/${id}`)
+        proxy.cut()
+        expect(await within(5000, pending)).toEqual({ kind: 'refused', code: 'TARGET_UNAVAILABLE' })
+        expect(await within(5000, session.close())).toBeUndefined()
+        // The orphaned backend is the server's to end; the test does not leave it running.
+        const c = await superuserClient(server, 'postgres')
+        try {
+          await c.query('SELECT pg_terminate_backend($1)', [pid])
+        } finally {
+          await c.end()
+        }
+      } finally {
+        await proxy.stop()
+      }
+    }, 30_000)
+
+    // A partition: the peer stops answering and no FIN ever comes; the read ends at its hard deadline.
+    it('ends a read on a connection that stops answering at a hard deadline after its statement timeout (VC-012)', async () => {
+      const t = testTargets()
+      const proxy = await FaultProxy.start(t, server)
+      try {
+        const id = 'req_01M4S9000000000000000000AF'
+        const session = await TargetSession.open({
+          endpoint: {
+            host: '127.0.0.1',
+            port: proxy.port,
+            tlsServerName: t.serverName,
+            caPem: t.caPem,
+          },
+          database,
+          role: 'reader',
+          user: ROLE_NAMES.reader,
+          password: loginPassword(ROLE_NAMES.reader),
+          applicationName: 'exponetdb/test/reader',
+        })
+        const pending = executeDataRead(
+          session,
+          request('SELECT count(*) FROM generate_series(1, 1000000000000) a', {
+            requestId: id,
+            statementTimeoutMs: 500,
+          }),
+        )
+        await waitActive(`exponetdb/query/${id}`)
+        proxy.setMode({ kind: 'partition' })
+        expect(await within(20_000, pending)).toEqual({
+          kind: 'refused',
+          code: 'TARGET_UNAVAILABLE',
+          details: { reason: 'read_deadline' },
+        })
+        expect(session.usable).toBe(false)
+      } finally {
+        await proxy.stop()
+      }
+    }, 40_000)
   },
 )
