@@ -769,14 +769,16 @@ describe('the operational metrics (VC-037)', () => {
     expect(counts.oldestWaitingSeconds).toBeGreaterThanOrEqual(0)
     expect(counts.nodes['active'] ?? 0).toBeGreaterThanOrEqual(1)
     // A 72 hour certificate: more than a day left, less than four days.
-    expect(counts.nodeCertificateSeconds).toBeGreaterThan(86_400)
-    expect(counts.nodeCertificateSeconds).toBeLessThan(4 * 86_400)
+    const left = counts.nodeCertificateNotAfter - Date.now() / 1000
+    expect(left).toBeGreaterThan(86_400)
+    expect(left).toBeLessThan(4 * 86_400)
     // The worker's gauges carry the same numbers.
     const registry = new MetricsRegistry()
     operationalGauges(registry)(counts)
     const text = registry.render()
     expect(text).toContain('exdb_operations{state="queued"}')
-    expect(text).toContain('exdb_node_certificate_expiry_seconds ')
+    expect(text).toContain('exdb_node_certificate_not_after_timestamp_seconds ')
+    expect(text).toContain('exdb_metrics_refreshed_timestamp_seconds ')
     await drive()
     await node.stop()
   })

@@ -33,69 +33,70 @@ export const TARGET_HEALTH_STATES = [
   'suspended',
 ] as const
 
-/** Reported when no node has a certificate: ten years, so `< 86400` alerts never fire on nothing. */
-export const NO_CERTIFICATE_SECONDS = 10 * 365 * 86_400
+/** Reported when no node has a certificate: the year 2100, so an alert on "soon" never fires on nothing. */
+export const NO_CERTIFICATE_TIMESTAMP = 4_102_444_800
 
 export interface OperationalCounts {
   readonly operations: Readonly<Record<string, number>>
   /** Age of the oldest operation that has not started (awaiting approval or queued), 0 for none. */
   readonly oldestWaitingSeconds: number
   readonly nodes: Readonly<Record<string, number>>
-  /** Seconds until the soonest certificate of a node that can still connect; none: 10 years. */
-  readonly nodeCertificateSeconds: number
+  /** When the soonest certificate of a node that can still connect ends (epoch seconds). */
+  readonly nodeCertificateNotAfter: number
   readonly targets: Readonly<Record<string, number>>
 }
 
 export async function readOperationalCounts(q: Queryable): Promise<OperationalCounts> {
-  const [ops, oldest, nodes, cert, targets] = await Promise.all([
-    q.query(
-      'metrics.operations_by_state',
-      `SELECT state, count(*)::int AS n FROM operations.operations
-        WHERE state IN ('awaiting_approval', 'queued', 'running', 'verifying', 'needs_reconciliation', 'needs_attention')
-        GROUP BY state`,
-    ),
-    q.query(
-      'metrics.oldest_waiting',
-      `SELECT coalesce(floor(extract(epoch FROM (clock_timestamp() - min(created_at)))), 0)::bigint AS s
-         FROM operations.operations WHERE state IN ('awaiting_approval', 'queued')`,
-    ),
-    q.query(
-      'metrics.nodes_by_state',
-      `SELECT CASE WHEN state IN ('active', 'degraded')
-                    AND (last_heartbeat_at IS NULL
-                         OR clock_timestamp() - last_heartbeat_at > make_interval(secs => $1::double precision / 1000))
-                   THEN 'offline' ELSE state END AS state,
-              count(*)::int AS n
-         FROM nodes.nodes GROUP BY 1`,
-      [OFFLINE_AFTER_MS],
-    ),
-    q.query(
-      'metrics.node_certificate',
-      `SELECT floor(extract(epoch FROM (min(certificate_expires_at) - clock_timestamp())))::bigint AS s
-         FROM nodes.nodes WHERE state IN ('active', 'degraded')`,
-    ),
-    q.query(
-      'metrics.targets_by_health',
-      `SELECT s.state, count(*)::int AS n FROM observation.target_status s
-         JOIN registry.targets t ON t.target_id = s.target_id AND t.state <> 'decommissioned'
-        GROUP BY s.state`,
-    ),
-  ])
+  // One query after the other: the worker's pool is small and this is not on a request's path.
+  const ops = await q.query(
+    'metrics.operations_by_state',
+    `SELECT state, count(*)::int AS n FROM operations.operations
+      WHERE state IN ('awaiting_approval', 'queued', 'running', 'verifying', 'needs_reconciliation', 'needs_attention')
+      GROUP BY state`,
+  )
+  const oldest = await q.query(
+    'metrics.oldest_waiting',
+    `SELECT coalesce(floor(extract(epoch FROM (clock_timestamp() - min(created_at)))), 0)::bigint AS s
+       FROM operations.operations WHERE state IN ('awaiting_approval', 'queued')`,
+  )
+  const nodes = await q.query(
+    'metrics.nodes_by_state',
+    `SELECT CASE WHEN state IN ('active', 'degraded')
+                  AND (last_heartbeat_at IS NULL
+                       OR clock_timestamp() - last_heartbeat_at > make_interval(secs => $1::double precision / 1000))
+                 THEN 'offline' ELSE state END AS state,
+            count(*)::int AS n
+       FROM nodes.nodes GROUP BY 1`,
+    [OFFLINE_AFTER_MS],
+  )
+  const cert = await q.query(
+    'metrics.node_certificate',
+    `SELECT floor(extract(epoch FROM min(certificate_expires_at)))::bigint AS ts
+       FROM nodes.nodes WHERE state IN ('pending_binding', 'active', 'degraded')`,
+  )
+  const targets = await q.query(
+    'metrics.targets_by_health',
+    `SELECT s.state, count(*)::int AS n FROM observation.target_status s
+       JOIN registry.targets t ON t.target_id = s.target_id AND t.state <> 'decommissioned'
+      GROUP BY s.state`,
+  )
   const counts = (rows: typeof ops.rows) =>
     Object.fromEntries(rows.map((r) => [r.text('state'), r.int('n')]))
-  const soonest = cert.rows[0]?.textOrNull('s')
+  const soonest = cert.rows[0]?.textOrNull('ts')
   return {
     operations: counts(ops.rows),
     oldestWaitingSeconds: Number(oldest.rows[0]?.text('s') ?? 0),
     nodes: counts(nodes.rows),
-    nodeCertificateSeconds:
-      soonest === null || soonest === undefined ? NO_CERTIFICATE_SECONDS : Number(soonest),
+    nodeCertificateNotAfter:
+      soonest === null || soonest === undefined ? NO_CERTIFICATE_TIMESTAMP : Number(soonest),
     targets: counts(targets.rows),
   }
 }
 
 /** Registers the gauges once per registry and returns the function that sets them from the counts. */
-export function operationalGauges(metrics: MetricsRegistry): (counts: OperationalCounts) => void {
+export function operationalGauges(
+  metrics: MetricsRegistry,
+): (counts: OperationalCounts, nowMs?: number) => void {
   const operations = metrics.gauge<'state'>(
     'exdb_operations',
     'Operations that have not finished, by state.',
@@ -114,19 +115,25 @@ export function operationalGauges(metrics: MetricsRegistry): (counts: Operationa
     },
   )
   const certificate = metrics.gauge(
-    'exdb_node_certificate_expiry_seconds',
-    'Seconds until the soonest certificate of a node that can connect expires (ten years when none).',
+    'exdb_node_certificate_not_after_timestamp_seconds',
+    'When the soonest certificate of a node that can connect ends, as a Unix time (the year 2100 when none). Alert on this minus time() below a day.',
+    {},
+  )
+  const refreshed = metrics.gauge(
+    'exdb_metrics_refreshed_timestamp_seconds',
+    'When the worker last refreshed the operational gauges: alert when it stops advancing, they are then stale.',
     {},
   )
   const targets = metrics.gauge<'state'>('exdb_targets', 'Registered targets by health state.', {
     state: { values: TARGET_HEALTH_STATES },
   })
-  return (counts) => {
+  return (counts, nowMs = Date.now()) => {
     for (const state of WAITING_OPERATION_STATES)
       operations.set({ state }, counts.operations[state] ?? 0)
     for (const state of NODE_STATES) nodes.set({ state }, counts.nodes[state] ?? 0)
     for (const state of TARGET_HEALTH_STATES) targets.set({ state }, counts.targets[state] ?? 0)
     oldest.set({}, counts.oldestWaitingSeconds)
-    certificate.set({}, counts.nodeCertificateSeconds)
+    certificate.set({}, counts.nodeCertificateNotAfter)
+    refreshed.set({}, Math.floor(nowMs / 1000))
   }
 }

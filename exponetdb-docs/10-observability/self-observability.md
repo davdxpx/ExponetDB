@@ -66,7 +66,7 @@ allowlist per event and a pattern denylist as a second line
 | `exdb_lock_wait_seconds` | domain kind | exclusivity contention **[PLANNED]** |
 | `exdb_audit_chain_verified` | scope (`incremental`, `full`) | integrity checks |
 | `exdb_operations`, `exdb_operation_oldest_waiting_seconds` | state (the six that have not finished) | **[OBSERVED]** (VC-037) refreshed by the worker task `metrics.refresh` every 30 s from the Control Store: operations waiting, running or needing attention, and how long the oldest one has waited |
-| `exdb_nodes`, `exdb_node_certificate_expiry_seconds` | state (`pending_binding`, `active`, `degraded`, `offline`, `binding_failed`, `revoked`, `decommissioned`) | **[OBSERVED]** (VC-037, VC-039) nodes by state with `offline` judged by the heartbeat, and the seconds until the soonest certificate of a node that can connect (ten years when none): alert below 86,400 |
+| `exdb_nodes`, `exdb_node_certificate_not_after_timestamp_seconds` | state (`pending_binding`, `active`, `degraded`, `offline`, `binding_failed`, `revoked`, `decommissioned`) | **[OBSERVED]** (VC-037, VC-039) nodes by state with `offline` judged by the heartbeat, and when the soonest certificate of a node that can connect ends, as a Unix time (the year 2100 when none): alert when it minus `time()` is below 86,400. `exdb_metrics_refreshed_timestamp_seconds` is when the worker last set the gauges; alert when it stops advancing, because they are then stale |
 | `exdb_targets` | state (the six health states) | **[OBSERVED]** (VC-037) registered targets by health state
 
 Labels never contain target names, user ids or other high-cardinality or

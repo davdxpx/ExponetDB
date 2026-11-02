@@ -134,7 +134,10 @@ async function verify(
   return undefined
 }
 
-const operationalSetters = new WeakMap<Runtime, (counts: OperationalCounts) => void>()
+const operationalSetters = new WeakMap<
+  Runtime,
+  (counts: OperationalCounts, nowMs?: number) => void
+>()
 
 const gauges = new WeakMap<Runtime, Gauge<'scope'>>()
 function verifiedGauge(ctx: TaskContext): Gauge<'scope'> {
@@ -219,7 +222,7 @@ export const WORKER_TASKS: readonly TaskDefinition[] = [
         set = operationalGauges(ctx.runtime.metrics)
         operationalSetters.set(ctx.runtime, set)
       }
-      set(await readOperationalCounts(ctx.store))
+      set(await readOperationalCounts(ctx.store), ctx.runtime.clock.nowMs())
       return undefined
     },
   },

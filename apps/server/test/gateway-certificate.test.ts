@@ -32,9 +32,10 @@ describe('the verified client certificate of a session (VC-150)', () => {
     expect(certificateExpired(presented, Date.parse('2026-11-04T00:00:00Z'))).toBe(true)
   })
 
-  it('is never expired for a session without a certificate or without a readable end', () => {
+  it('is not judged for a session without a certificate, and refused when its end is unreadable', () => {
     expect(certificateExpired(undefined, Date.now())).toBe(false)
-    expect(certificateExpired(presentedOf(stream(peer('garbage'))), Date.now())).toBe(false)
     expect(presentedOf(stream(peer('Oct 30 05:57:35 2026 GMT'), false))).toBeUndefined()
+    // A verified certificate whose notAfter the TLS layer did not report: the check cannot be skipped.
+    expect(certificateExpired(presentedOf(stream(peer('garbage'))), Date.now())).toBe(true)
   })
 })

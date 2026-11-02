@@ -35,18 +35,16 @@ describe('the audit partitions a probe can see (VC-042)', () => {
   })
 
   it('warn under 30 days of cover and fail when now + 7 days is not covered', async () => {
-    // Keep the current month only.
+    // Keep the current month only: 1 to 31 days of cover, depending on the day of the month.
     await db.asSuperuser(async (c) => {
       for (const offset of [3, 2, 1]) {
         await c.query(`ALTER TABLE audit.audit_events DETACH PARTITION audit.${monthName(offset)}`)
       }
     })
     const s = await state()
-    // The current month alone is 1 to 31 days: fewer than 30 days of cover means margin_low,
-    // fewer than 7 days means ending; at the start of a 31-day month it is ok again.
-    expect(['margin_low', 'ending', 'ok']).toContain(s.status)
     expect(s.coveredDays).toBeLessThanOrEqual(31)
-    if (s.coveredDays < 7) expect(s.status).toBe('ending')
+    // The status follows the cover: under 7 days is ending, under 30 is a margin warning, else ok.
+    expect(s.status).toBe(s.coveredDays < 7 ? 'ending' : s.coveredDays < 30 ? 'margin_low' : 'ok')
   })
 
   it('fail as missing, and the append is refused with a named error, when the current month is gone', async () => {
