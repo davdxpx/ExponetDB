@@ -70,6 +70,12 @@ Rules:
 - `restore.prepare@1` validates space, engine compatibility and WAL continuity
   for the requested point in time on the node **during planning**. A plan with a
   failed check cannot be applied.
+- **[DECIDED]** (verification campaign fix VC-060, 2026-11-02) Space is
+  measured on the filesystem of the scratch directory (`<engine>/scratch`, which
+  can be a mount of its own; the engine directory only while scratch does not
+  exist yet), and `restore.execute@1` measures it again before it writes
+  anything: the chosen backup's size plus a tenth must fit, else it refuses
+  `precondition_failed`. Space prepare saw can be gone by the time of apply.
 - Bindings: backup id and its verification digest, WAL range, destination node
   and path, the destination target's identity (or "does not exist yet").
 - **[DECIDED]** (verification campaign fix VC-004, 2026-11-02) A restore to the

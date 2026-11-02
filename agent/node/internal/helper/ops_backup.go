@@ -473,6 +473,19 @@ func (h *Helper) portListening(port int) (bool, error) {
 	return false, nil
 }
 
+// scratchSpacePath is where a restore writes: the scratch directory when it exists (it can be a
+// mount of its own), else the engine directory it will be created in (VC-060).
+func (h *Helper) scratchSpacePath() string {
+	engine := h.path(h.paths().Engine)
+	if info, err := os.Lstat(engine + "/scratch"); err == nil && info.IsDir() {
+		return engine + "/scratch"
+	}
+	return engine
+}
+
+// freeSpace measures a filesystem's free bytes (a variable so tests can measure without disks).
+var freeSpace = spaceAvailable
+
 func spaceAvailable(path string) (int64, error) {
 	var s syscall.Statfs_t
 	if err := syscall.Statfs(path, &s); err != nil {
@@ -903,9 +916,35 @@ func restoreExecute(ctx context.Context, h *Helper, job *verify.Job) (canon.Obje
 			return nil, r
 		}
 	}
+	// VC-060: the space prepare measured may be gone; it is measured again before anything is written.
+	if r := h.restoreSpace(ctx, args); r != nil {
+		return nil, r
+	}
 	p.op, p.purpose, p.domain, p.runID = OpRestoreExecute, "restore", "restore", args.RunID
 	p.newScratch, p.rowCounts, p.port = true, args.RowCounts, args.Port
 	return h.startRun(ctx, job, p)
+}
+
+// restoreSpace refuses a restore whose chosen backup, plus a tenth, does not fit the filesystem of
+// the scratch directory, as prepare's space_insufficient does.
+func (h *Helper) restoreSpace(ctx context.Context, args restoreArgs) *Refusal {
+	in, r := h.instance(args.Cluster)
+	if r != nil {
+		return r
+	}
+	stanza, r := h.prepareInfo(ctx, in.DataDirectory, args)
+	if r != nil {
+		return r
+	}
+	chosen, _ := chooseBackup(stanza, args.Target)
+	if chosen == nil || chosen.Info.Size == nil || *chosen.Info.Size < 0 {
+		return nil
+	}
+	available, err := freeSpace(h.scratchSpacePath())
+	if err != nil || available < *chosen.Info.Size+*chosen.Info.Size/10 {
+		return refuse(CodePreconditionFailed, "the scratch directory's filesystem has too little space for the restore")
+	}
+	return nil
 }
 
 func restoreVerify(ctx context.Context, h *Helper, job *verify.Job) (canon.Object, *Refusal) {
@@ -1226,7 +1265,7 @@ func restorePrepare(ctx context.Context, h *Helper, job *verify.Job) (canon.Obje
 		refusals = append(refusals, s)
 	}
 	enginePath := h.path(h.paths().Engine)
-	available, err := spaceAvailable(enginePath)
+	available, err := freeSpace(h.scratchSpacePath())
 	if err != nil {
 		return nil, refuse(CodeNotConfigured, "the engine directory is missing")
 	}
