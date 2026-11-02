@@ -79,7 +79,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-57 | `advisors_run` records a run, but its scope `diagnostics.read` is a read scope | **open** | (a) a new additive oauth bundle makes `diagnostics.read` a write scope (consent shows it; clients that auto-approve read tools stop doing so); (b) a separate record scope for advisor runs (`diagnostics.record`), `diagnostics.read` stays read-only; (c) an advisor run over MCP records nothing (findings only from Web App, CLI and the worker) | nothing in Part B; the MCP annotation stays `readOnlyHint` until decided | open |
 | OD-58 | How an operation in `needs_attention` is closed | **open** (built with option (a) by the test campaign fixes) | (a) the recovery plan that names it closes it as `verification_failed`, `unknown` becomes `partially_applied`; (b) (a) plus the planned `operation.force_release` for operations no recovery plan covers; (c) (a) with `verification_failed` admitting an `unknown` apply outcome | option (a) is in the code on the branch; the owner confirms or changes it | open |
 | OD-59 | Flagging ledger rows as untrusted (`ledger.reconcile` with `flag_untrusted`) | **open** | (a) leave it unbuilt: `adopt_target` is the only decision, `flag_untrusted` is refused as `not_built`; (b) record the decision and a finding while the divergence keeps refusing plans; (c) remove it from the contract | (a) is in the code on the branch; the owner decides | open |
-| OD-60 | How strict a restore drill is about `amcheck` | **open** (built with option (a) by the test campaign fixes) | (a) a check the node could not run everywhere (`not_run`) does not fail a drill and stays recorded; `failed` and `error` do; (b) strict: a drill is refused at planning unless the extension is known to exist in every database of the restored cluster; (c) the node creates `amcheck` in the disposable scratch cluster with the host's contrib package, so the check runs everywhere | (a) is in the code on the branch; the owner confirms or changes it | open |
+| OD-60 | How strict a restore drill is about `amcheck` | **decided** 2026-11-02 ((a), and an optional data check, VC-004) by the test campaign fixes) | (a) a check the node could not run everywhere (`not_run`) does not fail a drill and stays recorded; `failed` and `error` do; (b) strict: a drill is refused at planning unless the extension is known to exist in every database of the restored cluster; (c) the node creates `amcheck` in the disposable scratch cluster with the host's contrib package, so the check runs everywhere | (a) is in the code on the branch; the owner confirms or changes it | open |
 | OD-61 | What an empty or missing drift baseline means, how large a read-lane result may be, and what counts toward the findings headline | **open** (nothing built; test campaign TC-017, TC-037) | (a) a target without a usable baseline reports one `no_baseline` finding and no `object_added` flood; roll-ups leave the severity counters; MCP results are capped (64 KB with a cursor) and repeated codes grouped; (b) keep the counts and only present them better (group by target and code, "rehearsal drift" separate); (c) leave as is | (a) together with OD-57 (b), as one change to the recording path |
 | OD-62 | Node certificate expiry: a distinct refusal reason, findings and thresholds | **open** (the agent's `status` text is built; test campaign TC-042) | (a) reason `certificate_expired`, findings `node_certificate_near_expiry` (warning from 12 h before the end without a renewal, critical after) and `node_certificate_expired`; (b) findings only; (c) documentation only (built) | (a) with a 12 h warning |
 | OD-63 | Who may withdraw a node plan, and whether withdrawing a revoke plan needs a fresh passkey | **open** (test campaign TC-020) | (a) the plan's creator withdraws it with the scope that created it, without a fresh passkey (withdrawing is the safe direction); (b) as (a), but a `node.revoke` or `node.decommission` plan still needs re-authentication to withdraw; (c) keep `nodes.operate` | (a) |
@@ -1868,8 +1868,12 @@ History:
 
 ## OD-60. How strict a drill is about `amcheck`
 
-- **Status.** OPEN (found on 2026-10-27 by the test campaign, TC-010 / D-02; built
-  with option (a) by the fixes of 2026-10-28, for the owner to confirm)
+- **Status.** DECIDED on 2026-11-02 under the owner's delegation to the fix session of the
+  verification campaign: (a) confirmed for `amcheck`, and S2-D2 answered: a drill may carry a
+  data check (`rowCounts`, bounds per table, check `row_counts`), and one without it passes on
+  replay, probes and `amcheck` only and records `row_counts` as not configured; a replay that
+  stops at the start of the newest archived segment fails the drill (VC-004). Found on
+  2026-10-27 by the test campaign, TC-010 / D-02.
 - **Question.** The node's `amcheck` check reports `not_run` when a database of the
   restored cluster lacks the extension (a template, an application database, any
   backup older than the extension). The Control Plane required every configured
@@ -2095,6 +2099,7 @@ under that delegation here, with the option and the reason; the owner can revisi
 | OD-64, B1-D3 | four hours from the apply request; later approvals refused, the worker cancels | the documented window; dispatch re-checks bindings anyway |
 | B1-D4 | `operation.force_release`, as defined before G1 (a `high` planned operation, a person, re-authentication at apply), as the exit of `needs_attention` for every kind, with a stated outcome and a reason, rather than per-kind retry rules | one action closes the dead end for every kind, present and future |
 | D0-01 | a production `migration.verify` that names a stuck operation needs an approval and a fresh re-authentication | closing an operation on production is a recovery like `migration.resume` |
+| OD-60, S2-D2 | (a) for `amcheck`; a drill may carry row-count bounds (`row_counts`); without them it passes without a data check and says so; a short replay fails it | a mandatory data check needs bounds only the person knows; the replay end catches the deleted segment without one |
 
 ## Owner decisions of the Wave 9 Part B order (2026-10-26)
 

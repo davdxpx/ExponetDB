@@ -138,6 +138,7 @@ function answer(host: Host) {
           refusals: [],
         }
       case 'restore.execute@1':
+        startedRowCounts = args['rowCounts']
         host.runs.set(runId, { purpose: 'restore', startJobId: job.jobId, label: null })
         return started(args)
       case 'restore.discard@1':
@@ -160,6 +161,14 @@ function answer(host: Host) {
 
 /** What the simulated node reports for the amcheck check of a restore (TC-010). */
 let amcheckOutcome: 'passed' | 'not_run' | 'failed' = 'passed'
+/**
+ * Where the simulated replay stops: inside the newest archived segment
+ * (000000010000000000000009), as a real replay of it does. VC-004: exactly at
+ * its start means that segment was never replayed (deleted or unreadable).
+ */
+let replayReached = '0/9000060'
+/** The row-count bounds the last restore start carried (VC-004). */
+let startedRowCounts: unknown
 const AMCHECK_DETAIL = '497 indexes checked in 3 of 5 databases; amcheck is missing in the others'
 
 function statusOf(
@@ -188,17 +197,25 @@ function statusOf(
         : {
             label: run.label,
             verifyErrors: run.purpose === 'verify' ? 0 : null,
-            recoveryReachedLsn: run.purpose === 'restore' ? '0/9000000' : null,
+            recoveryReachedLsn: run.purpose === 'restore' ? replayReached : null,
             recoveryReachedAt: run.purpose === 'restore' ? at : null,
             timeline: 1,
             port: run.purpose === 'restore' ? 55401 : null,
             checks:
               run.purpose === 'restore'
-                ? ['recovery_target_reached', 'probe_simple', 'probe_extended', 'amcheck'].map(
-                    (check) =>
-                      check === 'amcheck' && amcheckOutcome !== 'passed'
-                        ? { check, outcome: amcheckOutcome, detail: AMCHECK_DETAIL }
-                        : { check, outcome: 'passed', detail: null },
+                ? [
+                    'recovery_target_reached',
+                    'probe_simple',
+                    'probe_extended',
+                    'amcheck',
+                    // The node counts the tables it was given (VC-004).
+                    ...(Array.isArray(startedRowCounts) && startedRowCounts.length > 0
+                      ? ['row_counts']
+                      : []),
+                  ].map((check) =>
+                    check === 'amcheck' && amcheckOutcome !== 'passed'
+                      ? { check, outcome: amcheckOutcome, detail: AMCHECK_DETAIL }
+                      : { check, outcome: 'passed', detail: null },
                   )
                 : [],
             phases:
@@ -709,6 +726,46 @@ describe('backups through REST, the worker and a simulated node', () => {
       'failed',
       'passed',
     ])
+    await node.stop()
+  })
+
+  // VC-004: with the newest archived segment deleted the drill passed with committed data missing.
+  it('fails a drill whose replay stopped at the start of the newest archived segment, and carries row-count bounds to the node', async () => {
+    const { w, node } = await setup('nonprod')
+    const repositoryId = await adopt(w)
+    await refresh(w)
+    const catalog = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/backups`)
+    const backupId = catalog.body.backups[0].id as string
+    await owner.browser.call(
+      'POST',
+      `/api/v1/clusters/${w.clusterId}/backups/${backupId}/verify`,
+      {},
+    )
+    await drive()
+    try {
+      replayReached = '0/9000000'
+      const short = await planAndApply(`/api/v1/clusters/${w.clusterId}/drills`, {
+        repositoryId,
+        selection: { kind: 'latest' },
+      })
+      expect(short.operation.state).toBe('verification_failed')
+      const restores = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/restores`)
+      expect(restores.body.restores[0].checks).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ check: 'recovery_target_reached', outcome: 'failed' }),
+        ]),
+      )
+    } finally {
+      replayReached = '0/9000060'
+    }
+    const bounds = [{ database: 'app', schema: 'public', table: 'orders', min: 1000, max: 2000 }]
+    const counted = await planAndApply(`/api/v1/clusters/${w.clusterId}/drills`, {
+      repositoryId,
+      selection: { kind: 'latest' },
+      rowCounts: bounds,
+    })
+    expect(counted.operation.state).toBe('succeeded')
+    expect(startedRowCounts).toEqual(bounds)
     await node.stop()
   })
 

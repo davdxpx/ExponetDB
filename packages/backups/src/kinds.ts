@@ -1322,7 +1322,8 @@ abstract class RestoreRunKind extends RunKind {
       // prepare refuses without a port, so the start always names the one the node chose.
       port: prepared['port'] as number,
       checks: checks.filter((x) => typeof x === 'string'),
-      rowCounts: [],
+      // The data check the plan carries (VC-004); a plan from before it has none.
+      rowCounts: (c.raw('rowCounts') as JsonValue[] | undefined) ?? [],
     }
   }
 
@@ -1355,10 +1356,12 @@ abstract class RestoreRunKind extends RunKind {
     const source = obj(c.raw('source'))
     const walTo = typeof source['walTo'] === 'string' ? source['walTo'] : null
     const reached = typeof out['recoveryReachedLsn'] === 'string' ? out['recoveryReachedLsn'] : null
+    // walTo is the START of the newest archived segment: a replay that reached no further never
+    // read that segment (deleted or unreadable), so committed data may be missing (VC-004).
     const replayShort =
       source['pointInTime'] == null &&
       walTo !== null &&
-      (reached === null || lsnValue(reached) < lsnValue(walTo))
+      (reached === null || lsnValue(reached) <= lsnValue(walTo))
     // RB-08 asks for amcheck "where installed": the node reports `not_run`, never `passed`, when a
     // database of the restored cluster lacks the extension (a template, an application database, a
     // backup older than the extension). That is reduced assurance, not a failed restore (TC-010,

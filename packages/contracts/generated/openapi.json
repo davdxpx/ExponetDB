@@ -6093,6 +6093,46 @@
             "pattern": "^bkr_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
             "type": "string"
           },
+          "rowCounts": {
+            "description": "VC-004: the data check of the drill: each table of the restored cluster must hold between min and max rows (check row_counts). A drill without it passes on replay, probes and amcheck only, and says so.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "database": {
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_$-]{0,62}$",
+                  "type": "string"
+                },
+                "max": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "min": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "schema": {
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_$]{0,62}$",
+                  "type": "string"
+                },
+                "table": {
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_$]{0,62}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "database",
+                "schema",
+                "table",
+                "min",
+                "max"
+              ],
+              "type": "object"
+            },
+            "maxItems": 32,
+            "type": "array"
+          },
           "selection": {
             "$ref": "#/components/schemas/DrillSelection"
           }

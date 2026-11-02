@@ -464,6 +464,8 @@ interface RestoreDraft {
   readonly nodeId: string | undefined
   readonly targetId: string | null
   readonly reason: string | null
+  /** The data check of a drill (VC-004): bounds the node counts in the restored cluster. */
+  readonly rowCounts?: DrillPlanRequest['rowCounts']
 }
 
 async function planRestoreLike(
@@ -533,7 +535,14 @@ async function planRestoreLike(
       engineVersion: s.engineVersion,
     },
     destination: { kind: d.purpose === 'drill' ? 'scratch' : 'new_cluster', nodeId: node.nodeId },
-    checks: ['recovery_target_reached', 'probe_simple', 'probe_extended', 'amcheck'],
+    checks: [
+      'recovery_target_reached',
+      'probe_simple',
+      'probe_extended',
+      'amcheck',
+      ...(d.rowCounts === undefined || d.rowCounts.length === 0 ? [] : ['row_counts']),
+    ],
+    rowCounts: (d.rowCounts ?? []).map((r) => ({ ...r })),
     reason: d.reason,
   }
   return storeRegistryPlan(tx, context, actor, {
@@ -598,6 +607,7 @@ export function planDrill(
     nodeId: input.nodeId,
     targetId: null,
     reason: null,
+    ...(input.rowCounts === undefined ? {} : { rowCounts: input.rowCounts }),
   })
 }
 
