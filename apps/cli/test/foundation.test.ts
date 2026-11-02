@@ -302,7 +302,7 @@ describe('the human renderer names the data of a refusal (TC-022)', () => {
     })
     expect(stale).toContain('  changed: content (actual: invalid)')
     expect(stale.some((l) => l.startsWith('  changed: fingerprint'))).toBe(true)
-    expect(stale.join('\n')).not.toMatch(/\u001b/)
+    expect(stale.join('\n').includes('\u001b')).toBe(false)
     expect(refused('LEDGER_DIVERGENCE', { unrecorded: [A], missing: [B] })).toEqual(
       expect.arrayContaining([`  unrecorded: ${A}`, `  missing: ${B}`]),
     )
