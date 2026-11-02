@@ -96,6 +96,51 @@ describe('strict YAML', () => {
     expect(parseStrictYaml('base: &b {x: 1}\nother:\n  <<: *b\n')).toMatchObject({ ok: false })
   })
 
+  it('refuses flow collections nested deeper than 32 with a named reason (VC-094)', () => {
+    const nested = (depth: number) => `a: ${'['.repeat(depth)}${']'.repeat(depth)}\n`
+    expect(parseStrictYaml(nested(32))).toMatchObject({ ok: true })
+    expect(parseStrictYaml(nested(33))).toMatchObject({ ok: false, error: { code: 'yaml_depth' } })
+    // Deep enough to overflow the library's own recursion: still the named reason, quickly.
+    const started = performance.now()
+    expect(parseStrictYaml(nested(5000))).toMatchObject({
+      ok: false,
+      error: { code: 'yaml_depth' },
+    })
+    expect(performance.now() - started).toBeLessThan(1000)
+    expect(parseStrictYaml(`a: ${'{x: '.repeat(40)}1${'}'.repeat(40)}\n`)).toMatchObject({
+      ok: false,
+      error: { code: 'yaml_depth' },
+    })
+    // Brackets inside a quoted scalar or a block scalar are text.
+    expect(parseStrictYaml(`a: "${'['.repeat(100)}"\nb: |\n  ${'['.repeat(100)}\n`)).toMatchObject({
+      ok: true,
+    })
+  })
+
+  it('refuses block collections nested deeper than 32 too, at once (the review of group E)', () => {
+    const seq = (n: number) => `${'- '.repeat(n)}x\n`
+    expect(parseStrictYaml(seq(33))).toMatchObject({ ok: true })
+    for (const n of [34, 3000, 20_000]) {
+      expect(parseStrictYaml(seq(n)), `depth ${n}`).toMatchObject({
+        ok: false,
+        error: { code: 'yaml_depth' },
+      })
+    }
+    // Not quadratic: the fastest of three runs at 5,000 levels (the visit took 7.5 s there).
+    const best = Math.min(
+      ...Array.from({ length: 3 }, () => {
+        const started = performance.now()
+        parseStrictYaml(seq(5000))
+        return performance.now() - started
+      }),
+    )
+    expect(best).toBeLessThan(2000)
+    const map = (n: number) =>
+      `${Array.from({ length: n }, (_, i) => `${' '.repeat(i)}k${i}:`).join('\n')} v\n`
+    expect(parseStrictYaml(map(33))).toMatchObject({ ok: true })
+    expect(parseStrictYaml(map(34))).toMatchObject({ ok: false, error: { code: 'yaml_depth' } })
+  })
+
   it('uses the YAML 1.2 core schema (yes and on stay strings)', () => {
     expect(parseStrictYaml('a: yes\nb: on\nc: true\n')).toEqual({
       ok: true,

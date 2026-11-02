@@ -1,8 +1,10 @@
 import { encodeUtf8 } from '@exponetdb/kernel'
+import { lex, statementBodies } from './lexer.ts'
 import type { SupportedMajor } from './majors.ts'
 import {
   type JsonNode,
   MAX_MIGRATION_PARSE_BYTES,
+  MAX_MIGRATION_STATEMENTS,
   names,
   nodeType,
   type ParsedStatement,
@@ -111,6 +113,8 @@ export type ForbiddenReason =
   | 'ledger_schema'
   | 'cursor_or_prepared'
   | 'privileged'
+  | 'server_file_function'
+  | 'untrusted_language'
 
 /** Parameters the executor pins; reviewed SQL never changes them, not even with SET LOCAL (G6 order §23). */
 export const ENGINE_SETTINGS: ReadonlySet<string> = new Set([
@@ -665,6 +669,82 @@ function draft(kind: string): Draft {
     underivedParts: false,
     details: {},
   }
+}
+
+/**
+ * Functions that read or write the database server's files (VC-146). Reviewed SQL never reaches
+ * the server's file system; only the migrator role's missing privileges stopped these before.
+ */
+export const SERVER_FILE_FUNCTIONS: ReadonlySet<string> = new Set([
+  'pg_read_file',
+  'pg_read_binary_file',
+  'pg_ls_dir',
+  'pg_stat_file',
+  'pg_ls_logdir',
+  'pg_ls_waldir',
+  'pg_ls_tmpdir',
+  'pg_ls_archive_statusdir',
+  'pg_ls_logicalmapdir',
+  'pg_ls_logicalsnapdir',
+  'pg_ls_replslotdir',
+  'pg_file_write',
+  'pg_file_rename',
+  'pg_file_unlink',
+  'pg_logdir_ls',
+  'lo_import',
+  'lo_export',
+])
+
+/**
+ * The languages a reviewed function may be written in: the trusted ones, an allowlist (a
+ * denylist of `plpython3u`, `plperlu`, … misses `plsh`, `plr`, `plrust` and whatever an
+ * extension adds). Anything else runs with the server's rights or is not known to be sandboxed.
+ */
+export const TRUSTED_LANGUAGES: ReadonlySet<string> = new Set([
+  'sql',
+  'plpgsql',
+  'plperl',
+  'pltcl',
+  'plv8',
+])
+
+/** A quoted identifier's name: `""` is one quote, and `U&"…"` decodes `\XXXX`, `\+XXXXXX` and `\\`. */
+function quotedIdentName(raw: string): string {
+  if (/^u&"/i.test(raw)) {
+    return raw
+      .slice(3, -1)
+      .replace(/\\(?:\+([0-9a-fA-F]{6})|([0-9a-fA-F]{4})|\\)/g, (m, long, short) => {
+        if (m === '\\\\') return '\\'
+        const code = Number.parseInt(long ?? short, 16)
+        return code > 0x10ffff ? m : String.fromCodePoint(code)
+      })
+      .replaceAll('""', '"')
+  }
+  return raw.slice(1, -1).replaceAll('""', '"')
+}
+
+/**
+ * The first server-file function a statement calls, found lexically (identifiers followed by
+ * `(`, so a comment, a string literal or a longer name does not count), through up to two levels
+ * of bodies: a `DO` block or a function body is one literal to the SQL parser.
+ */
+function serverFileCall(text: string, depth = 0): string | undefined {
+  const tokens = lex(text).filter((t) => t.kind !== 'space' && t.kind !== 'comment')
+  for (const [i, token] of tokens.entries()) {
+    if (token.kind !== 'ident' && token.kind !== 'qident') continue
+    const raw = text.slice(token.start, token.end)
+    const name = token.kind === 'qident' ? quotedIdentName(raw) : raw.toLowerCase()
+    const next = tokens[i + 1]
+    if (SERVER_FILE_FUNCTIONS.has(name) && next !== undefined && text[next.start] === '(') {
+      return name
+    }
+  }
+  if (depth >= 2) return undefined
+  for (const body of statementBodies(text)) {
+    const found = serverFileCall(body, depth + 1)
+    if (found !== undefined) return found
+  }
+  return undefined
 }
 
 function forbid(d: Draft, reason: ForbiddenReason, detail: string): Draft {
@@ -1278,6 +1358,9 @@ function createFunction(d: Draft, body: JsonNode): void {
   }
   void setArg
   const language = str(nodeType(opts.get('language'))?.body['sval'])
+  if (language !== null && !TRUSTED_LANGUAGES.has(language.toLowerCase())) {
+    d.forbidden = { reason: 'untrusted_language', detail: language.toLowerCase().slice(0, 64) }
+  }
   const as = nodeType(opts.get('as'))
   let bodyText: string | null = null
   if (as?.type === 'List') {
@@ -1935,7 +2018,15 @@ function classify(statement: ParsedStatement, trusted: ReadonlySet<string>): Dra
     case 'DoStmt': {
       d.kind = 'DO'
       d.procedural = true
-      const as = nodeType(defElems(body['args']).get('as'))
+      const doArgs = defElems(body['args'])
+      const doLanguage = str(nodeType(doArgs.get('language'))?.body['sval'])
+      if (doLanguage !== null && !TRUSTED_LANGUAGES.has(doLanguage.toLowerCase())) {
+        d.forbidden = {
+          reason: 'untrusted_language',
+          detail: doLanguage.toLowerCase().slice(0, 64),
+        }
+      }
+      const as = nodeType(doArgs.get('as'))
       const code = str(as?.body['sval']) ?? ''
       if (DYNAMIC_SQL.test(code)) d.details.dynamicSql = true
       d.conditional =
@@ -2181,6 +2272,10 @@ export function analyzeMigrationSql(
   if (!parsed.ok) {
     return { ok: false, failure: parsed.failure, ...parseFailurePosition(text, parsed.failure) }
   }
+  if (parsed.statements.length > MAX_MIGRATION_STATEMENTS) {
+    const failure: ParseFailure = { kind: 'too_large', limit: 'statements' }
+    return { ok: false, failure, ...parseFailurePosition(text, failure) }
+  }
   const trusted = new Set(options.trustedExtensions ?? [])
   const statements: StatementFacts[] = []
   const firsts = parsed.statements.map((st) => firstToken(text, st.start, st.end))
@@ -2202,6 +2297,10 @@ export function analyzeMigrationSql(
         }
       }
       throw error
+    }
+    if (d.forbidden === null) {
+      const called = serverFileCall(text.slice(statement.start, statement.end))
+      if (called !== undefined) d.forbidden = { reason: 'server_file_function', detail: called }
     }
     if (d.compatibility.length === 0) d.compatibility.push('unknown')
     const at = positions[index] ?? { line: 1, column: 1, byteOffset: 0 }

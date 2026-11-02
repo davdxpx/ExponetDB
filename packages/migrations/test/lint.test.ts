@@ -174,6 +174,129 @@ describe('content the engine refuses', () => {
     expect(finding(r, 'security_definer_without_search_path')?.blocking).toBe(true)
   })
 
+  describe('server-file functions and untrusted languages (VC-146)', () => {
+    const forbidden = (up: string) => finding(lint([bundle({ up })]), 'forbidden_statement')
+
+    it.each([
+      'pg_read_file',
+      'pg_read_binary_file',
+      'pg_ls_dir',
+      'pg_stat_file',
+      'lo_import',
+      'lo_export',
+    ])('refuses %s, qualified or not, in a statement and inside a body', (name) => {
+      expect(forbidden(`SELECT ${name}('/etc/passwd');`), name).toMatchObject({ blocking: true })
+      expect(
+        forbidden(`SELECT pg_catalog.${name}('/etc/passwd');`),
+        `pg_catalog.${name}`,
+      ).toBeDefined()
+      expect(forbidden(`SELECT "${name}"('/etc/passwd');`), `"${name}"`).toBeDefined()
+      expect(
+        forbidden(`DO $$ BEGIN PERFORM ${name.toUpperCase()}('/etc/passwd'); END $$;`),
+        `DO ${name}`,
+      ).toBeDefined()
+      expect(
+        forbidden(
+          `CREATE FUNCTION public.f() RETURNS text LANGUAGE sql AS 'SELECT ${name}(''/x'')';`,
+        ),
+        `function ${name}`,
+      ).toBeDefined()
+    })
+
+    it.each([
+      'pg_ls_logdir',
+      'pg_ls_waldir',
+      'pg_ls_tmpdir',
+      'pg_ls_archive_statusdir',
+      'pg_file_write',
+      'pg_file_rename',
+      'pg_file_unlink',
+    ])('refuses the server-file function %s too', (name) => {
+      expect(forbidden(`SELECT ${name}('x');`), name).toMatchObject({ blocking: true })
+    })
+
+    it('decodes a Unicode-escaped function name before it compares', () => {
+      expect(forbidden(`SELECT U&"pg_read_file"('/etc/passwd');`)).toBeDefined()
+      expect(forbidden(`SELECT U&"pg\\005fread_file"('/etc/passwd');`)).toBeDefined()
+      expect(forbidden(`SELECT U&"pg\\+00005fread_file"('/etc/passwd');`)).toBeDefined()
+      expect(forbidden(`SELECT "pg_read_""file"('/etc/passwd');`)).toBeUndefined()
+    })
+
+    it.each([
+      'plpython3u',
+      'plpythonu',
+      'plperlu',
+      'pltclu',
+      'c',
+      'internal',
+      'plr',
+      'plsh',
+      'plrust',
+    ])('refuses the untrusted language %s in CREATE FUNCTION and DO', (language) => {
+      expect(
+        forbidden(`CREATE FUNCTION public.f() RETURNS int LANGUAGE ${language} AS 'x';`),
+      ).toMatchObject({ blocking: true })
+      if (!['c', 'internal'].includes(language)) {
+        expect(forbidden(`DO LANGUAGE ${language} $$ x $$;`)).toMatchObject({ blocking: true })
+      }
+    })
+
+    it('does not refuse the name in a comment, a string or an identifier that only contains it', () => {
+      expect(forbidden(`-- pg_read_file('/x')\nSELECT 1;`)).toBeUndefined()
+      expect(forbidden(`SELECT 'pg_read_file(' AS note;`)).toBeUndefined()
+      expect(forbidden('SELECT my_pg_read_file_wrapper(1);')).toBeUndefined()
+      expect(
+        forbidden(
+          'CREATE FUNCTION public.f() RETURNS int LANGUAGE plpgsql AS $$ BEGIN RETURN 1; END $$;',
+        ),
+      ).toBeUndefined()
+    })
+  })
+
+  it('shares one parse budget between the bundles of a request, named, and still lints the rest (VC-014)', () => {
+    const small =
+      'CREATE TABLE public.a (id bigint PRIMARY KEY);\nCREATE TABLE public.b (id bigint);\n'
+    const r = lint(
+      [
+        bundle({ up: small }),
+        bundle({ up: small.replace(/public\.a/, 'public.c').replace(/public\.b/, 'public.d') }),
+      ],
+      { parseTokenBudget: 30 },
+    )
+    const refused = r.bundles.flatMap((b) => b.findings).filter((f) => f.rule === 'parse_error')
+    expect(refused).toHaveLength(1)
+    expect(refused[0]?.message).toContain('request_tokens')
+    expect(refused[0]?.blocking).toBe(true)
+    // The bundle inside the budget was analysed.
+    expect(r.bundles[0]?.statements.length).toBe(2)
+    expect(r.bundles[1]?.statements.length).toBe(0)
+  })
+
+  it('counts a dense down.sql against the same request budget (the review of group E)', () => {
+    const small = 'CREATE TABLE public.a (id bigint PRIMARY KEY);\n'
+    const dense = 'SELECT 1;\n'.repeat(40)
+    const r = lint([bundle({ up: small, down: dense })], { parseTokenBudget: 60 })
+    const messages = r.bundles.flatMap((b) => b.findings).filter((f) => f.rule === 'parse_error')
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toMatchObject({ file: 'down.sql', blocking: true })
+    expect(messages[0]?.message).toContain('request_tokens')
+    expect(r.bundles[0]?.rollbackStatements.length).toBe(0)
+    // Inside the budget it is analysed as before.
+    const fits = lint([bundle({ up: small, down: 'DROP TABLE public.a;\n' })], {
+      parseTokenBudget: 60,
+    })
+    expect(fits.bundles[0]?.rollbackStatements.length).toBe(1)
+  })
+
+  it('names the limit when block comments nest too deep, without parsing the file (VC-013)', () => {
+    const depth = 40_000
+    const started = performance.now()
+    const r = lint([bundle({ up: `${'/*'.repeat(depth)}${'*/'.repeat(depth)}\nSELECT 1;` })])
+    expect(performance.now() - started).toBeLessThan(2000)
+    expect(finding(r, 'parse_error')).toMatchObject({ file: 'up.sql', blocking: true })
+    expect(finding(r, 'parse_error')?.message).toContain('comment_depth')
+  })
+
   it('reports a parse error with the grammar and the position', () => {
     const r = lint([bundle({ up: 'CREATE TABLE public.ok (id int);\nCREATE TABEL x (id int);' })])
     expect(finding(r, 'parse_error')).toMatchObject({ file: 'up.sql', line: 2, blocking: true })

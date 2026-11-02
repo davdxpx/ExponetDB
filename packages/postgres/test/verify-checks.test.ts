@@ -88,3 +88,34 @@ SELECT count(*) = 0 AS ok FROM app.visible_leads('00000000-0000-0000-0000-000000
     expect(analyzeVerifyFile(major, 'SELECT (')).toMatchObject({ ok: false, check: null })
   })
 })
+
+/**
+ * VC-015: `(.*?)\s*$` retried the trailing white-space match from every position of the lazy
+ * group, so a directive value with a long run of white space before a last character took time
+ * quadratic in the run. The directive is matched linearly and trimmed afterwards.
+ */
+describe('a directive value with a long run of white space (VC-015)', () => {
+  const timed = (spaces: number) => {
+    const text = `-- check: a${' '.repeat(spaces)}b\nSELECT true AS ok;\n`
+    const started = performance.now()
+    const checks = verifyDirectives(SUPPORTED_MAJORS[0] ?? 17, text)
+    return { ms: performance.now() - started, name: checks?.[0]?.name }
+  }
+
+  it('is read in linear time and keeps the name', () => {
+    timed(1000) // warm-up
+    // The parse bound is 256 KiB; 200,000 spaces is as much padding as one line can carry.
+    // The fastest of a few runs on each size: a loaded machine slows a run, never speeds it up.
+    const best = (spaces: number) => {
+      const runs = Array.from({ length: 4 }, () => timed(spaces))
+      return { ms: Math.min(...runs.map((r) => r.ms)), name: runs[0]?.name }
+    }
+    const small = best(50_000)
+    const large = best(200_000)
+    expect(small.name?.startsWith('a')).toBe(true)
+    expect(large.name?.startsWith('a')).toBe(true)
+    expect(large.ms).toBeLessThan(200)
+    // Four times the input: linear is about 4, quadratic about 16 (the old expression took 53 s).
+    expect(large.ms / Math.max(small.ms, 5)).toBeLessThan(8)
+  })
+})

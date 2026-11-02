@@ -92,6 +92,62 @@ export function countTokens(
   return count
 }
 
+/**
+ * The deepest nesting of block comments in the text, counted without keeping the tokens and
+ * stopping once it passes `max` (VC-013). Markers inside literals and line comments are not
+ * comments. PostgreSQL's own scanner is quadratic in this depth, so a text is checked before it
+ * is handed to it.
+ */
+export function commentDepth(text: string, max: number, mode: LexMode = 'standard'): number {
+  let deepest = 0
+  scan(text, mode, (kind, start, end) => {
+    if (kind !== 'comment' || text[start] !== '/') return true
+    let depth = 0
+    for (let j = start; j < end; j++) {
+      if (text[j] === '/' && text[j + 1] === '*') {
+        depth++
+        j++
+        if (depth > deepest) deepest = depth
+      } else if (text[j] === '*' && text[j + 1] === '/') {
+        depth--
+        j++
+      }
+    }
+    return deepest <= max
+  })
+  return deepest
+}
+
+/** PostgreSQL's operator characters (scan.l `op_chars`). */
+const OP_CHARS = new Set('~!@#^&|`?+-*/%<>='.split(''))
+
+/**
+ * The most `/*` starts inside one maximal run of operator characters (VC-013, found by the review
+ * of group E). PostgreSQL's scanner matches `/*` followed by the whole run of operator characters
+ * after it and then gives all but two characters back (`xcstart`, `yyless(2)`), so every start
+ * rescans the rest of its run: closed comments in a row, `/**\/` repeated, take time quadratic
+ * in the run at depth 1, and `+/**\/` repeated does the same between operators. The count is made
+ * on the raw text, so a run inside a literal is counted too; that over-approximates only for text
+ * nobody writes. Stops counting once it passes `max`.
+ */
+export function commentRun(text: string, max: number): number {
+  let run = 0
+  let most = 0
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i] as string
+    if (!OP_CHARS.has(c)) {
+      run = 0
+    } else if (c === '/' && text[i + 1] === '*') {
+      run++
+      if (run > most) {
+        most = run
+        if (most > max) return most
+      }
+    }
+  }
+  return most
+}
+
 const ESCAPES: Readonly<Record<string, string>> = { b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' }
 
 /** The character an `E''` backslash escape stands for, and where the text goes on. */

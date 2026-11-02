@@ -888,9 +888,27 @@ finding is wrong. Owner decisions are in [`open-decisions.md`](../00-product/ope
 | VC-136 comment-only change is not seen by drift | DOCUMENTED (`fp1` does not cover comments; `fp2` through an ADR) | | [drift-detection.md §6.1](../03-database-model/drift-detection.md) |
 | VC-108 plan analysis reaches agents without the `untrusted` marker | MOVED to group E (hostile input and containment: the MCP output schemas) | | |
 
+### VC-1g. Group E: hostile input and containment (branch `fix/verification-campaign-group-e`, stacked on group G)
+
+| Finding | Status | Regression artifact | Document |
+|---|---|---|---|
+| VC-013 nested block comments freeze the serving process | IMPLEMENTED (nesting of at most 32 and at most 32 `/*` starts per run of operator characters, checked before any parse, also for PL/pgSQL and the legacy early refusal; the lint finding names the limit), TESTED LOCALLY; NOT BUILT: a time-boxed analysis in a worker thread; NOT EXECUTED: the campaign's `I14-containment` suite | `packages/postgres/test/containment.test.ts`, `packages/migrations/test/lint.test.ts` | [migration-bundles.md §1](../04-migrations/migration-bundles.md) |
+| VC-014 memory is bounded per parse, not per request | IMPLEMENTED (400,000 parse tokens shared by the bundles of a request, blocking `parse_error` naming `request_tokens`), TESTED LOCALLY; NOT EXECUTED: the dense-bundle runs at the 259 MiB heap | `packages/migrations/test/lint.test.ts` | [migration-bundles.md §1](../04-migrations/migration-bundles.md), [deployment.md §2a](../12-operations/deployment.md) |
+| VC-015 quadratic `-- check:` regular expression | IMPLEMENTED (linear match, trimmed afterwards), TESTED LOCALLY | `packages/postgres/test/verify-checks.test.ts` | |
+| VC-068 limits are not named | IMPLEMENTED (statements per file 10,000, comment depth, tokens; one table), TESTED LOCALLY | `containment.test.ts`, `packages/migrations/test/limits-doc.test.ts` | [migration-bundles.md §1](../04-migrations/migration-bundles.md) |
+| VC-095 limits not announced in one place | IMPLEMENTED (the table, compared with the constants by a docs test) | `limits-doc.test.ts` | [migration-bundles.md §1](../04-migrations/migration-bundles.md) |
+| VC-094 deeply nested YAML | IMPLEMENTED (`yaml_depth`: flow collections by the library's lexer, block and flow collections below the root by an iterative walk, at most 32 levels; a stack overflow of the library is the same reason), TESTED LOCALLY | `packages/migrations/test/bundle.test.ts` | |
+| VC-086, VC-093 CLI loader | IMPLEMENTED (a file is read up to its limit + 1 byte; a link or directory in place of a bundle file is refused by name), TESTED LOCALLY | `apps/cli/test/local.test.ts` | |
+| VC-101 oversized JSON body not named | IMPLEMENTED (`/body too_large` with the limit), TESTED LOCALLY | `apps/server/test/http-profile.int.test.ts` | |
+| VC-046 a 32 MiB body is read before the permission check | IMPLEMENTED (routes with a body over 64 KiB authenticate and ask the action's permission anywhere first; the MCP edge's bundle tools are NOT changed), TESTED LOCALLY | `apps/server/test/http-profile.int.test.ts` | [deployment.md §2a](../12-operations/deployment.md) |
+| VC-078 one client pushes serve past its container limit | PARTLY IMPLEMENTED (1,024 connections per listener, tested; four large bodies at once, `429` before the body, the slot release and the 429 path are NOT covered by a test); NOT BUILT: a per-principal share of the four slots, a per-grant cap on `/mcp`; NOT EXECUTED: the 1,000-request load run | `apps/server/test/listen-limits.test.ts`, `in-flight.test.ts` | [deployment.md §2a](../12-operations/deployment.md) |
+| VC-047 a single read floods the target's disk with temp files | IMPLEMENTED (`temp_file_limit = 1GB` for the reader and the verifier in both bootstrap generators), TESTED LOCALLY at the generated SQL; NOT EXECUTED: the 53400 abort on PostgreSQL 16/17/18; existing clusters need the `ALTER ROLE` | `packages/postgres/test/adapter.test.ts` | [credentials-and-roles.md](../03-database-model/credentials-and-roles.md) |
+| VC-123 an accept holds the plan lock while it reads the target | PARTLY IMPLEMENTED (a 30 s deadline on the live check, the check is told to stop and closes its session, then `TARGET_UNAVAILABLE`); NOT BUILT: reading the target before the transaction, one check at a time per target | `packages/operations/test/accept-deadline.int.test.ts` | |
+| VC-146 server-file and untrusted-language functions | IMPLEMENTED (`forbidden_statement`, found lexically also in bodies), TESTED LOCALLY | `packages/migrations/test/lint.test.ts` | [analysis.md](../04-migrations/analysis.md) |
+
 ### VC-1a. Groups not started yet
 
-Groups E, F, H, I and the closing documents of section 5 of the fix prompt get their own branches
+Groups F, H, I and the closing documents of section 5 of the fix prompt get their own branches
 and pull requests.
 
 ### VC-2. Review history (append-only)
@@ -904,3 +922,4 @@ and pull requests.
 | 2026-11-02 | `fix/verification-campaign-group-a-followups` | the delegated decisions of group A built: OD-69 (b), OD-70 (b) to (d), OD-68 (b) |
 | 2026-11-02 | `fix/verification-campaign-group-d` | group D: VC-065, VC-043, VC-010, VC-011 (decided under the delegation), VC-141, VC-143 |
 | 2026-11-02 | `fix/verification-campaign-group-g` | group G: VC-063, VC-023, VC-045, VC-102, VC-027, VC-080, VC-079, VC-153, VC-022, VC-069, VC-071, VC-073, VC-074, VC-075 (decided), VC-106, VC-136; VC-087 deferred; VC-108 moved to group E |
+| 2026-11-02 | `fix/verification-campaign-group-e` | group E: VC-013, VC-014, VC-015, VC-068, VC-095, VC-094, VC-086, VC-093, VC-101, VC-046, VC-146; VC-078 partly; VC-123 and the MCP edge open |

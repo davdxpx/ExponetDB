@@ -74,6 +74,15 @@ describe('endpoints', () => {
 })
 
 describe('bootstrap SQL', () => {
+  it('bounds the temporary files of a read and of a verification (VC-047)', () => {
+    // set-returning functions materialize before the first row: 9 GB of temp files per 60 s read.
+    for (const text of [bootstrapScript(['app_db']), clusterBootstrapStatements().join('\n')]) {
+      for (const role of ['exponetdb_reader', 'exponetdb_verifier']) {
+        expect(text).toMatch(new RegExp(`ALTER ROLE "${role}" SET temp_file_limit = E?'1GB'`))
+      }
+    }
+  })
+
   it('creates the roles without any password unless a SCRAM verifier is given', () => {
     const script = bootstrapScript(['app_db'])
     expect(script).not.toMatch(/PASSWORD/)

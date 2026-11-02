@@ -76,7 +76,17 @@ with `BYPASSRLS`; operator `pg_signal_backend` and `pg_monitor`; migrator a
 execution roles), role settings (`default_transaction_read_only = on` for
 observer, reader and verifier; `search_path = ''` for the verifier;
 `statement_timeout` 30 s for observer and operator;
-`idle_in_transaction_session_timeout` 30 s, migrator 120 s) and connection
+`idle_in_transaction_session_timeout` 30 s, migrator 120 s; **[DECIDED]**
+(verification campaign VC-047, 2026-11-02) `temp_file_limit = 1GB` for the
+reader and the verifier, because a set-returning function is materialized before
+the first row and the row cap does not bound that work: 2.2 GB of temporary
+files in 14 s, about 9 GB per read at the agent timeout. It is a superuser-only
+setting: the bootstrap script runs as the cluster's administrator, and on a
+provider that does not allow it the script needs `GRANT SET ON PARAMETER
+temp_file_limit` for that administrator first. On clusters bootstrapped
+earlier: `ALTER ROLE exponetdb_reader SET temp_file_limit = '1GB'` and the same
+for `exponetdb_verifier`; the integration proof of the abort (SQLSTATE 53400 on
+PostgreSQL 16, 17 and 18) is not run) and connection
 limits (observer and reader 8, verifier 4, operator and migrator 2). The
 database part grants `CONNECT` to the login roles and `CREATE` to the
 ledger owner. Credential verification refuses a role that is a superuser,

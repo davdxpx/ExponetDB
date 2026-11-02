@@ -28,6 +28,8 @@ export interface ListenDeadlines {
   readonly requestMs: number
   readonly checkMs: number
   readonly keepAliveMs: number
+  /** Open connections at once; past it a connection is closed at once (VC-078). */
+  readonly maxConnections: number
 }
 
 export const LISTEN_DEADLINES: ListenDeadlines = {
@@ -35,6 +37,8 @@ export const LISTEN_DEADLINES: ListenDeadlines = {
   requestMs: 120_000,
   checkMs: 2_000,
   keepAliveMs: 5_000,
+  // About 1,100 descriptors and 143 MB were held by an unauthenticated flood without a cap.
+  maxConnections: 1024,
 }
 
 export async function listen(
@@ -56,6 +60,7 @@ export async function listen(
         },
       },
       (info: AddressInfo) => {
+        server.maxConnections = deadlines.maxConnections
         resolve({
           port: info.port,
           close: (timeoutMs) =>

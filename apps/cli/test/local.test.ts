@@ -1,5 +1,15 @@
 import { execFileSync } from 'node:child_process'
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  truncate,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -7,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { EXIT } from '../src/cli/exit.ts'
 import { referenceMarkdown } from '../src/cli/reference.ts'
 import { COMMANDS } from '../src/commands/index.ts'
+import { currentProject, readBundles } from '../src/local/project.ts'
 import { run } from '../src/main.ts'
 import { testIo } from './support.ts'
 
@@ -45,6 +56,55 @@ async function cli(argv: readonly string[], extra: Partial<Parameters<typeof tes
   )
   return { code, stdout: stdout.join(''), stderr: stderr.join('') }
 }
+
+/**
+ * VC-086, VC-093: the loader read a file whole before it cut it (a sparse 1.5 GiB `up.sql` raised
+ * the memory by that much) and turned a link or a directory named `verify.sql`/`up.sql` into an
+ * empty file, which then validated as an empty check file.
+ */
+describe('the bundle loader (VC-086, VC-093)', () => {
+  const bundle = async (build: (path: string) => Promise<void>) => {
+    await mkdir(join(dir, 'repo'))
+    expect((await cli(['init', '--project', 'demo/platform'])).code).toBe(0)
+    const made = JSON.parse((await cli(['migration', 'new', 'loader', '--json'])).stdout)
+    await build(made.data.path)
+    return made.data.path as string
+  }
+
+  it('reads an oversized file only up to its limit and refuses it as too large', async () => {
+    await bundle(async (path) => {
+      await writeFile(join(path, 'up.sql'), '')
+      await truncate(join(path, 'up.sql'), 1.5 * 1024 * 1024 * 1024)
+    })
+    const before = process.memoryUsage().rss
+    const r = await cli(['migration', 'lint', '--json'])
+    const grown = process.memoryUsage().rss - before
+    expect(r.code).not.toBe(0)
+    expect(r.stdout + r.stderr).toMatch(/too_large|too large|file_too_large|limit/i)
+    expect(grown).toBeLessThan(200 * 1024 * 1024)
+  })
+
+  it('keeps a small file as a small buffer, not a view into a limit-sized one', async () => {
+    await bundle(async () => undefined)
+    const loaded = await readBundles(await currentProject(join(dir, 'repo')))
+    const files = loaded.flatMap((b) => [...b.input.files.values()])
+    expect(files.length).toBeGreaterThan(0)
+    for (const bytes of files) expect(bytes.buffer.byteLength).toBeLessThan(1024 * 1024)
+  })
+
+  it('refuses a link in place of a bundle file by name, and does not follow it', async () => {
+    const path = await bundle(async (p) => {
+      await writeFile(join(dir, 'outside.sql'), 'SELECT false AS ok;\n')
+      await rm(join(p, 'verify.sql'), { force: true })
+      await symlink(join(dir, 'outside.sql'), join(p, 'verify.sql'))
+    })
+    const r = await cli(['migration', 'lint', '--json'])
+    expect(r.code).not.toBe(0)
+    expect(r.stdout + r.stderr).toContain('verify.sql')
+    expect(r.stdout + r.stderr).toMatch(/not a regular file|link/i)
+    expect(path).toContain('loader')
+  })
+})
 
 describe('a local migration stream', () => {
   it('initializes a project, adds bundles in dependency order, and checks them like the server', async () => {

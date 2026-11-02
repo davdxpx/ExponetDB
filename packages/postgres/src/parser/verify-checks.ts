@@ -42,7 +42,8 @@ export type VerifyFile =
       readonly check: { readonly index: number; readonly name: string } | null
     }
 
-const DIRECTIVE = /^--\s*(check|covers|calls|reads-view):[ \t]*(.*?)\s*$/
+// Linear: the value is trimmed after the match (a lazy `(.*?)\s*$` is quadratic in a white-space run, VC-015).
+const DIRECTIVE = /^--\s*(check|covers|calls|reads-view):[ \t]*(.*)$/
 const CALLS = /^([a-z_][a-z0-9_$]*)\.([a-z_][a-z0-9_$]*)\(([^()]*)\)$/
 const READS_VIEW = /^([a-z_][a-z0-9_$]*)\.([a-z_][a-z0-9_$]*)$/
 
@@ -82,7 +83,8 @@ function directivesIn(region: string): Directives {
     if (!comment.startsWith('--')) continue
     const m = DIRECTIVE.exec(comment)
     if (m === null) continue
-    const [, directive, value = ''] = m
+    const [, directive, raw = ''] = m
+    const value = raw.trimEnd()
     if (directive === 'check' && value !== '') out.name = value.slice(0, 120)
     if (directive === 'covers') {
       out.covers.push(

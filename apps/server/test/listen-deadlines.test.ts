@@ -8,7 +8,7 @@ import { LISTEN_DEADLINES, listen } from '../src/roles/lifecycle.ts'
  * its body, is cut off; a normal request is not. The deadlines are shortened
  * for the test; production uses {@link LISTEN_DEADLINES}.
  */
-const SHORT = { headersMs: 400, requestMs: 800, checkMs: 100, keepAliveMs: 200 }
+const SHORT = { headersMs: 400, requestMs: 800, checkMs: 100, keepAliveMs: 200, maxConnections: 64 }
 
 /** Writes `chunks` (one per `gapMs`) and resolves with what came back and when the socket closed. */
 function slowClient(
@@ -106,7 +106,7 @@ describe('listener read deadlines (slow clients)', () => {
     const listener = await listen(
       async () => new Response('ok'),
       { host: '127.0.0.1', port: 0 },
-      { headersMs: 20_000, requestMs: 30_000, checkMs: 100, keepAliveMs: 200 },
+      { headersMs: 20_000, requestMs: 30_000, checkMs: 100, keepAliveMs: 200, maxConnections: 64 },
     )
     try {
       const state = await new Promise<{ received: string; closed: boolean }>((resolve) => {

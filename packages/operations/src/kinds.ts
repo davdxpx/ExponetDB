@@ -82,8 +82,14 @@ export interface OperationKind {
    * `verification_failed`.
    */
   supersedeOutcome?(plan: PlanRecord): 'applied' | 'not_applied' | 'unknown' | undefined
-  /** Kind-specific bindings, checked at acceptance and again under the locks. */
-  checkBindings(plan: PlanRecord): Promise<readonly ChangedBinding[]>
+  /**
+   * Kind-specific bindings, checked at acceptance and again under the locks. The signal aborts
+   * when the accept's deadline passes: a check that reads a target stops reading.
+   */
+  checkBindings(
+    plan: PlanRecord,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<readonly ChangedBinding[]>
   execute(ctx: ExecutionContext): Promise<ExecutionOutcome>
   verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'>
   /** After a lost worker: what really happened? Never re-executes. */
