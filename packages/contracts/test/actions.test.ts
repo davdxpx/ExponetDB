@@ -277,7 +277,8 @@ describe('operation.force_release (owner decision before G1)', () => {
         (d.scope.kind === 'fixed' && d.scope.scope === 'operations.recover')
       )
     })
-    expect(users).toEqual(['operation.force_release'])
+    // VC-006: the plan of the release needs the same permission; nothing else does.
+    expect([...users].sort()).toEqual(['operation.force_release', 'operation.force_release.plan'])
   })
 
   it('no longer uses registry.manage, which stays with registry writes and credential.rotate', () => {

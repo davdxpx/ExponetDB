@@ -391,21 +391,26 @@ verification only needs another run. **[DECIDED]** (verification campaign
 fix VC-006, VC-055, VC-007, 2026-11-02, under the owner's delegation)
 `operation.force_release` closes an operation in `needs_attention` of any
 kind, for which no retry and no recovery plan exists, or whose outcome
-stayed `unknown`: a person with `operations.recover` on the plan's subject,
-in the Web App with a fresh re-authentication (300 s; the CLI's step-up
-receipts cover `plan.apply` and the token reveal only, and the operation
-page is the place that shows what happened), states what happened to the
-change (`applied`, `not_applied`, `unknown`) and why
-(`POST /operations/{id}/force-release`, audited `operation.force_release`
-with the reason). serve records it in `recovery.force_releases` (it may not
-move an operation that started); the worker claims the operation, closes it
-under its lease and releases its domains, running nothing again: a change
-the person found not applied ends `failed` / `not_applied` (the edge
-`operations.release_transition_allowed`, bundle `operation-force-release`),
+stayed `unknown`. It is a `high` planned operation at the tier of the
+operation it names (the definition decided before G1): a person with
+`operations.recover` plans it (`POST /operations/{id}/force-release`, CLI
+`operation force-release`, Web App "Release operation"), stating what
+happened to the change (`applied`, `not_applied`, `unknown`) and why, and
+applies it through `plan.apply` with a fresh re-authentication (the CLI's
+step-up covers it). The plan takes the domains the operation holds and names
+it (`supersedes`), so the worker closes it in the transaction that takes
+them, as a recovery plan does (and with VC-044's savepoint), running nothing
+of it again: a change the person found not applied, where the engine itself
+did not know, ends `failed` / `not_applied` (the edge
+`operations.release_transition_allowed`, bundle `operation-force-release`);
 any other ends `verification_failed` (applied, or partly applied for an
 `unknown` outcome) with a failed verification. The closing event names the
-person, the stated outcome, the reason and the outcomes the operation had.
-Another state answers `OPERATION_NOT_RELEASABLE`; a second request while one is open answers `CONFLICT` (only the first person's statement is used); `not_applied` for a change the engine recorded as applied is refused (`VALIDATION_FAILED`), and a request recorded before the engine learnt that is closed as applied. A production
+release, the stated outcome and the person. The release then verifies that
+the operation is finished. Planning refuses another state
+(`OPERATION_NOT_RELEASABLE`) and `not_applied` for a change the engine
+recorded as applied (`VALIDATION_FAILED`); a second release plan of an
+operation that was closed meanwhile is stale (`PLAN_STALE`, binding
+`operation`). A production
 `migration.verify` that names a stuck operation (and so closes it) needs an
 approval and a fresh re-authentication (rule
 `migration.verify-supersedes-production`, decision D0-01).

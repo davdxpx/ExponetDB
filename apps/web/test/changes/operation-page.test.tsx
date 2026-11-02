@@ -352,11 +352,11 @@ describe('the operation page', () => {
       verificationOutcome: 'pending',
       retryable: false,
     })
-    const { header } = await openOperation(world)
+    const { header, ...mounted } = await openOperation(world)
     expect(within(header).queryByRole('button', { name: 'Verify again' })).toBeNull()
     await user.click(within(header).getByRole('button', { name: 'Release operation' }))
     const dialog = await screen.findByRole('alertdialog', { name: 'Release this operation?' })
-    const action = within(dialog).getByRole('button', { name: 'Release operation' })
+    const action = within(dialog).getByRole('button', { name: 'Plan the release' })
     // Without a reason nothing is sent.
     await user.click(action)
     expect(world.posts(`/operations/${OP}/force-release`)).toHaveLength(0)
@@ -371,7 +371,8 @@ describe('the operation page', () => {
       outcome: 'not_applied',
       reason: 'Checked on the target: the table does not exist.',
     })
-    expect(await screen.findByText(`Operation ${OP} is released.`)).toBeInTheDocument()
+    // The plan page applies it, with a fresh re-authentication.
+    await waitFor(() => expect(mounted.router.state.location.pathname).toContain(PLAN))
   })
 
   it('offers no release for an operation that does not need attention', async () => {

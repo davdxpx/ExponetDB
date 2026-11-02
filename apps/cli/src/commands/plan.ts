@@ -5,6 +5,7 @@ import { EXIT } from '../cli/exit.ts'
 import { collect, LIST_FLAGS, listingFailure } from '../cli/lists.ts'
 import { must } from '../cli/remote.ts'
 import type { CommandSpec } from '../cli/types.ts'
+import { UsageError } from '../cli/usage.ts'
 import { operationResult, WAIT_FLAGS, waits, watchOperation } from '../cli/watch.ts'
 import { createNewPrivateFile } from '../files.ts'
 import { ago, countLine, header } from '../output/format.ts'
@@ -454,6 +455,57 @@ export const planCommands: readonly CommandSpec[] = [
         o,
         Number(input.flags['timeout-wait'] ?? 900_000),
       )
+    },
+  },
+  {
+    path: ['operation', 'force-release'],
+    summary: 'Plan releasing an operation that needs attention, of any kind.',
+    description:
+      'For an operation in needs_attention that no retry and no recovery plan covers, or whose outcome stayed unknown (VC-006). You state what happened to its change (applied, not_applied, unknown) and why; applying the plan (plan apply, a fresh re-authentication) closes the operation, runs nothing of it again and frees what it holds on the target. not_applied is refused for a change the engine recorded as applied.',
+    group: 'operation',
+    args: [{ name: 'operation', description: 'The operation id (op_…).', required: true }],
+    flags: [
+      {
+        name: 'outcome',
+        type: 'string',
+        placeholder: 'applied|not_applied|unknown',
+        description: 'What happened to the change, as you checked it on the target.',
+        required: true,
+      },
+      {
+        name: 'reason',
+        type: 'string',
+        placeholder: 'text',
+        description:
+          'Why, and how you checked (kept with the plan and in the audit, 1 to 1000 characters).',
+        required: true,
+      },
+      { name: 'apply', type: 'boolean', description: 'Apply at once and wait.' },
+      ...WAIT_FLAGS,
+    ],
+    locality: 'remote',
+    effect: 'plan',
+    action: 'operation.force_release.plan',
+    scopes: ['operations.recover'],
+    output: 'PlanView',
+    examples: [
+      'exponetdb operation force-release op_01… --outcome not_applied --reason "The table does not exist on the target."',
+    ],
+    async run(ctx, input) {
+      const outcome = String(input.flags['outcome'])
+      if (outcome !== 'applied' && outcome !== 'not_applied' && outcome !== 'unknown') {
+        throw new UsageError('--outcome is applied, not_applied or unknown.')
+      }
+      const remote = await ctx.remote()
+      const plan = must(
+        await remote.sdk.call('planForceRelease', {
+          params: { operationId: String(input.args['operation']) },
+          body: { outcome, reason: String(input.flags['reason']) },
+        }),
+      )
+      if (input.flags['apply'] !== true || plan.decision === 'deny')
+        return planResult('operation force-release', remote, plan)
+      return applyPlan(ctx, remote, 'operation force-release', plan, input.flags)
     },
   },
   {

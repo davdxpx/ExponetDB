@@ -682,6 +682,7 @@
               "migration.import.analyze",
               "migration.baseline.plan",
               "drift.accept.plan",
+              "operation.force_release.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -13991,6 +13992,7 @@
               "migration.import.analyze",
               "migration.baseline.plan",
               "drift.accept.plan",
+              "operation.force_release.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -14843,6 +14845,7 @@
               "migration.import.analyze",
               "migration.baseline.plan",
               "drift.accept.plan",
+              "operation.force_release.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -15751,6 +15754,7 @@
               "migration.import.analyze",
               "migration.baseline.plan",
               "drift.accept.plan",
+              "operation.force_release.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -16194,6 +16198,7 @@
               "migration.import.analyze",
               "migration.baseline.plan",
               "drift.accept.plan",
+              "operation.force_release.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -33445,7 +33450,7 @@
     },
     "/operations/{operationId}/force-release": {
       "post": {
-        "operationId": "forceReleaseOperation",
+        "operationId": "planForceRelease",
         "parameters": [
           {
             "in": "path",
@@ -33473,7 +33478,7 @@
                     "type": "string"
                   },
                   "reason": {
-                    "description": "Why it is released and how the outcome was checked; recorded in the audit, permanent.",
+                    "description": "Why it is released and how the outcome was checked; recorded in the plan and the audit, permanent.",
                     "maxLength": 1000,
                     "type": "string",
                     "x-untrusted": true
@@ -33490,15 +33495,15 @@
           "required": true
         },
         "responses": {
-          "202": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Operation"
+                  "$ref": "#/components/schemas/PlanView"
                 }
               }
             },
-            "description": "Accepted."
+            "description": "Created."
           },
           "401": {
             "$ref": "#/components/responses/Problem",
@@ -33514,11 +33519,11 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CONFLICT, OPERATION_NOT_RELEASABLE."
+            "description": "Error codes: OPERATION_NOT_RELEASABLE."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: VALIDATION_FAILED."
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
           },
           "429": {
             "$ref": "#/components/responses/Problem",
@@ -33543,17 +33548,17 @@
             "session": []
           }
         ],
-        "summary": "Close an operation that needs attention (VC-006): a person states what happened to its change and why; the worker closes it, runs nothing again and releases its exclusivity domains. A person only, with a fresh re-authentication (the Web App offers it).",
+        "summary": "Plan closing an operation that needs attention (operation.force_release, VC-006): a person states what happened to its change and why; applied through POST /plans/{id}/apply (re-authentication), the worker closes the operation, runs nothing of it again and releases its exclusivity domains.",
         "tags": [
           "operations"
         ],
-        "x-exponetdb-action": "operation.force_release",
-        "x-exponetdb-action-class": "high",
+        "x-exponetdb-action": "operation.force_release.plan",
+        "x-exponetdb-action-class": "read",
         "x-exponetdb-errors": [
-          "CONFLICT",
           "CONTROL_PLANE_DEGRADED",
           "CSRF_FAILED",
           "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
           "INSUFFICIENT_SCOPE",
           "INTERNAL",
           "OPERATION_NOT_FOUND",
@@ -33564,7 +33569,7 @@
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
         ],
-        "x-exponetdb-wave": "6"
+        "x-exponetdb-wave": "9"
       }
     },
     "/operations/{operationId}/retry-verification": {

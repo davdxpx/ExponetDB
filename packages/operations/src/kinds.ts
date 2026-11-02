@@ -75,6 +75,13 @@ export interface OperationKind {
    * ([`supersede.ts`](./supersede.ts)); nothing else is touched.
    */
   supersedes?(plan: PlanRecord): readonly string[]
+  /**
+   * What a person stated about the change of the operations it names
+   * (`operation.force_release`, VC-006): `not_applied` closes one whose outcome
+   * is `unknown` as `failed` / `not_applied`; otherwise the close is
+   * `verification_failed`.
+   */
+  supersedeOutcome?(plan: PlanRecord): 'applied' | 'not_applied' | 'unknown' | undefined
   /** Kind-specific bindings, checked at acceptance and again under the locks. */
   checkBindings(plan: PlanRecord): Promise<readonly ChangedBinding[]>
   execute(ctx: ExecutionContext): Promise<ExecutionOutcome>

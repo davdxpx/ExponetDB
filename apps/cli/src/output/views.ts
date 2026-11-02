@@ -379,13 +379,13 @@ export function operationNext(o: Operation & { readonly retryable?: boolean }): 
       return [`exponetdb operation watch ${o.id}`]
     case 'inspect':
       // The server decides what can be verified again (VC-049); anything else stuck is released
-      // by a person in the Web App (VC-006, a fresh re-authentication).
+      // by a person once they know what happened to the change (VC-006).
       if (o.state !== 'needs_attention') return [inspect]
       return o.retryable === true
         ? [inspect, `exponetdb operation retry-verification ${o.id}`]
         : [
             inspect,
-            'Release it on its page in the Web App once you know what happened to the change (operation.force_release).',
+            `exponetdb operation force-release ${o.id} --outcome <applied|not_applied|unknown> --reason "<why>"`,
           ]
     case 'resume':
       return [

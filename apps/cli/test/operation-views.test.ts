@@ -83,7 +83,7 @@ describe('the next step of an operation that needs attention', () => {
       const next = operationNext(stuck({ ...(retryable === undefined ? {} : { retryable }) }))
       expect(next.join('\n')).not.toContain('retry-verification')
       expect(next).toContain(
-        'Release it on its page in the Web App once you know what happened to the change (operation.force_release).',
+        `exponetdb operation force-release ${id} --outcome <applied|not_applied|unknown> --reason "<why>"`,
       )
     }
   })

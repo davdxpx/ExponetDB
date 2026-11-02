@@ -827,22 +827,29 @@ export const ROUTES = [
     errors: ['CSRF_FAILED', 'OPERATION_NOT_FOUND', 'OPERATION_NOT_RETRYABLE'],
   },
   {
-    operationId: 'forceReleaseOperation',
+    operationId: 'planForceRelease',
     method: 'post',
     path: '/operations/{operationId}/force-release',
     summary:
-      'Close an operation that needs attention (VC-006): a person states what happened to its change and why; the worker closes it, runs nothing again and releases its exclusivity domains. A person only, with a fresh re-authentication (the Web App offers it).',
-    action: 'operation.force_release',
+      'Plan closing an operation that needs attention (operation.force_release, VC-006): a person states what happened to its change and why; applied through POST /plans/{id}/apply (re-authentication), the worker closes the operation, runs nothing of it again and releases its exclusivity domains.',
+    action: 'operation.force_release.plan',
     pathParams: z.strictObject({ operationId: OperationIdSchema }),
     body: z.strictObject({
       outcome: z.enum(['applied', 'not_applied', 'unknown']),
       reason: untrustedText(
         1000,
-        'Why it is released and how the outcome was checked; recorded in the audit, permanent.',
+        'Why it is released and how the outcome was checked; recorded in the plan and the audit, permanent.',
       ),
     }),
-    response: { status: 202, schema: OperationSchema },
-    errors: ['CSRF_FAILED', 'OPERATION_NOT_FOUND', 'OPERATION_NOT_RELEASABLE', 'CONFLICT'],
+    // Literal here: the shared plan constants are declared further down.
+    response: { status: 201, schema: PlanViewSchema },
+    errors: [
+      'CSRF_FAILED',
+      'IDEMPOTENCY_KEY_REUSED',
+      'OPERATION_NOT_FOUND',
+      'OPERATION_NOT_RELEASABLE',
+      'VALIDATION_FAILED',
+    ],
   },
   {
     operationId: 'listPlans',

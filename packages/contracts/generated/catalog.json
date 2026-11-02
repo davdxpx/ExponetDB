@@ -1696,6 +1696,37 @@
       "wave": "8"
     },
     {
+      "basis": "operations-engine.md §4.1 (VC-006: the exit of needs_attention for every kind); applied through plan.apply",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "operation.force_release.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "operations.recover"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "operations.recover"
+      },
+      "subject": "plan",
+      "tierSemantics": "subject",
+      "title": "Plan releasing an operation that needs attention",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
       "basis": "resources.md, tool-catalog.md",
       "class": {
         "class": "read",

@@ -20,6 +20,13 @@ export {
 } from './driver.ts'
 export { type ChangedBinding, type InternalOperationCode, OperationError } from './errors.ts'
 export {
+  type AssertedOutcome,
+  FORCE_RELEASE_KIND,
+  type ForceReleaseContent,
+  ForceReleaseKind,
+  forceReleaseContent,
+} from './force-release.ts'
+export {
   beginIdempotent,
   completeIdempotent,
   IDEMPOTENCY_KEY,
@@ -37,7 +44,6 @@ export {
   type OperationKind,
 } from './kinds.ts'
 export {
-  type AssertedOutcome,
   type Claim,
   type ClaimOptions,
   claimNextOperation,
@@ -47,7 +53,6 @@ export {
   type NextStep,
   releaseQueuedLease,
   renewLease,
-  requestForceRelease,
   requestVerificationRetry,
 } from './leases.ts'
 export { acquireLocks, expandDomains, heldLocks, isDomainKey, type LockResult } from './locks.ts'

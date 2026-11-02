@@ -34,6 +34,7 @@ export async function closeSuperseded(
   const named = (kind.supersedes?.(plan) ?? []).slice(0, MAX_NAMED)
   if (named.length === 0) return
   const needed = new Set(expandDomains(kind.exclusivity(plan)))
+  const stated = kind.supersedeOutcome?.(plan)
   for (const text of new Set(named)) {
     const id = parseId('op', text)
     if (!id.ok) continue
@@ -46,22 +47,43 @@ export async function closeSuperseded(
     if (row === undefined) continue
     const target = operationFromRow(row)
     if (target.state !== 'needs_attention') continue
-    if (!(await heldLocks(tx, target.operationId)).some((d) => needed.has(d))) continue
+    // A recovery plan closes only an operation in its way; a person's force release (it states an
+    // outcome) closes the operation it names, whatever that holds.
+    if (
+      stated === undefined &&
+      !(await heldLocks(tx, target.operationId)).some((d) => needed.has(d))
+    ) {
+      continue
+    }
+    const detail = {
+      supersededBy,
+      previousApplyOutcome: target.applyOutcome,
+      previousVerificationOutcome: target.verificationOutcome,
+      ...(stated === undefined ? {} : { statedOutcome: stated, statedBy: plan.actor.identityId }),
+    }
+    // A person's "not applied" holds only where the engine itself does not know (VC-006).
     await transitionOperation(
       tx,
-      {
-        operationId: target.operationId,
-        from: 'needs_attention',
-        to: 'verification_failed',
-        applyOutcome: target.applyOutcome === 'unknown' ? 'partially_applied' : target.applyOutcome,
-        verificationOutcome: 'failed',
-        actor: WORKER_ACTOR,
-        detail: {
-          supersededBy,
-          previousApplyOutcome: target.applyOutcome,
-          previousVerificationOutcome: target.verificationOutcome,
-        },
-      },
+      stated === 'not_applied' && target.applyOutcome === 'unknown'
+        ? {
+            operationId: target.operationId,
+            from: 'needs_attention',
+            to: 'failed',
+            applyOutcome: 'not_applied',
+            verificationOutcome: 'not_applicable',
+            actor: WORKER_ACTOR,
+            detail,
+          }
+        : {
+            operationId: target.operationId,
+            from: 'needs_attention',
+            to: 'verification_failed',
+            applyOutcome:
+              target.applyOutcome === 'unknown' ? 'partially_applied' : target.applyOutcome,
+            verificationOutcome: 'failed',
+            actor: WORKER_ACTOR,
+            detail,
+          },
       options,
     )
   }

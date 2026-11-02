@@ -5,6 +5,7 @@ import {
   PlanConfirmDialog,
   type PlanConfirmFacts,
   TypedConfirmDialog,
+  useNavigate,
 } from '@exponetdb/ui-patterns'
 import { useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useId, useState } from 'react'
@@ -15,6 +16,7 @@ import { t } from '../../lib/i18n/i18n.ts'
 import type { PageMessage } from '../plans/decision-actions.tsx'
 import { actionError } from '../plans/failure.ts'
 import { operationKeys } from '../plans/keys.ts'
+import { planPath } from '../plans/plan-model.ts'
 import { nounPhrase } from '../target/phrases.ts'
 import { CANCELABLE_STATES, verifyAgainRung } from './model.ts'
 
@@ -159,12 +161,12 @@ export function releaseOffered(operation: OperationRead): boolean {
 }
 
 /**
- * "Release operation" (`POST /operations/{id}/force-release`,
- * `operation.force_release`): ends an operation in `needs_attention` of any
- * kind. The person states what happened to the change and why (both kept in
- * the audit log); the worker closes it, runs nothing again and frees its
- * domains. Always through a fresh re-authentication; the production frame
- * on production.
+ * "Release operation" (`POST /operations/{id}/force-release`): plans
+ * `operation.force_release` for an operation in `needs_attention` of any
+ * kind. The person states what happened to the change and why (kept in the
+ * plan and the audit log); the plan page applies it with a fresh
+ * re-authentication, and the worker closes the operation, runs nothing of it
+ * again and frees its domains.
  */
 export function ForceReleaseAction({
   operation,
@@ -176,7 +178,7 @@ export function ForceReleaseAction({
   readonly onMessage: PageMessage
 }): ReactNode {
   const { client, confirmIdentity } = useApi()
-  const refresh = useRefreshOperation(operation.id)
+  const navigate = useNavigate()
   const [outcome, setOutcome] = useState<ReleaseOutcome>('unknown')
   const [reason, setReason] = useState('')
   const reasonId = useId()
@@ -186,9 +188,10 @@ export function ForceReleaseAction({
     if (trimmed.length === 0) {
       throw new ApiError('VALIDATION_FAILED', 422, t('changes.release.reasonMissing'))
     }
+    let plan: { readonly id: string }
     try {
-      await withReauth(client, confirmIdentity, () =>
-        client.operation('forceReleaseOperation', {
+      plan = await withReauth(client, confirmIdentity, () =>
+        client.operation('planForceRelease', {
           params: { operationId: operation.id },
           body: { outcome, reason: trimmed },
         }),
@@ -197,7 +200,8 @@ export function ForceReleaseAction({
       throw actionError(error)
     }
     onMessage('status', t('changes.release.done', { id: operation.id }))
-    void refresh()
+    const href = planPath(plan.id)
+    if (href !== undefined) navigate(href)
   }
   return (
     <ConfirmDialog

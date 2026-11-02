@@ -34,6 +34,7 @@ import {
 } from '@exponetdb/observability'
 import {
   type DispatchAdmission,
+  ForceReleaseKind,
   KindRegistry,
   type OperationKind,
   WORKER_ACTOR,
@@ -154,6 +155,8 @@ export function composeAccess(
     }),
     // Wave 9 Part B: backup records and engine runs (acceptance checks only; serve signs no job).
     ...backupKindsFor(rt, connector, config.backupExecution),
+    // VC-006: the release of an operation that needs attention, of any kind.
+    new ForceReleaseKind(services.store),
   ])
   const policy = registryPolicy(rules, codeVersion(), runtime.clock)
   const authConfig = parseAuthConfig({
@@ -291,6 +294,8 @@ export function workerKinds(
     ...diagnosticsKinds({ store: services.store, connector, installationId, clock: runtime.clock }),
     // Wave 9 Part B: backup records and engine runs; activation is read again when a run would start.
     ...backupKindsFor(rt, connector, backupExecution),
+    // VC-006: the release of an operation that needs attention, of any kind.
+    new ForceReleaseKind(services.store),
   ]
 }
 

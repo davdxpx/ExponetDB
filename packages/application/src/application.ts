@@ -144,18 +144,22 @@ import {
   type AssertedOutcome,
   beginIdempotent,
   completeIdempotent,
+  createPlan,
+  FORCE_RELEASE_KIND,
+  heldLocks,
   type KindRegistry,
   OperationError,
   type PlanRecord,
   type PlanSubject,
   readPlan,
+  readPolicySettings,
   releaseIdempotent,
-  requestForceRelease,
   requestVerificationRetry,
   type StoredActionClass,
   transitionOperation,
   withdrawPlan,
 } from '@exponetdb/operations'
+import { PolicyEngine } from '@exponetdb/policy'
 import {
   applyRegistryPlan,
   type RegistryAcceptContext,
@@ -2090,21 +2094,21 @@ export class Application {
   }
 
   /**
-   * Closes an operation in `needs_attention`, of any kind (VC-006, VC-055,
-   * VC-007; `operation.force_release`, operations-engine.md §4.1): a person
-   * with `operations.recover` on the plan's subject, in the Web App with a
-   * fresh re-authentication, states what happened to the change and why.
-   * serve records the request, audited; the worker closes the operation
-   * under its lease (`failed` when the person found the change not
-   * applied, else `verification_failed`), runs nothing again and releases
-   * its domains. A caller who may not read the operation gets
+   * Plans `operation.force_release` (VC-006, VC-055, VC-007, operations-engine.md
+   * §4.1): the exit of an operation in `needs_attention` of any kind. A person
+   * with `operations.recover` on its plan's subject states what happened to
+   * its change and why; the plan takes the domains the operation holds and
+   * names it, and applying it (`plan.apply`, a fresh re-authentication) closes
+   * it, running nothing of it again. `not_applied` is refused for a change the
+   * engine recorded as applied. A caller who may not read the operation gets
    * `OPERATION_NOT_FOUND`.
    */
-  async forceReleaseOperation(
+  async planForceRelease(
     caller: Caller,
     operationId: string,
     body: { readonly outcome: AssertedOutcome; readonly reason: string },
-  ): Promise<OperationView> {
+    idempotency?: { readonly key: string; readonly requestHash: string },
+  ): Promise<PlanView> {
     const reason = body.reason.trim()
     if (reason.length === 0) {
       throw new RegistryError('VALIDATION_FAILED', {
@@ -2113,11 +2117,12 @@ export class Application {
         ],
       })
     }
-    await this.#d.auth.store.transaction('application.operation.force_release', async (tx) => {
+    const stuck = async (tx: Tx) => {
       const { rows } = isId('op', operationId)
         ? await tx.query(
             'application.operation.for_release',
-            `SELECT kind, plan_id, state, apply_outcome FROM operations.operations WHERE operation_id = $1 FOR UPDATE`,
+            `SELECT kind, plan_id, state, apply_outcome FROM operations.operations
+              WHERE operation_id = $1 FOR UPDATE`,
             [operationId],
           )
         : { rows: [] }
@@ -2134,57 +2139,81 @@ export class Application {
       ) {
         throw new AuthError('OPERATION_NOT_FOUND')
       }
-      await this.#authorize(
-        tx,
-        'operation.force_release',
-        caller,
-        { kind: 'plan', subject: subjectOf(plan) },
-        plan.kind,
-      )
-      const state = row.text('state')
-      if (state !== 'needs_attention') {
-        throw new RegistryError('OPERATION_NOT_RELEASABLE', { state })
-      }
-      // The engine saw the change applied: a person cannot record it as not applied.
-      if (body.outcome === 'not_applied' && row.text('apply_outcome') !== 'unknown') {
-        throw new RegistryError('VALIDATION_FAILED', {
-          errors: [
-            {
-              path: '/outcome',
-              code: 'contradicts_outcome',
-              message: 'The change is recorded as applied; release it as applied or unknown.',
-            },
-          ],
-        })
-      }
-      const actor = actorFor(caller, 'operation.force_release')
-      const recorded = await requestForceRelease(tx, operationId, actor.identityId, {
-        outcome: body.outcome,
-        reason,
-      })
-      // One open request per operation: a second person's assertion would never be used.
-      if (!recorded) throw new RegistryError('CONFLICT')
-      await appendAuditEvent(
-        tx,
-        {
-          action: 'operation.force_release',
-          phase: 'requested',
-          actor: {
-            kind: actor.kind ?? 'human',
-            identityId: actor.identityId,
-            label: actor.label as never,
-            reauthAt: actor.reauthAt,
-          },
-          client: { clientId: actor.clientId ?? null, kind: actor.client ?? 'web' },
-          refs: { operationId: operationId as OperationId, planId: plan.planId },
+      return { row, plan }
+    }
+    return this.#plan(
+      caller,
+      'operation.force_release.plan',
+      idempotency,
+      (c) => registryActor(planActor(c)),
+      async (tx, actor) => {
+        const { row, plan } = await stuck(tx)
+        const state = row.text('state')
+        if (state !== 'needs_attention') {
+          throw new RegistryError('OPERATION_NOT_RELEASABLE', { state })
+        }
+        // The engine saw the change applied: a person cannot record it as not applied.
+        if (body.outcome === 'not_applied' && row.text('apply_outcome') !== 'unknown') {
+          throw new RegistryError('VALIDATION_FAILED', {
+            errors: [
+              {
+                path: '/outcome',
+                code: 'contradicts_outcome',
+                message: 'The change is recorded as applied; release it as applied or unknown.',
+              },
+            ],
+          })
+        }
+        const subject = subjectOf(plan)
+        const content = {
+          operationId,
+          outcome: body.outcome,
           reason,
-          changes: { from: state, outcome: body.outcome },
-          result: { status: 'succeeded' },
-        },
-        { clock: this.#d.policy.clock },
-      )
-    })
-    return operationView(this.#d.auth.store, operationId, this.publicOrigin)
+          domains: [...(await heldLocks(tx, operationId))],
+        }
+        const policy = await new PolicyEngine({
+          registry: this.#d.policy.registry,
+          providers: [],
+          codeVersion: this.#d.policy.codeVersion,
+          clock: this.#d.policy.clock,
+        }).evaluate({
+          request: {
+            kind: FORCE_RELEASE_KIND,
+            principal: {
+              kind: 'human',
+              identityId: actor.identityId,
+              client: actor.client ?? 'web',
+            },
+            subject: subject.tier === undefined ? {} : { tier: subject.tier },
+            content,
+          },
+          settings: await readPolicySettings(tx, {}),
+        })
+        return createPlan(
+          tx,
+          {
+            kind: FORCE_RELEASE_KIND,
+            kindVersion: 1,
+            actionClass: 'high',
+            actor: registryOperationActor(actor),
+            subject,
+            content,
+            analysis: {
+              operationId,
+              kind: row.text('kind'),
+              state,
+              applyOutcome: row.text('apply_outcome'),
+              statedOutcome: body.outcome,
+              effect:
+                'the operation is closed with the stated outcome and its exclusivity domains are released; nothing of it runs again',
+            },
+            policy,
+          },
+          { clock: this.#d.policy.clock },
+        )
+      },
+      async (tx) => ({ kind: 'plan', subject: subjectOf((await stuck(tx)).plan) }),
+    )
   }
 
   // ----- inline access changes (C-6: precondition, re-authentication, mutation, audit) -----

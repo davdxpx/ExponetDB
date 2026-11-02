@@ -1016,7 +1016,7 @@ describe('plan list and operation cancel over REST', () => {
   })
 
   // VC-006: needs_attention had no exit outside four migration kinds; a person now closes it.
-  it('force-releases an operation that needs attention: audited, nothing runs again, a finished one is refused', async () => {
+  it('force-releases an operation that needs attention through a plan: nothing runs again, a finished one is refused', async () => {
     const { rows } = await db.asSuperuser((c) =>
       c.query(
         `SELECT operation_id FROM operations.operations
@@ -1037,26 +1037,19 @@ describe('plan list and operation cancel over REST', () => {
     const path = `/api/v1/operations/${id}/force-release`
     const empty = await owner.browser.call('POST', path, { outcome: 'applied', reason: '' })
     expect(empty.status).toBe(422)
-    await reauth()
+    // The change was applied: "not applied" contradicts what the engine knows.
     const contradiction = await owner.browser.call('POST', path, {
       outcome: 'not_applied',
       reason: 'It never ran.',
     })
     expect([contradiction.status, contradiction.body.code]).toEqual([422, 'VALIDATION_FAILED'])
-    await reauth()
-    const released = await owner.browser.call('POST', path, {
-      outcome: 'applied',
-      reason: 'The table exists on the target; verified by hand.',
-    })
-    expect([released.status, released.body.state]).toEqual([202, 'needs_attention'])
-    // A second request while the first is open changes nothing and says so; the change was
-    // applied, so "not applied" contradicts what the engine knows.
-    const again = await owner.browser.call('POST', path, {
-      outcome: 'unknown',
-      reason: 'Someone else, at the same time.',
-    })
-    expect([again.status, again.body.code]).toEqual([409, 'CONFLICT'])
-    await drive()
+    const { plan, operation: release } = await planAndApply(
+      path,
+      { outcome: 'applied', reason: 'The table exists on the target; verified by hand.' },
+      { reauth: true },
+    )
+    expect(plan).toMatchObject({ kind: 'operation.force_release', class: 'high' })
+    expect(await operation(release.id)).toMatchObject({ state: 'succeeded' })
     expect(await operation(id)).toMatchObject({
       state: 'verification_failed',
       applyOutcome: 'applied',
@@ -1076,20 +1069,14 @@ describe('plan list and operation cancel over REST', () => {
       { outcome: 'applied', reason: 'x' },
     )
     expect([unknown.status, unknown.body.code]).toEqual([404, 'OPERATION_NOT_FOUND'])
-    const audit = await db.asSuperuser((c) =>
+    const closed = await db.asSuperuser((c) =>
       c.query(
-        `SELECT event::jsonb AS e FROM audit.audit_events
-          WHERE operation_id = $1 AND action = 'operation.force_release' ORDER BY seq`,
+        `SELECT detail AS d FROM operations.operation_events
+          WHERE operation_id = $1 AND to_state = 'verification_failed'`,
         [id],
       ),
     )
-    expect(audit.rows).toHaveLength(1)
-    expect(audit.rows[0]?.e).toMatchObject({
-      phase: 'requested',
-      actor: { kind: 'human' },
-      reason: 'The table exists on the target; verified by hand.',
-      changes: { from: 'needs_attention', outcome: 'applied' },
-    })
+    expect(closed.rows[0]?.d).toMatchObject({ supersededBy: release.id, statedOutcome: 'applied' })
   })
 
   it('rejects an approval of a kind that verifies: the operation ends canceled, nothing ran', async () => {

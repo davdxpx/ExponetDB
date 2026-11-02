@@ -5,18 +5,16 @@ description: |
   Verification campaign VC-006, VC-055, VC-007: needs_attention had an exit
   only through the recovery plans of four migration kinds, so an operation of
   any other kind, or one whose outcome stayed unknown, kept its exclusivity
-  domains for ever. A person's force release (operation.force_release) now
-  closes it: serve records the request in recovery.force_releases (as for a
-  verification retry, serve may not move an operation that started), and the
-  worker makes the transition under its lease, never running anything again.
-  The person states the outcome; one found not applied ends failed, which
-  needs the edge needs_attention -> failed: its own pure function
-  operations.release_transition_allowed, and the guard function
+  domains for ever. operation.force_release, a planned operation a person
+  applies, now names such an operation and closes it in the transaction that
+  takes its domains, as a recovery plan does. A change the person found not
+  applied ends failed, which needs the edge needs_attention -> failed: its own
+  pure function operations.release_transition_allowed, and the guard function
   (operations.operation_guard) replaced with the text of the
-  operation-supersession bundle plus one condition that accepts it.
-  operations.recovery_transition_allowed and every earlier verify.sql stay
-  true. Additive: one table, its triggers, one function and grants; no frozen
-  bundle changes.
+  operation-supersession bundle plus one condition that accepts it. An index
+  on the waiting states serves the claim and the approval window. Additive:
+  one function, one index and grants; operations.recovery_transition_allowed
+  and every earlier verify.sql stay true; no frozen bundle changes.
 dependsOn:
   - 01M61FKAJN5VP9H2E73K74NCZ2
 execution:
