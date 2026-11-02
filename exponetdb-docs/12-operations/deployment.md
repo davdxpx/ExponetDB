@@ -228,6 +228,21 @@ only) memory stays flat and parsing is as fast (1 200 parses of a 2 KiB file:
   parse only, was removed after the security review; this one replaces it.)
   The reference scan of the scratch preflight follows bodies two levels
   deep, and trees 1 000 levels deep, and stops there (`too_complex`).
+- **[DECIDED]** (verification campaign VC-013, VC-014, VC-046, VC-068, VC-078, 2026-11-02)
+  The other bounds of a request that analyses SQL, all named in the refusal and listed with
+  their constants in [`../04-migrations/migration-bundles.md`](../04-migrations/migration-bundles.md)
+  §1: block comments nest at most 32 deep (PostgreSQL's scanner is quadratic in it), a file
+  holds at most 10,000 statements, and the bundles of one lint or plan request share 400,000
+  parse tokens (six dense bundles of 660 KB ended a serve process at the 259 MiB heap). A
+  route that takes a body over 64 KiB (bundles, plans, legacy imports) authenticates the
+  caller and asks for the action's permission before it reads a byte, and at most **four**
+  such bodies are read at once per serve process (`429 RATE_LIMITED`, `Retry-After: 1`,
+  before the body); a caller without the permission is answered 403 with no buffering. Each
+  listener accepts at most **1,024** connections and closes the rest at once (an
+  unauthenticated flood held about 1,700 descriptors and 143 MB). **Not done:** the analysis
+  runs on the serving thread without a deadline (a worker thread would give one), and the
+  measured peak under these bounds in a 512 MiB container; the figures follow the earlier
+  measurement of about 650 bytes per token.
 - Memory limits: `serve` and `worker` **512 MiB** each with the flag (the
   measured peaks leave about half of it free); the limit of 1 536 MiB set
   after the restart can stay until the flag is deployed. `gateway` parses
