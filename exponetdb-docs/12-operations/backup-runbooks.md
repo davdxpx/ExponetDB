@@ -37,7 +37,15 @@ archive fails, the RPO grows with every minute and WAL piles up in
 2. Is the repository readable? The same listing shows each repository's
    `reconciliation` outcome; `backup_repository_unreadable` (critical) means
    the engine cannot read the repository at all (credentials, endpoint,
-   bucket policy, lock rules, an expired token).
+   bucket policy, lock rules, an expired token). **[DECIDED]** (verification
+   campaign fix VC-061, 2026-11-02) Its detail and the failed operation name
+   the cause: `reason: repository_unreadable` (a wrong cipher key, damaged
+   files or an engine error: restore the key from the offline copy, check the
+   files) or `reason: repository_missing` (the stanza path is gone: the
+   repository was deleted or moved, never "another cluster's stanza"). A
+   verification, backup run or drill on such a repository ends at once
+   `failed` with `BACKUP_REPOSITORY_UNAVAILABLE`, a refresh likewise with one
+   row per unread repository in `detail.repositories`.
 3. Is the host disk filling? `disk.stats@1` breakdown, category `wal`
    (RB-07).
 4. What does PostgreSQL say? The server log lines of the archive command

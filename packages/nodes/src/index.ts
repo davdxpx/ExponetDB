@@ -138,6 +138,7 @@ export {
 export {
   APPLY_JOB_SECONDS,
   awaitJob,
+  helperRefusal,
   type JobEnd,
   judgedEnd,
   outcomeOf,

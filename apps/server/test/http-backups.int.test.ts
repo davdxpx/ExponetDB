@@ -23,6 +23,7 @@ import type { BackupExecutionConfig, ServeConfig } from '../src/config/env.ts'
 import { createPublicApp, httpMetrics } from '../src/interfaces/http/app.ts'
 import {
   enrollOwner,
+  NodeFailure,
   ORIGIN,
   type Person,
   placeTarget,
@@ -74,6 +75,49 @@ interface Host {
   calls: string[]
   /** The label the next backup run reports (an existing one simulates engine-user state naming an old backup). */
   runLabel: string
+  /** VC-061: the repository's key was changed, or the repository was deleted. */
+  damage?: 'wrong_key' | 'deleted' | undefined
+}
+
+/** VC-061: what the agent states when the helper refuses at once (the run never started). */
+function damaged(host: Host, capability: string): JsonObject | NodeFailure | undefined {
+  if (host.damage === undefined) return undefined
+  const code = host.damage === 'wrong_key' ? 'repository_unreadable' : 'repository_missing'
+  switch (capability) {
+    case 'backup.list@1':
+      return host.damage === 'wrong_key'
+        ? new NodeFailure([], `helper refused (${code}): pgBackRest's catalog is not readable`)
+        : {
+            ...listing(host),
+            stanza: {
+              status: 'missing',
+              message: 'missing stanza path',
+              systemIdentifier: null,
+              cipher: 'unknown',
+            },
+            backups: [],
+            archive: [],
+          }
+    case 'backup.run@1':
+    case 'backup.verify@1':
+    case 'restore.execute@1':
+      return new NodeFailure(
+        ['start_run:running'],
+        `start_refused (${code}): the repository cannot be used`,
+      )
+    case 'restore.prepare@1':
+      return {
+        runId: 'x',
+        scratchFree: true,
+        port: 55401,
+        spaceAvailableBytes: 10_000_000_000,
+        spaceRequiredBytes: null,
+        engineCanRead: false,
+        walContinuous: null,
+        refusals: [host.damage === 'wrong_key' ? 'engine_cannot_read' : 'repository_missing'],
+      }
+  }
+  return undefined
 }
 
 function listing(host: Host): JsonObject {
@@ -112,9 +156,19 @@ function started(args: JsonObject): JsonObject {
 }
 
 function answer(host: Host) {
-  return (capability: string, args: JsonObject, job: { readonly jobId: string }): JsonObject => {
+  return (
+    capability: string,
+    args: JsonObject,
+    job: { readonly jobId: string },
+  ): JsonObject | NodeFailure => {
     host.calls.push(capability)
     const runId = String(args['runId'] ?? '')
+    const refused = damaged(host, capability)
+    if (refused !== undefined) {
+      return refused instanceof NodeFailure || capability !== 'restore.prepare@1'
+        ? refused
+        : { ...refused, runId }
+    }
     switch (capability) {
       case 'postgres.status@1':
         return STATUS
@@ -318,6 +372,19 @@ async function drive() {
     })
     if (r.status === 'idle') return
   }
+}
+
+/** The detail of the operation's last event that names an error code (VC-061). */
+async function errorDetail(operationId: string): Promise<JsonObject | undefined> {
+  const r = await db.asSuperuser((c) =>
+    c.query(
+      `SELECT detail FROM operations.operation_events WHERE operation_id = $1 AND detail ? 'errorCode'
+        ORDER BY event_id DESC LIMIT 1`,
+      [operationId],
+    ),
+  )
+  // The transition writes the outcome's detail beside its errorCode.
+  return r.rows[0]?.detail as JsonObject | undefined
 }
 
 async function view(operationId: string) {
@@ -684,6 +751,76 @@ describe('backups through REST, the worker and a simulated node', () => {
       undefined,
     ])
     expect(String(recovery.body.change?.analysis?.activation)).toMatch(/^not activated/)
+    await node.stop()
+  })
+
+  it('ends a verification, a refresh and a drill at once with a named code on a wrong key or a deleted repository (VC-061)', async () => {
+    const { w, node, host } = await setup('nonprod')
+    const repositoryId = await adopt(w)
+    await refresh(w)
+    const catalog = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/backups`)
+    const backupId = catalog.body.backups[0].id as string
+    const verifyOnce = async () => {
+      const verified = await owner.browser.call(
+        'POST',
+        `/api/v1/clusters/${w.clusterId}/backups/${backupId}/verify`,
+        {},
+      )
+      expect([verified.status, verified.body?.code], JSON.stringify(verified.body)).toEqual([
+        202,
+        undefined,
+      ])
+      const started = Date.now()
+      await drive()
+      return { operation: await view(verified.body.id), seconds: (Date.now() - started) / 1000 }
+    }
+    // A passed verification first: the drill below is allowed.
+    expect((await verifyOnce()).operation.state).toBe('succeeded')
+
+    for (const [damage, reason] of [
+      ['wrong_key', 'repository_unreadable'],
+      ['deleted', 'repository_missing'],
+    ] as const) {
+      host.damage = damage
+      host.calls.length = 0
+      const { operation, seconds } = await verifyOnce()
+      expect(
+        [
+          operation.state,
+          operation.applyOutcome,
+          operation.errorCode,
+          (await errorDetail(operation.id))?.['reason'],
+        ],
+        `${damage}: ${JSON.stringify(operation)}`,
+      ).toEqual(['failed', 'not_applied', 'BACKUP_REPOSITORY_UNAVAILABLE', reason])
+      // The refusal ends it: no wait for a run that never began.
+      expect(seconds).toBeLessThan(20)
+      expect(host.calls).not.toContain('run.status@1')
+      const refreshed = await refresh(w)
+      const repositories = (await errorDetail(refreshed.id))?.['repositories']
+      expect(
+        [refreshed.state, refreshed.errorCode, repositories],
+        `${damage}: ${JSON.stringify(refreshed)}`,
+      ).toEqual([
+        'failed',
+        'BACKUP_REPOSITORY_UNAVAILABLE',
+        [{ repositoryId, errorCode: 'BACKUP_REPOSITORY_UNAVAILABLE', reason }],
+      ])
+    }
+    // A drill on the deleted repository names it missing, not a foreign stanza.
+    const drill = await planAndApply(`/api/v1/clusters/${w.clusterId}/drills`, {
+      repositoryId,
+      selection: { kind: 'latest' },
+    })
+    expect(
+      [
+        drill.operation.state,
+        drill.operation.errorCode,
+        (await errorDetail(drill.operation.id))?.['refusals'],
+      ],
+      JSON.stringify(drill.operation),
+    ).toEqual(['failed', 'BACKUP_REPOSITORY_UNAVAILABLE', ['repository_missing']])
+    host.damage = undefined
     await node.stop()
   })
 

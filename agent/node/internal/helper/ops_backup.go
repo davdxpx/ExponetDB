@@ -770,6 +770,9 @@ func (h *Helper) clusterRun(ctx context.Context, ref clusterRef, repoRef reposit
 		if r != nil {
 			return startPlan{}, r
 		}
+		if r := stanzaRefusal(s); r != nil {
+			return startPlan{}, r
+		}
 		if id := s.systemID(); id == "" || id != ref.SystemIdentifier {
 			return startPlan{}, refuse(CodePreconditionFailed, "the stanza does not belong to cluster %s (system identifier)", ref.LocalName)
 		}
@@ -1308,6 +1311,10 @@ func restorePrepare(ctx context.Context, h *Helper, job *verify.Job) (canon.Obje
 		add("repository_not_configured")
 	case r != nil:
 		add("engine_cannot_read")
+	case stanzaState(stanza.Status.Code) == "missing":
+		add("repository_missing")
+	case stanzaState(stanza.Status.Code) == "error":
+		add("engine_cannot_read")
 	case stanza.systemID() != args.Cluster.SystemIdentifier:
 		add("system_identifier_mismatch")
 	default:
@@ -1484,16 +1491,31 @@ func (h *Helper) pgbrArchiveGaps(ctx context.Context, repo *repository, u engine
 	return gaps
 }
 
+// stanzaRefusal names a stanza that is not usable (VC-061): missing (the repository was deleted
+// or never created) or in error, never as another cluster's stanza.
+func stanzaRefusal(s *pgbrStanza) *Refusal {
+	switch stanzaState(s.Status.Code) {
+	case "missing":
+		return refuse(CodeRepositoryMissing, "the repository has no stanza %s (%s)", s.Name, Redact(s.Status.Message, 128))
+	case "error":
+		return refuse(CodeRepositoryUnreadable, "pgBackRest reports the stanza in error (%s)", Redact(s.Status.Message, 128))
+	}
+	return nil
+}
+
 func (h *Helper) pgbrInfo(ctx context.Context, repo *repository, u engineUser) (*pgbrStanza, *Refusal) {
 	optional, bind := pgbrWritable(repo.pgbrPaths)
 	out, err := h.sup().runAs(ctx, execSpec{UID: u.UID, GID: u.GID, Path: PgBackRest,
 		Args: pgbrInfoArgs(h.path(repo.pgbrConfig), includeOf(h, repo), repo.stanza(), repo.repoIndex(), ""), Optional: optional, Bind: bind, Timeout: 30 * time.Second})
 	if err != nil || out.ExitCode != 0 {
-		return nil, refuse(CodeFailed, "pgBackRest could not read the repository")
+		return nil, refuse(CodeRepositoryUnreadable, "pgBackRest could not read the repository (a wrong cipher key, damaged files or an engine error)")
 	}
 	s, err := parsePgbrInfo(out.Stdout, repo.stanza())
+	if errors.Is(err, errStanzaNotReported) {
+		return nil, refuse(CodeFailed, "pgBackRest did not report the stanza")
+	}
 	if err != nil {
-		return nil, refuse(CodeFailed, "pgBackRest's catalog is not readable")
+		return nil, refuse(CodeRepositoryUnreadable, "pgBackRest's catalog is not readable (a wrong cipher key or damaged files)")
 	}
 	return s, nil
 }

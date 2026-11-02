@@ -72,6 +72,8 @@ export interface ReconcileInput {
 export interface ReconcileOutcome {
   readonly outcome: 'ok' | 'partial' | 'failed'
   readonly errorCode: string | null
+  /** Why the repository was not mirrored (VC-061): `repository_missing`, `repository_unreadable`, `identity_mismatch`. */
+  readonly reason?: string
   readonly entries: number
   readonly inserted: number
   readonly missing: number
@@ -227,6 +229,7 @@ export async function reconcileCatalog(tx: Tx, input: ReconcileInput): Promise<R
   if (input.engine === 'pgbackrest') {
     const stanza = result.stanza
     if (stanza === null || stanza.status !== 'ok') {
+      const reason = stanza?.status === 'missing' ? 'repository_missing' : 'repository_unreadable'
       await finding(
         tx,
         clusterId,
@@ -234,13 +237,14 @@ export async function reconcileCatalog(tx: Tx, input: ReconcileInput): Promise<R
         'critical',
         key('backup_repository_unreadable'),
         'The engine could not read the repository (stanza missing or in error).',
-        { repositoryId, status: stanza?.status ?? 'missing' },
+        { repositoryId, status: stanza?.status ?? 'missing', reason },
         nowMs,
       )
       return record(
         {
           outcome: 'failed',
           errorCode: 'BACKUP_REPOSITORY_UNAVAILABLE',
+          reason,
           entries: 0,
           inserted: 0,
           missing: 0,
@@ -263,6 +267,7 @@ export async function reconcileCatalog(tx: Tx, input: ReconcileInput): Promise<R
         {
           outcome: 'failed',
           errorCode: 'RESTORE_TARGET_MISMATCH',
+          reason: 'identity_mismatch',
           entries: 0,
           inserted: 0,
           missing: 0,

@@ -1466,9 +1466,9 @@ func TestStartsCheckTheStanzasCluster(t *testing.T) {
 		{Name: "retention", Value: canon.Object{{Name: "fullCount", Value: canon.Number(1)}, {Name: "differentialCount", Value: canon.Null{}}, {Name: "logicalDays", Value: canon.Null{}}}},
 		{Name: "keepLabels", Value: canon.Array{}}}), CodePreconditionFailed)
 	b.mustRefuse(OpRestoreExecute, b.job("restore.execute", restoreJobArgs(runA, 55402)), CodePreconditionFailed)
-	// A stanza without a database (never created): refused too.
+	// A stanza without a database (never created): refused too, named as missing (VC-061).
 	b.info = `[{"name":"main","status":{"code":1,"message":"missing stanza path"},"db":[],"backup":[],"archive":[]}]`
-	b.mustRefuse(OpBackupRun, b.job("backup.run", runArgs(runA, "full", pgbrRepo())), CodePreconditionFailed)
+	b.mustRefuse(OpBackupRun, b.job("backup.run", runArgs(runA, "full", pgbrRepo())), CodeRepositoryMissing)
 	if len(b.run.find(SystemdRun, "--unit=")) != 0 {
 		t.Fatal("a run started")
 	}

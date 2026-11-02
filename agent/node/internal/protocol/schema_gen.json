@@ -2960,7 +2960,8 @@
               "target_outside_window",
               "system_identifier_mismatch",
               "no_free_port",
-              "repository_not_configured"
+              "repository_not_configured",
+              "repository_missing"
             ],
             "type": "string"
           },

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,5 +119,45 @@ func TestBackupCapabilitiesForwardToTheHelper(t *testing.T) {
 	h.run, h.ops = run, nil
 	if _, err := caps["backup.run@1"].Run(context.Background(), &verify.Job{}, run); !errors.Is(err, agent.ErrCanceled) || len(h.ops) != 0 {
 		t.Fatalf("canceled start: %v %v", err, h.ops)
+	}
+}
+
+// TestADefiniteHelperRefusalOfAStartSaysTheRunDidNotStart (VC-061): the helper refuses a start
+// before any unit runs; the agent says so (start_refused and the helper's code), so the Control
+// Plane does not wait for a run that never began. A refusal that may have started it does not.
+func TestADefiniteHelperRefusalOfAStartSaysTheRunDidNotStart(t *testing.T) {
+	cfg := &config.Config{Instances: []config.Instance{{LocalName: "17/main"}}}
+	h := &recordingHelper{}
+	e := &Env{Config: cfg, Helper: h}
+	caps := map[string]agent.Capability{}
+	for _, c := range All(e) {
+		caps[c.Key()] = c
+	}
+	call := func(key string, refusal *helperproto.ErrorBody) error {
+		c := caps[key]
+		run := agent.NewRun(c.EffectStep(), time.Now, nil)
+		h.run, h.err = run, refusal
+		_, err := c.Run(context.Background(), &verify.Job{Capability: key}, run)
+		if err == nil {
+			t.Fatalf("%s: no error", key)
+		}
+		return err
+	}
+	for _, key := range []string{"backup.run@1", "backup.verify@1", "backup.expire@1", "restore.execute@1", "restore.verify@1"} {
+		err := call(key, &helperproto.ErrorBody{Code: "repository_unreadable", Message: "pgBackRest's catalog is not readable"})
+		if want := "start_refused (repository_unreadable): pgBackRest's catalog is not readable"; err.Error() != want {
+			t.Fatalf("%s: %q, want %q", key, err.Error(), want)
+		}
+		for _, code := range []string{helperproto.CodeOutcomeUnknown, helperproto.CodeReplayed} {
+			if err := call(key, &helperproto.ErrorBody{Code: code, Message: "x"}); strings.HasPrefix(err.Error(), "start_refused") {
+				t.Fatalf("%s: %s may have started a run: %q", key, code, err.Error())
+			}
+		}
+	}
+	// A cancel or a discard the helper refused is not a start.
+	for _, key := range []string{"run.cancel@1", "restore.discard@1"} {
+		if err := call(key, &helperproto.ErrorBody{Code: helperproto.CodeFailed, Message: "x"}); strings.HasPrefix(err.Error(), "start_refused") {
+			t.Fatalf("%s: %q", key, err.Error())
+		}
 	}
 }

@@ -82,8 +82,10 @@ func parsePgbrInfo(out []byte, stanza string) (*pgbrStanza, error) {
 			return &list[i], nil
 		}
 	}
-	return nil, errors.New("helper: the engine did not report the stanza")
+	return nil, errStanzaNotReported
 }
+
+var errStanzaNotReported = errors.New("helper: the engine did not report the stanza")
 
 var (
 	lsnRE     = regexp.MustCompile(`^[0-9A-F]{1,8}/[0-9A-F]{1,8}$`)

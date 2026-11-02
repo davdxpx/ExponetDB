@@ -1519,6 +1519,8 @@ const RestorePrepareResult = z
           'system_identifier_mismatch',
           'no_free_port',
           'repository_not_configured',
+          // VC-061: the repository has no stanza (deleted or never created).
+          'repository_missing',
         ]),
       )
       .max(8),

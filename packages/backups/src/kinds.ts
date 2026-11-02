@@ -569,7 +569,7 @@ abstract class RunKind implements OperationKind {
       )
       return 'applied'
     }
-    const outcome = outcomeOf(end, capability) ?? 'unknown'
+    const outcome = repositoryOutcome(outcomeOf(end, capability) ?? 'unknown')
     // A start whose effect may have begun is not known to have failed: the run stays `unknown`, never retried.
     await this.d.store.query(
       'backups.kind.run.not_started',
@@ -902,6 +902,18 @@ export class BackupVerifyKind extends RunKind {
   }
 }
 
+/** The helper's refusals that name the repository's state (VC-061). */
+const REPOSITORY_REASONS = new Set(['repository_missing', 'repository_unreadable'])
+
+/** A node failure that names the repository's state is the repository's code (VC-061). */
+function repositoryOutcome(outcome: ExecutionOutcome): ExecutionOutcome {
+  if (typeof outcome !== 'object' || outcome.errorCode !== 'NODE_CAPABILITY_FAILED') return outcome
+  const reason = outcome.detail?.['reason']
+  return typeof reason === 'string' && REPOSITORY_REASONS.has(reason)
+    ? { ...outcome, errorCode: 'BACKUP_REPOSITORY_UNAVAILABLE' }
+    : outcome
+}
+
 /** The tier the plan bound in its subject; a missing tier is unknown and the activation check treats it as production. */
 function tierOf(plan: PlanRecord): 'prod' | 'nonprod' | undefined {
   const subject = plan.body['subject']
@@ -935,10 +947,11 @@ export async function refreshRepository(
   ctx: ExecutionContext,
   c: Body,
   job: (capability: NodeCapabilityKey, args: JsonObject) => Promise<JobEnd>,
-): Promise<'ok' | 'failed'> {
+): Promise<RefreshOutcome> {
   const repositoryId = c.text('repositoryId')
   const repo = await getRepository(d.store, repositoryId)
-  if (repo === undefined || repo.state === 'retired') return 'failed'
+  if (repo === undefined || repo.state === 'retired')
+    return { repositoryId, errorCode: 'BACKUP_REPOSITORY_UNAVAILABLE', reason: 'retired' }
   const args = {
     cluster: { localName: c.text('localName'), systemIdentifier: c.text('systemIdentifier') },
     repository: {
@@ -968,7 +981,13 @@ export async function refreshRepository(
         nowMs: d.clock.nowMs(),
       }),
     )
-    return 'failed'
+    const failure = repositoryOutcome(outcomeOf(end, 'backup.list@1') ?? 'unknown')
+    const reason = typeof failure === 'object' ? failure.detail?.['reason'] : undefined
+    return {
+      repositoryId,
+      errorCode: typeof failure === 'object' ? failure.errorCode : 'NODE_CAPABILITY_FAILED',
+      reason: typeof reason === 'string' ? reason : 'not_read',
+    }
   }
   const archive = await latestArchive(d.store, repo.clusterId)
   const outcome = await d.store.transaction('backups.kind.refresh.reconcile', async (tx) => {
@@ -992,8 +1011,19 @@ export async function refreshRepository(
       nowMs: d.clock.nowMs(),
     })
   })
-  return outcome.outcome === 'failed' ? 'failed' : 'ok'
+  return outcome.outcome === 'failed'
+    ? {
+        repositoryId,
+        errorCode: outcome.errorCode ?? 'BACKUP_REPOSITORY_UNAVAILABLE',
+        reason: outcome.reason ?? 'not_mirrored',
+      }
+    : 'ok'
 }
+
+/** One repository's refresh: `ok`, or why it was not mirrored (VC-061: a refresh names it). */
+export type RefreshOutcome =
+  | 'ok'
+  | { readonly repositoryId: string; readonly errorCode: string; readonly reason: string }
 
 /** `backup.catalog.refresh` (inline, low): reads every observed repository of the cluster. */
 export class CatalogRefreshKind implements OperationKind {
@@ -1035,6 +1065,7 @@ export class CatalogRefreshKind implements OperationKind {
       [c.text('clusterId')],
     )
     let ok = 0
+    const failures: JsonObject[] = []
     for (const row of rows) {
       const body = new Body({
         ...(ctx.plan.body['content'] as JsonObject),
@@ -1055,14 +1086,17 @@ export class CatalogRefreshKind implements OperationKind {
         ),
       )
       if (outcome === 'ok') ok++
+      else failures.push({ ...outcome })
     }
-    return rows.length === 0
-      ? 'not_applied'
-      : ok === rows.length
-        ? 'applied'
-        : ok > 0
-          ? 'partially_applied'
-          : 'not_applied'
+    if (rows.length === 0) return 'not_applied'
+    if (ok === rows.length) return 'applied'
+    if (ok > 0) return 'partially_applied'
+    // No repository was read: the first one's code names the operation's failure.
+    return {
+      outcome: 'not_applied',
+      errorCode: String(failures[0]?.['errorCode']),
+      detail: { repositories: failures },
+    }
   }
 
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {
@@ -1230,9 +1264,11 @@ abstract class RestoreRunKind extends RunKind {
       return {
         refused: {
           outcome: 'not_applied',
-          errorCode: refusals.includes('system_identifier_mismatch')
-            ? 'RESTORE_TARGET_MISMATCH'
-            : 'RESTORE_SOURCE_INVALID',
+          errorCode: refusals.includes('repository_missing')
+            ? 'BACKUP_REPOSITORY_UNAVAILABLE'
+            : refusals.includes('system_identifier_mismatch')
+              ? 'RESTORE_TARGET_MISMATCH'
+              : 'RESTORE_SOURCE_INVALID',
           detail: { refusals },
         },
       }

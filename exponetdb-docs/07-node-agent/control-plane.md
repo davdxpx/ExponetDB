@@ -432,6 +432,22 @@ host it journals a step named after the capability's effect step with state
 `running` (`agent.Run.BeginEffect`), so a `failed` statement says whether the
 host may have changed.
 
+**[DECIDED]** (verification campaign fix VC-061, 2026-11-02) A run start
+(`start_run`: `backup.run`, `backup.verify`, `backup.expire`,
+`restore.execute`, `restore.verify`) journals its effect step before it asks
+the root helper, but the helper starts the run's unit last: when it refuses
+with any code but `outcome_unknown` (systemd-run did not answer) or `replayed`,
+no unit runs. The agent then states the excerpt
+`start_refused (<helper code>): <message>`, and the Control Plane judges that
+statement as stopped before the effect point (`not_applied`,
+`NODE_CAPABILITY_FAILED` with `detail.reason` = the helper code; a backup kind
+turns `repository_missing` and `repository_unreadable` into
+`BACKUP_REPOSITORY_UNAVAILABLE`) instead of waiting for a run that never began
+and ending `OUTCOME_UNKNOWN`. Any other helper refusal is stated as
+`helper refused (<code>): <message>`, whose code is kept as `detail.reason`
+and proves nothing about the effect. Only the excerpt's start is read; a
+prefix in front of it (the run limit) leaves the job unknown.
+
 **Reconciliation** (**[DECIDED]** Wave 5 Phase 5 review) never runs the apply
 job again, and never judges the host while the job, or an effect it began,
 can still change it:

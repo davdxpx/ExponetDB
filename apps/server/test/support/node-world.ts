@@ -404,16 +404,26 @@ export interface SimulatedJob {
   open(field: string, sealed: unknown): Uint8Array
 }
 
+/** A signed `failed` statement: the steps the agent journaled (`name:state`) and its excerpt. */
+export class NodeFailure {
+  readonly steps: readonly string[]
+  readonly excerpt: string
+  constructor(steps: readonly string[], excerpt: string) {
+    this.steps = steps
+    this.excerpt = excerpt
+  }
+}
+
 /**
  * What the simulated node answers per capability: a result that passes the
- * capability's schema, or `hold` to stop after the start, as an agent that
- * died before its statement (the job's lease then runs out).
+ * capability's schema, a `NodeFailure`, or `hold` to stop after the start, as
+ * an agent that died before its statement (the job's lease then runs out).
  */
 export type NodeAnswers = (
   capability: string,
   args: JsonObject,
   job: SimulatedJob,
-) => JsonObject | 'hold' | Promise<JsonObject | 'hold'>
+) => JsonObject | NodeFailure | 'hold' | Promise<JsonObject | NodeFailure | 'hold'>
 
 export interface SimulatedNode {
   readonly nodeId: string
@@ -605,16 +615,38 @@ export async function simulatedNode(
     if (answered === 'hold') {
       return
     }
-    const unsigned = {
-      jobId,
-      nodeId,
-      finishedAt: new Date().toISOString(),
-      outcome: 'succeeded' as const,
-      rejectionReason: null,
-      result: answered,
-      steps: [],
-      outputExcerpt: null,
-    }
+    const finishedAt = new Date().toISOString()
+    const unsigned =
+      answered instanceof NodeFailure
+        ? {
+            jobId,
+            nodeId,
+            finishedAt,
+            outcome: 'failed' as const,
+            rejectionReason: null,
+            result: null,
+            steps: answered.steps.map((step, index) => {
+              const [name = '', state = ''] = step.split(':')
+              return {
+                index,
+                name,
+                state: state as 'running' | 'succeeded' | 'failed' | 'skipped',
+                at: finishedAt,
+                message: null,
+              }
+            }),
+            outputExcerpt: answered.excerpt,
+          }
+        : {
+            jobId,
+            nodeId,
+            finishedAt,
+            outcome: 'succeeded' as const,
+            rejectionReason: null,
+            result: answered,
+            steps: [],
+            outputExcerpt: null,
+          }
     const value = signResult(
       nsk,
       { installationId: db.installationId, nodeId, jobId, argsHash: String(envelope['argsHash']) },
