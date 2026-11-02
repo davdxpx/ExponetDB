@@ -1,4 +1,4 @@
-import { lstat, readdir, readFile } from 'node:fs/promises'
+import { lstat, open, readdir, readFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import {
   BUNDLE_FILE_LIMITS,
@@ -92,11 +92,28 @@ export function bundleRoots(project: LocalProject): string[] {
 // ignoreBOM: a byte order mark stays in the text (the server refuses it as the local check does).
 const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
 
+/** At most `max` bytes of a file, read through a handle so a huge file is never held whole. */
+async function readUpTo(file: string, max: number): Promise<Uint8Array> {
+  const handle = await open(file, 'r')
+  try {
+    const buffer = new Uint8Array(max)
+    let filled = 0
+    while (filled < max) {
+      const { bytesRead } = await handle.read(buffer, filled, max - filled, filled)
+      if (bytesRead === 0) break
+      filled += bytesRead
+    }
+    return buffer.subarray(0, filled)
+  } finally {
+    await handle.close()
+  }
+}
+
 /**
- * Every bundle directory of the roots, with its exact bytes. A symbolic
- * link, an unexpected file or an oversized file is passed on as it is, so
- * the shared validation refuses it with its reason; a link is never
- * followed.
+ * Every bundle directory of the roots, with its exact bytes. An unexpected
+ * file or an oversized file (read up to its limit + 1 byte) is passed on as
+ * it is, so the shared validation refuses it with its reason; a link or a
+ * directory in place of a file is refused here and never followed.
  */
 export async function readBundles(project: LocalProject): Promise<LocalBundle[]> {
   const bundles: LocalBundle[] = []
@@ -121,18 +138,15 @@ export async function readBundles(project: LocalProject): Promise<LocalBundle[]>
       const files = new Map<string, Uint8Array>()
       for (const file of await readdir(path, { withFileTypes: true })) {
         if (!file.isFile()) {
-          // Still reported: the validation refuses an unexpected entry by name.
-          files.set(file.name, new Uint8Array())
-          continue
+          // A link or a directory is never followed and never read as an empty file (VC-093).
+          throw new CliError(
+            'VALIDATION_FAILED',
+            `${join(path, file.name)} is not a regular file (links are not followed).`,
+          )
         }
         const limit = (BUNDLE_FILE_LIMITS as Record<string, number>)[file.name] ?? 0
-        const info = await lstat(join(path, file.name))
-        // An oversized file is read only up to the limit + 1 byte: enough for the refusal.
-        const bytes = await readFile(join(path, file.name))
-        files.set(
-          file.name,
-          new Uint8Array(info.size > limit + 1 ? bytes.subarray(0, limit + 1) : bytes),
-        )
+        // An oversized file is read only up to the limit + 1 byte: enough for the refusal (VC-086).
+        files.set(file.name, await readUpTo(join(path, file.name), limit + 1))
       }
       bundles.push({
         directory: entry.name,
