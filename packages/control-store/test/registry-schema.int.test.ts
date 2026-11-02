@@ -799,6 +799,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M61FKAJN5VP9H2E73K74NCZ2',
         // Verification campaign VC-006 (2026-11-02): a person force-releases a needs_attention operation.
         '01M6DV2NQJDYWP4GXT46DTRK2S',
+        // OD-69 (b), verification campaign VC-003 (2026-11-02): a marked event at the head's time.
+        '01M6E66KZSPYHEF2Y7D4YJYWDH',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

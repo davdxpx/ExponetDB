@@ -2055,7 +2055,8 @@ History:
   continues from the real clock (monthly partitions then hold an overlapping range).
 - **Recommendation.** (b) with the bound; (c) only if the owner wants no event time that is not
   the real time.
-- **Blocks.** Nothing built here.
+- **Built.** 2026-11-02 on `fix/verification-campaign-group-a-followups`: the additive bundle `audit-clock-clamp` (the guard accepts the head's time while the head is at most 24 h ahead, with a row in the new append-only `audit.clock_skew_marks`; ac1 and `exponetdb.audit/v1` do not change, so the mark is a row, not an event member); the writer writes the mark and the event in one transaction; `AUDIT_CLOCK_SKEW` beyond 24 h.
+- **Blocks.** Nothing.
 
 ## OD-70. Control Store disk and bundle ingest
 
