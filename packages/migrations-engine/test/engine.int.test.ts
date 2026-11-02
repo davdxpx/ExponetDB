@@ -1097,6 +1097,44 @@ describe('the Control Store volume', () => {
     // With room on the volume the same ingest stores.
     expect((await ingest(used * 10))[0]?.status).toBe('stored')
   })
+
+  // Review of OD-70 (b): a plan with inline bundles stores revisions too; the refusal applies there.
+  it('refuses a plan whose inline bundles would be stored on a volume above 90 %', async () => {
+    const id = ulid()
+    const size = await h.serve.query(
+      'test.volume.size.plan',
+      'SELECT pg_database_size(current_database())::bigint AS n',
+    )
+    const used = Number(size.rows[0]?.text('n'))
+    const refused = await h.serve
+      .transaction('test.volume.plan', (tx: Tx) =>
+        planMigrationApply(
+          tx,
+          { ...ctx, volumeBytes: Math.ceil(used / 0.95) },
+          a,
+          staging.targetId,
+          {
+            defaults: DEFAULTS,
+            lintProfile: 'standard',
+            bundles: [
+              bundle({
+                id,
+                name: 'volume-plan',
+                up: 'CREATE TABLE public.volume_plan (id int);\n',
+              }),
+            ],
+          } as MigrationPlanRequest,
+        ),
+      )
+      .catch((e: unknown) => e)
+    expect(refused).toMatchObject({ code: 'CONTROL_STORE_VOLUME_FULL' })
+    const stored = await h.serve.query(
+      'test.volume.plan.stored',
+      'SELECT count(*)::int AS n FROM migrations.bundle_revisions WHERE migration_id = $1',
+      [id],
+    )
+    expect(stored.rows[0]?.int('n')).toBe(0)
+  })
 })
 
 /**

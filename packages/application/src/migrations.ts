@@ -198,6 +198,7 @@ export class MigrationUseCases {
       policy: plans.policy,
       installationId: plans.installationId,
       connector: plans.connector,
+      volumeBytes: this.#volumeBytes,
     }
   }
 
