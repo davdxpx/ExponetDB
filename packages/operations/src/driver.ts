@@ -11,7 +11,7 @@ import {
   releaseQueuedLease,
   renewLease,
 } from './leases.ts'
-import { acquireLocks } from './locks.ts'
+import { acquireLocks, recordLockWait } from './locks.ts'
 import { type PlanRecord, readPlan } from './plans.ts'
 import { closeSuperseded } from './supersede.ts'
 import { type OperationRecord, readOperation, transitionOperation } from './transitions.ts'
@@ -176,15 +176,31 @@ async function drive(
 
   if (claim.next === 'start') {
     const started = await store.transaction('operations.driver.start', async (tx) => {
-      await closeSuperseded(tx, id, kind, plan, clock)
-      const locks = await acquireLocks(tx, id, kind.exclusivity(plan))
-      if (!locks.acquired) {
-        return locks
+      // The close of a superseded operation frees the domain this one takes, so it comes first;
+      // it holds only if the locks, the bindings and the admission pass too (VC-044): a refusal
+      // or a wait rolls back to the savepoint and the named operation keeps its state and lock.
+      const gate = await tx
+        .savepoint(async (sp) => {
+          await closeSuperseded(sp, id, kind, plan, clock)
+          const locks = await acquireLocks(sp, id, kind.exclusivity(plan))
+          if (!locks.acquired) throw new StartRefused(locks)
+          let found = await kind.checkBindings(plan)
+          if (found.length === 0 && options.admit !== undefined) {
+            found = await options.admit(sp, plan, operation)
+          }
+          if (found.length > 0) throw new StartRefused(found)
+          return undefined
+        })
+        .catch((error: unknown) => {
+          if (error instanceof StartRefused) return error.outcome
+          throw error
+        })
+      if (gate !== undefined && 'acquired' in gate) {
+        // The savepoint took the wait's event with it.
+        await recordLockWait(tx, id, gate.domain, gate.blockingOperationId)
+        return gate
       }
-      let changed = await kind.checkBindings(plan)
-      if (changed.length === 0 && options.admit !== undefined) {
-        changed = await options.admit(tx, plan, operation)
-      }
+      const changed = gate ?? []
       if (changed.length > 0) {
         // The applying identity no longer holds the plan's authority (E27): that is the reason, not staleness.
         const revoked = changed.some((b) => b.binding === 'authorization')
@@ -458,4 +474,15 @@ function context(
   readmit?: ExecutionContext['readmit'],
 ): ExecutionContext {
   return { plan, operationId, signal, leaseOwner, ...(readmit === undefined ? {} : { readmit }) }
+}
+
+/** A start the locks or the bindings refused: carried out of the savepoint it rolls back. */
+class StartRefused extends Error {
+  readonly outcome:
+    | Extract<Awaited<ReturnType<typeof acquireLocks>>, { acquired: false }>
+    | Awaited<ReturnType<OperationKind['checkBindings']>>
+  constructor(outcome: StartRefused['outcome']) {
+    super('the start was refused')
+    this.outcome = outcome
+  }
 }

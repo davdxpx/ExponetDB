@@ -385,6 +385,59 @@ describe('a recovery operation closes the needs_attention operation that holds i
     expect(rows[0]?.text('by')).toBe(fix.id)
   })
 
+  // VC-044: the close ran before the recovery's own locks, bindings and admission, and committed.
+  it('leaves the named operation needing attention, with its lock, when the recovery is refused or waits', async () => {
+    const tgt = target()
+    const other = target()
+    const first = await stuck('synthetic.stucke', { verify: async () => 'error' }, tgt)
+    const still = async () => {
+      expect(await readOperation(as('exdb_worker'), first.id)).toMatchObject({
+        state: 'needs_attention',
+        leaseOwner: null,
+      })
+      expect(await heldLocks(as('exdb_worker'), first.id)).toEqual([`target:${tgt}:schema`])
+    }
+    // (a) The recovery's plan is stale at dispatch: it fails, and closes nothing.
+    // The target changes after the plan was accepted: stale only at dispatch.
+    let changed = false
+    const staleKind = syntheticKind('synthetic.fixstale', {
+      bindings: async () => (changed ? [{ binding: 'fingerprint' }] : []),
+    })
+    const stale = await queue(staleKind, [`target:${tgt}:schema`], [first.id])
+    changed = true
+    expect(await run(staleKind)).toMatchObject({
+      status: 'done',
+      operation: { operationId: stale, state: 'failed' },
+    })
+    await still()
+    // (b) The recovery waits for another domain held by a running operation: it closes nothing.
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const holder = syntheticKind('synthetic.holder', {
+      execute: async () => {
+        await gate
+        return 'applied'
+      },
+    })
+    const holding = await queue(holder, [`target:${other}:schema`])
+    const running = run(holder)
+    await sleep(200)
+    const waitKind = syntheticKind('synthetic.fixwait')
+    const waiting = await queue(
+      waitKind,
+      [`target:${tgt}:schema`, `target:${other}:schema`],
+      [first.id],
+    )
+    expect(await run(waitKind)).toMatchObject({ status: 'waiting', blockingOperationId: holding })
+    await still()
+    // The wait is still recorded (the views read waitingFor from it).
+    expect(await events(waiting)).toContain('locks_waiting')
+    release()
+    await running
+  })
+
   it('closes only an operation in needs_attention that holds a domain the recovery needs', async () => {
     const tgt = target()
     const other = target()

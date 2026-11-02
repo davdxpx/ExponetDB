@@ -369,7 +369,11 @@ keeps its fifteen pairs). Its locks go with the transition, the audit event
 `supersededBy` and the outcomes it had; a verification outcome of `error` or
 `pending` becomes `failed`, and an apply outcome of `unknown` becomes
 `partially_applied`, the only finished state that admits work stopped
-part-way. An operation that is not in `needs_attention`, holds none of the
+part-way. **[DECIDED]** (verification campaign fix VC-044, 2026-11-02) The
+close holds only if the recovery itself starts: it runs under a savepoint
+together with the recovery's locks, its bindings and its admission, and a
+refusal (`PLAN_STALE`, `GRANT_REVOKED`) or a wait for another domain rolls
+it back, so the named operation keeps `needs_attention` and its lock. An operation that is not in `needs_attention`, holds none of the
 recovery's domains, or is not a valid id is left alone. Nothing is
 re-executed (C-16), and a plan whose named operation is no longer in
 `needs_attention` is stale (`PLAN_STALE`, binding `operation`). The retry
