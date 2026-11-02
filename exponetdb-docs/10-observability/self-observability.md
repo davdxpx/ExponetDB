@@ -111,7 +111,7 @@ nowhere); `GET /nodes/certificates` shows the certificates the store holds and
 names the ones it cannot know. Anything the read cannot observe is listed in
 `unobserved` with a reason, never counted as operational.
 **[DECIDED]** (verification campaign fix VC-003, 2026-11-02) Every role's
-readiness has the degrading check `audit_chain`: it warns `audit_clock_skew`
+readiness has the degrading check `audit_clock`: it warns `audit_clock_skew`
 when the newest audit event lies more than a minute ahead of the database
 clock (a clock step forward and back). Every audited change is then refused
 with 503 `AUDIT_CLOCK_SKEW` naming both times, reads keep working, and the

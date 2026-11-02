@@ -2038,7 +2038,7 @@ History:
   (+3 h on the stack) while events are written, then back, leaves the head in the future: every
   audited change, sign-in included, is refused until the clock passes the head (2 h 54 min on
   the stack); reads keep working. The fix of 2026-11-02 names it (503 `AUDIT_CLOCK_SKEW` with
-  `headAt` and `databaseNow`, readiness check `audit_chain` warns `audit_clock_skew`, RB-16).
+  `headAt` and `databaseNow`, readiness check `audit_clock` warns `audit_clock_skew`, RB-16).
   Should the chain tolerate or clamp such a skew, and is a repair needed?
 - **Why it matters.** On one host (as `reos-01` runs it) the Control Store's clock and the
   roles' clocks step together, so the events of the skew are accepted and the wedge follows the

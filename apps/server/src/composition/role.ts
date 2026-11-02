@@ -152,7 +152,7 @@ export async function composeRole(
     },
     {
       // VC-003: a chain head ahead of the clock stops every audited change, reads go on.
-      name: 'audit_chain',
+      name: 'audit_clock',
       severity: 'degrading',
       run: async () =>
         (await auditClockSkew(store)) === undefined ? pass() : warn('audit_clock_skew'),
