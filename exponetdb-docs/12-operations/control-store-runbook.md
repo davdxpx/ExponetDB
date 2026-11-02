@@ -105,8 +105,11 @@ Trigger: Control Plane `down` (every role not ready with
    the roles and the resource? Login refused (password rotated without
    updating the roles)? Do not restore before ruling these out.
 2. **Restore** (data loss only). Create a new isolated PostgreSQL 17 resource
-   with maintenance database `postgres` and a temporary superuser named
-   `restore_admin`, different from every role in the saved export. Do not
+   with maintenance database `postgres` and a temporary superuser with a
+   **fresh name for this recovery**, for example `restore_admin_20261102_1530`,
+   different from every role in the saved export (**[DECIDED]** VC-141: the
+   superuser of an earlier recovery is part of every later dump, so the same
+   name a second time stops the restore at `role ... already exists`). Do not
    run bootstrap SQL first: the complete `pg_dumpall` export creates the
    roles, databases and privileges. Decompress it and feed it to
    `psql -U restore_admin -d postgres -v ON_ERROR_STOP=1` inside the scratch
@@ -115,19 +118,44 @@ Trigger: Control Plane `down` (every role not ready with
    every expected bundle must be applied and verified with matching content.
    Apply any later release's additive bundles through `control-store migrate`
    with `exdb_migrate`, never replay old `up.sql` to repair missing grants.
+   Once the roles are ready (step 5), take the temporary superuser's login away
+   (`ALTER ROLE restore_admin_20261102_1530 NOLOGIN`, as a superuser of the
+   platform) and record its name in the incident.
 3. **Integrity.** `control-store status` must be `current`; `audit verify`
    must pass; compare the latest exported checkpoint (bucket) with the
    restored chain: `audit verify --from-checkpoint <seq>` for the newest
    exported checkpoint whose sequence exists in the restore. Events after the
-   dump are lost; record the gap (the exported checkpoints show its size) as
-   part of the incident. A checkpoint that does not match the restored chain
+   dump are lost; record the gap as part of the incident. **[DECIDED]**
+   (VC-143) checkpoints are made and exported **hourly** (`audit.checkpoint`):
+   the newest exported checkpoint proves the chain up to its sequence and
+   time, the restored head says where the dump ended, and the events between
+   the dump and the loss are known only as a time span (at most an hour past
+   the newest exported checkpoint), never as a count. A checkpoint that does not match the restored chain
    is a security incident (RB-12).
 4. **Keys.** `keyring status` with the offline keyring: no missing key. If
    the keyring is lost too, follow RB-14.
 5. **Roles.** Update `EXPONETDB_CONTROL_STORE_URL` of each resource if the
    passwords changed; start worker, serve, gateway; all must become ready.
-6. **Reconcile** ledger mirrors against target ledgers (from Wave 4, F30); in
-   Wave 2 there are no managed targets.
+6. **Reconcile every managed target** (**[DECIDED]** VC-010, 2026-11-02).
+   The restored mirror misses what was planned and applied after the dump;
+   each such target answers `LEDGER_DIVERGENCE` and blocks schema changes
+   until a person adopts its ledger. For each target (`exponetdb target
+   list`), nonprod first:
+   1. `exponetdb migration status --target <path>`: in sync, go on with the
+      next target; out of sync or `LEDGER_DIVERGENCE`:
+   2. `exponetdb migration ledger reconcile --target <path> --note
+      "Control Store restored from the dump of <time>; the target ledger is
+      the truth"` (scope `migrations.import`, a person): it plans adopting the
+      target's ledger; the mirror rows that differ move to a history, nothing
+      is deleted;
+   3. apply it (`--apply`, or `exponetdb plan apply <plan>`): on nonprod that
+      is all (6 steps, about 6 s per target on the stack); on production the
+      apply needs a re-authentication within 300 s (the CLI prints the step-up
+      address and code, a person confirms) and then an approval by a person
+      (10 steps);
+   4. `exponetdb migration status --target <path>` again: in sync.
+   A target the dump already knew in its current state needs nothing. Never
+   re-run a migration to "repair" a mirror.
 
 ## 5. RB-17 Control Store disk full (`ENOSPC`)
 
