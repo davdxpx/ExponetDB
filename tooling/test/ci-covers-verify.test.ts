@@ -24,6 +24,7 @@ describe('the CI workflow and bun run verify (VC-081)', () => {
   )
 
   it('never cancels the run of a commit on main', () => {
-    expect(workflow).toContain("cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}")
+    const open = '$' + '{{'
+    expect(workflow).toContain(`cancel-in-progress: ${open} github.ref != 'refs/heads/main' }}`)
   })
 })
