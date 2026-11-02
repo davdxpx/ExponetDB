@@ -985,6 +985,14 @@ describe('backups through REST, the worker and a simulated node', () => {
     // The digest of another repository's runbook is refused before anything is written.
     const wrong = await attest({ runbookDigest: `sha256:${'0'.repeat(64)}` })
     expect([wrong.status, wrong.body?.code]).toEqual([422, 'VALIDATION_FAILED'])
+    // VC-104: a restore time ahead of the database clock is a refusal that names the member, not
+    // the 500 of the database's own exception.
+    const ahead = await attest({
+      restoredAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+    })
+    expect([ahead.status, ahead.body?.code]).toEqual([422, 'VALIDATION_FAILED'])
+    expect(ahead.body?.details?.errors?.[0]).toMatchObject({ path: '/restoredAt', code: 'invalid' })
+    await owner.reauth()
     const passed = await attest()
     expect([passed.status, passed.body?.code], JSON.stringify(passed.body)).toEqual([
       201,
