@@ -860,3 +860,4 @@ and pull requests.
 | 2026-11-02 | (this branch) | section opened; group A: VC-012, VC-002, VC-003, VC-001; OD-68 to OD-70 added |
 | 2026-11-02 | `fix/verification-campaign-group-b` | group B: VC-044, VC-006, VC-055, VC-007, VC-049, D0-01, VC-008, VC-057 (OD-64), VC-058, VC-064; delegated decisions recorded in open-decisions.md |
 | 2026-11-02 | `fix/verification-campaign-group-c` | group C: VC-004 (OD-60), VC-005, VC-060, VC-061, VC-062, VC-059 |
+| 2026-11-02 | `fix/verification-campaign-group-c` | independent review of group C (no critical or high finding): a started run refused `replayed`; the archive time bound to the current archive id; an unlisted archive never continuous, a 64 MiB listing, the newest gaps, a log's missing last segment; every dump read first and psql meta-commands refused in the restic runbook; drill bounds checked at planning; an unreadable free space named |
