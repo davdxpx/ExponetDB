@@ -104,6 +104,38 @@ export async function ensureAuditPartitions(q: Queryable, monthsAhead = 3): Prom
   return rows[0]?.int('created') ?? 0
 }
 
+/** Days of cover below which a probe warns, and the days ahead that must be covered at all. */
+const PARTITION_WARN_DAYS = 30
+const PARTITION_MIN_DAYS = 7
+
+export interface AuditPartitionState {
+  /**
+   * `missing`: the current month has no partition, so every audited change fails;
+   * `ending`: now + 7 days is not covered; `margin_low`: less than 30 days of cover; `ok`.
+   */
+  readonly status: 'ok' | 'margin_low' | 'ending' | 'missing'
+  /** Whole days from now to the end of the last partition (0 when the current month is missing). */
+  readonly coveredDays: number
+}
+
+/**
+ * What a probe sees of the monthly partitions (VC-042): the partition holding now, and how far the
+ * partitions reach. The worker keeps three months ahead; this notices when it did not.
+ */
+export async function auditPartitionState(q: Queryable): Promise<AuditPartitionState> {
+  const { rows } = await q.query(
+    'audit.partitions.state',
+    `SELECT coalesce(bool_or(lower_bound <= clock_timestamp() AND upper_bound > clock_timestamp()), false) AS current,
+            coalesce(floor(extract(epoch FROM (max(upper_bound) - clock_timestamp())) / 86400), 0)::int AS days
+       FROM audit.partition_inventory`,
+  )
+  const row = rows[0]
+  const days = row?.int('days') ?? 0
+  if (row?.bool('current') !== true) return { status: 'missing', coveredDays: 0 }
+  if (days < PARTITION_MIN_DAYS) return { status: 'ending', coveredDays: days }
+  return { status: days < PARTITION_WARN_DAYS ? 'margin_low' : 'ok', coveredDays: days }
+}
+
 export interface AuditPartition {
   readonly partition: string
   readonly lowerBound: Date

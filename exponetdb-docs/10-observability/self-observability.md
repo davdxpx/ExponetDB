@@ -117,6 +117,14 @@ clock (a clock step forward and back). Every audited change is then refused
 with 503 `AUDIT_CLOCK_SKEW` naming both times, reads keep working, and the
 role stays in service ([RB-16](../12-operations/incident-model.md),
 [OD-69](../00-product/open-decisions.md#od-69-audit-chain-and-clock-skew)).
+**[DECIDED]** (verification campaign fix VC-042) The degrading check `audit_partitions`
+reads the monthly partitions of `audit.audit_events` (`audit.partition_inventory`):
+it fails `audit_partition_missing` when the current month has no partition (every
+audited change then fails and answers 503 `CONTROL_PLANE_DEGRADED`, reads go on),
+fails `audit_partition_ending` when now + 7 days is not covered, and warns
+`audit_partition_margin_low` under 30 days of cover. The worker task `audit.partitions`
+keeps three months ahead; the check notices when it did not (a long worker outage, a
+Control Store restored from an older dump into a later month).
 
 ## 6. What happens when observability is down
 

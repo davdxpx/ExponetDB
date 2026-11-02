@@ -1,4 +1,4 @@
-import { auditClockSkew } from '@exponetdb/audit'
+import { auditClockSkew, auditPartitionState } from '@exponetdb/audit'
 import {
   type BundleSet,
   beat,
@@ -156,6 +156,20 @@ export async function composeRole(
       severity: 'degrading',
       run: async () =>
         (await auditClockSkew(store)) === undefined ? pass() : warn('audit_clock_skew'),
+    },
+    {
+      // VC-042: a missing audit partition stops every audited change while reads go on, so the role
+      // reports degraded with the reason instead of staying ready.
+      name: 'audit_partitions',
+      severity: 'degrading',
+      run: async () => {
+        const { status } = await auditPartitionState(store)
+        return status === 'ok'
+          ? pass()
+          : status === 'margin_low'
+            ? warn('audit_partition_margin_low')
+            : fail(status === 'missing' ? 'audit_partition_missing' : 'audit_partition_ending')
+      },
     },
     {
       name: 'heartbeat',
