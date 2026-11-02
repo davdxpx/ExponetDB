@@ -858,6 +858,17 @@ finding is wrong. Owner decisions are in [`open-decisions.md`](../00-product/ope
 | OD-70 (d) a human-only purge of never-planned revisions older than 90 days | IMPLEMENTED (`migration.revisions.purge`, bundle `migration-revision-purge`; REST only), TESTED LOCALLY | `apps/server/test/http-migrations.int.test.ts` | [resources.md](../06-rest-api/resources.md), RB-17 step 6 |
 | OD-68 (b) the size rule for `verify.sql`; a declared memory limit; agent reads refused without one | IMPLEMENTED (bundle `cluster-memory-limit`, `registry.cluster.declare_memory_limit`, `sql_query` toolVersion 2), TESTED LOCALLY on PostgreSQL 16, 17 and 18 (the rule) and 17 (the reads). Owner action: declare the memory limit of every existing cluster, else agents read no rows of it | `packages/postgres/test/admission.test.ts`, `apps/server/test/mcp-data.int.test.ts` | [registry.md](../02-control-plane/registry.md), [verification.md](../04-migrations/verification.md) |
 
+### VC-1e. Group D: upgrade and recovery runbooks (branch `fix/verification-campaign-group-d`, stacked on the group A follow-ups)
+
+| Finding | Status | Regression artifact | Document |
+|---|---|---|---|
+| VC-065 the upgrade runbook omits eleven steps | IMPLEMENTED (the one-page card in `upgrades.md` §1.1: one-way schema change, preflight, window, drain, verified dump, checks, restore as the rollback; `control-store status` lists `pending`, a newer store names `unknown` and the remedy; `migrate` is audited `control_store.migrated`), TESTED LOCALLY; NOT EXECUTED: the card end to end on a stack (`C/upgrade/scripts/40-upgrade.sh`) | `apps/server/test/server.int.test.ts` | [upgrades.md §1](../12-operations/upgrades.md) |
+| VC-043 a redeploy interrupts a running apply | IMPLEMENTED (shutdown drains within `EXPONETDB_SHUTDOWN_TIMEOUT_MS` and always marks the heartbeat stopped; the worker runs with 120000 and a stop grace period above it), TESTED LOCALLY; NOT EXECUTED: `80-sigterm.sh` on a stack | `apps/server/test/shutdown.test.ts` | [deployment.md §2](../12-operations/deployment.md), [upgrades.md §1.1](../12-operations/upgrades.md) |
+| VC-010 RB-10 step 6 is empty for managed targets | IMPLEMENTED (a per-target loop; the `LEDGER_DIVERGENCE` remediation names the command and the route), TESTED LOCALLY; NOT EXECUTED: an RB-10 rehearsal with a nonprod and a production target | `packages/contracts/test/errors.test.ts` | [control-store-runbook.md §4](../12-operations/control-store-runbook.md) |
+| VC-011 RB-14 cannot be executed | DECIDED under the delegation (a lost keyring with no copy is a new installation; custody in three places; a yearly restore test), IMPLEMENTED (`SECRET_KEY_UNAVAILABLE` 503 instead of 500), TESTED LOCALLY | `apps/server/test/http-auth.test.ts` | [secrets.md §5](../08-auth-and-security/secrets.md), [incident-model.md](../12-operations/incident-model.md) RB-14 |
+| VC-141 a second RB-10 recovery fails on `restore_admin` | DOCUMENTED (a fresh superuser name per recovery, its login taken away afterwards) | | [control-store-runbook.md §4](../12-operations/control-store-runbook.md) |
+| VC-143 hourly checkpoints cannot size the lost gap | DOCUMENTED (what the checkpoints prove; the gap is a time span) | | [control-store-runbook.md §4](../12-operations/control-store-runbook.md) |
+
 ### VC-1a. Groups not started yet
 
 Groups D to I and the closing documents of section 5 of the fix prompt get their own branches
@@ -872,3 +883,4 @@ and pull requests.
 | 2026-11-02 | `fix/verification-campaign-group-c` | group C: VC-004 (OD-60), VC-005, VC-060, VC-061, VC-062, VC-059 |
 | 2026-11-02 | `fix/verification-campaign-group-c` | independent review of group C (no critical or high finding): a started run refused `replayed`; the archive time bound to the current archive id; an unlisted archive never continuous, a 64 MiB listing, the newest gaps, a log's missing last segment; every dump read first and psql meta-commands refused in the restic runbook; drill bounds checked at planning; an unreadable free space named |
 | 2026-11-02 | `fix/verification-campaign-group-a-followups` | the delegated decisions of group A built: OD-69 (b), OD-70 (b) to (d), OD-68 (b) |
+| 2026-11-02 | `fix/verification-campaign-group-d` | group D: VC-065, VC-043, VC-010, VC-011 (decided under the delegation), VC-141, VC-143 |
