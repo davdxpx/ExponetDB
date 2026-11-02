@@ -1064,6 +1064,7 @@ export class CatalogRefreshKind implements OperationKind {
         WHERE cluster_id = $1 AND state <> 'retired' AND ownership <> 'external' ORDER BY priority, repository_id`,
       [c.text('clusterId')],
     )
+    await this.#archiveStatus(ctx, c)
     let ok = 0
     const failures: JsonObject[] = []
     for (const row of rows) {
@@ -1097,6 +1098,42 @@ export class CatalogRefreshKind implements OperationKind {
       errorCode: String(failures[0]?.['errorCode']),
       detail: { repositories: failures },
     }
+  }
+
+  /**
+   * VC-062: the archive's time comes from the node's `wal.archive_status@1` observation, which
+   * only an inspection recorded; without it no point in time was ever offered. The refresh reads
+   * it first, so the listing that follows holds the archiver's last segment. A node that cannot
+   * answer leaves the time unknown (the selection then says `archive_time_unknown`).
+   */
+  async #archiveStatus(ctx: ExecutionContext, c: Body): Promise<void> {
+    const args = {
+      cluster: { localName: c.text('localName'), systemIdentifier: c.text('systemIdentifier') },
+    }
+    const end = await runJob(
+      this.#d,
+      {
+        nodeId: c.text('nodeId'),
+        operationId: ctx.operationId,
+        capability: 'wal.archive_status@1',
+        args: () => args,
+        windowSeconds: READ_JOB_SECONDS,
+      },
+      ctx.signal,
+      ctx.leaseOwner,
+    )
+    if (end.end !== 'succeeded') return
+    await this.#d.store.transaction('backups.kind.refresh.archive', (tx) =>
+      recordObservation(tx, {
+        jobId: end.jobId,
+        nodeId: c.text('nodeId'),
+        clusterId: c.text('clusterId'),
+        capability: 'wal.archive_status@1',
+        argsHash: argsHashOf(args),
+        operationId: ctx.operationId,
+        result: end.result,
+      }),
+    )
   }
 
   async verify(ctx: ExecutionContext): Promise<'passed' | 'failed' | 'partial' | 'error'> {

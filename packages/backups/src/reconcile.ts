@@ -355,17 +355,26 @@ export async function reconcileCatalog(tx: Tx, input: ReconcileInput): Promise<R
     const timeline = segmentTimeline(a.min) ?? segmentTimeline(a.max)
     if (timeline === null || !/^[0-9]{1,2}-[0-9]{1,5}$/.test(a.id)) continue
     const max = a.max !== null && SEGMENT.test(a.max) ? a.max : null
-    // The time of the newest segment is known only when the archiver's last archived segment is
-    // exactly that one: a later one says nothing about when this repository got its newest
+    // The archive reaches the archiver's time only when this repository holds the archiver's last
+    // archived segment: a later one says nothing about when this repository got its newest
     // segment (a lagging copy, or archive-push moved to another repository: review findings
-    // C-3/A-3). A time later than now (plus the tolerated skew) is not believed.
+    // C-3/A-3). VC-062: one inside the repository, below its newest (an observation older than
+    // the listing), is a lower bound, not a reason to show no window. A time later than now (plus
+    // the tolerated skew) is not believed.
     const archived = input.archive
     const archivedAtMs =
       archived?.lastArchivedAt == null ? Number.NaN : Date.parse(archived.lastArchivedAt)
+    const min = a.min !== null && SEGMENT.test(a.min) ? a.min : null
+    const last = archived?.lastArchivedWal ?? null
     const maxArchivedAt =
       archived !== null &&
       max !== null &&
-      archived.lastArchivedWal === max &&
+      min !== null &&
+      last !== null &&
+      SEGMENT.test(last) &&
+      segmentTimeline(last) === timeline &&
+      last >= min &&
+      last <= max &&
       Number.isFinite(archivedAtMs) &&
       archivedAtMs <= nowMs + FUTURE_TOLERANCE_MS
         ? archived.lastArchivedAt

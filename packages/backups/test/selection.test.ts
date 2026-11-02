@@ -151,7 +151,8 @@ describe('a point in time', () => {
     expect(idOf(selectSource(THREE, [coverage()], { kind: 'pitr', atMs: NOW - 1 * 60_000 }))).toBe(
       'point_in_time_outside_window',
     )
-    // And with no recorded time for the newest segment, nothing is claimed.
+    // And with no recorded time for the newest segment, nothing is claimed, and the reason
+    // names what is missing (VC-062): the archive's time, not the point.
     expect(
       idOf(
         selectSource(THREE, [coverage({ maxArchivedAt: null })], {
@@ -159,7 +160,7 @@ describe('a point in time', () => {
           atMs: NOW - 36 * HOUR,
         }),
       ),
-    ).toBe('point_in_time_outside_window')
+    ).toBe('archive_time_unknown')
   })
 })
 
@@ -187,6 +188,12 @@ describe('a random point in time', () => {
     const gapped = coverage({ gapEnds: ['000000010000000100000018'] })
     const got = selectSource(THREE, [gapped], { kind: 'pitr_random' }, () => 0)
     expect(got.ok && got.source.backupId).toBe(MIDDLE.view.id)
+  })
+
+  it('names a missing archive time instead of claiming no backup is selectable (VC-062)', () => {
+    expect(
+      idOf(selectSource(THREE, [coverage({ maxArchivedAt: null })], { kind: 'pitr_random' })),
+    ).toBe('archive_time_unknown')
   })
 
   it('refuses without coverage or with a window shorter than the margin', () => {

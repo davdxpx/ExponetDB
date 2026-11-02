@@ -192,7 +192,7 @@ describe('gaps in the WAL archive', () => {
 })
 
 describe('archive times of a repository', () => {
-  it('takes the archiver time only for the exact newest segment of the repository', async () => {
+  it('takes the archiver time for the newest segment of the repository', async () => {
     const w = await world()
     await reconcile(w, listing(w), {
       lastArchivedWal: '000000010000000000000009',
@@ -201,6 +201,28 @@ describe('archive times of a repository', () => {
     expect((await listCoverage(serve, w.clusterId))[0]?.maxArchivedAt?.toISOString()).toBe(
       '2026-10-21T02:00:00.000Z',
     )
+  })
+
+  // VC-062: an observation older than the listing (the archiver's last segment is in the repository,
+  // below its newest) was ignored, so no point in time was ever offered: the archive reaches at least then.
+  it('takes the archiver time as a lower bound when its last segment is in the repository below the newest', async () => {
+    const w = await world()
+    await reconcile(w, listing(w), {
+      lastArchivedWal: '000000010000000000000006',
+      lastArchivedAt: '2026-10-21T01:00:00.000Z',
+    })
+    expect((await listCoverage(serve, w.clusterId))[0]?.maxArchivedAt?.toISOString()).toBe(
+      '2026-10-21T01:00:00.000Z',
+    )
+    // Not a segment this repository does not hold: below its oldest, or on another timeline.
+    for (const lastArchivedWal of ['000000010000000000000001', '000000020000000000000006']) {
+      const v = await world()
+      await reconcile(v, listing(v), {
+        lastArchivedWal,
+        lastArchivedAt: '2026-10-21T01:00:00.000Z',
+      })
+      expect((await listCoverage(serve, v.clusterId))[0]?.maxArchivedAt, lastArchivedWal).toBeNull()
+    }
   })
 
   it('records no time when the archiver is ahead of what this repository lists (a lagging copy)', async () => {

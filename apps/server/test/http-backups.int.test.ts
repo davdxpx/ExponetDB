@@ -174,6 +174,17 @@ function answer(host: Host) {
         return STATUS
       case 'backup.list@1':
         return listing(host)
+      case 'wal.archive_status@1':
+        // The archiver's last segment is the repository's newest (the listing's archive max).
+        return {
+          archiveMode: 'on',
+          archivedCount: 9,
+          failedCount: 0,
+          lastArchivedWal: '000000010000000000000009',
+          lastArchivedAt: new Date(Date.now() - 60_000).toISOString(),
+          lastFailedWal: null,
+          lastFailedAt: null,
+        }
       case 'backup.run@1':
         host.runs.set(runId, { purpose: 'backup', startJobId: job.jobId, label: host.runLabel })
         return started(args)
@@ -751,6 +762,33 @@ describe('backups through REST, the worker and a simulated node', () => {
       undefined,
     ])
     expect(String(recovery.body.change?.analysis?.activation)).toMatch(/^not activated/)
+    await node.stop()
+  })
+
+  it('offers a random point in time after a refresh alone: the refresh records the archive time (VC-062)', async () => {
+    const { w, node, host } = await setup('nonprod')
+    const repositoryId = await adopt(w)
+    // No wal.archive_status@1 inspection before: the refresh reads it itself.
+    expect((await refresh(w)).state).toBe('succeeded')
+    expect(host.calls).toContain('wal.archive_status@1')
+    const catalog = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/backups`)
+    const backupId = catalog.body.backups[0].id as string
+    const verified = await owner.browser.call(
+      'POST',
+      `/api/v1/clusters/${w.clusterId}/backups/${backupId}/verify`,
+      {},
+    )
+    expect(verified.status, JSON.stringify(verified.body)).toBe(202)
+    await drive()
+    expect((await view(verified.body.id)).state).toBe('succeeded')
+    const planned = await owner.browser.call('POST', `/api/v1/clusters/${w.clusterId}/drills`, {
+      repositoryId,
+      selection: { kind: 'pitr_random' },
+    })
+    expect(
+      [planned.status, planned.body?.code, planned.body?.decision],
+      JSON.stringify(planned.body),
+    ).toEqual([201, undefined, 'allow'])
     await node.stop()
   })
 

@@ -35,6 +35,7 @@ export type BackupConflictReason =
   | 'wal_not_continuous'
   | 'point_in_time_outside_window'
   | 'no_backup_selectable'
+  | 'archive_time_unknown'
   | 'repository_engine_below_floor'
 
 export function conflict(reason: BackupConflictReason): BackupError {
