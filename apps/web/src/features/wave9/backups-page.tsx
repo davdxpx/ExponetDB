@@ -8,13 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from '@exponetdb/ui'
-import {
-  formatCount,
-  ObservedTime,
-  StateMessage,
-  UntrustedName,
-  useLinkComponent,
-} from '@exponetdb/ui-patterns'
+import { ObservedTime, StateMessage, UntrustedName, useLinkComponent } from '@exponetdb/ui-patterns'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
@@ -715,7 +709,7 @@ function FindingsList({ findings }: { readonly findings: readonly Finding[] }): 
           <UntrustedName name={finding.summary} maxCodePoints={200} />
           <span className="text-xs text-foreground-light">
             {t('wave9.advisors.lastSeen')} <ObservedTime observedAt={finding.lastSeenAt} />{' '}
-            {t('wave9.advisors.occurrences', { count: formatCount(finding.occurrences) })}
+            {t('wave9.advisors.occurrences', { count: finding.occurrences })}
           </span>
         </li>
       ))}

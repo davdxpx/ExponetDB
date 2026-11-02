@@ -25,14 +25,22 @@ export const infrastructureMessages = {
   'infra.retire.blockers.title': 'Before it can be removed',
   'infra.retire.clear':
     'Nothing blocks the removal now. The plan and its apply check again before anything changes.',
-  'infra.retire.group.cluster': '{count} clusters on this server are not retired',
-  'infra.retire.group.node': '{count} nodes of this server are not decommissioned',
-  'infra.retire.group.enrollment_token': '{count} enrollment tokens can still be redeemed',
-  'infra.retire.group.node_job': '{count} node jobs are not finished',
-  'infra.retire.group.database': '{count} databases are registered on this cluster',
-  'infra.retire.group.endpoint': '{count} endpoints are active',
-  'infra.retire.group.credential': '{count} credential submissions are being verified',
-  'infra.retire.group.operation': '{count} operations on it are not finished',
+  'infra.retire.group.cluster':
+    '{count, plural, one {# cluster on this server is not retired} other {# clusters on this server are not retired}}',
+  'infra.retire.group.node':
+    '{count, plural, one {# node of this server is not decommissioned} other {# nodes of this server are not decommissioned}}',
+  'infra.retire.group.enrollment_token':
+    '{count, plural, one {# enrollment token can still be redeemed} other {# enrollment tokens can still be redeemed}}',
+  'infra.retire.group.node_job':
+    '{count, plural, one {# node job is not finished} other {# node jobs are not finished}}',
+  'infra.retire.group.database':
+    '{count, plural, one {# database is registered on this cluster} other {# databases are registered on this cluster}}',
+  'infra.retire.group.endpoint':
+    '{count, plural, one {# endpoint is active} other {# endpoints are active}}',
+  'infra.retire.group.credential':
+    '{count, plural, one {# credential submission is being verified} other {# credential submissions are being verified}}',
+  'infra.retire.group.operation':
+    '{count, plural, one {# operation on it is not finished} other {# operations on it are not finished}}',
   'infra.retire.hint.cluster':
     'Open each cluster and remove it first: decommission its targets, retire its databases, then retire the cluster.',
   'infra.retire.hint.node':
@@ -49,9 +57,12 @@ export const infrastructureMessages = {
   'infra.retire.hint.operation': 'Let it finish, or cancel it on its operation page.',
   'infra.retire.more': 'And {count} more not listed here.',
   'infra.retire.with.title': 'Retired with it, in the same operation',
-  'infra.retire.with.endpoint': '{count} active endpoints',
-  'infra.retire.with.credential': '{count} active credentials (their secrets are not erased)',
-  'infra.retire.kept': '{count} retired records stay as history.',
+  'infra.retire.with.endpoint':
+    '{count, plural, one {# active endpoint} other {# active endpoints}}',
+  'infra.retire.with.credential':
+    '{count, plural, one {# active credential (its secret is not erased)} other {# active credentials (their secrets are not erased)}}',
+  'infra.retire.kept':
+    '{count, plural, one {# retired record stays as history.} other {# retired records stay as history.}}',
   'infra.retire.backups.not_installed':
     'Backups: no backup engine records anything yet (Wave 9), so no backup can be bound to it.',
   'infra.retire.backups.none': 'Backups: the backup engine holds no binding to it.',

@@ -89,7 +89,7 @@ describe('the findings page', () => {
     expect(within(rows[1] as HTMLElement).getByText('public.orders_1')).toBeInTheDocument()
     expect(within(rows[1] as HTMLElement).getByText(/First seen/)).toBeInTheDocument()
     expect(within(rows[1] as HTMLElement).getByText(/Last seen/)).toBeInTheDocument()
-    expect(within(rows[1] as HTMLElement).getByText('Seen 3 times')).toBeInTheDocument()
+    expect(within(rows[1] as HTMLElement).getByText('Recorded 3 times')).toBeInTheDocument()
     expect(within(rows[2] as HTMLElement).getByText('Critical')).toBeInTheDocument()
     const query = lastQuery(world)
     expect([query.get('state'), query.get('limit')]).toEqual(['open', '50'])

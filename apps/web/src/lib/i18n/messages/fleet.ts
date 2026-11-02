@@ -171,7 +171,7 @@ export const fleetMessages = {
   'globalFindings.noObject': 'No object',
   'globalFindings.firstSeen': 'First seen',
   'globalFindings.lastSeen': 'Last seen',
-  'globalFindings.occurrences': 'Seen {count} times',
+  'globalFindings.occurrences': 'Recorded {count, plural, one {# time} other {# times}}',
   // The targets list.
   'targets.title': 'Databases',
   'targets.description':
