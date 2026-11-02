@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import type { ProjectConfig } from '@exponetdb/contracts'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { BundleInput } from '../src/format/index.ts'
@@ -732,6 +733,35 @@ describe('verify.sql', () => {
         'uncovered_statement',
       ),
     ).toBeUndefined()
+  })
+})
+
+describe('the covers directive (TC-073)', () => {
+  const up = [1, 2, 3].map((n) => `INSERT INTO public.lead (id) VALUES (${n});\n`).join('')
+  const check = (covers: string) =>
+    `-- check: seeded\n-- covers: ${covers}\nSELECT count(*) = 3 AS ok FROM public.lead;\n`
+  const run = (covers: string) =>
+    lint([bundle({ up, verify: check(covers), declared: 'data_rewrite' })])
+
+  it('counts statements from 0, so 0,1,2 covers all three statements', () => {
+    const r = run('0,1,2')
+    expect(finding(r, 'uncovered_statement')).toBeUndefined()
+    expect(finding(r, 'covers_out_of_range')).toBeUndefined()
+  })
+
+  it('names the index and the base when an entry is shifted by one', () => {
+    const r = run('1,2,3')
+    expect(finding(r, 'uncovered_statement')?.message).toMatch(/statement 0 \(counted from 0\)/)
+    expect(finding(r, 'covers_out_of_range')).toMatchObject({ level: 'warn' })
+    expect(finding(r, 'covers_out_of_range')?.message).toMatch(/3/)
+  })
+
+  it('documents the base in verification.md', () => {
+    const doc = readFileSync(
+      new URL('../../../exponetdb-docs/04-migrations/verification.md', import.meta.url),
+      'utf8',
+    )
+    expect(doc).toContain('counted from 0')
   })
 })
 

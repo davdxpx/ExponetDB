@@ -176,6 +176,11 @@ with a boolean result and a description. Coverage is reported per statement.
 Statements that are not derivable and not covered make the result `partial`.
 "Covered by verify.sql" is declared by the author with a `-- covers: <statement
 index or object>` annotation above a check; the engine does not try to guess.
+The statement index is the position of the top-level statement in `up.sql`,
+**counted from 0**; comments and empty statements are not counted. With
+`CREATE TABLE …; GRANT …; UPDATE …;` the `UPDATE` is statement `2`. An
+`uncovered_statement` finding names the index it wants (`statement 2 (counted from
+0)`), and an entry past the last statement is flagged `covers_out_of_range`.
 The annotation is part of the verify digest like every other line of
 `verify.sql`, so changing what a check covers changes the digest.
 

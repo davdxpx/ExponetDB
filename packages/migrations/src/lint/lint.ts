@@ -975,10 +975,19 @@ export function lintBundles(inputs: readonly BundleInput[], ctx: LintContext): L
       const s = statements[index] as StatementFacts
       emit(
         'uncovered_statement',
-        `${s.kind}: not derivable and not covered by a verify.sql check.`,
+        `${s.kind}: statement ${index} (counted from 0) is not derivable and not covered by a verify.sql check.`,
         {
           statement: s,
         },
+      )
+    }
+    // An index entry past the last statement covers nothing: almost always a count from 1.
+    for (const entry of covered) {
+      if (!/^\d+$/.test(entry) || Number(entry) < statements.length) continue
+      emit(
+        'covers_out_of_range',
+        `verify.sql: covers ${entry} names no statement; up.sql has ${statements.length} (indexes 0 to ${statements.length - 1}, counted from 0).`,
+        { file: 'verify.sql' },
       )
     }
     const report: BundleReport = {
