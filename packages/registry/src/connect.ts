@@ -219,6 +219,50 @@ export class Connector {
     throw last
   }
 
+  /**
+   * The system identifier an address answers with, read as the cluster's observer before the
+   * address is registered as an endpoint (VC-074). The address is not in the registry yet, so
+   * the session is not pinned; the caller compares the identifier with the cluster's.
+   */
+  async probeAddress(
+    clusterId: string,
+    address: { readonly host: string; readonly port: number; readonly tlsServerName: string },
+    purpose: string,
+  ): Promise<string> {
+    const cluster = await getCluster(this.#q, clusterId)
+    if (cluster === undefined) {
+      throw new RegistryError('NOT_FOUND')
+    }
+    if (cluster.state === 'retired') {
+      throw conflict('cluster_retired')
+    }
+    const password = await this.#password(cluster.clusterId, 'observer', undefined)
+    const session = await TargetSession.open(
+      {
+        endpoint: {
+          host: address.host,
+          port: address.port,
+          tlsServerName: address.tlsServerName,
+          caPem: cluster.caBundle,
+        },
+        database: 'postgres',
+        role: 'observer',
+        user: ROLE_NAMES.observer,
+        password,
+        applicationName: `exponetdb/${purpose}`,
+      },
+      {
+        guards: { database: 'postgres' },
+        ...(this.#options.limits === undefined ? {} : { limits: this.#options.limits }),
+      },
+    )
+    try {
+      return session.facts.systemIdentifier
+    } finally {
+      await session.close()
+    }
+  }
+
   /** A session on a target's current placement. */
   async forTarget(
     target: TargetRecord,

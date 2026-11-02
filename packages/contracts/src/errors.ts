@@ -1044,6 +1044,15 @@ export const ERRORS = {
     retryable: false,
     title: 'Cluster identity mismatch',
     message: 'The cluster system identifier does not match the pinned value.',
+    remediation:
+      'The address reaches another PostgreSQL instance than the one this cluster is pinned to; check the host and the port. Nothing was written.',
+    // VC-074: planning an endpoint of another instance names both identifiers (not secret).
+    details: z
+      .strictObject({
+        pinned: z.string().regex(/^[0-9]{1,20}$/),
+        observed: z.string().regex(/^[0-9]{1,20}$/),
+      })
+      .optional(),
   },
   TARGET_REGISTRATION_REFUSED: {
     group: 'targets_clusters_nodes',

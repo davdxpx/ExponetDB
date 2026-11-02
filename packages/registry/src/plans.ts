@@ -983,6 +983,7 @@ export async function planEndpointAdd(
     throw conflict('cluster_retired')
   }
   const endpoint = await endpointContent(tx, context, input, '')
+  const probe = await probeEndpoint(context, cluster, endpoint)
   const tier = cluster.derivedTier ?? undefined
   return store(tx, context, actor, {
     kind: 'registry.endpoint.add',
@@ -993,8 +994,48 @@ export async function planEndpointAdd(
       clusterState: cluster.state,
       address: `${input.host.toLowerCase()}:${input.port}`,
     },
-    analysis: { derivedTier: cluster.derivedTier, kind: endpoint.kind, label: endpoint.label },
+    analysis: {
+      derivedTier: cluster.derivedTier,
+      kind: endpoint.kind,
+      label: endpoint.label,
+      ...probe,
+    },
   })
+}
+
+/**
+ * VC-074: the address is probed with the cluster's observer credential before it is written. An
+ * address of another instance would suspend the targets whose database exists there and make
+ * the others unhealthy within seconds, so it is refused, naming both identifiers. A pending
+ * cluster has no identity to compare with, and an address that cannot be reached is shown in
+ * the plan as such (an endpoint may be added for a host that is down for maintenance).
+ */
+async function probeEndpoint(
+  context: RegistryPlanContext,
+  cluster: ClusterRecord,
+  endpoint: EndpointContent,
+): Promise<{ probe: 'matches' | 'unreachable' | 'not_pinned'; observed?: string }> {
+  if (cluster.systemIdentifier === null) return { probe: 'not_pinned' }
+  let observed: string
+  try {
+    observed = await context.connector.probeAddress(
+      cluster.clusterId,
+      endpoint,
+      `endpoint-add/${cluster.clusterId}`,
+    )
+  } catch (error) {
+    if (error instanceof TargetError && error.code === 'TARGET_UNAVAILABLE') {
+      return { probe: 'unreachable' }
+    }
+    throw error
+  }
+  if (observed !== cluster.systemIdentifier) {
+    throw new RegistryError('CLUSTER_IDENTITY_MISMATCH', {
+      pinned: cluster.systemIdentifier,
+      observed,
+    })
+  }
+  return { probe: 'matches', observed }
 }
 
 export async function planEndpointRetire(

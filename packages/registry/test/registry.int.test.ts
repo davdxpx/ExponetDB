@@ -1,7 +1,15 @@
 import { CONTROL_STORE_ROLES, loadBundleSet } from '@exponetdb/control-store'
+import { newId } from '@exponetdb/kernel'
 import { readOperation } from '@exponetdb/operations'
 import { databaseBootstrapStatements, stampTarget, TargetSession } from '@exponetdb/postgres'
-import { runAsSuperuser, serverFor, type TestServer, withSuperuser } from '@exponetdb/testkit'
+import {
+  FaultProxy,
+  runAsSuperuser,
+  serverFor,
+  type TestServer,
+  testTargets,
+  withSuperuser,
+} from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   Connector,
@@ -788,6 +796,44 @@ describe('registration on every supported major', () => {
 })
 
 describe('cluster identity', () => {
+  it('refuses to plan an endpoint of another instance and names both system identifiers (VC-074)', async () => {
+    const pg16 = serverFor(16)
+    const clusterId = clusters.get(16)
+    if (clusterId === undefined) throw new Error('the PostgreSQL 16 cluster')
+    const id = (server: TestServer) =>
+      withSuperuser(server, 'postgres', async (c) =>
+        String(
+          (await c.query('SELECT system_identifier::text AS s FROM pg_control_system()')).rows[0]
+            ?.s,
+        ),
+      )
+    const before = (await listEndpoints(h.worker, clusterId, 'active')).length
+    const refused = await run(h, a, (tx) =>
+      planEndpointAdd(tx, h.context, a, clusterId, endpointFor(pg17, 'localhost')),
+    ).catch((error: unknown) => error)
+    expect(refused).toMatchObject({
+      code: 'CLUSTER_IDENTITY_MISMATCH',
+      details: { pinned: await id(pg16), observed: await id(pg17) },
+    })
+    expect((await listEndpoints(h.worker, clusterId, 'active')).length).toBe(before)
+    // The same instance through another address (a proxy to it) plans, and the plan shows what was seen.
+    const proxy = await FaultProxy.start(testTargets(), pg16)
+    try {
+      const same = await h.serve.transaction('test.registry.endpoint.same', (tx) =>
+        planEndpointAdd(tx, h.context, a, clusterId, {
+          kind: 'private',
+          host: '127.0.0.1',
+          port: proxy.port,
+          tlsServerName: testTargets().serverName,
+          label: 'pg16-proxy',
+        }),
+      )
+      expect(same.body['analysis']).toMatchObject({ probe: 'matches', observed: await id(pg16) })
+    } finally {
+      await proxy.stop()
+    }
+  })
+
   it('refuses a cluster whose address now reaches another cluster (no auto-pin)', async () => {
     // The PostgreSQL 16 cluster (with a live target) gets a second endpoint
     // that is really an address of the PostgreSQL 17 server, then its own
@@ -795,10 +841,18 @@ describe('cluster identity', () => {
     const pg16 = serverFor(16)
     const clusterId = clusters.get(16)
     if (clusterId === undefined) throw new Error('the PostgreSQL 16 cluster')
-    const moved = await run(h, a, (tx) =>
-      planEndpointAdd(tx, h.context, a, clusterId, endpointFor(pg17, 'localhost')),
+    // Planning such an endpoint is refused now (VC-074, below); the registry state is made as it
+    // would be after the address was re-pointed at the other server.
+    await h.db.asSuperuser((c) =>
+      c.query(
+        `INSERT INTO registry.endpoints (endpoint_id, cluster_id, kind, host, port, tls_server_name, label,
+                                         state, created_by_operation_id)
+         SELECT $1, cluster_id, 'private', 'localhost', $3, 'localhost', 'pg17-local', 'active',
+                created_by_operation_id
+           FROM registry.endpoints WHERE cluster_id = $2 LIMIT 1`,
+        [newId('end', Date.now()), clusterId, pg17.port],
+      ),
     )
-    expect(moved.operation.state).toBe('succeeded')
     const first = (await listEndpoints(h.worker, clusterId, 'active')).find(
       (e) => e.port === pg16.port,
     )

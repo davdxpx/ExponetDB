@@ -221,10 +221,14 @@ mirror's last known `ledger_state_hash` no longer matches.
    transaction, under the target's schema lock, as part of the first operation
    that needs the new version; they are additive only (new nullable columns,
    new tables). A destructive ledger change would be a new ADR.
-5. **Restore**: the restored database brings its own `exponetdb` schema. The
-   restore operation re-stamps the identity (new `generation`) and reconciles the
-   mirror to the restored ledger, recording a `ledger_reconciled` event. Plans
-   bound to the old generation become stale.
+5. **Restore**: the restored database brings its own `exponetdb` schema.
+   **[DECIDED]** (verification campaign VC-023, 2026-11-02) A restore that bumps the
+   target's `generation` makes the Control Store's mirror (of the earlier
+   generation) a divergence, not an empty slate: plans are refused and nothing is
+   mirrored for the new generation until `ledger.reconcile` adopts the restored
+   ledger on purpose, which records a `ledger_reconciled` event. Plans bound to
+   the old generation become stale. Nothing bumps the generation today; whoever
+   builds the bump starts from this rule.
 
 ## 5. Mirror and reconciliation
 
