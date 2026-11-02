@@ -84,6 +84,23 @@ describe('an audit chain whose head is ahead of the database clock (VC-003)', ()
       .asSuperuser((c) => c.query(INSERT_RAW, rawParams(unmarked)))
       .catch((e: unknown) => e)
     expect(refused).toMatchObject({ code: 'EXA02' })
+    // A mark written earlier (more than a minute before the event) is no mark for it.
+    const stale = await db
+      .asSuperuser(async (c) => {
+        await c.query('BEGIN')
+        try {
+          await c.query(
+            `INSERT INTO audit.clock_skew_marks (seq, database_at, chain_head_at)
+             VALUES ($1, clock_timestamp() - interval '2 minutes', $2::timestamptz)`,
+            [unmarked.seq, written.occurredAt],
+          )
+          await c.query(INSERT_RAW, rawParams(unmarked))
+        } finally {
+          await c.query('ROLLBACK')
+        }
+      })
+      .catch((e: unknown) => e)
+    expect(stale).toMatchObject({ code: 'EXA02' })
   })
 
   it('names the skew on append and to a probe beyond 24 h, and the chain itself stays valid', async () => {
