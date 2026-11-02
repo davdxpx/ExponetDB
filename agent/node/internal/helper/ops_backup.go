@@ -946,7 +946,10 @@ func (h *Helper) restoreSpace(ctx context.Context, args restoreArgs) *Refusal {
 		return nil
 	}
 	available, err := freeSpace(h.scratchSpacePath())
-	if err != nil || available < *chosen.Info.Size+*chosen.Info.Size/10 {
+	if err != nil {
+		return refuse(CodeFailed, "the free space of the scratch directory's filesystem cannot be read")
+	}
+	if available < *chosen.Info.Size+*chosen.Info.Size/10 {
 		return refuse(CodePreconditionFailed, "the scratch directory's filesystem has too little space for the restore")
 	}
 	return nil
