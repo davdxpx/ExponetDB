@@ -5,8 +5,9 @@ import type { LedgerRecord } from '@exponetdb/postgres'
 import {
   compareLedger,
   divergenceDetails,
-  operationsOfTarget,
-  readMirrorFacts,
+  readMirrorState,
+  recordedRows,
+  recordKey,
 } from './divergence.ts'
 import type { VerificationRun } from './verification.ts'
 
@@ -177,16 +178,22 @@ export async function writeMirror(
     readonly baselineId: string | null
   },
 ): Promise<void> {
-  const mirror = (await readMirrorFacts(tx, input.targetId, input.generation)) ?? []
+  const state = await readMirrorState(tx, input.targetId, input.generation)
+  // VC-023: a mirror that holds another generation is not a fresh start. Nothing is adopted and
+  // the state is left as it is, so the next plan still sees the divergence until ledger.reconcile.
+  if (state.kind === 'other_generation') return
+  const mirror = state.kind === 'current' ? state.rows : []
   const mirrored = new Set(mirror.map((r) => r.migrationId))
-  const known = await operationsOfTarget(
+  const recorded = await recordedRows(
     tx,
     input.targetId,
-    input.rows.filter((r) => !mirrored.has(r.migrationId)).map((r) => r.operationId),
+    input.rows.filter((r) => !mirrored.has(r.migrationId)),
   )
-  const divergence = compareLedger(mirror, input.rows, known)
+  const divergence = compareLedger(mirror, input.rows, recorded)
   for (const r of input.rows) {
-    if (!mirrored.has(r.migrationId) && !known.has(r.operationId)) continue
+    if (!mirrored.has(r.migrationId) && !recorded.has(recordKey(r.operationId, r.migrationId))) {
+      continue
+    }
     await insertMirrorRow(tx, input.targetId, input.generation, r)
   }
   await tx.query(

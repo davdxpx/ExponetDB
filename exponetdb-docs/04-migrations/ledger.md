@@ -234,7 +234,17 @@ mirror's last known `ledger_state_hash` no longer matches.
   written rows back (from the target, on a new connection) and upserts them into
   the mirror together with the observed `ledger_state_hash`.
 - A periodic reconciliation (default every 10 minutes per active target, and on
-  every plan) compares `ledger_state_hash` of target and mirror.
+  every plan) compares `ledger_state_hash` of target and mirror. **[DECIDED]**
+  (verification campaign VC-022, 2026-11-02) The worker task `ledger.watch`
+  runs every 10 minutes: one observer read per active or suspended target and
+  the same comparison status, plans and `ledger.reconcile` use. While they
+  differ a critical `health` finding `ledger_divergence` is open on the target
+  (naming up to 16 migration ids per class) and the audit event
+  `ledger.divergence.detected` was written once; when they agree the finding is
+  resolved (`cleared`) and `ledger.divergence.cleared` is written. A target that
+  cannot be read is the health sample's to report; the watch never reads it as
+  agreeing (the task fails visibly). Schema changes are blocked by the plans'
+  own comparison, not by suspending the target.
 - Divergence classes:
 
 | Divergence | Typical cause | Effect |
@@ -244,6 +254,39 @@ mirror's last known `ledger_state_hash` no longer matches.
 | Mirror has rows the target lacks | Restore to an older state, or manual deletion | `LEDGER_DIVERGENCE`; if a restore operation explains it, the restore's reconcile step resolves it |
 | Same `migration_id`, different checksum | Tampering or a bug | `LEDGER_DIVERGENCE` + `MIGRATION_CHECKSUM_MISMATCH` finding (critical) |
 | `installation_id` in target differs from this installation | Two ExponetDB installations, or a copied database | Target refused (`TARGET_IDENTITY_MISMATCH`) |
+
+**[DECIDED]** (verification campaign, 2026-11-02) What the comparison counts:
+
+- **A row is recorded only when the operation listed its migration** (VC-063).
+  "An operation of this target wrote it" means the operation's own progress
+  (`migrations.operation_migrations`, written for every planned migration when
+  the operation starts executing) lists that migration; the baseline and the
+  import replay write their rows without such progress and count by their
+  kind. The operation id of a genuine operation on a row it never applied (a
+  hand-written row quoting a real id, or a restored Control Store that still
+  holds the operation as `awaiting_approval`) is `unrecorded`. Status, plans,
+  `ledger.reconcile` and the mirror write share one function, so they cannot
+  disagree.
+- **A mirror of another generation is a divergence** (VC-023). A target with a
+  mirror for an earlier generation and none for the current one has every live
+  row `unrecorded`; the mirror write after an apply adopts nothing and leaves
+  the state alone, until `ledger.reconcile` adopts the ledger on purpose. Nothing
+  bumps `generation` today; whoever builds the bump (the restore of Wave 9
+  Part B's protections) starts from this rule.
+- **The mirror is revert-only** (VC-045). The worker holds UPDATE on
+  `migrations.ledger_mirror`, but a trigger lets an update change only
+  `reverted_at`, `reverted_by_op` and `mirrored_at` (`EXM03` otherwise).
+  `migrations.archive_mirror_rows` moves rows only for a running
+  `ledger.reconcile` of the target under its lease (the operation row locked
+  `FOR SHARE`), for the generation the plan names and, per class, the ids the
+  plan lists (a plan that lists them all binds each id, a larger one the
+  count).
+- **An applied id is applied** (VC-027, VC-080). Other bytes under an id any
+  target of the project applied (the mirror) or an operation applied or may have
+  applied (its progress says applied, partly applied or unknown, or it has not
+  finished) are refused `MIGRATION_CHECKSUM_MISMATCH`, at ingest and again when
+  an operation starts executing, one id at a time under a Control Store lock,
+  before any statement reaches a target.
 
 `ledger.reconcile` is a planned, audited operation that records the operator's
 decision (adopt target as truth, or flag rows as untrusted) without deleting any

@@ -224,6 +224,10 @@ function mapSqlstate(
       opts,
     )
   }
+  // The database is gone or renamed (VC-072): an unavailable target with the SQLSTATE, not an internal error.
+  if (sqlstate === '3D000') {
+    return new TargetError('TARGET_UNAVAILABLE', 'database_name', opts)
+  }
   if (sqlstate === '28P01' || sqlstate === '28000') {
     return new TargetError('TARGET_CREDENTIAL_INVALID', 'auth_failed', opts)
   }

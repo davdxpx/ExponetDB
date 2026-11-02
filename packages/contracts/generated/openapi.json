@@ -17060,6 +17060,7 @@
               "TARGET_CREDENTIAL_INVALID",
               "TARGET_TLS_FAILED",
               "TARGET_IDENTITY_MISMATCH",
+              "TARGET_READ_ONLY",
               "CLUSTER_IDENTITY_MISMATCH",
               "TARGET_REGISTRATION_REFUSED",
               "REGISTRY_CONFLICT",

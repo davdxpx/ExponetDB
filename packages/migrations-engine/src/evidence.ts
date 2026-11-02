@@ -15,6 +15,7 @@ import {
   RegistryError,
   type TargetRecord,
 } from '@exponetdb/registry'
+import { compareWithMirror, recordedRows, recordKey } from './divergence.ts'
 import { MigrationError } from './errors.ts'
 
 /**
@@ -134,6 +135,47 @@ export async function evidenceTargetOf(
   return liveTargetOf(q, target.projectId, environment.evidenceFrom)
 }
 
+/**
+ * What makes the evidence target's rows evidence (VC-079): the evidence was produced by this
+ * installation, not written by hand. A ledger row counts only when an operation of the evidence
+ * target listed that migration, the evidence target's ledger agrees with its mirror in the Control
+ * Store (which exists to catch tampering: one divergence is no evidence at all), and the
+ * verification is one the Control Store mirrored. An operation id alone proves nothing. Planning
+ * and the apply-time re-check use the same function.
+ */
+export async function evidenceTrust(
+  q: Queryable,
+  evidenceTargetId: string,
+  read: EvidenceRead,
+  migrations: readonly { readonly migrationId: string }[],
+): Promise<{
+  rowTrusted(row: LedgerRecord): boolean
+  verificationTrusted(verificationId: string): boolean
+}> {
+  const concerned = read.ledger.filter((r) =>
+    migrations.some((m) => m.migrationId === r.migrationId),
+  )
+  const recorded = await recordedRows(q, evidenceTargetId, concerned)
+  const divergent =
+    (await compareWithMirror(q, evidenceTargetId, read.generation, read.ledger)) !== null
+  const { rows } = await q.query(
+    'migrations.evidence.mirrored_verifications',
+    `SELECT verification_id FROM migrations.verification_mirror
+      WHERE target_id = $1 AND generation = $2
+        AND verification_id = ANY (ARRAY(SELECT jsonb_array_elements_text($3::jsonb)))`,
+    [
+      evidenceTargetId,
+      read.generation,
+      JSON.stringify(read.verifications.map((v) => v.verificationId)),
+    ],
+  )
+  const mirrored = new Set(rows.map((r) => r.text('verification_id')))
+  return {
+    rowTrusted: (row) => !divergent && recorded.has(recordKey(row.operationId, row.migrationId)),
+    verificationTrusted: (id) => mirrored.has(id),
+  }
+}
+
 export async function collectEvidence(
   q: Queryable,
   connector: Connector,
@@ -177,17 +219,7 @@ export async function collectEvidence(
     }
     throw error
   }
-  // Condition 3: the evidence was produced by this installation (its operation is known here).
-  const operationIds = read.ledger
-    .filter((r) => migrations.some((m) => m.migrationId === r.migrationId))
-    .map((r) => r.operationId)
-  const { rows: knownRows } = await q.query(
-    'migrations.evidence.known_operations',
-    `SELECT operation_id FROM operations.operations
-      WHERE operation_id = ANY (ARRAY(SELECT jsonb_array_elements_text($1::jsonb)))`,
-    [JSON.stringify(operationIds)],
-  )
-  const known = new Set(knownRows.map((r) => r.text('operation_id')))
+  const trust = await evidenceTrust(q, evidence.targetId, read, migrations)
   const items: EvidenceItem[] = []
   const verifications: Record<string, string> = {}
   let fact: EvidenceFact = 'present'
@@ -206,9 +238,9 @@ export async function collectEvidence(
       row === undefined || row.revertedAt !== null
         ? undefined
         : latest(read.verifications, m.migrationId)
-    if (row !== undefined && row.revertedAt === null && known.has(row.operationId)) {
+    if (row !== undefined && row.revertedAt === null && trust.rowTrusted(row)) {
       status =
-        v === undefined || v.status !== 'passed'
+        v === undefined || v.status !== 'passed' || !trust.verificationTrusted(v.verificationId)
           ? 'unverified'
           : v.verifyDigest === m.verifyDigest
             ? 'present'

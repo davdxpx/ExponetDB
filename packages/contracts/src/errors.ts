@@ -1019,6 +1019,24 @@ export const ERRORS = {
     title: 'Target identity mismatch',
     message:
       'The identity marker in the database does not match the expected target; the target was suspended.',
+    // VC-071: a copy of the database carries the same marker but is another database object.
+    details: z
+      .strictObject({
+        reason: z.enum(['database_oid']),
+        recordedOid: z.string().regex(/^[0-9]{1,10}$/),
+        observedOid: z.string().regex(/^[0-9]{1,10}$/),
+      })
+      .optional(),
+  },
+  TARGET_READ_ONLY: {
+    group: 'targets_clusters_nodes',
+    status: 409,
+    retryable: false,
+    title: 'Target is read-only',
+    message:
+      'The PostgreSQL behind the target is a standby (in recovery) or read-only; nothing was written.',
+    remediation:
+      'Check which instance the endpoints of the cluster reach: the primary is the one that is not in recovery. After a promotion, plan the change again.',
   },
   CLUSTER_IDENTITY_MISMATCH: {
     group: 'targets_clusters_nodes',

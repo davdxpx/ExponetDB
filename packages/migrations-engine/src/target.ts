@@ -11,6 +11,7 @@ import {
   readLedgerRows,
   relationSizes,
   snapshotWithin,
+  sql,
   type TargetError,
 } from '@exponetdb/postgres'
 import { MigrationError } from './errors.ts'
@@ -35,7 +36,29 @@ export interface TargetState {
   readonly systemIdentifier: string
   readonly databaseOid: string
   readonly serverVersionNum: number
+  /** `pg_is_in_recovery()`: a standby takes no writes (VC-073). */
+  readonly inRecovery: boolean
   readonly observedAt: string
+}
+
+/**
+ * A change is refused before any statement when the PostgreSQL behind the target is a standby
+ * (VC-073), and when the database object is not the one the registry recorded (VC-071: a clone
+ * that took the name carries the same marker). Reads (status, verification of what is there) are
+ * not refused by either.
+ */
+export function assertWritable(
+  state: Pick<TargetState, 'inRecovery' | 'databaseOid'>,
+  recordedOid: string | null,
+): void {
+  if (state.inRecovery) throw new MigrationError('TARGET_READ_ONLY')
+  if (recordedOid !== null && recordedOid !== state.databaseOid) {
+    throw new MigrationError('TARGET_IDENTITY_MISMATCH', {
+      reason: 'database_oid',
+      recordedOid,
+      observedOid: state.databaseOid,
+    })
+  }
 }
 
 export interface ExpectedIdentity {
@@ -87,6 +110,8 @@ export function checkIdentity(
   }
 }
 
+const RECOVERY = sql`SELECT pg_catalog.pg_is_in_recovery() AS in_recovery`
+
 /** Reads the target state inside an open read-only transaction (observer, or the migrator's re-check). */
 export async function readTargetState(
   tx: CatalogReader,
@@ -125,6 +150,8 @@ export async function readTargetState(
     systemIdentifier: tx.facts.systemIdentifier,
     databaseOid: tx.facts.databaseOid,
     serverVersionNum: tx.facts.serverVersionNum,
+    // Unknown counts as in recovery: a write is never started on a guess.
+    inRecovery: (await tx.query(RECOVERY))[0]?.bool('in_recovery') ?? true,
     observedAt: new Date().toISOString(),
   }
 }

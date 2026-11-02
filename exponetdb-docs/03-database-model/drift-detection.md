@@ -165,6 +165,21 @@ privileges on staging and production due to `pg_default_acl`) and the missing
 `0014` policy fix on production are exactly class C/D security drift that went
 unnoticed for weeks.
 
+### 6.1 What the fingerprint does not cover
+
+**[DECIDED]** (verification campaign VC-136, 2026-11-02) `fp1` is frozen and
+hashes object definitions, ownership, privileges, security settings and
+dependencies, not their **comments**: a `COMMENT ON` change made outside the
+migrations is not drift, which the fingerprint tests pin
+(`packages/postgres/test/adapter.test.ts`, "omits absent and default values":
+the comment moves the documentation hash, not the entry's). Comments are also
+the channel through which untrusted text reaches an agent
+([`../08-auth-and-security/ai-agent-safety.md`](../08-auth-and-security/ai-agent-safety.md)),
+so an unseen comment change is a known blind spot, not a clean check. A check
+that counts comments is `fp2` through an ADR, not a change to `fp1`. The same
+holds for data, sequence values, statistics and anything outside the managed
+scope (counted as `unmanaged`).
+
 ## 7. Wave 4 implementation (kind C)
 
 **[DECIDED]** (Wave 4, `packages/diagnostics`; order §137 to §142) Until the
@@ -174,6 +189,12 @@ after the identity read-back, stored as the baseline only when it is
 complete) or an accepted drift (`drift.accept`, Wave 8, §5). The provenance is
 recorded (`reason`, operation). Wave 6 supersedes it with the last verified
 `fingerprint_after`. The current schema is never taken as expected.
+**[DECIDED]** (VC-069, 2026-11-02) That includes an operation that stopped
+part-way: the last bundle of its verified prefix (applied and verified without a
+gap from the first) becomes the expected schema, from the plan's start, so the
+next plan starts from a baseline it knows; a bundle that changed the schema
+before it failed is not adopted (the snapshot must still equal that bundle's
+`fingerprint_after`), and a change made between two plans stays drift.
 
 - A check takes the current snapshot with the **baseline's** managed scope,
   so the two fingerprints are comparable; schemas outside that scope are

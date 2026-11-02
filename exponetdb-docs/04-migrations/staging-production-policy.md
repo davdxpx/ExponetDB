@@ -58,9 +58,16 @@ target `S`:
    ([`migration-bundles.md` §3](./migration-bundles.md#3-checksum-semantics)),
    so evidence never carries over to a verification whose checks, coverage or
    declared consumer code differ.
-3. The evidence was produced by this installation (the ledger row's
-   `operation_id` is known in the Control Store) and `S`'s identity marker is
-   intact (no `TARGET_IDENTITY_MISMATCH` or `LEDGER_DIVERGENCE` open on `S`).
+3. The evidence was produced by this installation and `S`'s identity marker is
+   intact. **[DECIDED]** (verification campaign VC-079, VC-153, 2026-11-02) An
+   operation id alone is not attribution: the ledger row counts only when an
+   operation of `S` listed the migration (its progress in the Control Store), `S`'s
+   ledger agrees with its mirror in the Control Store (one divergence on `S` is
+   no evidence at all: the mirror exists to catch tampering), and the passing
+   verification is one the Control Store mirrored. Two hand-written rows quoting
+   a genuine or unrelated operation id are therefore `missing` or `unverified`,
+   and the plan is denied. The apply re-checks the same rules, and the very
+   verification the plan bound.
 4. `S` has not been restored to a state *before* `M` since (generation check:
    the ledger row exists in `S`'s current generation).
 
