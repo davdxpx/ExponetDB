@@ -47,6 +47,8 @@ export interface ListResult {
     readonly id: string
     readonly min: string | null
     readonly max: string | null
+    /** VC-005: absent when the node could not list the archive. */
+    readonly gapEnds?: readonly string[]
   }[]
   readonly truncated: boolean
 }
@@ -70,6 +72,8 @@ export interface ReconcileInput {
 export interface ReconcileOutcome {
   readonly outcome: 'ok' | 'partial' | 'failed'
   readonly errorCode: string | null
+  /** Why the repository was not mirrored (VC-061): `repository_missing`, `repository_unreadable`, `identity_mismatch`. */
+  readonly reason?: string
   readonly entries: number
   readonly inserted: number
   readonly missing: number
@@ -225,6 +229,7 @@ export async function reconcileCatalog(tx: Tx, input: ReconcileInput): Promise<R
   if (input.engine === 'pgbackrest') {
     const stanza = result.stanza
     if (stanza === null || stanza.status !== 'ok') {
+      const reason = stanza?.status === 'missing' ? 'repository_missing' : 'repository_unreadable'
       await finding(
         tx,
         clusterId,
@@ -232,13 +237,14 @@ export async function reconcileCatalog(tx: Tx, input: ReconcileInput): Promise<R
         'critical',
         key('backup_repository_unreadable'),
         'The engine could not read the repository (stanza missing or in error).',
-        { repositoryId, status: stanza?.status ?? 'missing' },
+        { repositoryId, status: stanza?.status ?? 'missing', reason },
         nowMs,
       )
       return record(
         {
           outcome: 'failed',
           errorCode: 'BACKUP_REPOSITORY_UNAVAILABLE',
+          reason,
           entries: 0,
           inserted: 0,
           missing: 0,
@@ -261,6 +267,7 @@ export async function reconcileCatalog(tx: Tx, input: ReconcileInput): Promise<R
         {
           outcome: 'failed',
           errorCode: 'RESTORE_TARGET_MISMATCH',
+          reason: 'identity_mismatch',
           entries: 0,
           inserted: 0,
           missing: 0,
@@ -344,32 +351,66 @@ export async function reconcileCatalog(tx: Tx, input: ReconcileInput): Promise<R
     await resolve(tx, clusterId, 'backup_catalog_divergence', key('backup_catalog_divergence'))
   }
 
+  // The archiver writes into the current archive id only: the highest database id (pgBackRest's
+  // `<major>-<db id>`, raised by stanza-upgrade). WAL names restart after a major upgrade, so an
+  // older id's range can hold the archiver's segment name too (VC-062 review).
+  const dbIdOf = (id: string) => Number(id.slice(id.indexOf('-') + 1))
+  const current = Math.max(...result.archive.map((a) => dbIdOf(a.id)).filter(Number.isFinite))
   for (const a of result.archive) {
     const timeline = segmentTimeline(a.min) ?? segmentTimeline(a.max)
     if (timeline === null || !/^[0-9]{1,2}-[0-9]{1,5}$/.test(a.id)) continue
     const max = a.max !== null && SEGMENT.test(a.max) ? a.max : null
-    // The time of the newest segment is known only when the archiver's last archived segment is
-    // exactly that one: a later one says nothing about when this repository got its newest
+    // The archive reaches the archiver's time only when this repository holds the archiver's last
+    // archived segment: a later one says nothing about when this repository got its newest
     // segment (a lagging copy, or archive-push moved to another repository: review findings
-    // C-3/A-3). A time later than now (plus the tolerated skew) is not believed.
+    // C-3/A-3). VC-062: one inside the repository, below its newest (an observation older than
+    // the listing), is a lower bound, not a reason to show no window. A time later than now (plus
+    // the tolerated skew) is not believed.
     const archived = input.archive
     const archivedAtMs =
       archived?.lastArchivedAt == null ? Number.NaN : Date.parse(archived.lastArchivedAt)
+    const min = a.min !== null && SEGMENT.test(a.min) ? a.min : null
+    const last = archived?.lastArchivedWal ?? null
     const maxArchivedAt =
       archived !== null &&
+      dbIdOf(a.id) === current &&
       max !== null &&
-      archived.lastArchivedWal === max &&
+      min !== null &&
+      last !== null &&
+      SEGMENT.test(last) &&
+      segmentTimeline(last) === timeline &&
+      last >= min &&
+      last <= max &&
       Number.isFinite(archivedAtMs) &&
       archivedAtMs <= nowMs + FUTURE_TOLERANCE_MS
         ? archived.lastArchivedAt
         : null
+    // VC-005: where the archive resumes after missing segments, as the node listed it, the newest
+    // 64 (the holes newer backups depend on). A listing the node could not make (no gapEnds) keeps
+    // the holes known before and adds an `unlisted` end at the newest segment: nothing before it
+    // is proven continuous, also on a first listing (VC-005 review).
+    const gaps =
+      a.gapEnds === undefined
+        ? null
+        : JSON.stringify(
+            a.gapEnds
+              .filter((end) => SEGMENT.test(end) && segmentTimeline(end) === timeline)
+              .slice(-64)
+              .map((end) => ({ to: end })),
+          )
+    const unlisted = JSON.stringify(max === null ? [] : [{ to: max, unlisted: true }])
     await tx.query(
       'backups.wal_coverage.upsert',
-      `INSERT INTO backups.wal_coverage (repository_id, archive_id, timeline, min_segment, max_segment, max_archived_at, observed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, now())
+      `INSERT INTO backups.wal_coverage (repository_id, archive_id, timeline, min_segment, max_segment, max_archived_at, gaps, observed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, coalesce($7::jsonb, $8::jsonb), now())
        ON CONFLICT (repository_id, archive_id, timeline) DO UPDATE
           SET min_segment = EXCLUDED.min_segment, max_segment = EXCLUDED.max_segment,
-              max_archived_at = EXCLUDED.max_archived_at, observed_at = now()`,
+              max_archived_at = EXCLUDED.max_archived_at,
+              gaps = CASE WHEN $7::jsonb IS NULL
+                          THEN coalesce((SELECT jsonb_agg(g) FROM jsonb_array_elements(backups.wal_coverage.gaps) g
+                                          WHERE NOT g ? 'unlisted'), '[]'::jsonb) || $8::jsonb
+                          ELSE EXCLUDED.gaps END,
+              observed_at = now()`,
       [
         repositoryId,
         a.id,
@@ -377,6 +418,8 @@ export async function reconcileCatalog(tx: Tx, input: ReconcileInput): Promise<R
         a.min !== null && SEGMENT.test(a.min) ? a.min : null,
         max,
         maxArchivedAt,
+        gaps,
+        unlisted,
       ],
     )
   }

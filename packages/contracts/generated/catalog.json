@@ -11065,6 +11065,7 @@
               "point_in_time_outside_window",
               "no_backup_selectable",
               "repository_engine_below_floor",
+              "archive_time_unknown",
               "cluster_not_external",
               "node_not_served"
             ]

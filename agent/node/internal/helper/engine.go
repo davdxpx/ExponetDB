@@ -463,13 +463,72 @@ func (e *engineRun) pgbrVerify(ctx context.Context) {
 	if err == nil && code == 0 {
 		// pgbackrest verify exits 0 when it reports a corrupt or missing file (TC-011, D-03): the
 		// result is in its text, and a backup is not verified on a corrupt archive.
-		n := scan.errors()
+		reported := scan.errors()
+		// VC-005: a segment missing after the start of the backups it verified is no error of
+		// pgbackrest verify; the node lists the archive itself.
+		gaps, listed := e.archiveGapsAfter(ctx, e.str("label"))
+		if !listed {
+			// Not proven free of holes is no pass (VC-005 review).
+			gaps++
+			e.note("the archive could not be listed for WAL gaps; the verification does not pass without it")
+		}
+		n := reported + gaps
 		e.outcome.VerifyErrors = &n
+		if reported > 0 {
+			e.note("pgbackrest verify reported %d error(s) in the repository", reported)
+		}
+		if gaps > 0 {
+			e.note("the WAL archive misses segments after the start of the verified backups (%d gap(s))", gaps)
+		}
 		if n > 0 {
 			e.outcome.State = "failed"
-			e.note("pgbackrest verify reported %d error(s) in the repository", n)
 		}
 	}
+}
+
+// archiveGapsAfter counts the WAL gaps after the start of the backup `label` (or, for the whole
+// repository, of its oldest backup): a hole there makes a backup unrestorable to its end or a
+// point in time past the hole. `listed` is false when the archive could not be read.
+func (e *engineRun) archiveGapsAfter(ctx context.Context, label string) (int64, bool) {
+	s, ok := e.pgbrInfo(ctx)
+	if !ok {
+		return 0, false
+	}
+	start := ""
+	for _, b := range s.Backup {
+		if b.Archive.Start == nil || (label != "" && b.Label != label) {
+			continue
+		}
+		if start == "" || *b.Archive.Start < start {
+			start = *b.Archive.Start
+		}
+	}
+	if start == "" {
+		return 0, true
+	}
+	p := e.rec.PgBackRest
+	var gaps int64
+	for _, a := range s.Archive {
+		if !archiveIDRE.MatchString(a.ID) {
+			continue
+		}
+		var buf strings.Builder
+		w := &lockedWriter{w: &buf}
+		code, err := e.o.exec.run(ctx, engineCmd{Path: PgBackRest, Args: pgbrRepoLsArgs(p.Config, p.Include, p.Stanza, p.Repo, a.ID), Out: w})
+		if err != nil || code != 0 {
+			return gaps, false
+		}
+		segments, err := archiveSegments([]byte(buf.String()))
+		if err != nil {
+			return gaps, false
+		}
+		for _, end := range walGapEnds(segments) {
+			if end > start {
+				gaps++
+			}
+		}
+	}
+	return gaps, true
 }
 
 // verifyCountsRE is the line pgBackRest prints under each archive and backup it verified.

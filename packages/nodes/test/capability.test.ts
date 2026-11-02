@@ -9,6 +9,7 @@ import {
   fragmentHolds,
   hbaLockOut,
   hbaRuleShows,
+  helperRefusal,
   outcomeOf,
   pemCertificates,
   rejectionCode,
@@ -55,6 +56,48 @@ describe('job ends (control-plane.md §9.4)', () => {
     ]) {
       expect(outcomeOf({ end: 'unproven', jobId: 'j', why }, cap)).toBe('unknown')
     }
+  })
+
+  it("reads the helper's refusal from the agent's excerpt; a refused start never began (VC-061)", () => {
+    expect(
+      helperRefusal('start_run', "start_refused (repository_unreadable): pgBackRest's catalog"),
+    ).toEqual({
+      code: 'repository_unreadable',
+      started: false,
+    })
+    expect(helperRefusal(null, 'helper refused (repository_missing): x')).toEqual({
+      code: 'repository_missing',
+      started: undefined,
+    })
+    // Only a start says its run never began; anything else proves nothing about the effect.
+    expect(helperRefusal('remove_scratch', 'start_refused (failed): x')?.started).toBeUndefined()
+    for (const excerpt of [
+      null,
+      '',
+      "stopped at the job's run limit: start_refused (failed): x",
+      'start_refused (Failed): x',
+      'precondition_failed: y',
+    ]) {
+      expect(helperRefusal('start_run', excerpt)?.started).toBeUndefined()
+    }
+    const failed = (startRefused?: string) =>
+      outcomeOf(
+        {
+          end: 'failed',
+          jobId: 'j',
+          effectBegan: false,
+          precondition: false,
+          steps: ['start_run:running'],
+          ...(startRefused === undefined ? {} : { helperCode: startRefused }),
+        },
+        'backup.verify@1',
+      )
+    expect(failed('repository_unreadable')).toMatchObject({
+      outcome: 'not_applied',
+      errorCode: 'NODE_CAPABILITY_FAILED',
+      detail: { capability: 'backup.verify@1', jobId: 'j', reason: 'repository_unreadable' },
+    })
+    expect(failed()).toMatchObject({ detail: { capability: 'backup.verify@1', jobId: 'j' } })
   })
 
   it('a job that never ran is not applied, with the reason as a catalog code', () => {

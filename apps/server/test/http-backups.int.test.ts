@@ -23,6 +23,7 @@ import type { BackupExecutionConfig, ServeConfig } from '../src/config/env.ts'
 import { createPublicApp, httpMetrics } from '../src/interfaces/http/app.ts'
 import {
   enrollOwner,
+  NodeFailure,
   ORIGIN,
   type Person,
   placeTarget,
@@ -74,6 +75,49 @@ interface Host {
   calls: string[]
   /** The label the next backup run reports (an existing one simulates engine-user state naming an old backup). */
   runLabel: string
+  /** VC-061: the repository's key was changed, or the repository was deleted. */
+  damage?: 'wrong_key' | 'deleted' | undefined
+}
+
+/** VC-061: what the agent states when the helper refuses at once (the run never started). */
+function damaged(host: Host, capability: string): JsonObject | NodeFailure | undefined {
+  if (host.damage === undefined) return undefined
+  const code = host.damage === 'wrong_key' ? 'repository_unreadable' : 'repository_missing'
+  switch (capability) {
+    case 'backup.list@1':
+      return host.damage === 'wrong_key'
+        ? new NodeFailure([], `helper refused (${code}): pgBackRest's catalog is not readable`)
+        : {
+            ...listing(host),
+            stanza: {
+              status: 'missing',
+              message: 'missing stanza path',
+              systemIdentifier: null,
+              cipher: 'unknown',
+            },
+            backups: [],
+            archive: [],
+          }
+    case 'backup.run@1':
+    case 'backup.verify@1':
+    case 'restore.execute@1':
+      return new NodeFailure(
+        ['start_run:running'],
+        `start_refused (${code}): the repository cannot be used`,
+      )
+    case 'restore.prepare@1':
+      return {
+        runId: 'x',
+        scratchFree: true,
+        port: 55401,
+        spaceAvailableBytes: 10_000_000_000,
+        spaceRequiredBytes: null,
+        engineCanRead: false,
+        walContinuous: null,
+        refusals: [host.damage === 'wrong_key' ? 'engine_cannot_read' : 'repository_missing'],
+      }
+  }
+  return undefined
 }
 
 function listing(host: Host): JsonObject {
@@ -98,7 +142,10 @@ function listing(host: Host): JsonObject {
       postgresMajor: 17,
       error: false,
     })),
-    archive: [{ id: '17-1', min: '000000010000000000000003', max: '000000010000000000000009' }],
+    // The node listed the archive and found no hole (VC-005: an unlisted archive is not continuous).
+    archive: [
+      { id: '17-1', min: '000000010000000000000003', max: '000000010000000000000009', gapEnds: [] },
+    ],
     truncated: false,
   }
 }
@@ -112,14 +159,35 @@ function started(args: JsonObject): JsonObject {
 }
 
 function answer(host: Host) {
-  return (capability: string, args: JsonObject, job: { readonly jobId: string }): JsonObject => {
+  return (
+    capability: string,
+    args: JsonObject,
+    job: { readonly jobId: string },
+  ): JsonObject | NodeFailure => {
     host.calls.push(capability)
     const runId = String(args['runId'] ?? '')
+    const refused = damaged(host, capability)
+    if (refused !== undefined) {
+      return refused instanceof NodeFailure || capability !== 'restore.prepare@1'
+        ? refused
+        : { ...refused, runId }
+    }
     switch (capability) {
       case 'postgres.status@1':
         return STATUS
       case 'backup.list@1':
         return listing(host)
+      case 'wal.archive_status@1':
+        // The archiver's last segment is the repository's newest (the listing's archive max).
+        return {
+          archiveMode: 'on',
+          archivedCount: 9,
+          failedCount: 0,
+          lastArchivedWal: '000000010000000000000009',
+          lastArchivedAt: new Date(Date.now() - 60_000).toISOString(),
+          lastFailedWal: null,
+          lastFailedAt: null,
+        }
       case 'backup.run@1':
         host.runs.set(runId, { purpose: 'backup', startJobId: job.jobId, label: host.runLabel })
         return started(args)
@@ -138,6 +206,7 @@ function answer(host: Host) {
           refusals: [],
         }
       case 'restore.execute@1':
+        startedRowCounts = args['rowCounts']
         host.runs.set(runId, { purpose: 'restore', startJobId: job.jobId, label: null })
         return started(args)
       case 'restore.discard@1':
@@ -160,6 +229,14 @@ function answer(host: Host) {
 
 /** What the simulated node reports for the amcheck check of a restore (TC-010). */
 let amcheckOutcome: 'passed' | 'not_run' | 'failed' = 'passed'
+/**
+ * Where the simulated replay stops: inside the newest archived segment
+ * (000000010000000000000009), as a real replay of it does. VC-004: exactly at
+ * its start means that segment was never replayed (deleted or unreadable).
+ */
+let replayReached = '0/9000060'
+/** The row-count bounds the last restore start carried (VC-004). */
+let startedRowCounts: unknown
 const AMCHECK_DETAIL = '497 indexes checked in 3 of 5 databases; amcheck is missing in the others'
 
 function statusOf(
@@ -188,17 +265,25 @@ function statusOf(
         : {
             label: run.label,
             verifyErrors: run.purpose === 'verify' ? 0 : null,
-            recoveryReachedLsn: run.purpose === 'restore' ? '0/9000000' : null,
+            recoveryReachedLsn: run.purpose === 'restore' ? replayReached : null,
             recoveryReachedAt: run.purpose === 'restore' ? at : null,
             timeline: 1,
             port: run.purpose === 'restore' ? 55401 : null,
             checks:
               run.purpose === 'restore'
-                ? ['recovery_target_reached', 'probe_simple', 'probe_extended', 'amcheck'].map(
-                    (check) =>
-                      check === 'amcheck' && amcheckOutcome !== 'passed'
-                        ? { check, outcome: amcheckOutcome, detail: AMCHECK_DETAIL }
-                        : { check, outcome: 'passed', detail: null },
+                ? [
+                    'recovery_target_reached',
+                    'probe_simple',
+                    'probe_extended',
+                    'amcheck',
+                    // The node counts the tables it was given (VC-004).
+                    ...(Array.isArray(startedRowCounts) && startedRowCounts.length > 0
+                      ? ['row_counts']
+                      : []),
+                  ].map((check) =>
+                    check === 'amcheck' && amcheckOutcome !== 'passed'
+                      ? { check, outcome: amcheckOutcome, detail: AMCHECK_DETAIL }
+                      : { check, outcome: 'passed', detail: null },
                   )
                 : [],
             phases:
@@ -301,6 +386,19 @@ async function drive() {
     })
     if (r.status === 'idle') return
   }
+}
+
+/** The detail of the operation's last event that names an error code (VC-061). */
+async function errorDetail(operationId: string): Promise<JsonObject | undefined> {
+  const r = await db.asSuperuser((c) =>
+    c.query(
+      `SELECT detail FROM operations.operation_events WHERE operation_id = $1 AND detail ? 'errorCode'
+        ORDER BY event_id DESC LIMIT 1`,
+      [operationId],
+    ),
+  )
+  // The transition writes the outcome's detail beside its errorCode.
+  return r.rows[0]?.detail as JsonObject | undefined
 }
 
 async function view(operationId: string) {
@@ -670,6 +768,103 @@ describe('backups through REST, the worker and a simulated node', () => {
     await node.stop()
   })
 
+  it('offers a random point in time after a refresh alone: the refresh records the archive time (VC-062)', async () => {
+    const { w, node, host } = await setup('nonprod')
+    const repositoryId = await adopt(w)
+    // No wal.archive_status@1 inspection before: the refresh reads it itself.
+    expect((await refresh(w)).state).toBe('succeeded')
+    expect(host.calls).toContain('wal.archive_status@1')
+    const catalog = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/backups`)
+    const backupId = catalog.body.backups[0].id as string
+    const verified = await owner.browser.call(
+      'POST',
+      `/api/v1/clusters/${w.clusterId}/backups/${backupId}/verify`,
+      {},
+    )
+    expect(verified.status, JSON.stringify(verified.body)).toBe(202)
+    await drive()
+    expect((await view(verified.body.id)).state).toBe('succeeded')
+    const planned = await owner.browser.call('POST', `/api/v1/clusters/${w.clusterId}/drills`, {
+      repositoryId,
+      selection: { kind: 'pitr_random' },
+    })
+    expect(
+      [planned.status, planned.body?.code, planned.body?.decision],
+      JSON.stringify(planned.body),
+    ).toEqual([201, undefined, 'allow'])
+    await node.stop()
+  })
+
+  it('ends a verification, a refresh and a drill at once with a named code on a wrong key or a deleted repository (VC-061)', async () => {
+    const { w, node, host } = await setup('nonprod')
+    const repositoryId = await adopt(w)
+    await refresh(w)
+    const catalog = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/backups`)
+    const backupId = catalog.body.backups[0].id as string
+    const verifyOnce = async () => {
+      const verified = await owner.browser.call(
+        'POST',
+        `/api/v1/clusters/${w.clusterId}/backups/${backupId}/verify`,
+        {},
+      )
+      expect([verified.status, verified.body?.code], JSON.stringify(verified.body)).toEqual([
+        202,
+        undefined,
+      ])
+      const started = Date.now()
+      await drive()
+      return { operation: await view(verified.body.id), seconds: (Date.now() - started) / 1000 }
+    }
+    // A passed verification first: the drill below is allowed.
+    expect((await verifyOnce()).operation.state).toBe('succeeded')
+
+    for (const [damage, reason] of [
+      ['wrong_key', 'repository_unreadable'],
+      ['deleted', 'repository_missing'],
+    ] as const) {
+      host.damage = damage
+      host.calls.length = 0
+      const { operation, seconds } = await verifyOnce()
+      expect(
+        [
+          operation.state,
+          operation.applyOutcome,
+          operation.errorCode,
+          (await errorDetail(operation.id))?.['reason'],
+        ],
+        `${damage}: ${JSON.stringify(operation)}`,
+      ).toEqual(['failed', 'not_applied', 'BACKUP_REPOSITORY_UNAVAILABLE', reason])
+      // The refusal ends it: no wait for a run that never began.
+      expect(seconds).toBeLessThan(20)
+      expect(host.calls).not.toContain('run.status@1')
+      const refreshed = await refresh(w)
+      const repositories = (await errorDetail(refreshed.id))?.['repositories']
+      expect(
+        [refreshed.state, refreshed.errorCode, repositories],
+        `${damage}: ${JSON.stringify(refreshed)}`,
+      ).toEqual([
+        'failed',
+        'BACKUP_REPOSITORY_UNAVAILABLE',
+        [{ repositoryId, errorCode: 'BACKUP_REPOSITORY_UNAVAILABLE', reason }],
+      ])
+    }
+    // A drill on the deleted repository names it missing, not a foreign stanza.
+    const drill = await planAndApply(`/api/v1/clusters/${w.clusterId}/drills`, {
+      repositoryId,
+      selection: { kind: 'latest' },
+    })
+    expect(
+      [
+        drill.operation.state,
+        drill.operation.errorCode,
+        (await errorDetail(drill.operation.id))?.['refusals'],
+      ],
+      JSON.stringify(drill.operation),
+    ).toEqual(['failed', 'BACKUP_REPOSITORY_UNAVAILABLE', ['repository_missing']])
+    host.damage = undefined
+    await node.stop()
+  })
+
   it('passes a drill whose amcheck was not run where the extension is missing, and fails one whose amcheck failed (TC-010, D-02)', async () => {
     const { w, node } = await setup('nonprod')
     const repositoryId = await adopt(w)
@@ -709,6 +904,62 @@ describe('backups through REST, the worker and a simulated node', () => {
       'failed',
       'passed',
     ])
+    await node.stop()
+  })
+
+  // VC-004: with the newest archived segment deleted the drill passed with committed data missing.
+  it('fails a drill whose replay stopped at the start of the newest archived segment, and carries row-count bounds to the node', async () => {
+    const { w, node } = await setup('nonprod')
+    const repositoryId = await adopt(w)
+    await refresh(w)
+    const catalog = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/backups`)
+    const backupId = catalog.body.backups[0].id as string
+    await owner.browser.call(
+      'POST',
+      `/api/v1/clusters/${w.clusterId}/backups/${backupId}/verify`,
+      {},
+    )
+    await drive()
+    try {
+      replayReached = '0/9000000'
+      const short = await planAndApply(`/api/v1/clusters/${w.clusterId}/drills`, {
+        repositoryId,
+        selection: { kind: 'latest' },
+      })
+      expect(short.operation.state).toBe('verification_failed')
+      const restores = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/restores`)
+      expect(restores.body.restores[0].checks).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ check: 'recovery_target_reached', outcome: 'failed' }),
+        ]),
+      )
+    } finally {
+      replayReached = '0/9000060'
+    }
+    const bounds = [{ database: 'app', schema: 'public', table: 'orders', min: 1000, max: 2000 }]
+    const counted = await planAndApply(`/api/v1/clusters/${w.clusterId}/drills`, {
+      repositoryId,
+      selection: { kind: 'latest' },
+      rowCounts: bounds,
+    })
+    expect(counted.operation.state).toBe('succeeded')
+    expect(startedRowCounts).toEqual(bounds)
+    // VC-004 review: bounds the node would refuse are refused at planning, never after the start.
+    for (const bad of [
+      { database: 'app', schema: 'public', table: 'Orders', min: 1, max: 2 },
+      { database: 'app', schema: 'pub$lic', table: 'orders', min: 1, max: 2 },
+      { database: 'app', schema: 'public', table: 'orders', min: 3, max: 2 },
+    ]) {
+      const refused = await owner.browser.call('POST', `/api/v1/clusters/${w.clusterId}/drills`, {
+        repositoryId,
+        selection: { kind: 'latest' },
+        rowCounts: [bad],
+      })
+      expect([refused.status, refused.body?.code], JSON.stringify(bad)).toEqual([
+        422,
+        'VALIDATION_FAILED',
+      ])
+    }
     await node.stop()
   })
 

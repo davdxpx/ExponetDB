@@ -264,6 +264,7 @@ type execSpec struct {
 	Optional, Bind  []string
 	EnvironmentFile string
 	Timeout         time.Duration
+	MaxOutput       int
 }
 
 type unitState struct {
@@ -430,7 +431,7 @@ func (s systemdSupervisor) runAs(ctx context.Context, e execSpec) (Output, error
 	if !engineBinary(e.Path) {
 		return Output{}, errors.New("helper: binary not allowlisted")
 	}
-	return s.runner.Run(ctx, Command{Path: SystemdRun, Args: readArgs(e), Timeout: e.Timeout})
+	return s.runner.Run(ctx, Command{Path: SystemdRun, Args: readArgs(e), Timeout: e.Timeout, MaxOutput: e.MaxOutput})
 }
 
 // engineBinary: the binaries a run or a read may execute as the engine user.

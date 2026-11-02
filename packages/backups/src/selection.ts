@@ -42,7 +42,11 @@ export type Selection =
   | { readonly ok: true; readonly source: ResolvedSource }
   | {
       readonly ok: false
-      readonly reason: 'no_backup_selectable' | 'backup_not_found' | 'point_in_time_outside_window'
+      readonly reason:
+        | 'no_backup_selectable'
+        | 'backup_not_found'
+        | 'point_in_time_outside_window'
+        | 'archive_time_unknown'
     }
 
 /** At least this far before the newest archived WAL, so the random point is inside what is surely archived. */
@@ -140,6 +144,9 @@ export function selectSource(
       const b = verified.find((x) => Date.parse(x.view.finishedAt ?? '') <= request.atMs)
       if (b === undefined) return { ok: false, reason: 'point_in_time_outside_window' }
       const c = coverageFor(b, coverage)
+      // VC-062: the archive is there but the time of its newest segment was never observed.
+      if (c !== undefined && c.maxArchivedAt === null)
+        return { ok: false, reason: 'archive_time_unknown' }
       if (c?.maxArchivedAt == null || c.maxArchivedAt.getTime() < request.atMs) {
         return { ok: false, reason: 'point_in_time_outside_window' }
       }
@@ -147,11 +154,18 @@ export function selectSource(
     }
     case 'pitr_random': {
       // The oldest verified base from which the archive is continuous to its end.
-      const windows = verified
+      const continuous = verified
         .map((b) => ({ b, c: coverageFor(b, coverage) }))
-        .filter(({ b, c }) => continuousFrom(b, c) && c?.maxArchivedAt != null)
+        .filter(({ b, c }) => continuousFrom(b, c))
+      const windows = continuous.filter(({ c }) => c?.maxArchivedAt != null)
       const oldest = windows[windows.length - 1]
-      if (oldest === undefined) return { ok: false, reason: 'no_backup_selectable' }
+      if (oldest === undefined) {
+        // VC-062: say what is missing: the archive's time (a refresh records it), not a backup.
+        return {
+          ok: false,
+          reason: continuous.length > 0 ? 'archive_time_unknown' : 'no_backup_selectable',
+        }
+      }
       const from = Date.parse(oldest.b.view.finishedAt ?? '')
       const to = (oldest.c?.maxArchivedAt?.getTime() ?? from) - PITR_MARGIN_MS
       if (!(to > from)) return { ok: false, reason: 'point_in_time_outside_window' }

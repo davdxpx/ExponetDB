@@ -891,6 +891,13 @@ export type DrillList = {
 export type DrillPlanRequest = {
   readonly nodeId?: string
   readonly repositoryId: string
+  readonly rowCounts?: ReadonlyArray<{
+    readonly database: string
+    readonly max: number
+    readonly min: number
+    readonly schema: string
+    readonly table: string
+  }>
   readonly selection: DrillSelection
 }
 

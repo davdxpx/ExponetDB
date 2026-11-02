@@ -70,8 +70,24 @@ Rules:
 - `restore.prepare@1` validates space, engine compatibility and WAL continuity
   for the requested point in time on the node **during planning**. A plan with a
   failed check cannot be applied.
+- **[DECIDED]** (verification campaign fix VC-060, 2026-11-02) Space is
+  measured on the filesystem of the scratch directory (`<engine>/scratch`, which
+  can be a mount of its own; the engine directory only while scratch does not
+  exist yet), and `restore.execute@1` measures it again before it writes
+  anything: the chosen backup's size plus a tenth must fit, else it refuses
+  `precondition_failed`. Space prepare saw can be gone by the time of apply.
 - Bindings: backup id and its verification digest, WAL range, destination node
   and path, the destination target's identity (or "does not exist yet").
+- **[DECIDED]** (verification campaign fix VC-004, 2026-11-02) A restore to the
+  end of the archive must replay into the newest archived segment: a replay
+  that reached only that segment's start never read it (deleted or
+  unreadable), and the check `recovery_target_reached` fails the drill. A
+  drill request may carry `rowCounts` (database, schema, table, `min`,
+  `max`; at most 32; schema and table names in lower case, `min` at most
+  `max`, refused at planning otherwise): the node counts those tables in the restored cluster
+  (check `row_counts`) and a table outside its bounds fails the drill. A
+  drill without them passes on replay, probes and `amcheck` only and its
+  record says `row_counts` is not configured ([OD-60](../00-product/open-decisions.md#od-60-how-strict-a-drill-is-about-amcheck)).
 
 ## 3. Execution phases
 

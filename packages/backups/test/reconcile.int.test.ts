@@ -156,8 +156,71 @@ afterAll(async () => {
   await db?.drop()
 })
 
+// VC-005: backups.wal_coverage.gaps was never written, so wal_gap and walContinuous could not fire.
+describe('gaps in the WAL archive', () => {
+  it('records the gaps the node reports and keeps them when a later listing could not list the archive', async () => {
+    const w = await world()
+    const holed = listing(w, {
+      archive: [
+        {
+          id: '17-1',
+          min: WAL_START,
+          max: '000000010000000000000009',
+          gapEnds: ['000000010000000000000007'],
+        },
+      ],
+    })
+    await reconcile(w, holed, null)
+    expect((await listCoverage(serve, w.clusterId))[0]?.gapEnds).toEqual([
+      '000000010000000000000007',
+    ])
+    // The next listing has no gapEnds (the node could not list): the gap is not forgotten, and the
+    // archive up to its newest segment is not proven continuous either (VC-005 review).
+    await reconcile(w, listing(w), null)
+    expect((await listCoverage(serve, w.clusterId))[0]?.gapEnds).toEqual([
+      '000000010000000000000007',
+      '000000010000000000000009',
+    ])
+    // A listing without holes clears it.
+    await reconcile(
+      w,
+      listing(w, {
+        archive: [{ id: '17-1', min: WAL_START, max: '000000010000000000000009', gapEnds: [] }],
+      }),
+      null,
+    )
+    expect((await listCoverage(serve, w.clusterId))[0]?.gapEnds).toEqual([])
+  })
+
+  // VC-005 review: a first listing the node could not make was stored as '[]', a continuity claim.
+  it('never records an archive the node could not list as continuous, also the first time', async () => {
+    const w = await world()
+    await reconcile(w, listing(w), null)
+    expect((await listCoverage(serve, w.clusterId))[0]?.gapEnds).toEqual([
+      '000000010000000000000009',
+    ])
+  })
+
+  it('keeps the newest 64 gaps, the ones newer backups depend on', async () => {
+    const w = await world()
+    const ends = Array.from(
+      { length: 70 },
+      (_, i) => `00000001000000000000${(0x10 + i).toString(16).toUpperCase().padStart(4, '0')}`,
+    )
+    await reconcile(
+      w,
+      listing(w, {
+        archive: [{ id: '17-1', min: WAL_START, max: '000000010000000000000060', gapEnds: ends }],
+      }),
+      null,
+    )
+    const kept = (await listCoverage(serve, w.clusterId))[0]?.gapEnds ?? []
+    expect([kept.length, kept[0], kept[63]]).toEqual([64, ends[6], ends[69]])
+  })
+})
+
 describe('archive times of a repository', () => {
-  it('takes the archiver time only for the exact newest segment of the repository', async () => {
+  it('takes the archiver time for the newest segment of the repository', async () => {
     const w = await world()
     await reconcile(w, listing(w), {
       lastArchivedWal: '000000010000000000000009',
@@ -166,6 +229,51 @@ describe('archive times of a repository', () => {
     expect((await listCoverage(serve, w.clusterId))[0]?.maxArchivedAt?.toISOString()).toBe(
       '2026-10-21T02:00:00.000Z',
     )
+  })
+
+  // VC-062: an observation older than the listing (the archiver's last segment is in the repository,
+  // below its newest) was ignored, so no point in time was ever offered: the archive reaches at least then.
+  it('takes the archiver time as a lower bound when its last segment is in the repository below the newest', async () => {
+    const w = await world()
+    await reconcile(w, listing(w), {
+      lastArchivedWal: '000000010000000000000006',
+      lastArchivedAt: '2026-10-21T01:00:00.000Z',
+    })
+    expect((await listCoverage(serve, w.clusterId))[0]?.maxArchivedAt?.toISOString()).toBe(
+      '2026-10-21T01:00:00.000Z',
+    )
+    // Not a segment this repository does not hold: below its oldest, or on another timeline.
+    for (const lastArchivedWal of ['000000010000000000000001', '000000020000000000000006']) {
+      const v = await world()
+      await reconcile(v, listing(v), {
+        lastArchivedWal,
+        lastArchivedAt: '2026-10-21T01:00:00.000Z',
+      })
+      expect((await listCoverage(serve, v.clusterId))[0]?.maxArchivedAt, lastArchivedWal).toBeNull()
+    }
+  })
+
+  // VC-062 review: after a major upgrade (stanza-upgrade) the stanza keeps the old archive id; WAL
+  // names restart, so the new cluster's segment lies inside the old archive's range too.
+  it("gives the archiver's time only to the current archive id, never to an older major's", async () => {
+    const w = await world()
+    await reconcile(
+      w,
+      listing(w, {
+        archive: [
+          { id: '16-1', min: '000000010000000000000001', max: '000000010000000000000090' },
+          { id: '17-2', min: '000000010000000000000001', max: '000000010000000000000009' },
+        ],
+      }),
+      { lastArchivedWal: '000000010000000000000005', lastArchivedAt: '2026-10-21T01:00:00.000Z' },
+    )
+    const byId = Object.fromEntries(
+      (await listCoverage(serve, w.clusterId)).map((c) => [
+        c.archiveId,
+        c.maxArchivedAt?.toISOString() ?? null,
+      ]),
+    )
+    expect(byId).toEqual({ '16-1': null, '17-2': '2026-10-21T01:00:00.000Z' })
   })
 
   it('records no time when the archiver is ahead of what this repository lists (a lagging copy)', async () => {

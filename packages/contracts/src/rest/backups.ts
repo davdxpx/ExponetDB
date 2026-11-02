@@ -550,6 +550,26 @@ export const DrillPlanRequestSchema = z
     nodeId: NodeIdSchema.optional().meta({
       description: "Default: the cluster's own node; a drill always restores into scratch.",
     }),
+    rowCounts: z
+      .array(
+        // The node's own rules (NodeCapRestoreExecuteArgs), so a bound it would refuse is refused
+        // at planning, not after the run row exists (VC-004 review).
+        z
+          .strictObject({
+            database: z.string().regex(/^[A-Za-z_][A-Za-z0-9_$-]{0,62}$/),
+            schema: z.string().regex(/^[a-z_][a-z0-9_]{0,62}$/),
+            table: z.string().regex(/^[a-z_][a-z0-9_]{0,62}$/),
+            min: z.int().min(0),
+            max: z.int().min(0),
+          })
+          .refine((b) => b.min <= b.max, { message: 'min must not exceed max' }),
+      )
+      .max(32)
+      .optional()
+      .meta({
+        description:
+          'VC-004: the data check of the drill: each table of the restored cluster must hold between min and max rows (check row_counts). A drill without it passes on replay, probes and amcheck only, and says so.',
+      }),
   })
   .meta({ id: 'DrillPlanRequest' })
 

@@ -84,6 +84,11 @@ const (
 	// CodeOutcomeUnknown: an effect started and its end was not seen (a
 	// timeout); it may have happened.
 	CodeOutcomeUnknown = "outcome_unknown"
+	// CodeRepositoryMissing: the repository has no stanza (deleted or never created) (VC-061).
+	CodeRepositoryMissing = "repository_missing"
+	// CodeRepositoryUnreadable: the engine cannot read the repository (a wrong cipher key,
+	// damaged files, an engine error) (VC-061).
+	CodeRepositoryUnreadable = "repository_unreadable"
 )
 
 func (e *ErrorBody) Error() string { return "helper refused (" + e.Code + "): " + e.Message }

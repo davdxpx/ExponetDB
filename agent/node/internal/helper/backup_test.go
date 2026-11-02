@@ -333,9 +333,10 @@ func TestBackupRunStartsAFixedUnit(t *testing.T) {
 	if info, _ := os.Lstat(work); ownerOf(info) != b.uid {
 		t.Fatal("the work directory is not the engine user's")
 	}
-	// The same run id again, by another job: refused, nothing started.
+	// The same run id again, by another job: refused, nothing started. The run exists, so the
+	// refusal is replayed, which the agent never states as a start that did not begin (VC-061).
 	b.setUnit(UnitName(runA), "")
-	b.mustRefuse(OpBackupRun, b.job("backup.run", runArgs(runA, "full", pgbrRepo())), CodePreconditionFailed)
+	b.mustRefuse(OpBackupRun, b.job("backup.run", runArgs(runA, "full", pgbrRepo())), CodeReplayed)
 	if len(b.run.find(SystemdRun, "--unit=")) != 1 {
 		t.Fatal("a second start of one run id ran")
 	}
@@ -679,6 +680,10 @@ func TestBackupList(t *testing.T) {
 		t.Fatalf("%v", read.Args)
 	}
 	noSecrets(t, "argv", b.allArgv())
+	// VC-005 review: a long archive's listing is not cut at the default 1 MiB.
+	if ls := b.run.find(SystemdRun, "repo-ls"); len(ls) == 0 || ls[0].MaxOutput != listingMaxOutput || listingMaxOutput < 64<<20 {
+		t.Fatalf("repo-ls: %v", ls)
+	}
 	// A failed engine read is an error, never an empty list.
 	b.info = "[]"
 	b.mustRefuse(OpBackupList, b.job("backup.list", listArgs), CodeFailed)
@@ -1037,14 +1042,23 @@ func TestEngineRunVerifyReadsWhatPgBackRestReports(t *testing.T) {
 			"  backup: 20261007-010000F, status: invalid, total files checked: 12, total valid files: 9\n" + counts(1, 2, 0, 0), 3, "failed"},
 		// No count line at all: an error status or an invalid result is still at least one error.
 		{"an error status without counts", "P01   WARN: invalid result 000000010000000100000023-0123: Data corruption detected\nstanza: main\nstatus: error\n", 2, "failed"},
+		// VC-005 review: an archive the node cannot list is not proven free of holes.
+		{"the archive cannot be listed", clean, 1, "failed"},
 	} {
 		b := newBackupEnv(t)
 		b.mode("")
 		b.mustCall(OpBackupVerify, b.job("backup.verify", canon.Object{{Name: "cluster", Value: cluster()}, {Name: "repository", Value: pgbrRepo()},
 			{Name: "runId", Value: canon.String(runA)}, {Name: "label", Value: canon.Null{}}, {Name: "snapshot", Value: canon.Null{}}}))
 		fx := &fakeExec{fn: func(e engineCmd) (int, string) {
-			if strings.HasSuffix(strings.Join(e.Args, " "), " info") {
+			argv := strings.Join(e.Args, " ")
+			switch {
+			case strings.HasSuffix(argv, " info"):
 				return 0, pgbrInfoFixture(sysid)
+			case strings.Contains(argv, "repo-ls"):
+				if c.name == "the archive cannot be listed" {
+					return 1, ""
+				}
+				return 0, continuousListing("17-1", 1, 6)
 			}
 			return 0, c.out
 		}}
@@ -1373,7 +1387,7 @@ func FuzzEngineOutputs(f *testing.F) {
 			return
 		}
 		if s, err := parsePgbrInfo(info, "main"); err == nil {
-			if err := sv.ValidateResult("backup.list@1", pgbrListResult(s, "2.60.0")); err != nil {
+			if err := sv.ValidateResult("backup.list@1", pgbrListResult(s, "2.60.0", nil)); err != nil {
 				t.Fatalf("pgBackRest list: %v", err)
 			}
 			_ = pgbrSurvivors(s, 1, nil)
@@ -1466,9 +1480,9 @@ func TestStartsCheckTheStanzasCluster(t *testing.T) {
 		{Name: "retention", Value: canon.Object{{Name: "fullCount", Value: canon.Number(1)}, {Name: "differentialCount", Value: canon.Null{}}, {Name: "logicalDays", Value: canon.Null{}}}},
 		{Name: "keepLabels", Value: canon.Array{}}}), CodePreconditionFailed)
 	b.mustRefuse(OpRestoreExecute, b.job("restore.execute", restoreJobArgs(runA, 55402)), CodePreconditionFailed)
-	// A stanza without a database (never created): refused too.
+	// A stanza without a database (never created): refused too, named as missing (VC-061).
 	b.info = `[{"name":"main","status":{"code":1,"message":"missing stanza path"},"db":[],"backup":[],"archive":[]}]`
-	b.mustRefuse(OpBackupRun, b.job("backup.run", runArgs(runA, "full", pgbrRepo())), CodePreconditionFailed)
+	b.mustRefuse(OpBackupRun, b.job("backup.run", runArgs(runA, "full", pgbrRepo())), CodeRepositoryMissing)
 	if len(b.run.find(SystemdRun, "--unit=")) != 0 {
 		t.Fatal("a run started")
 	}

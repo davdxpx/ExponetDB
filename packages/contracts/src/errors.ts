@@ -1132,6 +1132,8 @@ export const ERRORS = {
             'point_in_time_outside_window',
             'no_backup_selectable',
             'repository_engine_below_floor',
+            // VC-062: no wal.archive_status@1 time for the archive yet; a catalog refresh records it.
+            'archive_time_unknown',
             // OD-54 (a), registry.cluster.adopt_agent: only an external cluster is adopted, by
             // an enrolled node that is live (active or degraded, with a recent heartbeat).
             'cluster_not_external',

@@ -82,8 +82,10 @@ func parsePgbrInfo(out []byte, stanza string) (*pgbrStanza, error) {
 			return &list[i], nil
 		}
 	}
-	return nil, errors.New("helper: the engine did not report the stanza")
+	return nil, errStanzaNotReported
 }
+
+var errStanzaNotReported = errors.New("helper: the engine did not report the stanza")
 
 var (
 	lsnRE     = regexp.MustCompile(`^[0-9A-F]{1,8}/[0-9A-F]{1,8}$`)
@@ -161,7 +163,9 @@ func stanzaState(code int) string {
 var pgbrKinds = map[string]string{"full": "full", "diff": "differential", "incr": "incremental"}
 
 // pgbrListResult is backup.list@1's result for a pgBackRest stanza.
-func pgbrListResult(s *pgbrStanza, engineVersion string) canon.Object {
+// gaps holds the gap ends of each archive id the node could list (VC-005); an archive missing
+// from it is reported without gapEnds (not listed), never as continuous.
+func pgbrListResult(s *pgbrStanza, engineVersion string, gaps map[string][]string) canon.Object {
 	sysid := canon.Value(canon.Null{})
 	if id := s.systemID(); id != "" {
 		sysid = canon.String(id)
@@ -203,11 +207,23 @@ func pgbrListResult(s *pgbrStanza, engineVersion string) canon.Object {
 			truncated = true
 			break
 		}
-		archive = append(archive, canon.Object{
+		item := canon.Object{
 			{Name: "id", Value: canon.String(bounded(a.ID, 32))},
 			{Name: "min", Value: optPattern(segmentRE, a.Min, true)},
 			{Name: "max", Value: optPattern(segmentRE, a.Max, true)},
-		})
+		}
+		if ends, listed := gaps[a.ID]; listed {
+			// The newest 64: a newer backup's continuity depends on the latest holes (VC-005 review).
+			if len(ends) > 64 {
+				ends, truncated = ends[len(ends)-64:], true
+			}
+			list := canon.Array{}
+			for _, end := range ends {
+				list = append(list, canon.String(end))
+			}
+			item = append(item, canon.Member{Name: "gapEnds", Value: list})
+		}
+		archive = append(archive, item)
 	}
 	return canon.Object{
 		{Name: "engineVersion", Value: versionValue(engineVersion)},
