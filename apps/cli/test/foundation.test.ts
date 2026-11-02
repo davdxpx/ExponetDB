@@ -325,6 +325,35 @@ describe('the human renderer names the data of a refusal (TC-022)', () => {
   })
 })
 
+describe('a refused node plan names the capability, the field and the reason (TC-056)', () => {
+  const terminal = { columns: 100, color: false, ascii: false, quiet: false }
+  const refused = (code: string, details: unknown, remediation?: string) =>
+    renderHuman(
+      result({
+        command: 'node postgres roles',
+        error: { code, message: 'refused', ...(remediation === undefined ? {} : { remediation }), details },
+      }),
+      terminal,
+    ).err
+
+  it('prints the capability that must be inspected first', () => {
+    expect(refused('NODE_OBSERVATION_STALE', { capability: 'agent.diagnostics@2' })).toContain(
+      '  capability: agent.diagnostics@2',
+    )
+  })
+
+  it('prints the reason of a registry conflict and the field of a validation failure', () => {
+    expect(refused('REGISTRY_CONFLICT', { reason: 'ca_bundle_lacks_postgres_ca' })).toContain(
+      '  reason: ca_bundle_lacks_postgres_ca',
+    )
+    expect(
+      refused('VALIDATION_FAILED', {
+        errors: [{ path: '/args/database', code: 'invalid', message: 'Required.' }],
+      }),
+    ).toContain('  /args/database: Required.')
+  })
+})
+
 describe('the plan view shows the change of a node plan (TC-001)', () => {
   const terminal = { columns: 110, color: false, ascii: false, quiet: false }
   const plan = (kind: string, content: object, analysis: object) =>

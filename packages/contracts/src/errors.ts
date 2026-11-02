@@ -1142,6 +1142,14 @@ export const ERRORS = {
             'job_key_not_removable',
             'job_key_overlap',
             'job_keys_invalid',
+            // Node plans (TC-056): the server or the host state that refuses the change.
+            'postgres_not_running',
+            'config_include_missing',
+            'config_parameter_conflict',
+            'config_plan_changed',
+            'extension_not_available',
+            'extension_already_installed',
+            'extension_not_installed',
             // Wave 8, drift acceptance: the finding is already resolved; the
             // target's current schema could not be read completely.
             'finding_resolved',
@@ -1292,7 +1300,8 @@ export const ERRORS = {
     title: 'Node observation missing or stale',
     message:
       'No node-signed observation of this cluster is recent enough to plan against (at most 10 minutes).',
-    remediation: 'Inspect the cluster through the node, then plan again.',
+    remediation:
+      'Inspect the cluster through the node (node inspect <node> --cluster <cluster> --capability <capability>), then plan again.',
     details: z.strictObject({
       capability: z
         .string()

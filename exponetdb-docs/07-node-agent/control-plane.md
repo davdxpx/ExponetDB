@@ -314,7 +314,16 @@ and the kind's change; `credential.rotate` has its own route
 the change against the kind's schema, resolves §9.1 and requires the **basis
 observation**: a node-signed observation of the kind's basis capability for
 this cluster (and, for a node plan capability, for exactly these arguments),
-at most 10 minutes old, otherwise `NODE_OBSERVATION_STALE`. The plan content
+at most 10 minutes old, otherwise `NODE_OBSERVATION_STALE` (its `details.capability`
+names the capability to inspect first; the CLI prints it). **[DECIDED]** (TC-056) A
+refusal names its cause: a field that is not accepted is `VALIDATION_FAILED` with
+the JSON Pointer of the field (`/args/expectSettings`, `/steps`, `/changes`), and
+the observed state that forbids the change is `REGISTRY_CONFLICT` with a `reason`:
+`postgres_not_running` (a reload of a stopped server), `config_include_missing`,
+`config_parameter_conflict` (a source with higher precedence overrides the
+parameter), `config_plan_changed`, `extension_not_available`,
+`extension_already_installed` and `extension_not_installed`; never the generic
+`CONFLICT`, which says an `If-Match` did not match. The plan content
 is the exact change and the mapping; the expected state binds the node id
 and state, the mapping and the basis observation's digest; the analysis is
 taken from the observation, so the person approves what the node reported.
