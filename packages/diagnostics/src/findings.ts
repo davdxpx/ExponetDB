@@ -129,37 +129,57 @@ export function clip(text: string, max: number): string {
   return `${text.slice(0, end)}…`
 }
 
-/** Opens a finding, or counts one more occurrence of the open one with the same key. */
+/**
+ * Opens a finding, or counts one more sighting of the open one with the same key. An open finding
+ * is written again only when what it says changed or when its last sighting is a day old (VC-041):
+ * counting every check wrote every open finding at every drift check (an indexed column, so no HOT
+ * update). `occurrences` and `lastSeenAt` therefore advance at most once a day for an unchanged
+ * finding.
+ */
 export async function recordFinding(
   tx: Tx,
   input: FindingInput,
 ): Promise<{ readonly findingId: string; readonly opened: boolean }> {
-  const { rows } = await tx.query(
-    'observation.findings.record',
-    `INSERT INTO observation.findings AS f
-       (finding_id, target_id, kind, code, severity, dedup_key, summary, details, state, opened_by_check)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 'open', $9)
-     ON CONFLICT (target_id, dedup_key) WHERE state = 'open'
-     DO UPDATE SET occurrences = f.occurrences + 1, severity = EXCLUDED.severity,
-                   summary = EXCLUDED.summary, details = EXCLUDED.details
-     RETURNING f.finding_id, (f.xmax = 0) AS opened`,
-    [
-      newId('fnd', Date.now()),
-      input.targetId,
-      input.kind,
-      input.code,
-      input.severity,
-      clip(input.dedupKey, 1024),
-      clip(input.summary, 1024),
-      JSON.stringify(input.details),
-      input.checkId ?? null,
-    ],
-  )
-  const row = rows[0]
-  if (row === undefined) {
-    throw new Error('a finding upsert returns its row')
+  const params = [
+    newId('fnd', Date.now()),
+    input.targetId,
+    input.kind,
+    input.code,
+    input.severity,
+    clip(input.dedupKey, 1024),
+    clip(input.summary, 1024),
+    JSON.stringify(input.details),
+    input.checkId ?? null,
+  ]
+  // A finding resolved between the upsert and the read is opened again by the second attempt.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { rows } = await tx.query(
+      'observation.findings.record',
+      `INSERT INTO observation.findings AS f
+         (finding_id, target_id, kind, code, severity, dedup_key, summary, details, state, opened_by_check)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, 'open', $9)
+       ON CONFLICT (target_id, dedup_key) WHERE state = 'open'
+       DO UPDATE SET occurrences = f.occurrences + 1, severity = EXCLUDED.severity,
+                     summary = EXCLUDED.summary, details = EXCLUDED.details
+        WHERE (f.severity, f.summary, f.details) IS DISTINCT FROM
+                (EXCLUDED.severity, EXCLUDED.summary, EXCLUDED.details)
+           OR f.last_seen_at < clock_timestamp() - interval '1 day'
+       RETURNING f.finding_id, (f.xmax = 0) AS opened`,
+      params,
+    )
+    const row = rows[0]
+    if (row !== undefined) return { findingId: row.text('finding_id'), opened: row.bool('opened') }
+    // Nothing to write: the open finding already says this.
+    const { rows: seen } = await tx.query(
+      'observation.findings.seen',
+      `SELECT finding_id FROM observation.findings
+        WHERE target_id = $1 AND dedup_key = $2 AND state = 'open'`,
+      [input.targetId, clip(input.dedupKey, 1024)],
+    )
+    const existing = seen[0]
+    if (existing !== undefined) return { findingId: existing.text('finding_id'), opened: false }
   }
-  return { findingId: row.text('finding_id'), opened: row.bool('opened') }
+  throw new Error('a finding upsert returns its row')
 }
 
 export async function resolveFinding(

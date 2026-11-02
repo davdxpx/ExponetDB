@@ -57,6 +57,7 @@ import {
   RegistrationSnapshotStore,
   readStatuses,
   recordDriftFailure,
+  recordFinding,
   recordLedgerWatch,
   runDriftCheck,
   sampleTarget,
@@ -381,7 +382,7 @@ describe('drift against the registration baseline', () => {
     expect(r.check.matched).toBeGreaterThan(5)
   })
 
-  it('finds out-of-band DDL; disabling row security is critical; a repeat counts occurrences', async () => {
+  it('finds out-of-band DDL; disabling row security is critical; a repeat is the same finding, written once (VC-041)', async () => {
     await ddl([
       'ALTER TABLE public.accounts DISABLE ROW LEVEL SECURITY',
       'ALTER TABLE public.accounts ADD COLUMN note text',
@@ -399,8 +400,8 @@ describe('drift against the registration baseline', () => {
     const open = await openFindings(h.worker, target.targetId, 'drift')
     expect(open.map((f) => [f.code, f.severity, f.occurrences])).toEqual(
       expect.arrayContaining([
-        ['object_changed', 'critical', 2],
-        ['object_added', 'warning', 2],
+        ['object_changed', 'critical', 1],
+        ['object_added', 'warning', 1],
       ]),
     )
     const changed = open.find((f) => f.code === 'object_changed')
@@ -979,18 +980,102 @@ describe('the ledger watch finding (VC-022)', () => {
       )
     ).rows[0]?.int('n')
 
-  it('opens one critical finding with an alertable audit event, counts later sightings, and clears when the ledger agrees', async () => {
+  it('opens one critical finding with an alertable audit event, writes an unchanged sighting once, and clears when the ledger agrees', async () => {
     const open = () => openFindings(h.worker, target.targetId, 'health')
     await recordLedgerWatch(h.worker, h.context.policy.clock, target.targetId, sighting)
     await recordLedgerWatch(h.worker, h.context.policy.clock, target.targetId, sighting)
     const found = (await open()).filter((f) => f.code === 'ledger_divergence')
     expect(found).toHaveLength(1)
-    expect(found[0]).toMatchObject({ severity: 'critical', occurrences: 2 })
+    expect(found[0]).toMatchObject({ severity: 'critical', occurrences: 1 })
     expect(await auditCount('ledger.divergence.detected')).toBe(1)
     // They agree again: resolved as cleared, once; an agreeing sighting with nothing open says nothing.
     await recordLedgerWatch(h.worker, h.context.policy.clock, target.targetId, null)
     await recordLedgerWatch(h.worker, h.context.policy.clock, target.targetId, null)
     expect((await open()).filter((f) => f.code === 'ledger_divergence')).toHaveLength(0)
     expect(await auditCount('ledger.divergence.cleared')).toBe(1)
+  })
+})
+
+/**
+ * VC-041: every drift check rewrote every open finding (`occurrences + 1` on an indexed column, so
+ * no HOT update): 13,968 open findings at the 15 minute cadence were about 1.3 million row updates
+ * and their WAL a day. An open finding is written again when what it says changed, or when its last
+ * sighting is a day old.
+ */
+describe('a repeated sighting of an open finding (VC-041)', () => {
+  const input = (
+    i: number,
+    over: Partial<{ summary: string; severity: 'warning' | 'critical' }> = {},
+  ) => ({
+    targetId: target.targetId,
+    kind: 'drift' as const,
+    code: 'object_added',
+    severity: over.severity ?? ('warning' as const),
+    dedupKey: `vc041:table:public.t${i}`,
+    summary: over.summary ?? `table public.t${i} was added`,
+    details: { name: `t${i}` },
+  })
+  const rowVersions = async () =>
+    new Map(
+      (
+        await h.worker.query(
+          'test.vc041.versions',
+          `SELECT dedup_key, xmin::text AS version, occurrences FROM observation.findings
+            WHERE target_id = $1 AND dedup_key LIKE 'vc041:%' AND state = 'open'`,
+          [target.targetId],
+        )
+      ).rows.map((r) => [r.text('dedup_key'), `${r.text('version')}/${r.int('occurrences')}`]),
+    )
+  const record = (inputs: ReturnType<typeof input>[]) =>
+    h.worker.transaction('test.vc041.record', async (tx) => {
+      const ids: string[] = []
+      for (const i of inputs) ids.push((await recordFinding(tx, i)).findingId)
+      return ids
+    })
+
+  it('writes 1,000 open findings once, however often they are seen again', async () => {
+    const inputs = Array.from({ length: 1000 }, (_, i) => input(i))
+    const first = await record(inputs)
+    const before = await rowVersions()
+    expect(before.size).toBe(1000)
+    const second = await record(inputs)
+    const third = await record(inputs)
+    // The same findings, answered with their ids, and not one row version was written.
+    expect(second).toEqual(first)
+    expect(third).toEqual(first)
+    expect(await rowVersions()).toEqual(before)
+  }, 120_000)
+
+  it('writes a finding again when its text or severity changed', async () => {
+    const before = await rowVersions()
+    await record([
+      input(0, { severity: 'critical' }),
+      input(1, { summary: 'table public.t1 changed' }),
+    ])
+    const after = await rowVersions()
+    for (const key of ['vc041:table:public.t0', 'vc041:table:public.t1']) {
+      expect(after.get(key)).not.toBe(before.get(key))
+      expect(after.get(key)?.endsWith('/2')).toBe(true)
+    }
+    expect(after.get('vc041:table:public.t2')).toBe(before.get('vc041:table:public.t2'))
+  })
+
+  it('refreshes a finding last seen more than a day ago, once', async () => {
+    await h.db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE observation.findings SET last_seen_at = clock_timestamp() - interval '2 days'
+          WHERE target_id = $1 AND dedup_key = 'vc041:table:public.t5'`,
+        [target.targetId],
+      )
+      await c.query('COMMIT')
+    })
+    const before = await rowVersions()
+    await record([input(5)])
+    const refreshed = await rowVersions()
+    expect(refreshed.get('vc041:table:public.t5')).not.toBe(before.get('vc041:table:public.t5'))
+    await record([input(5)])
+    expect(await rowVersions()).toEqual(refreshed)
   })
 })

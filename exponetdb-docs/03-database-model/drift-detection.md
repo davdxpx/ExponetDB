@@ -262,8 +262,10 @@ the reference never moves back to an older state; it catches up a
 migration verified later through `migration.verify`, which records none.
 - Each drifted object is one finding (`object_added`, `object_removed`,
   `object_changed`), deduplicated by kind, code and object (`C:<code>:<class>:`
-  SHA-256 of the canonical key): seen again it counts one more occurrence on
-  the same row; gone, it is resolved `cleared`, or `superseded` when the same
+  SHA-256 of the canonical key): seen again it is the same row, written again
+  only when its text or severity changed or when its last sighting is a day old
+  (**[DECIDED]** VC-041: `occurrences` and `last_seen_at` advance at most once a
+  day for an unchanged finding; every check used to rewrite every open finding); gone, it is resolved `cleared`, or `superseded` when the same
   object now drifts another way. Resolved findings stay as history.
 - Severity follows §6, conservatively: a changed `acl` or `owner` of any
   object; default privileges, policies and event triggers added, removed or
