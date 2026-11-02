@@ -1008,6 +1008,58 @@ describe('verify.sql refusals carry the decided codes at plan time', () => {
   })
 })
 
+// VC-001: a holder of migrations.plan filled the Control Store disk with a few permanent ingests.
+describe('the daily ingest quota of an identity', () => {
+  const ingest = (bundles: ReturnType<typeof bundle>[], dailyBytes: number) =>
+    h.serve.transaction('test.quota.ingest', (tx) =>
+      ingestBundles(tx, {
+        projectId,
+        bundles,
+        defaults: DEFAULTS,
+        identityId: a.identityId,
+        dailyBytes,
+      }),
+    )
+
+  it('refuses a bundle that would pass the bytes stored in the last 24 hours, and stores nothing of it', async () => {
+    const padded = (name: string, id = ulid()) =>
+      bundle({
+        id,
+        name,
+        up: `CREATE TABLE public.${name.replaceAll('-', '_')} (id int);\n-- ${'x'.repeat(4000)}\n`,
+      })
+    const first = padded('quota-a')
+    // What this identity stored before in the run, plus one bundle, fits.
+    const used = await h.serve.query(
+      'test.quota.used',
+      `SELECT coalesce(sum(octet_length(manifest_yaml) + octet_length(up_sql)
+                + coalesce(octet_length(verify_sql), 0) + coalesce(octet_length(down_sql), 0)), 0)::int AS n
+         FROM migrations.bundle_revisions WHERE ingested_by = $1`,
+      [a.identityId],
+    )
+    const budget = (used.rows[0]?.int('n') ?? 0) + 6000
+    expect((await ingest([first], budget))[0]?.status).toBe('stored')
+    // The same bytes again cost nothing: nothing new is stored.
+    expect((await ingest([first], budget))[0]?.status).toBe('unchanged')
+    const secondId = ulid()
+    const second = padded('quota-b', secondId)
+    const refused = await ingest([second], budget).catch((e: unknown) => e)
+    expect(refused).toMatchObject({
+      code: 'RATE_LIMITED',
+      details: { retryAfterSeconds: expect.any(Number) },
+    })
+    const wait = (refused as { details: { retryAfterSeconds: number } }).details.retryAfterSeconds
+    expect(wait).toBeGreaterThan(0)
+    expect(wait).toBeLessThanOrEqual(24 * 3600)
+    const stored = await h.serve.query(
+      'test.quota.stored',
+      'SELECT count(*)::int AS n FROM migrations.bundle_revisions WHERE migration_id = $1',
+      [secondId],
+    )
+    expect(stored.rows[0]?.int('n')).toBe(0)
+  })
+})
+
 /**
  * A8 (verification.md §4.3): the verify session is a dedicated, pinned one. The check
  * below runs on the production L2 layer and asserts its own session: the name

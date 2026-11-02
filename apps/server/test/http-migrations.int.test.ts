@@ -524,6 +524,31 @@ describe('migrations over REST', () => {
     expect(stored.text).toContain('public.leads')
   })
 
+  // VC-001: ingest was an unaudited, permanent write; a holder of migrations.plan filled the disk.
+  it('audits every ingest in its own transaction, naming the project, the ids and the bytes stored', async () => {
+    const id = ulid()
+    const b = bundle({ id, name: 'audited-ingest', up: 'CREATE TABLE public.audited (id int);\n' })
+    const ingest = await owner.browser.call('POST', `/api/v1/projects/${ids.project}/bundles`, {
+      bundles: [b],
+      defaults: DEFAULTS,
+    })
+    expect(ingest.status).toBe(200)
+    const audit = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT event::jsonb AS e FROM audit.audit_events
+          WHERE action = 'migration.bundle.ingested' ORDER BY seq DESC LIMIT 1`,
+      ),
+    )
+    expect(audit.rows[0]?.e).toMatchObject({
+      phase: 'completed',
+      actor: { kind: 'human' },
+      refs: { migrationIds: [id] },
+      changes: { projectId: ids.project, stored: 1, unchanged: 0, bytes: expect.any(Number) },
+      result: { status: 'succeeded' },
+    })
+    expect(audit.rows[0]?.e.changes.bytes).toBeGreaterThan(0)
+  })
+
   it('plans on staging, applies through plan.apply, verifies and reads the ledger back live', async () => {
     const { plan, operation: op } = await planAndApply(
       `/api/v1/targets/${ids.stagingTarget}/migrations/plans`,

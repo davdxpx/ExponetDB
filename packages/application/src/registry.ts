@@ -9,6 +9,7 @@ import {
 import { backupDependencies } from '@exponetdb/backups'
 import type {
   AccessRole,
+  AuditEventInput,
   BackupDependency,
   Cluster,
   ClusterAgentAdoptionRequest,
@@ -233,6 +234,8 @@ export interface RegistryHost {
     create: (tx: Tx, actor: RegistryActor) => Promise<PlanRecord>,
   ): Promise<OperationView>
   identityOf(caller: CallerLike): IdentityId
+  /** Actor, client and request of an audit event for any caller kind. */
+  auditParties(caller: CallerLike): Pick<AuditEventInput, 'actor' | 'client' | 'request'>
   planActor(caller: CallerLike): PlanActor
   /** The delegation restrictions of a bearer caller (undefined for a session). */
   restrictions(caller: CallerLike): TargetVisibilityRestriction | undefined
