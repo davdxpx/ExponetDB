@@ -343,6 +343,44 @@ describe('the operation page', () => {
     expect(within(dialog).getByLabelText(/To confirm, type the target path/)).toBeInTheDocument()
   })
 
+  // VC-006: needs_attention of a kind without a retry or recovery plan had no exit at all.
+  it('releases an operation that needs attention with a stated outcome and a reason, once', async () => {
+    const user = userEvent.setup()
+    const world = worldWith({
+      state: 'needs_attention',
+      applyOutcome: 'unknown',
+      verificationOutcome: 'pending',
+      retryable: false,
+    })
+    const { header, ...mounted } = await openOperation(world)
+    expect(within(header).queryByRole('button', { name: 'Verify again' })).toBeNull()
+    await user.click(within(header).getByRole('button', { name: 'Release operation' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Release this operation?' })
+    const action = within(dialog).getByRole('button', { name: 'Plan the release' })
+    // Without a reason nothing is sent.
+    await user.click(action)
+    expect(world.posts(`/operations/${OP}/force-release`)).toHaveLength(0)
+    await user.click(within(dialog).getByRole('radio', { name: /Not applied/ }))
+    await user.type(
+      within(dialog).getByRole('textbox', { name: /Why/ }),
+      'Checked on the target: the table does not exist.',
+    )
+    await user.dblClick(action)
+    await waitFor(() => expect(world.posts(`/operations/${OP}/force-release`)).toHaveLength(1))
+    expect(world.posts(`/operations/${OP}/force-release`)[0]?.body).toEqual({
+      outcome: 'not_applied',
+      reason: 'Checked on the target: the table does not exist.',
+    })
+    // The plan page applies it, with a fresh re-authentication.
+    await waitFor(() => expect(mounted.router.state.location.pathname).toContain(PLAN))
+  })
+
+  it('offers no release for an operation that does not need attention', async () => {
+    const world = worldWith({ state: 'queued' })
+    const { header } = await openOperation(world)
+    expect(within(header).queryByRole('button', { name: 'Release operation' })).toBeNull()
+  })
+
   it('cancels an operation that has not started, through a confirmation', async () => {
     const user = userEvent.setup()
     const world = worldWith({ state: 'queued' })

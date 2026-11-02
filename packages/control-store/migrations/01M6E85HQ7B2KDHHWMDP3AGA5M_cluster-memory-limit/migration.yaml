@@ -1,0 +1,23 @@
+schema: exponetdb.migration/v1
+id: 01M6E85HQ7B2KDHHWMDP3AGA5M
+name: cluster-memory-limit
+description: |
+  Owner decision OD-68 (b), verification campaign VC-002: PostgreSQL has no
+  per-query memory limit, and one data read that builds huge values made the
+  kernel restart a target's whole cluster. A cluster now records whether its
+  PostgreSQL runs under a memory limit (cgroup, vm.overcommit_memory=2, or
+  none), declared by a person through an operation of the kind
+  registry.cluster.declare_memory_limit (production authority, like the
+  declared tier). NULL means not declared: data reads of its targets carry a
+  warning and agent reads are refused. The guard admits the write only from
+  an operation of this kind and stamps its time. Additive: three columns, a
+  guard and a column grant to the worker.
+dependsOn:
+  - 01M6E7DFZVEYRCA07SCYAA2PB6
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

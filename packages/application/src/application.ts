@@ -139,23 +139,36 @@ import {
   type SessionId,
   toJsonValue,
 } from '@exponetdb/kernel'
-import { type ReviewFile, reviewFiles } from '@exponetdb/migrations-engine'
 import {
+  PURGE_AGE_DAYS,
+  purgeableRevisions,
+  REVISION_PURGE_KIND,
+  type ReviewFile,
+  reviewFiles,
+} from '@exponetdb/migrations-engine'
+import {
+  type AssertedOutcome,
   beginIdempotent,
   completeIdempotent,
+  createPlan,
+  FORCE_RELEASE_KIND,
+  heldLocks,
   type KindRegistry,
   OperationError,
   type PlanRecord,
   type PlanSubject,
   readPlan,
+  readPolicySettings,
   releaseIdempotent,
   requestVerificationRetry,
   type StoredActionClass,
   transitionOperation,
   withdrawPlan,
 } from '@exponetdb/operations'
+import { PolicyEngine } from '@exponetdb/policy'
 import {
   applyRegistryPlan,
+  getProject,
   type RegistryAcceptContext,
   type RegistryActor,
   RegistryError,
@@ -231,6 +244,11 @@ export interface ApplicationDeps {
    * each plan. Absent: both disabled.
    */
   readonly backupExecution?: () => ExecutionSettings
+  /**
+   * OD-70 (b): the Control Store's volume size (`EXPONETDB_CONTROL_STORE_VOLUME_BYTES`). Ingest
+   * is refused at 90 %; installation health warns at 80 %. Absent: neither, and health says so.
+   */
+  readonly controlStoreVolumeBytes?: number
   /** The running release (`GET /installation`). */
   readonly installation: {
     readonly version: string
@@ -619,7 +637,7 @@ export class Application {
     this.backups = new BackupUseCases(host, {
       execution: deps.backupExecution ?? (() => EXECUTION_DISABLED),
     })
-    this.migrations = new MigrationUseCases(host)
+    this.migrations = new MigrationUseCases(host, { volumeBytes: deps.controlStoreVolumeBytes })
     this.queries = new QueryUseCases({
       store: deps.auth.store,
       clock: deps.policy.clock,
@@ -1180,7 +1198,9 @@ export class Application {
     if (sources === undefined) {
       throw new AuthError('CONTROL_PLANE_DEGRADED')
     }
-    return readInstallationHealth(this.#d.auth.store, this.#d.policy.clock, sources)
+    return readInstallationHealth(this.#d.auth.store, this.#d.policy.clock, sources, {
+      volumeBytes: this.#d.controlStoreVolumeBytes,
+    })
   }
 
   /**
@@ -2085,6 +2105,211 @@ export class Application {
       )
     })
     return operationView(this.#d.auth.store, operationId, this.publicOrigin)
+  }
+
+  /**
+   * Plans `operation.force_release` (VC-006, VC-055, VC-007, operations-engine.md
+   * §4.1): the exit of an operation in `needs_attention` of any kind. A person
+   * with `operations.recover` on its plan's subject states what happened to
+   * its change and why; the plan takes the domains the operation holds and
+   * names it, and applying it (`plan.apply`, a fresh re-authentication) closes
+   * it, running nothing of it again. `not_applied` is refused for a change the
+   * engine recorded as applied. A caller who may not read the operation gets
+   * `OPERATION_NOT_FOUND`.
+   */
+  async planForceRelease(
+    caller: Caller,
+    operationId: string,
+    body: { readonly outcome: AssertedOutcome; readonly reason: string },
+    idempotency?: { readonly key: string; readonly requestHash: string },
+  ): Promise<PlanView> {
+    const reason = body.reason.trim()
+    if (reason.length === 0) {
+      throw new RegistryError('VALIDATION_FAILED', {
+        errors: [
+          { path: '/reason', code: 'too_small', message: 'Say why the operation is released.' },
+        ],
+      })
+    }
+    const stuck = async (tx: Tx) => {
+      const { rows } = isId('op', operationId)
+        ? await tx.query(
+            'application.operation.for_release',
+            `SELECT kind, plan_id, state, apply_outcome FROM operations.operations
+              WHERE operation_id = $1 FOR UPDATE`,
+            [operationId],
+          )
+        : { rows: [] }
+      const row = rows[0]
+      const planId = row?.textOrNull('plan_id') ?? null
+      const plan = planId === null ? undefined : await readPlan(tx, planId)
+      if (
+        row === undefined ||
+        plan === undefined ||
+        !(await this.#mayRead(tx, caller, 'operation.get', row.text('kind'), {
+          kind: 'plan',
+          subject: subjectOf(plan),
+        }))
+      ) {
+        throw new AuthError('OPERATION_NOT_FOUND')
+      }
+      return { row, plan }
+    }
+    return this.#plan(
+      caller,
+      'operation.force_release.plan',
+      idempotency,
+      (c) => registryActor(planActor(c)),
+      async (tx, actor) => {
+        const { row, plan } = await stuck(tx)
+        const state = row.text('state')
+        if (state !== 'needs_attention') {
+          throw new RegistryError('OPERATION_NOT_RELEASABLE', { state })
+        }
+        // The engine saw the change applied: a person cannot record it as not applied.
+        if (body.outcome === 'not_applied' && row.text('apply_outcome') !== 'unknown') {
+          throw new RegistryError('VALIDATION_FAILED', {
+            errors: [
+              {
+                path: '/outcome',
+                code: 'contradicts_outcome',
+                message: 'The change is recorded as applied; release it as applied or unknown.',
+              },
+            ],
+          })
+        }
+        const subject = subjectOf(plan)
+        const content = {
+          operationId,
+          outcome: body.outcome,
+          reason,
+          domains: [...(await heldLocks(tx, operationId))],
+        }
+        const policy = await new PolicyEngine({
+          registry: this.#d.policy.registry,
+          providers: [],
+          codeVersion: this.#d.policy.codeVersion,
+          clock: this.#d.policy.clock,
+        }).evaluate({
+          request: {
+            kind: FORCE_RELEASE_KIND,
+            principal: {
+              kind: 'human',
+              identityId: actor.identityId,
+              client: actor.client ?? 'web',
+            },
+            subject: subject.tier === undefined ? {} : { tier: subject.tier },
+            content,
+          },
+          settings: await readPolicySettings(tx, {}),
+        })
+        return createPlan(
+          tx,
+          {
+            kind: FORCE_RELEASE_KIND,
+            kindVersion: 1,
+            actionClass: 'high',
+            actor: registryOperationActor(actor),
+            subject,
+            content,
+            analysis: {
+              operationId,
+              kind: row.text('kind'),
+              state,
+              applyOutcome: row.text('apply_outcome'),
+              statedOutcome: body.outcome,
+              effect:
+                'the operation is closed with the stated outcome and its exclusivity domains are released; nothing of it runs again',
+            },
+            policy,
+          },
+          { clock: this.#d.policy.clock },
+        )
+      },
+      async (tx) => ({ kind: 'plan', subject: subjectOf((await stuck(tx)).plan) }),
+    )
+  }
+
+  /**
+   * OD-70 (d): plans the purge of a project's bundle revisions that no plan references and that
+   * are older than {@link PURGE_AGE_DAYS} days. The plan lists them with their bytes; `plan.apply`
+   * (re-authentication) lets the worker delete exactly those.
+   */
+  async planRevisionPurge(
+    caller: Caller,
+    projectId: string,
+    body: { readonly reason: string },
+    idempotency?: { readonly key: string; readonly requestHash: string },
+  ): Promise<PlanView> {
+    const reason = body.reason.trim()
+    if (reason.length === 0) {
+      throw new RegistryError('VALIDATION_FAILED', {
+        errors: [
+          { path: '/reason', code: 'too_small', message: 'Say why the revisions are purged.' },
+        ],
+      })
+    }
+    return this.#plan(
+      caller,
+      'migration.revisions.purge.plan',
+      idempotency,
+      (c) => registryActor(planActor(c)),
+      async (tx, actor) => {
+        const revisions = await purgeableRevisions(tx, projectId)
+        if (revisions.length === 0) {
+          throw new RegistryError('REGISTRY_CONFLICT', { reason: 'nothing_to_purge' })
+        }
+        const content: JsonObject = {
+          projectId,
+          reason,
+          revisions: revisions.map((r) => ({ ...r })),
+        }
+        const policy = await new PolicyEngine({
+          registry: this.#d.policy.registry,
+          providers: [],
+          codeVersion: this.#d.policy.codeVersion,
+          clock: this.#d.policy.clock,
+        }).evaluate({
+          request: {
+            kind: REVISION_PURGE_KIND,
+            principal: {
+              kind: 'human',
+              identityId: actor.identityId,
+              client: actor.client ?? 'web',
+            },
+            subject: {},
+            content,
+          },
+          settings: await readPolicySettings(tx, {}),
+        })
+        return createPlan(
+          tx,
+          {
+            kind: REVISION_PURGE_KIND,
+            kindVersion: 1,
+            actionClass: 'high',
+            actor: registryOperationActor(actor),
+            subject: { projectId },
+            content,
+            analysis: {
+              revisions: revisions.length,
+              bytes: revisions.reduce((n, r) => n + r.bytes, 0),
+              olderThanDays: PURGE_AGE_DAYS,
+              effect:
+                'these revisions are deleted from the Control Store; a revision a plan names by the time of the apply stays',
+            },
+            policy,
+          },
+          { clock: this.#d.policy.clock },
+        )
+      },
+      async (tx) => {
+        if (!isId('prj', projectId) || (await getProject(tx, projectId)) === undefined) {
+          throw new RegistryError('NOT_FOUND')
+        }
+        return { kind: 'project', projectId }
+      },
+    )
   }
 
   // ----- inline access changes (C-6: precondition, re-authentication, mutation, audit) -----

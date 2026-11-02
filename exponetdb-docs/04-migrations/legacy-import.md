@@ -941,11 +941,17 @@ have; its rows record `checksum_provenance = 'legacy_file_at_import'` and
 
 When a database moves (for REOSA: from the hosted provider to `reos-db-01`), the
 `exponetdb` schema moves with the data **if it is included in the dump**.
-**[DECIDED]** The move procedure dumps the `exponetdb` schema together with the
-application schemas, and the restore operation re-stamps the identity marker with
-a new generation; the ledger and baseline remain valid because the database
-content did not change. If the import is done only after the move, it is done on
-the new target directly. See
+**[DECIDED]** (verification campaign VC-075, 2026-11-02) Nothing re-stamps the
+identity marker of a database that was dumped and restored by hand: the copy
+carries the old marker and database object id, and it is refused
+(`TARGET_IDENTITY_MISMATCH`, in every environment). A moved database is
+therefore **imported after the move**: register the new database as a new target
+and import its history (`legacy import`), then accept the baseline; the old
+target is decommissioned. The ledger inside a dump is data of the copy; it is
+not adopted. Only ExponetDB's own restore operation
+([ADR-0038](../01-architecture/adr/0038-restore-plans-drills-and-offline-runbooks.md))
+stamps a target it creates. A `target.rehome` kind is not built (it needs the
+generation bump of the ledger mirror, see [`ledger.md`](./ledger.md) §5). See
 [`../13-integrations/reosa-integration.md`](../13-integrations/reosa-integration.md).
 
 ## 6. Edge cases

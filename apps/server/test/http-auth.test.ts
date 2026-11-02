@@ -7,6 +7,7 @@ import {
   ROUTE_LIST,
 } from '@exponetdb/contracts'
 import { expectOk, parseId } from '@exponetdb/kernel'
+import { SecretError } from '@exponetdb/secrets'
 import { describe, expect, it } from 'vitest'
 import { HANDLERS, servedRoutes } from '../src/interfaces/http/api.ts'
 import {
@@ -152,14 +153,20 @@ describe('served routes (Wave 2 and 4 to 9)', () => {
       'planBackupRun',
       // OD-54 (a): adopting an external cluster by the node agent.
       'planClusterAgentAdoption',
+      // OD-68 (b): the declared memory limit of a cluster.
+      'planClusterMemoryLimit',
       'planClusterRetirement',
       'planDatabaseRetirement',
       'planDrill',
       'planExecutionRoleBindings',
       'planExecutionRoleException',
       'planExecutionRoleExceptionRevocation',
+      // The verification campaign fixes (VC-006): the release of an operation that needs attention.
+      'planForceRelease',
       'planRestore',
       'planRestoreDiscard',
+      // OD-70 (d): the purge of bundle revisions no plan references.
+      'planRevisionPurge',
       'planServerRetirement',
       'planSessionTermination',
       'recordOfflineDrill',
@@ -346,6 +353,21 @@ describe('cookies and problems', () => {
     const skewed = problemResponse(requestId, new AuditClockSkewError(details))
     expect(skewed.status).toBe(503)
     expect(await skewed.json()).toMatchObject({ code: 'AUDIT_CLOCK_SKEW', details })
+  })
+
+  // VC-011: a secret whose master key is not in the loaded keyring answered 500 INTERNAL (plans,
+  // the owner's password sign-in). It names the cause and the key id (ids are not secret).
+  it('names a master key missing from the keyring as 503 SECRET_KEY_UNAVAILABLE, not 500 (VC-011)', async () => {
+    const requestId = expectOk(parseId('req', 'req_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z'), 'request id')
+    const missing = problemResponse(
+      requestId,
+      new SecretError('secret_key_unavailable', { keyId: 'k1' }),
+    )
+    expect(missing.status).toBe(503)
+    expect(await missing.json()).toMatchObject({
+      code: 'SECRET_KEY_UNAVAILABLE',
+      details: { keyId: 'k1' },
+    })
   })
 
   it('the Web App CSP allows no inline script and no other origin', () => {

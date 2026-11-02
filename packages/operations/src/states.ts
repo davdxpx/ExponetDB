@@ -39,8 +39,9 @@ export const TRANSITIONS: Readonly<Record<OperationState, readonly OperationStat
   running: ['verifying', 'failed', 'needs_reconciliation'],
   needs_reconciliation: ['verifying', 'failed', 'needs_attention'],
   verifying: ['succeeded', 'verification_failed', 'needs_attention'],
-  // `verification_failed`: a recovery plan that names the operation closes it (supersede.ts).
-  needs_attention: ['verifying', 'verification_failed'],
+  // `verification_failed`: a recovery plan that names the operation closes it (supersede.ts), or a
+  // person's force release; `failed`: a force release of a change the person found not applied.
+  needs_attention: ['verifying', 'verification_failed', 'failed'],
   succeeded: [],
   failed: [],
   verification_failed: [],

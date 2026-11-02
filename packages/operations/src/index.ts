@@ -7,6 +7,11 @@ export {
 } from './accept.ts'
 export { type OperationActor, sameCaller, WORKER_ACTOR } from './actors.ts'
 export {
+  APPROVAL_WINDOW_SECONDS,
+  expireAwaitingApprovals,
+  PAST_APPROVAL_WINDOW,
+} from './approval-window.ts'
+export {
   type DispatchAdmission,
   type DriverOptions,
   type DriverResult,
@@ -14,6 +19,13 @@ export {
   type StepError,
 } from './driver.ts'
 export { type ChangedBinding, type InternalOperationCode, OperationError } from './errors.ts'
+export {
+  type AssertedOutcome,
+  FORCE_RELEASE_KIND,
+  type ForceReleaseContent,
+  ForceReleaseKind,
+  forceReleaseContent,
+} from './force-release.ts'
 export {
   beginIdempotent,
   completeIdempotent,

@@ -2,6 +2,7 @@ import type { OperationKind } from '@exponetdb/operations'
 import type { MigrationKindDeps } from './deps.ts'
 import { MigrationApplyKind } from './kind.ts'
 import { ImportReplayKind, MigrationBaselineKind } from './legacy.ts'
+import { RevisionPurgeKind } from './purge.ts'
 import { LedgerReconcileKind } from './reconcile.ts'
 import { MigrationVerifyKind } from './reverify.ts'
 import { MigrationRollbackKind } from './rollback.ts'
@@ -16,5 +17,7 @@ export function migrationKinds(deps: MigrationKindDeps): readonly OperationKind[
     new ImportReplayKind(deps),
     new MigrationBaselineKind(deps),
     new LedgerReconcileKind(deps),
+    // OD-70 (d): the purge of never-planned bundle revisions.
+    new RevisionPurgeKind(deps),
   ]
 }

@@ -30,6 +30,7 @@ import (
 	"os/signal"
 	"os/user"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -523,8 +524,8 @@ func TestPglab(t *testing.T) {
 	if str(st, "state") != "succeeded" || !strings.HasSuffix(full, "F") {
 		t.Fatalf("full backup: %v", st)
 	}
-	// A second start of the same run id is refused.
-	if _, refusal := l.call(OpBackupRun, "backup.run", runArgsOf(l.cluster(), l.repo(), runFull, "full")); refusal == nil || refusal.Code != CodePreconditionFailed {
+	// A second start of the same run id is refused, replayed: the run exists (VC-061 review).
+	if _, refusal := l.call(OpBackupRun, "backup.run", runArgsOf(l.cluster(), l.repo(), runFull, "full")); refusal == nil || refusal.Code != CodeReplayed {
 		t.Fatalf("second start: %+v", refusal)
 	}
 
@@ -704,6 +705,49 @@ func TestPglab(t *testing.T) {
 	}
 	if c := l.sql("app", "SELECT count(*) FROM public.accounts"); c != "200" {
 		t.Fatalf("the source cluster changed: %s rows", c)
+	}
+
+	// 8b. VC-005: a WAL segment missing after the newest backup's start. pgbackrest verify says
+	// ok; the node lists the archive and finds the hole, in backup.list and in backup.verify.
+	archiveDir := dir + "/repo/archive/lab/17-1/0000000100000000"
+	segmentFiles := func() []string {
+		entries, _ := os.ReadDir(archiveDir)
+		var names []string
+		for _, e := range entries {
+			if archivedSegmentRE.MatchString(e.Name()) {
+				names = append(names, e.Name())
+			}
+		}
+		sort.Strings(names)
+		return names
+	}
+	before := len(segmentFiles())
+	for i := 0; i < 3; i++ {
+		l.sql("app", fmt.Sprintf("INSERT INTO public.accounts VALUES (%d, 'gap'); SELECT pg_switch_wal()", 1000+i))
+	}
+	for i := 0; len(segmentFiles()) < before+3; i++ {
+		if i > 120 {
+			t.Fatalf("the three new segments were not archived: %v", segmentFiles())
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	files := segmentFiles()
+	hole := files[len(files)-2]
+	if err := os.Remove(archiveDir + "/" + hole); err != nil {
+		t.Fatal(err)
+	}
+	list = l.must(OpBackupList, "backup.list", canon.Object{{Name: "cluster", Value: l.cluster()}, {Name: "repository", Value: l.repo()}})
+	out, _ = canon.Canonicalize(list)
+	fmt.Fprintf(&l.log, "backup.list with a hole (%s removed): %s\n", hole, out)
+	resumes := strings.SplitN(files[len(files)-1], "-", 2)[0]
+	if !strings.Contains(string(out), `"gapEnds":["`+resumes+`"]`) {
+		t.Fatalf("backup.list does not report the gap ending at %s: %s", resumes, out)
+	}
+	runGap := "run_01M70000000000000000000V03"
+	st = l.wait(runGap, l.must(OpBackupVerify, "backup.verify", canon.Object{{Name: "cluster", Value: l.cluster()}, {Name: "repository", Value: l.repo()},
+		{Name: "runId", Value: canon.String(runGap)}, {Name: "label", Value: canon.Null{}}, {Name: "snapshot", Value: canon.Null{}}}), 5*time.Minute)
+	if str(st, "state") != "failed" {
+		t.Fatalf("a verify over an archive with a hole must fail: %v", st)
 	}
 
 	// 9. A logical backup to restic: pg_dump, then restic with the password

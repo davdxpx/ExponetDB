@@ -31,7 +31,7 @@ import {
 } from './content.ts'
 import { type MigrationKindDeps, projectRegistry } from './deps.ts'
 import { MigrationError } from './errors.ts'
-import { readEvidenceTarget } from './evidence.ts'
+import { evidenceTrust, readEvidenceTarget } from './evidence.ts'
 import { boundExceptionsHold, executionRolesFor } from './execution-roles.ts'
 import {
   executionRolesChanged,
@@ -53,7 +53,7 @@ import {
   writeVerificationMirror,
 } from './records.ts'
 import { readBack, resumeLog } from './resume.ts'
-import { readRevision, type StoredRevision } from './store.ts'
+import { appliedElsewhere, readRevision, type StoredRevision } from './store.ts'
 import { ledgerHashOf, readTargetState } from './target.ts'
 import { type VerificationRun, verifyMigration } from './verification.ts'
 
@@ -235,6 +235,12 @@ export class MigrationApplyKind implements OperationKind {
         evidence,
         `evidence/${content.target.targetId}`,
       )
+      const trust = await evidenceTrust(
+        this.#deps.store,
+        evidence.targetId,
+        read,
+        content.migrations,
+      )
       for (const m of content.migrations) {
         const row = read.ledger.find((r) => r.migrationId === m.migrationId)
         const bound = content.evidence.verifications[m.migrationId]
@@ -248,7 +254,11 @@ export class MigrationApplyKind implements OperationKind {
           latest === undefined ||
           latest.status !== 'passed' ||
           latest.verifyDigest !== m.verifyDigest ||
-          bound === undefined
+          bound === undefined ||
+          // A newer verification of the staging run is fine when it passed; it must be one this
+          // installation mirrored, as the bound one had to be (VC-079).
+          !trust.rowTrusted(row) ||
+          !trust.verificationTrusted(latest)
         ) {
           return [{ binding: 'evidence', actual: 'no_longer_present' }]
         }
@@ -298,11 +308,45 @@ export class MigrationApplyKind implements OperationKind {
     }
     const project = await projectRegistry(this.#deps.store, content.projectId)
     // Progress rows first: the operation shows every planned migration from the start.
-    await fenced(fence, 'migrations.kind.progress_init', async (tx) => {
+    // VC-080: the immutability of an applied id is checked here too, not only when the bundle was
+    // stored. One id at a time (a Control Store lock held to the end of this transaction), so two
+    // operations with other bytes under the same id cannot both pass: the second sees the progress
+    // the first wrote, and nothing of it reaches a target.
+    const clash = await fenced(fence, 'migrations.kind.progress_init', async (tx) => {
+      for (const m of [...content.migrations].sort((a, b) =>
+        a.migrationId < b.migrationId ? -1 : 1,
+      )) {
+        await tx.query(
+          'migrations.kind.claim_lock',
+          'SELECT pg_advisory_xact_lock(1163412546, hashtext($1))',
+          [`migration-claim/${content.projectId}/${m.migrationId}`],
+        )
+      }
+      let found: { migrationId: string; checksum: string; targetId: string } | undefined
+      for (const m of content.migrations) {
+        const other = (await appliedElsewhere(tx, content.projectId, m.migrationId)).find(
+          (a) => a.checksum !== m.checksum,
+        )
+        if (other !== undefined && found === undefined)
+          found = { migrationId: m.migrationId, ...other }
+      }
+      // The operation shows every planned migration from the start, also when it ends here.
       for (const [position, m] of content.migrations.entries()) {
         await writeProgress(tx, ctx.operationId, initial(position, m))
       }
+      return found
     })
+    if (clash !== undefined) {
+      return {
+        outcome: 'not_applied',
+        errorCode: 'MIGRATION_CHECKSUM_MISMATCH',
+        detail: {
+          migrationId: clash.migrationId,
+          knownChecksum: clash.checksum,
+          where: { kind: 'target_ledger', targetId: clash.targetId },
+        },
+      }
+    }
     let opened: Awaited<ReturnType<Connector['forTarget']>>
     try {
       opened = await this.#deps.connector.forTarget(target, 'migrator', ctx.operationId)
@@ -349,6 +393,10 @@ export class MigrationApplyKind implements OperationKind {
           ),
         { statementTimeoutMs: 60_000 },
       )
+      // Before any statement: a standby takes no writes (VC-073); the database binding below names a copy.
+      if (state.inRecovery) {
+        return { outcome: 'not_applied', errorCode: 'TARGET_READ_ONLY' }
+      }
       const changed = stateChanges(content, state)
       const roleChange = await executionRolesChanged(
         session,
@@ -797,7 +845,15 @@ export class MigrationApplyKind implements OperationKind {
       progress = await readProgress(this.#deps.store, ctx.operationId)
     }
     const result = aggregate(progress, content.migrations.length)
-    if (result === 'passed') await this.#recordExpected(ctx, content)
+    // VC-069: an operation that stopped part-way still leaves the verified prefix as the expected
+    // schema; otherwise the next plan starts from a schema the baseline never saw and every later
+    // verified bundle reads as drift. The snapshot must still equal that bundle's fingerprint, so a
+    // bundle that changed the schema before it failed is not adopted.
+    await this.#recordExpected(
+      ctx,
+      content,
+      result === 'passed' ? content.migrations.length : verifiedPrefix(progress),
+    )
     return result
   }
 
@@ -807,9 +863,14 @@ export class MigrationApplyKind implements OperationKind {
    * fails or differs leaves the previous baseline, and the next drift check
    * says so; the operation's outcome stays what verification decided.
    */
-  async #recordExpected(ctx: ExecutionContext, content: PlanContent): Promise<void> {
+  async #recordExpected(
+    ctx: ExecutionContext,
+    content: PlanContent,
+    /** How many migrations from the start of the plan are verified; the last of them is recorded. */
+    verified: number,
+  ): Promise<void> {
     const expected = this.#deps.expected
-    const last = content.migrations.at(-1)
+    const last = verified === 0 ? undefined : content.migrations[verified - 1]
     if (expected === undefined || last === undefined) return
     try {
       const target = await findTarget(this.#deps.store, content.target.targetId)
@@ -1035,6 +1096,18 @@ export function stateChanges(
     }
   }
   return changed
+}
+
+/** How many migrations from the start are applied and verified without a gap (VC-069). */
+export function verifiedPrefix(progress: readonly Progress[]): number {
+  const byPosition = [...progress].sort((a, b) => a.position - b.position)
+  let n = 0
+  for (const p of byPosition) {
+    if (p.position !== n || p.applyOutcome !== 'applied' || p.verificationOutcome !== 'passed')
+      break
+    n++
+  }
+  return n
 }
 
 /** The operation's verification outcome from its per-migration rows. */

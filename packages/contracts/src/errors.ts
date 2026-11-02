@@ -241,6 +241,15 @@ export const ERRORS = {
     title: 'No approval pending',
     message: 'The operation does not await an approval.',
   },
+  APPROVAL_EXPIRED: {
+    group: 'plans_and_operations',
+    status: 409,
+    retryable: false,
+    title: 'Approval window passed',
+    message:
+      'The operation waited for an approval longer than the approval window (4 hours); it is canceled and nothing ran.',
+    remediation: 'Plan the change again and approve the new plan within the window.',
+  },
   APPROVAL_DUPLICATE: {
     group: 'plans_and_operations',
     status: 409,
@@ -315,6 +324,30 @@ export const ERRORS = {
     title: 'Verification cannot be retried',
     message:
       'Only an operation that needs attention after an applied change whose verification could not run or did not finish can be verified again.',
+    details: z.strictObject({
+      state: z.enum([
+        'awaiting_approval',
+        'queued',
+        'running',
+        'verifying',
+        'needs_reconciliation',
+        'needs_attention',
+        'succeeded',
+        'failed',
+        'verification_failed',
+        'canceled',
+      ]),
+    }),
+  },
+  OPERATION_NOT_RELEASABLE: {
+    group: 'plans_and_operations',
+    status: 409,
+    retryable: false,
+    title: 'Operation cannot be force-released',
+    message:
+      'Only an operation that needs attention can be force-released; any other state has its own exit or is finished.',
+    remediation:
+      'Read the operation: a queued or awaiting operation can be canceled, a running one finishes or is reconciled by the worker.',
     details: z.strictObject({
       state: z.enum([
         'awaiting_approval',
@@ -582,6 +615,9 @@ export const ERRORS = {
     retryable: false,
     title: 'Ledger divergence',
     message: 'The target ledger and the Control Store mirror disagree; schema changes are blocked.',
+    // VC-010: after a Control Store restore (RB-10 step 6) or a hand change on the target.
+    remediation:
+      'If the target ledger is the truth (after a Control Store restore or a change made by hand), plan adopting it: exponetdb migration ledger reconcile --target and --note (POST /targets/{id}/ledger/reconcile-plans), apply that plan, then plan the change again.',
     details: z.strictObject({
       missing: z
         .array(untrustedText(210, 'A mirrored migration id the target ledger no longer has.'))
@@ -982,7 +1018,25 @@ export const ERRORS = {
     retryable: false,
     title: 'Target identity mismatch',
     message:
-      'The identity marker in the database does not match the expected target; the target was suspended.',
+      'The database does not match the expected target (its identity marker, or its database object); a mismatched marker suspends the target.',
+    // VC-071: a copy of the database carries the same marker but is another database object.
+    details: z
+      .strictObject({
+        reason: z.enum(['database_oid']),
+        recordedOid: z.string().regex(/^[0-9]{1,10}$/),
+        observedOid: z.string().regex(/^[0-9]{1,10}$/),
+      })
+      .optional(),
+  },
+  TARGET_READ_ONLY: {
+    group: 'targets_clusters_nodes',
+    status: 409,
+    retryable: false,
+    title: 'Target is read-only',
+    message:
+      'The PostgreSQL behind the target is a standby (in recovery) or read-only; nothing was written.',
+    remediation:
+      'Check which instance the endpoints of the cluster reach: the primary is the one that is not in recovery. After a promotion, plan the change again.',
   },
   CLUSTER_IDENTITY_MISMATCH: {
     group: 'targets_clusters_nodes',
@@ -990,6 +1044,15 @@ export const ERRORS = {
     retryable: false,
     title: 'Cluster identity mismatch',
     message: 'The cluster system identifier does not match the pinned value.',
+    remediation:
+      'The address reaches another PostgreSQL instance than the one this cluster is pinned to; check the host and the port. Nothing was written.',
+    // VC-074: planning an endpoint of another instance names both identifiers (not secret).
+    details: z
+      .strictObject({
+        pinned: z.string().regex(/^[0-9]{1,20}$/),
+        observed: z.string().regex(/^[0-9]{1,20}$/),
+      })
+      .optional(),
   },
   TARGET_REGISTRATION_REFUSED: {
     group: 'targets_clusters_nodes',
@@ -1099,6 +1162,10 @@ export const ERRORS = {
             'point_in_time_outside_window',
             'no_backup_selectable',
             'repository_engine_below_floor',
+            // VC-062: no wal.archive_status@1 time for the archive yet; a catalog refresh records it.
+            'archive_time_unknown',
+            // OD-70 (d): no revision of the project is unreferenced and older than 90 days.
+            'nothing_to_purge',
             // OD-54 (a), registry.cluster.adopt_agent: only an external cluster is adopted, by
             // an enrolled node that is live (active or degraded, with a recent heartbeat).
             'cluster_not_external',
@@ -1355,6 +1422,8 @@ export const ERRORS = {
     message: 'Data reads are disabled on this target or tier for this client.',
     remediation:
       'The data.read policy rule of the target decides who reads its rows; by default production rows are for people only. Read a non-production target, or ask a person to run the read.',
+    // OD-68 (b): an agent reads rows only where the cluster declared a memory limit.
+    details: z.strictObject({ reason: z.enum(['target_memory_unlimited']) }).optional(),
   },
   STATEMENT_NOT_AVAILABLE: {
     group: 'queries_and_diagnostics',
@@ -1401,6 +1470,28 @@ export const ERRORS = {
     retryable: false,
     title: 'Conflict',
     message: 'The resource changed (If-Match did not match).',
+  },
+  SECRET_KEY_UNAVAILABLE: {
+    group: 'generic',
+    status: 503,
+    retryable: false,
+    title: 'Master key unavailable',
+    message:
+      'A master key this request needs is not in the keyring the server loaded; the values it protects cannot be read (RB-14).',
+    // VC-011: key ids are not secret; the keyring status names the same id.
+    details: z.strictObject({ keyId: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/) }).optional(),
+  },
+  CONTROL_STORE_VOLUME_FULL: {
+    group: 'generic',
+    status: 507,
+    retryable: false,
+    title: 'Control Store volume full',
+    message:
+      'The Control Store fills nine tenths of its configured volume; bundles are not stored until there is room (RB-17).',
+    // OD-70 (b): the database's own size and the configured volume (EXPONETDB_CONTROL_STORE_VOLUME_BYTES).
+    details: z
+      .strictObject({ usedBytes: z.int().min(0), volumeBytes: z.int().positive() })
+      .optional(),
   },
   RATE_LIMITED: {
     group: 'generic',

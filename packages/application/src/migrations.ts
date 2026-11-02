@@ -58,9 +58,12 @@ import type { CallerLike, Idempotency, RegistryHost } from './registry.ts'
  */
 export class MigrationUseCases {
   readonly #h: RegistryHost
+  readonly #volumeBytes: number | undefined
 
-  constructor(host: RegistryHost) {
+  /** `volumeBytes`: the configured Control Store volume (OD-70 (b)); absent: not checked. */
+  constructor(host: RegistryHost, options: { readonly volumeBytes?: number | undefined } = {}) {
     this.#h = host
+    this.#volumeBytes = options.volumeBytes
   }
 
   #services() {
@@ -107,6 +110,7 @@ export class MigrationUseCases {
         defaults: request.defaults ?? {},
         ...(request.source === undefined ? {} : { source: request.source }),
         identityId: this.#h.identityOf(caller),
+        ...(this.#volumeBytes === undefined ? {} : { volumeBytes: this.#volumeBytes }),
       })
       // Stored revisions are permanent: the write is audited with it, or not made (VC-001).
       // Nothing stored is no change, and no event (the chain is permanent too).
@@ -194,6 +198,7 @@ export class MigrationUseCases {
       policy: plans.policy,
       installationId: plans.installationId,
       connector: plans.connector,
+      volumeBytes: this.#volumeBytes,
     }
   }
 

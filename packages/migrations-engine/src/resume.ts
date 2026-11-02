@@ -41,6 +41,7 @@ import { projectRegistry } from './deps.ts'
 import { MigrationError } from './errors.ts'
 import { executionRolesFor, roleUnder } from './execution-roles.ts'
 import type { MigrationPlanContext } from './planner.ts'
+import { stuckOperationOf } from './recovery.ts'
 import { readRevision } from './store.ts'
 import { readTargetState } from './target.ts'
 
@@ -257,6 +258,17 @@ export async function planMigrationResume(
     const originalPlan =
       original === undefined ? undefined : await readPlan(tx, original.planId as string)
     if (originalPlan === undefined || originalPlan.kind !== 'migration.apply') {
+      throw new MigrationError('NOT_FOUND')
+    }
+    // VC-106: the operation id comes out of the target's own events, which are data of the managed
+    // database. It must be an operation of this target in the Control Store, and the one that
+    // holds the target when one is stuck on this migration.
+    const subject = originalPlan.body['subject']
+    if (!isJsonObject(subject) || subject['targetId'] !== target.targetId) {
+      throw new MigrationError('NOT_FOUND')
+    }
+    const stuck = await stuckOperationOf(tx, target.targetId, migrationId)
+    if (stuck !== undefined && stuck !== log.originalOperationId) {
       throw new MigrationError('NOT_FOUND')
     }
     const before = planContent(originalPlan)

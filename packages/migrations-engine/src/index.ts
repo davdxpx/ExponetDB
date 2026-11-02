@@ -7,6 +7,7 @@ export {
 } from './analysis.ts'
 export { type PlanContent, PlanContentInvalid, type PlanItem, planContent } from './content.ts'
 export { type ExpectedSchema, type MigrationKindDeps, projectRegistry } from './deps.ts'
+export { divergenceDetails, type LedgerDivergence } from './divergence.ts'
 export { MigrationError } from './errors.ts'
 export {
   collectEvidence,
@@ -24,6 +25,7 @@ export {
 } from './executor.ts'
 export { aggregate, MigrationApplyKind, stateChanges } from './kind.ts'
 export { migrationKinds } from './kinds.ts'
+export { ledgerDivergenceOf } from './ledger-watch.ts'
 export {
   decideImportItem,
   type ImportAnalysisInput,
@@ -36,6 +38,14 @@ export {
 } from './legacy.ts'
 export { refuseOversizedLegacyFiles } from './legacy-files.ts'
 export { type MigrationPlanContext, planMigrationApply } from './planner.ts'
+export {
+  PURGE_AGE_DAYS,
+  PURGE_MAX,
+  type PurgeableRevision,
+  purgeableRevisions,
+  REVISION_PURGE_KIND,
+  RevisionPurgeKind,
+} from './purge.ts'
 export {
   bundleFile,
   bundleView,

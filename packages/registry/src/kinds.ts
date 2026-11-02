@@ -680,6 +680,82 @@ export class ClusterDeclareTierKind extends RegistryKind {
 }
 
 /**
+ * Declares whether a cluster's PostgreSQL runs under a memory limit (OD-68 (b)): agents read rows
+ * of its targets only under a declared limit, so it is a production decision like the declared
+ * tier. Bound to the declaration and the cluster state the plan was made against; the Control
+ * Store guard admits the write only from an operation of this kind and stamps its time.
+ */
+export class ClusterDeclareMemoryLimitKind extends RegistryKind {
+  readonly kind = 'registry.cluster.declare_memory_limit'
+  readonly actionClass = 'high'
+
+  async bindings(_plan: PlanRecord, c: Body, expected: Body) {
+    const cluster = await getCluster(this.deps.store, c.text('clusterId'))
+    const changed: ChangedBinding[] = []
+    if (cluster === undefined || cluster.state === 'retired') {
+      changed.push({
+        binding: 'clusterState',
+        expected: expected.text('clusterState'),
+        actual: cluster?.state ?? null,
+      })
+    }
+    if (cluster !== undefined && cluster.memoryLimit !== expected.textOrNull('memoryLimit')) {
+      changed.push({
+        binding: 'memoryLimit',
+        expected: expected.textOrNull('memoryLimit'),
+        actual: cluster.memoryLimit,
+      })
+    }
+    return changed
+  }
+
+  async run(ctx: ExecutionContext, c: Body) {
+    const clusterId = c.id('cls', 'clusterId')
+    const memoryLimit = c.oneOf(['cgroup', 'overcommit', 'none'] as const, 'memoryLimit')
+    return this.effect(async (tx) => {
+      const { rows } = await tx.query(
+        'registry.kind.cluster.memory_limit_before',
+        `SELECT memory_limit FROM registry.clusters WHERE cluster_id = $1 AND state <> 'retired' FOR UPDATE`,
+        [clusterId],
+      )
+      const before = rows[0]
+      if (before === undefined) return false
+      const { rowCount } = await tx.query(
+        'registry.kind.cluster.declare_memory_limit',
+        `UPDATE registry.clusters SET memory_limit = $2, memory_limit_by_operation_id = $3
+          WHERE cluster_id = $1 AND state <> 'retired'`,
+        [clusterId, memoryLimit, ctx.operationId],
+      )
+      if (rowCount !== 1) return false
+      await this.audit(
+        tx,
+        ctx,
+        { clusterId, memoryLimit, before: before.textOrNull('memory_limit') },
+        { clusterId, tier: 'prod' },
+      )
+      return true
+    })
+  }
+
+  check(ctx: ExecutionContext, c: Body) {
+    return this.exists(
+      'registry.kind.cluster_memory_limit.verify',
+      `SELECT 1 FROM registry.clusters
+        WHERE cluster_id = $1 AND memory_limit = $2 AND memory_limit_by_operation_id = $3`,
+      [c.text('clusterId'), c.text('memoryLimit'), ctx.operationId],
+    )
+  }
+
+  applied(ctx: ExecutionContext, c: Body) {
+    return this.exists(
+      'registry.kind.cluster_memory_limit.reconcile',
+      'SELECT 1 FROM registry.clusters WHERE cluster_id = $1 AND memory_limit_by_operation_id = $2',
+      [c.text('clusterId'), ctx.operationId],
+    )
+  }
+}
+
+/**
  * Adopts an external cluster by the node agent (OD-54 option (a), registry.md
  * §4.5): `management_mode` external → agent, once, and the node's server when
  * the cluster had none. Bound to the cluster's mode, state, pinned system
@@ -1445,6 +1521,7 @@ export function registryKinds(deps: RegistryKindDeps): readonly OperationKind[] 
     new ClusterRegisterKind(deps),
     new ClusterConfirmKind(deps),
     new ClusterDeclareTierKind(deps),
+    new ClusterDeclareMemoryLimitKind(deps),
     new ClusterAdoptAgentKind(deps),
     new EndpointAddKind(deps),
     new EndpointRetireKind(deps),

@@ -79,11 +79,11 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-57 | `advisors_run` records a run, but its scope `diagnostics.read` is a read scope | **open** | (a) a new additive oauth bundle makes `diagnostics.read` a write scope (consent shows it; clients that auto-approve read tools stop doing so); (b) a separate record scope for advisor runs (`diagnostics.record`), `diagnostics.read` stays read-only; (c) an advisor run over MCP records nothing (findings only from Web App, CLI and the worker) | nothing in Part B; the MCP annotation stays `readOnlyHint` until decided | open |
 | OD-58 | How an operation in `needs_attention` is closed | **open** (built with option (a) by the test campaign fixes) | (a) the recovery plan that names it closes it as `verification_failed`, `unknown` becomes `partially_applied`; (b) (a) plus the planned `operation.force_release` for operations no recovery plan covers; (c) (a) with `verification_failed` admitting an `unknown` apply outcome | option (a) is in the code on the branch; the owner confirms or changes it | open |
 | OD-59 | Flagging ledger rows as untrusted (`ledger.reconcile` with `flag_untrusted`) | **open** | (a) leave it unbuilt: `adopt_target` is the only decision, `flag_untrusted` is refused as `not_built`; (b) record the decision and a finding while the divergence keeps refusing plans; (c) remove it from the contract | (a) is in the code on the branch; the owner decides | open |
-| OD-60 | How strict a restore drill is about `amcheck` | **open** (built with option (a) by the test campaign fixes) | (a) a check the node could not run everywhere (`not_run`) does not fail a drill and stays recorded; `failed` and `error` do; (b) strict: a drill is refused at planning unless the extension is known to exist in every database of the restored cluster; (c) the node creates `amcheck` in the disposable scratch cluster with the host's contrib package, so the check runs everywhere | (a) is in the code on the branch; the owner confirms or changes it | open |
+| OD-60 | How strict a restore drill is about `amcheck` | **decided** 2026-11-02 ((a), and an optional data check, VC-004) by the test campaign fixes) | (a) a check the node could not run everywhere (`not_run`) does not fail a drill and stays recorded; `failed` and `error` do; (b) strict: a drill is refused at planning unless the extension is known to exist in every database of the restored cluster; (c) the node creates `amcheck` in the disposable scratch cluster with the host's contrib package, so the check runs everywhere | (a) is in the code on the branch; the owner confirms or changes it | open |
 | OD-61 | What an empty or missing drift baseline means, how large a read-lane result may be, and what counts toward the findings headline | **open** (nothing built; test campaign TC-017, TC-037) | (a) a target without a usable baseline reports one `no_baseline` finding and no `object_added` flood; roll-ups leave the severity counters; MCP results are capped (64 KB with a cursor) and repeated codes grouped; (b) keep the counts and only present them better (group by target and code, "rehearsal drift" separate); (c) leave as is | (a) together with OD-57 (b), as one change to the recording path |
 | OD-62 | Node certificate expiry: a distinct refusal reason, findings and thresholds | **open** (the agent's `status` text is built; test campaign TC-042) | (a) reason `certificate_expired`, findings `node_certificate_near_expiry` (warning from 12 h before the end without a renewal, critical after) and `node_certificate_expired`; (b) findings only; (c) documentation only (built) | (a) with a 12 h warning |
 | OD-63 | Who may withdraw a node plan, and whether withdrawing a revoke plan needs a fresh passkey | **open** (test campaign TC-020) | (a) the plan's creator withdraws it with the scope that created it, without a fresh passkey (withdrawing is the safe direction); (b) as (a), but a `node.revoke` or `node.decommission` plan still needs re-authentication to withdraw; (c) keep `nodes.operate` | (a) |
-| OD-64 | How long an operation may wait for approval | **open** (test campaign TC-034; the owner is asked to look at `op_01M5X74EJ0CD4BYGRZ9DM1KZYA`) | (a) an `awaiting_approval` operation whose plan expired is canceled (`plan_expired`, audited) and the approval page says so; (b) a separate deadline for approvals (for example 24 h); (c) no deadline (today) | (b), with (a) as the floor |
+| OD-64 | How long an operation may wait for approval | **decided** 2026-11-02 (4 h window, VC-057) | (a) an `awaiting_approval` operation whose plan expired is canceled (`plan_expired`, audited) and the approval page says so; (b) a separate deadline for approvals (for example 24 h); (c) no deadline (today) | (b), with (a) as the floor |
 | OD-65 | E16 and E18 waivers: detection before more imports | **open** (test campaign TC-023, TC-024) | (a) the OD-7a staging import counts as real REOSA data: build `hotfix_without_evidence` and `applied_not_in_source` before the next import; (b) it does not: keep the waivers until Wave 10 | (a) for E16 (a break-glass hotfix is reachable once a channel is set), (b) for E18 |
 | OD-66 | G10.3 wording against OD-7b | **open** (test campaign TC-063) | (a) "at least five REOSA migrations applied staging-first; production evidence checked by a plan only until Wave 11"; (b) keep the wording and treat it as a Wave 11 gate | (a) |
 | OD-67 | Step-up for enrolling a node | **open** (test campaign TC-053) | (a) one combined step-up whose receipt covers the plan apply and the token reveal of that plan only; (b) a longer receipt (5 min) for those two actions; (c) keep two receipts | (a) |
@@ -1868,8 +1868,12 @@ History:
 
 ## OD-60. How strict a drill is about `amcheck`
 
-- **Status.** OPEN (found on 2026-10-27 by the test campaign, TC-010 / D-02; built
-  with option (a) by the fixes of 2026-10-28, for the owner to confirm)
+- **Status.** DECIDED on 2026-11-02 under the owner's delegation to the fix session of the
+  verification campaign: (a) confirmed for `amcheck`, and S2-D2 answered: a drill may carry a
+  data check (`rowCounts`, bounds per table, check `row_counts`), and one without it passes on
+  replay, probes and `amcheck` only and records `row_counts` as not configured; a replay that
+  stops at the start of the newest archived segment fails the drill (VC-004). Found on
+  2026-10-27 by the test campaign, TC-010 / D-02.
 - **Question.** The node's `amcheck` check reports `not_run` when a database of the
   restored cluster lacks the extension (a template, an application database, any
   backup older than the extension). The Control Plane required every configured
@@ -1949,7 +1953,7 @@ History:
 
 ## OD-64. How long an operation may wait for approval
 
-- **Status.** OPEN (found on 2026-10-27 by the test campaign, TC-034)
+- **Status.** DECIDED on 2026-11-02 under the owner's delegation to the fix session: an apply request waits for an approval at most four hours (the documented approval window); a later approval is refused (`APPROVAL_EXPIRED`) and the worker cancels the operation (VC-057). The plan's lifetime ends when it is accepted; dispatch re-checks every binding. Previously: OPEN (found on 2026-10-27 by the test campaign, TC-034)
 - **Question.** An `access.identity.erase` operation (`op_01M5X74EJ0CD4BYGRZ9DM1KZYA`, created
   2026-10-26T23:01Z) is `awaiting_approval` with a live approval URL although its plan was
   consumed, approved 1 of 1 and expired about 20 hours before the campaign. Is that the designed
@@ -2027,7 +2031,8 @@ History:
   aggregates in agent reads.
 - **Recommendation.** (b); P1 (no data loss, no gate bypass; agent reads of production are
   `humans_only` by default, OD-13).
-- **Blocks.** Nothing built here.
+- **Built.** 2026-11-02 on `fix/verification-campaign-group-a-followups`: the size rule refuses a `verify.sql` check (`VERIFY_CONSTRUCT_UNSUPPORTED`, `size_argument`); the cluster's declared memory limit (`cgroup`, `overcommit`, `none`; bundle `cluster-memory-limit`, `POST /clusters/{id}/memory-limit`, production authority); a row read of a cluster without a declared limit warns a person (`warnings: ["target_memory_unlimited"]`) and refuses an agent (`DATA_READ_NOT_PERMITTED`, `details.reason`); `sql_query` at toolVersion 2. Until the owner declares the limits of existing clusters, agents read no rows of them.
+- **Blocks.** Nothing.
 
 ## OD-69. Audit chain and clock skew
 
@@ -2051,7 +2056,8 @@ History:
   continues from the real clock (monthly partitions then hold an overlapping range).
 - **Recommendation.** (b) with the bound; (c) only if the owner wants no event time that is not
   the real time.
-- **Blocks.** Nothing built here.
+- **Built.** 2026-11-02 on `fix/verification-campaign-group-a-followups`: the additive bundle `audit-clock-clamp` (the guard accepts the head's time while the head is at most 24 h ahead, with a row in the new append-only `audit.clock_skew_marks`; ac1 and `exponetdb.audit/v1` do not change, so the mark is a row, not an event member); the writer writes the mark and the event in one transaction; `AUDIT_CLOCK_SKEW` beyond 24 h.
+- **Blocks.** Nothing.
 
 ## OD-70. Control Store disk and bundle ingest
 
@@ -2079,7 +2085,36 @@ History:
 - **Recommendation.** Confirm (1) to (3); (b) with a configured size; (d) with re-authentication;
   (e) only if (2) is not enough; P1 (control plane, not data plane), but the owner may weigh
   `reos-01`, where the Control Store shares a host with other services.
-- **Blocks.** Nothing built beyond the confirmation part.
+- **Built.** 2026-11-02 on `fix/verification-campaign-group-a-followups`: (b) `EXPONETDB_CONTROL_STORE_VOLUME_BYTES`, the installation health component `control_store_volume` and the refusal `CONTROL_STORE_VOLUME_FULL` (507) at 90 %, measured as the database's own size (a lower bound: WAL and other files are not counted); (c) the restart policy `unless-stopped` and a WAL volume in the deployment rules (`deployment.md` §1); (d) the planned operation `migration.revisions.purge` (`POST /projects/{id}/bundle-revisions/purge`, permission `operations.recover`, human only, re-authentication; REST only, no CLI command or Web App page yet) and the additive bundle `migration-revision-purge`, whose guard refuses every other delete of a revision.
+- **Blocks.** Nothing.
+
+## Decisions of the verification campaign fixes (2026-11-02, under the owner's delegation)
+
+On 2026-11-02 the owner told the fix session of the verification campaign of 2026-10-28
+"I confirm the decisions, you can decide as expert". The session records every decision it took
+under that delegation here, with the option and the reason; the owner can revisit any of them.
+
+| Source | Decision | Reason |
+|---|---|---|
+| OD-68, D2-D1 | (b): a registry memory fact, a warning and refused agent reads where it is missing; `verify.sql` under the size rule; P1 | the guard cannot bound rows times values; a memory-limited server ends one backend instead of the cluster |
+| OD-69 | (b): clamp a skewed audit event to the head's time, bounded to 24 h | keeps the chain writable through a short step without bridging it |
+| OD-70, S6-D2, C1-D2 | the built audit and quota confirmed; a configured volume component; restart policy and WAL volume in the deployment record; a human-only purge of unreferenced revisions older than 90 days; no general REST rate limit; P1 | the disk is the control plane's, not the data plane's; the quota closes the low-privilege path |
+| OD-70 (d), permission | the purge uses `operations.recover` (human only), not a new permission | it is recovery of the Control Plane's own state like `operation.force_release`; a new permission would change every role definition for one admin action |
+| VC-011 (RB-14) | a lost keyring with no copy is a new installation; custody in three places and a yearly restore test; a missing key answers 503 `SECRET_KEY_UNAVAILABLE` | the job key and the node CA key are wrapped by the same keyring, so no node job can rotate credentials without it; an audited offline reset would add a tool that rewrites wrapped secrets, a larger risk than a documented new installation |
+| OD-64, B1-D3 | four hours from the apply request; later approvals refused, the worker cancels | the documented window; dispatch re-checks bindings anyway |
+| B1-D4 | `operation.force_release`, as defined before G1 (a `high` planned operation, a person, re-authentication at apply), as the exit of `needs_attention` for every kind, with a stated outcome and a reason, rather than per-kind retry rules | one action closes the dead end for every kind, present and future |
+| D0-01 | a production `migration.verify` that names a stuck operation needs an approval and a fresh re-authentication | closing an operation on production is a recovery like `migration.resume` |
+| OD-60, S2-D2 | (a) for `amcheck`; a drill may carry row-count bounds (`row_counts`); without them it passes without a data check and says so; a short replay fails it | a mandatory data check needs bounds only the person knows; the replay end catches the deleted segment without one |
+| S2-D1, D-R1-2 | the node computes WAL gaps itself (a `repo-ls` listing) and `backup.verify` fails on a gap after the start of the backups it verifies | pgBackRest's verify does not report a missing segment between two others; nothing else can see it |
+| VC-079, VC-153 (evidence) | an evidence row counts only when an operation of the evidence target listed the migration, the evidence target's ledger agrees with its mirror and the verification is mirrored; no override | the mirror exists to catch tampering; a hand-written row quoting a genuine operation id passed every earlier check |
+| VC-023 (generation) | a mirror of another generation is a divergence; nothing is mirrored for it until `ledger.reconcile` adopts the ledger; the bump itself stays unbuilt | a restore that bumps the generation must not switch the divergence check off or re-adopt the restored ledger |
+| VC-045 (mirror) | the mirror is revert-only by trigger (`EXM03`); the worker archives rows only inside a running `ledger.reconcile` that lists them | "insert-and-revert-only" was code convention that a compromised worker role could ignore |
+| VC-022 (watch) | the ledger watch runs every 10 minutes per active or suspended target and opens a critical `health` finding `ledger_divergence`; it does not suspend the target | plans already refuse on divergence, so a suspension would only turn a stale mirror into an outage; a finding and an audit event make it visible |
+| VC-074 (endpoint add) | the plan probes the address with the cluster's observer credential and is refused `CLUSTER_IDENTITY_MISMATCH` naming both identifiers; an unreachable address is planned and shows `probe: unreachable`; a pending cluster is not probed (no identity yet); the apply does not probe again | a reachable address of another instance suspends targets within seconds; an address that is down (maintenance) is a legitimate thing to register, and the plan expires in minutes |
+| VC-071, VC-073 (clone, standby) | a copy of the registered database (another database oid) is `TARGET_IDENTITY_MISMATCH` and a primary in recovery is `TARGET_READ_ONLY`, both at plan and at apply; no health condition for either | the typed refusal stops every write; a health condition and a surfaced clone are display work left for the Web App group |
+| VC-075 (database move) | the sentence that a restore "re-stamps the marker" is removed; a moved database is imported and registered as a new target (history imported, baseline accepted) | a `target.rehome` kind would take an adopted marker and a generation bump, the exact thing VC-023 shows the store cannot yet handle safely; import-after-move works today |
+| VC-087 (hotfix follow-up) | deferred: the `hotfix_without_evidence` finding and the break-glass ledger mark are not built | needs a ledger-row source column on frozen target schema (a new ledger version) and the break-glass flow is itself waived until OD-21; recorded, not silently dropped |
+| VC-136 (comments) | `fp1` does not cover comments; documented as a known blind spot; a check that counts them is `fp2` through an ADR | `fp1` is frozen; comments reach agents as untrusted text, so the gap is stated where agents read |
 
 ## Owner decisions of the Wave 9 Part B order (2026-10-26)
 

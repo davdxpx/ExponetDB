@@ -37,6 +37,8 @@ type Command struct {
 	Path    string
 	Args    []string
 	Timeout time.Duration
+	// MaxOutput replaces the default output cap (maxOutput) when it is larger.
+	MaxOutput int
 }
 
 // Output is what the helper reads of an execution: standard output and the
@@ -62,10 +64,11 @@ var ErrOutputTooLarge = errors.New("helper: command output too large")
 type capped struct {
 	buf      bytes.Buffer
 	exceeded bool
+	limit    int
 }
 
 func (c *capped) Write(p []byte) (int, error) {
-	if c.buf.Len()+len(p) > maxOutput {
+	if c.buf.Len()+len(p) > max(maxOutput, c.limit) {
 		c.exceeded = true
 		return 0, ErrOutputTooLarge
 	}
@@ -92,7 +95,7 @@ func (ExecRunner) Run(ctx context.Context, c Command) (Output, error) {
 	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL=C", "LANG=C", "SYSTEMD_PAGER=", "SYSTEMD_COLORS=0", "DEBIAN_FRONTEND=noninteractive"}
 	cmd.Dir = "/"
 	cmd.Stdin = nil
-	out := &capped{}
+	out := &capped{limit: c.MaxOutput}
 	cmd.Stdout = out
 	cmd.Stderr = discard{}
 	cmd.WaitDelay = 5 * time.Second

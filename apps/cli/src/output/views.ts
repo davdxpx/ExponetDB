@@ -370,7 +370,7 @@ function operationNotes(o: Operation): string[] {
 }
 
 /** What to run next for an operation, from the server's next action. */
-export function operationNext(o: Operation): string[] {
+export function operationNext(o: Operation & { readonly retryable?: boolean }): string[] {
   const inspect = `exponetdb operation show ${o.id}`
   switch (o.nextAction) {
     case 'approve':
@@ -378,12 +378,15 @@ export function operationNext(o: Operation): string[] {
     case 'wait':
       return [`exponetdb operation watch ${o.id}`]
     case 'inspect':
-      // An applied change whose verification errored or never finished can be verified again.
-      return o.state === 'needs_attention' &&
-        (o.applyOutcome === 'applied' || o.applyOutcome === 'partially_applied') &&
-        (o.verificationOutcome === 'error' || o.verificationOutcome === 'pending')
+      // The server decides what can be verified again (VC-049); anything else stuck is released
+      // by a person once they know what happened to the change (VC-006).
+      if (o.state !== 'needs_attention') return [inspect]
+      return o.retryable === true
         ? [inspect, `exponetdb operation retry-verification ${o.id}`]
-        : [inspect]
+        : [
+            inspect,
+            `exponetdb operation force-release ${o.id} --outcome <applied|not_applied|unknown> --reason "<why>"`,
+          ]
     case 'resume':
       return [
         o.subject.targetId === null

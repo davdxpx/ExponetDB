@@ -285,7 +285,7 @@ export async function getServer(q: Queryable, serverId: string): Promise<ServerR
 
 const CLUSTER_COLUMNS = `c.cluster_id, c.server_id, c.management_mode, c.display_name, c.state, c.system_identifier,
   c.server_version_num, c.ca_bundle, ${ts('c.confirmed_at')}, ct.derived_tier, c.declared_tier,
-  ${ts('c.retired_at')}`
+  c.memory_limit, ${ts('c.retired_at')}`
 const CLUSTER_FROM = `registry.clusters c JOIN registry.cluster_tiers ct ON ct.cluster_id = c.cluster_id`
 
 export async function listClusters(

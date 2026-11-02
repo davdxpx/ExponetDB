@@ -59,6 +59,8 @@ const SHAPES: Record<string, { scopes: Scope[]; tiers: Tier[] }> = {
 // wal_continuity_unproven (A-4). Both version-1 digests are new on this branch, not released.
 // Re-pinned 2026-10-28: the tools that return an operation carry the L0 gate of a rolled-back
 // migration (untrusted `first`, so openWorldHint and a description note); toolVersion raised.
+// Re-pinned 2026-11-02 (OD-68 (b)): sql_query at toolVersion 2, its result names the warning
+// target_memory_unlimited; only the data reader's list holds it.
 const PINNED: Record<string, { tools: number; digest: string }> = {
   'baseline, nonprod': {
     tools: 15,
@@ -78,7 +80,7 @@ const PINNED: Record<string, { tools: number; digest: string }> = {
   },
   'data reader, nonprod': {
     tools: 22,
-    digest: 'sha256:92dc94f80336cc11fc5fb46124d3c66a1bae8b0a654689890e97491f2e8e1421',
+    digest: 'sha256:e752e8c518533459dee0e50ef3842b328b04eb4ba968a41bbc0d4f3c918a7962',
   },
 }
 

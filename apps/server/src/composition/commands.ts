@@ -1,6 +1,6 @@
 import { constants } from 'node:fs'
 import { open, unlink } from 'node:fs/promises'
-import { pruneAuditPartitions, verifyAuditChain } from '@exponetdb/audit'
+import { appendAuditEvent, pruneAuditPartitions, verifyAuditChain } from '@exponetdb/audit'
 import { type McpKeyPurpose, rotateMcpKey } from '@exponetdb/auth'
 import {
   bootstrapPsqlScript,
@@ -80,13 +80,35 @@ export async function writeSecretFile(path: string, text: string): Promise<void>
 export async function migrate(config: StoreConfig, runtime: Runtime): Promise<MigrateReport> {
   const store = openStore(runtime, config.controlStoreUrl, 'exdb_migrate', 2)
   try {
-    return await migrateControlStore({
+    const report = await migrateControlStore({
       store,
       bundles: await loadBundleSet(),
       engineVersion: BUILD.version,
       newInstallationId: () => newId('ins', runtime.clock.nowMs()),
       logger: runtime.logger,
     })
+    // VC-065: a migration changes every role's schema and is one way; it is audited, naming what it
+    // applied. A run that applies nothing writes no event (the chain is permanent).
+    if (report.applied.length > 0) {
+      await store.transaction('commands.migrate.audit', (tx) =>
+        appendAuditEvent(
+          tx,
+          {
+            action: 'control_store.migrated',
+            phase: 'completed',
+            actor: { kind: 'system', identityId: null, label: 'system:migrate' },
+            changes: {
+              applied: report.applied.length,
+              bundles: report.applied.slice(0, 64),
+              engineVersion: BUILD.version,
+            },
+            result: { status: 'succeeded' },
+          },
+          { clock: runtime.clock },
+        ),
+      )
+    }
+    return report
   } finally {
     await store.close()
   }
@@ -97,7 +119,16 @@ export interface SchemaStatus {
   readonly status: string
   readonly expected: number
   readonly applied: number
+  /** The preflight of an upgrade (VC-065): the bundles this build would apply. */
+  readonly pending: readonly string[]
+  /** Bundles a newer build applied, which this build does not know. */
+  readonly unknown?: readonly string[]
+  /** What to do when this build cannot run against the store. */
+  readonly remedy?: string
 }
+
+/** VC-065: a store a newer build migrated is never run by an older one (the schema change is one way). */
+export const SCHEMA_NEWER_REMEDY = 'deploy_the_newer_image_or_restore_the_pre_upgrade_dump'
 
 /** `exponetdb control-store status`: read-only, with any runtime login. */
 export async function schemaStatus(config: StoreConfig, runtime: Runtime): Promise<SchemaStatus> {
@@ -111,11 +142,19 @@ export async function schemaStatus(config: StoreConfig, runtime: Runtime): Promi
     const bundles = await loadBundleSet()
     const expected = expectedMigrations(bundles)
     const ledger = await readLedger(store)
+    const state = compareSchema(expected, ledger)
     return {
       installationId: (await readInstallationId(store)) ?? null,
-      status: compareSchema(expected, ledger).status,
+      status: state.status,
       expected: expected.length,
       applied: ledger.entries.length,
+      pending:
+        state.status === 'pending' || state.status === 'uninitialized'
+          ? expected
+              .filter((e) => !ledger.entries.some((l) => l.migrationId === e.id))
+              .map((e) => `${e.id}_${e.name}`)
+          : [],
+      ...(state.status === 'newer' ? { unknown: state.unknown, remedy: SCHEMA_NEWER_REMEDY } : {}),
     }
   } finally {
     await store.close()

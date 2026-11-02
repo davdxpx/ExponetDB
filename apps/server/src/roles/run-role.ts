@@ -1,10 +1,14 @@
 import type { HealthCheck } from '@exponetdb/observability'
+import { SCHEMA_NEWER_REMEDY } from '../composition/commands.ts'
 import { composeRole, type RoleServices } from '../composition/role.ts'
 import { createRuntime, type Runtime } from '../composition/runtime.ts'
 import { BUILD } from '../config/build-info.ts'
 import type { RoleConfig } from '../config/env.ts'
 import { createInternalApp, createPublicApp, httpMetrics } from '../interfaces/http/app.ts'
-import { bounded, type Listener, listen, shutdownSignal } from './lifecycle.ts'
+import { type Listener, listen, shutdown, shutdownSignal } from './lifecycle.ts'
+
+/** After the drain: marking the heartbeat stopped and closing the pool and the internal listener. */
+const SERVICES_STOP_MS = 5000
 
 /**
  * Runs one process role until a shutdown signal (or `until`, in tests):
@@ -62,6 +66,8 @@ export async function runRole(run: RoleRun): Promise<number> {
         : 'startup_failed'
     log.error('process.start_refused', {
       reason: /^[a-z][a-z0-9_]{0,63}$/.test(code) ? code : 'startup_failed',
+      // VC-065: an older image against a store a newer build migrated: never run it, say what to do.
+      ...(code === 'schema_newer' ? { remedy: SCHEMA_NEWER_REMEDY } : {}),
     })
     await runtime.tracing.shutdown(2000)
     return 3
@@ -97,13 +103,16 @@ export async function runRole(run: RoleRun): Promise<number> {
 
   await (run.until ?? shutdownSignal(log))
 
-  const finished = await bounded(async () => {
-    services.readiness.markStopping()
-    await publicListener?.close(config.shutdownTimeoutMs / 2)
-    await stopLoops()
-    await services.stop()
-    await internal.close(1000)
-  }, config.shutdownTimeoutMs)
+  const finished = await shutdown(
+    {
+      markStopping: () => services.readiness.markStopping(),
+      closePublic: async () => publicListener?.close(config.shutdownTimeoutMs / 2),
+      stopLoops,
+      stopServices: () => services.stop(),
+      closeInternal: () => internal.close(1000),
+    },
+    { drainMs: config.shutdownTimeoutMs, afterMs: SERVICES_STOP_MS },
+  )
   await runtime.tracing.shutdown(2000)
   log.info('process.stopped', { ok: finished })
   return finished ? 0 : 1

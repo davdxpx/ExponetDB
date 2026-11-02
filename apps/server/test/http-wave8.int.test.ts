@@ -328,6 +328,8 @@ describe('installation health', () => {
         { component: 'maintenance', reason: 'never_registered' },
         { component: 'samplers', reason: 'never_registered' },
         { component: 'gateway', reason: 'not_applicable' },
+        // OD-70 (b): without EXPONETDB_CONTROL_STORE_VOLUME_BYTES the volume is not observed.
+        { component: 'control_store_volume', reason: 'volume_size_not_configured' },
       ]),
     )
     expect(component(r.body, 'samplers')).toBeUndefined()

@@ -2,6 +2,7 @@ import {
   type ClusterAgentAdoptionRequest,
   type ClusterConfirmRequest,
   type ClusterDeclaredTierRequest,
+  type ClusterMemoryLimitRequest,
   type ClusterRegisterRequest,
   type DatabaseRegisterRequest,
   type EndpointRequest,
@@ -735,6 +736,50 @@ export async function planClusterDeclareTier(
   })
 }
 
+/**
+ * Declares the memory limit of a cluster's PostgreSQL (OD-68 (b)): a production decision whichever
+ * value (the action's registry tier is `production`), so the plan records the tier `prod`; a
+ * retired cluster never. The kind re-checks the declaration the plan was made against.
+ */
+export async function planClusterDeclareMemoryLimit(
+  tx: Tx,
+  context: RegistryPlanContext,
+  actor: RegistryActor,
+  clusterId: string,
+  input: ClusterMemoryLimitRequest,
+): Promise<PlanRecord> {
+  const cluster = await getCluster(tx, clusterId)
+  if (cluster === undefined) {
+    throw new RegistryError('NOT_FOUND')
+  }
+  if (cluster.state === 'retired') {
+    throw conflict('cluster_retired')
+  }
+  if (cluster.memoryLimit === input.memoryLimit) {
+    throw invalid(
+      'memoryLimit',
+      'no_change',
+      'The cluster is already declared with this memory limit.',
+    )
+  }
+  return store(tx, context, actor, {
+    kind: 'registry.cluster.declare_memory_limit',
+    actionClass: 'high',
+    subject: { clusterId, tier: 'prod' },
+    content: { clusterId, memoryLimit: input.memoryLimit },
+    expectedState: { memoryLimit: cluster.memoryLimit, clusterState: cluster.state },
+    analysis: {
+      before: cluster.memoryLimit,
+      after: input.memoryLimit,
+      effect:
+        input.memoryLimit === 'none'
+          ? 'data reads of its targets carry a warning and agents read no rows'
+          : 'an exhausting read ends one backend with an error; agents may read rows where the data.read rule allows it',
+      authority: 'registry.manage at the production registry tier',
+    },
+  })
+}
+
 // ----- adoption of an external cluster by the node agent (OD-54 option (a)) -----
 
 /** Four missed heartbeats read offline (the nodes package's `OFFLINE_AFTER_MS`). */
@@ -938,6 +983,7 @@ export async function planEndpointAdd(
     throw conflict('cluster_retired')
   }
   const endpoint = await endpointContent(tx, context, input, '')
+  const probe = await probeEndpoint(context, cluster, endpoint)
   const tier = cluster.derivedTier ?? undefined
   return store(tx, context, actor, {
     kind: 'registry.endpoint.add',
@@ -948,8 +994,48 @@ export async function planEndpointAdd(
       clusterState: cluster.state,
       address: `${input.host.toLowerCase()}:${input.port}`,
     },
-    analysis: { derivedTier: cluster.derivedTier, kind: endpoint.kind, label: endpoint.label },
+    analysis: {
+      derivedTier: cluster.derivedTier,
+      kind: endpoint.kind,
+      label: endpoint.label,
+      ...probe,
+    },
   })
+}
+
+/**
+ * VC-074: the address is probed with the cluster's observer credential before it is written. An
+ * address of another instance would suspend the targets whose database exists there and make
+ * the others unhealthy within seconds, so it is refused, naming both identifiers. A pending
+ * cluster has no identity to compare with, and an address that cannot be reached is shown in
+ * the plan as such (an endpoint may be added for a host that is down for maintenance).
+ */
+async function probeEndpoint(
+  context: RegistryPlanContext,
+  cluster: ClusterRecord,
+  endpoint: EndpointContent,
+): Promise<{ probe: 'matches' | 'unreachable' | 'not_pinned'; observed?: string }> {
+  if (cluster.systemIdentifier === null) return { probe: 'not_pinned' }
+  let observed: string
+  try {
+    observed = await context.connector.probeAddress(
+      cluster.clusterId,
+      endpoint,
+      `endpoint-add/${cluster.clusterId}`,
+    )
+  } catch (error) {
+    if (error instanceof TargetError && error.code === 'TARGET_UNAVAILABLE') {
+      return { probe: 'unreachable' }
+    }
+    throw error
+  }
+  if (observed !== cluster.systemIdentifier) {
+    throw new RegistryError('CLUSTER_IDENTITY_MISMATCH', {
+      pinned: cluster.systemIdentifier,
+      observed,
+    })
+  }
+  return { probe: 'matches', observed }
 }
 
 export async function planEndpointRetire(

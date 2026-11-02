@@ -37,7 +37,15 @@ archive fails, the RPO grows with every minute and WAL piles up in
 2. Is the repository readable? The same listing shows each repository's
    `reconciliation` outcome; `backup_repository_unreadable` (critical) means
    the engine cannot read the repository at all (credentials, endpoint,
-   bucket policy, lock rules, an expired token).
+   bucket policy, lock rules, an expired token). **[DECIDED]** (verification
+   campaign fix VC-061, 2026-11-02) Its detail and the failed operation name
+   the cause: `reason: repository_unreadable` (a wrong cipher key, damaged
+   files or an engine error: restore the key from the offline copy, check the
+   files) or `reason: repository_missing` (the stanza path is gone: the
+   repository was deleted or moved, never "another cluster's stanza"). A
+   verification, backup run or drill on such a repository ends at once
+   `failed` with `BACKUP_REPOSITORY_UNAVAILABLE`, a refresh likewise with one
+   row per unread repository in `detail.repositories`.
 3. Is the host disk filling? `disk.stats@1` breakdown, category `wal`
    (RB-07).
 4. What does PostgreSQL say? The server log lines of the archive command
@@ -166,6 +174,24 @@ read from files the operator names in environment variables at run time
 which come from the owner-held offline copy
 ([`../08-auth-and-security/secrets.md`](../08-auth-and-security/secrets.md)).
 The script restores into an empty `TARGET_DIR` and refuses a non-empty one.
+
+**[DECIDED]** (verification campaign fix VC-059, 2026-11-02) The restic
+(logical) script creates the roles before it restores a database: it applies
+the snapshot's `globals*.sql` (`pg_dumpall --globals-only --no-role-passwords`)
+to the new cluster first, since the dumps own objects by and grant to those
+roles. A snapshot without one, or with more than one, stops the script
+before anything is created, with a message that names the manual step
+(dump the roles from the source or write the `CREATE ROLE` statements and
+run again with `GLOBALS_FILE=<file>`); a globals file that creates
+tablespaces stops it too (remove those lines), and so does one holding a psql
+meta-command pg_dumpall does not write (any backslash outside the `\connect`,
+`\restrict` and `\unrestrict` lines: psql would run `\!` on the host). Every
+dump is read (`pg_restore --list`) before any cluster is created. When a `pg_restore` fails the
+script stops the cluster and says it holds a partial restore: a
+half-restored cluster never keeps running. The node dumps roles without
+passwords (`--no-role-passwords`); set them before any client connects. A lab test restores a snapshot with a role
+grant and checks the roles and the grant
+(`packages/backups/test/runbook-restic.lab.test.ts`).
 
 Download the runbook **before** an incident and keep it with the offline
 key copy: during an incident ExponetDB may be the thing that is down. The

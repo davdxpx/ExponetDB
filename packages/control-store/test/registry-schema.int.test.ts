@@ -797,6 +797,16 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M61C90YHV706H2B8EW39TBAF',
         // Test campaign TC-013 (2026-10-28): serve records the attestation of an offline drill.
         '01M61FKAJN5VP9H2E73K74NCZ2',
+        // Verification campaign VC-006 (2026-11-02): a person force-releases a needs_attention operation.
+        '01M6DV2NQJDYWP4GXT46DTRK2S',
+        // OD-69 (b), verification campaign VC-003 (2026-11-02): a marked event at the head's time.
+        '01M6E66KZSPYHEF2Y7D4YJYWDH',
+        // OD-70 (d), verification campaign VC-001 (2026-11-02): purge never-planned bundle revisions.
+        '01M6E7DFZVEYRCA07SCYAA2PB6',
+        // OD-68 (b), verification campaign VC-002 (2026-11-02): a cluster's declared memory limit.
+        '01M6E85HQ7B2KDHHWMDP3AGA5M',
+        // Verification campaign VC-045, VC-102 (2026-11-02): the mirror is revert-only; archiving is bound to its plan.
+        '01M6EJD93DP9GNTHF77YY8VNY6',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

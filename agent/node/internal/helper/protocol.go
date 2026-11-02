@@ -35,15 +35,17 @@ const (
 	OpRestoreVerify       = helperproto.OpRestoreVerify
 	OpRestoreDiscard      = helperproto.OpRestoreDiscard
 
-	CodeRequestInvalid     = helperproto.CodeRequestInvalid
-	CodeJobInvalid         = helperproto.CodeJobInvalid
-	CodeOperationMismatch  = helperproto.CodeOperationMismatch
-	CodeReplayed           = helperproto.CodeReplayed
-	CodeNotConfigured      = helperproto.CodeNotConfigured
-	CodePreconditionFailed = helperproto.CodePreconditionFailed
-	CodeFailed             = helperproto.CodeFailed
-	CodeUnsupported        = helperproto.CodeUnsupported
-	CodeOutcomeUnknown     = helperproto.CodeOutcomeUnknown
+	CodeRequestInvalid       = helperproto.CodeRequestInvalid
+	CodeJobInvalid           = helperproto.CodeJobInvalid
+	CodeOperationMismatch    = helperproto.CodeOperationMismatch
+	CodeReplayed             = helperproto.CodeReplayed
+	CodeNotConfigured        = helperproto.CodeNotConfigured
+	CodePreconditionFailed   = helperproto.CodePreconditionFailed
+	CodeFailed               = helperproto.CodeFailed
+	CodeUnsupported          = helperproto.CodeUnsupported
+	CodeOutcomeUnknown       = helperproto.CodeOutcomeUnknown
+	CodeRepositoryMissing    = helperproto.CodeRepositoryMissing
+	CodeRepositoryUnreadable = helperproto.CodeRepositoryUnreadable
 )
 
 type (

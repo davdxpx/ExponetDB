@@ -39,6 +39,8 @@ describe('operation state machine (operations-engine.md §4.1)', () => {
         'verifying->needs_attention',
         'needs_attention->verifying',
         'needs_attention->verification_failed',
+        // VC-006: a force release of a change the person found not applied.
+        'needs_attention->failed',
       ].sort(),
     )
   })

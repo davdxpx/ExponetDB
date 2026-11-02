@@ -381,6 +381,22 @@ describe('size arguments of value-building functions (VC-002)', () => {
       })
     },
   )
+  // OD-68 (b): a verify.sql check runs on the verifier's cluster as a data read does on the
+  // reader's (staging needs no approval), so the same rule refuses it.
+  it.each(SUPPORTED_MAJORS)(
+    'refuses an unbounded size argument in a verify.sql check on %i',
+    (major) => {
+      expect(
+        admitVerifySync(
+          major,
+          "SELECT count(*) > 0 AS ok FROM (SELECT repeat('x', 100000000)) AS v",
+        ),
+      ).toMatchObject({ ok: false, code: 'VERIFY_CONSTRUCT_UNSUPPORTED', reason: 'size_argument' })
+      expect(admitVerifySync(major, "SELECT length(repeat('x', 10)) = 10 AS ok")).toMatchObject({
+        ok: true,
+      })
+    },
+  )
 })
 
 describe('secret-bearing catalogs (Wave 7 review)', () => {

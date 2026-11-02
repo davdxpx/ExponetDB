@@ -68,7 +68,12 @@ export interface IngestInput {
   readonly identityId: string
   /** The identity's quota; {@link INGEST_DAILY_BYTES} unless a caller (a test) names another. */
   readonly dailyBytes?: number
+  /** The configured Control Store volume (OD-70 (b)); absent: not checked. */
+  readonly volumeBytes?: number
 }
+
+/** OD-70 (b): ingest stops when the Control Store database fills this share of its volume. */
+export const VOLUME_REFUSE_PERCENT = 90
 
 /**
  * The bundle bytes one identity may store in 24 hours (VC-001; the value is
@@ -147,18 +152,37 @@ function bundleRefusal(failure: BundleFailure): MigrationError {
   return new MigrationError(failure.code, failure.details as unknown as JsonObject)
 }
 
-/** Every checksum of an id applied on any target of the project (mirror), reverted rows included. */
-async function appliedElsewhere(
+/**
+ * Every checksum of an id applied on any target of the project, reverted rows included: what the
+ * ledger mirror holds, and (VC-027) what an operation applied or may have applied since: its
+ * progress says applied, partly applied or unknown, or it has not finished. Between the target's
+ * commit and the mirror write the mirror alone would let other bytes through under an applied id.
+ */
+export async function appliedElsewhere(
   q: Queryable,
   projectId: string,
   migrationId: string,
 ): Promise<{ readonly checksum: string; readonly targetId: string }[]> {
   const { rows } = await q.query(
     'migrations.store.applied_elsewhere',
-    `SELECT m.checksum, m.target_id FROM migrations.ledger_mirror m
+    `SELECT m.checksum AS checksum, m.target_id AS target_id FROM migrations.ledger_mirror m
        JOIN registry.targets t ON t.target_id = m.target_id
       WHERE t.project_id = $1 AND m.migration_id = $2
-      ORDER BY m.target_id`,
+      UNION
+     SELECT item ->> 'checksum', p.target_id
+       FROM migrations.operation_migrations om
+       JOIN operations.operations o ON o.operation_id = om.operation_id
+       JOIN operations.plans p ON p.plan_id = o.plan_id
+       JOIN operations.plan_bodies b ON b.plan_id = p.plan_id
+       JOIN registry.targets t ON t.target_id = p.target_id
+       CROSS JOIN LATERAL jsonb_array_elements(
+         CASE WHEN jsonb_typeof(b.body::jsonb -> 'content' -> 'migrations') = 'array'
+              THEN b.body::jsonb -> 'content' -> 'migrations' ELSE '[]'::jsonb END) AS item
+      WHERE t.project_id = $1 AND om.migration_id = $2 AND item ->> 'migrationId' = $2
+        AND item ->> 'checksum' IS NOT NULL
+        AND (om.apply_outcome IN ('applied', 'partially_applied', 'unknown')
+             OR o.state IN ('running', 'verifying', 'needs_reconciliation', 'needs_attention'))
+      ORDER BY 2, 1`,
     [projectId, migrationId],
   )
   return rows.map((r) => ({ checksum: r.text('checksum'), targetId: r.text('target_id') }))
@@ -181,6 +205,19 @@ export async function ingestBundles(tx: Tx, input: IngestInput): Promise<Ingeste
     'SELECT pg_advisory_xact_lock(1163412546, hashtext($1))',
     [`bundle-quota/${input.identityId}`],
   )
+  if (input.volumeBytes !== undefined) {
+    const size = await tx.query(
+      'migrations.store.volume_used',
+      'SELECT pg_database_size(current_database())::bigint AS n',
+    )
+    const usedBytes = Number(size.rows[0]?.text('n') ?? '0')
+    if (usedBytes * 100 >= input.volumeBytes * VOLUME_REFUSE_PERCENT) {
+      throw new MigrationError('CONTROL_STORE_VOLUME_FULL', {
+        usedBytes,
+        volumeBytes: input.volumeBytes,
+      })
+    }
+  }
   const usage = (await tx.query('migrations.store.quota_used', QUOTA_USED, [input.identityId]))
     .rows[0]
   let used = usage === undefined ? 0 : Number(usage.text('used'))

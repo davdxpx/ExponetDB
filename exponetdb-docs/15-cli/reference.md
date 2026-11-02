@@ -127,6 +127,7 @@ exit codes are in [`README.md`](./README.md).
 | [`operation watch`](#operation-watch) | remote | read | Watch an operation until it is final (exit 0 only when applied and verified). |
 | [`operation cancel`](#operation-cancel) | remote | mutation | Cancel an operation that has not started (awaiting approval or queued). |
 | [`operation retry-verification`](#operation-retry-verification) | remote | mutation | Verify again an operation that needs attention after an applied change. |
+| [`operation force-release`](#operation-force-release) | remote | plan | Plan releasing an operation that needs attention, of any kind. |
 | [`approval list`](#approval-list) | remote | read | List operations awaiting approval that you may read. |
 | [`approval show`](#approval-show) | remote | read | Show what an approval decides: the operation, its plan and the plan hash. |
 | [`approval open`](#approval-open) | remote | read | Open the bound approval page in the browser. |
@@ -2266,6 +2267,32 @@ Runs: against the server; effect: mutation; action: `operation.retry_verificatio
 
 ```sh
 exponetdb operation retry-verification op_01… --wait
+```
+
+### operation force-release
+
+Plan releasing an operation that needs attention, of any kind.
+
+For an operation in needs_attention that no retry and no recovery plan covers, or whose outcome stayed unknown (VC-006). You state what happened to its change (applied, not_applied, unknown) and why; applying the plan (plan apply, a fresh re-authentication) closes the operation, runs nothing of it again and frees what it holds on the target. not_applied is refused for a change the engine recorded as applied.
+
+```text
+exponetdb operation force-release <operation> [flags]
+```
+
+Runs: against the server; effect: plan; action: `operation.force_release.plan`; scopes: `operations.recover`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `operation` (required) | The operation id (op_…). |
+| `--outcome <applied|not_applied|unknown>` | What happened to the change, as you checked it on the target. (required) |
+| `--reason <text>` | Why, and how you checked (kept with the plan and in the audit, 1 to 1000 characters). (required) |
+| `--apply` | Apply at once and wait. |
+| `--wait` | Wait until applied and verified (the default). |
+| `--no-wait` | Return once the server accepted the operation. |
+| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+
+```sh
+exponetdb operation force-release op_01… --outcome not_applied --reason "The table does not exist on the target."
 ```
 
 ## Approvals

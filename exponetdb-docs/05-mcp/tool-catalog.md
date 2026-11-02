@@ -129,7 +129,7 @@ error catalog (`Next step:` in the text;
 
 | Tool | Scope | Ann. | Input | Output | REST | Wave |
 |---|---|---|---|---|---|---|
-| `sql_query` | `data.read:nonprod` / `data.read:prod` | RO | `target`, `sql` (one read-only statement), `params[]`, `maxRows`, optional `queryId` (`qry_…`, to cancel it by) | rows (typed JSON, capped), columns, truncation flags, RLS annotation, masked columns, duration, statement digest | `POST /targets/{id}/queries` | 7, served |
+| `sql_query` | `data.read:nonprod` / `data.read:prod` | RO | `target`, `sql` (one read-only statement), `params[]`, `maxRows`, optional `queryId` (`qry_…`, to cancel it by) | rows (typed JSON, capped), columns, truncation flags, RLS annotation, masked columns, duration, statement digest; **[DECIDED]** (OD-68 (b), toolVersion 2) refused `DATA_READ_NOT_PERMITTED` (`target_memory_unlimited`) where the target's cluster declares no memory limit | `POST /targets/{id}/queries` | 7, served |
 | `sql_explain` | as `sql_query` | RO | `target`, `sql`, `params[]`, `analyze` (bool), optional `queryId` | JSON plan (redacted), summary (cost, rows, seq scans, misestimates) | `POST /targets/{id}/explain` | 7, served |
 | `sql_cancel` | `data.read:nonprod` / `data.read:prod`, and the same identity, client and grant as the query | RO | `target`, `queryId` | `canceled` or `finished` | `POST /targets/{id}/queries/{queryId}/cancel` | 7, served |
 

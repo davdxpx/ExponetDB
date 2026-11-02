@@ -88,6 +88,12 @@ For `transactional: false`:
     catalog read that failed) is a blocking finding and denies the plan.
     `all_done` (every statement done, the record step failed, e.g. L0)
     retries only the record step.
+  - **[DECIDED]** (verification campaign VC-106, 2026-11-02) The event log is
+    data of the managed database, so the operation it names is not trusted: the
+    plan accepts it only when the Control Store knows it as an apply of **this**
+    target whose plan lists the migration, and, when an operation of the target
+    is stuck on this migration (`needs_attention`), only when it is that one.
+    Anything else is `NOT_FOUND`; the plan never closes another operation.
   - The plan binds the original apply plan's item (checksum, bundle digest,
     execution role, timeouts, search path), the live partial fingerprint and
     ledger hash, the digest of the event log since the start, the statement

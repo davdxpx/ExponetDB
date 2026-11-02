@@ -16,6 +16,7 @@ import type {
   ClusterBootstrapSql,
   ClusterConfirmRequest,
   ClusterDeclaredTierRequest,
+  ClusterMemoryLimitRequest,
   ClusterRegisterRequest,
   ClusterRetireRequest,
   CredentialView,
@@ -141,6 +142,7 @@ import {
   type PageRequest,
   planClusterAdoptAgent,
   planClusterConfirm,
+  planClusterDeclareMemoryLimit,
   planClusterDeclareTier,
   planClusterRegister,
   planClusterRetire,
@@ -938,6 +940,25 @@ export class RegistryUseCases {
       idem,
       { kind: 'cluster', clusterId },
       (tx, c, a) => planClusterDeclareTier(tx, c, a, clusterId, body),
+    )
+  }
+
+  /**
+   * Declares whether the cluster's PostgreSQL runs under a memory limit (OD-68 (b)): a production
+   * decision whichever value, applied through `plan.apply`.
+   */
+  planClusterMemoryLimit(
+    caller: CallerLike,
+    clusterId: string,
+    body: ClusterMemoryLimitRequest,
+    idem?: Idempotency,
+  ) {
+    return this.#plan(
+      caller,
+      'registry.cluster.declare_memory_limit.plan',
+      idem,
+      { kind: 'cluster', clusterId },
+      (tx, c, a) => planClusterDeclareMemoryLimit(tx, c, a, clusterId, body),
     )
   }
 

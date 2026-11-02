@@ -22,7 +22,12 @@ import {
 import type { InstallationId, ProcessInstanceId, SecretId } from '@exponetdb/kernel'
 import { bindPendingNodes, judgeCompletions, sweepJobs } from '@exponetdb/nodes'
 import { type Gauge, type HealthCheck, pass, warn } from '@exponetdb/observability'
-import { expirePlans, pruneIdempotencyKeys, WORKER_ACTOR } from '@exponetdb/operations'
+import {
+  expireAwaitingApprovals,
+  expirePlans,
+  pruneIdempotencyKeys,
+  WORKER_ACTOR,
+} from '@exponetdb/operations'
 import { type Keyring, rewrapBatch } from '@exponetdb/secrets'
 import type { AuditExportConfig } from '../config/env.ts'
 import type { ObservationTasks } from './registry.ts'
@@ -216,6 +221,17 @@ export const WORKER_TASKS: readonly TaskDefinition[] = [
     },
   },
   {
+    // VC-057, OD-64: an apply request waits for an approval at most the approval window.
+    name: 'operations.approvals_expire',
+    intervalSeconds: MINUTE,
+    run: async (ctx) => {
+      await ctx.store.transaction('operations.approvals.expire', (tx) =>
+        expireAwaitingApprovals(tx, WORKER_ACTOR, { clock: ctx.runtime.clock, limit: 1000 }),
+      )
+      return undefined
+    },
+  },
+  {
     name: 'idempotency.prune',
     intervalSeconds: HOUR,
     run: async (ctx) => {
@@ -263,6 +279,11 @@ export const WORKER_TASKS: readonly TaskDefinition[] = [
     name: 'drift.schedule',
     intervalSeconds: MINUTE,
     run: (ctx) => ctx.observation?.checkDrift() ?? Promise.resolve('observation_off'),
+  },
+  {
+    name: 'ledger.watch',
+    intervalSeconds: 10 * MINUTE,
+    run: (ctx) => ctx.observation?.watchLedgers() ?? Promise.resolve('observation_off'),
   },
   {
     name: 'health.partitions',

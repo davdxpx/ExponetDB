@@ -682,6 +682,8 @@
               "migration.import.analyze",
               "migration.baseline.plan",
               "drift.accept.plan",
+              "operation.force_release.plan",
+              "migration.revisions.purge.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -712,6 +714,7 @@
               "ledger.reconcile",
               "drift.accept",
               "operation.force_release",
+              "migration.revisions.purge",
               "connections.cancel",
               "connections.terminate",
               "postgres.config.apply",
@@ -812,6 +815,7 @@
               "registry.database.retire.plan",
               "registry.database.retire",
               "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_memory_limit.plan",
               "project.execution_roles.get",
               "registry.execution_role_binding.set.plan",
               "registry.execution_role_binding.set",
@@ -819,6 +823,7 @@
               "registry.execution_role_exception.declare",
               "registry.execution_role_exception.revoke.plan",
               "registry.execution_role_exception.revoke",
+              "registry.cluster.declare_memory_limit",
               "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
@@ -4923,6 +4928,22 @@
             ],
             "type": "string"
           },
+          "memoryLimit": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cgroup",
+                  "overcommit",
+                  "none"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "OD-68 (b): whether its PostgreSQL runs under a memory limit (a cgroup limit, vm.overcommit_memory=2, or none), declared by a person with production authority; null while undeclared. Without a limit, data reads of its targets carry the warning target_memory_unlimited and agent reads are refused."
+          },
           "postgresVersion": {
             "anyOf": [
               {
@@ -5127,6 +5148,24 @@
         },
         "required": [
           "declaredTier"
+        ],
+        "type": "object"
+      },
+      "ClusterMemoryLimitRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "memoryLimit": {
+            "description": "cgroup: the PostgreSQL service runs under a memory limit (systemd MemoryMax, a container limit); overcommit: the host runs vm.overcommit_memory=2; none: neither. A limit makes an exhausting read end one backend with an error instead of a restart of the cluster.",
+            "enum": [
+              "cgroup",
+              "overcommit",
+              "none"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "memoryLimit"
         ],
         "type": "object"
       },
@@ -6091,6 +6130,46 @@
             "description": "Entity id `^bkr_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
             "pattern": "^bkr_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
             "type": "string"
+          },
+          "rowCounts": {
+            "description": "VC-004: the data check of the drill: each table of the restored cluster must hold between min and max rows (check row_counts). A drill without it passes on replay, probes and amcheck only, and says so.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "database": {
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_$-]{0,62}$",
+                  "type": "string"
+                },
+                "max": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "min": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "schema": {
+                  "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+                  "type": "string"
+                },
+                "table": {
+                  "pattern": "^[a-z_][a-z0-9_]{0,62}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "database",
+                "schema",
+                "table",
+                "min",
+                "max"
+              ],
+              "type": "object"
+            },
+            "maxItems": 32,
+            "type": "array"
           },
           "selection": {
             "$ref": "#/components/schemas/DrillSelection"
@@ -9207,7 +9286,8 @@
               "keyring",
               "maintenance",
               "data_reads",
-              "audit_chain"
+              "audit_chain",
+              "control_store_volume"
             ]
           },
           "observedAt": {
@@ -13991,6 +14071,8 @@
               "migration.import.analyze",
               "migration.baseline.plan",
               "drift.accept.plan",
+              "operation.force_release.plan",
+              "migration.revisions.purge.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -14021,6 +14103,7 @@
               "ledger.reconcile",
               "drift.accept",
               "operation.force_release",
+              "migration.revisions.purge",
               "connections.cancel",
               "connections.terminate",
               "postgres.config.apply",
@@ -14121,6 +14204,7 @@
               "registry.database.retire.plan",
               "registry.database.retire",
               "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_memory_limit.plan",
               "project.execution_roles.get",
               "registry.execution_role_binding.set.plan",
               "registry.execution_role_binding.set",
@@ -14128,6 +14212,7 @@
               "registry.execution_role_exception.declare",
               "registry.execution_role_exception.revoke.plan",
               "registry.execution_role_exception.revoke",
+              "registry.cluster.declare_memory_limit",
               "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
@@ -14843,6 +14928,8 @@
               "migration.import.analyze",
               "migration.baseline.plan",
               "drift.accept.plan",
+              "operation.force_release.plan",
+              "migration.revisions.purge.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -14873,6 +14960,7 @@
               "ledger.reconcile",
               "drift.accept",
               "operation.force_release",
+              "migration.revisions.purge",
               "connections.cancel",
               "connections.terminate",
               "postgres.config.apply",
@@ -14973,6 +15061,7 @@
               "registry.database.retire.plan",
               "registry.database.retire",
               "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_memory_limit.plan",
               "project.execution_roles.get",
               "registry.execution_role_binding.set.plan",
               "registry.execution_role_binding.set",
@@ -14980,6 +15069,7 @@
               "registry.execution_role_exception.declare",
               "registry.execution_role_exception.revoke.plan",
               "registry.execution_role_exception.revoke",
+              "registry.cluster.declare_memory_limit",
               "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
@@ -15751,6 +15841,8 @@
               "migration.import.analyze",
               "migration.baseline.plan",
               "drift.accept.plan",
+              "operation.force_release.plan",
+              "migration.revisions.purge.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -15781,6 +15873,7 @@
               "ledger.reconcile",
               "drift.accept",
               "operation.force_release",
+              "migration.revisions.purge",
               "connections.cancel",
               "connections.terminate",
               "postgres.config.apply",
@@ -15881,6 +15974,7 @@
               "registry.database.retire.plan",
               "registry.database.retire",
               "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_memory_limit.plan",
               "project.execution_roles.get",
               "registry.execution_role_binding.set.plan",
               "registry.execution_role_binding.set",
@@ -15888,6 +15982,7 @@
               "registry.execution_role_exception.declare",
               "registry.execution_role_exception.revoke.plan",
               "registry.execution_role_exception.revoke",
+              "registry.cluster.declare_memory_limit",
               "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
@@ -16194,6 +16289,8 @@
               "migration.import.analyze",
               "migration.baseline.plan",
               "drift.accept.plan",
+              "operation.force_release.plan",
+              "migration.revisions.purge.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -16224,6 +16321,7 @@
               "ledger.reconcile",
               "drift.accept",
               "operation.force_release",
+              "migration.revisions.purge",
               "connections.cancel",
               "connections.terminate",
               "postgres.config.apply",
@@ -16324,6 +16422,7 @@
               "registry.database.retire.plan",
               "registry.database.retire",
               "registry.cluster.declare_tier.plan",
+              "registry.cluster.declare_memory_limit.plan",
               "project.execution_roles.get",
               "registry.execution_role_binding.set.plan",
               "registry.execution_role_binding.set",
@@ -16331,6 +16430,7 @@
               "registry.execution_role_exception.declare",
               "registry.execution_role_exception.revoke.plan",
               "registry.execution_role_exception.revoke",
+              "registry.cluster.declare_memory_limit",
               "registry.cluster.declare_tier",
               "registry.credential.submit",
               "oauth.metadata.get",
@@ -16880,6 +16980,7 @@
               "APPROVAL_COOLING_PERIOD",
               "SELF_APPROVAL_UNACKNOWLEDGED",
               "APPROVAL_NOT_PENDING",
+              "APPROVAL_EXPIRED",
               "APPROVAL_DUPLICATE",
               "BREAK_GLASS_REQUIRED",
               "BREAK_GLASS_UNAVAILABLE",
@@ -16887,6 +16988,7 @@
               "OPERATION_CONFLICT",
               "OPERATION_NOT_CANCELABLE",
               "OPERATION_NOT_RETRYABLE",
+              "OPERATION_NOT_RELEASABLE",
               "OPERATION_CANCELLED",
               "OUTCOME_UNKNOWN",
               "PRECONDITION_FAILED",
@@ -16958,6 +17060,7 @@
               "TARGET_CREDENTIAL_INVALID",
               "TARGET_TLS_FAILED",
               "TARGET_IDENTITY_MISMATCH",
+              "TARGET_READ_ONLY",
               "CLUSTER_IDENTITY_MISMATCH",
               "TARGET_REGISTRATION_REFUSED",
               "REGISTRY_CONFLICT",
@@ -16992,6 +17095,8 @@
               "VALIDATION_FAILED",
               "NOT_FOUND",
               "CONFLICT",
+              "SECRET_KEY_UNAVAILABLE",
+              "CONTROL_STORE_VOLUME_FULL",
               "RATE_LIMITED",
               "AUDIT_CLOCK_SKEW",
               "CONTROL_PLANE_DEGRADED",
@@ -18015,6 +18120,17 @@
                 "type": "null"
               }
             ]
+          },
+          "warnings": {
+            "description": "OD-68 (b): target_memory_unlimited when the target's cluster has no declared memory limit: a read that builds large values can make the kernel restart the whole cluster.",
+            "items": {
+              "enum": [
+                "target_memory_unlimited"
+              ],
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
           }
         },
         "required": [
@@ -28132,6 +28248,109 @@
         "x-exponetdb-wave": "9"
       }
     },
+    "/clusters/{clusterId}/memory-limit": {
+      "post": {
+        "operationId": "planClusterMemoryLimit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "clusterId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^cls_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClusterMemoryLimitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan the declaration of whether the cluster's PostgreSQL runs under a memory limit (OD-68); needs registry.manage:prod whichever value, applied through plan.apply.",
+        "tags": [
+          "clusters"
+        ],
+        "x-exponetdb-action": "registry.cluster.declare_memory_limit.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
+      }
+    },
     "/clusters/{clusterId}/restore-runbook": {
       "get": {
         "operationId": "getRestoreRunbook",
@@ -33441,6 +33660,130 @@
         "x-exponetdb-wave": "6"
       }
     },
+    "/operations/{operationId}/force-release": {
+      "post": {
+        "operationId": "planForceRelease",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "outcome": {
+                    "enum": [
+                      "applied",
+                      "not_applied",
+                      "unknown"
+                    ],
+                    "type": "string"
+                  },
+                  "reason": {
+                    "description": "Why it is released and how the outcome was checked; recorded in the plan and the audit, permanent.",
+                    "maxLength": 1000,
+                    "type": "string",
+                    "x-untrusted": true
+                  }
+                },
+                "required": [
+                  "outcome",
+                  "reason"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: OPERATION_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: OPERATION_NOT_RELEASABLE."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "operations.recover"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan closing an operation that needs attention (operation.force_release, VC-006): a person states what happened to its change and why; applied through POST /plans/{id}/apply (re-authentication), the worker closes the operation, runs nothing of it again and releases its exclusivity domains.",
+        "tags": [
+          "operations"
+        ],
+        "x-exponetdb-action": "operation.force_release.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "OPERATION_NOT_FOUND",
+          "OPERATION_NOT_RELEASABLE",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
+      }
+    },
     "/operations/{operationId}/retry-verification": {
       "post": {
         "operationId": "retryOperationVerification",
@@ -35155,6 +35498,121 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "4"
+      }
+    },
+    "/projects/{projectId}/bundle-revisions/purge": {
+      "post": {
+        "operationId": "planRevisionPurge",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "description": "Why the revisions are purged; recorded in the plan and the audit, permanent.",
+                    "maxLength": 1000,
+                    "type": "string",
+                    "x-untrusted": true
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "operations.recover"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan purging the bundle revisions of a project that no plan references and that are older than 90 days (migration.revisions.purge, OD-70): the plan lists them; applied through POST /plans/{id}/apply (re-authentication), the worker deletes exactly those, and the database refuses any other.",
+        "tags": [
+          "projects"
+        ],
+        "x-exponetdb-action": "migration.revisions.purge.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
       }
     },
     "/projects/{projectId}/bundles": {

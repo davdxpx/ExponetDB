@@ -598,7 +598,7 @@ export function admitReadSync(major: SupportedMajor, text: string): Admission {
   if (statementClass === 'select') statementClass = selectClass(target.node)
   const refusal = checkTree(major, { SelectStmt: target.node }, {}, collected, parsed.indexOf, 0)
   if (refusal !== undefined) return refusal
-  // Data reads only: a verify.sql check is reviewed bundle content with its own receive bound.
+  // The verify.sql checks are under the same rule (admitChecks, OD-68 (b)).
   const unbounded = sizeArgumentRefusal({ SelectStmt: target.node })
   if (unbounded !== undefined) {
     const position = location(unbounded.body, parsed.indexOf)
@@ -717,6 +717,16 @@ function admitChecks(major: SupportedMajor, text: string, options: AdmissionOpti
       i,
     )
     if (refusal !== undefined) return refusal
+    // OD-68 (b): a check runs on the verifier's cluster as a data read runs on the reader's.
+    const unbounded = sizeArgumentRefusal({ SelectStmt: stmt.node })
+    if (unbounded !== undefined) {
+      const position = location(unbounded.body, parsed.indexOf)
+      return refuse('QUERY_CONSTRUCT_UNSUPPORTED', 'size_argument', {
+        construct: unbounded.construct,
+        statement: i,
+        ...(position === undefined ? {} : { position }),
+      })
+    }
   }
   return {
     ok: true,

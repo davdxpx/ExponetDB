@@ -473,6 +473,19 @@ func (h *Helper) portListening(port int) (bool, error) {
 	return false, nil
 }
 
+// scratchSpacePath is where a restore writes: the scratch directory when it exists (it can be a
+// mount of its own), else the engine directory it will be created in (VC-060).
+func (h *Helper) scratchSpacePath() string {
+	engine := h.path(h.paths().Engine)
+	if info, err := os.Lstat(engine + "/scratch"); err == nil && info.IsDir() {
+		return engine + "/scratch"
+	}
+	return engine
+}
+
+// freeSpace measures a filesystem's free bytes (a variable so tests can measure without disks).
+var freeSpace = spaceAvailable
+
 func spaceAvailable(path string) (int64, error) {
 	var s syscall.Statfs_t
 	if err := syscall.Statfs(path, &s); err != nil {
@@ -508,7 +521,9 @@ func (h *Helper) startRun(ctx context.Context, job *verify.Job, p startPlan) (ca
 	}
 	defer runs.Close()
 	if info, err := runs.Lstat(p.runID); err != nil || info.Kind != fsafe.KindNone {
-		return nil, refuse(CodePreconditionFailed, "run %s was started already", p.runID)
+		// replayed, never precondition_failed: the run's unit may be running, and the agent states
+		// only refusals that prove no unit runs as start_refused (VC-061).
+		return nil, refuse(CodeReplayed, "run %s was started already", p.runID)
 	}
 	var scratchRoot *fsafe.Dir
 	if p.newScratch || p.scratchDir != "" {
@@ -757,6 +772,9 @@ func (h *Helper) clusterRun(ctx context.Context, ref clusterRef, repoRef reposit
 		if r != nil {
 			return startPlan{}, r
 		}
+		if r := stanzaRefusal(s); r != nil {
+			return startPlan{}, r
+		}
 		if id := s.systemID(); id == "" || id != ref.SystemIdentifier {
 			return startPlan{}, refuse(CodePreconditionFailed, "the stanza does not belong to cluster %s (system identifier)", ref.LocalName)
 		}
@@ -903,9 +921,38 @@ func restoreExecute(ctx context.Context, h *Helper, job *verify.Job) (canon.Obje
 			return nil, r
 		}
 	}
+	// VC-060: the space prepare measured may be gone; it is measured again before anything is written.
+	if r := h.restoreSpace(ctx, args); r != nil {
+		return nil, r
+	}
 	p.op, p.purpose, p.domain, p.runID = OpRestoreExecute, "restore", "restore", args.RunID
 	p.newScratch, p.rowCounts, p.port = true, args.RowCounts, args.Port
 	return h.startRun(ctx, job, p)
+}
+
+// restoreSpace refuses a restore whose chosen backup, plus a tenth, does not fit the filesystem of
+// the scratch directory, as prepare's space_insufficient does.
+func (h *Helper) restoreSpace(ctx context.Context, args restoreArgs) *Refusal {
+	in, r := h.instance(args.Cluster)
+	if r != nil {
+		return r
+	}
+	stanza, r := h.prepareInfo(ctx, in.DataDirectory, args)
+	if r != nil {
+		return r
+	}
+	chosen, _ := chooseBackup(stanza, args.Target)
+	if chosen == nil || chosen.Info.Size == nil || *chosen.Info.Size < 0 {
+		return nil
+	}
+	available, err := freeSpace(h.scratchSpacePath())
+	if err != nil {
+		return refuse(CodeFailed, "the free space of the scratch directory's filesystem cannot be read")
+	}
+	if available < *chosen.Info.Size+*chosen.Info.Size/10 {
+		return refuse(CodePreconditionFailed, "the scratch directory's filesystem has too little space for the restore")
+	}
+	return nil
 }
 
 func restoreVerify(ctx context.Context, h *Helper, job *verify.Job) (canon.Object, *Refusal) {
@@ -1226,7 +1273,7 @@ func restorePrepare(ctx context.Context, h *Helper, job *verify.Job) (canon.Obje
 		refusals = append(refusals, s)
 	}
 	enginePath := h.path(h.paths().Engine)
-	available, err := spaceAvailable(enginePath)
+	available, err := freeSpace(h.scratchSpacePath())
 	if err != nil {
 		return nil, refuse(CodeNotConfigured, "the engine directory is missing")
 	}
@@ -1268,6 +1315,10 @@ func restorePrepare(ctx context.Context, h *Helper, job *verify.Job) (canon.Obje
 	case r != nil && r.Code == "repository_not_configured":
 		add("repository_not_configured")
 	case r != nil:
+		add("engine_cannot_read")
+	case stanzaState(stanza.Status.Code) == "missing":
+		add("repository_missing")
+	case stanzaState(stanza.Status.Code) == "error":
 		add("engine_cannot_read")
 	case stanza.systemID() != args.Cluster.SystemIdentifier:
 		add("system_identifier_mismatch")
@@ -1406,6 +1457,12 @@ func pgbrBase(config, include, stanza string, repo int) []string {
 	return append(args, "--stanza="+stanza, "--repo="+strconv.Itoa(repo))
 }
 
+// pgbrRepoLsArgs is the fixed argv that lists one archive id's files (VC-005).
+func pgbrRepoLsArgs(config, include, stanza string, repo int, archiveID string) []string {
+	return append(pgbrBase(config, include, stanza, repo), "--output=json", "--log-level-console=off",
+		"--log-level-stderr=off", "repo-ls", "--recurse", "archive/"+stanza+"/"+archiveID)
+}
+
 // pgbrInfoArgs is the fixed argv of pgBackRest's catalog read.
 func pgbrInfoArgs(config, include, stanza string, repo int, set string) []string {
 	args := append(pgbrBase(config, include, stanza, repo), "--output=json", "--log-level-console=off", "--log-level-stderr=off")
@@ -1415,16 +1472,55 @@ func pgbrInfoArgs(config, include, stanza string, repo int, set string) []string
 	return append(args, "info")
 }
 
+// pgbrArchiveGaps lists each archive id of the stanza and returns its gap ends; an id that cannot
+// be listed is left out (reported as not listed).
+func (h *Helper) pgbrArchiveGaps(ctx context.Context, repo *repository, u engineUser, s *pgbrStanza) map[string][]string {
+	optional, bind := pgbrWritable(repo.pgbrPaths)
+	gaps := map[string][]string{}
+	for _, a := range s.Archive {
+		if !archiveIDRE.MatchString(a.ID) {
+			continue
+		}
+		out, err := h.sup().runAs(ctx, execSpec{UID: u.UID, GID: u.GID, Path: PgBackRest,
+			Args:     pgbrRepoLsArgs(h.path(repo.pgbrConfig), includeOf(h, repo), repo.stanza(), repo.repoIndex(), a.ID),
+			Optional: optional, Bind: bind, Timeout: 60 * time.Second, MaxOutput: listingMaxOutput})
+		if err != nil || out.ExitCode != 0 {
+			continue
+		}
+		segments, err := archiveSegments(out.Stdout)
+		if err != nil {
+			continue
+		}
+		gaps[a.ID] = walGapEnds(segments)
+	}
+	return gaps
+}
+
+// stanzaRefusal names a stanza that is not usable (VC-061): missing (the repository was deleted
+// or never created) or in error, never as another cluster's stanza.
+func stanzaRefusal(s *pgbrStanza) *Refusal {
+	switch stanzaState(s.Status.Code) {
+	case "missing":
+		return refuse(CodeRepositoryMissing, "the repository has no stanza %s (%s)", s.Name, Redact(s.Status.Message, 128))
+	case "error":
+		return refuse(CodeRepositoryUnreadable, "pgBackRest reports the stanza in error (%s)", Redact(s.Status.Message, 128))
+	}
+	return nil
+}
+
 func (h *Helper) pgbrInfo(ctx context.Context, repo *repository, u engineUser) (*pgbrStanza, *Refusal) {
 	optional, bind := pgbrWritable(repo.pgbrPaths)
 	out, err := h.sup().runAs(ctx, execSpec{UID: u.UID, GID: u.GID, Path: PgBackRest,
 		Args: pgbrInfoArgs(h.path(repo.pgbrConfig), includeOf(h, repo), repo.stanza(), repo.repoIndex(), ""), Optional: optional, Bind: bind, Timeout: 30 * time.Second})
 	if err != nil || out.ExitCode != 0 {
-		return nil, refuse(CodeFailed, "pgBackRest could not read the repository")
+		return nil, refuse(CodeRepositoryUnreadable, "pgBackRest could not read the repository (a wrong cipher key, damaged files or an engine error)")
 	}
 	s, err := parsePgbrInfo(out.Stdout, repo.stanza())
+	if errors.Is(err, errStanzaNotReported) {
+		return nil, refuse(CodeFailed, "pgBackRest did not report the stanza")
+	}
 	if err != nil {
-		return nil, refuse(CodeFailed, "pgBackRest's catalog is not readable")
+		return nil, refuse(CodeRepositoryUnreadable, "pgBackRest's catalog is not readable (a wrong cipher key or damaged files)")
 	}
 	return s, nil
 }
@@ -1472,7 +1568,7 @@ func backupList(ctx context.Context, h *Helper, job *verify.Job) (canon.Object, 
 		if r != nil {
 			return nil, r
 		}
-		return pgbrListResult(s, version), nil
+		return pgbrListResult(s, version, h.pgbrArchiveGaps(ctx, repo, u, s)), nil
 	}
 	out, r := h.resticRead(ctx, repo, u, []string{"snapshots", "--json", "--no-lock", "--no-cache", "--tag", "exponetdb"})
 	if r != nil {

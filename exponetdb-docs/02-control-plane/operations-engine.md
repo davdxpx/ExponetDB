@@ -276,6 +276,14 @@ When a plan requires approval, the *apply request* may wait in
 `awaiting_approval` for up to the **approval window** (default 4 h, maximum 24 h).
 All live bindings are re-checked when execution actually starts, so a late
 approval of a now-stale plan ends in `PLAN_STALE` without executing anything.
+**[DECIDED]** (verification campaign fix VC-057, OD-64, 2026-11-02, under
+the owner's delegation) The window is four hours from the apply request,
+fixed (no setting yet), counted from the request or from the end of the
+latest approval's cooling period. An approval after it is refused (`APPROVAL_EXPIRED`),
+and the worker task `operations.approvals_expire` (every minute) cancels the
+operation (`canceled`, error `APPROVAL_EXPIRED`, nothing ran), which also
+frees its place in the caller's queue of at most 20 waiting approvals. The
+plan's own lifetime (§3.3 above) ends at acceptance.
 
 ### 3.4 Plan states
 
@@ -319,7 +327,8 @@ stateDiagram-v2
   verifying --> verification_failed: verification failed or partial
   verifying --> needs_attention: verification could not run (timeout, target unreachable)
   needs_attention --> verifying: operator retries verification
-  needs_attention --> verification_failed: a recovery plan that names it supersedes it
+  needs_attention --> verification_failed: a recovery plan that names it supersedes it, or a force release
+  needs_attention --> failed: a force release of a change found not applied
   succeeded --> [*]
   failed --> [*]
   verification_failed --> [*]
@@ -369,13 +378,42 @@ keeps its fifteen pairs). Its locks go with the transition, the audit event
 `supersededBy` and the outcomes it had; a verification outcome of `error` or
 `pending` becomes `failed`, and an apply outcome of `unknown` becomes
 `partially_applied`, the only finished state that admits work stopped
-part-way. An operation that is not in `needs_attention`, holds none of the
+part-way. **[DECIDED]** (verification campaign fix VC-044, 2026-11-02) The
+close holds only if the recovery itself starts: it runs under a savepoint
+together with the recovery's locks, its bindings and its admission, and a
+refusal (`PLAN_STALE`, `GRANT_REVOKED`) or a wait for another domain rolls
+it back, so the named operation keeps `needs_attention` and its lock. An operation that is not in `needs_attention`, holds none of the
 recovery's domains, or is not a valid id is left alone. Nothing is
 re-executed (C-16), and a plan whose named operation is no longer in
 `needs_attention` is stale (`PLAN_STALE`, binding `operation`). The retry
 (`operation.retry_verification`) stays for an applied change whose
-verification only needs another run. `operation.force_release`, for an
-operation no recovery plan covers, remains planned.
+verification only needs another run. **[DECIDED]** (verification campaign
+fix VC-006, VC-055, VC-007, 2026-11-02, under the owner's delegation)
+`operation.force_release` closes an operation in `needs_attention` of any
+kind, for which no retry and no recovery plan exists, or whose outcome
+stayed `unknown`. It is a `high` planned operation at the tier of the
+operation it names (the definition decided before G1): a person with
+`operations.recover` plans it (`POST /operations/{id}/force-release`, CLI
+`operation force-release`, Web App "Release operation"), stating what
+happened to the change (`applied`, `not_applied`, `unknown`) and why, and
+applies it through `plan.apply` with a fresh re-authentication (the CLI's
+step-up covers it). The plan takes the domains the operation holds and names
+it (`supersedes`), so the worker closes it in the transaction that takes
+them, as a recovery plan does (and with VC-044's savepoint), running nothing
+of it again: a change the person found not applied, where the engine itself
+did not know, ends `failed` / `not_applied` (the edge
+`operations.release_transition_allowed`, bundle `operation-force-release`);
+any other ends `verification_failed` (applied, or partly applied for an
+`unknown` outcome) with a failed verification. The closing event names the
+release, the stated outcome and the person. The release then verifies that
+the operation is finished. Planning refuses another state
+(`OPERATION_NOT_RELEASABLE`) and `not_applied` for a change the engine
+recorded as applied (`VALIDATION_FAILED`); a second release plan of an
+operation that was closed meanwhile is stale (`PLAN_STALE`, binding
+`operation`). A production
+`migration.verify` that names a stuck operation (and so closes it) needs an
+approval and a fresh re-authentication (rule
+`migration.verify-supersedes-production`, decision D0-01).
 
 ### 4.2 Workers and leases
 
@@ -383,6 +421,29 @@ operation no recovery plan covers, remains planned.
 claims a queued operation with `SELECT … FOR UPDATE SKIP LOCKED` and writes a
 lease (`lease_owner`, `lease_expires_at`, default 30 s, renewed every 10 s).
 Each step is recorded as an `operation_event` row before and after it runs.
+**[DECIDED]** (verification campaign fix VC-008, 2026-11-02) The claim
+takes the oldest eligible operation; a queued operation whose last attempt
+waited for a domain (`locks_waiting`) is not eligible while the operation it
+waited for still holds that domain. One blocked operation therefore never
+starves younger operations of other domains, and a waiter writes no event
+until its blocker lets the domain go (before: two event rows per waiter
+every poll).
+
+**[DECIDED]** (verification campaign fix VC-064, 2026-11-02) A worker
+claims nothing while its readiness check `schema` does not pass (a Control
+Store migrated by a newer build, `schema_newer`; or one not migrated yet):
+it logs `operations.claim_paused` once with the reason and
+`operations.claim_resumed` when the schema is its own again. An operation
+it already runs finishes.
+
+**[DECIDED]** (verification campaign fix VC-058, VC-007, 2026-11-02) An
+operation in `needs_attention` whose apply outcome is `unknown` is claimed
+again five minutes after it last changed, and its kind's read-only
+`reconcile` runs again (never the change): `applied` moves it to
+`verifying` and on, `not_applied` ends it `failed` / `not_applied`, and
+`unknown` leaves it as it was, unleased, for the next attempt; the wait doubles with every attempt, up to six hours. For a
+migration the target's ledger decides, so a lost COMMIT reply followed by a
+target restart reconciles once the target answers.
 
 If a worker dies, its lease expires. Another worker takes the operation over and
 **does not resume blindly**: it calls the kind's `reconcile` with the recorded

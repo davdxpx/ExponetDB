@@ -105,8 +105,11 @@ Trigger: Control Plane `down` (every role not ready with
    the roles and the resource? Login refused (password rotated without
    updating the roles)? Do not restore before ruling these out.
 2. **Restore** (data loss only). Create a new isolated PostgreSQL 17 resource
-   with maintenance database `postgres` and a temporary superuser named
-   `restore_admin`, different from every role in the saved export. Do not
+   with maintenance database `postgres` and a temporary superuser with a
+   **fresh name for this recovery**, for example `restore_admin_20261102_1530`,
+   different from every role in the saved export (**[DECIDED]** VC-141: the
+   superuser of an earlier recovery is part of every later dump, so the same
+   name a second time stops the restore at `role ... already exists`). Do not
    run bootstrap SQL first: the complete `pg_dumpall` export creates the
    roles, databases and privileges. Decompress it and feed it to
    `psql -U restore_admin -d postgres -v ON_ERROR_STOP=1` inside the scratch
@@ -115,19 +118,44 @@ Trigger: Control Plane `down` (every role not ready with
    every expected bundle must be applied and verified with matching content.
    Apply any later release's additive bundles through `control-store migrate`
    with `exdb_migrate`, never replay old `up.sql` to repair missing grants.
+   Once the roles are ready (step 5), take the temporary superuser's login away
+   (`ALTER ROLE restore_admin_20261102_1530 NOLOGIN`, as a superuser of the
+   platform) and record its name in the incident.
 3. **Integrity.** `control-store status` must be `current`; `audit verify`
    must pass; compare the latest exported checkpoint (bucket) with the
    restored chain: `audit verify --from-checkpoint <seq>` for the newest
    exported checkpoint whose sequence exists in the restore. Events after the
-   dump are lost; record the gap (the exported checkpoints show its size) as
-   part of the incident. A checkpoint that does not match the restored chain
+   dump are lost; record the gap as part of the incident. **[DECIDED]**
+   (VC-143) checkpoints are made and exported **hourly** (`audit.checkpoint`):
+   the newest exported checkpoint proves the chain up to its sequence and
+   time, the restored head says where the dump ended, and the events between
+   the dump and the loss are known only as a time span (at most an hour past
+   the newest exported checkpoint), never as a count. A checkpoint that does not match the restored chain
    is a security incident (RB-12).
 4. **Keys.** `keyring status` with the offline keyring: no missing key. If
    the keyring is lost too, follow RB-14.
 5. **Roles.** Update `EXPONETDB_CONTROL_STORE_URL` of each resource if the
    passwords changed; start worker, serve, gateway; all must become ready.
-6. **Reconcile** ledger mirrors against target ledgers (from Wave 4, F30); in
-   Wave 2 there are no managed targets.
+6. **Reconcile every managed target** (**[DECIDED]** VC-010, 2026-11-02).
+   The restored mirror misses what was planned and applied after the dump;
+   each such target answers `LEDGER_DIVERGENCE` and blocks schema changes
+   until a person adopts its ledger. For each target (`exponetdb target
+   list`), nonprod first:
+   1. `exponetdb migration status --target <path>`: in sync, go on with the
+      next target; out of sync or `LEDGER_DIVERGENCE`:
+   2. `exponetdb migration ledger reconcile --target <path> --note
+      "Control Store restored from the dump of <time>; the target ledger is
+      the truth"` (scope `migrations.import`, a person): it plans adopting the
+      target's ledger; the mirror rows that differ move to a history, nothing
+      is deleted;
+   3. apply it (`--apply`, or `exponetdb plan apply <plan>`): on nonprod that
+      is all (6 steps, about 6 s per target on the stack); on production the
+      apply needs a re-authentication within 300 s (the CLI prints the step-up
+      address and code, a person confirms) and then an approval by a person
+      (10 steps);
+   4. `exponetdb migration status --target <path>` again: in sync.
+   A target the dump already knew in its current state needs nothing. Never
+   re-run a migration to "repair" a mirror.
 
 ## 5. RB-17 Control Store disk full (`ENOSPC`)
 
@@ -153,10 +181,29 @@ full. Nothing committed is lost.
    and the audit events `migration.bundle.ingested` (every ingest is audited
    since this fix; one identity stores at most 64 MiB of bundle bytes in 24
    hours, more answers `RATE_LIMITED`). A hostile identity: RB-11.
-5. **Prevent.** Alert on the host's disk use (the product has no Control
-   Store disk signal yet), keep WAL on its own volume where the platform
-   allows it, and leave free space for at least a day of the quota per
-   active identity. Thresholds, a disk component in installation health, a
-   restart policy and an audited purge of never-planned revisions are owner
-   decision
-   [OD-70](../00-product/open-decisions.md#od-70-control-store-disk-and-bundle-ingest).
+5. **Prevent.** Set `EXPONETDB_CONTROL_STORE_VOLUME_BYTES` on serve to the
+   Control Store volume's size: installation health then shows the component
+   `control_store_volume` (degraded from 80 %, reason
+   `volume_above_80_percent`), and from 90 % bundle ingest answers 507
+   `CONTROL_STORE_VOLUME_FULL` while everything else goes on (**[DECIDED]**
+   [OD-70](../00-product/open-decisions.md#od-70-control-store-disk-and-bundle-ingest)
+   (b), built 2026-11-02). The share is the database's own size: WAL and
+   other files on the volume are not counted, so still alert on the host's
+   disk use. Keep WAL on its own volume where the platform allows it, and
+   leave free space for at least a day of the quota per active identity.
+6. **Free space** (**[DECIDED]** OD-70 (d)). Revisions no plan references and
+   older than 90 days can be purged by a person with `operations.recover`:
+   `POST /api/v1/projects/{id}/bundle-revisions/purge` with a reason plans
+   `migration.revisions.purge` (it lists the revisions and their bytes), and
+   `POST /api/v1/plans/{id}/apply` with re-authentication lets the worker
+   delete exactly those (audited `migration.revisions.purged`). The database
+   refuses any other delete. Recent hostile ingests are younger than 90 days:
+   for them grow the volume (step 2). A delete frees space inside the
+   database but does not shrink its files, so `pg_database_size` and the
+   volume component (and with them `CONTROL_STORE_VOLUME_FULL`) stay where
+   they were until the table is rewritten: in a maintenance window, as the
+   Control Store owner, `VACUUM (FULL) migrations.bundle_revisions` (it holds
+   an `ACCESS EXCLUSIVE` lock on the table while it runs: no ingest and no
+   migration plan meanwhile). The plans tables are locked by the purge itself
+   only while it deletes (at most 5 s of waiting, then it fails and deletes
+   nothing).

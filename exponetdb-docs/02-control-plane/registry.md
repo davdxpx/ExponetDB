@@ -130,7 +130,16 @@ the adoption is applied, node capabilities stay unavailable for it.
   IP host names the DNS name of its certificate. An address names one
   cluster registry-wide. An endpoint is never edited: a changed address is a
   new endpoint, then the old one is retired; the last direct endpoint of a
-  cluster with live targets cannot be retired.
+  cluster with live targets cannot be retired. **[DECIDED]** (verification
+  campaign VC-074, 2026-11-02) Planning an endpoint of a confirmed cluster
+  probes the address with the cluster's observer credential: another
+  `system_identifier` is refused `CLUSTER_IDENTITY_MISMATCH` naming both; the plan
+  shows `probe: matches` or, for an address that cannot be reached,
+  `probe: unreachable`; a pending cluster has no identity to compare and is not
+  probed. The apply does not probe again (the plan expires in minutes). The probe is one TLS and
+  authentication attempt (bounded by the connect timeout) to an address the planner chose,
+  made inside the planning request: the permission to plan an endpoint is an administrator's,
+  and a refusal other than "unreachable" (TLS, credential) is returned as it is.
 - Credentials: the person runs the role bootstrap SQL (no password; psql
   `\password` sets each one) and submits each password once through the
   write-only endpoint (Web App, re-authentication). `serve` encrypts it at
@@ -275,6 +284,22 @@ production database is placed. A cluster therefore also carries a
   declared `prod` is still a `nonprod` target for migrations, policy and
   data reads (database-level actions use the target's tier, §5 of
   authorization.md). It changes who may *place* it.
+
+**[DECIDED]** ([OD-68](../00-product/open-decisions.md#od-68-memory-of-a-data-read-on-the-target) (b),
+2026-11-02) A cluster also carries a **declared memory limit**, a registry
+fact with the same authority: `memoryLimit` is `cgroup` (the PostgreSQL
+service runs under a memory limit), `overcommit` (the host runs
+`vm.overcommit_memory=2`), `none` or `null` (undeclared). A person declares
+it through the plan `POST /clusters/{id}/memory-limit`
+(`registry.cluster.declare_memory_limit`, class `high`, re-authentication,
+production authority whichever value: the declaration lets agents read rows).
+Without `cgroup` or `overcommit`, a row read of the cluster's targets carries
+the warning `target_memory_unlimited` for a person and is refused
+`DATA_READ_NOT_PERMITTED` for an agent: PostgreSQL has no per-query memory
+limit, and an exhausted server without one restarts every session of the
+cluster. Like the declared tier, it is never removed, a retired cluster keeps
+it, and the Control Store guard admits each declaration only from its own
+operation (bundle `cluster-memory-limit`).
 
 Tests: `apps/server/test/http-registry-tier.int.test.ts`,
 `packages/auth/test/registry-tier.test.ts`,

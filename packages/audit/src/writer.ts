@@ -41,10 +41,11 @@ export class AuditWriteError extends Error {
 }
 
 /**
- * The chain head lies more than a minute ahead of the database clock (a clock
+ * The chain head lies more than 24 hours ahead of the database clock (a clock
  * step forward and back, VC-003): the chain guard refuses every event until the
  * clock passes the head, so every audited mutation stops. Nothing is broken in
- * the chain; the catalog code names the cause and both times.
+ * the chain; the catalog code names the cause and both times. Up to 24 hours an
+ * event takes the head's time with a row in `audit.clock_skew_marks` (OD-69 (b)).
  */
 export class AuditClockSkewError extends Error {
   override readonly name = 'AuditClockSkewError'
@@ -60,6 +61,8 @@ const UTC_US = `'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'`
 
 /** The head-ahead test of the chain guard (`audit-chain` bundle): more than a minute ahead. */
 const HEAD_AHEAD = `h.occurred_at > clock_timestamp() + interval '1 minute'`
+/** OD-69 (b): how far ahead the guard (`audit-clock-clamp` bundle) still takes a marked event. */
+const HEAD_CLAMPABLE = `h.occurred_at <= clock_timestamp() + interval '24 hours'`
 
 /** The skew a probe sees (readiness): the head's time and the database clock, or `undefined`. */
 export async function auditClockSkew(
@@ -109,6 +112,7 @@ export async function appendAuditEvent(
       `SELECT h.seq, h.hash,
               to_char(greatest(clock_timestamp(), h.occurred_at) AT TIME ZONE 'UTC', ${UTC_US}) AS now,
               coalesce(${HEAD_AHEAD}, false) AS ahead,
+              coalesce(${HEAD_CLAMPABLE}, true) AS clampable,
               to_char(h.occurred_at AT TIME ZONE 'UTC', ${UTC_US}) AS head_at,
               to_char(clock_timestamp() AT TIME ZONE 'UTC', ${UTC_US}) AS db_now
          FROM (SELECT 1) AS one
@@ -119,7 +123,10 @@ export async function appendAuditEvent(
     if (row === undefined) {
       throw new ControlStoreError('control_store_invalid_result')
     }
-    if (row.bool('ahead')) {
+    // OD-69 (b): a head at most 24 h ahead is a clock step back; the event takes the head's time
+    // and a clock-skew mark says so. Further ahead, nothing is written until the clock is repaired.
+    const ahead = row.bool('ahead')
+    if (ahead && !row.bool('clampable')) {
       throw new AuditClockSkewError({
         headAt: row.text('head_at'),
         databaseNow: row.text('db_now'),
@@ -154,6 +161,14 @@ export async function appendAuditEvent(
     const hashed = auditChainHash(prevHash, json.value)
     if (!hashed.ok) {
       throw new InvariantError('a schema-valid audit event was refused by ac1')
+    }
+    if (ahead) {
+      // The mark the guard needs for an event at the head's time (bundle audit-clock-clamp).
+      await tx.query(
+        'audit.append.clock_skew_mark',
+        `INSERT INTO audit.clock_skew_marks (seq, database_at, chain_head_at) VALUES ($1, clock_timestamp(), $2::timestamptz)`,
+        [event.seq, row.text('head_at')],
+      )
     }
     await tx.query(
       'audit.append.insert',

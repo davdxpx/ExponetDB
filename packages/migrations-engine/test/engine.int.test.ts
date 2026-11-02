@@ -1062,6 +1062,81 @@ describe('the daily ingest quota of an identity', () => {
   })
 })
 
+// OD-70 (b): a configured Control Store volume refuses ingest at 90 %, whatever the identity's quota.
+describe('the Control Store volume', () => {
+  it('refuses an ingest once the database fills 90 % of the configured volume, and stores nothing', async () => {
+    const id = ulid()
+    const one = bundle({ id, name: 'volume-a', up: 'CREATE TABLE public.volume_a (id int);\n' })
+    const ingest = (volumeBytes: number) =>
+      h.serve.transaction('test.volume.ingest', (tx) =>
+        ingestBundles(tx, {
+          projectId,
+          bundles: [one],
+          defaults: DEFAULTS,
+          identityId: a.identityId,
+          volumeBytes,
+        }),
+      )
+    // A volume barely larger than the database: far above 90 %.
+    const size = await h.serve.query(
+      'test.volume.size',
+      'SELECT pg_database_size(current_database())::bigint AS n',
+    )
+    const used = Number(size.rows[0]?.text('n'))
+    const refused = await ingest(Math.ceil(used / 0.95)).catch((e: unknown) => e)
+    expect(refused).toMatchObject({
+      code: 'CONTROL_STORE_VOLUME_FULL',
+      details: { usedBytes: expect.any(Number), volumeBytes: expect.any(Number) },
+    })
+    const stored = await h.serve.query(
+      'test.volume.stored',
+      'SELECT count(*)::int AS n FROM migrations.bundle_revisions WHERE migration_id = $1',
+      [id],
+    )
+    expect(stored.rows[0]?.int('n')).toBe(0)
+    // With room on the volume the same ingest stores.
+    expect((await ingest(used * 10))[0]?.status).toBe('stored')
+  })
+
+  // Review of OD-70 (b): a plan with inline bundles stores revisions too; the refusal applies there.
+  it('refuses a plan whose inline bundles would be stored on a volume above 90 %', async () => {
+    const id = ulid()
+    const size = await h.serve.query(
+      'test.volume.size.plan',
+      'SELECT pg_database_size(current_database())::bigint AS n',
+    )
+    const used = Number(size.rows[0]?.text('n'))
+    const refused = await h.serve
+      .transaction('test.volume.plan', (tx: Tx) =>
+        planMigrationApply(
+          tx,
+          { ...ctx, volumeBytes: Math.ceil(used / 0.95) },
+          a,
+          staging.targetId,
+          {
+            defaults: DEFAULTS,
+            lintProfile: 'standard',
+            bundles: [
+              bundle({
+                id,
+                name: 'volume-plan',
+                up: 'CREATE TABLE public.volume_plan (id int);\n',
+              }),
+            ],
+          } as MigrationPlanRequest,
+        ),
+      )
+      .catch((e: unknown) => e)
+    expect(refused).toMatchObject({ code: 'CONTROL_STORE_VOLUME_FULL' })
+    const stored = await h.serve.query(
+      'test.volume.plan.stored',
+      'SELECT count(*)::int AS n FROM migrations.bundle_revisions WHERE migration_id = $1',
+      [id],
+    )
+    expect(stored.rows[0]?.int('n')).toBe(0)
+  })
+})
+
 /**
  * A8 (verification.md §4.3): the verify session is a dedicated, pinned one. The check
  * below runs on the production L2 layer and asserts its own session: the name

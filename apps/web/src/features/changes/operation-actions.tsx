@@ -1,19 +1,22 @@
 import type { OperationRead } from '@exponetdb/sdk/operations'
-import { Button } from '@exponetdb/ui'
+import { Button, RadioGroup, RadioGroupItem, Textarea } from '@exponetdb/ui'
 import {
   ConfirmDialog,
   PlanConfirmDialog,
   type PlanConfirmFacts,
   TypedConfirmDialog,
+  useNavigate,
 } from '@exponetdb/ui-patterns'
 import { useQueryClient } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { type ReactNode, useId, useState } from 'react'
 import { useApi } from '../../lib/api/context.tsx'
+import { ApiError } from '../../lib/api/errors.ts'
 import { withReauth } from '../../lib/api/reauth.ts'
 import { t } from '../../lib/i18n/i18n.ts'
 import type { PageMessage } from '../plans/decision-actions.tsx'
 import { actionError } from '../plans/failure.ts'
 import { operationKeys } from '../plans/keys.ts'
+import { planPath } from '../plans/plan-model.ts'
 import { nounPhrase } from '../target/phrases.ts'
 import { CANCELABLE_STATES, verifyAgainRung } from './model.ts'
 
@@ -141,6 +144,114 @@ export function CancelOperationAction({
       onConfirm={run}
     >
       <p className="m-0 py-2 text-xs text-foreground-light">{t('changes.cancel.hint')}</p>
+    </ConfirmDialog>
+  )
+}
+
+const RELEASE_OUTCOMES = [
+  ['not_applied', 'changes.release.notApplied'],
+  ['applied', 'changes.release.applied'],
+  ['unknown', 'changes.release.unknown'],
+] as const
+type ReleaseOutcome = (typeof RELEASE_OUTCOMES)[number][0]
+
+/** Whether the page offers a release: any operation that needs attention (VC-006). */
+export function releaseOffered(operation: OperationRead): boolean {
+  return operation.state === 'needs_attention'
+}
+
+/**
+ * "Release operation" (`POST /operations/{id}/force-release`): plans
+ * `operation.force_release` for an operation in `needs_attention` of any
+ * kind. The person states what happened to the change and why (kept in the
+ * plan and the audit log); the plan page applies it with a fresh
+ * re-authentication, and the worker closes the operation, runs nothing of it
+ * again and frees its domains.
+ */
+export function ForceReleaseAction({
+  operation,
+  production,
+  onMessage,
+}: {
+  readonly operation: OperationRead
+  readonly production: boolean
+  readonly onMessage: PageMessage
+}): ReactNode {
+  const { client, confirmIdentity } = useApi()
+  const navigate = useNavigate()
+  const [outcome, setOutcome] = useState<ReleaseOutcome>('unknown')
+  const [reason, setReason] = useState('')
+  const reasonId = useId()
+  const outcomeId = useId()
+  const run = async (): Promise<void> => {
+    const trimmed = reason.trim()
+    if (trimmed.length === 0) {
+      throw new ApiError('VALIDATION_FAILED', 422, t('changes.release.reasonMissing'))
+    }
+    let plan: { readonly id: string }
+    try {
+      plan = await withReauth(client, confirmIdentity, () =>
+        client.operation('planForceRelease', {
+          params: { operationId: operation.id },
+          body: { outcome, reason: trimmed },
+        }),
+      )
+    } catch (error) {
+      throw actionError(error)
+    }
+    onMessage('status', t('changes.release.done', { id: operation.id }))
+    const href = planPath(plan.id)
+    if (href !== undefined) navigate(href)
+  }
+  return (
+    <ConfirmDialog
+      onOpenChange={(open) => {
+        if (!open) {
+          setReason('')
+          setOutcome('unknown')
+        }
+      }}
+      trigger={
+        <Button type="button" variant="default" size="small" data-action="force-release">
+          {t('changes.release.button')}
+        </Button>
+      }
+      title={t('changes.release.title')}
+      description={t('changes.release.description')}
+      actionLabel={t('changes.release.action')}
+      tier={production ? 'prod' : 'nonprod'}
+      onConfirm={run}
+    >
+      <div className="flex flex-col gap-3 py-2">
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="text-sm font-medium">{t('changes.release.outcome')}</legend>
+          <RadioGroup
+            value={outcome}
+            onValueChange={(value) => setOutcome(value as ReleaseOutcome)}
+          >
+            {RELEASE_OUTCOMES.map(([value, key]) => (
+              <div key={value} className="flex items-center gap-2">
+                <RadioGroupItem id={`${outcomeId}-${value}`} value={value} />
+                <label htmlFor={`${outcomeId}-${value}`} className="text-sm">
+                  {t(key)}
+                </label>
+              </div>
+            ))}
+          </RadioGroup>
+        </fieldset>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={reasonId} className="text-sm font-medium">
+            {t('changes.release.reason')}
+          </label>
+          <Textarea
+            id={reasonId}
+            value={reason}
+            maxLength={1000}
+            rows={3}
+            onChange={(event) => setReason(event.target.value)}
+          />
+        </div>
+      </div>
     </ConfirmDialog>
   )
 }

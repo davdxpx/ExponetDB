@@ -166,6 +166,8 @@ export interface ClusterRecord {
   readonly derivedTier: Tier | null
   /** The intended tier a person declared (OD-22); null while undeclared, which counts as prod for registry authority. */
   readonly declaredTier: Tier | null
+  /** OD-68 (b): whether its PostgreSQL runs under a memory limit; null while a person has not declared it. */
+  readonly memoryLimit: MemoryLimit | null
   /** When an operation retired the record (registry.md §4.4); null while it is not retired. */
   readonly retiredAt: string | null
 }
@@ -183,8 +185,21 @@ export function clusterFrom(row: Row): ClusterRecord {
     confirmedAt: row.textOrNull('confirmed_at'),
     derivedTier: tierOf(row.textOrNull('derived_tier')),
     declaredTier: tierOf(row.textOrNull('declared_tier')),
+    memoryLimit: memoryLimitOf(row.textOrNull('memory_limit')),
     retiredAt: row.textOrNull('retired_at'),
   }
+}
+
+export const MEMORY_LIMITS = ['cgroup', 'overcommit', 'none'] as const
+export type MemoryLimit = (typeof MEMORY_LIMITS)[number]
+
+function memoryLimitOf(value: string | null): MemoryLimit | null {
+  return value === null ? null : oneOf(MEMORY_LIMITS, value)
+}
+
+/** OD-68 (b): an exhausting read ends one backend, not the cluster, only under a declared limit. */
+export function memoryLimited(limit: MemoryLimit | null): boolean {
+  return limit === 'cgroup' || limit === 'overcommit'
 }
 
 export const ENDPOINT_KINDS = ['private', 'public', 'local_socket', 'pooler'] as const

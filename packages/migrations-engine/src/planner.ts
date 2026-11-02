@@ -64,7 +64,7 @@ import {
   type StoredRevision,
   storedStream,
 } from './store.ts'
-import { readTargetState, type TargetState } from './target.ts'
+import { assertWritable, readTargetState, type TargetState } from './target.ts'
 import { satisfies, serverVersion } from './versions.ts'
 
 /**
@@ -91,6 +91,8 @@ export interface MigrationPlanContext {
   readonly installationId: string
   /** serve's connector: observer sessions only. */
   readonly connector: Connector
+  /** OD-70 (b): the configured Control Store volume; inline bundles are refused at 90 %. */
+  readonly volumeBytes?: number | undefined
 }
 
 interface ProjectSettings {
@@ -393,6 +395,8 @@ async function readLive(
   if (state.meta.projectId !== target.projectId) {
     throw new MigrationError('LEDGER_DIVERGENCE')
   }
+  // Before anything is planned: a standby, or a copy of the database that took the name (VC-071, VC-073).
+  assertWritable(state, placement?.databaseOid ?? null)
   // Before the graph: a row the mirror never had is reported as such, with its id.
   await assertLedgerAgrees(tx, target, state.ledger)
   const order = await planOrder(tx, project, state, chosen)
@@ -598,6 +602,7 @@ export async function planMigrationApply(
       defaults: request.defaults ?? {},
       ...(request.source === undefined ? {} : { source: request.source }),
       identityId: actor.identityId,
+      ...(ctx.volumeBytes === undefined ? {} : { volumeBytes: ctx.volumeBytes }),
     })
     for (const item of ingested) chosen.set(item.revision.migrationId, item.revision)
   }

@@ -154,8 +154,35 @@ const NAMED_DETAILS: readonly (readonly [key: string, joiner: string])[] = [
   ['reason', ', '],
   ['extension', ', '],
   ['missing', ', '],
+  ['unrecorded', ', '],
+  ['checksumDiffers', ', '],
+  ['pinned', ', '],
+  ['observed', ', '],
   ['cycle', ' → '],
 ]
+
+/** What made a plan stale (`PLAN_STALE.changedBindings`): the binding and, when short, its actual value. */
+function bindingLines(details: unknown): string[] {
+  const bindings =
+    typeof details === 'object' &&
+    details !== null &&
+    'changedBindings' in details &&
+    Array.isArray(details.changedBindings)
+      ? (details.changedBindings as unknown[])
+      : []
+  const lines = bindings.slice(0, 5).flatMap((b) => {
+    if (typeof b !== 'object' || b === null || !('binding' in b) || typeof b.binding !== 'string') {
+      return []
+    }
+    const actual = 'actual' in b && (typeof b.actual === 'string' || typeof b.actual === 'number')
+    return [
+      actual
+        ? `changed: ${b.binding} (actual: ${String((b as { actual: unknown }).actual).slice(0, 64)})`
+        : `changed: ${b.binding}`,
+    ]
+  })
+  return bindings.length > 5 ? [...lines, `… ${bindings.length - 5} more changed`] : lines
+}
 
 /** `key: value` for each named detail that is a string or a list of strings (at most five entries). */
 function namedLines(details: unknown): string[] {
@@ -213,6 +240,7 @@ export function renderHuman(r: CommandResult, t: Terminal): { out: string[]; err
     if (r.error.remediation !== undefined) err.push(`  ${cleanLine(r.error.remediation)}`)
     // Field errors of a refused request (the catalog's details), as data.
     for (const line of detailLines(r.error.details)) err.push(`  ${cleanLine(line)}`)
+    for (const line of bindingLines(r.error.details)) err.push(`  ${cleanLine(line)}`)
     const ids = [
       r.requestId === undefined ? undefined : `request ${r.requestId}`,
       r.planId === undefined ? undefined : `plan ${r.planId}`,

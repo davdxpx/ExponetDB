@@ -50,6 +50,8 @@ export type JobEnd =
       readonly effectBegan: boolean
       readonly precondition: boolean
       readonly steps: readonly string[]
+      /** The root helper's refusal code, when the agent's excerpt names one (VC-061). */
+      readonly helperCode?: string
     }
   /** The node refused the job itself; it did not run. */
   | { readonly end: 'rejected'; readonly jobId: string; readonly reason: string }
@@ -221,15 +223,21 @@ export async function judgedEnd(
     case 'failed': {
       const steps = Array.isArray(completion['steps']) ? completion['steps'] : []
       const effect = definition.effectStep
-      const effectBegan =
-        effect !== null && steps.some((s) => isJsonObject(s) && s['name'] === effect)
       const excerpt = completion['outputExcerpt']
+      const refusal = helperRefusal(effect, excerpt)
+      // A start the helper refused definitely never began, although the agent journaled the
+      // effect step before it asked (VC-061).
+      const effectBegan =
+        effect !== null &&
+        refusal?.started !== false &&
+        steps.some((s) => isJsonObject(s) && s['name'] === effect)
       return {
         end: 'failed',
         jobId,
         effectBegan,
         precondition: typeof excerpt === 'string' && excerpt.startsWith('precondition_failed'),
         steps: stepsOf(steps),
+        ...(refusal === undefined ? {} : { helperCode: refusal.code }),
       }
     }
     case 'rejected': {
@@ -397,6 +405,26 @@ export async function settleJob(
   }
 }
 
+const HELPER_REFUSAL = /^(start_refused|helper refused) \(([a-z_]{1,64})\): /
+
+/**
+ * The root helper's refusal as the agent states it in a node-signed excerpt (VC-061):
+ * `helper refused (<code>): …` for any helper call, `start_refused (<code>): …` when the helper
+ * refused a run start before any unit ran (agent `startRefused`). `started` is `false` only for
+ * the latter on a `start_run` capability; otherwise the excerpt proves nothing about the effect.
+ */
+export function helperRefusal(
+  effectStep: string | null,
+  excerpt: unknown,
+): { readonly code: string; readonly started: false | undefined } | undefined {
+  const m = typeof excerpt === 'string' ? HELPER_REFUSAL.exec(excerpt) : null
+  if (m === null) return undefined
+  return {
+    code: String(m[2]),
+    started: m[1] === 'start_refused' && effectStep === 'start_run' ? false : undefined,
+  }
+}
+
 const JOB_EXPIRED_REASONS = new Set([
   'expired',
   'not_yet_valid',
@@ -440,7 +468,11 @@ export function outcomeOf(
         : {
             outcome: 'not_applied',
             errorCode: 'NODE_CAPABILITY_FAILED',
-            detail: { capability, jobId: end.jobId },
+            detail: {
+              capability,
+              jobId: end.jobId,
+              ...(end.helperCode === undefined ? {} : { reason: end.helperCode }),
+            },
           }
     case 'rejected':
       return {

@@ -519,6 +519,31 @@ export const migrationVerifyConsumerCode: Rule = {
   },
 }
 
+export const migrationVerifySupersedesProduction: Rule = {
+  id: 'migration.verify-supersedes-production',
+  version: 1,
+  description:
+    'A production verification run that closes a stuck operation (it names it) needs an approval and a fresh re-authentication, as a resume does (verification campaign D0-01).',
+  appliesTo: ['migration.verify'],
+  severity: 'require',
+  overridableByBreakGlass: false,
+  facts: [],
+  defaults: { approvals: 1, reauthWithinSeconds: 300 },
+  requirements: (params) => approvals(params, 'reauth'),
+  evaluate({ request }) {
+    return prodOnly(request.subject.tier, () => {
+      const named = isJsonObject(request.content) ? request.content['supersedes'] : undefined
+      return typeof named === 'string'
+        ? {
+            result: 'fail',
+            message: 'It closes the operation it names.',
+            facts: { supersedes: named },
+          }
+        : { result: 'not_applicable', message: 'It closes no operation.' }
+    })
+  },
+}
+
 export const migrationRollbackProduction: Rule = {
   id: 'migration.rollback-production',
   version: 1,
@@ -789,6 +814,7 @@ export const MIGRATION_RULES: readonly Rule[] = [
   migrationNontransactional,
   migrationAgentProduction,
   migrationVerifyConsumerCode,
+  migrationVerifySupersedesProduction,
   migrationRollbackProduction,
   migrationBaselineProduction,
   migrationLedgerReconcileProduction,

@@ -309,10 +309,35 @@ async function auditChain(
   }
 }
 
+/**
+ * OD-70 (b): the Control Store volume from the database's own size against the configured volume
+ * size: degraded from 80 %, and from 90 % bundle ingest is refused. shortcut: WAL and other files
+ * on the volume are not counted (the serve login cannot read them), so the share is a lower bound;
+ * a host-side disk measurement would be exact.
+ */
+export function volumeComponent(usedBytes: number, volumeBytes: number, nowMs: number): Component {
+  const usedPercent = Math.floor((usedBytes * 100) / volumeBytes)
+  const reasons =
+    usedPercent >= 90
+      ? ['ingest_refused', 'volume_above_90_percent']
+      : usedPercent >= 80
+        ? ['volume_above_80_percent']
+        : []
+  return {
+    component: 'control_store_volume',
+    state: reasons.length === 0 ? 'operational' : 'degraded',
+    source: 'live',
+    observedAt: iso(nowMs),
+    ...(reasons.length === 0 ? {} : { reasons }),
+    values: { usedBytes, volumeBytes, usedPercent },
+  }
+}
+
 export async function readInstallationHealth(
   q: Queryable,
   clock: Clock,
   sources: InstallationHealthSources,
+  options: { readonly volumeBytes?: number | undefined } = {},
 ): Promise<InstallationHealth> {
   const nowMs = clock.nowMs()
   const processes = await liveProcesses(q)
@@ -338,6 +363,17 @@ export async function readInstallationHealth(
     unobserved.push({ component: 'gateway', reason: gate.unobserved ?? 'not_recorded' })
   } else components.push(gate.component)
   components.push(keyring(keyringStatus, nowMs), audit)
+  if (options.volumeBytes === undefined) {
+    unobserved.push({ component: 'control_store_volume', reason: 'volume_size_not_configured' })
+  } else {
+    const size = await q.query(
+      'application.health.volume',
+      'SELECT pg_database_size(current_database())::bigint AS n',
+    )
+    components.push(
+      volumeComponent(Number(size.rows[0]?.text('n') ?? '0'), options.volumeBytes, nowMs),
+    )
+  }
   return {
     state: worst(components.map((c) => c.state)),
     components,

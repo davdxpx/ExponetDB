@@ -36,6 +36,7 @@ import {
   TargetRefSchema,
   TierSchema,
   TimestampSchema,
+  untrustedText,
 } from '../common.ts'
 import type { ErrorCode } from '../errors.ts'
 import { DependencyRefSchema, ExecutionRoleAliasSchema } from '../manifest/migration.ts'
@@ -149,6 +150,7 @@ import {
   ClusterBootstrapSqlSchema,
   ClusterConfirmRequestSchema,
   ClusterDeclaredTierRequestSchema,
+  ClusterMemoryLimitRequestSchema,
   ClusterRegisterRequestSchema,
   ClusterRetireRequestSchema,
   CredentialSubmissionSchema,
@@ -824,6 +826,55 @@ export const ROUTES = [
     body: z.strictObject({}),
     response: { status: 202, schema: OperationSchema },
     errors: ['CSRF_FAILED', 'OPERATION_NOT_FOUND', 'OPERATION_NOT_RETRYABLE'],
+  },
+  {
+    operationId: 'planForceRelease',
+    method: 'post',
+    path: '/operations/{operationId}/force-release',
+    summary:
+      'Plan closing an operation that needs attention (operation.force_release, VC-006): a person states what happened to its change and why; applied through POST /plans/{id}/apply (re-authentication), the worker closes the operation, runs nothing of it again and releases its exclusivity domains.',
+    action: 'operation.force_release.plan',
+    pathParams: z.strictObject({ operationId: OperationIdSchema }),
+    body: z.strictObject({
+      outcome: z.enum(['applied', 'not_applied', 'unknown']),
+      reason: untrustedText(
+        1000,
+        'Why it is released and how the outcome was checked; recorded in the plan and the audit, permanent.',
+      ),
+    }),
+    // Literal here: the shared plan constants are declared further down.
+    response: { status: 201, schema: PlanViewSchema },
+    errors: [
+      'CSRF_FAILED',
+      'IDEMPOTENCY_KEY_REUSED',
+      'OPERATION_NOT_FOUND',
+      'OPERATION_NOT_RELEASABLE',
+      'VALIDATION_FAILED',
+    ],
+  },
+  {
+    operationId: 'planRevisionPurge',
+    method: 'post',
+    path: '/projects/{projectId}/bundle-revisions/purge',
+    summary:
+      'Plan purging the bundle revisions of a project that no plan references and that are older than 90 days (migration.revisions.purge, OD-70): the plan lists them; applied through POST /plans/{id}/apply (re-authentication), the worker deletes exactly those, and the database refuses any other.',
+    action: 'migration.revisions.purge.plan',
+    pathParams: z.strictObject({ projectId: ProjectIdSchema }),
+    body: z.strictObject({
+      reason: untrustedText(
+        1000,
+        'Why the revisions are purged; recorded in the plan and the audit, permanent.',
+      ),
+    }),
+    // Literal here: the shared plan constants are declared further down.
+    response: { status: 201, schema: PlanViewSchema },
+    errors: [
+      'CSRF_FAILED',
+      'IDEMPOTENCY_KEY_REUSED',
+      'NOT_FOUND',
+      'REGISTRY_CONFLICT',
+      'VALIDATION_FAILED',
+    ],
   },
   {
     operationId: 'listPlans',
@@ -1886,6 +1937,18 @@ export const REGISTRY_ROUTES = [
     action: 'registry.cluster.declare_tier.plan',
     pathParams: clusterParams,
     body: ClusterDeclaredTierRequestSchema,
+    response: planned,
+    errors: PLAN_ERRORS,
+  },
+  {
+    operationId: 'planClusterMemoryLimit',
+    method: 'post',
+    path: '/clusters/{clusterId}/memory-limit',
+    summary:
+      "Plan the declaration of whether the cluster's PostgreSQL runs under a memory limit (OD-68); needs registry.manage:prod whichever value, applied through plan.apply.",
+    action: 'registry.cluster.declare_memory_limit.plan',
+    pathParams: clusterParams,
+    body: ClusterMemoryLimitRequestSchema,
     response: planned,
     errors: PLAN_ERRORS,
   },

@@ -1015,6 +1015,70 @@ describe('plan list and operation cancel over REST', () => {
     expect(requests.rows[0]?.n).toBe(1)
   })
 
+  // VC-006: needs_attention had no exit outside four migration kinds; a person now closes it.
+  it('force-releases an operation that needs attention through a plan: nothing runs again, a finished one is refused', async () => {
+    const { rows } = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT operation_id FROM operations.operations
+          WHERE kind = 'migration.apply' AND state = 'succeeded' ORDER BY created_at DESC LIMIT 1`,
+      ),
+    )
+    const id = String(rows[0]?.operation_id)
+    await db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE operations.operations SET state = 'needs_attention', verification_outcome = 'error'
+          WHERE operation_id = $1`,
+        [id],
+      )
+      await c.query('COMMIT')
+    })
+    const path = `/api/v1/operations/${id}/force-release`
+    const empty = await owner.browser.call('POST', path, { outcome: 'applied', reason: '' })
+    expect(empty.status).toBe(422)
+    // The change was applied: "not applied" contradicts what the engine knows.
+    const contradiction = await owner.browser.call('POST', path, {
+      outcome: 'not_applied',
+      reason: 'It never ran.',
+    })
+    expect([contradiction.status, contradiction.body.code]).toEqual([422, 'VALIDATION_FAILED'])
+    const { plan, operation: release } = await planAndApply(
+      path,
+      { outcome: 'applied', reason: 'The table exists on the target; verified by hand.' },
+      { reauth: true },
+    )
+    expect(plan).toMatchObject({ kind: 'operation.force_release', class: 'high' })
+    expect(await operation(release.id)).toMatchObject({ state: 'succeeded' })
+    expect(await operation(id)).toMatchObject({
+      state: 'verification_failed',
+      applyOutcome: 'applied',
+      verificationOutcome: 'failed',
+    })
+    const finished = await owner.browser.call('POST', path, {
+      outcome: 'applied',
+      reason: 'Again.',
+    })
+    expect([finished.status, finished.body]).toMatchObject([
+      409,
+      { code: 'OPERATION_NOT_RELEASABLE', details: { state: 'verification_failed' } },
+    ])
+    const unknown = await owner.browser.call(
+      'POST',
+      `/api/v1/operations/op_${newUlid(Date.now())}/force-release`,
+      { outcome: 'applied', reason: 'x' },
+    )
+    expect([unknown.status, unknown.body.code]).toEqual([404, 'OPERATION_NOT_FOUND'])
+    const closed = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT detail AS d FROM operations.operation_events
+          WHERE operation_id = $1 AND to_state = 'verification_failed'`,
+        [id],
+      ),
+    )
+    expect(closed.rows[0]?.d).toMatchObject({ supersededBy: release.id, statedOutcome: 'applied' })
+  })
+
   it('rejects an approval of a kind that verifies: the operation ends canceled, nothing ran', async () => {
     await reauth()
     const granted = await owner.browser.call(
@@ -1086,6 +1150,136 @@ const CLI_COMMAND: readonly [string, readonly string[]] =
   INSTALLED_CLI === undefined || INSTALLED_CLI === ''
     ? ['bun', ['--conditions=@exponetdb/source', CLI_MAIN]]
     : [INSTALLED_CLI, []]
+
+// OD-70 (d): revisions are permanent (append-only); a person may purge the ones no plan ever
+// referenced once they are older than 90 days, with re-authentication, audited.
+describe('the purge of unreferenced bundle revisions (OD-70)', () => {
+  const revisionsOf = async (migrationId: string) =>
+    (
+      await db.asSuperuser((c) =>
+        c.query(
+          'SELECT count(*)::int AS n FROM migrations.bundle_revisions WHERE migration_id = $1',
+          [migrationId],
+        ),
+      )
+    ).rows[0]?.n
+  const backdate = (migrationIds: readonly string[] | 'all') =>
+    db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE migrations.bundle_revisions SET ingested_at = now() - interval '100 days'
+          WHERE project_id = $1 AND ($2::text[] IS NULL OR migration_id = ANY ($2::text[]))`,
+        [ids.project, migrationIds === 'all' ? null : migrationIds],
+      )
+      await c.query('COMMIT')
+    })
+  const ingest = async (name: string) => {
+    const id = ulid()
+    const r = await owner.browser.call('POST', `/api/v1/projects/${ids.project}/bundles`, {
+      bundles: [
+        bundle({ id, name, up: `CREATE TABLE public.${name.replaceAll('-', '_')} (id int);\n` }),
+      ],
+      defaults: DEFAULTS,
+    })
+    expect(r.status, r.text).toBe(200)
+    return id
+  }
+  const path = () => `/api/v1/projects/${ids.project}/bundle-revisions/purge`
+
+  it('purges only never-planned revisions older than 90 days, through a planned operation', async () => {
+    const old = await ingest('purge-old')
+    // Every revision of the project is old now, also those earlier tests planned and applied.
+    await backdate('all')
+    const recent = await ingest('purge-recent')
+    const planned = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT DISTINCT r.migration_id AS id FROM migrations.bundle_revisions r
+          WHERE r.project_id = $1 AND EXISTS (SELECT FROM operations.plan_bodies b WHERE b.body LIKE '%' || r.migration_id || '%')
+          LIMIT 1`,
+        [ids.project],
+      ),
+    )
+    const referenced = String(planned.rows[0]?.id)
+    expect(referenced).toMatch(/^[0-7]/)
+
+    const empty = await owner.browser.call('POST', path(), { reason: '' })
+    expect([empty.status, empty.body.code]).toEqual([422, 'VALIDATION_FAILED'])
+    const { plan, operation: purge } = await planAndApply(
+      path(),
+      { reason: 'The disk filled with test bundles nobody planned.' },
+      { reauth: true },
+    )
+    expect(plan).toMatchObject({ kind: 'migration.revisions.purge', class: 'high' })
+    expect(await operation(purge.id)).toMatchObject({ state: 'succeeded' })
+    expect(await revisionsOf(old)).toBe(0)
+    expect(await revisionsOf(recent)).toBe(1)
+    expect(await revisionsOf(referenced)).toBeGreaterThan(0)
+    const audit = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT event::jsonb AS e FROM audit.audit_events
+          WHERE action = 'migration.revisions.purged' ORDER BY seq DESC LIMIT 1`,
+      ),
+    )
+    // The worker writes the deletion's event (the person's apply has its own, plan.apply).
+    expect(audit.rows[0]?.e).toMatchObject({
+      actor: { kind: 'system' },
+      refs: { operationId: purge.id, planId: plan.id },
+      changes: { projectId: ids.project, purged: expect.any(Number), bytes: expect.any(Number) },
+    })
+    expect(audit.rows[0]?.e.changes.purged).toBeGreaterThan(0)
+    // Nothing left to purge: refused at planning.
+    const again = await owner.browser.call('POST', path(), { reason: 'Again.' })
+    expect([again.status, again.body]).toMatchObject([
+      409,
+      { code: 'REGISTRY_CONFLICT', details: { reason: 'nothing_to_purge' } },
+    ])
+  })
+
+  // Review of OD-70 (d): the worker's function deletes only what a running purge operation lists.
+  it('refuses a direct purge call of the worker that no running purge operation names', async () => {
+    const id = await ingest('purge-direct')
+    await backdate([id])
+    const direct = await stores.worker
+      .query(
+        'test.purge.direct',
+        'SELECT purged FROM migrations.purge_revisions($1, $2, $3::text[], $4::int[])',
+        [`op_${newUlid(Date.now())}`, ids.project, [id], [1]],
+      )
+      .catch((e: unknown) => e)
+    expect(direct).toMatchObject({ sqlstate: 'EXM02' })
+    expect(await revisionsOf(id)).toBe(1)
+  })
+
+  it('never lets the database delete a revision a plan references, also with the purge flag set', async () => {
+    const planned = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT r.migration_id AS id FROM migrations.bundle_revisions r
+          WHERE EXISTS (SELECT FROM operations.plan_bodies b WHERE b.body LIKE '%' || r.migration_id || '%') LIMIT 1`,
+      ),
+    )
+    const id = String(planned.rows[0]?.id)
+    const direct = await db
+      .asSuperuser((c) =>
+        c.query('DELETE FROM migrations.bundle_revisions WHERE migration_id = $1', [id]),
+      )
+      .catch((e: unknown) => e)
+    expect(direct).toMatchObject({ code: expect.stringMatching(/^EX/) })
+    const flagged = await db
+      .asSuperuser(async (c) => {
+        await c.query('BEGIN')
+        await c.query(`SELECT set_config('exponetdb.revision_purge', 'on', true)`)
+        try {
+          await c.query('DELETE FROM migrations.bundle_revisions WHERE migration_id = $1', [id])
+        } finally {
+          await c.query('ROLLBACK')
+        }
+      })
+      .catch((e: unknown) => e)
+    expect(flagged).toMatchObject({ code: expect.stringMatching(/^EX/) })
+    expect(await revisionsOf(id)).toBeGreaterThan(0)
+  })
+})
 
 describe('the CLI as a process', () => {
   let listener: ServerType

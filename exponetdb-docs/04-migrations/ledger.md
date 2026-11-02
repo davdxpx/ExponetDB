@@ -221,10 +221,14 @@ mirror's last known `ledger_state_hash` no longer matches.
    transaction, under the target's schema lock, as part of the first operation
    that needs the new version; they are additive only (new nullable columns,
    new tables). A destructive ledger change would be a new ADR.
-5. **Restore**: the restored database brings its own `exponetdb` schema. The
-   restore operation re-stamps the identity (new `generation`) and reconciles the
-   mirror to the restored ledger, recording a `ledger_reconciled` event. Plans
-   bound to the old generation become stale.
+5. **Restore**: the restored database brings its own `exponetdb` schema.
+   **[DECIDED]** (verification campaign VC-023, 2026-11-02) A restore that bumps the
+   target's `generation` makes the Control Store's mirror (of the earlier
+   generation) a divergence, not an empty slate: plans are refused and nothing is
+   mirrored for the new generation until `ledger.reconcile` adopts the restored
+   ledger on purpose, which records a `ledger_reconciled` event. Plans bound to
+   the old generation become stale. Nothing bumps the generation today; whoever
+   builds the bump starts from this rule.
 
 ## 5. Mirror and reconciliation
 
@@ -234,7 +238,17 @@ mirror's last known `ledger_state_hash` no longer matches.
   written rows back (from the target, on a new connection) and upserts them into
   the mirror together with the observed `ledger_state_hash`.
 - A periodic reconciliation (default every 10 minutes per active target, and on
-  every plan) compares `ledger_state_hash` of target and mirror.
+  every plan) compares `ledger_state_hash` of target and mirror. **[DECIDED]**
+  (verification campaign VC-022, 2026-11-02) The worker task `ledger.watch`
+  runs every 10 minutes: one observer read per active or suspended target and
+  the same comparison status, plans and `ledger.reconcile` use. While they
+  differ a critical `health` finding `ledger_divergence` is open on the target
+  (naming up to 16 migration ids per class) and the audit event
+  `ledger.divergence.detected` was written once; when they agree the finding is
+  resolved (`cleared`) and `ledger.divergence.cleared` is written. A target that
+  cannot be read is the health sample's to report; the watch never reads it as
+  agreeing (the task fails visibly). Schema changes are blocked by the plans'
+  own comparison, not by suspending the target.
 - Divergence classes:
 
 | Divergence | Typical cause | Effect |
@@ -244,6 +258,53 @@ mirror's last known `ledger_state_hash` no longer matches.
 | Mirror has rows the target lacks | Restore to an older state, or manual deletion | `LEDGER_DIVERGENCE`; if a restore operation explains it, the restore's reconcile step resolves it |
 | Same `migration_id`, different checksum | Tampering or a bug | `LEDGER_DIVERGENCE` + `MIGRATION_CHECKSUM_MISMATCH` finding (critical) |
 | `installation_id` in target differs from this installation | Two ExponetDB installations, or a copied database | Target refused (`TARGET_IDENTITY_MISMATCH`) |
+
+**[DECIDED]** (verification campaign, 2026-11-02) What the comparison counts:
+
+- **A row is recorded only when an operation applied its migration** (VC-063). "An
+  operation of this target wrote it" means the operation's own progress
+  (`migrations.operation_migrations`, written for every planned migration when the operation
+  starts executing) lists that migration **and** says it was applied, partly applied or
+  unknown, or the operation is still in flight (`running`, `verifying`,
+  `needs_reconciliation`, `needs_attention`); a migration that was only planned and never
+  reached does not count. A baseline operation counts by kind once its apply outcome is
+  applied, partly applied or unknown. The operation id of a genuine operation on a row it never
+  applied (a hand-written row quoting a real id, or a restored Control Store that still holds
+  the operation as `awaiting_approval`) is `unrecorded`. Status, plans, `ledger.reconcile`, the
+  periodic watch and the mirror write share one function, so they cannot disagree.
+- **A target the store never mirrored is compared with an empty mirror** (VC-063): every live
+  row nobody recorded is `unrecorded`, so a Control Store restored from before a target's first
+  apply blocks planning and `ledger.reconcile` can adopt the ledger.
+- **A mirror of another generation is a divergence** (VC-023). A target with a mirror for an
+  earlier generation and none for the current one has every live row `unrecorded`; the mirror
+  write after an apply adopts nothing and leaves the state alone, until `ledger.reconcile`
+  adopts the ledger on purpose. Nothing bumps `generation` today; whoever builds the bump (the
+  restore of Wave 9 Part B's protections) starts from this rule, and from the case it leaves
+  open: with an empty live ledger the check agrees, and the engine's first rows at the new
+  generation are not mirrored until then.
+- **The mirror is revert-only for UPDATE** (VC-045). The worker holds UPDATE on
+  `migrations.ledger_mirror`, but a trigger lets an update change only `reverted_at`,
+  `reverted_by_op` and `mirrored_at` (`EXM03` otherwise). `migrations.archive_mirror_rows`
+  moves rows only for a running `ledger.reconcile` of the target under its lease (the
+  operation row locked `FOR SHARE`), for the generation the plan names and, per class, the ids
+  the plan lists (a plan that lists them all binds each id; a larger one binds the count,
+  summed over all calls of the operation). **This guards against in-place rewriting, not
+  against a worker that inserts rows:** the worker role keeps INSERT on the mirror, the
+  progress rows and the verification mirror, and it holds the migrator's secrets anyway.
+- **Evidence is read with the mirror beside it** (VC-079). A live ledger row is evidence only if
+  it is recorded, the ledger agrees with the mirror (one divergence on the evidence target is
+  no evidence at all), and the columns evidence reads (`verify_digest`, `fingerprint_before`,
+  reverted or not) equal the mirror's copy. A live verification counts only if the immutable
+  verification mirror holds the same id with the same migration, verify digest and status.
+- **An applied id is applied** (VC-027, VC-080). Other bytes under an id any target of the
+  project applied (the mirror) or an operation applied or may have applied (its progress says
+  applied, partly applied or unknown, or it has not finished) are refused
+  `MIGRATION_CHECKSUM_MISMATCH`, at ingest and again when an operation starts executing, one id
+  at a time under a Control Store lock, before any statement reaches a target.
+- **A copy or a standby is refused where a kind writes to the target** (VC-071, VC-073): the
+  apply and the rollback kinds refuse a PostgreSQL in recovery (`TARGET_READ_ONLY`) and a
+  database whose object id is not the registered one (`TARGET_IDENTITY_MISMATCH`), at plan time
+  and at apply. The baseline and the import replay do not check it yet.
 
 `ledger.reconcile` is a planned, audited operation that records the operator's
 decision (adopt target as truth, or flag rows as untrusted) without deleting any

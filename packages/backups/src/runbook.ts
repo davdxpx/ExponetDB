@@ -288,6 +288,11 @@ function restic(r: RunbookRepository): { script: string; placeholders: Runbook['
       name: 'SNAPSHOT',
       meaning: 'Optional: the restic snapshot id; default the newest snapshot tagged exponetdb.',
     },
+    {
+      name: 'GLOBALS_FILE',
+      meaning:
+        "Optional: the roles to create (pg_dumpall --globals-only) when the snapshot holds no globals*.sql; the dumps' grants need them.",
+    },
   ]
   let repository: string
   if (r.provider === 'posix') {
@@ -328,22 +333,54 @@ restic snapshots --tag exponetdb
 restic restore "\${SNAPSHOT:-latest}" --tag exponetdb --target "$WORK/dump"
 ls "$WORK/dump" >/dev/null
 
+# The dumps own and grant to roles only the globals file creates (VC-059): without it every
+# restore stops at the first GRANT, so the script stops here, before any cluster is created.
+if [ -n "\${GLOBALS_FILE:-}" ]; then
+  [ -f "$GLOBALS_FILE" ] || fail "GLOBALS_FILE is not a file: $GLOBALS_FILE"
+  globals="$GLOBALS_FILE"
+else
+  set -- $(find "$WORK/dump" -name 'globals*.sql' -type f)
+  [ "$#" -le 1 ] || fail "the snapshot holds more than one globals file: name the one to apply with GLOBALS_FILE"
+  [ "$#" -eq 1 ] || fail "the snapshot holds no globals file (globals*.sql of pg_dumpall --globals-only): its roles cannot be created. Dump them from the source (pg_dumpall --globals-only --no-role-passwords) or write the CREATE ROLE statements, and run again with GLOBALS_FILE=<that file>"
+  globals="$1"
+fi
+if grep -q '^CREATE TABLESPACE' "$globals"; then
+  fail "$globals creates tablespaces, whose directories this host does not have: remove those lines (the restore puts every table in the default tablespace) and run again with GLOBALS_FILE=<the edited file>"
+fi
+# psql runs the file as the cluster's superuser: a meta-command such as \\! would run on this host,
+# also in the middle of a line. pg_dumpall writes only \\connect and \\restrict / \\unrestrict
+# lines; any other backslash is refused (VC-059 review).
+if grep -v -E '^\\\\(connect|restrict|unrestrict) ' "$globals" | grep -q '\\\\'; then
+  fail "$globals holds a psql meta-command pg_dumpall does not write: read it, remove the line and run again with GLOBALS_FILE=<the edited file>"
+fi
+# Every dump is read before anything is created: a damaged one later must not leave a partial restore.
+for dump in $(find "$WORK/dump" -name '*.dump' -type f); do
+  "$PG_BIN/pg_restore" --list "$dump" >/dev/null || fail "unreadable dump: $dump; nothing was restored"
+done
+
 # A new, empty cluster for the logical dumps.
 mkdir -p "$TARGET_DIR"
 "$PG_BIN/initdb" -D "$TARGET_DIR" --auth=peer >/dev/null
 `
   lines += START_AND_CHECK.replace(
     'cat <<NEXT',
-    `for globals in $(find "$WORK/dump" -name 'globals*.sql' -type f); do
-  printf 'runbook: review %s before applying it (roles without passwords)\\n' "$globals" >&2
-done
+    `# The roles first. A role that exists already (the OS user's own) is reported and skipped; a
+# role that could not be created makes the restore below fail, which stops the cluster.
+printf 'runbook: creating the roles of %s\\n' "$globals" >&2
+"$PG_BIN/psql" -h "$CONF_DIR/socket" -p "$PORT" -d postgres -X -q -f "$globals" >"$CONF_DIR/globals.log" 2>&1 || true
+grep 'ERROR' "$CONF_DIR/globals.log" >&2 || true
 for dump in $(find "$WORK/dump" -name '*.dump' -type f); do
-  "$PG_BIN/pg_restore" --list "$dump" >/dev/null || fail "unreadable dump: $dump"
   name="$(basename "$dump" .dump)"
   "$PG_BIN/psql" -h "$CONF_DIR/socket" -p "$PORT" -d postgres -c "CREATE DATABASE \\"$name\\"" || true
-  "$PG_BIN/pg_restore" -h "$CONF_DIR/socket" -p "$PORT" -d "$name" --no-owner --exit-on-error "$dump"
+  if ! "$PG_BIN/pg_restore" -h "$CONF_DIR/socket" -p "$PORT" -d "$name" --no-owner --exit-on-error "$dump"; then
+    # A half-restored cluster never keeps running (VC-059): it would look like a restore.
+    "$PG_BIN/pg_ctl" -D "$TARGET_DIR" -m fast -w stop >/dev/null 2>&1 || true
+    fail "pg_restore failed for database $name (see above); the cluster was stopped: it holds a partial restore, never use it"
+  fi
 done
-cat <<NEXT`,
+cat <<NEXT
+Every dump was restored, after the roles of $globals. The node dumps roles without passwords
+(--no-role-passwords): set them before any client connects.`,
   )
   return { script: lines, placeholders }
 }

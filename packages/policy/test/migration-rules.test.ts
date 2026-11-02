@@ -488,3 +488,34 @@ describe('procedural SQL (OD-55 (c) and (d))', () => {
     ).toBe('not_applicable')
   })
 })
+
+// D0-01 (verification campaign): a verification run that names a stuck operation closes it; on
+// production that close needs an approval and a fresh re-authentication, as migration.resume does.
+describe('a production verification that closes a stuck operation', () => {
+  const verify = (tier: 'prod' | 'nonprod', supersedes?: string) =>
+    engine.evaluate({
+      request: {
+        kind: 'migration.verify',
+        principal: { kind: 'human', identityId: 'idn_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z', client: 'cli' },
+        subject: { tier },
+        content: {
+          facts: { ...CLEAN } as unknown as JsonObject,
+          ...(supersedes === undefined ? {} : { supersedes }),
+        },
+      },
+      settings: [],
+    })
+
+  it('requires an approval and a fresh re-authentication on production only', async () => {
+    const closing = await verify('prod', 'op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z')
+    expect(closing.decision).toBe('require')
+    expect(closing.requirements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'approval', count: 1 }),
+        expect.objectContaining({ kind: 'reauth', withinSeconds: 300 }),
+      ]),
+    )
+    expect((await verify('prod')).decision).toBe('allow')
+    expect((await verify('nonprod', 'op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z')).decision).toBe('allow')
+  })
+})

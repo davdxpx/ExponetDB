@@ -57,6 +57,7 @@ import {
   RegistrationSnapshotStore,
   readStatuses,
   recordDriftFailure,
+  recordLedgerWatch,
   runDriftCheck,
   sampleTarget,
   schemaFingerprintView,
@@ -963,3 +964,33 @@ class FailingConnector extends Connector {
     throw new TargetError('TARGET_UNAVAILABLE', 'connect_refused')
   }
 }
+
+describe('the ledger watch finding (VC-022)', () => {
+  const sighting = {
+    counts: { missing: 0, checksumDiffers: 0, unrecorded: 1 },
+    details: { missing: [], checksumDiffers: [], unrecorded: ['01M6EJD93DP9GNTHF77YY8VNY6'] },
+  }
+  const auditCount = async (action: string) =>
+    (
+      await h.worker.query(
+        'test.ledger_watch.audit',
+        `SELECT count(*)::int AS n FROM audit.audit_events WHERE action = $1 AND event::jsonb #>> '{subject,targetId}' = $2`,
+        [action, target.targetId],
+      )
+    ).rows[0]?.int('n')
+
+  it('opens one critical finding with an alertable audit event, counts later sightings, and clears when the ledger agrees', async () => {
+    const open = () => openFindings(h.worker, target.targetId, 'health')
+    await recordLedgerWatch(h.worker, h.context.policy.clock, target.targetId, sighting)
+    await recordLedgerWatch(h.worker, h.context.policy.clock, target.targetId, sighting)
+    const found = (await open()).filter((f) => f.code === 'ledger_divergence')
+    expect(found).toHaveLength(1)
+    expect(found[0]).toMatchObject({ severity: 'critical', occurrences: 2 })
+    expect(await auditCount('ledger.divergence.detected')).toBe(1)
+    // They agree again: resolved as cleared, once; an agreeing sighting with nothing open says nothing.
+    await recordLedgerWatch(h.worker, h.context.policy.clock, target.targetId, null)
+    await recordLedgerWatch(h.worker, h.context.policy.clock, target.targetId, null)
+    expect((await open()).filter((f) => f.code === 'ledger_divergence')).toHaveLength(0)
+    expect(await auditCount('ledger.divergence.cleared')).toBe(1)
+  })
+})

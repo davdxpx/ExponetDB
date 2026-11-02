@@ -52,6 +52,7 @@ import {
   ClusterConfirmRequestSchema,
   ClusterDeclaredTierRequestSchema,
   ClusterIdSchema,
+  ClusterMemoryLimitRequestSchema,
   ClusterRegisterRequestSchema,
   ClusterRetireRequestSchema,
   ConnectionCancelRequestSchema,
@@ -767,6 +768,24 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         OperationIdSchema.parse(field(call.params, 'operationId')),
       ),
     ),
+  planForceRelease: async (app, call) =>
+    value(
+      await app.planForceRelease(
+        caller(call),
+        OperationIdSchema.parse(field(call.params, 'operationId')),
+        call.body as { outcome: 'applied' | 'not_applied' | 'unknown'; reason: string },
+        idempotency(call),
+      ),
+    ),
+  planRevisionPurge: async (app, call) =>
+    value(
+      await app.planRevisionPurge(
+        caller(call),
+        ProjectIdSchema.parse(field(call.params, 'projectId')),
+        call.body as { reason: string },
+        idempotency(call),
+      ),
+    ),
   getInstallation: async (app, call) => value(await app.installation(caller(call))),
   // ----- /api/v1: the Wave 8 reads (order §9) -----
   getInstallationHealth: async (app, call) => value(await app.installationHealth(caller(call))),
@@ -1263,6 +1282,15 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         caller(call),
         clusterId(call),
         ClusterDeclaredTierRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planClusterMemoryLimit: async (app, call) =>
+    value(
+      await app.registry.planClusterMemoryLimit(
+        caller(call),
+        clusterId(call),
+        ClusterMemoryLimitRequestSchema.parse(call.body),
         idempotency(call),
       ),
     ),
