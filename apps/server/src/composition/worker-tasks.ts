@@ -10,6 +10,7 @@ import {
   verifyAuditChain,
 } from '@exponetdb/audit'
 import { oauth, pruneAuthState } from '@exponetdb/auth'
+import { maintainDrillFindings } from '@exponetdb/backups'
 import {
   type ControlStore,
   claimDueTask,
@@ -204,6 +205,18 @@ export const WORKER_TASKS: readonly TaskDefinition[] = [
     },
   },
   { name: 'audit.export', intervalSeconds: 5 * MINUTE, run: exportCheckpoints },
+  {
+    // VC-038: backup_drill_never_run|overdue|failed and restore_scratch_left are computed here;
+    // nothing ran the generator before, so a failed drill left no finding.
+    name: 'backups.findings',
+    intervalSeconds: 5 * MINUTE,
+    run: async (ctx) => {
+      await ctx.store.transaction('backups.findings.maintain', (tx) =>
+        maintainDrillFindings(tx, ctx.runtime.clock.nowMs()),
+      )
+      return undefined
+    },
+  },
   {
     name: 'audit.verify_incremental',
     intervalSeconds: HOUR,

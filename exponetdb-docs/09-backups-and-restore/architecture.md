@@ -121,7 +121,12 @@ Policy hooks that depend on backups (`migration.destructive-backup`,
 `backup.repository-healthy`, see
 [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md))
 read the catalog mirror **after** a refresh younger than 10 minutes; a stale
-mirror counts as "no backup" for policy purposes.
+mirror counts as "no backup" for policy purposes. **[DECIDED]** (VC-038, delegated) A refresh is
+the operation `backup.catalog.refresh`, started by a person or a client; ExponetDB starts no
+scheduled one (it would plan and apply as the system on a production cluster with no one to
+approve it). The cluster reads `catalog_stale` after 30 minutes without a refresh, which is the
+signal to refresh; the worker task `backups.findings` (every 5 minutes) computes the drill and
+scratch findings.
 
 ## 6. Backup run outcome
 
