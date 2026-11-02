@@ -405,10 +405,11 @@ SELECT count(*) = 2 AS ok FROM app.leads_view;
       const observer = await open(server, db, 'observer')
       const verifier = await open(server, db, 'verifier')
       try {
-        // One detail of 8 MB: past the 4 MiB bound before the driver holds it whole.
+        // One detail of 9.6 MB: past the 4 MiB bound before the driver holds it whole. Built from
+        // rows, not with repeat(): a size argument above 10,000 is refused at admission (OD-68 (b)).
         const checks = checksOf(
           server.major,
-          `-- check: huge detail\nSELECT false AS ok, pg_catalog.repeat('x', 8000000) AS detail;\n`,
+          `-- check: huge detail\nSELECT false AS ok, pg_catalog.string_agg(pg_catalog.md5(g::text), '') AS detail FROM pg_catalog.generate_series(1, 300000) AS g;\n`,
         )
         const resolution = await observer.readOnly((tx) => resolveVerifyCatalog(tx, checks))
         if (!resolution.ok) throw new Error('resolution')
