@@ -213,9 +213,11 @@ export async function executeDataRead(
   let deadline: ReturnType<typeof setTimeout> | undefined
   const abandoned = new Promise<DataReadOutcome>((resolve) => {
     deadline = setTimeout(() => {
+      // TARGET_UNAVAILABLE carries no catalog details: the cause travels as the reason.
       void session
         .close()
-        .finally(() => resolve(refused('TARGET_UNAVAILABLE', { reason: 'read_deadline' })))
+        .catch(() => undefined)
+        .then(() => resolve(refused('TARGET_UNAVAILABLE', undefined, 'read_deadline')))
     }, request.statementTimeoutMs + DATA_READ_GRACE_MS)
   })
   try {

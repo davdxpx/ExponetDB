@@ -621,7 +621,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         expect(await within(20_000, pending)).toEqual({
           kind: 'refused',
           code: 'TARGET_UNAVAILABLE',
-          details: { reason: 'read_deadline' },
+          reason: 'read_deadline',
         })
         expect(session.usable).toBe(false)
       } finally {
