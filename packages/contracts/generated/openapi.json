@@ -682,6 +682,7 @@
               "migration.import.analyze",
               "migration.baseline.plan",
               "drift.accept.plan",
+              "operation.force_release.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -13991,6 +13992,7 @@
               "migration.import.analyze",
               "migration.baseline.plan",
               "drift.accept.plan",
+              "operation.force_release.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -14843,6 +14845,7 @@
               "migration.import.analyze",
               "migration.baseline.plan",
               "drift.accept.plan",
+              "operation.force_release.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -15751,6 +15754,7 @@
               "migration.import.analyze",
               "migration.baseline.plan",
               "drift.accept.plan",
+              "operation.force_release.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -16194,6 +16198,7 @@
               "migration.import.analyze",
               "migration.baseline.plan",
               "drift.accept.plan",
+              "operation.force_release.plan",
               "migration.resume.plan",
               "migration.import.decide",
               "ledger.reconcile.plan",
@@ -16880,6 +16885,7 @@
               "APPROVAL_COOLING_PERIOD",
               "SELF_APPROVAL_UNACKNOWLEDGED",
               "APPROVAL_NOT_PENDING",
+              "APPROVAL_EXPIRED",
               "APPROVAL_DUPLICATE",
               "BREAK_GLASS_REQUIRED",
               "BREAK_GLASS_UNAVAILABLE",
@@ -16887,6 +16893,7 @@
               "OPERATION_CONFLICT",
               "OPERATION_NOT_CANCELABLE",
               "OPERATION_NOT_RETRYABLE",
+              "OPERATION_NOT_RELEASABLE",
               "OPERATION_CANCELLED",
               "OUTCOME_UNKNOWN",
               "PRECONDITION_FAILED",
@@ -33439,6 +33446,130 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "6"
+      }
+    },
+    "/operations/{operationId}/force-release": {
+      "post": {
+        "operationId": "planForceRelease",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^op_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "outcome": {
+                    "enum": [
+                      "applied",
+                      "not_applied",
+                      "unknown"
+                    ],
+                    "type": "string"
+                  },
+                  "reason": {
+                    "description": "Why it is released and how the outcome was checked; recorded in the plan and the audit, permanent.",
+                    "maxLength": 1000,
+                    "type": "string",
+                    "x-untrusted": true
+                  }
+                },
+                "required": [
+                  "outcome",
+                  "reason"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: OPERATION_NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: OPERATION_NOT_RELEASABLE."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "operations.recover"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan closing an operation that needs attention (operation.force_release, VC-006): a person states what happened to its change and why; applied through POST /plans/{id}/apply (re-authentication), the worker closes the operation, runs nothing of it again and releases its exclusivity domains.",
+        "tags": [
+          "operations"
+        ],
+        "x-exponetdb-action": "operation.force_release.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "OPERATION_NOT_FOUND",
+          "OPERATION_NOT_RELEASABLE",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
       }
     },
     "/operations/{operationId}/retry-verification": {

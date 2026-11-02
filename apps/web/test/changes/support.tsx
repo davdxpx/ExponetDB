@@ -8,7 +8,7 @@ import { createReauthBridge } from '../../src/features/reauth/reauth.tsx'
 import { ApiClient } from '../../src/lib/api/client.ts'
 import { createQueryClient } from '../../src/lib/query/client.ts'
 import { routeTree } from '../../src/routeTree.gen.ts'
-import { answer, operationFor, type Sent, World } from '../plans/support.tsx'
+import { answer, operationFor, PLAN, type Sent, World } from '../plans/support.tsx'
 
 export {
   BIDI,
@@ -85,6 +85,12 @@ function changesAnswer(world: ChangesWorld, sent: Sent): Response | Promise<Resp
   let m = /^\/api\/v1\/operations\/([^/]+)\/cancel$/.exec(p)
   if (m !== null && method === 'POST' && !world.needsProof()) {
     return json(200, world.cancelAnswer(decodeURIComponent(m[1] ?? '')))
+  }
+  m = /^\/api\/v1\/operations\/([^/]+)\/force-release$/.exec(p)
+  if (m !== null && method === 'POST' && !world.needsProof()) {
+    return world.operations.has(decodeURIComponent(m[1] ?? ''))
+      ? json(201, world.plans.get(PLAN))
+      : json(404, { code: 'OPERATION_NOT_FOUND', message: 'No such operation.' })
   }
   if (p === '/api/v1/projects' && method === 'GET') {
     return json(200, { items: world.projects, nextCursor: null })

@@ -87,12 +87,7 @@ export async function acquireLocks(
     })
   } catch (error) {
     if (error instanceof LockConflict) {
-      await tx.query(
-        'operations.event.locks_waiting',
-        `INSERT INTO operations.operation_events (operation_id, kind, detail)
-         VALUES ($1, 'locks_waiting', jsonb_build_object('domain', $2::text, 'blockingOperationId', $3::text))`,
-        [operationId, error.domain, error.blockingOperationId],
-      )
+      await recordLockWait(tx, operationId, error.domain, error.blockingOperationId)
       return {
         acquired: false,
         domain: error.domain,
@@ -104,6 +99,21 @@ export async function acquireLocks(
     }
     throw error
   }
+}
+
+/** The `locks_waiting` event the operation views read `waitingFor` from. */
+export async function recordLockWait(
+  q: Queryable,
+  operationId: string,
+  domain: string,
+  blockingOperationId: string,
+): Promise<void> {
+  await q.query(
+    'operations.event.locks_waiting',
+    `INSERT INTO operations.operation_events (operation_id, kind, detail)
+     VALUES ($1, 'locks_waiting', jsonb_build_object('domain', $2::text, 'blockingOperationId', $3::text))`,
+    [operationId, domain, blockingOperationId],
+  )
 }
 
 class LockConflict extends Error {

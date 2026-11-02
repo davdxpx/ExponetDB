@@ -824,13 +824,27 @@ finding is wrong. Owner decisions are in [`open-decisions.md`](../00-product/ope
 | VC-003 a clock step leaves the audit chain refusing every event | IMPLEMENTED (typed `AUDIT_CLOCK_SKEW`, readiness check `audit_clock`, RB-16), TESTED LOCALLY on PostgreSQL 17; tolerate, clamp or repair is owner decision [OD-69](../00-product/open-decisions.md#od-69-audit-chain-and-clock-skew). NOT EXECUTED: the clock step on a stack (`F-matrix.sh ... clock_fwd3h`); the test writes the future head directly | `packages/audit/test/clock-skew.int.test.ts`, `apps/server/test/http-auth.test.ts` (503 with both times, not 500) | [error-model.md §3](../02-control-plane/error-model.md#3-catalog), [self-observability.md](../10-observability/self-observability.md), [incident-model.md](../12-operations/incident-model.md) RB-16 |
 | VC-001 a full Control Store disk, caused by a holder of `migrations.plan` | PARTLY IMPLEMENTED: every ingest audited, 64 MiB per identity per 24 h, RB-17; TESTED LOCALLY on PostgreSQL 17. Owner decision [OD-70](../00-product/open-decisions.md#od-70-control-store-disk-and-bundle-ingest): the quota value, a disk component in installation health, restart policy and WAL volume, the purge path, a REST rate limit, P0 or P1. NOT EXECUTED: `fc3-disk.sh` on a stack with a loop-mounted volume | `packages/migrations-engine/test/engine.int.test.ts` (the quota), `apps/server/test/http-migrations.int.test.ts` (the audit event) | [resources.md](../06-rest-api/resources.md), [control-store-runbook.md §5](../12-operations/control-store-runbook.md#5-rb-17-control-store-disk-full-enospc) |
 
-### VC-1a. Groups not started on this branch
+### VC-1b. Group B: the engine's dead ends (branch `fix/verification-campaign-group-b`, stacked on group A)
 
-Groups B to I and the closing documents of section 5 of the fix prompt get their own branches
-and pull requests; nothing of them is changed here.
+| Finding | Status | Regression artifact | Document |
+|---|---|---|---|
+| VC-044 a refused recovery has already closed the operation it names | IMPLEMENTED, TESTED LOCALLY on PostgreSQL 17 (red before: `verification_failed` where `needs_attention` was expected) | `packages/operations/test/driver.int.test.ts` (a stale and a waiting recovery) | [operations-engine.md §4.1](../02-control-plane/operations-engine.md#41-state-machine) |
+| VC-006, VC-055, VC-007 `needs_attention` has no exit outside four migration kinds | IMPLEMENTED (`operation.force_release`, the `high` planned operation decided before G1: it names the operation and closes it at dispatch with the stated outcome; the edge `needs_attention -> failed` in the additive bundle `operation-force-release`; REST, CLI `operation force-release`, Web App), TESTED LOCALLY; decided under the owner's delegation (B1-D4) | `driver.int.test.ts` (four cases), `apps/server/test/http-migrations.int.test.ts`, `apps/web/test/changes/operation-page.test.tsx`, `apps/cli/test/backups.test.ts` | [operations-engine.md §4.1](../02-control-plane/operations-engine.md#41-state-machine), [resources.md](../06-rest-api/resources.md) |
+| VC-049 the CLI recommends retry-verification the server refuses | IMPLEMENTED, TESTED LOCALLY | `apps/cli/test/operation-views.test.ts` | |
+| D0-01 a production verify that closes a stuck operation | IMPLEMENTED (rule `migration.verify-supersedes-production`), TESTED LOCALLY | `packages/policy/test/migration-rules.test.ts` | [policy-engine.md](../02-control-plane/policy-engine.md) |
+| VC-008 one blocked operation starves every younger one | IMPLEMENTED, TESTED LOCALLY on PostgreSQL 17 (red before: the younger operation was never claimed) | `driver.int.test.ts` | [operations-engine.md §4.2](../02-control-plane/operations-engine.md#42-workers-and-leases) |
+| VC-057 an approval after the plan expired started the change (OD-64) | IMPLEMENTED (four-hour window, `APPROVAL_EXPIRED`, worker task `operations.approvals_expire`), TESTED LOCALLY; OD-64 decided under the delegation | `packages/auth/test/access.int.test.ts`, `driver.int.test.ts` | [operations-engine.md §3.3](../02-control-plane/operations-engine.md#33-expiry) |
+| VC-058 (and VC-007) an unknown outcome is never reconciled again | IMPLEMENTED (a reconcile again every five minutes), TESTED LOCALLY on PostgreSQL 17 with synthetic kinds; NOT EXECUTED: the stack reproduction `F-matrix.sh cell tx incommit pg_immediate` | `driver.int.test.ts` | [operations-engine.md §4.2](../02-control-plane/operations-engine.md#42-workers-and-leases) |
+| VC-064 an old worker keeps claiming after the schema moved ahead | IMPLEMENTED, TESTED LOCALLY; NOT EXECUTED: `C/upgrade/scripts/91-inflight-across-migrate.sh` on a stack | `apps/server/test/operations-loop.test.ts` | [operations-engine.md §4.2](../02-control-plane/operations-engine.md#42-workers-and-leases) |
+
+### VC-1a. Groups not started yet
+
+Groups C to I and the closing documents of section 5 of the fix prompt get their own branches
+and pull requests.
 
 ### VC-2. Review history (append-only)
 
 | Date | Commit | Change |
 |---|---|---|
 | 2026-11-02 | (this branch) | section opened; group A: VC-012, VC-002, VC-003, VC-001; OD-68 to OD-70 added |
+| 2026-11-02 | `fix/verification-campaign-group-b` | group B: VC-044, VC-006, VC-055, VC-007, VC-049, D0-01, VC-008, VC-057 (OD-64), VC-058, VC-064; delegated decisions recorded in open-decisions.md |

@@ -756,6 +756,21 @@ export const ACTIONS = {
       basis: 'resources.md "Schema and drift"; drift-detection.md §5',
     },
   ),
+  'operation.force_release.plan': record(
+    'Plan releasing an operation that needs attention',
+    'plan',
+    perm('operations.recover'),
+    scopeOf('operations.recover'),
+    {
+      clientKinds: HUMAN,
+      humanOnly: true,
+      tierSemantics: 'subject',
+      // Built by the verification campaign fixes (2026-11-02), with the routes of the last wave.
+      wave: '9',
+      basis:
+        'operations-engine.md §4.1 (VC-006: the exit of needs_attention for every kind); applied through plan.apply',
+    },
+  ),
   'migration.resume.plan': record(
     'Plan resuming a non-transactional bundle',
     'target',

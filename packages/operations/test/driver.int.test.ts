@@ -5,6 +5,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   acceptPlan,
   claimNextOperation,
+  createPlan,
+  expireAwaitingApprovals,
+  FORCE_RELEASE_KIND,
+  ForceReleaseKind,
   heldLocks,
   KindRegistry,
   type OperationKind,
@@ -13,7 +17,16 @@ import {
   transitionOperation,
   WORKER_ACTOR,
 } from '../src/index.ts'
-import { human, newPlan, serveActor, sleep, stores, syntheticKind, target } from './support.ts'
+import {
+  decision,
+  human,
+  newPlan,
+  serveActor,
+  sleep,
+  stores,
+  syntheticKind,
+  target,
+} from './support.ts'
 
 /**
  * The worker loop with synthetic kinds against PostgreSQL 17: every path of
@@ -244,6 +257,37 @@ describe('the worker loop', () => {
     })
   })
 
+  // VC-008: the claim took the oldest waiter on every tick, so one blocked operation starved all others.
+  it('a blocked operation does not starve a younger one, and is not claimed again while its blocker holds', async () => {
+    const parkedTarget = target()
+    const freeTarget = target()
+    const parkedKind = syntheticKind('synthetic.parked', { verify: async () => 'error' })
+    const parked = await queue(parkedKind, [`target:${parkedTarget}:schema`])
+    await run(parkedKind)
+    expect((await readOperation(as('exdb_worker'), parked))?.state).toBe('needs_attention')
+    // One registry, as a worker has: the older operation waits, the younger one is free.
+    const waiterKind = syntheticKind('synthetic.waiter')
+    const youngKind = syntheticKind('synthetic.young')
+    const older = await queue(waiterKind, [`target:${parkedTarget}:schema`])
+    const younger = await queue(youngKind, [`target:${freeTarget}:schema`])
+    const both = (workerId = newId('prc', Date.now())) =>
+      processNextOperation(as('exdb_worker'), {
+        workerId,
+        kinds: new KindRegistry([parkedKind, waiterKind, youngKind]),
+        clock: systemClock,
+      })
+    expect(await both()).toMatchObject({ status: 'waiting', operationId: older })
+    expect(await both()).toMatchObject({
+      status: 'done',
+      operation: { operationId: younger, state: 'succeeded' },
+    })
+    // Sixty more ticks: nothing to do, and the waiter writes no event while its blocker holds.
+    const before = (await events(older)).length
+    for (let i = 0; i < 60; i++) expect(await both()).toEqual({ status: 'idle' })
+    expect((await events(older)).length).toBe(before)
+    expect(before).toBeLessThanOrEqual(3)
+  })
+
   it('a takeover reconciles and never executes again', async () => {
     const kind = syntheticKind('synthetic.takeover', { reconcile: async () => 'applied' })
     const id = await queue(kind)
@@ -385,6 +429,59 @@ describe('a recovery operation closes the needs_attention operation that holds i
     expect(rows[0]?.text('by')).toBe(fix.id)
   })
 
+  // VC-044: the close ran before the recovery's own locks, bindings and admission, and committed.
+  it('leaves the named operation needing attention, with its lock, when the recovery is refused or waits', async () => {
+    const tgt = target()
+    const other = target()
+    const first = await stuck('synthetic.stucke', { verify: async () => 'error' }, tgt)
+    const still = async () => {
+      expect(await readOperation(as('exdb_worker'), first.id)).toMatchObject({
+        state: 'needs_attention',
+        leaseOwner: null,
+      })
+      expect(await heldLocks(as('exdb_worker'), first.id)).toEqual([`target:${tgt}:schema`])
+    }
+    // (a) The recovery's plan is stale at dispatch: it fails, and closes nothing.
+    // The target changes after the plan was accepted: stale only at dispatch.
+    let changed = false
+    const staleKind = syntheticKind('synthetic.fixstale', {
+      bindings: async () => (changed ? [{ binding: 'fingerprint' }] : []),
+    })
+    const stale = await queue(staleKind, [`target:${tgt}:schema`], [first.id])
+    changed = true
+    expect(await run(staleKind)).toMatchObject({
+      status: 'done',
+      operation: { operationId: stale, state: 'failed' },
+    })
+    await still()
+    // (b) The recovery waits for another domain held by a running operation: it closes nothing.
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const holder = syntheticKind('synthetic.holder', {
+      execute: async () => {
+        await gate
+        return 'applied'
+      },
+    })
+    const holding = await queue(holder, [`target:${other}:schema`])
+    const running = run(holder)
+    await sleep(200)
+    const waitKind = syntheticKind('synthetic.fixwait')
+    const waiting = await queue(
+      waitKind,
+      [`target:${tgt}:schema`, `target:${other}:schema`],
+      [first.id],
+    )
+    expect(await run(waitKind)).toMatchObject({ status: 'waiting', blockingOperationId: holding })
+    await still()
+    // The wait is still recorded (the views read waitingFor from it).
+    expect(await events(waiting)).toContain('locks_waiting')
+    release()
+    await running
+  })
+
   it('closes only an operation in needs_attention that holds a domain the recovery needs', async () => {
     const tgt = target()
     const other = target()
@@ -411,5 +508,284 @@ describe('a recovery operation closes the needs_attention operation that holds i
       status: 'done',
       operation: { state: 'succeeded' },
     })
+  })
+})
+
+// VC-006, VC-055, VC-007: needs_attention had an exit for four migration kinds only and kept its
+// domains for ever. operation.force_release, a planned operation a person applies, names it and
+// closes it for any kind with the stated outcome; nothing of it runs again.
+describe('a force release closes an operation that needs attention, of any kind', () => {
+  const force = () => new ForceReleaseKind(as('exdb_worker'))
+  const stuck = async (name: string, behavior: Parameters<typeof syntheticKind>[1]) => {
+    const tgt = target()
+    const kind = syntheticKind(name, behavior)
+    const id = await queue(kind, [`target:${tgt}:schema`])
+    await run(kind)
+    expect((await readOperation(as('exdb_worker'), id))?.state).toBe('needs_attention')
+    return { kind, id, tgt }
+  }
+  /** Plans and accepts the release as a person would, then lets one worker take it. */
+  const release = async (
+    s: { kind: OperationKind; id: string },
+    outcome: 'applied' | 'not_applied' | 'unknown',
+  ) => {
+    const domains = [...(await heldLocks(as('exdb_worker'), s.id))]
+    const plan = await as('exdb_serve').transaction('test.release.plan', async (tx) =>
+      createPlan(
+        tx,
+        {
+          kind: FORCE_RELEASE_KIND,
+          kindVersion: 1,
+          actionClass: 'high',
+          actor: human,
+          subject: { tier: 'nonprod' },
+          content: {
+            operationId: s.id,
+            outcome,
+            reason: 'Checked by hand on the target.',
+            domains,
+          },
+          policy: await decision(),
+        },
+        { clock: systemClock },
+      ),
+    )
+    const accepted = await as('exdb_serve').transaction('test.release.accept', (tx) =>
+      acceptPlan(
+        tx,
+        { planId: plan.planId, actor: human },
+        {
+          kinds: new KindRegistry([force()]),
+          clock: systemClock,
+          systemActor: serveActor,
+          recheckPolicy: async () => ({ status: 'proceed', requirements: [] }),
+        },
+      ),
+    )
+    if (accepted.status !== 'accepted') throw accepted.error
+    const result = await processNextOperation(as('exdb_worker'), {
+      workerId: newId('prc', Date.now()),
+      kinds: new KindRegistry([s.kind, force()]),
+      clock: systemClock,
+    })
+    return { releaseId: accepted.operation.operationId, result }
+  }
+  const closing = async (id: string) => {
+    const { rows } = await as('exdb_worker').query(
+      'test.release.detail',
+      `SELECT detail::text AS d FROM operations.operation_events
+        WHERE operation_id = $1 AND kind = 'transition' ORDER BY event_id DESC LIMIT 1`,
+      [id],
+    )
+    return JSON.parse(rows[0]?.text('d') ?? '{}') as Record<string, unknown>
+  }
+
+  it('closes an applied change whose verification errored as unverified, frees the domain, runs nothing', async () => {
+    const s1 = await stuck('synthetic.relverify', { verify: async () => 'error' })
+    const { releaseId, result } = await release(s1, 'applied')
+    expect(result).toMatchObject({
+      status: 'done',
+      operation: { operationId: releaseId, state: 'succeeded', verificationOutcome: 'passed' },
+    })
+    expect(await readOperation(as('exdb_worker'), s1.id)).toMatchObject({
+      state: 'verification_failed',
+      applyOutcome: 'applied',
+      leaseOwner: null,
+    })
+    expect(await heldLocks(as('exdb_worker'), s1.id)).toEqual([])
+    // Nothing ran again: one execute, one verify, as before the release.
+    expect(s1.kind.calls).toEqual({ execute: 1, verify: 1, reconcile: 0 })
+    expect(await closing(s1.id)).toMatchObject({
+      supersededBy: releaseId,
+      statedOutcome: 'applied',
+      statedBy: human.identityId,
+      previousApplyOutcome: 'applied',
+      previousVerificationOutcome: 'error',
+    })
+    // The domain is free: the next operation on the target runs.
+    const next = syntheticKind('synthetic.relnext')
+    await queue(next, [`target:${s1.tgt}:schema`])
+    expect(await run(next)).toMatchObject({ status: 'done', operation: { state: 'succeeded' } })
+  })
+
+  it('closes an unknown outcome the person found not applied as failed, not applied', async () => {
+    const s2 = await stuck('synthetic.relunknown', {
+      execute: async () => 'unknown',
+      reconcile: async () => 'unknown',
+    })
+    await release(s2, 'not_applied')
+    expect(await readOperation(as('exdb_worker'), s2.id)).toMatchObject({
+      state: 'failed',
+      applyOutcome: 'not_applied',
+      verificationOutcome: 'not_applicable',
+    })
+    expect(await heldLocks(as('exdb_worker'), s2.id)).toEqual([])
+    expect(await closing(s2.id)).toMatchObject({
+      statedOutcome: 'not_applied',
+      previousApplyOutcome: 'unknown',
+    })
+  })
+
+  it('never records a change it saw applied as not applied', async () => {
+    const s3 = await stuck('synthetic.relcontra', { verify: async () => 'error' })
+    await release(s3, 'not_applied')
+    expect(await readOperation(as('exdb_worker'), s3.id)).toMatchObject({
+      state: 'verification_failed',
+      applyOutcome: 'applied',
+    })
+  })
+
+  it('is stale once the operation is closed otherwise, and closes nothing twice', async () => {
+    const s4 = await stuck('synthetic.reltwice', { verify: async () => 'error' })
+    await release(s4, 'unknown')
+    const second = await release(s4, 'unknown').catch((e: unknown) => e)
+    // The plan is refused at acceptance: the operation it names is finished.
+    expect(second).toMatchObject({ code: 'PLAN_STALE' })
+    expect((await readOperation(as('exdb_worker'), s4.id))?.state).toBe('verification_failed')
+  })
+})
+
+// VC-057 / OD-64: nothing ended an operation awaiting approval.
+describe('the approval window', () => {
+  it('cancels an operation that awaited approval for more than four hours, and only that one', async () => {
+    const kind = syntheticKind('synthetic.approval')
+    const needsApproval = async () =>
+      newPlan(as('exdb_serve'), {
+        kind: kind.kind,
+        domains: [`target:${target()}:schema`],
+        decision: await decision('require', [
+          { kind: 'approval', count: 1, permission: 'plans.approve' },
+        ]),
+      })
+    const plan = await needsApproval()
+    const accept = (planId: string) =>
+      as('exdb_serve').transaction('test.accept.approval', (tx) =>
+        acceptPlan(
+          tx,
+          { planId: planId as never, actor: human },
+          {
+            kinds: new KindRegistry([kind]),
+            clock: systemClock,
+            systemActor: serveActor,
+            recheckPolicy: async () => ({
+              status: 'proceed',
+              requirements: [{ kind: 'approval', count: 1, permission: 'plans.approve' }],
+            }),
+          },
+        ),
+      )
+    const old = await accept(plan.planId)
+    const fresh = await accept((await needsApproval()).planId)
+    if (old.status !== 'accepted' || fresh.status !== 'accepted') throw new Error('not accepted')
+    expect([old.operation.state, fresh.operation.state]).toEqual([
+      'awaiting_approval',
+      'awaiting_approval',
+    ])
+    await db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE operations.operations SET created_at = clock_timestamp() - interval '4 hours 1 minute'
+          WHERE operation_id = $1`,
+        [old.operation.operationId],
+      )
+      await c.query('COMMIT')
+    })
+    const ended = await as('exdb_worker').transaction('test.approvals.expire', (tx) =>
+      expireAwaitingApprovals(tx, WORKER_ACTOR, { clock: systemClock }),
+    )
+    expect(ended).toBe(1)
+    expect((await readOperation(as('exdb_worker'), old.operation.operationId))?.state).toBe(
+      'canceled',
+    )
+    expect((await readOperation(as('exdb_worker'), fresh.operation.operationId))?.state).toBe(
+      'awaiting_approval',
+    )
+    const { rows } = await as('exdb_worker').query(
+      'test.approvals.expired',
+      `SELECT detail ->> 'errorCode' AS code FROM operations.operation_events
+        WHERE operation_id = $1 AND to_state = 'canceled'`,
+      [old.operation.operationId],
+    )
+    expect(rows[0]?.text('code')).toBe('APPROVAL_EXPIRED')
+  })
+})
+
+// VC-058, VC-007: an unknown outcome parked in needs_attention after one reconcile and was never
+// looked at again, even once the target answered; the change was committed (or not) all along.
+describe('an unknown outcome is reconciled again later', () => {
+  const age = (id: string) =>
+    db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE operations.operations SET updated_at = clock_timestamp() - interval '6 minutes'
+          WHERE operation_id = $1`,
+        [id],
+      )
+      await c.query('COMMIT')
+    })
+  const parked = async (name: string, later: 'applied' | 'not_applied' | 'unknown') => {
+    let answer: 'applied' | 'not_applied' | 'unknown' = 'unknown'
+    const kind = syntheticKind(name, {
+      execute: async () => 'unknown',
+      reconcile: async () => answer,
+    })
+    const id = await queue(kind, [`target:${target()}:schema`])
+    await run(kind)
+    expect(await readOperation(as('exdb_worker'), id)).toMatchObject({
+      state: 'needs_attention',
+      applyOutcome: 'unknown',
+    })
+    // Not again at once: the next attempt waits five minutes.
+    expect(await run(kind)).toEqual({ status: 'idle' })
+    answer = later
+    await age(id)
+    return { kind, id }
+  }
+
+  it('verifies and succeeds once the ledger shows the change applied, running nothing again', async () => {
+    const { kind, id } = await parked('synthetic.lateapplied', 'applied')
+    expect(await run(kind)).toMatchObject({
+      status: 'done',
+      operation: { operationId: id, state: 'succeeded', applyOutcome: 'applied' },
+    })
+    expect(kind.calls).toEqual({ execute: 1, verify: 1, reconcile: 2 })
+    expect(await heldLocks(as('exdb_worker'), id)).toEqual([])
+  })
+
+  it('fails as not applied once the target shows nothing was applied', async () => {
+    const { kind, id } = await parked('synthetic.latenot', 'not_applied')
+    expect(await run(kind)).toMatchObject({
+      status: 'done',
+      operation: { operationId: id, state: 'failed', applyOutcome: 'not_applied' },
+    })
+    expect(await heldLocks(as('exdb_worker'), id)).toEqual([])
+  })
+
+  it('keeps needing attention, unleased, while the outcome stays unknown, and backs off', async () => {
+    const { kind, id } = await parked('synthetic.lateunknown', 'unknown')
+    await run(kind)
+    expect(await readOperation(as('exdb_worker'), id)).toMatchObject({
+      state: 'needs_attention',
+      applyOutcome: 'unknown',
+      leaseOwner: null,
+    })
+    expect(kind.calls).toMatchObject({ execute: 1, reconcile: 2 })
+    // The wait doubles with each attempt: six minutes are not enough now, eleven are.
+    await age(id)
+    expect(await run(kind)).toEqual({ status: 'idle' })
+    await db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE operations.operations SET updated_at = clock_timestamp() - interval '11 minutes'
+          WHERE operation_id = $1`,
+        [id],
+      )
+      await c.query('COMMIT')
+    })
+    await run(kind)
+    expect(kind.calls.reconcile).toBe(3)
   })
 })

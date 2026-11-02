@@ -78,7 +78,8 @@ describe('the database enforces the same state machine', () => {
     const { rows } = await as('exdb_worker').query(
       'test.sm.transitions',
       // The guard accepts a transition either function allows (the recovery edge, TC-005, is its own).
-      `SELECT f, t, operations.transition_allowed(f, t) OR operations.recovery_transition_allowed(f, t) AS ok
+      `SELECT f, t, operations.transition_allowed(f, t) OR operations.recovery_transition_allowed(f, t)
+                OR operations.release_transition_allowed(f, t) AS ok
          FROM unnest($1::text[]) f, unnest($1::text[]) t`,
       [OPERATION_STATES],
     )

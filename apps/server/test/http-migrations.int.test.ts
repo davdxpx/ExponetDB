@@ -1015,6 +1015,70 @@ describe('plan list and operation cancel over REST', () => {
     expect(requests.rows[0]?.n).toBe(1)
   })
 
+  // VC-006: needs_attention had no exit outside four migration kinds; a person now closes it.
+  it('force-releases an operation that needs attention through a plan: nothing runs again, a finished one is refused', async () => {
+    const { rows } = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT operation_id FROM operations.operations
+          WHERE kind = 'migration.apply' AND state = 'succeeded' ORDER BY created_at DESC LIMIT 1`,
+      ),
+    )
+    const id = String(rows[0]?.operation_id)
+    await db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE operations.operations SET state = 'needs_attention', verification_outcome = 'error'
+          WHERE operation_id = $1`,
+        [id],
+      )
+      await c.query('COMMIT')
+    })
+    const path = `/api/v1/operations/${id}/force-release`
+    const empty = await owner.browser.call('POST', path, { outcome: 'applied', reason: '' })
+    expect(empty.status).toBe(422)
+    // The change was applied: "not applied" contradicts what the engine knows.
+    const contradiction = await owner.browser.call('POST', path, {
+      outcome: 'not_applied',
+      reason: 'It never ran.',
+    })
+    expect([contradiction.status, contradiction.body.code]).toEqual([422, 'VALIDATION_FAILED'])
+    const { plan, operation: release } = await planAndApply(
+      path,
+      { outcome: 'applied', reason: 'The table exists on the target; verified by hand.' },
+      { reauth: true },
+    )
+    expect(plan).toMatchObject({ kind: 'operation.force_release', class: 'high' })
+    expect(await operation(release.id)).toMatchObject({ state: 'succeeded' })
+    expect(await operation(id)).toMatchObject({
+      state: 'verification_failed',
+      applyOutcome: 'applied',
+      verificationOutcome: 'failed',
+    })
+    const finished = await owner.browser.call('POST', path, {
+      outcome: 'applied',
+      reason: 'Again.',
+    })
+    expect([finished.status, finished.body]).toMatchObject([
+      409,
+      { code: 'OPERATION_NOT_RELEASABLE', details: { state: 'verification_failed' } },
+    ])
+    const unknown = await owner.browser.call(
+      'POST',
+      `/api/v1/operations/op_${newUlid(Date.now())}/force-release`,
+      { outcome: 'applied', reason: 'x' },
+    )
+    expect([unknown.status, unknown.body.code]).toEqual([404, 'OPERATION_NOT_FOUND'])
+    const closed = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT detail AS d FROM operations.operation_events
+          WHERE operation_id = $1 AND to_state = 'verification_failed'`,
+        [id],
+      ),
+    )
+    expect(closed.rows[0]?.d).toMatchObject({ supersededBy: release.id, statedOutcome: 'applied' })
+  })
+
   it('rejects an approval of a kind that verifies: the operation ends canceled, nothing ran', async () => {
     await reauth()
     const granted = await owner.browser.call(

@@ -158,6 +158,8 @@ describe('served routes (Wave 2 and 4 to 9)', () => {
       'planExecutionRoleBindings',
       'planExecutionRoleException',
       'planExecutionRoleExceptionRevocation',
+      // The verification campaign fixes (VC-006): the release of an operation that needs attention.
+      'planForceRelease',
       'planRestore',
       'planRestoreDiscard',
       'planServerRetirement',

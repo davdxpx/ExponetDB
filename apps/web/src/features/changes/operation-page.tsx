@@ -64,7 +64,13 @@ import {
   stateTextKey,
   VERIFICATION_TEXT,
 } from './model.ts'
-import { CancelOperationAction, cancelOffered, VerifyAgainAction } from './operation-actions.tsx'
+import {
+  CancelOperationAction,
+  cancelOffered,
+  ForceReleaseAction,
+  releaseOffered,
+  VerifyAgainAction,
+} from './operation-actions.tsx'
 
 /**
  * The operation page `/changes/operations/<id>` (information-architecture.md
@@ -341,6 +347,7 @@ function OperationHeader({
     (operation.state === 'needs_attention' || operation.state === 'needs_reconciliation')
   const verifyAgain = attention && operation?.retryable === true && !stale
   const cancel = operation !== undefined && cancelOffered(operation) && !stale
+  const release = operation !== undefined && releaseOffered(operation) && !stale
   const planHref = operation === undefined ? undefined : planPath(operation.planId)
   return (
     <PageHeader size="large">
@@ -389,7 +396,8 @@ function OperationHeader({
             )}
           </PageHeaderDescription>
         </PageHeaderSummary>
-        {operation === undefined || (!verifyAgain && !cancel && planHref === undefined) ? null : (
+        {operation === undefined ||
+        (!verifyAgain && !cancel && !release && planHref === undefined) ? null : (
           <PageHeaderAside className="flex-wrap items-start">
             <div data-operation-actions="" className="flex flex-wrap items-start gap-2">
               {verifyAgain ? (
@@ -401,6 +409,13 @@ function OperationHeader({
               ) : null}
               {cancel ? (
                 <CancelOperationAction operation={operation} onMessage={onMessage} />
+              ) : null}
+              {release ? (
+                <ForceReleaseAction
+                  operation={operation}
+                  production={production}
+                  onMessage={onMessage}
+                />
               ) : null}
               {planHref === undefined ? null : (
                 <Button asChild size="small" variant="default">

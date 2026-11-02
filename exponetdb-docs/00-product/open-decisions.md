@@ -83,7 +83,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-61 | What an empty or missing drift baseline means, how large a read-lane result may be, and what counts toward the findings headline | **open** (nothing built; test campaign TC-017, TC-037) | (a) a target without a usable baseline reports one `no_baseline` finding and no `object_added` flood; roll-ups leave the severity counters; MCP results are capped (64 KB with a cursor) and repeated codes grouped; (b) keep the counts and only present them better (group by target and code, "rehearsal drift" separate); (c) leave as is | (a) together with OD-57 (b), as one change to the recording path |
 | OD-62 | Node certificate expiry: a distinct refusal reason, findings and thresholds | **open** (the agent's `status` text is built; test campaign TC-042) | (a) reason `certificate_expired`, findings `node_certificate_near_expiry` (warning from 12 h before the end without a renewal, critical after) and `node_certificate_expired`; (b) findings only; (c) documentation only (built) | (a) with a 12 h warning |
 | OD-63 | Who may withdraw a node plan, and whether withdrawing a revoke plan needs a fresh passkey | **open** (test campaign TC-020) | (a) the plan's creator withdraws it with the scope that created it, without a fresh passkey (withdrawing is the safe direction); (b) as (a), but a `node.revoke` or `node.decommission` plan still needs re-authentication to withdraw; (c) keep `nodes.operate` | (a) |
-| OD-64 | How long an operation may wait for approval | **open** (test campaign TC-034; the owner is asked to look at `op_01M5X74EJ0CD4BYGRZ9DM1KZYA`) | (a) an `awaiting_approval` operation whose plan expired is canceled (`plan_expired`, audited) and the approval page says so; (b) a separate deadline for approvals (for example 24 h); (c) no deadline (today) | (b), with (a) as the floor |
+| OD-64 | How long an operation may wait for approval | **decided** 2026-11-02 (4 h window, VC-057) | (a) an `awaiting_approval` operation whose plan expired is canceled (`plan_expired`, audited) and the approval page says so; (b) a separate deadline for approvals (for example 24 h); (c) no deadline (today) | (b), with (a) as the floor |
 | OD-65 | E16 and E18 waivers: detection before more imports | **open** (test campaign TC-023, TC-024) | (a) the OD-7a staging import counts as real REOSA data: build `hotfix_without_evidence` and `applied_not_in_source` before the next import; (b) it does not: keep the waivers until Wave 10 | (a) for E16 (a break-glass hotfix is reachable once a channel is set), (b) for E18 |
 | OD-66 | G10.3 wording against OD-7b | **open** (test campaign TC-063) | (a) "at least five REOSA migrations applied staging-first; production evidence checked by a plan only until Wave 11"; (b) keep the wording and treat it as a Wave 11 gate | (a) |
 | OD-67 | Step-up for enrolling a node | **open** (test campaign TC-053) | (a) one combined step-up whose receipt covers the plan apply and the token reveal of that plan only; (b) a longer receipt (5 min) for those two actions; (c) keep two receipts | (a) |
@@ -1949,7 +1949,7 @@ History:
 
 ## OD-64. How long an operation may wait for approval
 
-- **Status.** OPEN (found on 2026-10-27 by the test campaign, TC-034)
+- **Status.** DECIDED on 2026-11-02 under the owner's delegation to the fix session: an apply request waits for an approval at most four hours (the documented approval window); a later approval is refused (`APPROVAL_EXPIRED`) and the worker cancels the operation (VC-057). The plan's lifetime ends when it is accepted; dispatch re-checks every binding. Previously: OPEN (found on 2026-10-27 by the test campaign, TC-034)
 - **Question.** An `access.identity.erase` operation (`op_01M5X74EJ0CD4BYGRZ9DM1KZYA`, created
   2026-10-26T23:01Z) is `awaiting_approval` with a live approval URL although its plan was
   consumed, approved 1 of 1 and expired about 20 hours before the campaign. Is that the designed
@@ -2080,6 +2080,21 @@ History:
   (e) only if (2) is not enough; P1 (control plane, not data plane), but the owner may weigh
   `reos-01`, where the Control Store shares a host with other services.
 - **Blocks.** Nothing built beyond the confirmation part.
+
+## Decisions of the verification campaign fixes (2026-11-02, under the owner's delegation)
+
+On 2026-11-02 the owner told the fix session of the verification campaign of 2026-10-28
+"I confirm the decisions, you can decide as expert". The session records every decision it took
+under that delegation here, with the option and the reason; the owner can revisit any of them.
+
+| Source | Decision | Reason |
+|---|---|---|
+| OD-68, D2-D1 | (b): a registry memory fact, a warning and refused agent reads where it is missing; `verify.sql` under the size rule; P1 | the guard cannot bound rows times values; a memory-limited server ends one backend instead of the cluster |
+| OD-69 | (b): clamp a skewed audit event to the head's time, bounded to 24 h | keeps the chain writable through a short step without bridging it |
+| OD-70, S6-D2, C1-D2 | the built audit and quota confirmed; a configured volume component; restart policy and WAL volume in the deployment record; a human-only purge of unreferenced revisions older than 90 days; no general REST rate limit; P1 | the disk is the control plane's, not the data plane's; the quota closes the low-privilege path |
+| OD-64, B1-D3 | four hours from the apply request; later approvals refused, the worker cancels | the documented window; dispatch re-checks bindings anyway |
+| B1-D4 | `operation.force_release`, as defined before G1 (a `high` planned operation, a person, re-authentication at apply), as the exit of `needs_attention` for every kind, with a stated outcome and a reason, rather than per-kind retry rules | one action closes the dead end for every kind, present and future |
+| D0-01 | a production `migration.verify` that names a stuck operation needs an approval and a fresh re-authentication | closing an operation on production is a recovery like `migration.resume` |
 
 ## Owner decisions of the Wave 9 Part B order (2026-10-26)
 

@@ -19,6 +19,13 @@ import {
  * transition (`operation_lease_lost`).
  */
 export const LEASE_MS = 30_000
+/**
+ * How long an operation in `needs_attention` with an unknown outcome waits
+ * before its reconcile runs again (VC-058): the target may have answered by
+ * then, and the ledger tells whether the change is there. The wait doubles
+ * with every attempt, up to six hours.
+ */
+export const RECONCILE_RETRY_SECONDS = 300
 export const LEASE_RENEW_MS = 10_000
 
 export type NextStep = 'start' | 'reconcile' | 'verify'
@@ -57,13 +64,29 @@ export async function claimNextOperation(
                -- An operator asked to verify an applied change again (needs_attention to verifying).
                OR (state = 'needs_attention' AND apply_outcome IN ('applied', 'partially_applied')
                    AND EXISTS (SELECT 1 FROM recovery.verification_retries r
-                                WHERE r.operation_id = operations.operation_id AND r.started_at IS NULL)))
+                                WHERE r.operation_id = operations.operation_id AND r.started_at IS NULL))
+               -- An outcome nobody could determine is reconciled again now and then (VC-058).
+               OR (state = 'needs_attention' AND apply_outcome = 'unknown'
+                   AND updated_at < clock_timestamp() - make_interval(secs =>
+                         least(21600, $2::double precision * power(2, least(greatest(attempt - 1, 0), 10))))))
           AND (lease_expires_at IS NULL OR lease_expires_at < clock_timestamp())
           AND kind = ANY($1::text[])
+          -- VC-008: a queued operation whose last attempt waited for a domain is not claimed again
+          -- while the operation it waited for still holds that domain, so it neither starves the
+          -- younger ones nor writes two events every poll.
+          AND NOT (state = 'queued' AND EXISTS (
+                SELECT 1 FROM operations.operation_events w
+                  JOIN operations.operation_locks l
+                    ON l.domain_key = w.detail ->> 'domain'
+                   AND l.operation_id = w.detail ->> 'blockingOperationId'
+                 WHERE w.event_id = (SELECT max(e.event_id) FROM operations.operation_events e
+                                      WHERE e.operation_id = operations.operation_id
+                                        AND e.kind IN ('locks_waiting', 'locks_acquired'))
+                   AND w.kind = 'locks_waiting'))
         ORDER BY created_at, operation_id
         LIMIT 1
           FOR UPDATE SKIP LOCKED`,
-      [options.kinds],
+      [options.kinds, RECONCILE_RETRY_SECONDS],
     )
     const row = rows[0]
     if (row === undefined) {
@@ -113,6 +136,10 @@ export async function claimNextOperation(
         },
         { clock: options.clock },
       )
+    }
+    if (operation.state === 'needs_attention' && operation.applyOutcome === 'unknown') {
+      // Its reconcile runs again (read-only); the change never does.
+      return { operation, next: 'reconcile', takenOver, retried: false }
     }
     const retried = operation.state === 'needs_attention'
     if (retried) {

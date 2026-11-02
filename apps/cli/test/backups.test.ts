@@ -1149,6 +1149,56 @@ describe('ledger reconcile (TC-007)', () => {
   })
 })
 
+describe('operation force-release (VC-006)', () => {
+  const OPERATION = id('op', 7)
+
+  it('plans the release with the stated outcome and a reason, and applies nothing without --apply', async () => {
+    on(
+      'POST',
+      `/operations/${OPERATION}/force-release`,
+      plan('planForceRelease', 'operation.force_release'),
+    )
+    const bare = await cli(['operation', 'force-release', OPERATION, '--outcome', 'applied'])
+    expect(bare.code).toBe(EXIT.usage)
+    const wrong = await cli([
+      'operation',
+      'force-release',
+      OPERATION,
+      '--outcome',
+      'maybe',
+      '--reason',
+      'Checked.',
+    ])
+    expect(wrong.code).toBe(EXIT.usage)
+    expect(sent('POST', `/operations/${OPERATION}/force-release`)).toEqual([])
+    const out = await cli([
+      'operation',
+      'force-release',
+      OPERATION,
+      '--outcome',
+      'not_applied',
+      '--reason',
+      'Checked on the target.',
+    ])
+    expect(out.code, out.stderr).toBe(0)
+    expect(sent('POST', `/operations/${OPERATION}/force-release`)[0]?.body).toEqual({
+      outcome: 'not_applied',
+      reason: 'Checked on the target.',
+    })
+    expect(out.stdout).toContain('operation.force_release')
+    expect(requests.filter((r) => r.path.endsWith('/apply'))).toEqual([])
+  })
+
+  it('is catalogued as a human-only plan with the scope of the action', () => {
+    const command = COMMANDS.find((c) => c.path.join(' ') === 'operation force-release')
+    expect(command).toMatchObject({
+      effect: 'plan',
+      action: 'operation.force_release.plan',
+      scopes: ['operations.recover'],
+    })
+  })
+})
+
 describe('node plans create their own basis observation (TC-002)', () => {
   const OBSERVED_FRESH = '2026-10-26T11:58:00.000Z'
   const OBSERVED_STALE = '2026-10-26T11:20:00.000Z'

@@ -36,6 +36,7 @@ import {
   TargetRefSchema,
   TierSchema,
   TimestampSchema,
+  untrustedText,
 } from '../common.ts'
 import type { ErrorCode } from '../errors.ts'
 import { DependencyRefSchema, ExecutionRoleAliasSchema } from '../manifest/migration.ts'
@@ -824,6 +825,31 @@ export const ROUTES = [
     body: z.strictObject({}),
     response: { status: 202, schema: OperationSchema },
     errors: ['CSRF_FAILED', 'OPERATION_NOT_FOUND', 'OPERATION_NOT_RETRYABLE'],
+  },
+  {
+    operationId: 'planForceRelease',
+    method: 'post',
+    path: '/operations/{operationId}/force-release',
+    summary:
+      'Plan closing an operation that needs attention (operation.force_release, VC-006): a person states what happened to its change and why; applied through POST /plans/{id}/apply (re-authentication), the worker closes the operation, runs nothing of it again and releases its exclusivity domains.',
+    action: 'operation.force_release.plan',
+    pathParams: z.strictObject({ operationId: OperationIdSchema }),
+    body: z.strictObject({
+      outcome: z.enum(['applied', 'not_applied', 'unknown']),
+      reason: untrustedText(
+        1000,
+        'Why it is released and how the outcome was checked; recorded in the plan and the audit, permanent.',
+      ),
+    }),
+    // Literal here: the shared plan constants are declared further down.
+    response: { status: 201, schema: PlanViewSchema },
+    errors: [
+      'CSRF_FAILED',
+      'IDEMPOTENCY_KEY_REUSED',
+      'OPERATION_NOT_FOUND',
+      'OPERATION_NOT_RELEASABLE',
+      'VALIDATION_FAILED',
+    ],
   },
   {
     operationId: 'listPlans',
