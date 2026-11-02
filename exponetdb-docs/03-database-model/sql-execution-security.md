@@ -276,6 +276,8 @@ values.
   of huge built values made the kernel restart the target's cluster. The
   rule bounds one value only; rows times values is the residual of
   [OD-68](../00-product/open-decisions.md#od-68-memory-of-a-data-read-on-the-target).
+  **[DECIDED]** (OD-68 (b), 2026-11-02) the same rule refuses a `verify.sql`
+  check (`VERIFY_CONSTRUCT_UNSUPPORTED`, reason `size_argument`).
 - **Values.** Typed by type oid (booleans, integers, `int8` as a number
   when exact and as a string beyond 2^53, floats, `numeric` and other
   exact types as strings, JSON parsed up to 64 KiB, `bytea` as
