@@ -69,10 +69,14 @@ breaks the WAL chain, and every point in time after the gap is lost.
 fix and `failedCount` no longer grows; the next catalog refresh shows the
 archive's `max` segment advancing (`walCoverage` on `exponetdb backup list`);
 the protection reason clears. After a gap, the WAL range from the last base
-backup is no longer continuous: take a new full backup (`exponetdb backup
-run <cluster> --repository <id> --kind full` where the repository is
-`owned`; on an adopted repository the host's own schedule takes it) before
-counting PITR again.
+backup is no longer continuous: take a new full backup before counting PITR
+again. **[DECIDED]** (TC-047, delegated) Today every repository is adopted:
+the host's own schedule (or the operator on the host) takes the full backup;
+through ExponetDB only an incremental run starts on an `adopted_runs` repository, and
+`exponetdb backup run --kind full|differential` is refused. The hand-over to `owned`
+(`POST …/ownership {to: "owned"}`, W9-05) and the expire route are **[PLANNED]**
+with the storage decision of OD-4; once built, `backup run <cluster> --repository <id>
+--kind full` is the step here.
 
 **Follow-up.** An incident note with the gap's start and end; a drill from
 the first backup after the gap.

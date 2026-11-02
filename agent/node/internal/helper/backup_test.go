@@ -358,7 +358,9 @@ func TestRepositoryModesGateRuns(t *testing.T) {
 	if r := start("full", ids[0]); r == nil || r.Code != CodePreconditionFailed {
 		t.Fatalf("adopted_runs full: %+v", r)
 	}
-	if r := start("differential", ids[0]); r == nil || r.Code != CodePreconditionFailed {
+	// TC-075 (D-13): the sentence read "does not allow a incremental backup run".
+	if r := start("differential", ids[0]); r == nil || r.Code != CodePreconditionFailed ||
+		!strings.Contains(r.Message, "does not allow a backup run of kind differential") {
 		t.Fatalf("adopted_runs diff: %+v", r)
 	}
 	if r := start("incremental", ids[0]); r != nil {

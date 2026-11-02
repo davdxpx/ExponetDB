@@ -814,7 +814,7 @@ func backupRun(ctx context.Context, h *Helper, job *verify.Job) (canon.Object, *
 	case p.repo.mode == ModeOwned:
 	case p.repo.mode == ModeAdoptedRuns && args.Kind == "incremental":
 	default:
-		return nil, refuse(CodePreconditionFailed, "the host's repository mode %s does not allow a %s backup run", p.repo.mode, args.Kind)
+		return nil, refuse(CodePreconditionFailed, "the host's repository mode %s does not allow a backup run of kind %s", p.repo.mode, args.Kind)
 	}
 	if logical {
 		for _, b := range []string{"pg_dump", "pg_dumpall", "pg_restore"} {
