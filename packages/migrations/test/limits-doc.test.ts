@@ -6,6 +6,7 @@ import {
   MIGRATION_REQUEST_LIMITS,
 } from '@exponetdb/contracts'
 import { describe, expect, it } from 'vitest'
+import { MAX_YAML_FLOW_DEPTH } from '../src/format/yaml.ts'
 import {
   MAX_COMMENT_DEPTH,
   MAX_COMMENT_RUN,
@@ -14,8 +15,7 @@ import {
   MAX_PARSE_BYTES,
   MAX_PARSE_TOKENS,
   MAX_REQUEST_PARSE_TOKENS,
-  MAX_YAML_FLOW_DEPTH,
-} from '../src/limits.ts'
+} from '../src/lint/limits.ts'
 
 /**
  * VC-095: the limits of bundles are announced in one table of migration-bundles.md; a value that
