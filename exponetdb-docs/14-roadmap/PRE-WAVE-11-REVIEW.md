@@ -921,9 +921,23 @@ finding is wrong. Owner decisions are in [`open-decisions.md`](../00-product/ope
 | VC-029 type change blocks every case, VC-070 a view reads the column, VC-097 missing lock facts | DEFERRED (need old column types and dependent views as catalog facts and a lint-level override of the statement class) | | [open-decisions.md](../00-product/open-decisions.md) |
 | VC-020, VC-024 project settings have no server home; per-finding acknowledgement | DECIDED (registry project record; catalog facts instead of acknowledgements), NOT BUILT | | [open-decisions.md](../00-product/open-decisions.md) |
 
+### VC-1i. Group H: errors, signals and tests (branch `fix/verification-campaign-group-h`, stacked on group F)
+
+| Finding | Status | Regression artifact | Document |
+|---|---|---|---|
+| VC-066 an unmet backup requirement answers 500 and logs nothing | IMPLEMENTED (`BACKUP_REQUIRED` carries `newerThan`; every fall-back to INTERNAL is logged as `http.problem_downgraded`), TESTED LOCALLY; the accept-level assertion (`engine.int`) is written, see the run note | `apps/server/test/problem-mapping.test.ts`, `packages/operations/test/engine.int.test.ts` | [error-model.md](../02-control-plane/error-model.md) |
+| VC-053 a plan from before an upgrade, or a lost race, answers 500 | IMPLEMENTED (`operation_kind_unknown` is PLAN_STALE with the binding; the others are CONFLICT) | `problem-mapping.test.ts` | |
+| VC-036 a Control Store outage answers 500 | IMPLEMENTED (unavailable, timeout and serialization failure are CONTROL_PLANE_DEGRADED 503); NOT BUILT: pool exhaustion told apart from "unreachable" | `problem-mapping.test.ts` | |
+| VC-042 the audit gate is invisible to probes | PARTLY IMPLEMENTED (a failed append is CONTROL_PLANE_DEGRADED); NOT BUILT: the readiness check for the partitions | `problem-mapping.test.ts` | |
+| VC-056 a node revoke fails while a plan body holds an escaped NUL | IMPLEMENTED (the guard on the impact count and on `appliedElsewhere`; a repository check fails on any other bare plan-body cast), the live case (`node-lifecycle.int`) is written, see the run note | `tooling/test/plan-body-jsonb.test.ts`, `apps/server/test/node-lifecycle.int.test.ts` | |
+| VC-104 an offline drill restored in the future is a 5xx | IMPLEMENTED (422 naming `/restoredAt`); the live case (`http-backups.int`) is written, see the run note | `apps/server/test/http-backups.int.test.ts` | |
+| VC-037 every API request is route="/unmatched" | PARTLY IMPLEMENTED (the template is the label, room for the 202 templates); the §3 operational metrics are NOT BUILT | `apps/server/test/http.test.ts` | [open-decisions.md](../00-product/open-decisions.md) |
+| VC-081 three checks of `verify` are not in CI; VC-018 cancel-in-progress | IMPLEMENTED (three steps, a test that pins them, no cancelling on `main`); branch protection is an owner action | `tooling/test/ci-covers-verify.test.ts` | |
+| VC-039, VC-040, VC-041, VC-038, VC-150, VC-152, VC-019 and the remaining test findings | NOT STARTED or recorded as not built (see the decisions) | | [open-decisions.md](../00-product/open-decisions.md) |
+
 ### VC-1a. Groups not started yet
 
-Groups H, I and the closing documents of section 5 of the fix prompt get their own branches
+Group I (the 75 findings of the first campaign still open) and the closing documents of section 5 of the fix prompt get their own branches
 and pull requests.
 
 ### VC-2. Review history (append-only)
@@ -939,3 +953,4 @@ and pull requests.
 | 2026-11-02 | `fix/verification-campaign-group-g` | group G: VC-063, VC-023, VC-045, VC-102, VC-027, VC-080, VC-079, VC-153, VC-022, VC-069, VC-071, VC-073, VC-074, VC-075 (decided), VC-106, VC-136; VC-087 deferred; VC-108 moved to group E |
 | 2026-11-02 | `fix/verification-campaign-group-e` | group E: VC-013, VC-014, VC-015, VC-068, VC-095, VC-094, VC-086, VC-093, VC-101, VC-046, VC-146; VC-078 partly; VC-123 and the MCP edge open |
 | 2026-11-02 | `fix/verification-campaign-group-f` | group F: VC-016, VC-017, VC-028 (static), VC-030, VC-031, VC-032, VC-033; VC-029, VC-070, VC-097, VC-020, VC-024 deferred or decided |
+| 2026-11-02 | `fix/verification-campaign-group-h` | group H (first part): VC-066, VC-053, VC-036, VC-042 (error part), VC-056, VC-104, VC-037 (route label), VC-081, VC-018 (CI part); the other signals recorded as not built |
