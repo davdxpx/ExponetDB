@@ -31,7 +31,7 @@ export {
   pruneHeartbeats,
   registerProcess,
 } from './heartbeats.ts'
-export { ensureInstallation, readInstallationId } from './installation.ts'
+export { databaseNowMs, ensureInstallation, readInstallationId } from './installation.ts'
 export {
   compareSchema,
   type LatestVerification,

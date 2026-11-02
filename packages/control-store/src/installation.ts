@@ -48,3 +48,16 @@ export async function ensureInstallation(
   }
   return stored
 }
+
+/**
+ * The Control Store's own clock in milliseconds since the epoch. Times that the database later
+ * judges (plan lifetimes, node heartbeats, token windows) are taken from it, not from the clock of
+ * the process that happens to write them (VC-040).
+ */
+export async function databaseNowMs(q: Queryable): Promise<number> {
+  const { rows } = await q.query(
+    'control.database_now',
+    'SELECT (extract(epoch FROM clock_timestamp()) * 1000)::bigint AS ms',
+  )
+  return Number(rows[0]?.text('ms'))
+}

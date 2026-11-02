@@ -571,7 +571,7 @@ describe('capability operations through the Go agent and the helper', () => {
     const identityId = newId('idn', Date.now())
     const clock = { nowMs: () => Date.now() }
     await worker.transaction('test.token', (tx) =>
-      createEnrollmentToken(tx, clock, {
+      createEnrollmentToken(tx, {
         tokenId,
         serverId,
         revealBy: identityId,

@@ -75,7 +75,7 @@ const retire = (serverId: string, operationId: string) => (tx: Tx) =>
   )
 
 const token = (serverId: string, operationId: string) => (tx: Tx) =>
-  createEnrollmentToken(tx, clock, {
+  createEnrollmentToken(tx, {
     tokenId: newId('ent', Date.now()),
     serverId,
     revealBy: newId('idn', Date.now()),

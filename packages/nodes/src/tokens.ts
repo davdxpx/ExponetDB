@@ -30,7 +30,7 @@ export interface NewToken {
  * Refused
  * while the server has a node that is not terminal (I-6).
  */
-export async function createEnrollmentToken(tx: Tx, clock: Clock, token: NewToken): Promise<void> {
+export async function createEnrollmentToken(tx: Tx, token: NewToken): Promise<void> {
   // FOR SHARE on the server: a retirement (FOR UPDATE on the row, registry.md §4.4) waits for
   // this token and then sees it, or this waits for the retirement and then sees it retired.
   const server = await tx.query(
@@ -70,13 +70,13 @@ export async function createEnrollmentToken(tx: Tx, clock: Clock, token: NewToke
     'nodes.token.insert',
     `INSERT INTO nodes.enrollment_tokens (token_id, server_id, job_keys, state, reveal_by, reveal_until,
                                           created_by_operation_id)
-     VALUES ($1, $2, $3, 'created', $4, $5, $6)`,
+     VALUES ($1, $2, $3, 'created', $4, clock_timestamp() + make_interval(secs => $5::double precision / 1000), $6)`,
     [
       token.tokenId,
       token.serverId,
       JSON.stringify(anchors),
       token.revealBy,
-      new Date(clock.nowMs() + REVEAL_WINDOW_MS),
+      REVEAL_WINDOW_MS,
       token.operationId,
     ],
   )

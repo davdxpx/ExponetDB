@@ -1,5 +1,5 @@
 import { NODE_PROTOCOL_LIMITS } from '@exponetdb/contracts'
-import type { Queryable, Row } from '@exponetdb/control-store'
+import { databaseNowMs, type Queryable, type Row } from '@exponetdb/control-store'
 
 /**
  * Node reads ([control-plane.md §7](../../../exponetdb-docs/07-node-agent/control-plane.md#7-interfaces)):
@@ -175,7 +175,6 @@ export interface NodePage {
 export async function listNodes(
   q: Queryable,
   request: { readonly after: string | null; readonly limit: number },
-  nowMs: number,
 ): Promise<NodePage> {
   const limit = Math.min(Math.max(1, Math.trunc(request.limit)), 1000)
   const { rows } = await q.query(
@@ -183,15 +182,13 @@ export async function listNodes(
     `SELECT ${COLUMNS} FROM nodes.nodes WHERE ($1::text IS NULL OR node_id > $1) ORDER BY node_id LIMIT $2`,
     [request.after, limit + 1],
   )
+  // Offline is judged in database time: the heartbeat is written by the database's clock.
+  const nowMs = await databaseNowMs(q)
   const items = rows.slice(0, limit).map((r) => nodeRead(r, nowMs))
   return { items, last: items[items.length - 1]?.id ?? null, more: rows.length > limit }
 }
 
-export async function getNode(
-  q: Queryable,
-  nodeId: string,
-  nowMs: number,
-): Promise<NodeStatusRead | undefined> {
+export async function getNode(q: Queryable, nodeId: string): Promise<NodeStatusRead | undefined> {
   const { rows } = await q.query(
     'nodes.read.get',
     `SELECT ${COLUMNS} FROM nodes.nodes WHERE node_id = $1`,
@@ -212,7 +209,7 @@ export async function getNode(
   )
   return statusRead(
     row,
-    nowMs,
+    await databaseNowMs(q),
     new Map(registry.rows.map((r) => [r.text('system_identifier'), r.text('cluster_id')])),
   )
 }

@@ -104,7 +104,7 @@ process's readiness checks, the keyring and the audit tables. Of the checks
 listed above the read covers audit chain verification and export (the outcome
 of the worker's tasks), sampler lag, the keyring (keys loaded against keys
 referenced), and the maintenance tasks' failures (partition maintenance
-included). It does **not** cover clock skew between processes, the sampled
+included). It does **not** cover the sampled
 decryptability of every secret, the Control Store's size growth, the
 job-signing key's age, or the gateway's certificate (minted in memory, recorded
 nowhere); `GET /nodes/certificates` shows the certificates the store holds and
@@ -125,6 +125,13 @@ fails `audit_partition_ending` when now + 7 days is not covered, and warns
 `audit_partition_margin_low` under 30 days of cover. The worker task `audit.partitions`
 keeps three months ahead; the check notices when it did not (a long worker outage, a
 Control Store restored from an older dump into a later month).
+
+**[DECIDED]** (verification campaign fix VC-040) Every role's readiness has the degrading
+check `clock_skew`: it warns `clock_skew` when the process clock differs from the Control
+Store's by more than 5 seconds. A plan's `created_at` and `expires_at`, a node's offline
+judgement and an enrollment token's reveal window are taken from the database's clock, and the
+worker keeps its belief about its operation lease on the monotonic clock, so a stepped or
+skewed process clock neither stretches a plan's life nor flaps the nodes nor decides the lease.
 
 ## 6. What happens when observability is down
 

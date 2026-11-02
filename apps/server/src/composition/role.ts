@@ -5,6 +5,7 @@ import {
   type ControlStore,
   ControlStoreError,
   compareSchema,
+  databaseNowMs,
   expectedMigrations,
   HEARTBEAT_INTERVAL_MS,
   HEARTBEAT_STALE_SECONDS,
@@ -60,6 +61,9 @@ export interface ComposeOptions {
   readonly extraChecks?: (services: Omit<RoleServices, 'start' | 'stop'>) => readonly HealthCheck[]
   readonly readinessIntervalMs?: number
 }
+
+/** A process clock this far from the Control Store's is reported (self-observability.md §5). */
+const MAX_CLOCK_SKEW_MS = 5000
 
 export async function composeRole(
   config: RoleConfig,
@@ -156,6 +160,16 @@ export async function composeRole(
       severity: 'degrading',
       run: async () =>
         (await auditClockSkew(store)) === undefined ? pass() : warn('audit_clock_skew'),
+    },
+    {
+      // VC-040: plans, tokens and node state are judged in database time, so a process clock that
+      // differs is told, before it gives a person a plan that lives longer or a node that flaps.
+      name: 'clock_skew',
+      severity: 'degrading',
+      run: async () => {
+        const skew = Math.abs((await databaseNowMs(store)) - runtime.clock.nowMs())
+        return skew > MAX_CLOCK_SKEW_MS ? warn('clock_skew') : pass()
+      },
     },
     {
       // VC-042: a missing audit partition stops every audited change while reads go on, so the role

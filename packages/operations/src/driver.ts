@@ -82,7 +82,8 @@ export type DriverResult =
   | { readonly status: 'lease_lost'; readonly operationId: string }
   | { readonly status: 'done'; readonly operation: OperationRecord; readonly takenOver: boolean }
 
-async function withLease<T>(
+/** Exported for its test. */
+export async function withLease<T>(
   store: ControlStore,
   claim: Claim,
   options: DriverOptions,
@@ -93,10 +94,12 @@ async function withLease<T>(
   // A failed renewal does not lose the lease: it is lost when the store says
   // another worker holds it, or when it ran out without a renewal (a margin
   // of one renewal interval before its end).
-  let heldUntil = Date.now() + leaseMs
+  // The belief is kept on the monotonic clock: a wall clock stepped by NTP or by hand must neither
+  // keep an expired lease alive nor end a healthy one (VC-040). The store judges in database time.
+  let heldUntil = performance.now() + leaseMs
   const renewMs = options.renewMs ?? LEASE_RENEW_MS
   const timer = setInterval(() => {
-    const attempt = Date.now()
+    const attempt = performance.now()
     renewLease(store, claim.operation.operationId, options.workerId, leaseMs)
       .then((held) => {
         if (!held) {
@@ -106,7 +109,7 @@ async function withLease<T>(
         }
       })
       .catch(() => {
-        if (Date.now() >= heldUntil - renewMs) {
+        if (performance.now() >= heldUntil - renewMs) {
           controller.abort()
         }
       })

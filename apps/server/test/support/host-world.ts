@@ -890,7 +890,7 @@ export class HostWorld {
     const identityId = newId('idn', Date.now())
     const clock = { nowMs: () => Date.now() }
     await this.worker.transaction('test.token', (tx) =>
-      createEnrollmentToken(tx, clock, {
+      createEnrollmentToken(tx, {
         tokenId,
         serverId: this.serverId,
         revealBy: identityId,

@@ -156,6 +156,7 @@ describe('the three roles from one build', () => {
         expect.objectContaining({ name: 'role_credential', status: 'pass' }),
         expect.objectContaining({ name: 'keyring', status: 'pass' }),
         expect.objectContaining({ name: 'audit_partitions', status: 'pass' }),
+        expect.objectContaining({ name: 'clock_skew', status: 'pass' }),
         expect.objectContaining({ name: 'workers', status: 'warn', reason: 'no_live_worker' }),
       ]),
     )
