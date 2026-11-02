@@ -29,3 +29,7 @@ SELECT pg_get_functiondef('operations.operation_guard()'::regprocedure) LIKE '%r
    AND has_function_privilege('exdb_serve', 'operations.release_transition_allowed(text, text)', 'EXECUTE')
    AND has_function_privilege('exdb_worker', 'operations.release_transition_allowed(text, text)', 'EXECUTE')
    AND NOT has_function_privilege('public', 'operations.release_transition_allowed(text, text)', 'EXECUTE') AS ok;
+
+-- check: the claim reads waiting operations through their own index
+SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_indexes
+                WHERE schemaname = 'operations' AND indexname = 'operations_waiting') AS ok;

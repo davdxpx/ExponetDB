@@ -727,7 +727,7 @@ describe('an unknown outcome is reconciled again later', () => {
     expect(await heldLocks(as('exdb_worker'), id)).toEqual([])
   })
 
-  it('keeps needing attention, unleased, while the outcome stays unknown', async () => {
+  it('keeps needing attention, unleased, while the outcome stays unknown, and backs off', async () => {
     const { kind, id } = await parked('synthetic.lateunknown', 'unknown')
     await run(kind)
     expect(await readOperation(as('exdb_worker'), id)).toMatchObject({
@@ -735,6 +735,48 @@ describe('an unknown outcome is reconciled again later', () => {
       applyOutcome: 'unknown',
       leaseOwner: null,
     })
-    expect(kind.calls.execute).toBe(1)
+    expect(kind.calls).toMatchObject({ execute: 1, reconcile: 2 })
+    // The wait doubles with each attempt: six minutes are not enough now, eleven are.
+    await age(id)
+    expect(await run(kind)).toEqual({ status: 'idle' })
+    await db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE operations.operations SET updated_at = clock_timestamp() - interval '11 minutes'
+          WHERE operation_id = $1`,
+        [id],
+      )
+      await c.query('COMMIT')
+    })
+    await run(kind)
+    expect(kind.calls.reconcile).toBe(3)
+  })
+})
+
+describe('a force release that contradicts what the engine knows', () => {
+  it('never records a change it saw applied as not applied', async () => {
+    const tgt = target()
+    const kind = syntheticKind('synthetic.relcontra', { verify: async () => 'error' })
+    const id = await queue(kind, [`target:${tgt}:schema`])
+    await run(kind)
+    await db.asSuperuser((c) =>
+      c.query(
+        `INSERT INTO auth.identities (identity_id, kind, state, display_name) VALUES ($1, 'service', 'invited', 'release test')
+         ON CONFLICT (identity_id) DO NOTHING`,
+        [human.identityId],
+      ),
+    )
+    await as('exdb_serve').transaction('test.release.contra', (tx) =>
+      requestForceRelease(tx, id, human.identityId as string, {
+        outcome: 'not_applied',
+        reason: 'Recorded before the state changed.',
+      }),
+    )
+    await run(kind)
+    expect(await readOperation(as('exdb_worker'), id)).toMatchObject({
+      state: 'verification_failed',
+      applyOutcome: 'applied',
+    })
   })
 })

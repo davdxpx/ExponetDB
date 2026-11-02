@@ -278,7 +278,8 @@ All live bindings are re-checked when execution actually starts, so a late
 approval of a now-stale plan ends in `PLAN_STALE` without executing anything.
 **[DECIDED]** (verification campaign fix VC-057, OD-64, 2026-11-02, under
 the owner's delegation) The window is four hours from the apply request,
-fixed (no setting yet). An approval after it is refused (`APPROVAL_EXPIRED`),
+fixed (no setting yet), counted from the request or from the end of the
+latest approval's cooling period. An approval after it is refused (`APPROVAL_EXPIRED`),
 and the worker task `operations.approvals_expire` (every minute) cancels the
 operation (`canceled`, error `APPROVAL_EXPIRED`, nothing ran), which also
 frees its place in the caller's queue of at most 20 waiting approvals. The
@@ -404,7 +405,7 @@ the person found not applied ends `failed` / `not_applied` (the edge
 any other ends `verification_failed` (applied, or partly applied for an
 `unknown` outcome) with a failed verification. The closing event names the
 person, the stated outcome, the reason and the outcomes the operation had.
-Another state answers `OPERATION_NOT_RELEASABLE`. A production
+Another state answers `OPERATION_NOT_RELEASABLE`; a second request while one is open answers `CONFLICT` (only the first person's statement is used); `not_applied` for a change the engine recorded as applied is refused (`VALIDATION_FAILED`), and a request recorded before the engine learnt that is closed as applied. A production
 `migration.verify` that names a stuck operation (and so closes it) needs an
 approval and a fresh re-authentication (rule
 `migration.verify-supersedes-production`, decision D0-01).
@@ -435,7 +436,7 @@ operation in `needs_attention` whose apply outcome is `unknown` is claimed
 again five minutes after it last changed, and its kind's read-only
 `reconcile` runs again (never the change): `applied` moves it to
 `verifying` and on, `not_applied` ends it `failed` / `not_applied`, and
-`unknown` leaves it as it was, unleased, for the next attempt. For a
+`unknown` leaves it as it was, unleased, for the next attempt; the wait doubles with every attempt, up to six hours. For a
 migration the target's ledger decides, so a lost COMMIT reply followed by a
 target restart reconciles once the target answers.
 

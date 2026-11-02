@@ -158,7 +158,11 @@ export async function processNextOperation(
   try {
     return await drive(store, claim, kind, plan, options)
   } catch (error) {
-    if (error instanceof OperationError && error.code === 'operation_lease_lost') {
+    // Another transaction moved the operation meanwhile (a recovery closed it): as a lost lease.
+    if (
+      error instanceof OperationError &&
+      (error.code === 'operation_lease_lost' || error.code === 'operation_state_changed')
+    ) {
       return { status: 'lease_lost', operationId: claim.operation.operationId }
     }
     throw error

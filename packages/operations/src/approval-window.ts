@@ -13,8 +13,15 @@ import { transitionOperation } from './transitions.ts'
  */
 export const APPROVAL_WINDOW_SECONDS = 4 * 3600
 
-/** The SQL test of an operation row (`created_at`) past the window; `$1` is the window in seconds. */
-export const PAST_APPROVAL_WINDOW = `created_at <= clock_timestamp() - make_interval(secs => $1::double precision)`
+/**
+ * The SQL test of an operation row past the window, `$1` the window in seconds: from the request,
+ * or from the end of the latest approval's cooling period (an approved operation that cools still
+ * awaits; its window is never cut short).
+ */
+export const PAST_APPROVAL_WINDOW = `greatest(created_at,
+    coalesce((SELECT max(a.not_before) FROM approvals.plan_approvals a
+               WHERE a.operation_id = operations.operation_id AND a.decision = 'approved'), created_at))
+  <= clock_timestamp() - make_interval(secs => $1::double precision)`
 
 /** Worker job: cancels operations that waited past the window, at most `limit` per transaction. */
 export async function expireAwaitingApprovals(

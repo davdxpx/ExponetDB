@@ -100,3 +100,8 @@ BEGIN
   RETURN NEW;
 END
 $fn$;
+
+-- The claim and the approval-window task read operations in needs_attention and awaiting_approval
+-- every few seconds; operations_claimable covers only the working states.
+CREATE INDEX operations_waiting ON operations.operations (state, created_at, operation_id)
+  WHERE state IN ('needs_attention', 'awaiting_approval');

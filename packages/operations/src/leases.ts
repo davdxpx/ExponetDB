@@ -22,7 +22,8 @@ export const LEASE_MS = 30_000
 /**
  * How long an operation in `needs_attention` with an unknown outcome waits
  * before its reconcile runs again (VC-058): the target may have answered by
- * then, and the ledger tells whether the change is there.
+ * then, and the ledger tells whether the change is there. The wait doubles
+ * with every attempt, up to six hours.
  */
 export const RECONCILE_RETRY_SECONDS = 300
 export const LEASE_RENEW_MS = 10_000
@@ -71,7 +72,8 @@ export async function claimNextOperation(
                                 WHERE f.operation_id = operations.operation_id AND f.started_at IS NULL))
                -- An outcome nobody could determine is reconciled again now and then (VC-058).
                OR (state = 'needs_attention' AND apply_outcome = 'unknown'
-                   AND updated_at < clock_timestamp() - make_interval(secs => $2::double precision)))
+                   AND updated_at < clock_timestamp() - make_interval(secs =>
+                         least(21600, $2::double precision * power(2, least(greatest(attempt - 1, 0), 10))))))
           AND (lease_expires_at IS NULL OR lease_expires_at < clock_timestamp())
           AND kind = ANY($1::text[])
           -- VC-008: a queued operation whose last attempt waited for a domain is not claimed again
@@ -271,21 +273,23 @@ export type AssertedOutcome = 'applied' | 'not_applied' | 'unknown'
  * [operations-engine.md §4.1](../../../exponetdb-docs/02-control-plane/operations-engine.md#41-state-machine)).
  * serve may not move an operation that started; the worker claims it and
  * closes it under its lease, running nothing again. An open request is kept,
- * never doubled.
+ * never doubled: `false` when one was open already (nothing recorded).
  */
 export async function requestForceRelease(
   q: Queryable,
   operationId: string,
   requestedBy: string,
   request: { readonly outcome: AssertedOutcome; readonly reason: string },
-): Promise<void> {
-  await q.query(
+): Promise<boolean> {
+  const { rows } = await q.query(
     'operations.release.request',
     `INSERT INTO recovery.force_releases (operation_id, requested_by_identity_id, asserted_outcome, reason)
      VALUES ($1, $2, $3, $4)
-     ON CONFLICT (operation_id) WHERE started_at IS NULL DO NOTHING`,
+     ON CONFLICT (operation_id) WHERE started_at IS NULL DO NOTHING
+     RETURNING release_id`,
     [operationId, requestedBy, request.outcome, request.reason],
   )
+  return rows.length > 0
 }
 
 /**
@@ -319,7 +323,8 @@ async function closeReleased(
     previousApplyOutcome: operation.applyOutcome,
     previousVerificationOutcome: operation.verificationOutcome,
   }
-  return asserted === 'not_applied'
+  // A request recorded before the engine learnt the change was applied never undoes that.
+  return asserted === 'not_applied' && operation.applyOutcome === 'unknown'
     ? transitionOperation(
         tx,
         {

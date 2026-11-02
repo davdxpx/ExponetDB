@@ -11,6 +11,7 @@ import {
 import {
   acceptPlan,
   createPlan,
+  expireAwaitingApprovals,
   KindRegistry,
   type OperationActor,
   type OperationKind,
@@ -834,6 +835,29 @@ describe('OD-9 approvals', () => {
       await c.query('COMMIT')
     })
     expect(await caught(decide(adminSession, operationId, p.planHash))).toBe('APPROVAL_EXPIRED')
+    expect(await state(operationId)).toBe('awaiting_approval')
+  })
+
+  // Review of VC-057: an approved operation that cools is still awaiting_approval; the window
+  // runs from its latest approval, so a long cooling period is never cut short.
+  it('does not cancel an operation whose approval is cooling, however old the request is', async () => {
+    const s = await signIn(h, owner)
+    const { plan: p, operationId } = await syntheticOperation(humanActor(s), 'test.critical')
+    const outcome = await decide(s, operationId, p.planHash, true)
+    expect(outcome.notBefore).not.toBeNull()
+    await h.db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE operations.operations SET created_at = clock_timestamp() - interval '4 hours 1 minute'
+          WHERE operation_id = $1`,
+        [operationId],
+      )
+      await c.query('COMMIT')
+    })
+    await h.deps.store.transaction('test.approvals.expire', (tx) =>
+      expireAwaitingApprovals(tx, SERVE_OPERATION_ACTOR, { clock: h.clock }),
+    )
     expect(await state(operationId)).toBe('awaiting_approval')
   })
 

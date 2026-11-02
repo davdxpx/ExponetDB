@@ -831,7 +831,7 @@ export const ROUTES = [
     method: 'post',
     path: '/operations/{operationId}/force-release',
     summary:
-      'Close an operation that needs attention (VC-006): a person states what happened to its change and why; the worker closes it, runs nothing again and releases its exclusivity domains. Web App only (fresh re-authentication).',
+      'Close an operation that needs attention (VC-006): a person states what happened to its change and why; the worker closes it, runs nothing again and releases its exclusivity domains. A person only, with a fresh re-authentication (the Web App offers it).',
     action: 'operation.force_release',
     pathParams: z.strictObject({ operationId: OperationIdSchema }),
     body: z.strictObject({
@@ -842,7 +842,7 @@ export const ROUTES = [
       ),
     }),
     response: { status: 202, schema: OperationSchema },
-    errors: ['CSRF_FAILED', 'OPERATION_NOT_FOUND', 'OPERATION_NOT_RELEASABLE'],
+    errors: ['CSRF_FAILED', 'OPERATION_NOT_FOUND', 'OPERATION_NOT_RELEASABLE', 'CONFLICT'],
   },
   {
     operationId: 'listPlans',

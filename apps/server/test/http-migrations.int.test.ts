@@ -1038,11 +1038,24 @@ describe('plan list and operation cancel over REST', () => {
     const empty = await owner.browser.call('POST', path, { outcome: 'applied', reason: '' })
     expect(empty.status).toBe(422)
     await reauth()
+    const contradiction = await owner.browser.call('POST', path, {
+      outcome: 'not_applied',
+      reason: 'It never ran.',
+    })
+    expect([contradiction.status, contradiction.body.code]).toEqual([422, 'VALIDATION_FAILED'])
+    await reauth()
     const released = await owner.browser.call('POST', path, {
       outcome: 'applied',
       reason: 'The table exists on the target; verified by hand.',
     })
     expect([released.status, released.body.state]).toEqual([202, 'needs_attention'])
+    // A second request while the first is open changes nothing and says so; the change was
+    // applied, so "not applied" contradicts what the engine knows.
+    const again = await owner.browser.call('POST', path, {
+      outcome: 'unknown',
+      reason: 'Someone else, at the same time.',
+    })
+    expect([again.status, again.body.code]).toEqual([409, 'CONFLICT'])
     await drive()
     expect(await operation(id)).toMatchObject({
       state: 'verification_failed',

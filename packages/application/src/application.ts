@@ -2117,7 +2117,7 @@ export class Application {
       const { rows } = isId('op', operationId)
         ? await tx.query(
             'application.operation.for_release',
-            `SELECT kind, plan_id, state FROM operations.operations WHERE operation_id = $1 FOR UPDATE`,
+            `SELECT kind, plan_id, state, apply_outcome FROM operations.operations WHERE operation_id = $1 FOR UPDATE`,
             [operationId],
           )
         : { rows: [] }
@@ -2145,11 +2145,25 @@ export class Application {
       if (state !== 'needs_attention') {
         throw new RegistryError('OPERATION_NOT_RELEASABLE', { state })
       }
+      // The engine saw the change applied: a person cannot record it as not applied.
+      if (body.outcome === 'not_applied' && row.text('apply_outcome') !== 'unknown') {
+        throw new RegistryError('VALIDATION_FAILED', {
+          errors: [
+            {
+              path: '/outcome',
+              code: 'contradicts_outcome',
+              message: 'The change is recorded as applied; release it as applied or unknown.',
+            },
+          ],
+        })
+      }
       const actor = actorFor(caller, 'operation.force_release')
-      await requestForceRelease(tx, operationId, actor.identityId, {
+      const recorded = await requestForceRelease(tx, operationId, actor.identityId, {
         outcome: body.outcome,
         reason,
       })
+      // One open request per operation: a second person's assertion would never be used.
+      if (!recorded) throw new RegistryError('CONFLICT')
       await appendAuditEvent(
         tx,
         {

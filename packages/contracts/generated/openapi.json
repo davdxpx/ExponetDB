@@ -33514,7 +33514,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: OPERATION_NOT_RELEASABLE."
+            "description": "Error codes: CONFLICT, OPERATION_NOT_RELEASABLE."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -33543,13 +33543,14 @@
             "session": []
           }
         ],
-        "summary": "Close an operation that needs attention (VC-006): a person states what happened to its change and why; the worker closes it, runs nothing again and releases its exclusivity domains. Web App only (fresh re-authentication).",
+        "summary": "Close an operation that needs attention (VC-006): a person states what happened to its change and why; the worker closes it, runs nothing again and releases its exclusivity domains. A person only, with a fresh re-authentication (the Web App offers it).",
         "tags": [
           "operations"
         ],
         "x-exponetdb-action": "operation.force_release",
         "x-exponetdb-action-class": "high",
         "x-exponetdb-errors": [
+          "CONFLICT",
           "CONTROL_PLANE_DEGRADED",
           "CSRF_FAILED",
           "GRANT_REVOKED",
