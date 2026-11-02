@@ -73,6 +73,7 @@ export const KIND_TITLES: Readonly<Record<string, KindTitle>> = {
   ),
   'backup.verify': none('plans.title.backup.verify'),
   'operation.force_release': none('plans.title.operation.force_release'),
+  'migration.revisions.purge': none('plans.title.migration.revisions.purge'),
   'access.role_binding.create': none('plans.title.access.role_binding.create'),
   'access.role_binding.delete': none('plans.title.access.role_binding.delete'),
   'access.policy_settings.update': none('plans.title.access.policy_settings.update'),
@@ -95,6 +96,9 @@ export const KIND_TITLES: Readonly<Record<string, KindTitle>> = {
   'registry.server.retire': { key: 'plans.title.registry.server.retire', subject: 'server' },
   'registry.cluster.retire': cluster('plans.title.registry.cluster.retire'),
   'registry.cluster.register': none('plans.title.registry.cluster.register'),
+  'registry.cluster.declare_memory_limit': cluster(
+    'plans.title.registry.cluster.declare_memory_limit',
+  ),
   // Wave 9 Part B (ADR-0036, ADR-0038)
   'backup.repository.adopt': cluster('plans.title.backup.repository.adopt'),
   'backup.repository.ownership': cluster('plans.title.backup.repository.ownership'),
