@@ -1,5 +1,5 @@
 import { err, ok, type Result } from '@exponetdb/kernel'
-import { isAlias, isNode, parseAllDocuments, visit } from 'yaml'
+import { isAlias, isNode, Lexer, parseAllDocuments, visit } from 'yaml'
 
 export interface YamlIssue {
   readonly path: string
@@ -10,6 +10,7 @@ export interface YamlIssue {
     | 'yaml_anchor'
     | 'yaml_tag'
     | 'yaml_empty'
+    | 'yaml_depth'
   readonly message: string
 }
 
@@ -19,7 +20,34 @@ export interface YamlIssue {
  * anchors or aliases, no tags, no merge keys. The result is plain data for
  * schema validation; nothing in the file can create objects or references.
  */
+export const MAX_YAML_FLOW_DEPTH = 32
+
+/** The deepest nesting of flow collections (`[` and `{`), read by the library's non-recursive lexer. */
+function flowDepth(text: string): number {
+  let depth = 0
+  let deepest = 0
+  for (const token of new Lexer().lex(text)) {
+    if (token === '[' || token === '{') {
+      depth++
+      if (depth > deepest) deepest = depth
+      if (deepest > MAX_YAML_FLOW_DEPTH) break
+    } else if (token === ']' || token === '}') {
+      depth = Math.max(0, depth - 1)
+    }
+  }
+  return deepest
+}
+
 export function parseStrictYaml(text: string): Result<unknown, YamlIssue> {
+  // The library composes flow collections by recursion: a few thousand brackets overflow its stack
+  // (VC-094). The depth is bounded before the document is composed, with a named reason.
+  if (flowDepth(text) > MAX_YAML_FLOW_DEPTH) {
+    return err({
+      path: '',
+      code: 'yaml_depth',
+      message: `Flow collections nest at most ${MAX_YAML_FLOW_DEPTH} levels.`,
+    })
+  }
   const documents = parseAllDocuments(text, {
     version: '1.2',
     schema: 'core',
