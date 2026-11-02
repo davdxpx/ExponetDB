@@ -30,6 +30,7 @@ export const ulid = (prefix: string, n: number) => `${prefix}_01J${String(n).pad
 
 export const INSTALLATION = {
   version: '0.9.0',
+  installationId: ulid('ins', 1),
   contracts: {
     restApi: 'v1',
     mcpCatalog: 'exponetdb.mcp/v1',

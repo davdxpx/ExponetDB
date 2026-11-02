@@ -1982,7 +1982,7 @@ Runs: against the server; effect: read; action: `target.get`; scopes: `targets.r
 
 | Argument or flag | Meaning |
 |---|---|
-| `--scratch <target>` | The scratch target (path or tgt_ id); nonprod only. (required) |
+| `--scratch <target>` | The scratch target (path or tgt_ id); an environment named scratch, nonprod only. (required) |
 
 ### migration import scratch-check
 

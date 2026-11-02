@@ -64,3 +64,73 @@ describe('a project path (TC-052)', () => {
     expect(r.stderr).toContain('reosa/nothing')
   })
 })
+
+/**
+ * TC-065: `migration import scratch-reset-sql --scratch reosa/platform/staging` printed a full in-place
+ * reset script for the staging target: it checked only that the tier was nonprod. A script that
+ * resets a database is offered for a scratch environment only.
+ */
+describe('scratch-reset-sql (TC-065)', () => {
+  const target = (slug: string) => {
+    const n = slug === 'scratch' ? 3 : 4
+    return ok('getTarget', {
+      id: ulid('tgt', n),
+      path: `reosa/platform/${slug}`,
+      productId: ulid('prd', 2),
+      projectId: PRJ,
+      environmentId: ulid('env', n),
+      tier: 'nonprod',
+      state: 'active',
+      generation: 1,
+      health: null,
+      environment: { slug, tier: 'nonprod' },
+      placement: null,
+      ledger: null,
+      openFindingCount: 0,
+    })
+  }
+
+  beforeEach(() => {
+    api.on(
+      'GET',
+      `/projects/${PRJ}`,
+      ok('getProject', {
+        id: PRJ,
+        productId: ulid('prd', 2),
+        slug: 'platform',
+        path: 'reosa/platform',
+        displayName: 'Platform',
+        evidenceOverride: {},
+        managedScope: { includeSchemas: null, excludeSchemas: [] },
+        revision: 1,
+      }),
+    )
+  })
+
+  it('refuses a target whose environment is not a scratch environment, and prints no script', async () => {
+    api.on('GET', `/targets/${encodeURIComponent('reosa/platform/staging')}`, target('staging'))
+    const r = await api.cli([
+      'migration',
+      'import',
+      'scratch-reset-sql',
+      '--scratch',
+      'reosa/platform/staging',
+    ])
+    expect(r.code).toBe(2)
+    expect(r.stderr).toContain('staging')
+    expect(r.stdout).not.toMatch(/DROP|TRUNCATE|CREATE SCHEMA/i)
+  })
+
+  it('still offers the script for a scratch environment', async () => {
+    api.on('GET', `/targets/${encodeURIComponent('reosa/platform/scratch')}`, target('scratch'))
+    const r = await api.cli([
+      'migration',
+      'import',
+      'scratch-reset-sql',
+      '--scratch',
+      'reosa/platform/scratch',
+    ])
+    expect(r.code, r.stderr).toBe(0)
+    expect(r.stdout).toContain('CREATE SCHEMA')
+  })
+})

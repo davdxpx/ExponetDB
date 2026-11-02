@@ -572,6 +572,7 @@ describe('migration import scratch-reset-sql', () => {
       id: 'tgt_01M5GNJDEAT617M685B9PNA4Q4',
       path: 'acme/platform/scratch',
       tier: 'nonprod',
+      environment: { slug: 'scratch', tier: 'nonprod' },
       generation: 1,
       projectId: 'prj_01M5GNJDEAT617M685B9PNA4Q4',
     },

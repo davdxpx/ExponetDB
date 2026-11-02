@@ -111,6 +111,9 @@ function graphOf(valid: readonly ValidatedBundle[], baselines: readonly string[]
 const baselinesOf = (project: LocalProject) =>
   project.config.legacy === undefined ? [] : [project.config.legacy.baseline]
 
+/** A scratch environment: its slug is `scratch` or has `scratch` as a whole word (`scratch-eu`, `import-scratch`). */
+const SCRATCH_ENVIRONMENT = /(^|-)scratch(-|$)/
+
 /** The local bundle a selector names: its directory, a path to it or its migration id (TC-041). */
 function bundleNamed(directories: readonly string[], selector: string): string {
   const base = basename(selector.replace(/\/+$/, ''))
@@ -1151,7 +1154,8 @@ const remoteCommands: readonly CommandSpec[] = [
         name: 'scratch',
         type: 'string',
         placeholder: 'target',
-        description: 'The scratch target (path or tgt_ id); nonprod only.',
+        description:
+          'The scratch target (path or tgt_ id); an environment named scratch, nonprod only.',
         required: true,
       },
     ],
@@ -1167,6 +1171,13 @@ const remoteCommands: readonly CommandSpec[] = [
       )
       if (scratch.tier !== 'nonprod') {
         throw new UsageError('A scratch target is nonprod; this one is not.')
+      }
+      // The script empties a database in place: only an environment named for scratch is offered it
+      // (TC-065; nonprod alone also covers staging, which holds the real ledger).
+      if (!SCRATCH_ENVIRONMENT.test(scratch.environment.slug)) {
+        throw new UsageError(
+          `${scratch.path} is in the environment ${scratch.environment.slug}, not a scratch environment: the reset script is offered only for an environment named scratch (or scratch-…, …-scratch).`,
+        )
       }
       const project = must(
         await remote.sdk.call('getProject', { params: { projectId: scratch.projectId } }),
