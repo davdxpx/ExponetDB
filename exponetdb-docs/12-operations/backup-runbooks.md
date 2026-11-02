@@ -175,6 +175,21 @@ which come from the owner-held offline copy
 ([`../08-auth-and-security/secrets.md`](../08-auth-and-security/secrets.md)).
 The script restores into an empty `TARGET_DIR` and refuses a non-empty one.
 
+**[DECIDED]** (verification campaign fix VC-059, 2026-11-02) The restic
+(logical) script creates the roles before it restores a database: it applies
+the snapshot's `globals*.sql` (`pg_dumpall --globals-only --no-role-passwords`)
+to the new cluster first, since the dumps own objects by and grant to those
+roles. A snapshot without one, or with more than one, stops the script
+before anything is created, with a message that names the manual step
+(dump the roles from the source or write the `CREATE ROLE` statements and
+run again with `GLOBALS_FILE=<file>`); a globals file that creates
+tablespaces stops it too (remove those lines). When a `pg_restore` fails the
+script stops the cluster and says it holds a partial restore: a
+half-restored cluster never keeps running. The roles have no passwords; set
+them before any client connects. A lab test restores a snapshot with a role
+grant and checks the roles and the grant
+(`packages/backups/test/runbook-restic.lab.test.ts`).
+
 Download the runbook **before** an incident and keep it with the offline
 key copy: during an incident ExponetDB may be the thing that is down. The
 quarterly offline drill (C-35, [`restore.md` §6](../09-backups-and-restore/restore.md#6-drills))
