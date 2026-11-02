@@ -31,6 +31,7 @@ import {
 } from '@exponetdb/operations'
 import { type Keyring, rewrapBatch } from '@exponetdb/secrets'
 import type { AuditExportConfig } from '../config/env.ts'
+import { type OperationalCounts, operationalGauges, readOperationalCounts } from './ops-metrics.ts'
 import type { ObservationTasks } from './registry.ts'
 import type { Runtime } from './runtime.ts'
 import { TaskFailure } from './task-failure.ts'
@@ -133,6 +134,8 @@ async function verify(
   return undefined
 }
 
+const operationalSetters = new WeakMap<Runtime, (counts: OperationalCounts) => void>()
+
 const gauges = new WeakMap<Runtime, Gauge<'scope'>>()
 function verifiedGauge(ctx: TaskContext): Gauge<'scope'> {
   let gauge = gauges.get(ctx.runtime)
@@ -205,6 +208,21 @@ export const WORKER_TASKS: readonly TaskDefinition[] = [
     },
   },
   { name: 'audit.export', intervalSeconds: 5 * MINUTE, run: exportCheckpoints },
+  {
+    // VC-037: the gauges an alert needs (operations waiting, nodes by state, the soonest node
+    // certificate, targets by health) are read from the Control Store, not recorded by a request.
+    name: 'metrics.refresh',
+    intervalSeconds: 30,
+    run: async (ctx) => {
+      let set = operationalSetters.get(ctx.runtime)
+      if (set === undefined) {
+        set = operationalGauges(ctx.runtime.metrics)
+        operationalSetters.set(ctx.runtime, set)
+      }
+      set(await readOperationalCounts(ctx.store))
+      return undefined
+    },
+  },
   {
     // VC-038: backup_drill_never_run|overdue|failed and restore_scratch_left are computed here;
     // nothing ran the generator before, so a failed drill left no finding.

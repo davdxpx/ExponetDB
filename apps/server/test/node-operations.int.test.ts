@@ -33,6 +33,7 @@ import {
   workerDispatchAdmission,
   workerKinds,
 } from '../src/composition/access.ts'
+import { operationalGauges, readOperationalCounts } from '../src/composition/ops-metrics.ts'
 import { registryPolicy } from '../src/composition/registry.ts'
 import type { ServeConfig } from '../src/config/env.ts'
 import { createPublicApp, httpMetrics } from '../src/interfaces/http/app.ts'
@@ -755,6 +756,31 @@ async function recorded(operationId: string) {
   )
   return rows[0]
 }
+
+describe('the operational metrics (VC-037)', () => {
+  it('count what waits, the nodes by state and the soonest node certificate, from the Control Store', async () => {
+    const { w, node } = await setup('nonprod')
+    // A nonprod reload is queued and nothing drives it: one waiting operation.
+    const plan = await planReload(w, node)
+    const applied = await owner.browser.call('POST', `/api/v1/plans/${plan.id}/apply`, {})
+    expect(applied.body).toMatchObject({ state: 'queued' })
+    const counts = await readOperationalCounts(storeOf(db, 'exdb_worker'))
+    expect(counts.operations['queued']).toBeGreaterThanOrEqual(1)
+    expect(counts.oldestWaitingSeconds).toBeGreaterThanOrEqual(0)
+    expect(counts.nodes['active'] ?? 0).toBeGreaterThanOrEqual(1)
+    // A 72 hour certificate: more than a day left, less than four days.
+    expect(counts.nodeCertificateSeconds).toBeGreaterThan(86_400)
+    expect(counts.nodeCertificateSeconds).toBeLessThan(4 * 86_400)
+    // The worker's gauges carry the same numbers.
+    const registry = new MetricsRegistry()
+    operationalGauges(registry)(counts)
+    const text = registry.render()
+    expect(text).toContain('exdb_operations{state="queued"}')
+    expect(text).toContain('exdb_node_certificate_expiry_seconds ')
+    await drive()
+    await node.stop()
+  })
+})
 
 describe('the authorized caller through node operations (F9)', () => {
   it('lets a service account with nodes.plan inspect a node, recorded as itself', async () => {

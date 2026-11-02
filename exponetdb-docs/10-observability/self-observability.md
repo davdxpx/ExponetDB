@@ -55,16 +55,19 @@ allowlist per event and a pattern denylist as a second line
 | `exdb_mcp_requests_total` | era (`modern`, `legacy`, `none`), status class | MCP traffic by protocol era (when legacy can be retired) |
 | `exdb_mcp_tool_calls_total`, `exdb_mcp_tool_call_duration_seconds` | tool, outcome code (`ok` or the error code), era | agent behavior |
 | `exdb_mcp_denied_total` | reason (closed set: `origin`, `host`, `invalid_token`, `insufficient_scope`, `rate_limited`, `version`, …) | refusals at the `/mcp` edge |
-| `exdb_policy_decisions_total` | rule id, decision | which rules bite |
-| `exdb_operations_total` | kind, class, outcome | |
-| `exdb_operation_step_duration_seconds` | kind, step | slow steps |
-| `exdb_sampler_lag_seconds` | sampler | freshness of health data |
-| `exdb_sample_failures_total` | sampler, cause | gaps |
-| `exdb_agent_connected` | node | gateway view |
-| `exdb_agent_job_duration_seconds` | capability, outcome | |
+| `exdb_policy_decisions_total` | rule id, decision | which rules bite **[PLANNED]** |
+| `exdb_operations_total` | kind, class, outcome | **[PLANNED]** |
+| `exdb_operation_step_duration_seconds` | kind, step | slow steps **[PLANNED]** |
+| `exdb_sampler_lag_seconds` | sampler | freshness of health data **[PLANNED]** |
+| `exdb_sample_failures_total` | sampler, cause | gaps **[PLANNED]** |
+| `exdb_agent_connected` | node | gateway view **[PLANNED]** |
+| `exdb_agent_job_duration_seconds` | capability, outcome | **[PLANNED]** |
 | `exdb_control_store_query_duration_seconds` | process role, query class | Control Store pressure |
-| `exdb_lock_wait_seconds` | domain kind | exclusivity contention |
+| `exdb_lock_wait_seconds` | domain kind | exclusivity contention **[PLANNED]** |
 | `exdb_audit_chain_verified` | scope (`incremental`, `full`) | integrity checks |
+| `exdb_operations`, `exdb_operation_oldest_waiting_seconds` | state (the six that have not finished) | **[OBSERVED]** (VC-037) refreshed by the worker task `metrics.refresh` every 30 s from the Control Store: operations waiting, running or needing attention, and how long the oldest one has waited |
+| `exdb_nodes`, `exdb_node_certificate_expiry_seconds` | state (`pending_binding`, `active`, `degraded`, `offline`, `binding_failed`, `revoked`, `decommissioned`) | **[OBSERVED]** (VC-037, VC-039) nodes by state with `offline` judged by the heartbeat, and the seconds until the soonest certificate of a node that can connect (ten years when none): alert below 86,400 |
+| `exdb_targets` | state (the six health states) | **[OBSERVED]** (VC-037) registered targets by health state
 
 Labels never contain target names, user ids or other high-cardinality or
 personal values; target-level detail belongs in the Control Store's health
