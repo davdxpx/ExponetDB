@@ -48,6 +48,7 @@ describe('TC-050: the model evals', () => {
       encoding: 'utf8',
       timeout: 120_000,
     })
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: strips terminal colors from the report
     const out = `${run.stdout}${run.stderr}`.replace(/\u001b\[[0-9;]*m/g, '')
     expect(run.status, out).toBe(0)
     expect(out).toMatch(/Tests\s+\d+ skipped/)
