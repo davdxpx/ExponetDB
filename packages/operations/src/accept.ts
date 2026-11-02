@@ -225,7 +225,13 @@ export async function acceptPlan(
   }
   const kind = deps.kinds.get(plan.kind)
   if (kind === undefined || kind.version !== plan.kindVersion) {
-    return { status: 'refused', error: new OperationError('operation_kind_unknown') }
+    // A plan from before an upgrade names a kind or version this release lacks: stale, with the reason.
+    return {
+      status: 'refused',
+      error: new OperationError('operation_kind_unknown', {
+        changedBindings: [{ binding: 'kindVersion', actual: 'unknown' }],
+      }),
+    }
   }
   const checked = await withDeadline(
     (signal) => kind.checkBindings(plan, { signal }),
@@ -250,7 +256,14 @@ export async function acceptPlan(
     const met = (await deps.requirementMet?.(requirement, plan)) ?? false
     if (!met) {
       const code = REQUIREMENT_ERRORS[requirement.kind]
-      return { status: 'refused', error: new OperationError(code) }
+      // BACKUP_REQUIRED's catalog details name the age the policy asked for (VC-066); without them
+      // the interface could not build the answer and replied 500.
+      const details =
+        requirement.kind === 'backup' &&
+        /^P(?!$)(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+S)?)?$/.test(requirement.newerThan)
+          ? { details: { newerThan: requirement.newerThan } }
+          : {}
+      return { status: 'refused', error: new OperationError(code, details) }
     }
   }
   const awaitingApproval = requirements.some((r) => r.kind === 'approval')

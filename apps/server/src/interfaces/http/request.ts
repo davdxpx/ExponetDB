@@ -159,10 +159,41 @@ function keyUnavailable(error: unknown): { readonly keyId: string | undefined } 
   return { keyId: 'keyId' in error && typeof error.keyId === 'string' ? error.keyId : undefined }
 }
 
+/**
+ * Internal operation codes a route can reach, as the catalog codes they are answered with
+ * (VC-053): a plan from before an upgrade is stale, a lost race is a conflict. The worker-only
+ * `operation_lease_lost` stays internal.
+ */
+const INTERNAL_OPERATION_CODES: Readonly<Record<string, ErrorCode>> = {
+  operation_kind_unknown: 'PLAN_STALE',
+  operation_state_changed: 'CONFLICT',
+  operation_transition_invalid: 'CONFLICT',
+  idempotency_in_progress: 'CONFLICT',
+}
+
+/**
+ * Control Store failures that are the store being away or slow, not a bug (VC-036): the Control
+ * Plane is degraded and the caller may retry. The layer may not import the control-store package,
+ * so the error is recognized by its name and code.
+ */
+const CONTROL_STORE_DEGRADED = new Set([
+  'control_store_unavailable',
+  'control_store_timeout',
+  'control_store_serialization_failure',
+])
+
 /** The catalog code of an error from the application, auth or operations layers; anything else is internal. */
 export function errorCodeOf(error: unknown): ErrorCode {
   // VC-011
   if (keyUnavailable(error) !== undefined) return 'SECRET_KEY_UNAVAILABLE'
+  if (error instanceof Error && 'code' in error && typeof error.code === 'string') {
+    if (error.name === 'ControlStoreError' && CONTROL_STORE_DEGRADED.has(error.code)) {
+      return 'CONTROL_PLANE_DEGRADED'
+    }
+    const mapped =
+      error.name === 'OperationError' ? INTERNAL_OPERATION_CODES[error.code] : undefined
+    if (mapped !== undefined) return mapped
+  }
   if (
     error instanceof Error &&
     'code' in error &&
@@ -212,7 +243,12 @@ export function detailsOf(
 export function problemResponse(
   requestId: RequestId,
   error: unknown,
-  context: { readonly planId?: string; readonly retryAfterSeconds?: number } = {},
+  context: {
+    readonly planId?: string
+    readonly retryAfterSeconds?: number
+    /** Called when the answer had to fall back to INTERNAL: the journal names the code (VC-066). */
+    readonly onDowngrade?: (code: ErrorCode) => void
+  } = {},
 ): Response {
   let code = errorCodeOf(error)
   let details = detailsOf(error, code, context)
@@ -224,6 +260,7 @@ export function problemResponse(
     // Details that do not match the catalog are never sent; the code is kept only if it needs none.
     built = buildProblem(code, { requestId })
     if (!built.ok) {
+      context.onDowngrade?.(code)
       code = 'INTERNAL'
       built = buildProblem('INTERNAL', { requestId })
     }

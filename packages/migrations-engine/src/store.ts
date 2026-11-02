@@ -176,8 +176,8 @@ export async function appliedElsewhere(
        JOIN operations.plan_bodies b ON b.plan_id = p.plan_id
        JOIN registry.targets t ON t.target_id = p.target_id
        CROSS JOIN LATERAL jsonb_array_elements(
-         CASE WHEN jsonb_typeof(b.body::jsonb -> 'content' -> 'migrations') = 'array'
-              THEN b.body::jsonb -> 'content' -> 'migrations' ELSE '[]'::jsonb END) AS item
+         CASE WHEN jsonb_typeof(replace(b.body, '\\u0000', '\\ufffd')::jsonb -> 'content' -> 'migrations') = 'array'
+              THEN replace(b.body, '\\u0000', '\\ufffd')::jsonb -> 'content' -> 'migrations' ELSE '[]'::jsonb END) AS item
       WHERE t.project_id = $1 AND om.migration_id = $2 AND item ->> 'migrationId' = $2
         AND item ->> 'checksum' IS NOT NULL
         AND (om.apply_outcome IN ('applied', 'partially_applied', 'unknown')

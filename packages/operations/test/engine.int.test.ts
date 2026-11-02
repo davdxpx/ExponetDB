@@ -359,6 +359,16 @@ describe('plans and acceptance', () => {
     })
     const met = await accept(reauth.planId, human, deps({ requirementMet: async () => true }))
     expect(met).toMatchObject({ status: 'accepted', operation: { state: 'queued' } })
+    // VC-066: the refusal carries what the catalog's details require (an unmet backup requirement
+    // answered 500 because BACKUP_REQUIRED needs `newerThan` and the error had none).
+    const backup = await newPlan(as('exdb_serve'), {
+      decision: await decision('require', [{ kind: 'backup', newerThan: 'P1D', verified: true }]),
+    })
+    const refused = await accept(backup.planId)
+    expect(refused).toMatchObject({
+      status: 'refused',
+      error: { code: 'BACKUP_REQUIRED', details: { newerThan: 'P1D' } },
+    })
   })
 
   it('at most 20 operations of one actor and client wait for an approval; the plan stays active', async () => {

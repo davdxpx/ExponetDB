@@ -191,7 +191,7 @@ async function nodeImpact(q: Queryable, nodeId: string): Promise<JsonObject> {
     `SELECT count(*)::int AS n
        FROM operations.plans p JOIN operations.plan_bodies b ON b.plan_id = p.plan_id
       WHERE p.state = 'active' AND p.expires_at > clock_timestamp()
-        AND b.body::jsonb -> 'subject' ->> 'nodeId' = $1`,
+        AND replace(b.body, '\\u0000', '\\ufffd')::jsonb -> 'subject' ->> 'nodeId' = $1`,
     [nodeId],
   )
   const clusters = await q.query(
