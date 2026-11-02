@@ -387,6 +387,13 @@ operation no recovery plan covers, remains planned.
 claims a queued operation with `SELECT … FOR UPDATE SKIP LOCKED` and writes a
 lease (`lease_owner`, `lease_expires_at`, default 30 s, renewed every 10 s).
 Each step is recorded as an `operation_event` row before and after it runs.
+**[DECIDED]** (verification campaign fix VC-008, 2026-11-02) The claim
+takes the oldest eligible operation; a queued operation whose last attempt
+waited for a domain (`locks_waiting`) is not eligible while the operation it
+waited for still holds that domain. One blocked operation therefore never
+starves younger operations of other domains, and a waiter writes no event
+until its blocker lets the domain go (before: two event rows per waiter
+every poll).
 
 If a worker dies, its lease expires. Another worker takes the operation over and
 **does not resume blindly**: it calls the kind's `reconcile` with the recorded

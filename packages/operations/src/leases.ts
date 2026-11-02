@@ -57,9 +57,25 @@ export async function claimNextOperation(
                -- An operator asked to verify an applied change again (needs_attention to verifying).
                OR (state = 'needs_attention' AND apply_outcome IN ('applied', 'partially_applied')
                    AND EXISTS (SELECT 1 FROM recovery.verification_retries r
-                                WHERE r.operation_id = operations.operation_id AND r.started_at IS NULL)))
+                                WHERE r.operation_id = operations.operation_id AND r.started_at IS NULL))
+               -- A person released it (VC-006): it is closed, whatever its kind.
+               OR (state = 'needs_attention'
+                   AND EXISTS (SELECT 1 FROM recovery.force_releases f
+                                WHERE f.operation_id = operations.operation_id AND f.started_at IS NULL)))
           AND (lease_expires_at IS NULL OR lease_expires_at < clock_timestamp())
           AND kind = ANY($1::text[])
+          -- VC-008: a queued operation whose last attempt waited for a domain is not claimed again
+          -- while the operation it waited for still holds that domain, so it neither starves the
+          -- younger ones nor writes two events every poll.
+          AND NOT (state = 'queued' AND EXISTS (
+                SELECT 1 FROM operations.operation_events w
+                  JOIN operations.operation_locks l
+                    ON l.domain_key = w.detail ->> 'domain'
+                   AND l.operation_id = w.detail ->> 'blockingOperationId'
+                 WHERE w.event_id = (SELECT max(e.event_id) FROM operations.operation_events e
+                                      WHERE e.operation_id = operations.operation_id
+                                        AND e.kind IN ('locks_waiting', 'locks_acquired'))
+                   AND w.kind = 'locks_waiting'))
         ORDER BY created_at, operation_id
         LIMIT 1
           FOR UPDATE SKIP LOCKED`,

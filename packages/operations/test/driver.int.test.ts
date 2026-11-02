@@ -244,6 +244,37 @@ describe('the worker loop', () => {
     })
   })
 
+  // VC-008: the claim took the oldest waiter on every tick, so one blocked operation starved all others.
+  it('a blocked operation does not starve a younger one, and is not claimed again while its blocker holds', async () => {
+    const parkedTarget = target()
+    const freeTarget = target()
+    const parkedKind = syntheticKind('synthetic.parked', { verify: async () => 'error' })
+    const parked = await queue(parkedKind, [`target:${parkedTarget}:schema`])
+    await run(parkedKind)
+    expect((await readOperation(as('exdb_worker'), parked))?.state).toBe('needs_attention')
+    // One registry, as a worker has: the older operation waits, the younger one is free.
+    const waiterKind = syntheticKind('synthetic.waiter')
+    const youngKind = syntheticKind('synthetic.young')
+    const older = await queue(waiterKind, [`target:${parkedTarget}:schema`])
+    const younger = await queue(youngKind, [`target:${freeTarget}:schema`])
+    const both = (workerId = newId('prc', Date.now())) =>
+      processNextOperation(as('exdb_worker'), {
+        workerId,
+        kinds: new KindRegistry([parkedKind, waiterKind, youngKind]),
+        clock: systemClock,
+      })
+    expect(await both()).toMatchObject({ status: 'waiting', operationId: older })
+    expect(await both()).toMatchObject({
+      status: 'done',
+      operation: { operationId: younger, state: 'succeeded' },
+    })
+    // Sixty more ticks: nothing to do, and the waiter writes no event while its blocker holds.
+    const before = (await events(older)).length
+    for (let i = 0; i < 60; i++) expect(await both()).toEqual({ status: 'idle' })
+    expect((await events(older)).length).toBe(before)
+    expect(before).toBeLessThanOrEqual(3)
+  })
+
   it('a takeover reconciles and never executes again', async () => {
     const kind = syntheticKind('synthetic.takeover', { reconcile: async () => 'applied' })
     const id = await queue(kind)
