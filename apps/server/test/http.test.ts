@@ -1,7 +1,13 @@
 import { fixedClock } from '@exponetdb/kernel'
 import { MetricsRegistry, type ReadinessReport, silentLogger } from '@exponetdb/observability'
 import { describe, expect, it } from 'vitest'
-import { createInternalApp, createPublicApp, httpMetrics } from '../src/interfaces/http/app.ts'
+import { servedRoutes } from '../src/interfaces/http/api.ts'
+import {
+  createInternalApp,
+  createPublicApp,
+  httpMetrics,
+  ROUTE_LABEL,
+} from '../src/interfaces/http/app.ts'
 
 const report = (status: ReadinessReport['status']): ReadinessReport => ({
   status,
@@ -90,6 +96,29 @@ describe('public HTTP interface (serve)', () => {
     )
     expect(text).toContain('route="/unmatched"')
     expect(text).not.toContain('tgt_01JB')
+  })
+
+  it('records the matched route template of a parameterized route, one series for all ids (VC-037)', async () => {
+    const { pub, registry } = apps('ready')
+    // The routes of the API are mounted with templates; every call used to be "/unmatched".
+    pub.get('/api/v1/targets/:target', (c) => c.json({ ok: true }))
+    await pub.request('/api/v1/targets/tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z')
+    await pub.request('/api/v1/targets/tgt_01JB2Z6G8M4Q7R9T1V3W5X7Y9A')
+    await pub.request('/somewhere/else')
+    const text = registry.render()
+    expect(text).toContain(
+      'exdb_http_requests_total{method="GET",route="/api/v1/targets/:target",status_class="2xx"} 2',
+    )
+    expect(text).toContain('route="/unmatched"')
+    expect(text).not.toContain('tgt_01JB')
+  })
+
+  it('has room in the route label for every template the API serves (VC-037)', () => {
+    const templates = new Set(
+      servedRoutes().map(({ base, route }) => `${base}${route.path.replace(/\{(\w+)\}/g, ':$1')}`),
+    )
+    expect(templates.size).toBeLessThanOrEqual(ROUTE_LABEL.maxDistinct)
+    for (const template of templates) expect(template, template).toMatch(ROUTE_LABEL.pattern)
   })
 })
 
