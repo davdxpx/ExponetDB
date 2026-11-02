@@ -45,15 +45,34 @@ function scopesFrom(raw: unknown): readonly string[] {
   return scopes
 }
 
-function presetFrom(raw: unknown): readonly string[] {
-  const name = String(raw)
-  if (!isPreset(name)) {
-    throw new UsageError(
-      `${name} is not a preset (${PRESET_NAMES.join(', ')}).`,
-      'exponetdb auth presets',
-    )
+/** Words joined by spaces into lines of at most `width` characters. */
+function wrapWords(words: readonly string[], width: number): string[] {
+  const lines: string[] = []
+  let line = ''
+  for (const w of words) {
+    if (line !== '' && line.length + 1 + w.length > width) {
+      lines.push(line)
+      line = w
+    } else {
+      line = line === '' ? w : `${line} ${w}`
+    }
   }
-  return SCOPE_PRESETS[name].scopes
+  return line === '' ? lines : [...lines, line]
+}
+
+export function presetFrom(raw: unknown): readonly string[] {
+  const names = Array.isArray(raw) ? raw : [raw]
+  const scopes = names.flatMap((n) => {
+    const name = String(n)
+    if (!isPreset(name)) {
+      throw new UsageError(
+        `${name} is not a preset (${PRESET_NAMES.join(', ')}).`,
+        'exponetdb auth presets',
+      )
+    }
+    return SCOPE_PRESETS[name].scopes
+  })
+  return [...new Set(scopes)]
 }
 
 /**
@@ -150,9 +169,10 @@ export const authCommands: readonly CommandSpec[] = [
       },
       {
         name: 'preset',
-        type: 'enum',
-        values: PRESET_NAMES,
-        description: 'A named scope list (exponetdb auth presets); combines with --scope.',
+        type: 'list',
+        placeholder: PRESET_NAMES.join('|'),
+        description:
+          'Named scope lists (exponetdb auth presets), comma separated or repeated; they combine with each other and with --scope.',
       },
       {
         name: 'device',
@@ -423,10 +443,15 @@ export const authCommands: readonly CommandSpec[] = [
             columns: [
               { title: 'PRESET' },
               { title: 'DEVICE FLOW' },
-              { title: 'SCOPES', flexible: true },
+              { title: 'SUMMARY', flexible: true },
             ],
-            rows: items.map((i) => [i.preset, i.deviceFlow ? 'yes' : 'no', i.scopes.join(' ')]),
+            rows: items.map((i) => [i.preset, i.deviceFlow ? 'yes' : 'no', i.summary]),
           },
+          // The scopes wrap, so a long list is never cut at the terminal width.
+          ...items.map((i) => ({
+            kind: 'text' as const,
+            lines: [`${i.preset}:`, ...wrapWords(i.scopes, 100).map((l) => `  ${l}`)],
+          })),
         ],
       })
     },

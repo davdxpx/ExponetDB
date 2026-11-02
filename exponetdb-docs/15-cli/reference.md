@@ -295,7 +295,7 @@ Aliases: `auth login`.
 | Argument or flag | Meaning |
 |---|---|
 | `--scope <scopes>` | Scopes to ask for, space or comma separated (default: the last grant of the profile, else targets.read). |
-| `--preset <read\|developer:nonprod\|developer:prod\|operator:nonprod\|operator:prod\|admin>` | A named scope list (exponetdb auth presets); combines with --scope. |
+| `--preset <read|developer:nonprod|developer:prod|operator:nonprod|operator:prod|admin>` | Named scope lists (exponetdb auth presets), comma separated or repeated; they combine with each other and with --scope. |
 | `--device` | Use the device flow (a code to type elsewhere). |
 | `--no-browser` | Print the sign-in URL without opening a browser. |
 
@@ -1100,7 +1100,7 @@ List the endpoints of a cluster.
 exponetdb cluster endpoints <cluster>
 ```
 
-Runs: against the server; effect: read; action: `endpoint.list`; scopes: `nodes.read`; output: `EndpointList`.
+Runs: against the server; effect: read; action: `endpoint.list`; scopes: `registry.manage`; output: `EndpointList`.
 
 | Argument or flag | Meaning |
 |---|---|
@@ -1114,7 +1114,7 @@ List the registered databases of a cluster.
 exponetdb cluster databases <cluster>
 ```
 
-Runs: against the server; effect: read; action: `database.list`; scopes: `nodes.read`; output: `DatabaseList`.
+Runs: against the server; effect: read; action: `database.list`; scopes: `registry.manage`; output: `DatabaseList`.
 
 | Argument or flag | Meaning |
 |---|---|
@@ -1128,7 +1128,7 @@ List credential metadata of a cluster (never a secret).
 exponetdb cluster credentials <cluster>
 ```
 
-Runs: against the server; effect: read; action: `credential.list`; scopes: `nodes.read`; output: `CredentialList`.
+Runs: against the server; effect: read; action: `credential.list`; scopes: `registry.manage`; output: `CredentialList`.
 
 | Argument or flag | Meaning |
 |---|---|
@@ -1327,7 +1327,7 @@ The password a person set on an external cluster (psql \password, or a verifier 
 exponetdb cluster credential submit <cluster> <role> [flags]
 ```
 
-Runs: against the server; effect: read; action: `credential.list`; scopes: `nodes.read`; output: `CredentialView`.
+Runs: against the server; effect: read; action: `credential.list`; scopes: `registry.manage`; output: `CredentialView`.
 
 | Argument or flag | Meaning |
 |---|---|
@@ -1349,7 +1349,7 @@ Plan rotating a cluster credential through the node (a new SCRAM verifier, set l
 exponetdb cluster credential rotate <cluster> <role> [flags]
 ```
 
-Runs: against the server; effect: plan; action: `credential.rotate.plan`; scopes: `nodes.plan`; output: `PlanView`.
+Runs: against the server; effect: plan; action: `credential.rotate.plan`; scopes: `registry.manage`; output: `PlanView`.
 
 | Argument or flag | Meaning |
 |---|---|
