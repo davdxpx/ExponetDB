@@ -38,7 +38,7 @@ const PURGEABLE = `SELECT r.migration_id, r.revision, r.bundle_digest,
           + coalesce(octet_length(r.verify_sql), 0) + coalesce(octet_length(r.down_sql), 0) AS bytes
    FROM migrations.bundle_revisions r
   WHERE r.project_id = $1 AND r.ingested_at < clock_timestamp() - make_interval(days => $2)
-    AND NOT migrations.revision_referenced(r.migration_id)
+    AND r.migration_id NOT IN (SELECT id FROM migrations.referenced_migration_ids() AS x (id))
   ORDER BY r.ingested_at, r.migration_id, r.revision LIMIT $3`
 
 /** The project's revisions no plan references and older than the purge age, oldest first. */
@@ -143,8 +143,13 @@ export class RevisionPurgeKind implements OperationKind {
       if (!(await leaseHeld(tx, ctx.operationId, ctx.leaseOwner))) return 'not_applied'
       const { rows } = await tx.query(
         'migrations.purge.delete',
-        'SELECT purged, bytes FROM migrations.purge_revisions($1, $2::text[], $3::int[])',
-        [c.projectId, c.revisions.map((r) => r.migrationId), c.revisions.map((r) => r.revision)],
+        'SELECT purged, bytes FROM migrations.purge_revisions($1, $2, $3::text[], $4::int[])',
+        [
+          operationId,
+          c.projectId,
+          c.revisions.map((r) => r.migrationId),
+          c.revisions.map((r) => r.revision),
+        ],
       )
       const purged = rows[0]?.int('purged') ?? 0
       await appendAuditEvent(

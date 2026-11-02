@@ -9,7 +9,8 @@ SELECT EXISTS (SELECT FROM pg_catalog.pg_trigger t
                   AND t.tgenabled = 'O' AND t.tgfoid = 'audit.chain_guard()'::regprocedure) AS ok;
 
 -- check: the marks are append-only and no role may change or remove one
-SELECT bool_and(has_table_privilege(r, 'audit.clock_skew_marks', 'SELECT, INSERT')
+SELECT bool_and(has_table_privilege(r, 'audit.clock_skew_marks', 'SELECT')
+                AND has_table_privilege(r, 'audit.clock_skew_marks', 'INSERT')
                 AND NOT has_table_privilege(r, 'audit.clock_skew_marks', 'UPDATE')
                 AND NOT has_table_privilege(r, 'audit.clock_skew_marks', 'DELETE')
                 AND NOT has_table_privilege(r, 'audit.clock_skew_marks', 'TRUNCATE'))

@@ -1236,6 +1236,21 @@ describe('the purge of unreferenced bundle revisions (OD-70)', () => {
     ])
   })
 
+  // Review of OD-70 (d): the worker's function deletes only what a running purge operation lists.
+  it('refuses a direct purge call of the worker that no running purge operation names', async () => {
+    const id = await ingest('purge-direct')
+    await backdate([id])
+    const direct = await stores.worker
+      .query(
+        'test.purge.direct',
+        'SELECT purged FROM migrations.purge_revisions($1, $2, $3::text[], $4::int[])',
+        [`op_${newUlid(Date.now())}`, ids.project, [id], [1]],
+      )
+      .catch((e: unknown) => e)
+    expect(direct).toMatchObject({ sqlstate: 'EXM02' })
+    expect(await revisionsOf(id)).toBe(1)
+  })
+
   it('never lets the database delete a revision a plan references, also with the purge flag set', async () => {
     const planned = await db.asSuperuser((c) =>
       c.query(

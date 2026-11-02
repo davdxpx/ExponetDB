@@ -5,9 +5,9 @@ SELECT count(*) = 3 AS ok
    AND t.tgname IN ('bundle_revisions_immutable', 'bundle_revisions_no_update', 'bundle_revisions_purge_guard');
 
 -- check: only the worker may purge, and no runtime login may delete or update a revision itself
-SELECT has_function_privilege('exdb_worker', 'migrations.purge_revisions(text, text[], integer[])', 'EXECUTE')
-       AND NOT has_function_privilege('exdb_serve', 'migrations.purge_revisions(text, text[], integer[])', 'EXECUTE')
-       AND NOT has_function_privilege('public', 'migrations.purge_revisions(text, text[], integer[])', 'EXECUTE')
+SELECT has_function_privilege('exdb_worker', 'migrations.purge_revisions(text, text, text[], integer[])', 'EXECUTE')
+       AND NOT has_function_privilege('exdb_serve', 'migrations.purge_revisions(text, text, text[], integer[])', 'EXECUTE')
+       AND NOT has_function_privilege('public', 'migrations.purge_revisions(text, text, text[], integer[])', 'EXECUTE')
        AND NOT has_table_privilege('exdb_worker', 'migrations.bundle_revisions', 'DELETE')
        AND NOT has_table_privilege('exdb_serve', 'migrations.bundle_revisions', 'DELETE')
        AND NOT has_table_privilege('exdb_worker', 'migrations.bundle_revisions', 'UPDATE') AS ok;

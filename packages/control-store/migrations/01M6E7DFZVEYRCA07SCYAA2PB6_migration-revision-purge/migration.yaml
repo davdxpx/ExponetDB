@@ -7,9 +7,11 @@ description: |
   could never leave the Control Store. A person may purge the revisions of a
   project that no plan references and that were ingested more than 90 days ago
   (migration.revisions.purge, a planned operation with re-authentication). The
-  worker calls migrations.purge_revisions, which takes the plans tables in
-  SHARE ROW EXCLUSIVE mode, sets a transaction-local flag and deletes exactly
-  the revisions it is given; the trigger bundle_revisions_immutable now skips
+  worker calls migrations.purge_revisions, which deletes only for a running
+  migration.revisions.purge operation whose plan lists each key, takes the
+  plans tables in SHARE ROW EXCLUSIVE mode (lock_timeout 5 s), checks the
+  references as one set, sets a transaction-local flag and deletes exactly
+  the unreferenced keys; the trigger bundle_revisions_immutable now skips
   a delete while that flag is set, and the new trigger
   bundle_revisions_purge_guard refuses every such delete of a referenced or
   younger revision, so no login can delete one, also with the flag. Updates

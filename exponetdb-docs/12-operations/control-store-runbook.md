@@ -170,4 +170,12 @@ full. Nothing committed is lost.
    `POST /api/v1/plans/{id}/apply` with re-authentication lets the worker
    delete exactly those (audited `migration.revisions.purged`). The database
    refuses any other delete. Recent hostile ingests are younger than 90 days:
-   for them grow the volume (step 2).
+   for them grow the volume (step 2). A delete frees space inside the
+   database but does not shrink its files, so `pg_database_size` and the
+   volume component (and with them `CONTROL_STORE_VOLUME_FULL`) stay where
+   they were until the table is rewritten: in a maintenance window, as the
+   Control Store owner, `VACUUM (FULL) migrations.bundle_revisions` (it holds
+   an `ACCESS EXCLUSIVE` lock on the table while it runs: no ingest and no
+   migration plan meanwhile). The plans tables are locked by the purge itself
+   only while it deletes (at most 5 s of waiting, then it fails and deletes
+   nothing).
