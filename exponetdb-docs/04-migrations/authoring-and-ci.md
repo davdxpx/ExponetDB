@@ -76,7 +76,7 @@ one call, a stored plan is applied with `plan apply <planId>`,
 | Command | Purpose | Talks to server? |
 |---|---|---|
 | `exponetdb migration new <name>` | Create `<ULID>_<name>/` with manifest skeleton, `dependsOn` = current heads | no |
-| `exponetdb migration lint [paths…]` | All local lint rules (parse with libpg_query, DAG, manifest schema) | no |
+| `exponetdb migration lint [bundle…] [--since <id>]` | All local lint rules (parse with libpg_query, DAG, manifest schema); the arguments (directory, path or migration id) and `--since` (a bundle and everything that depends on it) scope the findings and the exit code, the rest is listed as `skipped` and still takes part in the graph | no |
 | `exponetdb migration checksum [paths…]` | Print apply checksum, verify digest, rollback digest, source digest | no |
 | `exponetdb migration graph` | Print the DAG, heads, pending sets (needs ledger state for pending) | optional |
 | `exponetdb migration plan --target <path> [ids…]` | Submit and plan; print the plan; exit code reflects decision | yes |

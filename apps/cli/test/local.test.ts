@@ -106,6 +106,73 @@ describe('the bundle loader (VC-086, VC-093)', () => {
   })
 })
 
+/**
+ * TC-041 (E9): `migration lint` linted every bundle and counted every blocking finding, so one old
+ * applied bundle (which cannot change without a checksum mismatch) kept a project red for ever. A
+ * bundle selector scopes the findings and the exit code; the graph still spans all bundles.
+ */
+describe('migration lint scope (TC-041)', () => {
+  const setup = async () => {
+    await mkdir(join(dir, 'repo'))
+    expect((await cli(['init', '--project', 'demo/platform'])).code).toBe(0)
+    const old = JSON.parse((await cli(['migration', 'new', 'old-function', '--json'])).stdout)
+    await writeFile(
+      join(old.data.path, 'up.sql'),
+      'CREATE FUNCTION public.one() RETURNS integer LANGUAGE sql SECURITY DEFINER AS $$ SELECT 1 $$;\n',
+    )
+    const fresh = JSON.parse((await cli(['migration', 'new', 'fresh-table', '--json'])).stdout)
+    await writeFile(
+      join(fresh.data.path, 'up.sql'),
+      'CREATE TABLE public.leads (id bigint PRIMARY KEY, email text NOT NULL);\nGRANT SELECT ON public.leads TO app_reader;\n',
+    )
+    await writeFile(
+      join(fresh.data.path, 'verify.sql'),
+      "-- check: leads exists\nSELECT to_regclass('public.leads') IS NOT NULL AS ok;\n",
+    )
+    return { old, fresh }
+  }
+  const name = (made: { data: { path: string } }) => made.data.path.split('/').at(-1) as string
+
+  it('keeps the whole-project lint red while the old bundle blocks', async () => {
+    await setup()
+    const r = await cli(['migration', 'lint'])
+    expect(r.code).toBe(EXIT.failure)
+  })
+
+  it('lints only the named bundle, lists the others as skipped and keeps the graph intact', async () => {
+    const { old, fresh } = await setup()
+    const r = await cli(['migration', 'lint', name(fresh), '--json'])
+    expect(r.code).toBe(0)
+    const report = JSON.parse(r.stdout)
+    expect(report.data.skipped).toEqual([name(old)])
+    expect(report.data.findings.map((f: { rule: string }) => f.rule)).not.toContain(
+      'unknown_dependency',
+    )
+    // By migration id and by path too.
+    expect((await cli(['migration', 'lint', fresh.data.migrationId])).code).toBe(0)
+    expect((await cli(['migration', 'lint', fresh.data.path])).code).toBe(0)
+  })
+
+  it('still fails for the old bundle, and names a bundle that does not exist as a usage error', async () => {
+    const { old } = await setup()
+    expect((await cli(['migration', 'lint', name(old)])).code).toBe(EXIT.failure)
+    const unknown = await cli(['migration', 'lint', '01ZZZZZZZZZZZZZZZZZZZZZZZZ'])
+    expect(unknown.code).toBe(EXIT.usage)
+    expect(unknown.stderr).toContain('01ZZZZZZZZZZZZZZZZZZZZZZZZ')
+  })
+
+  it('--since selects the bundle and everything that depends on it', async () => {
+    const { old, fresh } = await setup()
+    const since = await cli(['migration', 'lint', '--since', fresh.data.migrationId, '--json'])
+    expect(since.code).toBe(0)
+    expect(JSON.parse(since.stdout).data.skipped).toEqual([name(old)])
+    // Naming the old one selects both, so the lint is red again.
+    expect((await cli(['migration', 'lint', '--since', old.data.migrationId])).code).toBe(
+      EXIT.failure,
+    )
+  })
+})
+
 describe('a local migration stream', () => {
   it('initializes a project, adds bundles in dependency order, and checks them like the server', async () => {
     await mkdir(join(dir, 'repo'))

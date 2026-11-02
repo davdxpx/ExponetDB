@@ -1751,16 +1751,26 @@ exponetdb migration new leads-idx --nontransactional
 
 Lint the local bundles with the PostgreSQL parser (offline facts; exit 1 on a blocking finding).
 
+Without arguments every bundle is linted. Name bundles (directory, path or migration id) or use --since to count findings and the exit code for those only; the others are listed as skipped and still take part in the dependency graph. An applied bundle cannot change, so lint the new ones.
+
 ```text
-exponetdb migration lint [flags]
+exponetdb migration lint [bundle…] [flags]
 ```
 
 Runs: locally; effect: local; output: `LintReport`.
 
 | Argument or flag | Meaning |
 |---|---|
+| `bundle` | Bundles to lint: directory name, path or migration id (default all). |
+| `--since <id>` | Lint this bundle and every bundle that depends on it. |
 | `--postgres <16\|17\|18>` | The grammar (default 17). (default 17) |
 | `--tier <prod\|nonprod>` | Lint as for this tier (default prod, the strictest). (default prod) |
+
+```sh
+exponetdb migration lint
+exponetdb migration lint 01JB2Z6G8M4Q7R9T1V3W5X0002_add-index
+exponetdb migration lint --since 01JB2Z6G8M4Q7R9T1V3W5X0002
+```
 
 ### migration checksum
 
