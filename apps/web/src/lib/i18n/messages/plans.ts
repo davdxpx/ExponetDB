@@ -68,6 +68,9 @@ export const plansMessages = {
   'plans.title.packages.apply_update.byId': 'Apply package updates on node {subject}',
   'plans.title.backup.verify': 'Verify a backup',
   'plans.title.operation.force_release': 'Release a lock held by a lost worker',
+  'plans.title.migration.revisions.purge': 'Purge stored bundle revisions no plan references',
+  'plans.title.registry.cluster.declare_memory_limit':
+    'Declare the memory limit of cluster {subject}',
   'plans.title.access.role_binding.create': 'Create a role binding',
   'plans.title.access.role_binding.delete': 'Delete a role binding',
   'plans.title.access.policy_settings.update': 'Change the policy settings',

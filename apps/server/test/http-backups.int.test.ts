@@ -1,5 +1,4 @@
 import { operationView } from '@exponetdb/application'
-import { maintainDrillFindings } from '@exponetdb/backups'
 import { type MigratedTestDatabase, migratedTestDatabase } from '@exponetdb/control-store/testing'
 import { type JsonObject, newId, systemClock } from '@exponetdb/kernel'
 import { initPki } from '@exponetdb/nodes'
@@ -19,6 +18,7 @@ import {
 } from '@exponetdb/secrets'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { composeAccess, workerDispatchAdmission, workerKinds } from '../src/composition/access.ts'
+import { WORKER_TASKS } from '../src/composition/worker-tasks.ts'
 import type { BackupExecutionConfig, ServeConfig } from '../src/config/env.ts'
 import { createPublicApp, httpMetrics } from '../src/interfaces/http/app.ts'
 import {
@@ -461,10 +461,11 @@ async function planAndApply(path: string, body: unknown) {
   return { plan: planned.body, operation: await view(applied.body.id) }
 }
 
+/** One run of the worker's own task (VC-038): the generator had no caller outside this test. */
 async function findingsPass() {
-  await storeOf(db, 'exdb_worker').transaction('test.drill_findings', (tx) =>
-    maintainDrillFindings(tx, Date.now()),
-  )
+  const task = WORKER_TASKS.find((t) => t.name === 'backups.findings')
+  if (task === undefined) throw new Error('the worker has no task backups.findings')
+  await task.run({ store: storeOf(db, 'exdb_worker'), runtime: { clock: systemClock } } as never)
 }
 
 async function openFindings(clusterId: string): Promise<string[]> {
@@ -697,6 +698,21 @@ describe('backups through REST, the worker and a simulated node', () => {
     expect(policy.operation.state).toBe('succeeded')
     await findingsPass()
     expect(await openFindings(w.clusterId)).toContain('backup_drill_never_run')
+    // Seen again by the next task run, the open finding is not written again (the review of group H).
+    const version = async () =>
+      (
+        await db.asSuperuser((c) =>
+          c.query(
+            `SELECT xmin::text || '/' || xmax::text || '/' || occurrences AS v FROM observation.subject_findings
+              WHERE cluster_id = $1 AND code = 'backup_drill_never_run' AND state = 'open'`,
+            [w.clusterId],
+          ),
+        )
+      ).rows[0]?.v
+    const before = await version()
+    expect(before).toBeDefined()
+    await findingsPass()
+    expect(await version()).toBe(before)
     const catalog = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/backups`)
     const backupId = catalog.body.backups[0].id as string
     // A drill from an unverified backup is denied by restore.source-verified.

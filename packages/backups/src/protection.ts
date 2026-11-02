@@ -9,7 +9,7 @@ import type { BackupProtection } from '@exponetdb/contracts'
  * input: unknown > unprotected > at_risk > unproven > protected.
  */
 
-/** A catalog older than this is stale for display (the mirror is refreshed every 10 minutes). */
+/** A catalog older than this is stale for display (a refresh is an operation someone starts: VC-038). */
 export const CATALOG_STALE_AFTER_MS = 30 * 60_000
 /** A WAL archive observation older than this does not prove the archive works now. */
 /** How far an observed time may lie in the future (clock skew) before it is not believed. */

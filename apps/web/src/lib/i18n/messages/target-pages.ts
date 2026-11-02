@@ -241,7 +241,7 @@ const findingsMessages = {
   'findings.noObject': 'No object',
   'findings.firstSeen': 'First seen',
   'findings.lastSeen': 'Last seen',
-  'findings.occurrences': 'Seen {count} times',
+  'findings.occurrences': 'Recorded {count, plural, one {# time} other {# times}}',
   'findings.openDrift': 'Open on the Drift page',
 } as const
 

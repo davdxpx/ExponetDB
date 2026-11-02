@@ -74,7 +74,8 @@ export const ENTRIES: readonly Entry[] = [
   {
     what: 'MCP evals with a model (the *.model.test.ts class)',
     paths: ['apps/server/test/mcp-evals.model.test.ts', 'apps/server/vitest.evals.config.ts'],
-    needs: 'ANTHROPIC_API_KEY; without it the run says it was skipped and exits 0',
+    needs:
+      'EXDB_EVAL_ANTHROPIC_API_KEY (your own key); without it every task is skipped with the NOT RUN message and the run exits 0',
     command: 'bun run mcp:evals',
     ci: 'none (owner, with a key)',
   },

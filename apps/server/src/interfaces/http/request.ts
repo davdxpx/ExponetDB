@@ -183,6 +183,24 @@ const CONTROL_STORE_DEGRADED = new Set([
 ])
 
 /** The catalog code of an error from the application, auth or operations layers; anything else is internal. */
+/**
+ * Whether the answer to this error comes from a cause the journal must keep: it is answered
+ * INTERNAL, or it is an internal failure the mapping below turns into a catalog code (a Control
+ * Store outage, a failed audit append, an internal operation code, a lost key). A refusal the
+ * catalog names itself is not.
+ */
+export function hasInternalCause(error: unknown): boolean {
+  if (errorCodeOf(error) === 'INTERNAL') return true
+  if (keyUnavailable(error) !== undefined) return true
+  if (!(error instanceof Error) || !('code' in error) || typeof error.code !== 'string')
+    return false
+  return (
+    (error.name === 'ControlStoreError' && CONTROL_STORE_DEGRADED.has(error.code)) ||
+    (error.name === 'AuditWriteError' && error.code === 'audit_append_failed') ||
+    (error.name === 'OperationError' && INTERNAL_OPERATION_CODES[error.code] !== undefined)
+  )
+}
+
 export function errorCodeOf(error: unknown): ErrorCode {
   // VC-011
   if (keyUnavailable(error) !== undefined) return 'SECRET_KEY_UNAVAILABLE'

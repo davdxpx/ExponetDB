@@ -55,16 +55,19 @@ allowlist per event and a pattern denylist as a second line
 | `exdb_mcp_requests_total` | era (`modern`, `legacy`, `none`), status class | MCP traffic by protocol era (when legacy can be retired) |
 | `exdb_mcp_tool_calls_total`, `exdb_mcp_tool_call_duration_seconds` | tool, outcome code (`ok` or the error code), era | agent behavior |
 | `exdb_mcp_denied_total` | reason (closed set: `origin`, `host`, `invalid_token`, `insufficient_scope`, `rate_limited`, `version`, …) | refusals at the `/mcp` edge |
-| `exdb_policy_decisions_total` | rule id, decision | which rules bite |
-| `exdb_operations_total` | kind, class, outcome | |
-| `exdb_operation_step_duration_seconds` | kind, step | slow steps |
-| `exdb_sampler_lag_seconds` | sampler | freshness of health data |
-| `exdb_sample_failures_total` | sampler, cause | gaps |
-| `exdb_agent_connected` | node | gateway view |
-| `exdb_agent_job_duration_seconds` | capability, outcome | |
+| `exdb_policy_decisions_total` | rule id, decision | which rules bite **[PLANNED]** |
+| `exdb_operations_total` | kind, class, outcome | **[PLANNED]** |
+| `exdb_operation_step_duration_seconds` | kind, step | slow steps **[PLANNED]** |
+| `exdb_sampler_lag_seconds` | sampler | freshness of health data **[PLANNED]** |
+| `exdb_sample_failures_total` | sampler, cause | gaps **[PLANNED]** |
+| `exdb_agent_connected` | node | gateway view **[PLANNED]** |
+| `exdb_agent_job_duration_seconds` | capability, outcome | **[PLANNED]** |
 | `exdb_control_store_query_duration_seconds` | process role, query class | Control Store pressure |
-| `exdb_lock_wait_seconds` | domain kind | exclusivity contention |
+| `exdb_lock_wait_seconds` | domain kind | exclusivity contention **[PLANNED]** |
 | `exdb_audit_chain_verified` | scope (`incremental`, `full`) | integrity checks |
+| `exdb_operations`, `exdb_operation_oldest_waiting_seconds` | state (the six that have not finished) | **[OBSERVED]** (VC-037) refreshed by the worker task `metrics.refresh` every 30 s from the Control Store: operations waiting, running or needing attention, and how long the oldest one has waited |
+| `exdb_nodes`, `exdb_node_certificate_not_after_timestamp_seconds` | state (`pending_binding`, `active`, `degraded`, `offline`, `binding_failed`, `revoked`, `decommissioned`) | **[OBSERVED]** (VC-037, VC-039) nodes by state with `offline` judged by the heartbeat, and when the soonest certificate of a node that can connect ends, as a Unix time (the year 2100 when none): alert when it minus `time()` is below 86,400. `exdb_metrics_refreshed_timestamp_seconds` is when the worker last set the gauges; alert when it stops advancing, because they are then stale |
+| `exdb_targets` | state (the six health states) | **[OBSERVED]** (VC-037) registered targets by health state
 
 Labels never contain target names, user ids or other high-cardinality or
 personal values; target-level detail belongs in the Control Store's health
@@ -104,7 +107,7 @@ process's readiness checks, the keyring and the audit tables. Of the checks
 listed above the read covers audit chain verification and export (the outcome
 of the worker's tasks), sampler lag, the keyring (keys loaded against keys
 referenced), and the maintenance tasks' failures (partition maintenance
-included). It does **not** cover clock skew between processes, the sampled
+included). It does **not** cover the sampled
 decryptability of every secret, the Control Store's size growth, the
 job-signing key's age, or the gateway's certificate (minted in memory, recorded
 nowhere); `GET /nodes/certificates` shows the certificates the store holds and
@@ -117,6 +120,21 @@ clock (a clock step forward and back). Every audited change is then refused
 with 503 `AUDIT_CLOCK_SKEW` naming both times, reads keep working, and the
 role stays in service ([RB-16](../12-operations/incident-model.md),
 [OD-69](../00-product/open-decisions.md#od-69-audit-chain-and-clock-skew)).
+**[DECIDED]** (verification campaign fix VC-042) The degrading check `audit_partitions`
+reads the monthly partitions of `audit.audit_events` (`audit.partition_inventory`):
+it fails `audit_partition_missing` when the current month has no partition (every
+audited change then fails and answers 503 `CONTROL_PLANE_DEGRADED`, reads go on),
+fails `audit_partition_ending` when now + 7 days is not covered, and warns
+`audit_partition_margin_low` under 30 days of cover. The worker task `audit.partitions`
+keeps three months ahead; the check notices when it did not (a long worker outage, a
+Control Store restored from an older dump into a later month).
+
+**[DECIDED]** (verification campaign fix VC-040) Every role's readiness has the degrading
+check `clock_skew`: it warns `clock_skew` when the process clock differs from the Control
+Store's by more than 5 seconds. A plan's `created_at` and `expires_at`, a node's offline
+judgement and an enrollment token's reveal window are taken from the database's clock, and the
+worker keeps its belief about its operation lease on the monotonic clock, so a stepped or
+skewed process clock neither stretches a plan's life nor flaps the nodes nor decides the lease.
 
 ## 6. What happens when observability is down
 

@@ -416,7 +416,7 @@ export const FindingSchema = z
     state: z.enum(['open', 'resolved']),
     occurrences: z.int().min(1).meta({
       description:
-        'How often the same finding was detected while open (deduplicated, never repeated).',
+        'How many times the open finding was recorded: once when it opened, again when what it says changes, and at most once a day while it stays unchanged (it is never repeated at every check).',
     }),
     object: name(512, 'Affected object (class and qualified name), when there is one.').nullable(),
     securityRelevant: z.boolean(),

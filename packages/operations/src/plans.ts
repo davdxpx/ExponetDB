@@ -1,6 +1,6 @@
 import { appendAuditEvent } from '@exponetdb/audit'
 import { PolicyDecisionSchema, RequirementSchema } from '@exponetdb/contracts'
-import type { Queryable, Row, Tx } from '@exponetdb/control-store'
+import { databaseNowMs, type Queryable, type Row, type Tx } from '@exponetdb/control-store'
 import {
   type Clock,
   canonicalize,
@@ -163,8 +163,11 @@ export async function createPlan(
   if (!Number.isInteger(lifetime) || lifetime <= 0 || lifetime > limits.max) {
     throw new OperationError('VALIDATION_FAILED')
   }
-  const now = options.clock.nowMs()
-  const planId = newId('pln', now)
+  // The plan's times are the database's: accept and expiry judge with its clock, and the CHECK on
+  // `expires_at` is relative to `created_at`, so a process clock that differs would stretch or
+  // shrink the plan's life (VC-040). The process clock only names the id.
+  const now = await databaseNowMs(tx)
+  const planId = newId('pln', options.clock.nowMs())
   const contentChecksum = `sha256:${sha256Hex(canonical(json(plan.content)))}`
   const body: Record<string, JsonValue> = {
     id: planId,

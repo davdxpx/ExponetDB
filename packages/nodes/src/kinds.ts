@@ -163,7 +163,7 @@ export class NodeEnrollKind extends NodeKind {
     }
     const serverId = content.id('srv', 'serverId')
     const tokenId = content.id('ent', 'tokenId')
-    await createEnrollmentToken(tx, this.deps.clock, {
+    await createEnrollmentToken(tx, {
       tokenId,
       serverId,
       revealBy: identityId,

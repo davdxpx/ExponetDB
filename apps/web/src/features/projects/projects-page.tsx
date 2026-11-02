@@ -167,7 +167,7 @@ function Portfolio(props: {
       <Toolbar rows={rows} search={search} view={view} change={change} />
       <p role="status" className="m-0 text-xs text-foreground-light">
         {shown.length === rows.length
-          ? t('projects.count', { total: formatCount(rows.length) })
+          ? t('projects.count', { total: rows.length })
           : t('projects.matching', {
               shown: formatCount(shown.length),
               total: formatCount(rows.length),

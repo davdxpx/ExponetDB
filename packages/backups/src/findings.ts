@@ -127,6 +127,17 @@ export async function maintainDrillFindings(tx: Tx, nowMs: number): Promise<Dril
       nowMs,
     )
     for (const w of wanted) {
+      // An unchanged finding seen again is not written: every five minutes would rewrite each open
+      // drill finding 288 times a day (VC-038; the same rule as drift findings, VC-041).
+      const { rows: seen } = await tx.query(
+        'backups.findings.drill_seen',
+        `SELECT (severity, summary, details) IS NOT DISTINCT FROM ($3::text, $4::text, $5::jsonb)
+                AND last_seen_at >= now() - interval '1 day' AS unchanged
+           FROM observation.subject_findings
+          WHERE cluster_id = $1 AND kind = 'backup' AND dedup_key = $2 AND state = 'open'`,
+        [clusterId, w.code, w.severity, w.summary, JSON.stringify(w.details)],
+      )
+      if (seen[0]?.bool('unchanged') === true) continue
       const { rows: inserted } = await tx.query(
         'backups.findings.drill_open',
         `INSERT INTO observation.subject_findings
