@@ -116,6 +116,20 @@ export const MAX_PARSE_TOKENS = 200_000
 export const MAX_COMMENT_DEPTH = 32
 
 /**
+ * The most statements one migration file may hold (VC-068): classifying a statement costs CPU in
+ * the serving process, and 200,000 tokens allow far more statements than any real file has.
+ */
+export const MAX_MIGRATION_STATEMENTS = 10_000
+
+/**
+ * The most parse tokens (other than space and comments) the bundles of one lint or plan request
+ * share (VC-014). One parse is bounded by {@link MAX_PARSE_TOKENS}, but each bundle's analysis is
+ * kept in the report: about 650 bytes per token, so six dense bundles ended a serve process with
+ * the documented 259 MiB heap. 400,000 tokens are two largest files.
+ */
+export const MAX_REQUEST_PARSE_TOKENS = 400_000
+
+/**
  * Whether a parse of the text, or of a body in it (a dollar-quoted body is
  * parsed on its own: a `DO` block's PL/pgSQL, a function's SQL), up to two
  * levels down, would be given more than {@link MAX_PARSE_TOKENS} tokens: the
@@ -141,7 +155,10 @@ export type ParseFailure =
   | { readonly kind: 'nul' }
   | { readonly kind: 'empty' }
   /** A bound of the parse was exceeded; `limit` names it. */
-  | { readonly kind: 'too_large'; readonly limit: 'bytes' | 'tokens' | 'comment_depth' }
+  | {
+      readonly kind: 'too_large'
+      readonly limit: 'bytes' | 'tokens' | 'comment_depth' | 'statements' | 'request_tokens'
+    }
   /** A syntax error (or the parser's resource limit, e.g. nesting): `position` is a string index. */
   | { readonly kind: 'syntax'; readonly position: number | null; readonly resource: boolean }
 

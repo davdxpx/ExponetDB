@@ -4,6 +4,7 @@ import type { SupportedMajor } from './majors.ts'
 import {
   type JsonNode,
   MAX_MIGRATION_PARSE_BYTES,
+  MAX_MIGRATION_STATEMENTS,
   names,
   nodeType,
   type ParsedStatement,
@@ -2242,6 +2243,10 @@ export function analyzeMigrationSql(
   const parsed = parseWith(major, text, MAX_MIGRATION_PARSE_BYTES)
   if (!parsed.ok) {
     return { ok: false, failure: parsed.failure, ...parseFailurePosition(text, parsed.failure) }
+  }
+  if (parsed.statements.length > MAX_MIGRATION_STATEMENTS) {
+    const failure: ParseFailure = { kind: 'too_large', limit: 'statements' }
+    return { ok: false, failure, ...parseFailurePosition(text, failure) }
   }
   const trusted = new Set(options.trustedExtensions ?? [])
   const statements: StatementFacts[] = []

@@ -227,6 +227,25 @@ describe('content the engine refuses', () => {
     })
   })
 
+  it('shares one parse budget between the bundles of a request, named, and still lints the rest (VC-014)', () => {
+    const small =
+      'CREATE TABLE public.a (id bigint PRIMARY KEY);\nCREATE TABLE public.b (id bigint);\n'
+    const r = lint(
+      [
+        bundle({ up: small }),
+        bundle({ up: small.replace(/public\.a/, 'public.c').replace(/public\.b/, 'public.d') }),
+      ],
+      { parseTokenBudget: 30 },
+    )
+    const refused = r.bundles.flatMap((b) => b.findings).filter((f) => f.rule === 'parse_error')
+    expect(refused).toHaveLength(1)
+    expect(refused[0]?.message).toContain('request_tokens')
+    expect(refused[0]?.blocking).toBe(true)
+    // The bundle inside the budget was analysed.
+    expect(r.bundles[0]?.statements.length).toBe(2)
+    expect(r.bundles[1]?.statements.length).toBe(0)
+  })
+
   it('names the limit when block comments nest too deep, without parsing the file (VC-013)', () => {
     const depth = 40_000
     const started = performance.now()

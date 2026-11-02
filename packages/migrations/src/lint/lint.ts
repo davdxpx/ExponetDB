@@ -4,8 +4,10 @@ import {
   analyzeMigrationSql,
   COMPATIBILITY_ORDER,
   type CompatibilityClass,
+  countTokens,
   type LockSeverity,
   loadParser,
+  MAX_REQUEST_PARSE_TOKENS,
   mostSevere,
   type ObjectRef,
   type StatementFacts,
@@ -69,6 +71,8 @@ export interface LintContext {
   /** Checksums the bundle store saw per migration id (never applied anywhere). */
   readonly ingested?: ReadonlyMap<string, readonly string[]>
   readonly catalog?: CatalogFacts
+  /** The parse tokens the bundles of this request share (default {@link MAX_REQUEST_PARSE_TOKENS}). */
+  readonly parseTokenBudget?: number
 }
 
 export interface LintFinding {
@@ -419,6 +423,8 @@ export function lintBundles(inputs: readonly BundleInput[], ctx: LintContext): L
   const graphFindings: LintFinding[] = []
   const validated: { report: BundleReport; bundle: ValidatedBundle; findings: LintFinding[] }[] = []
   const trusted = ctx.project?.trustedExtensions ?? []
+  const requestBudget = ctx.parseTokenBudget ?? MAX_REQUEST_PARSE_TOKENS
+  let parsedTokens = 0
   const forbiddenSchemas = new Set(ctx.project?.lint?.forbiddenSchemas ?? [])
   const forbiddenFunctions = new Set(ctx.project?.lint?.forbiddenFunctions ?? [])
 
@@ -453,9 +459,21 @@ export function lintBundles(inputs: readonly BundleInput[], ctx: LintContext): L
     const searchPath = canonical.execution?.searchPath ?? []
     const up = normalizeSqlSource(input.files.get('up.sql') ?? new Uint8Array())
     const upText = up.ok ? up.value : ''
-    const analysis = analyzeMigrationSql(ctx.major, upText, { trustedExtensions: trusted })
+    // The bundles of a request share one parse budget (VC-014): each analysis is kept in the report.
+    const tokens = countTokens(upText, requestBudget + 1)
+    const overBudget = parsedTokens + tokens > requestBudget
+    if (!overBudget) parsedTokens += tokens
+    const analysis = overBudget
+      ? undefined
+      : analyzeMigrationSql(ctx.major, upText, { trustedExtensions: trusted })
     let statements: readonly StatementFacts[] = []
-    if (!analysis.ok) {
+    if (analysis === undefined) {
+      emit(
+        'parse_error',
+        `This request's bundles are over the shared parse budget (request_tokens: ${requestBudget} tokens): lint or plan fewer bundles at a time.`,
+        { file: 'up.sql', line: null, column: null },
+      )
+    } else if (!analysis.ok) {
       emit(
         'parse_error',
         analysis.failure.kind === 'syntax'

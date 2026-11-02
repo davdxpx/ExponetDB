@@ -3,6 +3,7 @@ import {
   analyzeMigrationSql,
   loadParser,
   MAX_COMMENT_DEPTH,
+  MAX_MIGRATION_STATEMENTS,
   parseWith,
 } from '../src/parser/index.ts'
 import { commentDepth } from '../src/parser/lexer.ts'
@@ -60,5 +61,21 @@ describe('the nesting of block comments (VC-013)', () => {
     expect(large.ms).toBeLessThan(2000)
     // Four times the depth: a linear check is about 4, the parser's scanner about 16.
     expect(large.ms / Math.max(small.ms, 1)).toBeLessThan(8)
+  })
+})
+
+describe('the statements of one migration file (VC-068)', () => {
+  it('refuses a file with more statements than the limit, named, before classifying any of them', () => {
+    const text = 'SELECT 1;\n'.repeat(MAX_MIGRATION_STATEMENTS + 1)
+    const started = performance.now()
+    const refused = analyzeMigrationSql(17, text)
+    expect(refused).toMatchObject({
+      ok: false,
+      failure: { kind: 'too_large', limit: 'statements' },
+    })
+    expect(performance.now() - started).toBeLessThan(2000)
+    expect(analyzeMigrationSql(17, 'SELECT 1;\n'.repeat(MAX_MIGRATION_STATEMENTS))).toMatchObject({
+      ok: true,
+    })
   })
 })
