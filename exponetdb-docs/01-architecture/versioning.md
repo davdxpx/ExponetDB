@@ -45,7 +45,10 @@ version field without an upgrade concept is not added.
 Within a major version, allowed without a version bump:
 
 - new optional request fields (with defaults that preserve old behavior);
-- new response fields (clients must ignore unknown fields; the SDK does);
+- new response fields (clients must ignore unknown fields; the CLI does: a field it does not
+  know is ignored, a missing field, a wrong type or a value outside a closed enum is
+  `RESPONSE_INVALID`, with the hint to update when the server is newer than the CLI; the server
+  names the oldest CLI it serves in `GET /installation` `minCliVersion`, **[DECIDED]** TC-040);
 - new endpoints, tools, capabilities, error codes, enum values **only** where the
   contract marks the enum as open (`x-extensible-enum`). Closed enums (for example
   `tier`) change only with a major;

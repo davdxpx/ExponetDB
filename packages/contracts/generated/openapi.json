@@ -9253,6 +9253,11 @@
             "pattern": "^ins_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
             "type": "string"
           },
+          "minCliVersion": {
+            "description": "The oldest CLI release this server still serves (additive, TC-040): a CLI below it stops with `cli_outdated` and the command to update, instead of failing on the first response it cannot read.",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$",
+            "type": "string"
+          },
           "oauthClientRegistration": {
             "description": "How this installation admits a new OAuth client (Wave 8, additive; `EXPONETDB_OAUTH_CLIENT_REGISTRATION`, OD-5): `open` approves a new CIMD or DCR client automatically, `review` waits for an administrator. A person still consents in both modes. Absent when the serving process does not report it.",
             "enum": [

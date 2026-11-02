@@ -64,6 +64,7 @@ const UNAVAILABLE = new Set([
   'discovery_failed',
   'installation_changed',
   'incompatible_server',
+  'cli_outdated',
   'lab_unavailable',
 ])
 

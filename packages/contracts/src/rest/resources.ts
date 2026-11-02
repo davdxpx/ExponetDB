@@ -2041,6 +2041,9 @@ export const AuditEventSchema = z
   })
   .meta({ id: 'AuditEvent' })
 
+/** The oldest CLI release this server's API still serves; raised in the release that breaks it. */
+export const MIN_CLI_VERSION = '0.6.0'
+
 export const InstallationSchema = z
   .object({
     installationId: InstallationIdSchema.optional().meta({
@@ -2048,6 +2051,14 @@ export const InstallationSchema = z
         "This installation's id (Wave 6, additive): a client that recorded it notices when another installation answers at the same origin.",
     }),
     version: z.string().regex(/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/),
+    minCliVersion: z
+      .string()
+      .regex(/^\d+\.\d+\.\d+$/)
+      .optional()
+      .meta({
+        description:
+          'The oldest CLI release this server still serves (additive, TC-040): a CLI below it stops with `cli_outdated` and the command to update, instead of failing on the first response it cannot read.',
+      }),
     contracts: z.object({
       restApi: z.literal('v1'),
       mcpCatalog: z.literal('exponetdb.mcp/v1'),

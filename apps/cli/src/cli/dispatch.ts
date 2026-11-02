@@ -4,7 +4,7 @@ import type { CommandResult, OutputContext, SafeError } from '../output/model.ts
 import { renderHuman, renderJson, renderNdjson, type Terminal } from '../output/render.ts'
 import { isCliScope, scopeHint, scopeList } from '../presets.ts'
 import { prop, TokenStore } from '../store.ts'
-import { BUILD } from '../version.ts'
+import { BUILD, CLI_VERSION, olderThan } from '../version.ts'
 import { type GlobalOptions, type Parsed, parse, UsageError } from './args.ts'
 import { EXIT, exitFor } from './exit.ts'
 import { commandHelp, groupHelp, rootHelp } from './help.ts'
@@ -319,6 +319,22 @@ export async function dispatch(
         blocks: [],
       }
       if (global.verbose && error instanceof Error) io.stderr(`(${error.name})\n`)
+    }
+  }
+  // A contract mismatch against a server newer than this CLI is the CLI being behind (TC-040).
+  const newer = remote?.installation.version
+  if (
+    r.error?.code === 'RESPONSE_INVALID' &&
+    newer !== undefined &&
+    olderThan(CLI_VERSION, newer) &&
+    r.error.remediation === undefined
+  ) {
+    r = {
+      ...r,
+      error: {
+        ...r.error,
+        remediation: `The server ${newer} is newer than this CLI ${CLI_VERSION} and answered in a shape it does not know: update the CLI.`,
+      },
     }
   }
   if (r.error?.code === 'INSUFFICIENT_SCOPE') {
