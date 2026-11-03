@@ -66,6 +66,7 @@ export class World {
       placement: null,
       ledger: null,
       openFindingCount: 0,
+      mode: 'managed',
       ...over,
     }
     this.targets.set(path, target)

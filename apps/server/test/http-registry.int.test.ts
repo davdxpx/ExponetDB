@@ -365,6 +365,17 @@ describe('registry over REST', () => {
     expect(before.body.script).toContain(
       String.raw`\connect -reuse-previous=on 'dbname=''app_pending'''`,
     )
+    // ADR-0039 §5: the observer alone, for a hosted provider's non-superuser administrator.
+    const observerOnly = await owner.browser.call(
+      'GET',
+      `/api/v1/clusters/${ids.cluster}/bootstrap-sql?database=app_pending&roles=observer`,
+    )
+    expect(observerOnly.status).toBe(200)
+    expect(observerOnly.body).toMatchObject({ roles: ['exponetdb_observer'], executionRoles: [] })
+    expect(observerOnly.body.script).toContain(
+      'GRANT CONNECT ON DATABASE "app_pending" TO "exponetdb_observer";',
+    )
+    expect(observerOnly.body.script).not.toMatch(/exponetdb_(ledger_owner|migrator|reader)/)
     const refused = await Promise.all([
       owner.browser.call(
         'GET',
@@ -447,6 +458,7 @@ describe('registry over REST', () => {
       health: null,
       placement: { clusterId: ids.cluster, managementMode: 'external' },
       openFindingCount: 0,
+      mode: 'managed',
     })
     expectNoConnectionMaterial(target.text)
     expect(target.text).not.toContain(String(pg17.port))

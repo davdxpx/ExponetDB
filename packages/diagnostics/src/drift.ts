@@ -736,7 +736,7 @@ export async function dueDriftTargets(
        FROM registry.targets t
        LEFT JOIN LATERAL (SELECT max(d.finished_at) AS last FROM observation.drift_checks d
                            WHERE d.target_id = t.target_id AND d.generation = t.generation) l ON true
-      WHERE t.state IN ('active', 'suspended')
+      WHERE (t.state IN ('active', 'suspended') OR (t.state = 'registered' AND t.mode = 'observed'))
         AND (l.last IS NULL OR l.last < clock_timestamp()
              - make_interval(mins => CASE WHEN t.tier = 'prod' THEN $1::int ELSE $2::int END))
       ORDER BY l.last NULLS FIRST, t.target_id LIMIT $3`,

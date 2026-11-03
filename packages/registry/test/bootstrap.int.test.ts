@@ -65,7 +65,9 @@ const LOGIN = role('login')
 const REACH = role('reach')
 const LATER = role('later')
 const OTHER = role('other')
-const ROLES = [OWNER, ADOPTED, LOGIN, REACH, LATER, OTHER]
+// ADR-0039 §5: a hosted provider's administrator, not a superuser (CREATEROLE, pg_monitor admin).
+const ADMIN = role('admin')
+const ROLES = [OWNER, ADOPTED, LOGIN, REACH, LATER, OTHER, ADMIN]
 const MISSING = `exdb_t_aaa_missing_${suffix}`
 
 const SHARED_CONNECTION_LIMIT = 32
@@ -180,6 +182,80 @@ const migratorGrants = async (s: TestServer) =>
     )
     return r.rows
   })
+
+describe.each(matrix().map((s) => [s.major, s] as const))(
+  'the observer-only bootstrap SQL as a non-superuser administrator on PostgreSQL %i (ADR-0039 §5)',
+  (_major, s) => {
+    it('runs twice as the administrator and leaves the observer, pg_monitor, its settings and CONNECT', async () => {
+      const database = await createDatabase(s, 'bsobs')
+      created.push({ server: s, database })
+      // The test servers share exponetdb_observer (created by the superuser): the administrator
+      // holds ADMIN on it as the creator of a role does, and owns the database it grants on.
+      await withRolesHeld(s, () =>
+        runAsSuperuser(s, 'postgres', [
+          `CREATE ROLE ${ADMIN} LOGIN NOSUPERUSER CREATEROLE NOCREATEDB NOREPLICATION NOBYPASSRLS`,
+          `GRANT pg_monitor TO ${ADMIN} WITH ADMIN OPTION, INHERIT FALSE, SET FALSE`,
+          `GRANT exponetdb_observer TO ${ADMIN} WITH ADMIN OPTION, INHERIT FALSE, SET FALSE`,
+          `ALTER DATABASE "${database}" OWNER TO ${ADMIN}`,
+        ]),
+      )
+      const asAdmin = (script: string) => `SET ROLE ${ADMIN};\n${script}`
+      // The full script needs a superuser (temp_file_limit, BYPASSRLS): it stops on its first error.
+      const full = await runBootstrap(s, asAdmin(bootstrapScript([database])))
+      expect(full.status).not.toBe(0)
+      const observerOnly = bootstrapScript([database], { roles: 'observer' })
+      for (const attempt of ['first', 'second']) {
+        const r = await runBootstrap(s, asAdmin(observerOnly))
+        expect(r.status, `${attempt}: ${r.stderr}`).toBe(0)
+        expect(r.stderr, attempt).not.toMatch(/ERROR/)
+      }
+      const facts = await withSuperuser(s, 'postgres', async (c) => {
+        const observer = await c.query(
+          `SELECT r.rolcanlogin, r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolreplication, r.rolbypassrls,
+                  (SELECT array_agg(x ORDER BY x) FROM unnest(st.setconfig) x) AS settings,
+                  (SELECT a.inherit_option::text || a.set_option::text FROM pg_catalog.pg_auth_members a
+                    WHERE a.member = r.oid AND a.roleid = 'pg_monitor'::regrole
+                      AND a.grantor = '${ADMIN}'::regrole) AS monitor_by_admin
+             FROM pg_catalog.pg_roles r
+             LEFT JOIN pg_catalog.pg_db_role_setting st ON st.setrole = r.oid AND st.setdatabase = 0
+            WHERE r.rolname = 'exponetdb_observer'`,
+        )
+        const acl = await c.query(
+          'SELECT datacl::text AS acl FROM pg_catalog.pg_database WHERE datname = $1',
+          [database],
+        )
+        return { observer: observer.rows[0], acl: String(acl.rows[0]?.acl) }
+      })
+      expect(facts.observer).toMatchObject({
+        rolcanlogin: true,
+        rolsuper: false,
+        rolcreatedb: false,
+        rolcreaterole: false,
+        rolreplication: false,
+        rolbypassrls: false,
+        monitor_by_admin: 'truefalse',
+      })
+      expect(facts.observer?.settings).toEqual(
+        expect.arrayContaining([
+          'default_transaction_read_only=on',
+          'idle_in_transaction_session_timeout=30s',
+          'statement_timeout=30s',
+        ]),
+      )
+      expect(facts.acl).toContain(`exponetdb_observer=c/${ADMIN}`)
+      // Nothing else was granted on the database (no CREATE for a ledger owner, no other role).
+      expect(facts.acl).not.toMatch(/exponetdb_(ledger_owner|reader|verifier|operator|migrator)=/)
+      await withRolesHeld(s, () =>
+        runAsSuperuser(s, 'postgres', [
+          `ALTER DATABASE "${database}" OWNER TO CURRENT_USER`,
+          `REVOKE pg_monitor FROM exponetdb_observer GRANTED BY ${ADMIN}`,
+          `REVOKE exponetdb_observer FROM ${ADMIN}`,
+          `REVOKE pg_monitor FROM ${ADMIN}`,
+        ]),
+      )
+    })
+  },
+)
 
 describe.each(matrix().map((s) => [s.major, s] as const))(
   'the bootstrap SQL on PostgreSQL %i',

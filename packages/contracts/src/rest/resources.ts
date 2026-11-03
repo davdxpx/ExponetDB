@@ -57,7 +57,7 @@ import {
   WalCoverageSchema,
 } from './backups.ts'
 import { LintCodeSchema, MigrationProgressSchema, VerificationRunSchema } from './migrations.ts'
-import { ServerProviderSchema } from './registry.ts'
+import { ServerProviderSchema, TargetModeSchema } from './registry.ts'
 
 /*
  * REST v1 read resources (resources.md). Shapes of a group are refined in the
@@ -389,6 +389,7 @@ export const TargetSchema = TargetSummarySchema.extend({
     })
     .nullable(),
   openFindingCount: z.int().min(0),
+  mode: TargetModeSchema,
 }).meta({ id: 'Target' })
 
 // ----- findings -----

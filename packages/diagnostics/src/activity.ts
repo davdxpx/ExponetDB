@@ -7,7 +7,7 @@ import {
   type TrustedSql,
 } from '@exponetdb/postgres'
 import { DEFAULT_MAX_LENGTH, MCP_MAX_LENGTH, redactStatement } from '@exponetdb/postgres/parser'
-import { brand, type TargetRecord } from '@exponetdb/registry'
+import { brand, catalogReadable, type TargetRecord } from '@exponetdb/registry'
 import { DiagnosticsError } from './errors.ts'
 import { clip } from './findings.ts'
 import { requireIdentity } from './identity.ts'
@@ -89,7 +89,7 @@ async function onTarget<T>(
     session: Awaited<ReturnType<SnapshotDeps['connector']['forTarget']>>['session'],
   ) => Promise<T>,
 ): Promise<T> {
-  if (target.state !== 'active' && target.state !== 'suspended') {
+  if (!catalogReadable(target)) {
     throw new DiagnosticsError(
       target.state === 'decommissioned' ? 'TARGET_NOT_FOUND' : 'TARGET_UNAVAILABLE',
     )

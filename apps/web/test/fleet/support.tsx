@@ -176,6 +176,7 @@ export function targetDetailFixture(
     },
     ledger: null,
     openFindingCount: 0,
+    mode: 'managed',
     ...over,
   }
 }

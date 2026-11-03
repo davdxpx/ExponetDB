@@ -94,7 +94,8 @@
       "1": "sha256:3c32f9c2fa8c05663b2490c458ad0ce0b5c0a2da06babb0bc43f51de0b08cf82"
     },
     "target_get": {
-      "1": "sha256:aa95a6a85c358656a2b5a0dafca5c71916f71910ed26cd3479cbc1ac92145c4a"
+      "1": "sha256:aa95a6a85c358656a2b5a0dafca5c71916f71910ed26cd3479cbc1ac92145c4a",
+      "2": "sha256:a8e66d9103cea0dd2717f839b4c83400a5f0a736f2de51c414ae711206f4dc5b"
     },
     "target_health": {
       "1": "sha256:e35c7e9ef6ab49fed3ea9cb4224fc803ee435a56732ac0b5df63c56fed417c57"

@@ -40,6 +40,7 @@ import {
   evaluateRegistryPolicy,
   findTarget,
   grantUsable,
+  isObserved,
   operationActor,
   type RegistryActor,
   type RegistryPolicyContext,
@@ -580,6 +581,8 @@ export async function planMigrationApply(
   if (target === undefined) {
     throw new MigrationError('TARGET_NOT_FOUND')
   }
+  // ADR-0039 §3: an observed target is never written to, and has no ExponetDB ledger.
+  if (isObserved(target)) throw new MigrationError('TARGET_OBSERVED_ONLY')
   if (target.state !== 'active') {
     throw new MigrationError('TARGET_SUSPENDED', {
       reason:

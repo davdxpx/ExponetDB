@@ -13,6 +13,7 @@ import type { LedgerRecord } from '@exponetdb/postgres'
 import {
   evaluateRegistryPolicy,
   findTarget,
+  isObserved,
   operationActor,
   type RegistryActor,
   RegistryError,
@@ -123,6 +124,8 @@ export async function planLedgerReconcile(
 ): Promise<PlanRecord> {
   const target = await findTarget(tx, targetRef)
   if (target === undefined) throw new MigrationError('TARGET_NOT_FOUND')
+  // ADR-0039 §3: an observed target is never written to, and has no ExponetDB ledger.
+  if (isObserved(target)) throw new MigrationError('TARGET_OBSERVED_ONLY')
   if (target.state !== 'active') {
     throw new MigrationError('TARGET_SUSPENDED', { reason: target.stateReason ?? 'administrator' })
   }

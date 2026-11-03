@@ -928,6 +928,7 @@ Runs: against the server; effect: plan; action: `target.register.plan`; scopes: 
 | `--project <prj_…>` | The project. Required unless --file is given. |
 | `--environment <env_…>` | The environment. Required unless --file is given. |
 | `--database <dbs_…>` | The registered database. Required unless --file is given. |
+| `--mode <managed\|observed>` | observed: needs the observer credential only, writes nothing to the database and never activates (ADR-0039). Default managed. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
 | `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
@@ -1154,6 +1155,7 @@ Runs: against the server; effect: read; action: `cluster.bootstrap_sql.get`; sco
 | `--project <prj_…>` | A project whose targets will be placed here: its execution roles too (needs migrations.read on it). |
 | `--environment <env_…>` | Only this environment of --project. |
 | `--ledger <supabase,drizzle,applied_migrations>` | Legacy ledgers the observer may read during an import. |
+| `--roles <all\|observer>` | observer: only the observer role, for an observed target on a hosted provider whose administrator is not a superuser (ADR-0039). |
 
 ### cluster register
 
@@ -1212,6 +1214,8 @@ Runs: against the server; effect: plan; action: `registry.endpoint.add.plan`; sc
 | `--host <host>` | Host name or address. Required unless --file is given. |
 | `--port <number>` | Port. (default 5432) |
 | `--tls-server-name <name>` | TLS server name to verify. |
+| `--pooler-mode <session\|transaction>` | The pooling mode of a pooler endpoint (required with --kind pooler). |
+| `--login-suffix <ref>` | A pooler that routes by the login name: the login becomes exponetdb_<role>.<suffix> (ADR-0039). |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
 | `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |

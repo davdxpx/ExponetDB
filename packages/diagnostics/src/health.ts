@@ -26,8 +26,10 @@ import {
   activeExceptions,
   brand,
   type Connector,
+  catalogReadable,
   type EndpointRecord,
   type ExecutionRoleExceptionRecord,
+  isObserved,
   listEndpoints,
   RegistryError,
   type TargetRecord,
@@ -352,7 +354,7 @@ export async function sampleTarget(
   deps: HealthDeps,
   target: TargetRecord,
 ): Promise<HealthObservation | undefined> {
-  if (target.state !== 'active' && target.state !== 'suspended') {
+  if (!catalogReadable(target)) {
     return undefined
   }
   const exceptions = await activeExceptions(deps.store, target.projectId, target.environmentId)
@@ -415,8 +417,9 @@ export async function sampleTarget(
         code: 'identity_mismatch',
         severity: 'critical',
         dedupKey: IDENTITY_FINDING,
-        summary:
-          'The database behind this target no longer carries its identity marker; writes are stopped until a person resolves it.',
+        summary: isObserved(target)
+          ? 'The database behind this observed target is not the one registered (its cluster or database oid differs); its reads are refused until a person resolves it.'
+          : 'The database behind this target no longer carries its identity marker; writes are stopped until a person resolves it.',
         details: { ...mismatch, securityRelevant: true, object: null },
       })
     } else if (sample.identity.status === 'match') {
@@ -485,12 +488,12 @@ async function keepExceptionFindings(
   }
 }
 
-/** Targets the sampler covers: active and suspended ones with a placement. */
+/** Targets the sampler covers: active, suspended and observed ones (ADR-0039) with a placement. */
 export async function targetsToSample(q: Queryable): Promise<string[]> {
   const { rows } = await q.query(
     'observation.health.targets',
     `SELECT t.target_id FROM registry.targets t
-      WHERE t.state IN ('active', 'suspended')
+      WHERE (t.state IN ('active', 'suspended') OR (t.state = 'registered' AND t.mode = 'observed'))
         AND EXISTS (SELECT FROM registry.placements p WHERE p.target_id = t.target_id AND p.valid_to IS NULL)
       ORDER BY t.target_id`,
   )

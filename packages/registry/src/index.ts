@@ -29,8 +29,10 @@ export {
   type ConnectorOptions,
   consumerOf,
   directEndpoints,
+  loginName,
   type OpenedSession,
   type SessionRequest,
+  sessionEndpoints,
 } from './connect.ts'
 export { Body, ContentInvalid } from './content.ts'
 export {
@@ -183,11 +185,19 @@ export type {
   ProductRecord,
   ProjectRecord,
   ServerRecord,
+  TargetMode,
   TargetRecord,
   TargetState,
   Tier,
 } from './records.ts'
-export { MEMORY_LIMITS, type MemoryLimit, memoryLimited } from './records.ts'
+export {
+  catalogReadable,
+  isObserved,
+  MEMORY_LIMITS,
+  type MemoryLimit,
+  memoryLimited,
+  TARGET_MODES,
+} from './records.ts'
 export { TargetRegisterKind } from './register.ts'
 export {
   type BackupBindings,

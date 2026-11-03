@@ -74,6 +74,49 @@ describe('endpoints', () => {
 })
 
 describe('bootstrap SQL', () => {
+  it('emits only the observer for a non-superuser administrator with --roles observer (ADR-0039 §5)', () => {
+    const script = bootstrapScript(['app_db', 'second'], { roles: 'observer' })
+    expect(script).not.toMatch(/PASSWORD/)
+    for (const other of [
+      'exponetdb_ledger_owner',
+      'exponetdb_reader',
+      'exponetdb_verifier',
+      'exponetdb_operator',
+      'exponetdb_migrator',
+      'temp_file_limit',
+      'BYPASSRLS"',
+      'GRANT CREATE',
+    ]) {
+      expect(script, other).not.toContain(other)
+    }
+    expect(script).toContain(
+      'CREATE ROLE "exponetdb_observer" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS INHERIT CONNECTION LIMIT 8',
+    )
+    // An existing role is only altered where such an administrator may, and refused when privileged.
+    expect(script).toContain('ALTER ROLE "exponetdb_observer" LOGIN INHERIT CONNECTION LIMIT 8;')
+    expect(script).toContain(
+      'r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR r.rolreplication OR r.rolbypassrls',
+    )
+    expect(script).toContain(
+      'GRANT "pg_monitor" TO "exponetdb_observer" WITH INHERIT TRUE, SET FALSE;',
+    )
+    expect(script).toContain('GRANT CONNECT ON DATABASE "app_db" TO "exponetdb_observer";')
+    expect(script).toContain('GRANT CONNECT ON DATABASE "second" TO "exponetdb_observer";')
+    expect(
+      script.split('\n').filter((l) => l.startsWith('ALTER ROLE "exponetdb_observer" SET')),
+    ).toEqual([
+      `ALTER ROLE "exponetdb_observer" SET default_transaction_read_only = E'on';`,
+      `ALTER ROLE "exponetdb_observer" SET statement_timeout = E'30s';`,
+      `ALTER ROLE "exponetdb_observer" SET idle_in_transaction_session_timeout = E'30s';`,
+    ])
+    expect(() =>
+      bootstrapScript(['app_db'], {
+        roles: 'observer',
+        executionRoles: [{ name: 'app_owner', bypassRlsExcused: false }],
+      }),
+    ).toThrow(/no execution role/)
+  })
+
   it('bounds the temporary files of a read and of a verification (VC-047)', () => {
     // set-returning functions materialize before the first row: 9 GB of temp files per 60 s read.
     for (const text of [bootstrapScript(['app_db']), clusterBootstrapStatements().join('\n')]) {

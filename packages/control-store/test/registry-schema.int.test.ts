@@ -488,6 +488,83 @@ describe('registry guards', () => {
     ).toBe('42501')
   })
 
+  it('keeps an observed target registered and its mode, and a login suffix on poolers only (ADR-0039)', async () => {
+    const w = await world()
+    const slug = (
+      await worker((c) =>
+        c.query('SELECT slug FROM registry.products WHERE product_id = $1', [w.product]),
+      )
+    ).rows[0]?.slug as string
+    const o = await op()
+    const id = newId('tgt', now())
+    await worker((c) =>
+      c.query(
+        `INSERT INTO registry.targets (target_id, project_id, environment_id, path, tier, generation, state, mode,
+                                       created_by_operation_id, state_changed_at, state_changed_by_operation_id)
+         VALUES ($1, $2, $3, $4, 'prod', 1, 'registered', 'observed', $5, now(), $5)`,
+        [id, w.project, w.production, `${slug}/platform/production`, o],
+      ),
+    )
+    const managed = await target(w, w.staging, `${slug}/platform/staging`)
+    const mode = await worker((c) =>
+      c.query('SELECT mode FROM registry.targets WHERE target_id = $1', [managed]),
+    )
+    expect(mode.rows[0]?.mode).toBe('managed')
+    const o2 = await op()
+    expect(
+      await refused(
+        'exdb_worker',
+        `UPDATE registry.targets SET state = 'active', state_changed_by_operation_id = $2 WHERE target_id = $1`,
+        [id, o2],
+      ),
+    ).toBe('EXG10')
+    // the worker holds no UPDATE on mode; the guard refuses it for anyone else
+    expect(
+      await refused(
+        'exdb_worker',
+        `UPDATE registry.targets SET mode = 'managed' WHERE target_id = $1`,
+        [id],
+      ),
+    ).toBe('42501')
+    expect(
+      await refused('super', `UPDATE registry.targets SET mode = 'managed' WHERE target_id = $1`, [
+        id,
+      ]),
+    ).toBe('EXG10')
+    await worker((c) =>
+      c.query(
+        `UPDATE registry.targets SET state = 'decommissioned', state_changed_by_operation_id = $2 WHERE target_id = $1`,
+        [id, o2],
+      ),
+    )
+    const insert = (kind: string, pooler: string | null, suffix: string | null) =>
+      refused(
+        'exdb_worker',
+        `INSERT INTO registry.endpoints (endpoint_id, cluster_id, kind, pooler_mode, host, port, tls_server_name, label,
+                                         login_suffix, state, created_by_operation_id)
+         VALUES ($1, $2, $3, $4, $5, 5432, 'pooler.example.test', 'pooler', $6, 'active', $7)`,
+        [
+          newId('end', now()),
+          w.cluster,
+          kind,
+          pooler,
+          `10.8.${worlds}.${Math.floor(Math.random() * 250)}`,
+          suffix,
+          o,
+        ],
+      )
+    expect(await insert('private', null, 'abc')).toBe('23514')
+    expect(await insert('pooler', 'session', 'Not-Valid')).toBe('23514')
+    expect(await insert('pooler', 'session', 'abcdefghij0123456789')).toBeUndefined()
+    expect(
+      await refused(
+        'super',
+        `UPDATE registry.endpoints SET login_suffix = 'other' WHERE cluster_id = $1 AND login_suffix IS NOT NULL`,
+        [w.cluster],
+      ),
+    ).toBe('EXG08')
+  })
+
   it('lets an address name one cluster only, registry-wide', async () => {
     const a = await world()
     const b = await world()
@@ -807,6 +884,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M6E85HQ7B2KDHHWMDP3AGA5M',
         // Verification campaign VC-045, VC-102 (2026-11-02): the mirror is revert-only; archiving is bound to its plan.
         '01M6EJD93DP9GNTHF77YY8VNY6',
+        // ADR-0039 (Wave 10, 2026-11-03): observed targets and login suffixes of pooler endpoints.
+        '01M6HQW7JQYHC8YR9KNTQ4PFFZ',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

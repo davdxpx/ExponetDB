@@ -16,13 +16,14 @@ credential, under which policies?*
 
 ```
 "reosa/platform/production"
-   │ parse path → (product, project, environment) → target tgt_…  (state must be active)
+   │ parse path → (product, project, environment) → target tgt_…  (state must be active; an observed target is read while registered)
    ▼
 current placement plc_… (generation 3) → database dbs_… ("reosa_production") → cluster cls_…
    ▼
 endpoint selection for the access role:
    migrator / verifier / operator → direct endpoints only (private > public > local socket on agent)
-   observer / reader             → direct endpoints (private > public); health probes additionally run as observer on every registered endpoint, poolers included
+   observer / reader             → direct endpoints (private > public); on a cluster without a direct endpoint, its session-mode poolers (ADR-0039); health probes additionally run as observer on every registered endpoint, poolers included
+   login                         → exponetdb_<role>, or exponetdb_<role>.<suffix> through a pooler endpoint with a login suffix
    ▼
 credential crd_… (cluster, role, active version) → secret (observer: decrypted in worker and serve; all other roles: worker only)
    ▼
@@ -38,6 +39,23 @@ TargetSession (TLS verify-full, session guards, pinned settings)
 - A target in `registered` state can be inspected (with observer credentials) but
   not changed; it becomes `active` only after its identity marker is stamped and
   its credentials verified.
+- **[DECIDED]** (ADR-0039, Wave 10) A target has a **mode**, chosen at
+  registration and never changed (`registry.targets.mode`, Control Store
+  guard `EXG10`): `managed` (the default, everything above) or `observed`.
+  An observed target is never written to: no identity marker, no `exponetdb`
+  schema, no ledger. It stays `registered` for its whole life (the guard
+  refuses `active` and `suspended` for it) and ends by `decommissioned`. It
+  allows the observer's reads only: health sampling, schema inspect,
+  fingerprint and drift (on demand and scheduled), table and statement
+  statistics, sessions and locks. Data reads, raw statements, every plan that
+  writes (migrations, diagnostics actions, drift acceptance, a managed
+  registration of the same target) and every non-observer session are refused
+  with `TARGET_OBSERVED_ONLY` (409). Migration status and detail are refused
+  the same way for now (the legacy-ledger view is Wave 10 W10-4). Its
+  identity is the cluster's pinned `system_identifier` and the database oid
+  recorded at the database's registration, checked on every observer session
+  (`TARGET_IDENTITY_MISMATCH`, `details.reason: database_oid`); a mismatch is
+  a critical health finding and never a suspension.
 
 ## 2. Registration flows
 
@@ -92,6 +110,47 @@ A8). The walkthrough with commands and expected outputs is
    which pins `system_identifier`; then databases and targets are registered
    as in §2.1, minus node capabilities (every node capability on an
    external cluster is `CAPABILITY_UNAVAILABLE`).
+
+### 2.2.1 An observed target on a hosted provider
+
+**[DECIDED]** (ADR-0039; the owner's Wave 10 order, W10-D3 and W10-D4)
+A database on a hosted provider (REOSA production on Supabase until Wave 11)
+is registered as an **observed** target: ExponetDB reads it as the observer
+and writes nothing to it. The walkthrough with commands is
+[`onboard-external-cluster.md` "A hosted provider: observe only"](../12-operations/onboard-external-cluster.md#a-hosted-provider-observe-only).
+
+1. The cluster is registered with the provider's **session pooler** as its
+   only endpoint (`kind: pooler`, `poolerMode: session`) when its direct host
+   is not reachable (the provider's direct host is IPv6 only). A pooler that
+   routes by the login name gets a **login suffix** (`loginSuffix`, pooler
+   endpoints only, `^[a-z0-9]{1,40}$`, immutable): the login is
+   `exponetdb_<role>.<suffix>`, the server-side `session_user` stays
+   `exponetdb_<role>`. A cluster of session poolers only serves observer and
+   reader sessions; every other role is refused (`REGISTRY_CONFLICT`,
+   `cluster_pooler_only`). A cluster of transaction poolers only is refused
+   at planning.
+2. The bootstrap SQL is generated with `--roles observer`: the observer role,
+   its `pg_monitor` membership, its settings that a non-superuser may set and
+   `CONNECT` on the named databases, nothing else. The provider's
+   administrator (not a superuser, but allowed to create roles and grant
+   `pg_monitor`) runs it after the owner approved its statement list.
+3. Only the observer's credential is submitted and verified; the cluster is
+   confirmed through the pooler, which pins its `system_identifier`.
+4. The database is registered (its oid is recorded), then the target with
+   `mode: observed`. The plan's analysis lists no writes. The operation proves
+   the database on an observer session (pinned identifier, database name and
+   oid), records the target and its placement, takes the registration
+   snapshot as the observer (the drift reference) and leaves the target
+   `registered`. Its verification reads again that nothing of ExponetDB is in
+   the database. A registration whose snapshot failed is planned again for
+   the same target; once the snapshot is stored, planning it again is
+   `path_taken`.
+5. The move to a managed target (Wave 11) registers the moved database as a
+   new managed target; the observed one is decommissioned then.
+
+**[OBSERVED]** (2026-11-03) The login suffix is proven at the session
+specification only (unit and integration tests); no real Supavisor was
+available, so the routing by the suffixed login is **not proven live**.
 
 **[DECIDED]** (OD-54 option (a), the owner's Wave 9 Part B order of
 2026-10-26) A cluster registered external later gains the node agent only

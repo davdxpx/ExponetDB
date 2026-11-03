@@ -167,6 +167,11 @@ export interface BootstrapScriptOptions {
   readonly executionRoles?: readonly BootstrapExecutionRole[]
   /** Legacy ledgers the observer reads in each database, where they exist. */
   readonly legacyLedgers?: readonly LegacyLedgerKind[]
+  /**
+   * `observer` (ADR-0039 §5): only the observer, for a hosted provider whose administrator is
+   * not a superuser ({@link observerBootstrapLines}); `all` (default): every ExponetDB role.
+   */
+  readonly roles?: 'all' | 'observer'
 }
 
 /** A DO block whose dollar-quote tag cannot occur in its body. */
@@ -185,6 +190,49 @@ function ensureRole(name: string, attributes: string): string {
     ALTER ROLE ${quoteIdent(name)} ${attributes};
   END IF;`,
   )
+}
+
+/**
+ * The observer alone (ADR-0039 §5), for an administrator that is not a superuser but may create
+ * roles and grant `pg_monitor` (a hosted provider): created with explicit attributes; an existing
+ * one is only brought to the attributes such an administrator may change, and refused when it
+ * holds one it may not (superuser, createdb, createrole, replication, bypassrls). Then its
+ * `pg_monitor` membership, its settings (all of them settable by any role) and `CONNECT` on each
+ * named database. No ledger owner, no other role, no superuser-only setting.
+ */
+function observerBootstrapLines(databases: readonly string[]): string[] {
+  const name = ROLE_NAMES.observer
+  const lines = [
+    doBlock(
+      `  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = ${quoteLiteral(name)}) THEN
+    CREATE ROLE ${quoteIdent(name)} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS INHERIT CONNECTION LIMIT ${CONNECTION_LIMITS.observer};
+  ELSIF EXISTS (SELECT FROM pg_catalog.pg_roles r WHERE r.rolname = ${quoteLiteral(name)}
+                   AND (r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR r.rolreplication OR r.rolbypassrls)) THEN
+    RAISE EXCEPTION 'role % holds a privileged attribute: an administrator who may change it must remove it', ${quoteLiteral(name)};
+  ELSE
+    ALTER ROLE ${quoteIdent(name)} LOGIN INHERIT CONNECTION LIMIT ${CONNECTION_LIMITS.observer};
+  END IF;`,
+    ),
+  ]
+  for (const member of MEMBERSHIPS.observer) {
+    lines.push(`GRANT ${quoteIdent(member)} TO ${quoteIdent(name)} WITH INHERIT TRUE, SET FALSE;`)
+  }
+  for (const [setting, value] of SETTINGS.observer) {
+    lines.push(`ALTER ROLE ${quoteIdent(name)} SET ${setting} = ${quoteLiteral(value)};`)
+  }
+  for (const database of databases) {
+    lines.push(`-- database ${database}`)
+    lines.push(
+      doBlock(
+        `  IF EXISTS (SELECT FROM pg_catalog.pg_database WHERE datname = ${quoteLiteral(database)}) THEN
+    GRANT CONNECT ON DATABASE ${quoteIdent(database)} TO ${quoteIdent(name)};
+  ELSE
+    RAISE NOTICE 'database % does not exist yet: create it, then run this script again', ${quoteLiteral(database)};
+  END IF;`,
+      ),
+    )
+  }
+  return lines
 }
 
 /**
@@ -247,7 +295,7 @@ export function bootstrapScript(
       throw new Error('a database or role name is not empty and has no control character')
     }
   }
-  const lines = [
+  const header = [
     '-- ExponetDB bootstrap for an external cluster. Run it with psql as an administrator;',
     '-- running it again is safe and converges (guarded statements).',
     '-- No password is in this script. After it ran, set each login password with',
@@ -255,6 +303,25 @@ export function bootstrapScript(
     "-- submit the same password once through ExponetDB's write-only credential endpoint.",
     "-- Names resolve in the system catalog only, never in a schema a database's owner controls.",
     SEARCH_PATH,
+  ]
+  if (options.roles === 'observer') {
+    if ((options.executionRoles ?? []).length > 0) {
+      throw new Error('an observer-only bootstrap grants no execution role')
+    }
+    return finishScript(
+      [
+        ...header,
+        '-- Observer only (an observed target, ADR-0039): the role, pg_monitor, its settings and',
+        '-- CONNECT; nothing else is created, granted or written. A non-superuser administrator',
+        '-- that may create roles and grant pg_monitor can run it.',
+        ...observerBootstrapLines(databases),
+      ],
+      databases,
+      options,
+    )
+  }
+  const lines = [
+    ...header,
     ensureRole(
       LEDGER_OWNER_ROLE,
       'NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS',
@@ -310,6 +377,15 @@ ${databaseBootstrapStatements(database)
       ),
     )
   }
+  return finishScript(lines, databases, options)
+}
+
+/** The legacy ledger read and the end of the script, for every variant. */
+function finishScript(
+  lines: string[],
+  databases: readonly string[],
+  options: BootstrapScriptOptions,
+): string {
   const ledgers = [...new Set(options.legacyLedgers ?? [])].sort()
   if (ledgers.length > 0 && databases.length > 0) {
     lines.push(

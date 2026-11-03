@@ -30,6 +30,7 @@ import {
   type BackupBindingsPort,
   Connector,
   findTarget,
+  isObserved,
   type RegistryAcceptContext,
   type RegistryPolicyContext,
   registryKinds,
@@ -307,7 +308,8 @@ export function observationTasks(
       let failed = 0
       for (const id of ids) {
         const target = await findTarget(rt.store, id)
-        if (target === undefined || target.placement === null) continue
+        // An observed target has no ExponetDB ledger to watch (ADR-0039).
+        if (target === undefined || target.placement === null || isObserved(target)) continue
         try {
           const divergence = await ledgerDivergenceOf(
             { store: rt.store, connector: probes },

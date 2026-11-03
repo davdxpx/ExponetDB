@@ -1,7 +1,15 @@
 import { generateKeyPairSync } from 'node:crypto'
 import { TargetError } from '@exponetdb/postgres'
 import { describe, expect, it } from 'vitest'
-import { Body, ContentInvalid, directEndpoints, RegistryError, refusedLogin } from '../src/index.ts'
+import {
+  Body,
+  ContentInvalid,
+  directEndpoints,
+  loginName,
+  RegistryError,
+  refusedLogin,
+  sessionEndpoints,
+} from '../src/index.ts'
 import type { EndpointRecord } from '../src/records.ts'
 import { managedScope, parseCaBundle, tlsServerNameFor } from '../src/validate.ts'
 
@@ -78,10 +86,13 @@ describe('endpoint selection', () => {
       port: 5432,
       tlsServerName: 'h.example',
       label: id,
+      loginSuffix: null,
       state,
       createdAt: '2026-10-06T00:00:00Z',
       retiredAt: null,
     }) as EndpointRecord
+  const pooler = (id: string, mode: 'session' | 'transaction', loginSuffix: string | null = null) =>
+    ({ ...e(id, 'pooler'), poolerMode: mode, loginSuffix }) as EndpointRecord
 
   it('prefers private over public, never a pooler, a retired endpoint or a socket of an external cluster', () => {
     const list = [
@@ -100,6 +111,42 @@ describe('endpoint selection', () => {
       '01',
       '05',
     ])
+  })
+
+  it('uses session poolers only on a cluster without a direct endpoint, and only for observer and reader (ADR-0039)', () => {
+    const external = { managementMode: 'external' } as const
+    const mixed = [pooler('01', 'session'), e('02', 'private'), pooler('03', 'transaction')]
+    for (const role of ['observer', 'reader', 'migrator'] as const) {
+      expect(sessionEndpoints(mixed, external, role).map((x) => x.label)).toEqual(['02'])
+    }
+    const poolerOnly = [
+      pooler('03', 'session'),
+      pooler('01', 'transaction'),
+      pooler('02', 'session'),
+      { ...pooler('04', 'session'), state: 'retired' } as EndpointRecord,
+    ]
+    expect(sessionEndpoints(poolerOnly, external, 'observer').map((x) => x.label)).toEqual([
+      '02',
+      '03',
+    ])
+    expect(sessionEndpoints(poolerOnly, external, 'reader').map((x) => x.label)).toEqual([
+      '02',
+      '03',
+    ])
+    for (const role of ['verifier', 'operator', 'migrator'] as const) {
+      expect(sessionEndpoints(poolerOnly, external, role)).toEqual([])
+    }
+    expect(sessionEndpoints([pooler('01', 'transaction')], external, 'observer')).toEqual([])
+  })
+
+  it('logs in through a pooler with a login suffix as exponetdb_<role>.<suffix> (ADR-0039)', () => {
+    expect(loginName('observer', pooler('01', 'session', 'abcdefghijklmnopqrst'))).toBe(
+      'exponetdb_observer.abcdefghijklmnopqrst',
+    )
+    expect(loginName('reader', pooler('01', 'session', 'ref1'))).toBe('exponetdb_reader.ref1')
+    expect(loginName('observer', pooler('01', 'session'))).toBe('exponetdb_observer')
+    expect(loginName('migrator', e('02', 'private'))).toBe('exponetdb_migrator')
+    expect(loginName('observer', {})).toBe('exponetdb_observer')
   })
 })
 

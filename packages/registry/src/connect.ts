@@ -13,7 +13,12 @@ import {
 import { type Consumer, type Keyring, readSecret } from '@exponetdb/secrets'
 import { conflict, RegistryError } from './errors.ts'
 import { activeCredential, getCluster, listEndpoints } from './reads.ts'
-import type { ClusterRecord, EndpointRecord, TargetRecord } from './records.ts'
+import {
+  type ClusterRecord,
+  type EndpointRecord,
+  isObserved,
+  type TargetRecord,
+} from './records.ts'
 
 /**
  * Target resolution to a verified session ([registry.md §1](../../../exponetdb-docs/02-control-plane/registry.md#1-resolution)).
@@ -26,9 +31,16 @@ import type { ClusterRecord, EndpointRecord, TargetRecord } from './records.ts'
  * - `serve` decrypts observer secrets only (it cannot read the worker's
  *   ciphertext table at all, se1); every other role is the worker's;
  * - observer and reader use direct endpoints (private before public);
- *   verifier, operator and migrator too. Poolers are probed by health per
- *   endpoint but never used for a session here. A local socket only makes
- *   sense on a node and is not used for external clusters;
+ *   verifier, operator and migrator too. A cluster without an active direct
+ *   endpoint (a hosted provider reachable through its session pooler only,
+ *   ADR-0039 §4) serves observer and reader sessions through its
+ *   session-mode poolers and refuses every other role
+ *   (`cluster_pooler_only`). A transaction-mode pooler is probed by health
+ *   per endpoint but never used for a session here. A local socket only
+ *   makes sense on a node and is not used for external clusters;
+ * - the login through a pooler endpoint with a login suffix is
+ *   `exponetdb_<role>.<suffix>` (the pooler routes by it); the session
+ *   guards check the server side as on any other path;
  * - the next endpoint is tried only when one does not answer; a TLS or
  *   credential failure stops (it would fail the same way, or worse, succeed
  *   against something else).
@@ -87,6 +99,36 @@ export function directEndpoints(
         (DIRECT_ORDER[a.kind] ?? 9) - (DIRECT_ORDER[b.kind] ?? 9) ||
         (a.endpointId < b.endpointId ? -1 : 1),
     )
+}
+
+/**
+ * The endpoints a session ExponetDB opens itself may use, in order (ADR-0039 §4): the direct
+ * ones; only when the cluster has none, its session-mode poolers, and those for the observer and
+ * the reader only. Never a transaction-mode pooler.
+ */
+export function sessionEndpoints(
+  endpoints: readonly EndpointRecord[],
+  cluster: Pick<ClusterRecord, 'managementMode'>,
+  role: AccessRole,
+): EndpointRecord[] {
+  const direct = directEndpoints(endpoints, cluster)
+  if (direct.length > 0 || (role !== 'observer' && role !== 'reader')) return direct
+  return sessionPoolers(endpoints)
+}
+
+function sessionPoolers(endpoints: readonly EndpointRecord[]): EndpointRecord[] {
+  return endpoints
+    .filter((e) => e.state === 'active' && e.kind === 'pooler' && e.poolerMode === 'session')
+    .sort((a, b) => (a.endpointId < b.endpointId ? -1 : 1))
+}
+
+/** The login name of a role through an endpoint: `exponetdb_<role>[.<suffix>]` (ADR-0039 §4). */
+export function loginName(
+  role: AccessRole,
+  endpoint: Pick<EndpointRecord, 'loginSuffix'> | { readonly loginSuffix?: string | null },
+): string {
+  const suffix = endpoint.loginSuffix ?? null
+  return suffix === null ? ROLE_NAMES[role] : `${ROLE_NAMES[role]}.${suffix}`
 }
 
 export function consumerOf(role: AccessRole): Consumer {
@@ -156,10 +198,16 @@ export class Connector {
     const all = await listEndpoints(this.#q, cluster.clusterId, 'active')
     const candidates =
       request.endpointId === undefined
-        ? directEndpoints(all, cluster)
+        ? sessionEndpoints(all, cluster, request.role)
         : all.filter((e) => e.endpointId === request.endpointId)
     if (candidates.length === 0) {
-      throw conflict('no_active_endpoint')
+      throw conflict(
+        request.endpointId === undefined &&
+          directEndpoints(all, cluster).length === 0 &&
+          sessionPoolers(all).length > 0
+          ? 'cluster_pooler_only'
+          : 'no_active_endpoint',
+      )
     }
     // A pooler is probed and read through by the observer; never a session that writes,
     // verifies or signals (postgres-adapter.md §3).
@@ -190,7 +238,7 @@ export class Connector {
             },
             database: request.database,
             role: request.role,
-            user: ROLE_NAMES[request.role],
+            user: loginName(request.role, endpoint),
             password,
             applicationName: `exponetdb/${request.purpose}`,
           },
@@ -226,7 +274,13 @@ export class Connector {
    */
   async probeAddress(
     clusterId: string,
-    address: { readonly host: string; readonly port: number; readonly tlsServerName: string },
+    address: {
+      readonly host: string
+      readonly port: number
+      readonly tlsServerName: string
+      /** The login suffix of a pooler address (ADR-0039 §4). */
+      readonly loginSuffix?: string | null
+    },
     purpose: string,
   ): Promise<string> {
     const cluster = await getCluster(this.#q, clusterId)
@@ -247,7 +301,7 @@ export class Connector {
         },
         database: 'postgres',
         role: 'observer',
-        user: ROLE_NAMES.observer,
+        user: loginName('observer', address),
         password,
         applicationName: `exponetdb/${purpose}`,
       },
@@ -273,6 +327,11 @@ export class Connector {
     const placement = target.placement
     if (placement === null) {
       throw new RegistryError('TARGET_UNAVAILABLE')
+    }
+    if (isObserved(target) && role !== 'observer') {
+      // ADR-0039 §3: an observed target is read as the observer only; nothing writes to it,
+      // reads its rows or verifies on it.
+      throw new RegistryError('TARGET_OBSERVED_ONLY')
     }
     if ((role === 'operator' || role === 'migrator') && target.state !== 'active') {
       // Writes stop while a target is suspended (registry.md §3); registration and

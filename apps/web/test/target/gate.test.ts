@@ -20,6 +20,7 @@ function target(over: Partial<Target> = {}): Target {
     placement: null,
     ledger: null,
     openFindingCount: 0,
+    mode: 'managed',
     ...over,
   }
 }
