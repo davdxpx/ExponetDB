@@ -240,8 +240,10 @@ shortcut: one cluster per pooler `host:port` (`endpoints_one_active_address`
 is registry-wide), so a second project on the same provider pooler cannot be
 registered yet; upgrade with an address key that includes the login suffix.
 
-`observer.sql` holds only the observer: the role (created with explicit
-attributes; an existing one with a privileged attribute is refused), its
+`observer.sql` holds only the observer, in one transaction that stops at the
+first error: the role (created with explicit attributes; an existing one with
+a privileged attribute or a membership other than `pg_monitor` is refused,
+and its earlier role settings are reset), its
 `pg_monitor` membership, its settings (`default_transaction_read_only`,
 `statement_timeout`, `idle_in_transaction_session_timeout`) and `CONNECT` on
 the named databases. With `--ledger` it also `\connect`s to each named

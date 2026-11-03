@@ -199,60 +199,93 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
           `ALTER DATABASE "${database}" OWNER TO ${ADMIN}`,
         ]),
       )
-      const asAdmin = (script: string) => `SET ROLE ${ADMIN};\n${script}`
-      // The full script needs a superuser (temp_file_limit, BYPASSRLS): it stops on its first error.
-      const full = await runBootstrap(s, asAdmin(bootstrapScript([database])))
-      expect(full.status).not.toBe(0)
-      const observerOnly = bootstrapScript([database], { roles: 'observer' })
-      for (const attempt of ['first', 'second']) {
-        const r = await runBootstrap(s, asAdmin(observerOnly))
-        expect(r.status, `${attempt}: ${r.stderr}`).toBe(0)
-        expect(r.stderr, attempt).not.toMatch(/ERROR/)
+      try {
+        const asAdmin = (script: string) => `SET ROLE ${ADMIN};\n${script}`
+        // The full script needs a superuser (temp_file_limit, BYPASSRLS): it stops on its first error.
+        const full = await runBootstrap(s, asAdmin(bootstrapScript([database])))
+        expect(full.status).not.toBe(0)
+        const observerOnly = bootstrapScript([database], { roles: 'observer' })
+        for (const attempt of ['first', 'second']) {
+          const r = await runBootstrap(s, asAdmin(observerOnly))
+          expect(r.status, `${attempt}: ${r.stderr}`).toBe(0)
+          expect(r.stderr, attempt).not.toMatch(/ERROR/)
+        }
+        const facts = await withSuperuser(s, 'postgres', async (c) => {
+          const observer = await c.query(
+            `SELECT r.rolcanlogin, r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolreplication, r.rolbypassrls,
+                    (SELECT array_agg(x ORDER BY x) FROM unnest(st.setconfig) x) AS settings,
+                    (SELECT a.inherit_option::text || a.set_option::text FROM pg_catalog.pg_auth_members a
+                      WHERE a.member = r.oid AND a.roleid = 'pg_monitor'::regrole
+                        AND a.grantor = '${ADMIN}'::regrole) AS monitor_by_admin
+               FROM pg_catalog.pg_roles r
+               LEFT JOIN pg_catalog.pg_db_role_setting st ON st.setrole = r.oid AND st.setdatabase = 0
+              WHERE r.rolname = 'exponetdb_observer'`,
+          )
+          const acl = await c.query(
+            'SELECT datacl::text AS acl FROM pg_catalog.pg_database WHERE datname = $1',
+            [database],
+          )
+          return { observer: observer.rows[0], acl: String(acl.rows[0]?.acl) }
+        })
+        expect(facts.observer).toMatchObject({
+          rolcanlogin: true,
+          rolsuper: false,
+          rolcreatedb: false,
+          rolcreaterole: false,
+          rolreplication: false,
+          rolbypassrls: false,
+          monitor_by_admin: 'truefalse',
+        })
+        expect(facts.observer?.settings).toEqual(
+          expect.arrayContaining([
+            'default_transaction_read_only=on',
+            'idle_in_transaction_session_timeout=30s',
+            'statement_timeout=30s',
+          ]),
+        )
+        expect(facts.acl).toContain(`exponetdb_observer=c/${ADMIN}`)
+        // Nothing else was granted on the database (no CREATE for a ledger owner, no other role).
+        expect(facts.acl).not.toMatch(/exponetdb_(ledger_owner|reader|verifier|operator|migrator)=/)
+        // An observer that is a member of another role is refused, and nothing is granted.
+        const other = await createDatabase(s, 'bsobs2')
+        created.push({ server: s, database: other })
+        await withRolesHeld(s, async () => {
+          await runAsSuperuser(s, 'postgres', [
+            `ALTER DATABASE "${other}" OWNER TO ${ADMIN}`,
+            'GRANT pg_read_all_settings TO exponetdb_observer',
+          ])
+          try {
+            const refused = await runPsql(
+              s,
+              asAdmin(shared(bootstrapScript([other], { roles: 'observer' }))),
+            )
+            expect(refused.status).not.toBe(0)
+            expect(refused.stderr).toContain('is a member of a role other than pg_monitor')
+          } finally {
+            await runAsSuperuser(s, 'postgres', [
+              'REVOKE pg_read_all_settings FROM exponetdb_observer',
+            ])
+          }
+        })
+        const untouched = await withSuperuser(s, 'postgres', (c) =>
+          c.query('SELECT datacl::text AS acl FROM pg_catalog.pg_database WHERE datname = $1', [
+            other,
+          ]),
+        )
+        expect(String(untouched.rows[0]?.acl)).not.toContain('exponetdb_observer')
+        await runAsSuperuser(s, 'postgres', [`ALTER DATABASE "${other}" OWNER TO CURRENT_USER`])
+      } finally {
+        // Cleanup also after a failure: afterAll drops the administrator, which must own nothing.
+        await withRolesHeld(s, () =>
+          runAsSuperuser(s, 'postgres', [
+            `ALTER DATABASE "${database}" OWNER TO CURRENT_USER`,
+            `REASSIGN OWNED BY ${ADMIN} TO CURRENT_USER`,
+            `REVOKE pg_monitor FROM exponetdb_observer GRANTED BY ${ADMIN}`,
+            `REVOKE exponetdb_observer FROM ${ADMIN}`,
+            `REVOKE pg_monitor FROM ${ADMIN}`,
+          ]),
+        )
       }
-      const facts = await withSuperuser(s, 'postgres', async (c) => {
-        const observer = await c.query(
-          `SELECT r.rolcanlogin, r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolreplication, r.rolbypassrls,
-                  (SELECT array_agg(x ORDER BY x) FROM unnest(st.setconfig) x) AS settings,
-                  (SELECT a.inherit_option::text || a.set_option::text FROM pg_catalog.pg_auth_members a
-                    WHERE a.member = r.oid AND a.roleid = 'pg_monitor'::regrole
-                      AND a.grantor = '${ADMIN}'::regrole) AS monitor_by_admin
-             FROM pg_catalog.pg_roles r
-             LEFT JOIN pg_catalog.pg_db_role_setting st ON st.setrole = r.oid AND st.setdatabase = 0
-            WHERE r.rolname = 'exponetdb_observer'`,
-        )
-        const acl = await c.query(
-          'SELECT datacl::text AS acl FROM pg_catalog.pg_database WHERE datname = $1',
-          [database],
-        )
-        return { observer: observer.rows[0], acl: String(acl.rows[0]?.acl) }
-      })
-      expect(facts.observer).toMatchObject({
-        rolcanlogin: true,
-        rolsuper: false,
-        rolcreatedb: false,
-        rolcreaterole: false,
-        rolreplication: false,
-        rolbypassrls: false,
-        monitor_by_admin: 'truefalse',
-      })
-      expect(facts.observer?.settings).toEqual(
-        expect.arrayContaining([
-          'default_transaction_read_only=on',
-          'idle_in_transaction_session_timeout=30s',
-          'statement_timeout=30s',
-        ]),
-      )
-      expect(facts.acl).toContain(`exponetdb_observer=c/${ADMIN}`)
-      // Nothing else was granted on the database (no CREATE for a ledger owner, no other role).
-      expect(facts.acl).not.toMatch(/exponetdb_(ledger_owner|reader|verifier|operator|migrator)=/)
-      await withRolesHeld(s, () =>
-        runAsSuperuser(s, 'postgres', [
-          `ALTER DATABASE "${database}" OWNER TO CURRENT_USER`,
-          `REVOKE pg_monitor FROM exponetdb_observer GRANTED BY ${ADMIN}`,
-          `REVOKE exponetdb_observer FROM ${ADMIN}`,
-          `REVOKE pg_monitor FROM ${ADMIN}`,
-        ]),
-      )
     })
   },
 )

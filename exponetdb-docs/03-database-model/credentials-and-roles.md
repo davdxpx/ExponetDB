@@ -560,10 +560,14 @@ script holds the observer only, for a hosted provider's administrator that
 is not a superuser but may create roles and grant `pg_monitor`: the role
 (created with explicit attributes; an existing one is brought only to what
 such an administrator may change and refused when it holds `SUPERUSER`,
-`CREATEDB`, `CREATEROLE`, `REPLICATION` or `BYPASSRLS`), `pg_monitor`
-`WITH INHERIT TRUE, SET FALSE`, its three settings (none superuser-only) and
-`CONNECT` on the named databases; no ledger owner, no other role, no
-execution role. The full script below needs a superuser. In order:
+`CREATEDB`, `CREATEROLE`, `REPLICATION` or `BYPASSRLS`, or when it is a
+member of any role other than `pg_monitor`), `pg_monitor`
+`WITH INHERIT TRUE, SET FALSE`, `RESET ALL` and then its three settings
+(none superuser-only) and `CONNECT` on the named databases; no ledger owner,
+no other role, no execution role. It starts with `\set ON_ERROR_STOP on` and
+runs in one transaction, so a refusal leaves nothing behind (the optional
+`--ledger` part follows after the commit, since `\connect` ends the
+session). The full script below needs a superuser. In order:
 
 1. **ExponetDB's roles** (§2): each one created when missing and altered to
    the same attributes otherwise (`DO` blocks that check `pg_roles`; an

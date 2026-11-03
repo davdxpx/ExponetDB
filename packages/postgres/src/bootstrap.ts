@@ -209,6 +209,11 @@ function observerBootstrapLines(databases: readonly string[]): string[] {
   ELSIF EXISTS (SELECT FROM pg_catalog.pg_roles r WHERE r.rolname = ${quoteLiteral(name)}
                    AND (r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR r.rolreplication OR r.rolbypassrls)) THEN
     RAISE EXCEPTION 'role % holds a privileged attribute: an administrator who may change it must remove it', ${quoteLiteral(name)};
+  ELSIF EXISTS (SELECT FROM pg_catalog.pg_auth_members a
+                  JOIN pg_catalog.pg_roles m ON m.oid = a.member
+                  JOIN pg_catalog.pg_roles g ON g.oid = a.roleid
+                 WHERE m.rolname = ${quoteLiteral(name)} AND g.rolname <> 'pg_monitor') THEN
+    RAISE EXCEPTION 'role % is a member of a role other than pg_monitor: revoke that membership first', ${quoteLiteral(name)};
   ELSE
     ALTER ROLE ${quoteIdent(name)} LOGIN INHERIT CONNECTION LIMIT ${CONNECTION_LIMITS.observer};
   END IF;`,
@@ -217,6 +222,8 @@ function observerBootstrapLines(databases: readonly string[]): string[] {
   for (const member of MEMBERSHIPS.observer) {
     lines.push(`GRANT ${quoteIdent(member)} TO ${quoteIdent(name)} WITH INHERIT TRUE, SET FALSE;`)
   }
+  // Only the intended settings: whatever was set on the role before is removed first.
+  lines.push(`ALTER ROLE ${quoteIdent(name)} RESET ALL;`)
   for (const [setting, value] of SETTINGS.observer) {
     lines.push(`ALTER ROLE ${quoteIdent(name)} SET ${setting} = ${quoteLiteral(value)};`)
   }
@@ -310,11 +317,16 @@ export function bootstrapScript(
     }
     return finishScript(
       [
+        // Stops at the first error even when psql is run without -v ON_ERROR_STOP=1.
+        '\\set ON_ERROR_STOP on',
         ...header,
         '-- Observer only (an observed target, ADR-0039): the role, pg_monitor, its settings and',
         '-- CONNECT; nothing else is created, granted or written. A non-superuser administrator',
-        '-- that may create roles and grant pg_monitor can run it.',
+        '-- that may create roles and grant pg_monitor can run it. One transaction: a refusal',
+        '-- leaves nothing behind.',
+        'BEGIN;',
         ...observerBootstrapLines(databases),
+        'COMMIT;',
       ],
       databases,
       options,

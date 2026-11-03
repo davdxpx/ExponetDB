@@ -159,6 +159,16 @@ describe('bootstrap SQL', () => {
     expect(script).toContain(
       'GRANT "pg_monitor" TO "exponetdb_observer" WITH INHERIT TRUE, SET FALSE;',
     )
+    // One transaction that stops at the first error, whatever psql's flags.
+    const lines = script.split('\n')
+    expect(lines[0]).toBe('\\set ON_ERROR_STOP on')
+    expect(lines.indexOf('BEGIN;')).toBeGreaterThan(0)
+    expect(lines.indexOf('COMMIT;')).toBeGreaterThan(lines.indexOf('BEGIN;'))
+    expect(script).toContain("g.rolname <> 'pg_monitor'")
+    expect(lines.indexOf('ALTER ROLE "exponetdb_observer" RESET ALL;')).toBeLessThan(
+      lines.findIndex((l) => l.startsWith('ALTER ROLE "exponetdb_observer" SET')),
+    )
+    expect(lines.indexOf('ALTER ROLE "exponetdb_observer" RESET ALL;')).toBeGreaterThan(0)
     expect(script).toContain('GRANT CONNECT ON DATABASE "app_db" TO "exponetdb_observer";')
     expect(script).toContain('GRANT CONNECT ON DATABASE "second" TO "exponetdb_observer";')
     expect(
