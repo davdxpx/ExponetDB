@@ -42,7 +42,10 @@ describe('a legacy history of 600 files and 3 MB (PostgreSQL 17)', () => {
     expect(replay.counts).toMatchObject({ elided: 21, mixedDoBlocks: 0, noStatements: 14 })
     expect(await w.apply(p)).toMatchObject({ state: 'succeeded', applyOutcome: 'applied' })
     const r = await w.report(p)
-    expect([r.state, r.incompleteReason ?? null]).toEqual(['open', null])
+    // 'resolved': no item waits for a decision. The history's `bigserial` table used to be
+    // `ambiguous` (the structural expectation named a type no catalog holds, VC-016), which kept
+    // the report `open`; the 600 ledger rows without a record are not decisions.
+    expect([r.state, r.incompleteReason ?? null]).toEqual(['resolved', null])
     expect(r.items.filter((i) => i.legacyId.startsWith('legacy:'))).toHaveLength(600)
     expect(r.items.filter((i) => i.state.endsWith('_missing'))).toEqual([])
   }, 900_000)

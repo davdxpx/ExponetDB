@@ -162,6 +162,10 @@ export async function readBack(
     // Gone: it took effect. Still there (also INVALID): DROP INDEX CONCURRENTLY runs again.
     return { state: index === null ? 'present' : 'absent', index }
   }
+  // DETACH PARTITION … CONCURRENTLY runs as two transactions: a cancel or timeout in the second
+  // leaves the partition pending (`pg_inherits.inhdetachpending`) and a rerun is refused. The
+  // catalog read for that is not built, so a person decides (the review of group F).
+  if (s.autocommitOnly && s.type === 'AlterTableStmt') return { state: 'ambiguous', index: null }
   const f = log.failed
   if (f !== null) {
     const guard = f.gate?.['guard']

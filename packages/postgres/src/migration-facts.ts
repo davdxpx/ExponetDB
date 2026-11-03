@@ -328,3 +328,26 @@ export async function relationSizes(reader: CatalogReader): Promise<Map<string, 
   }
   return out
 }
+
+// A validated CHECK (column IS NOT NULL) lets SET NOT NULL skip its scan (PostgreSQL 12 and later).
+const PROVEN_NOT_NULL = sql`SELECT n.nspname::text AS schema, c.relname::text AS name, a.attname::text AS column_name
+  FROM pg_catalog.pg_constraint con
+  JOIN pg_catalog.pg_class c ON c.oid = con.conrelid
+  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+  JOIN pg_catalog.pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = con.conkey[1]
+ WHERE con.contype = 'c' AND con.convalidated AND pg_catalog.cardinality(con.conkey) = 1
+   AND c.relkind IN ('r', 'p')
+   AND pg_catalog.pg_get_constraintdef(con.oid) IN (
+         pg_catalog.format('CHECK ((%I IS NOT NULL))', a.attname),
+         pg_catalog.format('CHECK (%I IS NOT NULL)', a.attname))
+   AND n.nspname <> 'information_schema' AND n.nspname !~ '^pg_' AND n.nspname <> 'exponetdb'
+ ORDER BY 1, 2, 3 LIMIT 50000`
+
+/**
+ * The columns (`schema.table.column`) with a validated `CHECK (column IS NOT NULL)`: the planner
+ * hands them to the lint as proof, so the documented NOT NULL recipe (VC-030) passes.
+ */
+export async function provenNotNullColumns(reader: CatalogReader): Promise<Set<string>> {
+  const rows = await reader.query(PROVEN_NOT_NULL)
+  return new Set(rows.map((r) => `${r.text('schema')}.${r.text('name')}.${r.text('column_name')}`))
+}

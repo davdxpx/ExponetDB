@@ -6,6 +6,7 @@ import {
   type LedgerMeta,
   type LedgerRecord,
   markerWithin,
+  provenNotNullColumns,
   type RelationSize,
   readLedgerMeta,
   readLedgerRows,
@@ -33,6 +34,8 @@ export interface TargetState {
   readonly snapshotComplete: boolean
   readonly extensions: Readonly<Record<string, string>>
   readonly relations: ReadonlyMap<string, RelationSize>
+  /** `schema.table.column` with a validated CHECK (column IS NOT NULL) (VC-030). */
+  readonly provenNotNull: ReadonlySet<string>
   readonly systemIdentifier: string
   readonly databaseOid: string
   readonly serverVersionNum: number
@@ -138,6 +141,7 @@ export async function readTargetState(
   })
   const extensions = await installedExtensions(tx)
   const relations = options.sizes === false ? new Map() : await relationSizes(tx)
+  const provenNotNull = options.sizes === false ? new Set<string>() : await provenNotNullColumns(tx)
   return {
     marker: marker.marker,
     meta,
@@ -147,6 +151,7 @@ export async function readTargetState(
     snapshotComplete: snapshot.complete,
     extensions,
     relations,
+    provenNotNull,
     systemIdentifier: tx.facts.systemIdentifier,
     databaseOid: tx.facts.databaseOid,
     serverVersionNum: tx.facts.serverVersionNum,

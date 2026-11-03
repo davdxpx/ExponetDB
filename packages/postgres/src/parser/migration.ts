@@ -324,7 +324,26 @@ export interface StatementDetails {
     readonly table: { readonly schema: string | null; readonly name: string }
   }
   readonly notNullWithoutProof?: readonly string[]
+  /** Every `ADD CONSTRAINT … CHECK (column IS NOT NULL)` of the statement: what it proves once validated (VC-030). */
+  readonly checksNotNull?: readonly {
+    readonly table: { readonly schema: string | null; readonly name: string }
+    readonly column: string
+    readonly name: string | null
+    readonly validated: boolean
+  }[]
+  /** Every `VALIDATE CONSTRAINT name` of the statement (VC-030). */
+  readonly validatesConstraints?: readonly {
+    readonly table: { readonly schema: string | null; readonly name: string }
+    readonly name: string
+  }[]
+  /** Every `DROP CONSTRAINT name` of the statement: a proof it gave is gone. */
+  readonly droppedConstraints?: readonly {
+    readonly table: { readonly schema: string | null; readonly name: string }
+    readonly name: string
+  }[]
   readonly constraintValidated?: boolean
+  /** An `INSERT … VALUES` (no query), which is not a slow statement. */
+  readonly insertValuesOnly?: boolean
   readonly volatileDefault?: boolean
   readonly typeChange?: boolean
   readonly dropColumn?: boolean
@@ -409,6 +428,41 @@ function qualifiedName(value: unknown): { schema: string | null; name: string } 
   if (parts === undefined || parts.length === 0) return null
   const name = parts[parts.length - 1] as string
   return { schema: parts.length > 1 ? (parts[parts.length - 2] as string) : null, name }
+}
+
+/**
+ * The integer type a `serial` shorthand stands for (VC-016): PostgreSQL expands the type name
+ * after the raw parse into an integer column, NOT NULL, with a `nextval` default. The shorthand is
+ * the bare one-part name, case-sensitive: PostgreSQL compares the string, so a quoted `"serial"`
+ * is the shorthand too (the raw tree does not tell them apart), while `"Serial"` and a qualified
+ * name are types.
+ */
+const SERIAL_TYPES: Readonly<Record<string, string>> = {
+  smallserial: 'pg_catalog.int2',
+  serial2: 'pg_catalog.int2',
+  serial: 'pg_catalog.int4',
+  serial4: 'pg_catalog.int4',
+  bigserial: 'pg_catalog.int8',
+  serial8: 'pg_catalog.int8',
+}
+
+function serialType(value: unknown): string | null {
+  const n = nodeType(value)
+  const body = n?.type === 'TypeName' ? n.body : obj(value)
+  const parts = names(body['names'])
+  if (parts === undefined || parts.length !== 1 || bool(body['setof'])) return null
+  if (list(body['arrayBounds']).length > 0) return null
+  return SERIAL_TYPES[parts[0] as string] ?? null
+}
+
+/** The column of `column IS NOT NULL` (a bare column, nothing else in the expression), or null. */
+function notNullCheckColumn(expr: unknown): string | null {
+  const test = nodeType(expr)
+  if (test?.type !== 'NullTest' || test.body['nulltesttype'] !== 'IS_NOT_NULL') return null
+  const ref = nodeType(test.body['arg'])
+  if (ref?.type !== 'ColumnRef') return null
+  const parts = names(ref.body['fields'])
+  return parts !== undefined && parts.length === 1 ? (parts[0] as string) : null
 }
 
 /** A `TypeName` → its name as written (schema.name, array suffix) and typmods. */
@@ -509,11 +563,14 @@ function referencedNames(node: unknown, cap = 512): string[] {
   return [...out]
 }
 
+/**
+ * Built-in functions whose default needs no rewrite (STABLE or IMMUTABLE, evaluated once for the
+ * existing rows, PostgreSQL 11 and later): VC-028 found `DEFAULT now()` called a table rewrite.
+ */
+const STABLE_DEFAULTS = new Set(['now', 'statement_timestamp', 'transaction_timestamp'])
+
 const VOLATILE_DEFAULTS = new Set([
-  'now',
   'clock_timestamp',
-  'statement_timestamp',
-  'transaction_timestamp',
   'random',
   'gen_random_uuid',
   'uuid_generate_v4',
@@ -527,8 +584,10 @@ function volatileExpression(expr: unknown): boolean {
   walk(expr, (type, body) => {
     if (type === 'FuncCall') {
       const n = qualifiedName(body['funcname'])
+      const builtin = n !== null && (n.schema === null || n.schema === 'pg_catalog')
+      const stable = builtin && STABLE_DEFAULTS.has(n.name)
       // Unknown functions may be volatile: a rewrite cannot be ruled out.
-      if (n === null || VOLATILE_DEFAULTS.has(n.name) || n.schema !== 'pg_catalog') {
+      if (!stable && (n === null || VOLATILE_DEFAULTS.has(n.name) || n.schema !== 'pg_catalog')) {
         volatile = true
       }
     }
@@ -845,10 +904,12 @@ function alterTable(d: Draft, body: JsonNode): void {
       case 'AT_AddColumn': {
         const col = obj(def?.body)
         const name = str(col['colname'])
-        const t = typeName(col['typeName'])
-        let notNull = false
-        let hasDefault = false
-        let volatileDefault = false
+        const serial = serialType(col['typeName'])
+        const t = serial === null ? typeName(col['typeName']) : { name: serial, typmods: null }
+        // A serial column is NOT NULL with a volatile default: the table is rewritten (VC-017).
+        let notNull = serial !== null
+        let hasDefault = serial !== null
+        let volatileDefault = serial !== null
         for (const k of list(col['constraints'])) {
           const ck = nodeType(k)
           const contype = str(ck?.body['contype'])
@@ -859,8 +920,13 @@ function alterTable(d: Draft, body: JsonNode): void {
           }
           if (contype === 'CONSTR_IDENTITY' || contype === 'CONSTR_GENERATED') {
             hasDefault = true
-            if (contype === 'CONSTR_GENERATED') volatileDefault = true
+            // An identity column fills its sequence for every existing row, like a stored
+            // generated column: the table is rewritten (VC-017).
+            volatileDefault = true
           }
+          // PostgreSQL makes an identity column implicitly NOT NULL (attnotnull); the structural
+          // verification compared false and rolled the apply back (the review of group F).
+          if (contype === 'CONSTR_IDENTITY') notNull = true
         }
         if (bool(cmd.body['missing_ok'])) d.conditionalForm = true
         if (name !== null) {
@@ -981,6 +1047,7 @@ function alterTable(d: Draft, body: JsonNode): void {
         const contype = str(k['contype'])
         const conname = str(k['conname'])
         const notValid = bool(k['skip_validation'])
+        let usingIndex = false
         if (conname !== null) {
           d.objects.push({
             kind: 'constraint',
@@ -1014,6 +1081,10 @@ function alterTable(d: Draft, body: JsonNode): void {
           }
           severity = notValid ? 'medium' : 'high'
           duration = notValid ? 'brief' : 'scan'
+        } else if (str(k['indexname']) !== null && contype === 'CONSTR_UNIQUE') {
+          // UNIQUE USING INDEX attaches an index that already exists: no scan, a brief lock
+          // (VC-031). PRIMARY KEY USING INDEX still scans: the key columns are made NOT NULL.
+          usingIndex = true
         } else if (contype === 'CONSTR_PRIMARY' || contype === 'CONSTR_UNIQUE') {
           duration = 'scan'
           severity = 'critical'
@@ -1021,7 +1092,16 @@ function alterTable(d: Draft, body: JsonNode): void {
           duration = 'scan'
           severity = 'critical'
         }
-        d.details.constraintValidated = !notValid
+        // Every command counts: a scanning constraint next to a USING INDEX one still scans.
+        d.details.constraintValidated =
+          (d.details.constraintValidated ?? false) || (!notValid && !usingIndex)
+        const proved = contype === 'CONSTR_CHECK' ? notNullCheckColumn(k['raw_expr']) : null
+        if (proved !== null) {
+          d.details.checksNotNull = [
+            ...(d.details.checksNotNull ?? []),
+            { table: rel, column: proved, name: conname, validated: !notValid },
+          ]
+        }
         d.compatibility.push('potentially_breaking')
         break
       }
@@ -1030,6 +1110,10 @@ function alterTable(d: Draft, body: JsonNode): void {
         severity = 'low'
         duration = 'scan'
         if (colname !== null) {
+          d.details.validatesConstraints = [
+            ...(d.details.validatesConstraints ?? []),
+            { table: rel, name: colname },
+          ]
           d.expectations.push({
             kind: 'constraint',
             schema: rel.schema,
@@ -1043,6 +1127,10 @@ function alterTable(d: Draft, body: JsonNode): void {
         break
       case 'AT_DropConstraint':
         if (colname !== null) {
+          d.details.droppedConstraints = [
+            ...(d.details.droppedConstraints ?? []),
+            { table: rel, name: colname },
+          ]
           d.objects.push({
             kind: 'constraint',
             schema: rel.schema,
@@ -1102,6 +1190,13 @@ function alterTable(d: Draft, body: JsonNode): void {
         d.underivedParts = true
         break
       case 'AT_DetachPartition':
+        // CONCURRENTLY cannot run in a transaction block and takes only a SHARE UPDATE
+        // EXCLUSIVE lock on the parent (VC-033).
+        if (bool(obj(def?.body)['concurrent'])) {
+          d.autocommitOnly = true
+          lock = 'SHARE UPDATE EXCLUSIVE'
+          severity = 'low'
+        }
         d.compatibility.push('destructive')
         d.underivedParts = true
         break
@@ -1416,9 +1511,10 @@ function createTable(d: Draft, body: JsonNode, rel: { schema: string | null; nam
     const el = nodeType(e)
     if (el?.type === 'ColumnDef') {
       const name = str(el.body['colname'])
-      const t = typeName(el.body['typeName'])
-      let notNull = false
-      let hasDefault = false
+      const serial = serialType(el.body['typeName'])
+      const t = serial === null ? typeName(el.body['typeName']) : { name: serial, typmods: null }
+      let notNull = serial !== null
+      let hasDefault = serial !== null
       for (const k of list(el.body['constraints'])) {
         const contype = str(nodeType(k)?.body['contype'])
         if (contype === 'CONSTR_NOTNULL' || contype === 'CONSTR_PRIMARY') notNull = true
@@ -2055,6 +2151,13 @@ function classify(statement: ParsedStatement, trusted: ReadonlySet<string>): Dra
         | 'merge'
       d.kind = verb.toUpperCase()
       d.details.dataChange = verb
+      // `INSERT … VALUES (…)` writes the rows it names and reads nothing (the lock rule, VC-032).
+      if (verb === 'insert') {
+        const select = nodeType(body['selectStmt'])
+        if (select?.type === 'SelectStmt' && Array.isArray(select.body['valuesLists'])) {
+          d.details.insertValuesOnly = true
+        }
+      }
       if (rel !== null) {
         d.objects.push({ kind: 'table', ...rel, action: 'write' })
         d.locks.push({

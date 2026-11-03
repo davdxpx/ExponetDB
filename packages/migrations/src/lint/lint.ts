@@ -423,6 +423,15 @@ export function lintBundles(inputs: readonly BundleInput[], ctx: LintContext): L
   const graphFindings: LintFinding[] = []
   const validated: { report: BundleReport; bundle: ValidatedBundle; findings: LintFinding[] }[] = []
   const trusted = ctx.project?.trustedExtensions ?? []
+  // Columns a validated CHECK (column IS NOT NULL) of an earlier statement of this request proves.
+  // CHECK (column IS NOT NULL) constraints this request adds, by `table.constraint`: validated or
+  // pending, and gone when a later statement drops them.
+  const checkProofs = new Map<string, { column: string; validated: boolean }>()
+  let unnamedChecks = 0
+  const provenInRequest = (column: string): boolean =>
+    [...checkProofs.values()].some((p) => p.validated && p.column === column)
+  // Tables earlier bundles of the request create: new, so small, whatever the live catalog lacks.
+  const createdInRequest = new Set<string>()
   const requestBudget = ctx.parseTokenBudget ?? MAX_REQUEST_PARSE_TOKENS
   let parsedTokens = 0
   const forbiddenSchemas = new Set(ctx.project?.lint?.forbiddenSchemas ?? [])
@@ -529,15 +538,19 @@ export function lintBundles(inputs: readonly BundleInput[], ctx: LintContext): L
     }
 
     // ----- statements of up.sql -----
-    const created = new Set<string>()
+    const created = new Set<string>(createdInRequest)
     for (const s of statements) {
       if (s.details.createdTable !== undefined) {
         created.add(key(s.details.createdTable.schema, s.details.createdTable.name))
         created.add(s.details.createdTable.name)
       }
     }
+    for (const c of created) createdInRequest.add(c)
     const transactional = m.execution.transactional
     const autocommit = statements.filter((s) => s.autocommitOnly)
+    // Tables whose ACCESS EXCLUSIVE or SHARE ROW EXCLUSIVE lock an earlier statement of this
+    // transactional bundle holds until COMMIT (VC-032), with the statement that took it.
+    const heldLocks = new Map<string, number>()
     for (const s of statements) {
       if (s.forbidden !== null) {
         emit('forbidden_statement', `${s.kind}: ${s.forbidden.reason} (${s.forbidden.detail}).`, {
@@ -553,6 +566,48 @@ export function lintBundles(inputs: readonly BundleInput[], ctx: LintContext): L
       }
       const table = tableOf(s)
       const large = table === null ? null : isLarge(ctx, table, searchPath, created)
+      // Columns of this statement's SET NOT NULL that nothing proves (also used by unsafe_not_null).
+      const unprovenNotNull = (s.details.notNullWithoutProof ?? []).filter((column) => {
+        const columnKey =
+          table === null
+            ? ''
+            : `${key(table.schema ?? searchPath[0] ?? null, table.name)}.${column}`
+        return !(ctx.catalog?.provenNotNull?.has(columnKey) ?? false) && !provenInRequest(columnKey)
+      })
+      if (transactional) {
+        const tableKey =
+          table === null ? null : key(table.schema ?? searchPath[0] ?? null, table.name)
+        const dataChange =
+          ['UpdateStmt', 'DeleteStmt', 'MergeStmt'].includes(s.type) ||
+          (s.type === 'InsertStmt' && s.details.insertValuesOnly !== true)
+        // A SET NOT NULL a proof covers does not scan; a statement with a finding of its own
+        // (a rewrite, an unproven NOT NULL, a validated constraint) is not named twice.
+        const provenOnly =
+          (s.details.notNullWithoutProof?.length ?? 0) > 0 && unprovenNotNull.length === 0
+        const ownFinding =
+          s.details.volatileDefault === true ||
+          unprovenNotNull.length > 0 ||
+          s.details.constraintValidated === true
+        const slow =
+          !ownFinding &&
+          (dataChange ||
+            (s.details.validatesConstraints?.length ?? 0) > 0 ||
+            (s.details.createIndex !== undefined && !s.details.createIndex.concurrent) ||
+            (!provenOnly && s.locks.some((l) => l.duration === 'scan' || l.duration === 'rewrite')))
+        const since = tableKey === null ? undefined : heldLocks.get(tableKey)
+        if (slow && since !== undefined && table !== null && large !== false) {
+          emit(
+            'lock_held_across_slow_statement',
+            `${s.kind} runs while the lock of statement ${since} on ${tableKey} is held until COMMIT.`,
+            { statement: s, large },
+          )
+        }
+        for (const l of s.locks) {
+          if (l.mode !== 'ACCESS EXCLUSIVE' && l.mode !== 'SHARE ROW EXCLUSIVE') continue
+          const held = l.on.includes('.') ? l.on : key(searchPath[0] ?? null, l.on)
+          if (!heldLocks.has(held)) heldLocks.set(held, s.index)
+        }
+      }
       const create = s.details.createIndex
       if (create !== undefined && !create.concurrent) {
         const l = isLarge(ctx, create.table, searchPath, created)
@@ -583,14 +638,8 @@ export function lintBundles(inputs: readonly BundleInput[], ctx: LintContext): L
           )
         }
       }
-      for (const column of s.details.notNullWithoutProof ?? []) {
-        const proven =
-          table !== null &&
-          (ctx.catalog?.provenNotNull?.has(
-            `${key(table.schema ?? searchPath[0] ?? null, table.name)}.${column}`,
-          ) ??
-            false)
-        if (!proven && large !== false) {
+      for (const column of unprovenNotNull) {
+        if (large !== false) {
           emit(
             'unsafe_not_null',
             `SET NOT NULL on ${column} scans the table under ACCESS EXCLUSIVE.`,
@@ -600,6 +649,26 @@ export function lintBundles(inputs: readonly BundleInput[], ctx: LintContext): L
             },
           )
         }
+      }
+      // A validated CHECK (column IS NOT NULL) of this request proves the column for the
+      // SET NOT NULL statements after it (VC-030): added valid, or added NOT VALID and validated;
+      // dropping the constraint takes the proof back.
+      const tableOfRef = (ref: { schema: string | null; name: string }) =>
+        key(ref.schema ?? searchPath[0] ?? null, ref.name)
+      for (const added of s.details.checksNotNull ?? []) {
+        const tableKey = tableOfRef(added.table)
+        const name = added.name ?? `#${unnamedChecks++}`
+        checkProofs.set(`${tableKey}.${name}`, {
+          column: `${tableKey}.${added.column}`,
+          validated: added.validated,
+        })
+      }
+      for (const validates of s.details.validatesConstraints ?? []) {
+        const proof = checkProofs.get(`${tableOfRef(validates.table)}.${validates.name}`)
+        if (proof !== undefined) proof.validated = true
+      }
+      for (const dropped of s.details.droppedConstraints ?? []) {
+        checkProofs.delete(`${tableOfRef(dropped.table)}.${dropped.name}`)
       }
       if (
         s.details.constraintValidated === true &&

@@ -250,6 +250,13 @@ export const LINT_RULES = {
     'ADD COLUMN with a volatile default rewrites the table under ACCESS EXCLUSIVE.',
     'Add the column without a default (or a constant one), then backfill in bounded batches.',
   ),
+  lock_held_across_slow_statement: rule(
+    'lock_held_across_slow_statement',
+    'warn',
+    'prod_large',
+    'A statement takes ACCESS EXCLUSIVE or SHARE ROW EXCLUSIVE on a table and a later, slower statement of the same transactional bundle (a backfill, a validation, an index build) runs while it is held until COMMIT.',
+    'Split the bundle: take the lock in one migration and run the slow statement in the next, or use the non-blocking form (NOT VALID then VALIDATE, CREATE INDEX CONCURRENTLY, batched backfill).',
+  ),
   type_change_rewrite: rule(
     'type_change_rewrite',
     'warn',
