@@ -2,6 +2,7 @@ import type { ApiError } from '@exponetdb/sdk'
 import { CliError } from '../errors.ts'
 import type { CommandResult, OutputContext, SafeError } from '../output/model.ts'
 import { renderHuman, renderJson, renderNdjson, type Terminal } from '../output/render.ts'
+import { cleanLine } from '../output/text.ts'
 import { isCliScope, scopeHint, scopeList } from '../presets.ts'
 import { prop, TokenStore } from '../store.ts'
 import { BUILD, CLI_VERSION, olderThan } from '../version.ts'
@@ -137,7 +138,7 @@ function emit(
     io.stdout(`${renderJson(r, context)}\n`)
     if (r.error !== undefined && terminal.columns > 0) {
       // A person reading a terminal still sees the error on stderr.
-      if (io.tty.stderr) io.stderr(`${r.error.code}: ${r.error.message}\n`)
+      if (io.tty.stderr) io.stderr(`${cleanLine(r.error.code)}: ${cleanLine(r.error.message)}\n`)
     }
     return
   }

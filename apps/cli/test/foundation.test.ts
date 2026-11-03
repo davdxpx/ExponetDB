@@ -337,6 +337,19 @@ describe('the help of a plan command (TC-057)', () => {
     }
   })
 
+  it('does so for every command that only plans (the review of group I)', async () => {
+    const planning = COMMANDS.filter(
+      (c) => c.effect === 'plan' && (c.flags ?? []).some((f) => f.name === 'apply'),
+    )
+    expect(planning.length).toBeGreaterThan(10)
+    const plain = planning
+      .filter((c) =>
+        (c.flags ?? []).some((f) => f.name === 'wait' && !f.description.startsWith('With --apply')),
+      )
+      .map((c) => c.path.join(' '))
+    expect(plain).toEqual([])
+  })
+
   it('keeps the plain wording for a command that applies at once', async () => {
     const help = (await cli(['migration', 'apply', '--help'])).stdout
     expect(help).toMatch(/--wait\s+Wait until applied and verified \(the default\)/)

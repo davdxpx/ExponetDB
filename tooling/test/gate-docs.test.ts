@@ -26,6 +26,13 @@ describe('the test files the gate documents name (TC-063)', () => {
     for (const f of FILES) expect(existsSync(join(docs, f)), f).toBe(true)
   })
 
+  it('finds the names it is meant to check (a changed document format must not turn the guard green)', () => {
+    const named = FILES.flatMap((file) => [
+      ...readFileSync(join(docs, file), 'utf8').matchAll(NAMED_TEST),
+    ])
+    expect(named.length).toBeGreaterThan(150)
+  })
+
   it('all exist', () => {
     const missing = FILES.flatMap((file) =>
       readFileSync(join(docs, file), 'utf8')

@@ -756,6 +756,14 @@ describe('the covers directive (TC-073)', () => {
     expect(finding(r, 'covers_out_of_range')?.message).toMatch(/3/)
   })
 
+  it('says nothing about the entries when up.sql did not parse (the review of group I)', () => {
+    const r = lint([
+      bundle({ up: 'SELEC 1 FROM;;', verify: check('0,1,5'), declared: 'data_rewrite' }),
+    ])
+    expect(finding(r, 'parse_error')).toBeDefined()
+    expect(finding(r, 'covers_out_of_range')).toBeUndefined()
+  })
+
   it('documents the base in verification.md', () => {
     const doc = readFileSync(
       new URL('../../../exponetdb-docs/04-migrations/verification.md', import.meta.url),

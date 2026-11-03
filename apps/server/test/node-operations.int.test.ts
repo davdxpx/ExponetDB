@@ -776,6 +776,18 @@ describe('a refused node plan names its cause (TC-056)', () => {
     await node.stop()
   })
 
+  it('answers a long unknown argument key with the 422, not a 500 (the review of group I)', async () => {
+    const { w, node } = await setup('nonprod')
+    const asked = await owner.browser.call('POST', `/api/v1/nodes/${node.nodeId}/inspections`, {
+      capability: 'postgres.roles.inspect@2',
+      clusterId: w.clusterId,
+      args: { ['k'.repeat(600)]: 1 },
+    })
+    expect([asked.status, asked.body?.code]).toEqual([422, 'VALIDATION_FAILED'])
+    expect(asked.body.details.errors[0].message.length).toBeLessThanOrEqual(200)
+    await node.stop()
+  })
+
   it('names the capability to inspect first when no observation is recent enough', async () => {
     const { w, node } = await setup('nonprod')
     const planned = await owner.browser.call('POST', `/api/v1/nodes/${node.nodeId}/plans`, {

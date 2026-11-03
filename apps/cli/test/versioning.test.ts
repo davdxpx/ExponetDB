@@ -1,7 +1,7 @@
-import { ROUTE_LIST } from '@exponetdb/contracts'
+import { MIN_CLI_VERSION, ROUTE_LIST } from '@exponetdb/contracts'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { matchesContract } from '../src/cli/remote.ts'
-import { CLI_VERSION } from '../src/version.ts'
+import { CLI_VERSION, olderThan } from '../src/version.ts'
 import { FakeApi, INSTALLATION, ok, ulid } from './fake-api.ts'
 
 /**
@@ -61,6 +61,25 @@ describe('a server this CLI cannot speak to', () => {
     expect(r.code).toBe(5)
     expect(r.stderr).toContain('cli_outdated')
     expect(r.stderr).toMatch(/9\.0\.0 or newer/)
+  })
+
+  it('never prints server text of an unexpected shape in the message', async () => {
+    api.installation = {
+      ...INSTALLATION,
+      version: `9.0.0\u001b[31m${'x'.repeat(500)}`,
+      contracts: { ...INSTALLATION.contracts, restApi: `v2\u001b]0;pwn\u0007` },
+    }
+    const r = await api.cli(['node', 'list'])
+    expect(r.code).toBe(5)
+    expect(r.stderr).toContain('incompatible_server')
+    expect(r.stderr).toContain('(unknown)')
+    expect(r.stderr).not.toContain('\u001b')
+    expect(r.stderr).not.toContain('pwn')
+    expect(r.stderr.length).toBeLessThan(600)
+  })
+
+  it('is never above the CLI it ships with: the server minimum cannot lock out its own release', () => {
+    expect(olderThan(CLI_VERSION, MIN_CLI_VERSION)).toBe(false)
   })
 
   it('does not refuse a CLI at or above the minimum', async () => {

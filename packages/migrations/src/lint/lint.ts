@@ -983,7 +983,9 @@ export function lintBundles(inputs: readonly BundleInput[], ctx: LintContext): L
     }
     // An index entry past the last statement covers nothing: almost always a count from 1.
     for (const entry of covered) {
-      if (!/^\d+$/.test(entry) || Number(entry) < statements.length) continue
+      // Without statements (up.sql did not parse) the parse error is the finding, not the entries.
+      if (statements.length === 0 || !/^\d+$/.test(entry) || Number(entry) < statements.length)
+        continue
       emit(
         'covers_out_of_range',
         `verify.sql: covers ${entry} names no statement; up.sql has ${statements.length} (indexes 0 to ${statements.length - 1}, counted from 0).`,

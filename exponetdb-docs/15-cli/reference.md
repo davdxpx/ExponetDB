@@ -1924,9 +1924,9 @@ Runs: against the server; effect: plan; action: `migration.resume.plan`; scopes:
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
 | `--cleanup` | Drop the INVALID index the stopped statement left (by its OID). |
 | `--apply` | Apply the plan at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### migration rollback
 
@@ -1943,9 +1943,9 @@ Runs: against the server; effect: plan; action: `migration.rollback.plan`; scope
 | `migration` (required) | The migration id. |
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
 | `--apply` | Apply the plan at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### migration import analyze
 
@@ -1966,9 +1966,9 @@ Runs: against the server; effect: plan; action: `migration.import.analyze`; scop
 | `--ledger <supabase,drizzle,applied_migrations>` | Legacy ledgers to read. |
 | `--not-applicable <files>` | Legacy files that never apply to this target. |
 | `--apply` | Apply the analysis plan at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### migration import scratch-reset-sql
 
@@ -2068,9 +2068,9 @@ Runs: against the server; effect: plan; action: `migration.baseline.plan`; scope
 | `report` (required) | The import report id. |
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
 | `--apply` | Apply at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### migration ledger reconcile
 
@@ -2087,9 +2087,9 @@ Runs: against the server; effect: plan; action: `ledger.reconcile.plan`; scopes:
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
 | `--note <text>` | Why: what happened to the target (kept with the plan, 1 to 1000 characters). (required) |
 | `--apply` | Apply at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ## Plans
 
@@ -2297,9 +2297,9 @@ Runs: against the server; effect: plan; action: `operation.force_release.plan`; 
 | `--outcome <applied|not_applied|unknown>` | What happened to the change, as you checked it on the target. (required) |
 | `--reason <text>` | Why, and how you checked (kept with the plan and in the audit, 1 to 1000 characters). (required) |
 | `--apply` | Apply at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ```sh
 exponetdb operation force-release op_01… --outcome not_applied --reason "The table does not exist on the target."

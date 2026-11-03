@@ -17,7 +17,7 @@ import { arg, flag, showCommand, TARGET_FLAG } from '../cli/reads.ts'
 import { must } from '../cli/remote.ts'
 import type { CommandInput, CommandSpec, FlagSpec, RunContext } from '../cli/types.ts'
 import { UsageError } from '../cli/usage.ts'
-import { WAIT_FLAGS, waits, watchOperation } from '../cli/watch.ts'
+import { PLAN_WAIT_FLAGS, WAIT_FLAGS, waits, watchOperation } from '../cli/watch.ts'
 import { CliError } from '../errors.ts'
 import { loadGrammar } from '../local/grammar.ts'
 import {
@@ -1038,7 +1038,7 @@ const remoteCommands: readonly CommandSpec[] = [
             ]
           : []),
         { name: 'apply', type: 'boolean', description: 'Apply the plan at once and wait.' },
-        ...WAIT_FLAGS,
+        ...PLAN_WAIT_FLAGS,
       ],
       locality: 'remote',
       effect: 'plan',
@@ -1107,7 +1107,7 @@ const remoteCommands: readonly CommandSpec[] = [
         description: 'Legacy files that never apply to this target.',
       },
       { name: 'apply', type: 'boolean', description: 'Apply the analysis plan at once and wait.' },
-      ...WAIT_FLAGS,
+      ...PLAN_WAIT_FLAGS,
     ],
     locality: 'remote',
     effect: 'plan',
@@ -1387,7 +1387,7 @@ const remoteCommands: readonly CommandSpec[] = [
     flags: [
       TARGET_REQUIRED,
       { name: 'apply', type: 'boolean', description: 'Apply at once and wait.' },
-      ...WAIT_FLAGS,
+      ...PLAN_WAIT_FLAGS,
     ],
     locality: 'remote',
     effect: 'plan',
@@ -1423,7 +1423,7 @@ const remoteCommands: readonly CommandSpec[] = [
         required: true,
       },
       { name: 'apply', type: 'boolean', description: 'Apply at once and wait.' },
-      ...WAIT_FLAGS,
+      ...PLAN_WAIT_FLAGS,
     ],
     locality: 'remote',
     effect: 'plan',

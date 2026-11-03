@@ -180,6 +180,10 @@ export async function resolveServer(
   )
 }
 
+const VERSION_SHAPE = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]{1,32})?$/
+const shownVersion = (v: unknown): string =>
+  typeof v === 'string' && v.length <= 64 && VERSION_SHAPE.test(v) ? v : 'unknown'
+
 export async function connect(ctx: RunContext): Promise<Remote> {
   const { server, profile } = await resolveServer(ctx)
   const auth = profile?.auth ?? { method: 'oauth' as const }
@@ -214,17 +218,21 @@ export async function connect(ctx: RunContext): Promise<Remote> {
     readonly minCliVersion?: unknown
     readonly contracts?: { readonly restApi?: unknown }
   }
-  const serverVersion = typeof seen.version === 'string' ? seen.version : 'unknown'
+  // Text of the server that reaches an error message is only ever a version or an API name of the
+  // expected shape, otherwise `unknown`: it is judged before the contract check below.
+  const serverVersion = shownVersion(seen.version)
   if (seen.contracts?.restApi !== 'v1') {
+    const api = String(seen.contracts?.restApi)
     throw new CliError(
       'incompatible_server',
-      `The server at ${server} (${serverVersion}) speaks the REST API ${String(seen.contracts?.restApi).slice(0, 16)}; this CLI (${CLI_VERSION}) speaks v1. Use a CLI release that matches the server.`,
+      `The server at ${server} (${serverVersion}) speaks the REST API ${/^[a-z0-9.-]{1,16}$/.test(api) ? api : 'unknown'}; this CLI (${CLI_VERSION}) speaks v1. Use a CLI release that matches the server.`,
     )
   }
-  if (typeof seen.minCliVersion === 'string' && olderThan(CLI_VERSION, seen.minCliVersion)) {
+  const minimum = shownVersion(seen.minCliVersion)
+  if (minimum !== 'unknown' && olderThan(CLI_VERSION, minimum)) {
     throw new CliError(
       'cli_outdated',
-      `The server at ${server} (${serverVersion}) needs CLI ${seen.minCliVersion} or newer; this CLI is ${CLI_VERSION}. Update the CLI.`,
+      `The server at ${server} (${serverVersion}) needs CLI ${minimum} or newer; this CLI is ${CLI_VERSION}. Update the CLI.`,
     )
   }
   if (!matchesContract('getInstallation', installation.value)) {

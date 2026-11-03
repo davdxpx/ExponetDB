@@ -399,7 +399,10 @@ async function basisObservation(
 
 /** A refused field of a node plan, with its JSON Pointer, so the caller sees what to correct (TC-056). */
 function invalid(path: string, message: string): NodeError {
-  return new NodeError('VALIDATION_FAILED', { errors: [{ path, code: 'invalid', message }] })
+  // The catalog bounds a located issue (512 characters); a caller's long key must not turn a 422 into a 500.
+  return new NodeError('VALIDATION_FAILED', {
+    errors: [{ path: path.slice(0, 512), code: 'invalid', message: message.slice(0, 200) }],
+  })
 }
 
 const conflict = (reason: string): NodeError => new NodeError('REGISTRY_CONFLICT', { reason })
