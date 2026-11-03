@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| What this is | The implementation prompt for a **new Claude Code session** that builds Wave 10 ([`implementation-waves.md` Wave 10](../implementation-waves.md#wave-10-reosa-integration), [`reosa-integration.md` §3 and §5](../../13-integrations/reosa-integration.md#3-wave-10-integration-on-the-current-databases)). Paste it as the first message of that session, or tell the session to read this file. In Phase 0 the session commits it as `exponetdb-docs/14-roadmap/orders/wave-10-order.md`. |
+| What this is | The owner's implementation order for Wave 10, prepared as a prompt on 2026-11-03 and committed here by the executing session in Phase 0 (W10-0). It builds Wave 10 ([`implementation-waves.md` Wave 10](../implementation-waves.md#wave-10-reosa-integration), [`reosa-integration.md` §3 and §5](../../13-integrations/reosa-integration.md#3-wave-10-integration-on-the-current-databases)). |
 | Prepared | 2026-11-03, on `main` at `e6f4c77c` (merge of `davdxpx/ExponetDB#61`), from a read-only pass over ExponetDB `main`, REOSA `main`, the live ExponetDB on `reos-01` (MCP reads) and a read-only look at `reos-db-01`. |
 | Authority | Items marked **[OWNER]** are the owner's instructions. Items marked **[DEFAULT]** are proposals of the research pass; they stand unless the owner overrules them in Phase 0. The executing session records every decision in `open-decisions.md` before it relies on it. |
 | Owner confirmation | **[OWNER]** 2026-11-03, in German ("Ja, alle so"): every **[DEFAULT]** of §3 is confirmed as written. W10-D9 (OD-4-storage) had no default and stays **open**; Track B's repository binding waits for it |

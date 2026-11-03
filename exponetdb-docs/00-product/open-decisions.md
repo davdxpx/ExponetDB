@@ -84,8 +84,8 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-62 | Node certificate expiry: a distinct refusal reason, findings and thresholds | **open** (the agent's `status` text is built; test campaign TC-042) | (a) reason `certificate_expired`, findings `node_certificate_near_expiry` (warning from 12 h before the end without a renewal, critical after) and `node_certificate_expired`; (b) findings only; (c) documentation only (built) | (a) with a 12 h warning |
 | OD-63 | Who may withdraw a node plan, and whether withdrawing a revoke plan needs a fresh passkey | **open** (test campaign TC-020) | (a) the plan's creator withdraws it with the scope that created it, without a fresh passkey (withdrawing is the safe direction); (b) as (a), but a `node.revoke` or `node.decommission` plan still needs re-authentication to withdraw; (c) keep `nodes.operate` | (a) |
 | OD-64 | How long an operation may wait for approval | **decided** 2026-11-02 (4 h window, VC-057) | (a) an `awaiting_approval` operation whose plan expired is canceled (`plan_expired`, audited) and the approval page says so; (b) a separate deadline for approvals (for example 24 h); (c) no deadline (today) | (b), with (a) as the floor |
-| OD-65 | E16 and E18 waivers: detection before more imports | **open** (test campaign TC-023, TC-024) | (a) the OD-7a staging import counts as real REOSA data: build `hotfix_without_evidence` and `applied_not_in_source` before the next import; (b) it does not: keep the waivers until Wave 10 | (a) for E16 (a break-glass hotfix is reachable once a channel is set), (b) for E18 |
-| OD-66 | G10.3 wording against OD-7b | **open** (test campaign TC-063) | (a) "at least five REOSA migrations applied staging-first; production evidence checked by a plan only until Wave 11"; (b) keep the wording and treat it as a Wave 11 gate | (a) |
+| OD-65 | E16 and E18 waivers: detection before more imports | **decided** 2026-11-03: (a) for both, by the owner's Wave 10 order (W10-D2) | (a) the OD-7a staging import counts as real REOSA data: build `hotfix_without_evidence` and `applied_not_in_source` before the next import; (b) it does not: keep the waivers until Wave 10 | (a) for E16 (a break-glass hotfix is reachable once a channel is set), (b) for E18 |
+| OD-66 | G10.3 wording against OD-7b | **decided** 2026-11-03: (a), by the owner's Wave 10 order (W10-D1) | (a) "at least five REOSA migrations applied staging-first; production evidence checked by a plan only until Wave 11"; (b) keep the wording and treat it as a Wave 11 gate | (a) |
 | OD-67 | Step-up for enrolling a node | **open** (test campaign TC-053) | (a) one combined step-up whose receipt covers the plan apply and the token reveal of that plan only; (b) a longer receipt (5 min) for those two actions; (c) keep two receipts | (a) |
 | OD-68 | Memory of a data read on the target: the residual after the size rule | **decided** 2026-11-02 (b), P1 (verification campaign VC-002, D2-D1) | (a) accept the residual: the size rule (built) bounds one built value, rows times values stays possible; (b) also require a memory-limited target (cgroup or `vm.overcommit_memory=2`) as a registry fact for any target that allows `data.read`, warn otherwise; (c) also refuse accumulating aggregates (`array_agg`, `string_agg`, `json_agg`, …) in agent reads | (b), and count a cluster restart by an authorized read as P1 |
 | OD-69 | Audit chain and clock skew | **decided** 2026-11-02 (b), bounded to 24 h (verification campaign VC-003) | (a) keep refusing (built: typed `AUDIT_CLOCK_SKEW`, readiness warning, RB-16) and wait for the clock; (b) clamp: write an event at the head's time with a skew marker while the head is ahead (new additive guard bundle); (c) an audited, human-only repair operation that appends a `clock_reset` event the guard accepts once | (b) with a bound (for example 24 h), else (c) |
@@ -1969,7 +1969,8 @@ History:
 
 ## OD-65. E16 and E18: detection before the next import
 
-- **Status.** OPEN (found on 2026-10-27 by the test campaign, TC-023 and TC-024)
+- **Status.** DECIDED 2026-11-03: option (a) for both E16 and E18 (the owner's Wave 10 order,
+  W10-D2; the waivers expire in Wave 10). Found on 2026-10-27 by the test campaign, TC-023 and TC-024
 - **Question.** The G6 waivers of E16 (`hotfix_without_evidence`) and E18
   (`applied_not_in_source`) expire "before the first import of real REOSA data (Wave 10)"; the
   live staging target already carries 555 `legacy_import` ledger rows from the OD-7a import. Is
@@ -1985,7 +1986,8 @@ History:
 
 ## OD-66. G10.3 against OD-7b
 
-- **Status.** OPEN (found on 2026-10-27 by the test campaign, TC-063)
+- **Status.** DECIDED 2026-11-03: option (a) (the owner's Wave 10 order, W10-D1); G10 row 3 is
+  reworded. Found on 2026-10-27 by the test campaign, TC-063
 - **Question.** `acceptance-gates.md` G10 row 3 requires "at least five REOSA migrations applied
   staging-first, production with evidence", while OD-7b forbids production applies before Wave 11.
 - **Options.** (a) reword: staging-first, with the production evidence checked by a plan only until
@@ -2136,6 +2138,26 @@ under that delegation here, with the option and the reason; the owner can revisi
 | Finding writes (VC-041) | **an unchanged open finding is read, and written at most once a day**; `occurrences` counts those writes, the Web App says "Recorded N times" | 13,968 open findings were 1.3 million row updates a day |
 | Recorded, not built (first campaign) | TC-016/E2 (the agent does not report `pendingRestart` or the server certificate end), TC-021 (quadratic `survivingExpectations`, unbounded across files), TC-027 and TC-028 (regression artifacts and local evidence of W9-04/W9-02), TC-038 (390 px node page), TC-048/E6 (enrollment tokens listed and revoked: an additive bundle, a sweep and routes), TC-054 (a refusal before pixels on an unrecorded platform), TC-058/E5 (a read route for job keys), TC-059, TC-060 (a busy code for lock contention on catalog reads), TC-061/MIG-11 (the documented cleanup-migration alternative), TC-062 (`exponetdb.missing_migrations` in the ledger bootstrap, which the frozen ledger guard set does not hold), TC-064 (twelve of fourteen items), TC-066 (nine of ten items), TC-067 (axe routes), TC-069 (a message naming the host clock), TC-070 (the torn helper-ledger tail), TC-072 (unit hardening, to be proven on a host), TC-075 (the rest) | each needs a change of its own (a Control Store bundle, a route and a client, a Go change proven on a systemd host, a web layout test in a browser) that a pass over the whole list cannot honestly verify; none hides a defect in what runs: the readers of the record see them here, in the review document and in `R/verdicts.md` |
 | Branch protection of `main` (VC-018) | **owner action**: protect `main` with the required `typescript`, `go` and browser jobs and a pull request before merge | it is a repository setting, not a file; the workflow no longer cancels a run on `main` and runs the three checks `verify` runs |
+
+## Owner decisions of the Wave 10 order (2026-11-03)
+
+The owner's Wave 10 order ([`../14-roadmap/orders/wave-10-order.md`](../14-roadmap/orders/wave-10-order.md))
+was confirmed by the owner on 2026-11-03 with every default of its §3 ("Ja, alle so").
+**[DECIDED]** 2026-11-03, source: that order §3 and its confirmation row. OD-65 and OD-66 are
+above. They change no other DECIDED rule; OD-7b stays in force.
+
+| # | Topic | Decision | Consequence |
+|---|---|---|---|
+| W10-D1 | OD-66 | option (a) | G10 row 3: staging-first applies, production evidence checked by a plan only until Wave 11 |
+| W10-D2 | OD-65 | option (a) for E16 and E18 | both detections are built in Wave 10 (W10-3); the G6 waivers close with them |
+| W10-D3 | Observing REOSA production on the hosted provider | a target `reosa/platform/production` in state `registered` with an observer credential only; no identity marker, no `exponetdb` schema, no other write | OD-7b's "at most read-only observation"; the target is never `active` before Wave 11 |
+| W10-D4 | The observer role on hosted production | created only after the owner's GO in chat for the exact statement list the session prepares (observer part of the bootstrap SQL), with a read-back query | the one permitted change on production in Wave 10 |
+| W10-D5 | `reosa/status/production` | later, not in Wave 10 | G10 covers the platform stream |
+| W10-D6 | SDK and CLI for REOSA | packed tarballs pinned by commit and checksum, committed in REOSA under `vendor/exponetdb/` | no package registry, no token in CI |
+| W10-D7 | Runtime schema contract | REOSA's health compares a bundle list baked into the build with the target's ledger directly (works when ExponetDB is down, C-29); production compares with the legacy ledgers until Wave 11 | no runtime dependency of REOSA on ExponetDB |
+| W10-D8 | Track B | the open G9 host items on `reos-db-01` are part of Wave 10 as a separate pull request, each host step with the owner's GO | the repository binding waits for OD-4-storage |
+| W10-D9 | OD-4 storage | **not decided** (the order had no default) | `OPEN — BLOCKS G9 FULL ACCEPTANCE`, unchanged |
+| W10-D10 | Deploys | only on the owner's word | merged packages are not live until the owner says so |
 
 ## Owner decisions of the Wave 9 Part B order (2026-10-26)
 

@@ -50,7 +50,7 @@ flowchart LR
 | 7 | AI agents work through MCP with the same engine | none: OD-13 and OD-29 resolved 2026-10-12 by the owner's Wave 7 order; merged in `davdxpx/ExponetDB#16` (`4e99244`, 2026-10-13), deployed on `reos-01` on 2026-10-13 ([record](../12-operations/deployments/2026-10-13-reos-01-wave7.md)), G7 awaits the owner ([gate record](./gates/7.md)) |
 | 8 | Web App on the design system | none: authorized 2026-10-13 by the owner's Wave 8 order ([order](./orders/wave-8-order.md)), which resolved OD-1 and OD-11 (placeholder brand) and adopted Supabase UI source by copy ([ADR-0030](../01-architecture/adr/0030-supabase-ui-source-adoption.md)); OD-38 (license basis) blocks release, not development; in progress, part 2 in `#27`, awaiting G8 ([gate record](./gates/8.md)) |
 | 9 | Backups proven by restores; diagnostics and advisors; first the migration engine made fit for real imported schemas (Part A) | authorized 2026-10-21 by the owner's Wave 9 order ([order](./orders/wave-9-order.md)); Part A done ([Part A record](./gates/9-part-a.md)); Part B ordered 2026-10-26 ([order](./orders/wave-9-part-b-order.md)): OD-8 technical default decided (legal review open), OD-53 to OD-56 decided, **OD-4 storage open (blocks the full G9 acceptance)**; in progress ([G9 record](./gates/9.md)) |
-| 10 | REOSA uses ExponetDB for its current databases | OD-7 resolved 2026-10-21 (OD-7a yes for staging, OD-7b no production applies before Wave 11); its product capabilities are pulled forward into Wave 9 Part A |
+| 10 | REOSA uses ExponetDB for its current databases | OD-7 resolved 2026-10-21 (OD-7a yes for staging, OD-7b no production applies before Wave 11); its product capabilities are pulled forward into Wave 9 Part A; authorized 2026-11-03 by the owner's Wave 10 order ([order](./orders/wave-10-order.md)), OD-65 and OD-66 decided, OD-4-storage open; in progress ([G10 record](./gates/10.md)) |
 | 11 | REOSA production runs on ExponetDB-managed PostgreSQL | OD-12 (HA stance), all product gates |
 
 ---
@@ -252,6 +252,7 @@ Ordering rules between 3A, 3B and later waves:
 | Tests | import result reproducible from the same inputs; staging → production evidence chain on real migrations |
 | Docs requirement | REOSA's own rules updated by REOSA; ExponetDB docs record the integration state |
 | Abort criteria | the hosted provider prevents the migrator design: keep read-only mode until Wave 11 |
+| State | **[OBSERVED]** (2026-11-03) authorized by the owner's Wave 10 order ([order](./orders/wave-10-order.md), prepared on `main` `e6f4c77c`); production is observed as a `registered` target without a marker (W10-D3); work packages W10-0 to W10-9 and Track B ([G10 record](./gates/10.md)) |
 
 ## Wave 11: REOSA move from Supabase to ExponetDB-managed PostgreSQL
 
