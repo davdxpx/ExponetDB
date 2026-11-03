@@ -325,11 +325,10 @@ export class NodeUseCases {
       return this.#visibleNodes(caller, request)
     }
     await this.#h.authorize(this.#h.store, 'node.list', caller, { kind: 'installation' })
-    const page = await listNodes(
-      this.#h.store,
-      { after: decodeCursor(request.cursor), limit: request.limit },
-      this.#h.clock.nowMs(),
-    )
+    const page = await listNodes(this.#h.store, {
+      after: decodeCursor(request.cursor),
+      limit: request.limit,
+    })
     return {
       items: page.items.map((n) => NodeSchema.parse(n)),
       nextCursor: page.more && page.last !== null ? encodeCursor(page.last) : null,
@@ -347,11 +346,10 @@ export class NodeUseCases {
     let after = decodeCursor(request.cursor)
     let scanned = 0
     for (;;) {
-      const page = await listNodes(
-        this.#h.store,
-        { after, limit: Math.min(200, SCAN_LIMIT - scanned) },
-        this.#h.clock.nowMs(),
-      )
+      const page = await listNodes(this.#h.store, {
+        after,
+        limit: Math.min(200, SCAN_LIMIT - scanned),
+      })
       for (const node of page.items) {
         scanned++
         let allowed = decided.get(node.serverId)
@@ -426,7 +424,7 @@ export class NodeUseCases {
   async node(caller: CallerLike, nodeId: string): Promise<NodeStatus> {
     const subject = await this.#nodeSubject(nodeId)
     await this.#h.authorize(this.#h.store, 'node.get', caller, subject)
-    const node = await getNode(this.#h.store, nodeId, this.#h.clock.nowMs())
+    const node = await getNode(this.#h.store, nodeId)
     if (node === undefined) {
       throw new NodeError('NOT_FOUND')
     }

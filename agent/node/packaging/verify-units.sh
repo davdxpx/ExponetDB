@@ -50,7 +50,10 @@ if [ "$(id -u)" -eq 0 ]; then
   systemd-tmpfiles --root="$root" --create
   [ "$(stat -c %a "$root/var/lib/exponetdb-node")" = 700 ] \
     || { echo "/var/lib/exponetdb-node is not mode 0700" >&2; exit 1; }
-  [ "$(stat -c %U "$root/var/lib/exponetdb-node")" = exponetdb-node ] \
+  # By numeric id: the scratch root's passwd gives the account an id that the host's own NSS may
+  # name differently (or not at all), so `stat -c %U` compared the wrong passwd (VC-130).
+  want="$(awk -F: '$1=="exponetdb-node"{print $3}' "$root/etc/passwd")"
+  [ -n "$want" ] && [ "$(stat -c %u "$root/var/lib/exponetdb-node")" = "$want" ] \
     || { echo "/var/lib/exponetdb-node is not owned by exponetdb-node" >&2; exit 1; }
   echo "state directory created with mode 0700"
 else

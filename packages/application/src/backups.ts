@@ -606,10 +606,27 @@ export class BackupUseCases {
           ],
         })
       }
+      // The database refuses a drill that finishes after its own clock (EXB06): say so with the
+      // member, before the write (VC-104: it surfaced as a 5xx).
+      const finishedMs = Date.parse(request.restoredAt)
+      const now = await tx.query(
+        'application.backups.offline_drill.clock',
+        'SELECT clock_timestamp() AS now',
+      )
+      if (finishedMs > (now.rows[0]?.date('now').getTime() ?? Number.POSITIVE_INFINITY)) {
+        throw new BackupError('VALIDATION_FAILED', {
+          errors: [
+            {
+              path: '/restoredAt',
+              code: 'invalid',
+              message: 'The restore time is in the future.',
+            },
+          ],
+        })
+      }
       const actor = registryActor(this.#h.planActor(caller))
       const drillId = newId('drl', this.#h.clock.nowMs())
       const outcome = request.outcome === 'passed' ? 'attested' : 'failed'
-      const finishedMs = Date.parse(request.restoredAt)
       const startedAt = new Date(finishedMs - request.durationSeconds * 1000).toISOString()
       // serve has no INSERT on backups.drills (the catalog bundle verifies that it only reads): the
       // attestation goes through the one function it may call (TC-013, D-09; it was a 500).

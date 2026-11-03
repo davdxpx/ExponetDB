@@ -19,7 +19,7 @@ export interface LedgerWatchSighting {
 /**
  * What the ledger watch (VC-022) records for one target: a critical finding while its ledger and
  * the Control Store mirror differ, resolved when they agree. Opening and clearing are audited once
- * each (an alertable signal; the repeated sightings only count up the finding's occurrences).
+ * each (an alertable signal; a repeated, unchanged sighting is written at most once a day).
  */
 export async function recordLedgerWatch(
   store: ControlStore,

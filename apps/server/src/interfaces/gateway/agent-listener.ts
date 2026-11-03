@@ -237,8 +237,12 @@ function codeOf(error: unknown): string {
   return 'INTERNAL'
 }
 
-/** The verified client certificate, if any: its node id (CN) and DER. */
-function presentedOf(stream: ServerHttp2Stream): Presented | undefined {
+/**
+ * The verified client certificate, if any: its node id (CN), DER and `notAfter`. TLS judges the
+ * validity once per connection, so a session kept open past `notAfter` would go on; every request
+ * is checked against it (VC-150).
+ */
+export function presentedOf(stream: ServerHttp2Stream): Presented | undefined {
   const socket = stream.session?.socket as TLSSocket | undefined
   if (socket === undefined || !socket.authorized) {
     return undefined
@@ -248,7 +252,21 @@ function presentedOf(stream: ServerHttp2Stream): Presented | undefined {
   if (peer === undefined || typeof cn !== 'string' || !(peer.raw instanceof Buffer)) {
     return undefined
   }
-  return { nodeId: cn, certificate: new Uint8Array(peer.raw) }
+  const notAfter = typeof peer.valid_to === 'string' ? Date.parse(peer.valid_to) : Number.NaN
+  return {
+    nodeId: cn,
+    certificate: new Uint8Array(peer.raw),
+    ...(Number.isFinite(notAfter) ? { expiresAtMs: notAfter } : {}),
+  }
+}
+
+/**
+ * Whether the certificate of a session that is still open has passed its end. A verified
+ * certificate whose end cannot be read is refused too: a check that can be skipped is no check.
+ */
+export function certificateExpired(presented: Presented | undefined, nowMs: number): boolean {
+  if (presented === undefined) return false
+  return presented.expiresAtMs === undefined || presented.expiresAtMs <= nowMs
 }
 
 /** Bytes of request bodies buffered across all streams. */
@@ -413,6 +431,7 @@ async function serveStream(
   let status = 200
   let code: string | undefined
   let body: unknown
+  let refusedReason: string | undefined
   try {
     if (route === undefined) {
       throw new Refusal('NOT_FOUND')
@@ -428,6 +447,10 @@ async function serveStream(
     }
     if (!isJsonContentType(headers['content-type'])) {
       throw new Refusal('VALIDATION_FAILED')
+    }
+    if (certificateExpired(presented, Date.now())) {
+      refusedReason = 'certificate_expired'
+      throw new Refusal('NODE_CERTIFICATE_REFUSED')
     }
     if (presented === undefined) {
       if (!route.anonymous) {
@@ -469,7 +492,14 @@ async function serveStream(
     if (status >= 500) {
       ctx.logger.warn('agent.request', { ...fields, code })
     } else if (code !== undefined && NOTABLE.has(code)) {
-      ctx.logger.info('agent.refused', { ...fields, code, ...idsOf(body, presented) })
+      // A refusal worth an operator's attention is a warning, with the reason when it is known
+      // (an expired certificate is the case RB-13 starts from).
+      ctx.logger.warn('agent.refused', {
+        ...fields,
+        code,
+        ...(refusedReason === undefined ? {} : { reason: refusedReason }),
+        ...idsOf(body, presented),
+      })
     } else {
       ctx.logger.debug('agent.request', code === undefined ? fields : { ...fields, code })
     }

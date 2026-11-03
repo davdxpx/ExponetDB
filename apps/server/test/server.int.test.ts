@@ -155,6 +155,8 @@ describe('the three roles from one build', () => {
         expect.objectContaining({ name: 'installation', status: 'pass' }),
         expect.objectContaining({ name: 'role_credential', status: 'pass' }),
         expect.objectContaining({ name: 'keyring', status: 'pass' }),
+        expect.objectContaining({ name: 'audit_partitions', status: 'pass' }),
+        expect.objectContaining({ name: 'clock_skew', status: 'pass' }),
         expect.objectContaining({ name: 'workers', status: 'warn', reason: 'no_live_worker' }),
       ]),
     )
@@ -345,6 +347,48 @@ describe('unsafe starts are refused (exit 3), unsafe states are not ready', () =
       expect(await serve.stop()).toBe(0)
     } finally {
       await empty.drop()
+    }
+  })
+})
+
+describe('a missing audit partition (VC-042)', () => {
+  it('turns the role degraded with the reason, while reads and probes go on', async () => {
+    const other = await migratedTestDatabase('exdb_it_server_auditpart')
+    try {
+      const month = new Date()
+      const partition = `audit_events_y${month.getUTCFullYear()}m${String(month.getUTCMonth() + 1).padStart(2, '0')}`
+      await other.asSuperuser((c) =>
+        c.query(`ALTER TABLE audit.audit_events DETACH PARTITION audit.${partition}`),
+      )
+      const serve = await start((hooks) =>
+        runServe(
+          serveConfig({
+            controlStoreUrl: other.url('exdb_serve'),
+            installationId: other.installationId,
+          }),
+          hooks,
+        ),
+      )
+      const detail = await eventually(
+        () => get(serve.ports.internal, '/healthz/detail'),
+        (r) =>
+          (r.body['checks'] as { name: string; status: string }[] | undefined)?.some(
+            (c) => c.name === 'audit_partitions' && c.status !== 'pass',
+          ) ?? false,
+      )
+      expect(detail.body['checks']).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'audit_partitions',
+            status: 'fail',
+            reason: 'audit_partition_missing',
+          }),
+        ]),
+      )
+      expect((await get(serve.ports.public, '/healthz/live')).status).toBe(200)
+      expect(await serve.stop()).toBe(0)
+    } finally {
+      await other.drop()
     }
   })
 })

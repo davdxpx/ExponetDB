@@ -28,7 +28,7 @@ export const projectsMessages = {
   'projects.card.environments': '{count} environments',
   'projects.card.environment': '1 environment',
   'projects.card.noEnvironment': 'No database registered yet',
-  'projects.count': '{total} projects',
+  'projects.count': '{total, plural, one {# project} other {# projects}}',
   'projects.matching': '{shown} of {total} projects match',
   'project.environments.matching': '{shown} of {total} environments shown',
   'project.environments.noMatch': 'No environment matches the search.',

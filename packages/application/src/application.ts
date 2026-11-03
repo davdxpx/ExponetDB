@@ -2629,7 +2629,10 @@ export class Application {
         throw await this.#humanApply(tx, caller, plan, error)
       }
       if (this.#d.kinds.get(plan.kind) === undefined) {
-        throw new OperationError('operation_kind_unknown')
+        // As the accept step does: PLAN_STALE names what changed, here the kind this release lacks.
+        throw new OperationError('operation_kind_unknown', {
+          changedBindings: [{ binding: 'kindVersion', actual: 'unknown' }],
+        })
       }
       const registry = this.#d.registry
       // A critical self-approval cools for 10 minutes and is released only

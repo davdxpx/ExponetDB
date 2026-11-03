@@ -12,16 +12,32 @@ export function useCatalog(next: Catalog): void {
   catalog = next
 }
 
+const PLURAL_RULES = new Intl.PluralRules('en')
+const COUNT_FORMAT = new Intl.NumberFormat('en-US')
+
+/** `{n, plural, one {# project} other {# projects}}`: the form the count selects, `#` is the count. */
+const PLURAL = /\{([A-Za-z]+), plural, one \{([^{}]*)\} other \{([^{}]*)\}\}/g
+
 /**
- * The text of a message key with `{name}` placeholders filled. Placeholders
- * without a value stay visible (a missing parameter is a bug that shows,
- * never a silent blank). The result is plain text; React renders it as text.
+ * The text of a message key with `{name}` placeholders filled and plural forms chosen. A count is
+ * written `{n, plural, one {# project} other {# projects}}` (Intl.PluralRules), never as a
+ * trailing "s" (TC-066). Placeholders without a value stay visible (a missing parameter is a bug
+ * that shows, never a silent blank). The result is plain text; React renders it as text.
  */
 export function t(key: MessageKey, params: MessageParams = {}): string {
-  return catalog[key].replace(/\{([A-Za-z]+)\}/g, (whole, name: string) => {
-    const value = params[name]
-    return value === undefined ? whole : String(value)
-  })
+  return catalog[key]
+    .replace(PLURAL, (whole, name: string, one: string, other: string) => {
+      const value = params[name]
+      if (typeof value !== 'number') return whole
+      return (PLURAL_RULES.select(value) === 'one' ? one : other).replaceAll(
+        '#',
+        COUNT_FORMAT.format(value),
+      )
+    })
+    .replace(/\{([A-Za-z]+)\}/g, (whole, name: string) => {
+      const value = params[name]
+      return value === undefined ? whole : String(value)
+    })
 }
 
 /**

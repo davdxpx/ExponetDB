@@ -22,7 +22,9 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push to a branch or pull request replaces the older run; a run on main is never
+  # cancelled, so every commit on main keeps its own result (VC-018).
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   TURBO_TELEMETRY_DISABLED: '1'
@@ -103,6 +105,16 @@ jobs:
 
       - name: Secret scan
         run: bun run secrets
+
+      # Part of `bun run verify`; each runs in under two seconds (VC-081).
+      - name: Third-party register
+        run: bun run third-party
+
+      - name: Dependency licenses
+        run: bun run licenses
+
+      - name: UI safety
+        run: bun run ui-safety
 
       - name: Dependency audit
         run: bun audit
@@ -409,6 +421,9 @@ jobs:
           "$RUNNER_TEMP/dist/exponetdb-node-0.0.0-ci.${GITHUB_RUN_NUMBER}-linux-amd64" version
           "$RUNNER_TEMP/dist/exponetdb-node-helper-0.0.0-ci.${GITHUB_RUN_NUMBER}-linux-amd64" version
           bash packaging/verify-units.sh
+          # Once as root as well: the state directory is created in a scratch root and its owner
+          # and mode are checked (the unprivileged run only reads the configuration back).
+          sudo bash packaging/verify-units.sh
 
   node-pg:
     # The node agent's capabilities against PostgreSQL 16, 17 and 18 in the

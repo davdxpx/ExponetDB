@@ -185,7 +185,7 @@ describe('the Go agent against the gateway and the worker', () => {
     const identityId = newId('idn', Date.now())
     const clock = { nowMs: () => Date.now() }
     await worker.transaction('test.token', (tx) =>
-      createEnrollmentToken(tx, clock, {
+      createEnrollmentToken(tx, {
         tokenId,
         serverId,
         revealBy: identityId,

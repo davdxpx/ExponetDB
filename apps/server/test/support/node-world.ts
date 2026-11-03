@@ -463,7 +463,7 @@ export async function simulatedNode(
   const identityId = newId('idn', Date.now())
   const operationId = await systemOperation(db)
   await worker.transaction('test.token', (tx) =>
-    createEnrollmentToken(tx, clock, {
+    createEnrollmentToken(tx, {
       tokenId,
       serverId: w.serverId,
       revealBy: identityId,

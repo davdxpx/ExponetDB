@@ -166,8 +166,8 @@ import { InFlight, LARGE_BODIES_IN_FLIGHT } from './in-flight.ts'
 import {
   clearCookie,
   clientAddress,
-  errorCodeOf,
   HttpRefusal,
+  hasInternalCause,
   parseCookies,
   problemResponse,
   readLimitedBytes,
@@ -2219,6 +2219,13 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
         return problemResponse(requestId, error, {
           ...(planId === undefined ? {} : { planId }),
           ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
+          // A catalog code that could not be built is answered INTERNAL; the journal names it (VC-066).
+          onDowngrade: (errorCode) =>
+            deps.logger.warn('http.problem_downgraded', {
+              errorCode,
+              route: route.path,
+              requestId,
+            }),
         })
       }
       try {
@@ -2431,7 +2438,7 @@ export function mountApi(app: Hono<Env>, deps: ApiDeps): void {
         // Whatever the answer will be INTERNAL for is logged: an error with a code outside the
         // catalog (a Control Store permission, a driver error) used to be answered 500 and
         // never logged, so the cause of a 500 could not be found (TC-013, D-09).
-        if (errorCodeOf(error) === 'INTERNAL') {
+        if (hasInternalCause(error)) {
           deps.logger.error('http.request_failed', {
             ...describeError(error),
             // The route template: the logger's allowlist keeps only a path here.

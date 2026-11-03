@@ -1,4 +1,5 @@
 import { type ErrorCode, errorDefinition } from '@exponetdb/contracts'
+import type { JsonObject } from '@exponetdb/kernel'
 
 /**
  * Operation errors use the stable codes of the error catalog
@@ -37,12 +38,15 @@ export class OperationError extends Error {
   readonly code: ErrorCode | InternalOperationCode
   readonly changedBindings: readonly ChangedBinding[]
   readonly blockingOperationId: string | undefined
+  /** The members the code's catalog details require (`BACKUP_REQUIRED`: `newerThan`), VC-066. */
+  readonly details: JsonObject | undefined
 
   constructor(
     code: ErrorCode | InternalOperationCode,
     options: {
       changedBindings?: readonly ChangedBinding[]
       blockingOperationId?: string
+      details?: JsonObject
       cause?: unknown
     } = {},
   ) {
@@ -53,5 +57,6 @@ export class OperationError extends Error {
     this.code = code
     this.changedBindings = options.changedBindings ?? []
     this.blockingOperationId = options.blockingOperationId
+    this.details = options.details
   }
 }

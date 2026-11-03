@@ -180,7 +180,7 @@ export const wave9Messages = {
   'wave9.advisors.open.what': 'Advisor findings',
   'wave9.advisors.open.empty': 'No advisor finding is open for this target.',
   'wave9.advisors.lastSeen': 'Last seen',
-  'wave9.advisors.occurrences': 'Seen {count} times',
+  'wave9.advisors.occurrences': 'Recorded {count, plural, one {# time} other {# times}}',
 
   // ----- backups of a target -----
   'wave9.backups.description':

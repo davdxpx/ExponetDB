@@ -199,15 +199,13 @@ function PreflightBody({
           <p className="m-0 font-medium">{t('infra.retire.with.title')}</p>
           <ul className="m-0 flex list-disc flex-col gap-0.5 pl-5 text-foreground-light">
             {preflight.retiredWith.map((group) => (
-              <li key={group.kind}>
-                {t(WITH_TITLE[group.kind], { count: formatCount(group.total) })}
-              </li>
+              <li key={group.kind}>{t(WITH_TITLE[group.kind], { count: group.total })}</li>
             ))}
           </ul>
         </div>
       )}
       <ul className="m-0 flex list-none flex-col gap-1 p-0 text-xs text-foreground-light">
-        <li>{t('infra.retire.kept', { count: formatCount(preflight.kept.retiredChildren) })}</li>
+        <li>{t('infra.retire.kept', { count: preflight.kept.retiredChildren })}</li>
         <li data-backups={backups}>{t(`infra.retire.backups.${backups}`)}</li>
         <li>
           {t('infra.retire.observed')} <ObservedTime observedAt={preflight.observedAt} />
@@ -247,7 +245,7 @@ function BlockerGroup({
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <p className="m-0 text-sm font-medium">
-          {t(GROUP_TITLE[group.kind], { count: formatCount(group.total) })}
+          {t(GROUP_TITLE[group.kind], { count: group.total })}
         </p>
         <p className="m-0 text-xs text-foreground-light">{t(GROUP_HINT[group.kind])}</p>
         <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">

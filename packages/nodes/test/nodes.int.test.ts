@@ -150,7 +150,7 @@ async function revealedToken(serverId: string) {
   const identityId = newId('idn', Date.now())
   const operationId = await operation()
   await worker.transaction('test.token', (tx) =>
-    createEnrollmentToken(tx, clock, { tokenId, serverId, revealBy: identityId, operationId }),
+    createEnrollmentToken(tx, { tokenId, serverId, revealBy: identityId, operationId }),
   )
   const reveal = () =>
     serve.transaction('test.reveal', (tx) =>
@@ -426,7 +426,7 @@ describe('node agent control plane (control-plane.md)', () => {
     })
 
     // Before any heartbeat the view comes from the hello: the node's own report of what runs.
-    const afterHello = await getNode(serve, enrolled.nodeId, Date.now())
+    const afterHello = await getNode(serve, enrolled.nodeId)
     expect(afterHello?.clusters).toEqual([
       expect.objectContaining({ clusterId, localName: '17/exdbnode', running: true }),
       expect.objectContaining({ clusterId: null, localName: '17/other', running: true }),
@@ -455,7 +455,7 @@ describe('node agent control plane (control-plane.md)', () => {
         agent: { queueSize: 0, bufferedResults: 0, lastErrors: [] },
       }),
     )
-    const afterBeat = await getNode(serve, enrolled.nodeId, Date.now())
+    const afterBeat = await getNode(serve, enrolled.nodeId)
     expect(afterBeat?.clusters).toEqual([
       {
         clusterId,

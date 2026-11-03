@@ -47,10 +47,17 @@ export interface HttpMetrics {
   readonly duration: Histogram<'route' | 'method'>
 }
 
+/**
+ * The route label: a route template of the router (`/api/v1/targets/:target`), never a raw path.
+ * The API has 202 templates of up to 84 characters (VC-037: with the old bound of 80 characters
+ * and 100 series every template was folded into "other").
+ */
+export const ROUTE_LABEL = { pattern: /^\/[a-zA-Z0-9_./:*{}-]{0,120}$/, maxDistinct: 400 } as const
+
 export function httpMetrics(registry: MetricsRegistry): HttpMetrics {
   return {
     requests: registry.counter('exdb_http_requests_total', 'HTTP requests by route template.', {
-      route: { pattern: /^\/[a-z0-9_./{}-]{0,80}$/, maxDistinct: 100 },
+      route: ROUTE_LABEL,
       method: { values: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'OTHER'] },
       status_class: { values: ['1xx', '2xx', '3xx', '4xx', '5xx'] },
     }),
@@ -58,7 +65,7 @@ export function httpMetrics(registry: MetricsRegistry): HttpMetrics {
       'exdb_http_request_duration_seconds',
       'HTTP request duration by route template.',
       {
-        route: { pattern: /^\/[a-z0-9_./{}-]{0,80}$/, maxDistinct: 100 },
+        route: ROUTE_LABEL,
         method: { values: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'OTHER'] },
       },
     ),
@@ -104,7 +111,15 @@ function base(
       headers[key] = value
     })
     await (deps.tracing === undefined ? run() : deps.tracing.withIncoming(headers, run))
-    const route = routes.includes(c.req.path) ? c.req.path : '/unmatched'
+    // The template of the route that answered (`/api/v1/targets/:target`), never the raw path; the
+    // catch-all of the middleware itself is "not matched" (VC-037: every API call was /unmatched).
+    const matched = c.req.routePath
+    const route =
+      matched !== '/*' && matched !== '*'
+        ? matched
+        : routes.includes(c.req.path)
+          ? c.req.path
+          : '/unmatched'
     const method = METHODS.has(c.req.method) ? c.req.method : 'OTHER'
     deps.metrics.requests.inc({ route, method, status_class: statusClass(c.res.status) })
     deps.metrics.duration.observe({ route, method }, (performance.now() - started) / 1000)

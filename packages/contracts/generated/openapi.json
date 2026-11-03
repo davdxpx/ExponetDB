@@ -7286,7 +7286,7 @@
             ]
           },
           "occurrences": {
-            "description": "How often the same finding was detected while open (deduplicated, never repeated).",
+            "description": "How many times the open finding was recorded: once when it opened, again when what it says changes, and at most once a day while it stays unchanged (it is never repeated at every check).",
             "maximum": 9007199254740991,
             "minimum": 1,
             "type": "integer"
@@ -7597,7 +7597,7 @@
             ]
           },
           "occurrences": {
-            "description": "How often the same finding was detected while open (deduplicated, never repeated).",
+            "description": "How many times the open finding was recorded: once when it opened, again when what it says changes, and at most once a day while it stays unchanged (it is never repeated at every check).",
             "maximum": 9007199254740991,
             "minimum": 1,
             "type": "integer"

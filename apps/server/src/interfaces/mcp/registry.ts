@@ -19,7 +19,7 @@ import type { RequestId } from '@exponetdb/kernel'
 import { describeError, type Logger } from '@exponetdb/observability'
 import type * as z from 'zod'
 import { existenceFloor, isExistenceRefusal } from '../existence.ts'
-import { detailsOf, errorCodeOf } from '../http/request.ts'
+import { detailsOf, errorCodeOf, hasInternalCause } from '../http/request.ts'
 import type { CursorCodec } from './cursor.ts'
 import type { RequestStateBinding, RequestStateCodec } from './request-state.ts'
 import { escapeValue, renderError, renderText, toolError } from './results.ts'
@@ -668,7 +668,7 @@ export function createToolHost(
             : await application.operation(caller, sealedOperation)
       } catch (error) {
         const code = errorCodeOf(error)
-        if (code === 'INTERNAL') {
+        if (hasInternalCause(error)) {
           logger.error('mcp.tool_failed', { ...describeError(error), tool: name })
         }
         // As REST (api.ts): a refusal that answers like an unknown object keeps its true

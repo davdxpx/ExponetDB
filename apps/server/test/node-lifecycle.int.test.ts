@@ -233,6 +233,32 @@ describe('node lifecycle mutations are fenced by their lease (F3)', () => {
     })
   }
 
+  it('plans a revoke while another active plan body holds an escaped NUL (VC-056)', async () => {
+    const w = await registryWorld(db)
+    const node = await simulatedNode(db, keyring, w, () => ({}))
+    const serve = storeOf(db, 'exdb_serve')
+    const first = await serve.transaction('test.nul.first', (tx) =>
+      planNodeRevoke(tx, { policy: policy() }, ACTOR, node.nodeId),
+    )
+    // The live installation holds such bodies (written before the REST layer refused a NUL); the
+    // text is not valid jsonb, and a bare cast made every later impact count fail with a 500.
+    await db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `UPDATE operations.plan_bodies
+            SET body = replace(body, '"subject"', '"note":"a\\u0000b","subject"')
+          WHERE plan_id = $1`,
+        [first.planId],
+      )
+      await c.query('COMMIT')
+    })
+    const second = await serve.transaction('test.nul.second', (tx) =>
+      planNodeRevoke(tx, { policy: policy() }, ACTOR, node.nodeId),
+    )
+    expect(second.kind).toBe('node.revoke')
+  })
+
   it('still writes while the lease is held', async () => {
     const w = await registryWorld(db)
     const node = await simulatedNode(db, keyring, w, () => ({}))

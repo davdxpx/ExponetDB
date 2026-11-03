@@ -208,9 +208,17 @@ async function staleReauth() {
   })
 }
 
+// One pool for the worker, not one per call: a pool per `drive` iteration was never closed and used up
+// the role's connection limit (SQLSTATE 53300 late in a full run).
+let worker: ReturnType<typeof db.store> | undefined
+const workerStore = () => {
+  worker ??= db.store('exdb_worker')
+  return worker
+}
+
 async function drive() {
   for (let i = 0; i < 20; i++) {
-    const r = await processNextOperation(db.store('exdb_worker'), {
+    const r = await processNextOperation(workerStore(), {
       workerId: newId('prc', Date.now()),
       kinds,
       clock: systemClock,
