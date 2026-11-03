@@ -195,6 +195,16 @@ async function diagnosticReads(
         exceptionRoles: failed,
       }
     }
+    if (error instanceof RegistryError && error.code === 'TARGET_IDENTITY_MISMATCH') {
+      // An observed target whose database oid changed (ADR-0039 §2), refused by the connector.
+      return {
+        diagnosticEndpointId: null,
+        identity: { status: 'mismatch', field: 'database_oid' },
+        settings: failed,
+        activity: failed,
+        exceptionRoles: failed,
+      }
+    }
     if (error instanceof TargetError && error.code === 'TARGET_IDENTITY_MISMATCH') {
       return {
         diagnosticEndpointId: null,

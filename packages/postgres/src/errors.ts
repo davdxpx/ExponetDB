@@ -59,6 +59,10 @@ export type TargetErrorReason =
   | 'receive_limit'
   | 'protocol'
   | 'unsupported_version'
+  /** The server-side session role is not the role ExponetDB logged in as (a pooler's mapping, ADR-0039). */
+  | 'session_user'
+  /** A pinned session setting is not in effect and could not be set (a pooler that drops startup options). */
+  | 'session_settings'
 
 const MESSAGES: Readonly<Record<TargetErrorCode, string>> = {
   TARGET_UNAVAILABLE: 'The target did not answer.',

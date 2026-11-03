@@ -224,18 +224,31 @@ endpoints:
     loginSuffix: abcdefghijklmnopqrst
 ```
 
+Before `cluster register`, the owner confirms the suffix against the live
+project: the provider's console names the project ref of the production
+project, and it must be the `loginSuffix` above. A restored, forked or
+cloned project has the same system identifier, database oid and observer
+password; nothing ExponetDB checks later tells it apart from the original.
+
 ```sh
 exponetdb cluster register --file cluster.yaml --apply
 exponetdb cluster declare-tier cls_… --tier prod --apply
 exponetdb cluster bootstrap-sql cls_… --roles observer --database postgres --file observer.sql
 ```
 
+shortcut: one cluster per pooler `host:port` (`endpoints_one_active_address`
+is registry-wide), so a second project on the same provider pooler cannot be
+registered yet; upgrade with an address key that includes the login suffix.
+
 `observer.sql` holds only the observer: the role (created with explicit
 attributes; an existing one with a privileged attribute is refused), its
 `pg_monitor` membership, its settings (`default_transaction_read_only`,
 `statement_timeout`, `idle_in_transaction_session_timeout`) and `CONNECT` on
-the named databases. Its statement list is what the owner approves before it
-runs on the hosted production database (W10-D4). The provider's
+the named databases. With `--ledger` it also `\connect`s to each named
+database and grants the observer `SELECT` on the legacy ledger tables there
+(optional; leave it out unless the legacy ledgers are read). Its statement
+list is what the owner approves before it runs on the hosted production
+database (W10-D4). The provider's
 administrator (not a superuser; it may create roles and grant `pg_monitor`)
 runs it, then sets the observer's password:
 
@@ -260,12 +273,14 @@ The target register plan's analysis says `no writes`. The target stays
 sessions and locks are read as the observer. A data read, a raw statement,
 a migration, a cancel or terminate plan or a drift acceptance answers
 `TARGET_OBSERVED_ONLY`. Only the observer's credential exists: a session of
-another role on this cluster answers `REGISTRY_CONFLICT`
-(`cluster_pooler_only`). When the database is recreated under the same name
+another role on this cluster, the reader included, answers
+`REGISTRY_CONFLICT` (`cluster_pooler_only`). When the database is recreated under the same name
 (another database oid), every read answers `TARGET_IDENTITY_MISMATCH`
 (`database_oid`) and health opens a critical `identity_mismatch` finding;
-the target is never suspended. Wave 11 registers the moved database as a new
-managed target and decommissions the observed one.
+the target is never suspended. How it becomes a managed target after the
+Wave 11 cutover is not built and is open
+([OD-71](../00-product/open-decisions.md#od-71-wave-11-from-an-observed-target-to-a-managed-one)):
+a path is never reused.
 
 **[OBSERVED]** (2026-11-03) The login suffix is proven at the session
 specification only; it has not been run against a live Supavisor yet.

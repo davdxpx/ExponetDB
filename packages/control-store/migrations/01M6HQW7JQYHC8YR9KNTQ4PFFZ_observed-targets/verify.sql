@@ -16,6 +16,7 @@ SELECT EXISTS (SELECT FROM pg_catalog.pg_attribute a
 SELECT pg_get_functiondef('registry.endpoint_guard()'::regprocedure) LIKE '%login_suffix%'
    AND pg_get_functiondef('registry.target_guard()'::regprocedure) LIKE '%OLD.mode%'
    AND pg_get_functiondef('registry.target_guard()'::regprocedure) LIKE '%an observed target stays registered%'
+   AND pg_get_functiondef('registry.database_guard()'::regprocedure) LIKE '%OLD.observed_oid%'
    AND EXISTS (SELECT FROM pg_catalog.pg_trigger t
                 WHERE t.tgrelid = 'registry.targets'::regclass AND t.tgname = 'targets_guard' AND t.tgenabled = 'O')
    AND EXISTS (SELECT FROM pg_catalog.pg_trigger t

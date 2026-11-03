@@ -584,7 +584,7 @@ export async function planClusterRegister(
     endpoints.push(await endpointContent(tx, context, e, `/endpoints/${i}`))
   }
   // ADR-0039 §4: a cluster is reached directly, or through session poolers only (a hosted
-  // provider), which then serve observer and reader sessions only.
+  // provider), which then serve observer sessions only.
   if (
     !endpoints.some((e) => e.kind !== 'pooler') &&
     !endpoints.every((e) => e.poolerMode === 'session')
@@ -625,7 +625,7 @@ export async function planClusterRegister(
         tlsServerName: e.tlsServerName,
       })),
       ...(endpoints.every((e) => e.kind === 'pooler')
-        ? { poolerOnly: 'observer and reader sessions only (ADR-0039)' }
+        ? { poolerOnly: 'observer sessions only (ADR-0039)' }
         : {}),
     },
   })

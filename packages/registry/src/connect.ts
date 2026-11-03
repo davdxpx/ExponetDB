@@ -33,9 +33,8 @@ import {
  * - observer and reader use direct endpoints (private before public);
  *   verifier, operator and migrator too. A cluster without an active direct
  *   endpoint (a hosted provider reachable through its session pooler only,
- *   ADR-0039 §4) serves observer and reader sessions through its
- *   session-mode poolers and refuses every other role
- *   (`cluster_pooler_only`). A transaction-mode pooler is probed by health
+ *   ADR-0039 §4) serves observer sessions through its session-mode poolers
+ *   and refuses every other role (`cluster_pooler_only`). A transaction-mode pooler is probed by health
  *   per endpoint but never used for a session here. A local socket only
  *   makes sense on a node and is not used for external clusters;
  * - the login through a pooler endpoint with a login suffix is
@@ -103,8 +102,8 @@ export function directEndpoints(
 
 /**
  * The endpoints a session ExponetDB opens itself may use, in order (ADR-0039 §4): the direct
- * ones; only when the cluster has none, its session-mode poolers, and those for the observer and
- * the reader only. Never a transaction-mode pooler.
+ * ones; only when the cluster has none, its session-mode poolers, and those for the observer
+ * only. Never a transaction-mode pooler.
  */
 export function sessionEndpoints(
   endpoints: readonly EndpointRecord[],
@@ -112,7 +111,7 @@ export function sessionEndpoints(
   role: AccessRole,
 ): EndpointRecord[] {
   const direct = directEndpoints(endpoints, cluster)
-  if (direct.length > 0 || (role !== 'observer' && role !== 'reader')) return direct
+  if (direct.length > 0 || role !== 'observer') return direct
   return sessionPoolers(endpoints)
 }
 
@@ -256,6 +255,7 @@ export class Connector {
               : { breaker: { breaker: this.#options.breaker, key: endpoint.endpointId } }),
           },
         )
+        await requireSessionUser(session, request.role)
         return { session, endpoint, cluster }
       } catch (error) {
         last = error
@@ -311,6 +311,7 @@ export class Connector {
       },
     )
     try {
+      await requireSessionUser(session, 'observer')
       return session.facts.systemIdentifier
     } finally {
       await session.close()
@@ -350,6 +351,21 @@ export class Connector {
       purpose,
       ...(options.endpointId === undefined ? {} : { endpointId: options.endpointId }),
     })
+    if (isObserved(target)) {
+      // ADR-0039 §2: an observed target has no marker; its database is the one whose oid was
+      // recorded at registration. Every reader checks it again; this is the connector's own check.
+      const recorded = placement.databaseOid
+      const observed = opened.session.facts.databaseOid
+      if (recorded === null || observed !== recorded) {
+        await opened.session.close()
+        throw new RegistryError(
+          'TARGET_IDENTITY_MISMATCH',
+          recorded === null
+            ? undefined
+            : { reason: 'database_oid', recordedOid: recorded, observedOid: observed },
+        )
+      }
+    }
     if (role === 'operator' || role === 'migrator') {
       // C-27: a session that can write or signal is handed out only after the
       // database proves it is this target at this generation of this installation.
@@ -365,6 +381,18 @@ export class Connector {
       }
     }
     return opened
+  }
+}
+
+/**
+ * The server-side session role is ExponetDB's role for the path (ADR-0039 §4): a pooler maps
+ * `exponetdb_<role>.<suffix>` to `exponetdb_<role>`, and a mapping to any other role (another
+ * tenant's, a role with more rights) is refused before the session is used.
+ */
+async function requireSessionUser(session: TargetSession, role: AccessRole): Promise<void> {
+  if (session.facts.user !== ROLE_NAMES[role]) {
+    await session.close()
+    throw new TargetError('TARGET_CREDENTIAL_INVALID', 'session_user')
   }
 }
 

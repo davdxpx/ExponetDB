@@ -113,7 +113,7 @@ describe('endpoint selection', () => {
     ])
   })
 
-  it('uses session poolers only on a cluster without a direct endpoint, and only for observer and reader (ADR-0039)', () => {
+  it('uses session poolers only on a cluster without a direct endpoint, and only for the observer (ADR-0039)', () => {
     const external = { managementMode: 'external' } as const
     const mixed = [pooler('01', 'session'), e('02', 'private'), pooler('03', 'transaction')]
     for (const role of ['observer', 'reader', 'migrator'] as const) {
@@ -129,11 +129,7 @@ describe('endpoint selection', () => {
       '02',
       '03',
     ])
-    expect(sessionEndpoints(poolerOnly, external, 'reader').map((x) => x.label)).toEqual([
-      '02',
-      '03',
-    ])
-    for (const role of ['verifier', 'operator', 'migrator'] as const) {
+    for (const role of ['reader', 'verifier', 'operator', 'migrator'] as const) {
       expect(sessionEndpoints(poolerOnly, external, role)).toEqual([])
     }
     expect(sessionEndpoints([pooler('01', 'transaction')], external, 'observer')).toEqual([])

@@ -22,7 +22,7 @@ current placement plc_… (generation 3) → database dbs_… ("reosa_production
    ▼
 endpoint selection for the access role:
    migrator / verifier / operator → direct endpoints only (private > public > local socket on agent)
-   observer / reader             → direct endpoints (private > public); on a cluster without a direct endpoint, its session-mode poolers (ADR-0039); health probes additionally run as observer on every registered endpoint, poolers included
+   observer / reader             → direct endpoints (private > public); on a cluster without a direct endpoint, the observer only through its session-mode poolers (ADR-0039); health probes additionally run as observer on every registered endpoint, poolers included
    login                         → exponetdb_<role>, or exponetdb_<role>.<suffix> through a pooler endpoint with a login suffix
    ▼
 credential crd_… (cluster, role, active version) → secret (observer: decrypted in worker and serve; all other roles: worker only)
@@ -125,10 +125,17 @@ and writes nothing to it. The walkthrough with commands is
    routes by the login name gets a **login suffix** (`loginSuffix`, pooler
    endpoints only, `^[a-z0-9]{1,40}$`, immutable): the login is
    `exponetdb_<role>.<suffix>`, the server-side `session_user` stays
-   `exponetdb_<role>`. A cluster of session poolers only serves observer and
-   reader sessions; every other role is refused (`REGISTRY_CONFLICT`,
-   `cluster_pooler_only`). A cluster of transaction poolers only is refused
-   at planning.
+   `exponetdb_<role>`, and a session whose server-side role is another one
+   is refused (`TARGET_CREDENTIAL_INVALID`, `session_user`). The owner
+   confirms the suffix against the live provider project at registration
+   (a restored or forked project has the same identifier, oid and
+   credential, ADR-0039 Consequences). A cluster of session poolers only
+   serves observer sessions; every other role, the reader included, is
+   refused (`REGISTRY_CONFLICT`, `cluster_pooler_only`). A cluster of
+   transaction poolers only is refused at planning. shortcut: one active
+   endpoint per `host:port` registry-wide (`endpoints_one_active_address`),
+   so one cluster per provider pooler address; upgrade when a second
+   project on the same pooler is observed.
 2. The bootstrap SQL is generated with `--roles observer`: the observer role,
    its `pg_monitor` membership, its settings that a non-superuser may set and
    `CONNECT` on the named databases, nothing else. The provider's
@@ -145,8 +152,11 @@ and writes nothing to it. The walkthrough with commands is
    the database. A registration whose snapshot failed is planned again for
    the same target; once the snapshot is stored, planning it again is
    `path_taken`.
-5. The move to a managed target (Wave 11) registers the moved database as a
-   new managed target; the observed one is decommissioned then.
+5. The move to a managed target after the Wave 11 cutover is **not built**
+   and is open ([OD-71](../00-product/open-decisions.md#od-71-wave-11-from-an-observed-target-to-a-managed-one)):
+   a path is never reused, so a new managed target at the same path is
+   refused by the Control Store; the recommended option is a one-way
+   adoption of the same target onto a new placement.
 
 **[OBSERVED]** (2026-11-03) The login suffix is proven at the session
 specification only (unit and integration tests); no real Supavisor was

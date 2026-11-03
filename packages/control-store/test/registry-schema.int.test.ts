@@ -563,6 +563,20 @@ describe('registry guards', () => {
         [w.cluster],
       ),
     ).toBe('EXG08')
+    // The database oid is an observed target's identity (ADR-0039 §2): set at registration, never changed.
+    await as('super', (c) =>
+      c.query(
+        `UPDATE registry.databases SET observed_oid = 16384 WHERE database_id = $1 AND observed_oid IS NULL`,
+        [w.database],
+      ),
+    )
+    expect(
+      await refused(
+        'exdb_worker',
+        'UPDATE registry.databases SET observed_oid = 16385 WHERE database_id = $1',
+        [w.database],
+      ),
+    ).toBe('EXG09')
   })
 
   it('lets an address name one cluster only, registry-wide', async () => {

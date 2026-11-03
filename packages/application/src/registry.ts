@@ -528,6 +528,7 @@ export class RegistryUseCases {
     const history = await readHealthHistory(this.#h.store, {
       targetId: target.targetId,
       state: target.state,
+      mode: target.mode,
       stateChangedAt: target.stateChangedAt,
       from: new Date(from),
       to: new Date(to),

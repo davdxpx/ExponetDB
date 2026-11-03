@@ -1,6 +1,15 @@
 import { serverFor, superuserClient } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { migrationDetail, migrationStatus, planLedgerReconcile } from '../src/index.ts'
+import {
+  migrationDetail,
+  migrationStatus,
+  planBaseline,
+  planImportAnalysis,
+  planLedgerReconcile,
+  planMigrationResume,
+  planMigrationRollback,
+  planMigrationVerify,
+} from '../src/index.ts'
 import { migrationWorld, type Target, type World } from './world.ts'
 
 /**
@@ -32,7 +41,7 @@ async function code(p: Promise<unknown>): Promise<string> {
 }
 
 describe('migrations on an observed target', () => {
-  it('refuses a migration plan, a ledger reconcile and the ledger reads, and writes nothing', async () => {
+  it('refuses every migration plan (apply, verify, resume, rollback, baseline, import, reconcile) and the ledger reads, and writes nothing', async () => {
     expect([t.record.state, t.record.mode]).toEqual(['registered', 'observed'])
     expect(
       await code(w.plan(t, { bundles: [w.bundle({ up: 'CREATE TABLE public.x (id int);\n' })] })),
@@ -47,6 +56,41 @@ describe('migrations on an observed target', () => {
         ),
       ),
     ).toBe('TARGET_OBSERVED_ONLY')
+    const plans = (label: string, fn: Parameters<typeof w.h.serve.transaction>[1]) =>
+      code(w.h.serve.transaction(`test.observed.${label}`, fn))
+    const id = w.ulid()
+    const refused = {
+      verify: await plans('verify', (tx) =>
+        planMigrationVerify(tx, w.ctx, w.a, t.record.targetId, id, {}),
+      ),
+      verifyBaseline: await plans('verify_baseline', (tx) =>
+        planMigrationVerify(tx, w.ctx, w.a, t.record.targetId, 'baseline:initial', {}),
+      ),
+      resume: await plans('resume', (tx) =>
+        planMigrationResume(tx, w.ctx, w.a, t.record.targetId, id, {}),
+      ),
+      rollback: await plans('rollback', (tx) =>
+        planMigrationRollback(tx, w.ctx, w.a, t.record.targetId, id),
+      ),
+      baseline: await plans('baseline', (tx) =>
+        planBaseline(tx, w.ctx, w.a, t.record.targetId, 'rpt_01M6HQW7JQYHC8YR9KNTQ4PFFZ'),
+      ),
+      importAnalysis: await plans('import', (tx) =>
+        planImportAnalysis(tx, w.ctx, w.a, t.record.targetId, {
+          scratchTarget: t.record.targetId,
+          baseline: 'baseline:initial',
+          files: [],
+        }),
+      ),
+    }
+    expect(refused).toEqual({
+      verify: 'TARGET_OBSERVED_ONLY',
+      verifyBaseline: 'TARGET_OBSERVED_ONLY',
+      resume: 'TARGET_OBSERVED_ONLY',
+      rollback: 'TARGET_OBSERVED_ONLY',
+      baseline: 'TARGET_OBSERVED_ONLY',
+      importAnalysis: 'TARGET_OBSERVED_ONLY',
+    })
     const deps = {
       store: w.h.serve,
       connector: w.h.serveConnector,

@@ -9,9 +9,10 @@ ALTER TABLE registry.endpoints
 ALTER TABLE registry.targets
   ADD COLUMN mode text NOT NULL DEFAULT 'managed' CHECK (mode IN ('managed', 'observed'));
 
--- The guards of the registry bundle again, with the new column immutable (endpoint) and the mode
--- immutable and an observed target held out of active and suspended (target). Same signatures,
--- owners and triggers; the earlier verify.sql files stay true.
+-- The guards of the registry bundle again, with the new column immutable (endpoint), the mode
+-- immutable and an observed target held out of active and suspended (target), and the recorded
+-- database oid kept once set (database). Same signatures, owners and triggers; the earlier
+-- verify.sql files stay true.
 CREATE OR REPLACE FUNCTION registry.endpoint_guard() RETURNS trigger
   LANGUAGE plpgsql SET search_path = pg_catalog AS $fn$
 BEGIN
@@ -105,6 +106,36 @@ BEGIN
   ELSIF (NEW.state_changed_at, NEW.state_changed_by_operation_id, NEW.state_reason)
         IS DISTINCT FROM (OLD.state_changed_at, OLD.state_changed_by_operation_id, OLD.state_reason) THEN
     RAISE EXCEPTION USING ERRCODE = 'EXG10', MESSAGE = 'the state record changes only with the state';
+  END IF;
+  RETURN NEW;
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION registry.database_guard() RETURNS trigger
+  LANGUAGE plpgsql SET search_path = pg_catalog AS $fn$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.state <> 'registered' THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXG09', MESSAGE = 'a database starts registered';
+    END IF;
+    IF NOT EXISTS (SELECT FROM registry.clusters c WHERE c.cluster_id = NEW.cluster_id AND c.state = 'active') THEN
+      RAISE EXCEPTION USING ERRCODE = 'EXG09', MESSAGE = 'a database is registered on a confirmed, active cluster';
+    END IF;
+    NEW.created_at := clock_timestamp();
+    RETURN NEW;
+  END IF;
+  IF (NEW.database_id, NEW.cluster_id, NEW.name, NEW.created_at, NEW.created_by_operation_id)
+     IS DISTINCT FROM (OLD.database_id, OLD.cluster_id, OLD.name, OLD.created_at, OLD.created_by_operation_id)
+     OR (OLD.state = 'retired' AND NEW.state <> 'retired') THEN
+    RAISE EXCEPTION USING ERRCODE = 'EXG09', MESSAGE = 'a database keeps its cluster and name; retirement is final';
+  END IF;
+  -- ADR-0039 §2: the oid recorded at registration is an observed target's identity.
+  IF OLD.observed_oid IS NOT NULL AND NEW.observed_oid IS DISTINCT FROM OLD.observed_oid THEN
+    RAISE EXCEPTION USING ERRCODE = 'EXG09', MESSAGE = 'a database keeps the oid recorded at its registration';
+  END IF;
+  IF NEW.state = 'retired' AND OLD.state = 'registered' AND EXISTS (
+       SELECT FROM registry.placements p WHERE p.database_id = NEW.database_id AND p.valid_to IS NULL) THEN
+    RAISE EXCEPTION USING ERRCODE = 'EXG09', MESSAGE = 'a database that is a current placement is not retired';
   END IF;
   RETURN NEW;
 END

@@ -9,6 +9,7 @@ import {
   planClusterConfirm,
   planClusterRegister,
   planEndpointAdd,
+  planEndpointRetire,
   planEnvironmentCreate,
   planProductCreate,
   planProjectCreate,
@@ -21,6 +22,7 @@ import {
 } from '@exponetdb/registry'
 import {
   dropDatabase,
+  loginPassword,
   runAsSuperuser,
   serverFor,
   type TestServer,
@@ -135,17 +137,43 @@ async function refusal(promise: Promise<unknown>): Promise<{ code: string; detai
   throw new Error('expected a refusal')
 }
 
-/** What a database holds that ExponetDB could have written: schemas, relations, functions. */
+/**
+ * What ExponetDB could have written to the database and the cluster: schemas, relations,
+ * functions and comments with their owners and ACLs, the database's owner and ACL, default
+ * privileges, extensions, and ExponetDB's roles with their attributes, the observer's
+ * memberships and the role settings in this database. Large lists are compared by digest.
+ */
 const catalogOf = (database: string) =>
   withSuperuser(pg17, database, async (c) => {
     const r = await c.query(
       `SELECT (SELECT array_agg(nspname::text ORDER BY nspname) FROM pg_catalog.pg_namespace) AS schemas,
+              (SELECT md5(string_agg(n.nspname || ':' || n.nspowner::regrole::text || ':' || coalesce(n.nspacl::text, ''), ',' ORDER BY n.nspname))
+                 FROM pg_catalog.pg_namespace n) AS namespace_acls,
               (SELECT count(*)::int FROM pg_catalog.pg_class) AS relations,
+              (SELECT md5(string_agg(c.oid::text || ':' || c.relowner::regrole::text || ':' || coalesce(c.relacl::text, ''), ',' ORDER BY c.oid))
+                 FROM pg_catalog.pg_class c) AS relation_acls,
               (SELECT count(*)::int FROM pg_catalog.pg_proc) AS functions,
-              (SELECT count(*)::int FROM pg_catalog.pg_description) AS comments`,
+              (SELECT md5(string_agg(p.oid::text || ':' || p.proowner::regrole::text || ':' || coalesce(p.proacl::text, ''), ',' ORDER BY p.oid))
+                 FROM pg_catalog.pg_proc p) AS function_acls,
+              (SELECT count(*)::int FROM pg_catalog.pg_description) AS comments,
+              (SELECT d.datdba::regrole::text || ':' || coalesce(d.datacl::text, '')
+                 FROM pg_catalog.pg_database d WHERE d.datname = pg_catalog.current_database()) AS database_acl,
+              (SELECT count(*)::int FROM pg_catalog.pg_default_acl) AS default_acls,
+              (SELECT array_agg(e.extname || ':' || e.extversion || ':' || e.extowner::regrole::text ORDER BY e.extname)
+                 FROM pg_catalog.pg_extension e) AS extensions,
+              (SELECT array_agg(r.rolname || ':' || r.rolsuper || r.rolcreaterole || r.rolcreatedb || r.rolreplication
+                                || r.rolbypassrls || r.rolcanlogin || r.rolinherit ORDER BY r.rolname)
+                 FROM pg_catalog.pg_roles r WHERE r.rolname LIKE 'exponetdb\\_%') AS roles,
+              (SELECT array_agg(g.rolname || ':' || a.inherit_option || a.set_option || a.admin_option ORDER BY g.rolname)
+                 FROM pg_catalog.pg_auth_members a JOIN pg_catalog.pg_roles g ON g.oid = a.roleid
+                WHERE a.member = 'exponetdb_observer'::regrole) AS observer_memberships,
+              (SELECT count(*)::int FROM pg_catalog.pg_db_role_setting s
+                 JOIN pg_catalog.pg_database d ON d.oid = s.setdatabase
+                WHERE d.datname = pg_catalog.current_database()) AS database_role_settings`,
     )
     return r.rows[0]
   })
+let footprint: Awaited<ReturnType<typeof catalogOf>>
 
 const pooler = () => ({
   kind: 'pooler' as const,
@@ -229,7 +257,7 @@ describe('a cluster reachable through a session pooler only (ADR-0039 §4)', () 
     expect(credentials.map((c) => [c.accessRole, c.state])).toEqual([['observer', 'active']])
   })
 
-  it('opens observer and reader sessions only: every other role is refused as cluster_pooler_only', async () => {
+  it('opens observer sessions only: every other role is refused as cluster_pooler_only', async () => {
     const opened = await h.workerConnector.open({
       clusterId,
       database: 'postgres',
@@ -241,7 +269,7 @@ describe('a cluster reachable through a session pooler only (ADR-0039 §4)', () 
     } finally {
       await opened.session.close()
     }
-    for (const role of ['migrator', 'operator', 'verifier'] as const) {
+    for (const role of ['reader', 'migrator', 'operator', 'verifier'] as const) {
       const refused = await refusal(
         h.workerConnector.open({ clusterId, database: 'postgres', role, purpose: 'test/refused' }),
       )
@@ -252,23 +280,66 @@ describe('a cluster reachable through a session pooler only (ADR-0039 §4)', () 
     }
   })
 
-  it('logs in through a pooler endpoint with a login suffix as exponetdb_<role>.<suffix> (NOT PROVEN live)', async () => {
-    const spy = vi.spyOn(TargetSession, 'open')
+  it('logs in through a suffixed pooler endpoint as exponetdb_<role>.<suffix>; the server session is the plain role (NOT PROVEN live)', async () => {
+    // The seam stands in for a pooler that routes by the login: it receives the suffixed login and
+    // opens the server session as the plain role. A real Supavisor is not available here.
+    const original = TargetSession.open.bind(TargetSession)
+    const logins: string[] = []
+    let mapTo = (user: string) => user.replace(/\.[a-z0-9]+$/, '')
+    const spy = vi.spyOn(TargetSession, 'open').mockImplementation((spec, options) => {
+      logins.push(spec.user)
+      const user = mapTo(spec.user)
+      return original(
+        { ...spec, user, password: user === spec.user ? spec.password : loginPassword(user) },
+        options,
+      )
+    })
     try {
-      // The test server has no role exponetdb_observer.ref123: the login is refused, after the
-      // spec named it. A real Supavisor routing by it is not available here.
-      await refusal(
-        plan(h, (tx) =>
-          planEndpointAdd(tx, h.context, a, clusterId, {
-            ...pooler(),
-            host: 'localhost',
-            tlsServerName: undefined,
-            label: 'suffixed pooler',
-            loginSuffix: 'ref123',
-          }),
-        ),
-      ).catch(() => undefined)
-      expect(spy.mock.calls.map(([spec]) => spec.user)).toContain('exponetdb_observer.ref123')
+      const added = await run(h, a, (tx) =>
+        planEndpointAdd(tx, h.context, a, clusterId, {
+          ...pooler(),
+          host: 'localhost',
+          tlsServerName: undefined,
+          label: 'suffixed pooler',
+          loginSuffix: 'ref123',
+        }),
+      )
+      expect(added.operation.state).toBe('succeeded')
+      const endpoint = (await planContent(h, added.plan.planId))['endpoint'] as {
+        endpointId: string
+      }
+      logins.length = 0
+      const opened = await h.workerConnector.open({
+        clusterId,
+        database: 'postgres',
+        role: 'observer',
+        purpose: 'test/suffix',
+        endpointId: endpoint.endpointId,
+      })
+      try {
+        expect(logins).toEqual(['exponetdb_observer.ref123'])
+        expect(opened.session.facts.user).toBe('exponetdb_observer')
+        expect(opened.endpoint.loginSuffix).toBe('ref123')
+      } finally {
+        await opened.session.close()
+      }
+      // A pooler that maps the login to another role is refused before the session is used.
+      mapTo = (user: string) => user.replace(/^exponetdb_observer\.[a-z0-9]+$/, 'exponetdb_reader')
+      const mapped = await refusal(
+        h.workerConnector.open({
+          clusterId,
+          database: 'postgres',
+          role: 'observer',
+          purpose: 'test/suffix',
+          endpointId: endpoint.endpointId,
+        }),
+      )
+      expect(mapped.code).toBe('TARGET_CREDENTIAL_INVALID')
+      mapTo = (user: string) => user.replace(/\.[a-z0-9]+$/, '')
+      const retired = await run(h, a, (tx) =>
+        planEndpointRetire(tx, h.context, a, clusterId, endpoint.endpointId),
+      )
+      expect(retired.operation.state).toBe('succeeded')
     } finally {
       spy.mockRestore()
     }
@@ -294,6 +365,7 @@ describe('an observed target (ADR-0039 §1)', () => {
       details: { reason: 'credential_missing' },
     })
     const before = await catalogOf(databaseName)
+    footprint = before
     const r = await run(h, a, (tx) =>
       planTargetRegister(tx, h.context, a, {
         projectId: projectId as never,
@@ -392,12 +464,14 @@ describe('an observed target (ADR-0039 §1)', () => {
     expect(o?.result.conditions.some((c) => c.condition === 'identity_mismatch')).toBe(false)
     expect(o?.result.probes.find((p) => p.probe === 'identity')?.outcome).toBe('ok')
     expect((await fresh()).state).toBe('registered')
+    expect(await catalogOf(databaseName)).toEqual(footprint)
   })
 
   it('finds drift against the registration snapshot, on demand and on schedule', async () => {
     expect(await dueDriftTargets(h.worker, 100)).toContain(target.targetId)
     const clean = await runDriftCheck(workerDeps(), target, 'schedule')
     expect(clean.check.status).toBe('clean')
+    expect(await catalogOf(databaseName)).toEqual(footprint)
     await runAsSuperuser(pg17, databaseName, ['CREATE TABLE public.planted (id integer)'])
     const drifted = await runDriftCheck(workerDeps(), target, a.identityId)
     expect(drifted.check.status).toBe('drifted')
@@ -435,6 +509,12 @@ describe('an observed target (ADR-0039 §1)', () => {
       ...databaseBootstrapStatements(databaseName),
       ...SCHEMA,
     ])
+    // The connector checks the oid itself before any reader does.
+    const connector = await refusal(h.workerConnector.forTarget(target, 'observer', 'test/oid'))
+    expect(connector).toMatchObject({
+      code: 'TARGET_IDENTITY_MISMATCH',
+      details: { reason: 'database_oid', recordedOid: recorded },
+    })
     const refused = await refusal(currentSchema(serveDeps(), target, 0))
     expect(refused.code).toBe('TARGET_IDENTITY_MISMATCH')
     expect(refused.details).toMatchObject({ reason: 'database_oid', recordedOid: recorded })

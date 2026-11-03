@@ -45,8 +45,11 @@ target is registered by a new path of `target.register`
   the database**: no marker, no `exponetdb` schema, no ledger;
 - leaves the target in state `registered` for its whole life. An observed
   target is never `active`; the state machine refuses `observed → active`.
-  It ends by `decommissioned`. Wave 11 registers the moved database as a new
-  `managed` target; the observed one is decommissioned then.
+  It ends by `decommissioned`. How the target becomes managed after the
+  Wave 11 cutover is **not built** and is an open decision
+  ([OD-71](../../00-product/open-decisions.md#od-71-wave-11-from-an-observed-target-to-a-managed-one)):
+  a path is never reused (C-4, `target_guard`), so a new managed target at
+  the same path is not possible as things stand.
 
 ### 2. Identity of an observed target: cluster identifier and database oid
 
@@ -78,7 +81,8 @@ stays mandatory for every write path; nothing about writes changes.
   database name and, for observed targets, oid). Credential verification
   compares the server-side `session_user`, so it is unaffected.
 - A cluster may be registered with **session-mode pooler endpoints only**.
-  Such a cluster serves observer (and reader) sessions only: every other
+  Such a cluster serves observer sessions only (amended 2026-11-04 after
+  review: the reader is not used through a pooler either): every other
   role is refused as today (`INTERNAL` guard in `connect.ts`, now with
   `CLUSTER_POOLER_ONLY` as reason). Connection order: direct endpoints
   first, then session poolers, never a transaction pooler for a session
@@ -103,6 +107,25 @@ approves before it runs on a hosted production database (W10-D4).
   checks TLS of the pooler-to-server hop as today, while the Control Plane
   side is verified by `verify-full` against the endpoint's CA. Recorded as a
   residual, as for the existing health probe through poolers.
+- **A clone passes every pin.** A restored, forked or physically cloned
+  provider project shares the `system_identifier`, the database oid and the
+  observer's credential with its origin. A login suffix that points at such
+  a clone passes the session guards, the identity check and the credential
+  check. The owner therefore confirms the suffix against the live project
+  (the provider's console names the project ref) when the endpoint is
+  registered; the onboarding walkthrough has the step. Residual.
+- **The legacy-ledger part of the observer script.** `--ledger` adds, to the
+  observer-only script, `\connect` to each named database and `SELECT`
+  grants on the legacy ledger tables to the observer. It is optional and
+  part of the statement list the owner approves (W10-D4).
+- **One cluster per pooler address.** `endpoints_one_active_address` allows
+  one active endpoint per `host:port` registry-wide, so a provider's shared
+  pooler host serves one registered cluster only. shortcut: one cluster per
+  pooler host and port, upgrade with an address key that includes the login
+  suffix when a second project on the same provider pooler is observed.
+- **Session settings through a pooler.** A pooler may drop the startup
+  options that pin the session settings; every session reads them back and,
+  through a pooler, sets them again (or fails closed).
 
 ## Alternatives considered
 

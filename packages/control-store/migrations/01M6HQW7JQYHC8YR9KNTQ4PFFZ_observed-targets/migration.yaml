@@ -9,9 +9,10 @@ description: |
   is read as the observer only, nothing is written to its database, and it stays
   registered until it is decommissioned. Both columns are immutable: the endpoint
   and target guards are replaced with the same signatures and triggers, and the
-  target guard refuses an observed target in active or suspended. Additive: two
-  columns, one constraint, two replaced functions; the earlier verify.sql files
-  stay true.
+  target guard refuses an observed target in active or suspended. The database
+  guard keeps registry.databases.observed_oid once it is set (an observed
+  target's identity). Additive: two columns, one constraint, three replaced
+  functions; the earlier verify.sql files stay true.
 dependsOn:
   - 01M6EJD93DP9GNTHF77YY8VNY6
 execution:
