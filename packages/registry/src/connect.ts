@@ -246,6 +246,8 @@ export class Connector {
             ...(request.guardProtocol === undefined
               ? {}
               : { guardProtocol: request.guardProtocol }),
+            // A pooler may drop the startup options: the session sets them again (ADR-0039).
+            ...(endpoint.kind === 'pooler' ? { reapplySettings: true } : {}),
             ...(this.#options.limits === undefined ? {} : { limits: this.#options.limits }),
             ...(this.#options.budget === undefined
               ? {}
@@ -280,6 +282,7 @@ export class Connector {
       readonly tlsServerName: string
       /** The login suffix of a pooler address (ADR-0039 §4). */
       readonly loginSuffix?: string | null
+      readonly kind?: string
     },
     purpose: string,
   ): Promise<string> {
@@ -307,6 +310,7 @@ export class Connector {
       },
       {
         guards: { database: 'postgres' },
+        ...(address.kind === 'pooler' ? { reapplySettings: true } : {}),
         ...(this.#options.limits === undefined ? {} : { limits: this.#options.limits }),
       },
     )

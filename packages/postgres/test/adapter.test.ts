@@ -24,6 +24,7 @@ import {
   scopeHeader,
   sql,
 } from '../src/index.ts'
+import { pinnedSettings, settingMismatches } from '../src/session.ts'
 
 describe('TrustedSql', () => {
   it('is created by the builder only and cannot be forged', () => {
@@ -70,6 +71,64 @@ describe('endpoints', () => {
     [{ host: 'db.example.test', port: 5432, tlsServerName: 'db.example.test', caPem: '' }, 'ca'],
   ] as const)('checks %j', (endpoint, problem) => {
     expect(endpointProblem(endpoint)).toBe(problem)
+  })
+})
+
+describe('pinned session settings (ADR-0039: a pooler may drop the startup options)', () => {
+  const limits = {
+    connectTimeoutMs: 5000,
+    statementTimeoutMs: 30_000,
+    lockTimeoutMs: 2000,
+    idleInTransactionMs: 30_000,
+  }
+  const server = (over: Record<string, string> = {}) =>
+    new Map(
+      Object.entries({
+        search_path: '',
+        timezone: 'UTC',
+        datestyle: 'ISO, YMD',
+        intervalstyle: 'postgres',
+        extra_float_digits: '1',
+        bytea_output: 'hex',
+        standard_conforming_strings: 'on',
+        quote_all_identifiers: 'off',
+        lc_monetary: 'C',
+        statement_timeout: '30000',
+        lock_timeout: '2000',
+        idle_in_transaction_session_timeout: '30000',
+        default_transaction_read_only: 'on',
+        constraint_exclusion: 'off',
+        ...over,
+      }),
+    )
+
+  it("accepts the server's forms of the pinned values", () => {
+    expect(settingMismatches(pinnedSettings('observer', limits), server())).toEqual([])
+    expect(
+      settingMismatches(pinnedSettings('observer', limits), server({ search_path: '""' })),
+    ).toEqual([])
+  })
+
+  it('names every setting that is not in effect or not reported', () => {
+    const dropped = server({
+      search_path: '"$user", public',
+      timezone: 'Europe/Berlin',
+      statement_timeout: '0',
+    })
+    dropped.delete('constraint_exclusion')
+    expect(settingMismatches(pinnedSettings('observer', limits), dropped)).toEqual([
+      'search_path',
+      'TimeZone',
+      'statement_timeout',
+      'constraint_exclusion',
+    ])
+    // A writing role pins read-only off and no constraint exclusion.
+    expect(
+      settingMismatches(
+        pinnedSettings('migrator', limits),
+        server({ default_transaction_read_only: 'off' }),
+      ),
+    ).toEqual([])
   })
 })
 

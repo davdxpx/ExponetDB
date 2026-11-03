@@ -14,7 +14,7 @@ import {
 import { mapDriverError, TargetError } from './errors.ts'
 import { isReviewedStatement, type ReviewedStatement } from './reviewed.ts'
 import { TargetRow } from './rows.ts'
-import { isTrustedSql, sql, type TrustedSql } from './sql.ts'
+import { isTrustedSql, quoteLiteral, sql, type TrustedSql } from './sql.ts'
 import { majorOf, type SupportedMajor } from './versions.ts'
 
 /**
@@ -131,6 +131,11 @@ export interface OpenOptions {
    * two probes can tell "simple works, extended hangs" from "down".
    */
   readonly guardProtocol?: 'simple' | 'extended'
+  /**
+   * A path through a pooler (ADR-0039): a pinned setting the pooler did not pass on is set again
+   * with `set_config` after connecting. Elsewhere a setting that is not in effect fails closed.
+   */
+  readonly reapplySettings?: boolean
 }
 
 /**
@@ -216,26 +221,66 @@ function ms(value: number): string {
   return String(value)
 }
 
+/**
+ * The pinned settings of every ExponetDB session (schema-fingerprints.md §4), sent as startup
+ * options and read back after connecting ({@link settingMismatches}).
+ */
+export function pinnedSettings(
+  role: AccessRole,
+  limits: SessionLimits,
+): readonly (readonly [string, string])[] {
+  return [
+    ['search_path', ''],
+    ['TimeZone', 'UTC'],
+    ['DateStyle', 'ISO,YMD'],
+    ['IntervalStyle', 'postgres'],
+    ['extra_float_digits', '1'],
+    ['bytea_output', 'hex'],
+    ['standard_conforming_strings', 'on'],
+    ['quote_all_identifiers', 'off'],
+    // `money` constants deparse through lc_monetary (`'$12.34'::money` or `'12,34 €'::money`).
+    ['lc_monetary', 'C'],
+    ['statement_timeout', ms(limits.statementTimeoutMs)],
+    ['lock_timeout', ms(limits.lockTimeoutMs)],
+    ['idle_in_transaction_session_timeout', ms(limits.idleInTransactionMs)],
+    ['default_transaction_read_only', READ_ONLY_ROLES.has(role) ? 'on' : 'off'],
+    // Constraint exclusion folds the CHECK constraints of inheritance children and
+    // partitions while planning: a tenant's CHECK (x > f(1)) would run f in a read.
+    ...(READ_ONLY_ROLES.has(role) ? [['constraint_exclusion', 'off'] as const] : []),
+  ]
+}
+
+/** `""`, `ISO, YMD`, `UTC`: the server's form of a setting compared with the pinned one. */
+const normalizedSetting = (value: string) => value.replaceAll(/[\s"]/g, '').toLowerCase()
+
+/**
+ * The pinned settings that are not in effect, by name, given the server's `pg_settings.setting`
+ * values (keyed by lower-case name; base units, so timeouts are milliseconds). A pooler may drop
+ * the startup options; a missing setting is a mismatch.
+ */
+export function settingMismatches(
+  pinned: readonly (readonly [string, string])[],
+  actual: ReadonlyMap<string, string>,
+): string[] {
+  return pinned
+    .filter(([name, value]) => {
+      const now = actual.get(name.toLowerCase())
+      return now === undefined || normalizedSetting(now) !== normalizedSetting(value)
+    })
+    .map(([name]) => name)
+}
+
+// The names of {@link pinnedSettings}, lower case (a constant list: a pinned setting is added to both).
+const SETTINGS_SQL = sql`SELECT lower(name) AS name, setting FROM pg_catalog.pg_settings
+  WHERE lower(name) IN ('search_path', 'timezone', 'datestyle', 'intervalstyle', 'extra_float_digits',
+    'bytea_output', 'standard_conforming_strings', 'quote_all_identifiers', 'lc_monetary',
+    'statement_timeout', 'lock_timeout', 'idle_in_transaction_session_timeout',
+    'default_transaction_read_only', 'constraint_exclusion')`
+
 /** Startup options: the pinned settings of every ExponetDB session (schema-fingerprints.md §4). */
 function startupOptions(role: AccessRole, limits: SessionLimits): string {
   return [
-    'search_path=',
-    'TimeZone=UTC',
-    'DateStyle=ISO,YMD',
-    'IntervalStyle=postgres',
-    'extra_float_digits=1',
-    'bytea_output=hex',
-    'standard_conforming_strings=on',
-    'quote_all_identifiers=off',
-    // `money` constants deparse through lc_monetary (`'$12.34'::money` or `'12,34 €'::money`).
-    'lc_monetary=C',
-    `statement_timeout=${ms(limits.statementTimeoutMs)}`,
-    `lock_timeout=${ms(limits.lockTimeoutMs)}`,
-    `idle_in_transaction_session_timeout=${ms(limits.idleInTransactionMs)}`,
-    `default_transaction_read_only=${READ_ONLY_ROLES.has(role) ? 'on' : 'off'}`,
-    // Constraint exclusion folds the CHECK constraints of inheritance children and
-    // partitions while planning: a tenant's CHECK (x > f(1)) would run f in a read.
-    ...(READ_ONLY_ROLES.has(role) ? ['constraint_exclusion=off'] : []),
+    ...pinnedSettings(role, limits).map(([name, value]) => `${name}=${value}`),
     // The migrator holds the target's session-level schema lock: the server
     // must notice a vanished worker and end the session (and the lock)
     // within about a minute (concurrency.md §4). Server-side keepalives work
@@ -361,6 +406,57 @@ const GUARD_SQL = sql`SELECT (SELECT s.system_identifier::text FROM pg_catalog.p
                 WHERE s.rolsuper AND pg_catalog.pg_has_role(session_user, s.oid, 'MEMBER')) AS superuser,
        session_user AS login`
 
+async function settingsOf(
+  client: pg.Client,
+  deadlineMs: number,
+  protocol: 'simple' | 'extended',
+): Promise<Map<string, string>> {
+  const result = (await client.query({
+    text: SETTINGS_SQL.text,
+    query_timeout: deadlineMs,
+    ...(protocol === 'simple' ? {} : { queryMode: 'extended' }),
+  } as never)) as pg.QueryResult
+  const out = new Map<string, string>()
+  for (const raw of result.rows) {
+    const row = new TargetRow(raw)
+    out.set(row.text('name'), row.text('setting'))
+  }
+  return out
+}
+
+/**
+ * Proves that the pinned settings are in effect before a session is handed out: a pooler may
+ * drop the startup options (ADR-0039). Through a pooler a missing one is set again with
+ * `set_config` (session level, like `SET`) and read again; whatever still differs, on any path,
+ * fails closed.
+ */
+async function pinSettings(
+  client: pg.Client,
+  role: AccessRole,
+  limits: SessionLimits,
+  reapply: boolean,
+  // The guard's protocol: a health probe of a path whose extended protocol hangs still opens.
+  protocol: 'simple' | 'extended',
+): Promise<void> {
+  const pinned = pinnedSettings(role, limits)
+  const read = () => settingsOf(client, limits.connectTimeoutMs, protocol)
+  let missing = settingMismatches(pinned, await read())
+  if (missing.length > 0 && reapply) {
+    for (const [name, value] of pinned.filter(([n]) => missing.includes(n))) {
+      // Constant names and values of this module, quoted: no bind parameter, so either protocol.
+      await client.query({
+        text: `SELECT pg_catalog.set_config(${quoteLiteral(name)}, ${quoteLiteral(value)}, false)`,
+        query_timeout: limits.connectTimeoutMs,
+        ...(protocol === 'simple' ? {} : { queryMode: 'extended' }),
+      } as never)
+    }
+    missing = settingMismatches(pinned, await read())
+  }
+  if (missing.length > 0) {
+    throw new TargetError('CAPABILITY_UNAVAILABLE', 'session_settings')
+  }
+}
+
 export class TargetSession {
   readonly facts: SessionFacts
   readonly role: AccessRole
@@ -479,6 +575,19 @@ export class TargetSession {
       throw mapped.reason === 'query_timeout'
         ? new TargetError('TARGET_UNAVAILABLE', 'connect_timeout')
         : mapped
+    }
+    try {
+      await pinSettings(
+        client,
+        spec.role,
+        limits,
+        options.reapplySettings === true,
+        options.guardProtocol ?? 'extended',
+      )
+    } catch (error) {
+      release?.()
+      await client.end().catch(() => undefined)
+      throw error instanceof TargetError ? error : mapDriverError(error, 'query')
     }
     const session = new TargetSession(client, spec, limits, facts, release)
     if (broken) {

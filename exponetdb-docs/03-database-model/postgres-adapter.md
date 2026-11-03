@@ -103,6 +103,18 @@ explicit protocol control.
    from `pg_stat_ssl`: the session checks the pooler-to-server hop, the
    Control Plane side is `verify-full` against the endpoint's CA (a residual,
    as for the health probe through poolers).
+6. **[DECIDED]** (ADR-0039, review of 2026-11-04) The pinned session settings
+   (`search_path`, `TimeZone`, `DateStyle`, `IntervalStyle`,
+   `extra_float_digits`, `bytea_output`, `standard_conforming_strings`,
+   `quote_all_identifiers`, `lc_monetary`, the three timeouts,
+   `default_transaction_read_only` and, for the read-only roles,
+   `constraint_exclusion`) are read back from `pg_settings` on every new
+   connection. Through a pooler endpoint, which may drop the startup options,
+   a value that differs is set again with `set_config` (session level) and
+   read again; on any path a value that still differs fails closed
+   (`CAPABILITY_UNAVAILABLE`, reason `session_settings`). The migrator's
+   keepalive options are not part of the check (their effect depends on the
+   platform; the session reports them in `disconnectDetection`).
 
 **[DECIDED]** (Wave 4) Where each guard lives: every session checks TLS in
 use (`pg_stat_ssl`), the pinned `system_identifier`, the database name and
