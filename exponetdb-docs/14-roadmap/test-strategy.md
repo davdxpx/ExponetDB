@@ -67,6 +67,11 @@ never against an emulation, whenever PostgreSQL behavior is part of the claim.
   gates.
 - Flaky tests are fixed or deleted with a replacement, never retried into green
   and never quarantined silently.
+- **[DECIDED]** (verification campaign) `bun run test` runs two packages at a time
+  (`turbo run test --concurrency=2`, like `test:integration`). With turbo's default of ten, every
+  package starts a Vitest worker per core and the linear-time bounds of the parser and the Argon2id
+  tests ran 10 to 100 times slower than alone: eight of them failed in three full runs and passed
+  alone. The bounds were not loosened; the run is slower (about 8 minutes on eight cores) and green.
 
 ## 5. Coverage expectations
 

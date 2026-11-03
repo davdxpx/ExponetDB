@@ -16,7 +16,7 @@
   "scripts": {
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test",
+    "test": "turbo run test --concurrency=2",
     "test:integration": "turbo run test:integration --concurrency=2",
     "test:e2e": "bun run --cwd apps/web build && bun run --cwd apps/design-system build && turbo run build --filter=@exponetdb/cli && bun run --cwd apps/server test:e2e",
     "dev:control-store": "bash tooling/dev/control-store.sh",
