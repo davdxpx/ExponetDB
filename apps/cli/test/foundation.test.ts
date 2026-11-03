@@ -325,6 +325,71 @@ describe('the human renderer names the data of a refusal (TC-022)', () => {
   })
 })
 
+describe('the help of a plan command (TC-057)', () => {
+  it('says --wait applies to --apply only, and that a plan alone applies nothing', async () => {
+    for (const path of [
+      ['node', 'postgres', 'reload'],
+      ['project', 'update'],
+    ]) {
+      const help = (await cli([...path, '--help'])).stdout
+      expect(help, path.join(' ')).toMatch(/--wait[^\n]*--apply/)
+      expect(help, path.join(' ')).toContain('Without --apply nothing is applied')
+    }
+  })
+
+  it('does so for every command that only plans (the review of group I)', async () => {
+    const planning = COMMANDS.filter(
+      (c) => c.effect === 'plan' && (c.flags ?? []).some((f) => f.name === 'apply'),
+    )
+    expect(planning.length).toBeGreaterThan(10)
+    const plain = planning
+      .filter((c) =>
+        (c.flags ?? []).some((f) => f.name === 'wait' && !f.description.startsWith('With --apply')),
+      )
+      .map((c) => c.path.join(' '))
+    expect(plain).toEqual([])
+  })
+
+  it('keeps the plain wording for a command that applies at once', async () => {
+    const help = (await cli(['migration', 'apply', '--help'])).stdout
+    expect(help).toMatch(/--wait\s+Wait until applied and verified \(the default\)/)
+  })
+})
+
+describe('a refused node plan names the capability, the field and the reason (TC-056)', () => {
+  const terminal = { columns: 100, color: false, ascii: false, quiet: false }
+  const refused = (code: string, details: unknown, remediation?: string) =>
+    renderHuman(
+      result({
+        command: 'node postgres roles',
+        error: {
+          code,
+          message: 'refused',
+          ...(remediation === undefined ? {} : { remediation }),
+          details,
+        },
+      }),
+      terminal,
+    ).err
+
+  it('prints the capability that must be inspected first', () => {
+    expect(refused('NODE_OBSERVATION_STALE', { capability: 'agent.diagnostics@2' })).toContain(
+      '  capability: agent.diagnostics@2',
+    )
+  })
+
+  it('prints the reason of a registry conflict and the field of a validation failure', () => {
+    expect(refused('REGISTRY_CONFLICT', { reason: 'ca_bundle_lacks_postgres_ca' })).toContain(
+      '  reason: ca_bundle_lacks_postgres_ca',
+    )
+    expect(
+      refused('VALIDATION_FAILED', {
+        errors: [{ path: '/args/database', code: 'invalid', message: 'Required.' }],
+      }),
+    ).toContain('  /args/database: Required.')
+  })
+})
+
 describe('the plan view shows the change of a node plan (TC-001)', () => {
   const terminal = { columns: 110, color: false, ascii: false, quiet: false }
   const plan = (kind: string, content: object, analysis: object) =>

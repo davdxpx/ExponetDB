@@ -17,3 +17,14 @@ export const BUILD: {
   typeof __EXPONETDB_CLI_BUILD__ === 'undefined'
     ? { version: CLI_VERSION, commit: 'source', builtAt: null }
     : __EXPONETDB_CLI_BUILD__
+
+/** Whether version `a` is older than `b` (`major.minor.patch`; a pre-release suffix is ignored). */
+export function olderThan(a: string, b: string): boolean {
+  const part = (v: string) => v.split('-')[0]?.split('.').map(Number) ?? []
+  const [x, y] = [part(a), part(b)]
+  for (let i = 0; i < 3; i++) {
+    const [p, q] = [x[i] ?? 0, y[i] ?? 0]
+    if (p !== q) return p < q
+  }
+  return false
+}

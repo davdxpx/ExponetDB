@@ -322,7 +322,7 @@ export async function planNodeInspection(
   const node = await servedNode(tx, { nodeId }, now)
   requireCapabilities(node, [capability])
   if (Object.hasOwn(request.args, 'cluster')) {
-    throw new NodeError('VALIDATION_FAILED')
+    throw invalid('/args/cluster', 'The cluster is named by clusterId, never as an argument.')
   }
   let mapping: ClusterMapping | undefined
   let args: JsonObject = { ...(request.args as JsonObject) }
@@ -332,17 +332,22 @@ export async function planNodeInspection(
     }
     args = { ...args, cluster: mapping === undefined ? null : clusterArg(mapping) }
   } else if (request.clusterId !== null) {
-    throw new NodeError('VALIDATION_FAILED')
+    throw invalid('/clusterId', 'This capability takes no cluster.')
   }
-  if (!NODE_CAPABILITIES[capability].args.safeParse(args).success) {
-    throw new NodeError('VALIDATION_FAILED')
+  const parsedArgs = NODE_CAPABILITIES[capability].args.safeParse(args)
+  if (!parsedArgs.success) {
+    const issue = parsedArgs.error.issues[0]
+    throw invalid(
+      `/args${(issue?.path ?? []).map((k) => `/${String(k)}`).join('')}`,
+      issue?.message ?? 'The arguments do not match the capability.',
+    )
   }
   // An inspection never asks the host whether a role setting equals a value
   // the caller names: for a withheld setting that would confirm a guess
   // (Wave 5 correction review). Only the worker's own verification of a
   // roles change passes expectations, for the values it just set.
   if (capability === 'postgres.roles.inspect@2' && list(args['expectSettings']).length > 0) {
-    throw new NodeError('VALIDATION_FAILED')
+    throw invalid('/args/expectSettings', 'Settings are not compared to values a caller names.')
   }
   const tier = mapping?.tier ?? (await serverTier(tx, node.serverId))
   return storePlan(tx, context, actor, {
@@ -391,6 +396,16 @@ async function basisObservation(
   }
   return observation
 }
+
+/** A refused field of a node plan, with its JSON Pointer, so the caller sees what to correct (TC-056). */
+function invalid(path: string, message: string): NodeError {
+  // The catalog bounds a located issue (512 characters); a caller's long key must not turn a 422 into a 500.
+  return new NodeError('VALIDATION_FAILED', {
+    errors: [{ path: path.slice(0, 512), code: 'invalid', message: message.slice(0, 200) }],
+  })
+}
+
+const conflict = (reason: string): NodeError => new NodeError('REGISTRY_CONFLICT', { reason })
 
 const OWN_ROLE = /^exponetdb_/
 
@@ -488,32 +503,35 @@ function analyze(kind: NodePlanKind, change: JsonObject, result: JsonObject): Js
     case 'postgres.reload':
     case 'postgres.restart':
       if (kind === 'postgres.reload' && result['running'] !== true) {
-        throw new NodeError('CONFLICT')
+        throw conflict('postgres_not_running')
       }
       return { observed: result }
     case 'postgres.config.apply': {
       const include = result['managedInclude']
       if (!isJsonObject(include) || include['included'] !== true) {
-        throw new NodeError('CONFLICT')
+        throw conflict('config_include_missing')
       }
       const parameters = list(result['parameters'])
       for (const p of parameters) {
         if (!isJsonObject(p) || p['valid'] !== true) {
-          throw new NodeError('VALIDATION_FAILED')
+          throw invalid(
+            '/changes',
+            `The parameter ${(str(p, 'name') ?? '').slice(0, 80)} is not valid on this server.`,
+          )
         }
         if (p['conflict'] !== null) {
-          throw new NodeError('CONFLICT')
+          throw conflict('config_parameter_conflict')
         }
       }
       const planned = list(change['changes']).map((c) => str(c, 'name'))
       // A parameter named twice would verify a value the fragment never
       // keeps (correction review, round 3).
       if (new Set(planned).size !== planned.length) {
-        throw new NodeError('VALIDATION_FAILED')
+        throw invalid('/changes', 'A parameter is named twice.')
       }
       const analyzed = parameters.map((p) => str(p, 'name'))
       if (planned.length !== analyzed.length || planned.some((n, i) => n !== analyzed[i])) {
-        throw new NodeError('CONFLICT')
+        throw conflict('config_plan_changed')
       }
       const restart = parameters.some((p) => isJsonObject(p) && p['effect'] === 'restart')
       return { parameters, managedInclude: include, needsRestart: restart }
@@ -535,7 +553,7 @@ function analyze(kind: NodePlanKind, change: JsonObject, result: JsonObject): Js
         const member = str(s, 'member')
         if ((role !== null && OWN_ROLE.test(role)) || (member !== null && OWN_ROLE.test(member))) {
           // ExponetDB's own roles change only through credential.rotate and the bootstrap SQL.
-          throw new NodeError('VALIDATION_FAILED')
+          throw invalid('/steps', 'ExponetDB’s own roles change only through credential rotation.')
         }
         if (
           str(s, 'op') === 'grant_membership' &&
@@ -544,7 +562,7 @@ function analyze(kind: NodePlanKind, change: JsonObject, result: JsonObject): Js
         ) {
           // A grant to a predefined role, or to a role ExponetDB's roles belong
           // to, widens every holder of it (the agent refuses it too).
-          throw new NodeError('VALIDATION_FAILED')
+          throw invalid('/steps', 'A grant to a predefined role widens every holder of that role.')
         }
       }
       const classified = steps.map((s) => ({
@@ -573,11 +591,13 @@ function analyze(kind: NodePlanKind, change: JsonObject, result: JsonObject): Js
         const version = str(step, 'version')
         const op = str(step, 'op')
         if (!(available.get(name) ?? []).includes(version)) {
-          throw new NodeError('CONFLICT')
+          throw conflict('extension_not_available')
         }
         const present = installed.has(name) || seen.has(name)
         if ((op === 'create') === present) {
-          throw new NodeError('CONFLICT')
+          throw conflict(
+            op === 'create' ? 'extension_already_installed' : 'extension_not_installed',
+          )
         }
         seen.add(name)
       }
@@ -694,7 +714,7 @@ async function requireRegisteredNames(q: Queryable, clusterId: string, change: J
   }
   for (const a of list(change['ipAddresses'])) {
     if (typeof a !== 'string' || isIP(a) === 0) {
-      throw new NodeError('VALIDATION_FAILED')
+      throw invalid('/ipAddresses', 'An entry is not an IP address.')
     }
     if (!ips.has(a.toLowerCase())) {
       throw new NodeError('REGISTRY_CONFLICT', { reason: 'tls_name_not_registered' })
@@ -740,7 +760,7 @@ export async function planNodeOperation(
     for (const a of [...requested, ...derived]) merged.set(JSON.stringify(a), a)
     // The agent adds its own peer access: one place of the job's 64 stays free.
     if (merged.size > 63) {
-      throw new NodeError('VALIDATION_FAILED')
+      throw invalid('/protectedAccess', 'At most 63 entries: the agent adds its own access.')
     }
     fields['protectedAccess'] = [...merged.values()]
     analysis = { ...analysis, protectedAccess: { requested: requested.length, derived } }
@@ -901,7 +921,7 @@ export async function planRoleVerifierSet(
   const roleName = submission.role
   if (OWN_ROLE.test(roleName) || roleName.startsWith('pg_')) {
     // ExponetDB's own roles: credential.rotate and the credential submission.
-    throw new NodeError('VALIDATION_FAILED')
+    throw invalid('/role', 'ExponetDB’s own roles and predefined roles take no verifier here.')
   }
   const { mapping, node } = await mapCluster(tx, clusterId, context.policy.clock.nowMs())
   requireCapabilities(node, [BASIS[kind], ...RUNS[kind]])

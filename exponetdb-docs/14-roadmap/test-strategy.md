@@ -180,3 +180,30 @@ Reproducibility rules of the default run:
   `EXDB_VISUAL_BASELINE_SET=ci-ubuntu-24.04`. A failing run names the set and what to do. A run that
   refuses before comparing pixels on a platform without a recorded set is not built: nothing records
   which machine made `local`.
+
+### 9.1 Guards and rules added by the verification campaign fixes (2026-11)
+
+**[DECIDED]** (verification campaign, groups E to I) What the default run now pins that a revert used
+to leave green:
+
+| Guard | Where | What a revert turns red |
+|---|---|---|
+| TZ, the model evals without a key, the key name `verify:host` prints | `tooling/test/test-infrastructure.test.ts` | a config without `TZ=UTC`; evals that fail instead of skipping; a wrong variable name (VC-131, VC-132) |
+| The baseline hint of a failing visual comparison | `apps/server/test/visual-hint.test.ts` | the default set read as a regression (TC-054) |
+| Every metric of self-observability.md §3 is registered or marked [PLANNED] | `tooling/test/metrics-doc.test.ts` | a page that promises alerts that cannot fire (VC-037) |
+| Every test file a gate document names exists | `tooling/test/gate-docs.test.ts` | a row proven by a file that was renamed (TC-063) |
+| A Web App sentence for every plan kind the contract stores | `apps/web/test/plans/plan-title.test.ts` | a new kind whose plan page has no title |
+| The three checks `verify` runs are in CI | `tooling/test/ci-covers-verify.test.ts` | a CI that drifted from `verify` (VC-081) |
+| Plan-body casts that fail on an escaped NUL | `tooling/test/plan-body-jsonb.test.ts` | a bare `body::jsonb` (VC-056) |
+
+Rules for integration tests that drive the worker: **one pool per test file, never one per call.**
+`drive()` of three files built `db.store('exdb_worker')` on every iteration; the pools were never
+closed and the role's connection limit (50) ended a full run with SQLSTATE 53300 in
+`http-registry-tier`, which was first taken for load and re-run until green. A failure that passes
+alone is investigated before it is called a flake. Timing assertions (linear-time bounds on the
+parser) take the fastest of several runs with a floor and are never loosened by raising a timeout;
+they can still fail while the machine runs other work, which is why the full verification is
+started on an otherwise idle machine and a failing timing test is re-run alone and recorded.
+
+CI also runs `agent/node/packaging/verify-units.sh` once with `sudo` (VC-130): the unprivileged run
+only reads the configuration back.

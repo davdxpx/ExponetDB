@@ -195,7 +195,8 @@ describe('the wrong node, installation, cluster or path (host scenario)', () => 
       const changes = [{ name: 'work_mem', value: '22MB' }]
       await w.inspect('postgres.config.plan@2', { changes })
       const planned = await w.plan({ kind: 'postgres.config.apply', changes, reload: true })
-      expect([planned.status, planned.body?.code]).toEqual([409, 'CONFLICT'])
+      expect([planned.status, planned.body?.code]).toEqual([409, 'REGISTRY_CONFLICT'])
+      expect(planned.body?.details).toEqual({ reason: 'config_include_missing' })
       expect(existsSync(elsewhere)).toBe(false)
     } finally {
       await w.stopAgent()

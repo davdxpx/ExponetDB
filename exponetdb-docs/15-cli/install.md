@@ -36,7 +36,7 @@ only; the CLI runs on Node.
 | Build commit | the commit packed (`EXPONETDB_BUILD_COMMIT`, else the checkout's HEAD; `-dirty` when the tree had changes) | `exponetdb --version`, `doctor` |
 | Build time | the commit's time (`SOURCE_DATE_EPOCH` overrides): the same commit packs the same bundle | `exponetdb --version` |
 | Server version | the installation answering at the origin (`GET /api/v1/installation`) | `doctor`, `whoami` |
-| REST API contract | `v1`; the CLI refuses a server that speaks another (`incompatible_server`, exit 5) | every remote command |
+| REST API contract | `v1`; the CLI refuses a server that speaks another (`incompatible_server`, exit 5, naming both versions) and a server whose `minCliVersion` is above the CLI (`cli_outdated`, exit 5) | every remote command |
 
 A run from source (`bun apps/cli/src/main.ts`) reports the commit as
 `source`.
@@ -119,5 +119,7 @@ not revoked stays valid on the server until it expires.
 | `exponetdb: command not found` | the install's `bin` is not on PATH | add the prefix's `bin` to PATH |
 | `parser_unavailable` (exit 1) | a parser asset of one major is missing or damaged; the other majors still work | reinstall the tarball; `doctor` lists the three parsers |
 | `incompatible_server` (exit 5) | the server speaks another REST API version | use a CLI that matches the server |
+| `cli_outdated` (exit 5) | the server's `GET /installation` names a `minCliVersion` above this CLI | update the CLI |
+| `RESPONSE_INVALID` with "server X is newer than this CLI" (exit 5) | a newer server answered in a shape this CLI does not know (a value of a closed enum added in a release) | update the CLI |
 | `installation_changed` (exit 5) | another installation answers at the profile's origin | check the server; re-add the profile with `--force` only if the change is intended |
 | `store_insecure` (exit 1) | the token store or its directory is readable by others or not yours | fix the permissions or remove the file and sign in again |

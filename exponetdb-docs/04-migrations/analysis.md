@@ -216,7 +216,9 @@ the statement analysis in `packages/postgres/src/parser/migration.ts`):
   the target major's grammar; position given), `verify_admission` (a
   refused construct in `verify.sql`; the finding carries `code`, `MIGRATION_STATEMENT_FORBIDDEN` for a statement form such as `SELECT … INTO` or a locking clause, `VERIFY_CONSTRUCT_UNSUPPORTED` otherwise), `uncovered_statement` (a statement
   neither derivable nor covered by `-- covers:`: verification can only end
-  `partial`, which is no production evidence; blocking on production),
+  `partial`, which is no production evidence; blocking on production; the message
+  names the statement index, counted from 0), `covers_out_of_range` (warn: a
+  `-- covers:` index past the last statement of `up.sql`),
   `compatibility_unknown` (warn: gating uses `unknown`),
   `data_change_unbounded` (`UPDATE`/`DELETE` without `WHERE`),
   `multiple_nontransactional_statements`, `duplicate_migration_id`,

@@ -94,6 +94,7 @@ import {
   isActionId,
   isHighRiskAction,
   type Me,
+  MIN_CLI_VERSION,
   type OAuthClientView,
   type OAuthResource,
   OperationSchema,
@@ -1183,6 +1184,7 @@ export class Application {
     return {
       ...(id === undefined ? {} : { installationId: id as Installation['installationId'] }),
       version: this.#d.installation.version,
+      minCliVersion: MIN_CLI_VERSION,
       contracts: {
         restApi: 'v1',
         mcpCatalog: 'exponetdb.mcp/v1',

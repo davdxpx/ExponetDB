@@ -295,7 +295,7 @@ Aliases: `auth login`.
 | Argument or flag | Meaning |
 |---|---|
 | `--scope <scopes>` | Scopes to ask for, space or comma separated (default: the last grant of the profile, else targets.read). |
-| `--preset <read\|developer:nonprod\|developer:prod\|operator:nonprod\|operator:prod\|admin>` | A named scope list (exponetdb auth presets); combines with --scope. |
+| `--preset <read|developer:nonprod|developer:prod|operator:nonprod|operator:prod|admin>` | Named scope lists (exponetdb auth presets), comma separated or repeated; they combine with each other and with --scope. |
 | `--device` | Use the device flow (a code to type elsewhere). |
 | `--no-browser` | Print the sign-in URL without opening a browser. |
 
@@ -635,9 +635,9 @@ Runs: against the server; effect: plan; action: `registry.product.create.plan`; 
 | `--name <text>` | Display name. Required unless --file is given. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### environment list
 
@@ -691,9 +691,9 @@ Runs: against the server; effect: plan; action: `registry.environment.create.pla
 | `--evidence-from <env>` | The environment whose verified result production needs. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### environment update
 
@@ -716,9 +716,9 @@ Runs: against the server; effect: plan; action: `registry.environment.update.pla
 | `--no-evidence-from` | Remove the evidence source. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### project list
 
@@ -749,7 +749,7 @@ Runs: against the server; effect: read; action: `project.get`; scopes: `targets.
 
 | Argument or flag | Meaning |
 |---|---|
-| `project` (required) | A project id (prj_…). |
+| `project` (required) | A project id (prj_…) or path (product/project). |
 
 ### project create
 
@@ -770,9 +770,9 @@ Runs: against the server; effect: plan; action: `registry.project.create.plan`; 
 | `--exclude-schemas <a,b>` | Schemas it never manages. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### project update
 
@@ -786,15 +786,15 @@ Runs: against the server; effect: plan; action: `registry.project.update.plan`; 
 
 | Argument or flag | Meaning |
 |---|---|
-| `project` (required) | A project id. |
+| `project` (required) | A project id (prj_…) or path (product/project). |
 | `--name <text>` | Display name. |
 | `--execution-role <name=role>` | Execution roles (name=PostgreSQL role). |
 | `--trusted-extensions <a,b>` | Extensions a bundle may require. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### project execution-roles
 
@@ -808,7 +808,7 @@ Runs: against the server; effect: read; action: `project.execution_roles.get`; s
 
 | Argument or flag | Meaning |
 |---|---|
-| `project` (required) | A project id (prj_…). |
+| `project` (required) | A project id (prj_…) or path (product/project). |
 
 ### project execution-roles set
 
@@ -822,15 +822,15 @@ Runs: against the server; effect: plan; action: `registry.execution_role_binding
 
 | Argument or flag | Meaning |
 |---|---|
-| `project` (required) | A project id. |
+| `project` (required) | A project id (prj_…) or path (product/project). |
 | `--environment <env>` | An environment of the project's product (id or slug). Required unless --file is given. |
 | `--role <alias=role>` | A binding (alias=PostgreSQL role); repeat for each alias. |
 | `--clear` | Remove every binding: the project map applies again. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### project role-exception declare
 
@@ -844,16 +844,16 @@ Runs: against the server; effect: plan; action: `registry.execution_role_excepti
 
 | Argument or flag | Meaning |
 |---|---|
-| `project` (required) | A project id. |
+| `project` (required) | A project id (prj_…) or path (product/project). |
 | `--environment <env>` | An environment of the project's product (id or slug). Required unless --file is given. |
 | `--role <role>` | The PostgreSQL role. Required unless --file is given. |
 | `--reason <text>` | Why the role needs BYPASSRLS (20 to 1000 characters). Required unless --file is given. |
 | `--review-by <YYYY-MM-DD>` | After this date the exception excuses nothing. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### project role-exception revoke
 
@@ -867,14 +867,14 @@ Runs: against the server; effect: plan; action: `registry.execution_role_excepti
 
 | Argument or flag | Meaning |
 |---|---|
-| `project` (required) | A project id. |
+| `project` (required) | A project id (prj_…) or path (product/project). |
 | `exception` (required) | The exception (rxe_…). |
 | `--reason <text>` | Why it is revoked (up to 1000 characters). Required unless --file is given. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### target list
 
@@ -930,9 +930,9 @@ Runs: against the server; effect: plan; action: `target.register.plan`; scopes: 
 | `--database <dbs_…>` | The registered database. Required unless --file is given. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### target suspend
 
@@ -949,9 +949,9 @@ Runs: against the server; effect: plan; action: `target.suspend.plan`; scopes: `
 | `target` (required) | A target id or path. |
 | `--reason <text>` | Why (recorded with the plan). (required) |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### target resume
 
@@ -968,9 +968,9 @@ Runs: against the server; effect: plan; action: `target.resume.plan`; scopes: `r
 | `target` (required) | A target id or path. |
 | `--reason <text>` | Why (recorded with the plan). (required) |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### target decommission
 
@@ -987,9 +987,9 @@ Runs: against the server; effect: plan; action: `target.decommission.plan`; scop
 | `target` (required) | A target id or path. |
 | `--reason <text>` | Why (recorded with the plan). (required) |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### server list
 
@@ -1036,9 +1036,9 @@ Runs: against the server; effect: plan; action: `registry.server.retire.plan`; s
 | `server` (required) | A server id (srv_…). |
 | `--reason <text>` | Why. |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### server create
 
@@ -1058,9 +1058,9 @@ Runs: against the server; effect: plan; action: `registry.server.create.plan`; s
 | `--provider-ref <id>` | The provider’s reference. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### cluster list
 
@@ -1100,7 +1100,7 @@ List the endpoints of a cluster.
 exponetdb cluster endpoints <cluster>
 ```
 
-Runs: against the server; effect: read; action: `endpoint.list`; scopes: `nodes.read`; output: `EndpointList`.
+Runs: against the server; effect: read; action: `endpoint.list`; scopes: `registry.manage`; output: `EndpointList`.
 
 | Argument or flag | Meaning |
 |---|---|
@@ -1114,7 +1114,7 @@ List the registered databases of a cluster.
 exponetdb cluster databases <cluster>
 ```
 
-Runs: against the server; effect: read; action: `database.list`; scopes: `nodes.read`; output: `DatabaseList`.
+Runs: against the server; effect: read; action: `database.list`; scopes: `registry.manage`; output: `DatabaseList`.
 
 | Argument or flag | Meaning |
 |---|---|
@@ -1128,7 +1128,7 @@ List credential metadata of a cluster (never a secret).
 exponetdb cluster credentials <cluster>
 ```
 
-Runs: against the server; effect: read; action: `credential.list`; scopes: `nodes.read`; output: `CredentialList`.
+Runs: against the server; effect: read; action: `credential.list`; scopes: `registry.manage`; output: `CredentialList`.
 
 | Argument or flag | Meaning |
 |---|---|
@@ -1171,9 +1171,9 @@ Runs: against the server; effect: plan; action: `registry.cluster.register.plan`
 |---|---|
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### cluster confirm
 
@@ -1190,9 +1190,9 @@ Runs: against the server; effect: plan; action: `registry.cluster.confirm.plan`;
 | `cluster` (required) | A cluster id. |
 | `--system-identifier <digits>` | The expected system identifier. |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### cluster endpoint add
 
@@ -1214,9 +1214,9 @@ Runs: against the server; effect: plan; action: `registry.endpoint.add.plan`; sc
 | `--tls-server-name <name>` | TLS server name to verify. |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### cluster endpoint retire
 
@@ -1234,9 +1234,9 @@ Runs: against the server; effect: plan; action: `registry.endpoint.retire.plan`;
 | `endpoint` (required) | An endpoint id. |
 | `--reason <text>` | Why. |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### cluster database retire
 
@@ -1254,9 +1254,9 @@ Runs: against the server; effect: plan; action: `registry.database.retire.plan`;
 | `database` (required) | A database id (dbs_…). |
 | `--reason <text>` | Why. |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### cluster retire
 
@@ -1273,9 +1273,9 @@ Runs: against the server; effect: plan; action: `registry.cluster.retire.plan`; 
 | `cluster` (required) | A cluster id. |
 | `--reason <text>` | Why. |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### cluster declare-tier
 
@@ -1294,9 +1294,9 @@ Runs: against the server; effect: plan; action: `registry.cluster.declare_tier.p
 | `cluster` (required) | A cluster id. |
 | `--tier <prod\|nonprod>` | The declared tier. (required) |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### cluster database register
 
@@ -1313,9 +1313,9 @@ Runs: against the server; effect: plan; action: `registry.database.register.plan
 | `cluster` (required) | A cluster id. |
 | `name` (required) | The database name. |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### cluster credential submit
 
@@ -1327,7 +1327,7 @@ The password a person set on an external cluster (psql \password, or a verifier 
 exponetdb cluster credential submit <cluster> <role> [flags]
 ```
 
-Runs: against the server; effect: read; action: `credential.list`; scopes: `nodes.read`; output: `CredentialView`.
+Runs: against the server; effect: read; action: `credential.list`; scopes: `registry.manage`; output: `CredentialView`.
 
 | Argument or flag | Meaning |
 |---|---|
@@ -1349,16 +1349,16 @@ Plan rotating a cluster credential through the node (a new SCRAM verifier, set l
 exponetdb cluster credential rotate <cluster> <role> [flags]
 ```
 
-Runs: against the server; effect: plan; action: `credential.rotate.plan`; scopes: `nodes.plan`; output: `PlanView`.
+Runs: against the server; effect: plan; action: `credential.rotate.plan`; scopes: `registry.manage`; output: `PlanView`.
 
 | Argument or flag | Meaning |
 |---|---|
 | `cluster` (required) | A cluster id. |
 | `role` (required) | The access role (e.g. observer, migrator). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ## Nodes
 
@@ -1474,9 +1474,9 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 | `--cluster <cls_…>` | The cluster on the node. (required) |
 | `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### node postgres restart
 
@@ -1496,9 +1496,9 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 | `--cluster <cls_…>` | The cluster on the node. (required) |
 | `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### node postgres config
 
@@ -1521,9 +1521,9 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 | `--no-reload` | Do not reload after applying. |
 | `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### node postgres hba
 
@@ -1544,9 +1544,9 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 | `--file <path>` | The change as JSON or YAML (checked against the contract). (required) |
 | `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### node postgres roles
 
@@ -1567,9 +1567,9 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 | `--file <path>` | The change as JSON or YAML (checked against the contract). (required) |
 | `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### node postgres extensions
 
@@ -1590,9 +1590,9 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 | `--file <path>` | The change as JSON or YAML (checked against the contract). (required) |
 | `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### node postgres tls
 
@@ -1613,9 +1613,9 @@ Runs: against the server; effect: plan; action: `node.plan`; scopes: `nodes.plan
 | `--file <path>` | The change as JSON or YAML (checked against the contract). (required) |
 | `--no-inspect` | Do not inspect the cluster first; plan against an observation you made yourself (at most 10 minutes old). |
 | `--apply` | Apply the plan at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### node job-keys
 
@@ -1633,9 +1633,9 @@ Runs: against the server; effect: plan; action: `node.config.update.plan`; scope
 | `--add <key>` | Job key ids to add. |
 | `--retire <key>` | Job key ids to retire. |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### node revoke
 
@@ -1651,9 +1651,9 @@ Runs: against the server; effect: plan; action: `node.revoke.plan`; scopes: `reg
 |---|---|
 | `node` (required) | The node id. |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### node decommission
 
@@ -1669,9 +1669,9 @@ Runs: against the server; effect: plan; action: `node.decommission.plan`; scopes
 |---|---|
 | `node` (required) | The node id. |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### node enrollment create
 
@@ -1751,16 +1751,26 @@ exponetdb migration new leads-idx --nontransactional
 
 Lint the local bundles with the PostgreSQL parser (offline facts; exit 1 on a blocking finding).
 
+Without arguments every bundle is linted. Name bundles (directory, path or migration id) or use --since to count findings and the exit code for those only; the others are listed as skipped and still take part in the dependency graph. An applied bundle cannot change, so lint the new ones.
+
 ```text
-exponetdb migration lint [flags]
+exponetdb migration lint [bundle…] [flags]
 ```
 
 Runs: locally; effect: local; output: `LintReport`.
 
 | Argument or flag | Meaning |
 |---|---|
+| `bundle` | Bundles to lint: directory name, path or migration id (default all). |
+| `--since <id>` | Lint this bundle and every bundle that depends on it. |
 | `--postgres <16\|17\|18>` | The grammar (default 17). (default 17) |
 | `--tier <prod\|nonprod>` | Lint as for this tier (default prod, the strictest). (default prod) |
+
+```sh
+exponetdb migration lint
+exponetdb migration lint 01JB2Z6G8M4Q7R9T1V3W5X0002_add-index
+exponetdb migration lint --since 01JB2Z6G8M4Q7R9T1V3W5X0002
+```
 
 ### migration checksum
 
@@ -1914,9 +1924,9 @@ Runs: against the server; effect: plan; action: `migration.resume.plan`; scopes:
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
 | `--cleanup` | Drop the INVALID index the stopped statement left (by its OID). |
 | `--apply` | Apply the plan at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### migration rollback
 
@@ -1933,9 +1943,9 @@ Runs: against the server; effect: plan; action: `migration.rollback.plan`; scope
 | `migration` (required) | The migration id. |
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
 | `--apply` | Apply the plan at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### migration import analyze
 
@@ -1956,9 +1966,9 @@ Runs: against the server; effect: plan; action: `migration.import.analyze`; scop
 | `--ledger <supabase,drizzle,applied_migrations>` | Legacy ledgers to read. |
 | `--not-applicable <files>` | Legacy files that never apply to this target. |
 | `--apply` | Apply the analysis plan at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### migration import scratch-reset-sql
 
@@ -1972,7 +1982,7 @@ Runs: against the server; effect: read; action: `target.get`; scopes: `targets.r
 
 | Argument or flag | Meaning |
 |---|---|
-| `--scratch <target>` | The scratch target (path or tgt_ id); nonprod only. (required) |
+| `--scratch <target>` | The scratch target (path or tgt_ id); an environment named scratch, nonprod only. (required) |
 
 ### migration import scratch-check
 
@@ -2058,9 +2068,9 @@ Runs: against the server; effect: plan; action: `migration.baseline.plan`; scope
 | `report` (required) | The import report id. |
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
 | `--apply` | Apply at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### migration ledger reconcile
 
@@ -2077,9 +2087,9 @@ Runs: against the server; effect: plan; action: `ledger.reconcile.plan`; scopes:
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
 | `--note <text>` | Why: what happened to the target (kept with the plan, 1 to 1000 characters). (required) |
 | `--apply` | Apply at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ## Plans
 
@@ -2287,9 +2297,9 @@ Runs: against the server; effect: plan; action: `operation.force_release.plan`; 
 | `--outcome <applied|not_applied|unknown>` | What happened to the change, as you checked it on the target. (required) |
 | `--reason <text>` | Why, and how you checked (kept with the plan and in the audit, 1 to 1000 characters). (required) |
 | `--apply` | Apply at once and wait. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ```sh
 exponetdb operation force-release op_01… --outcome not_applied --reason "The table does not exist on the target."
@@ -2672,9 +2682,9 @@ Runs: against the server; effect: plan; action: `connections.terminate.plan`; sc
 | `--condition <stalled\|idle_in_transaction\|long_running\|any>` | What must still hold when the session is terminated. (required) |
 | `--reason <text>` | Why. |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ## Backups and restores
 
@@ -2782,9 +2792,9 @@ Runs: against the server; effect: plan; action: `backup.repository.adopt.plan`; 
 | `cluster` (required) | A cluster id (cls_…). |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ```sh
 exponetdb backup adopt cls_01J… --file repository.yaml
@@ -2808,9 +2818,9 @@ Runs: against the server; effect: plan; action: `backup.repository.ownership.pla
 | `--to <adopted_runs\|owned>` | The ownership to plan. (required) |
 | `--host-configuration-unchanged` | Acknowledge that the host configuration, schedules, keys and retention stay as they are. (required) |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### backup retire-repository
 
@@ -2829,9 +2839,9 @@ Runs: against the server; effect: plan; action: `backup.repository.retire.plan`;
 | `--no-longer-protected` | Acknowledge that the cluster is no longer protected by this repository through ExponetDB. (required) |
 | `--reason <text>` | Why. |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### backup policy set
 
@@ -2850,9 +2860,9 @@ Runs: against the server; effect: plan; action: `backup.policy.set.plan`; scopes
 | `cluster` (required) | A cluster id (cls_…). |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ```sh
 exponetdb backup policy set cls_01J… --file policy.yaml
@@ -2893,9 +2903,9 @@ Runs: against the server; effect: plan; action: `backup.run.plan`; scopes: `back
 | `--repository <bkr_…>` | A backup repository id (bkr_…). (required) |
 | `--kind <full\|differential\|incremental\|logical>` | The backup kind. (required) |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### backup verify
 
@@ -2973,9 +2983,9 @@ Runs: against the server; effect: plan; action: `restore.discard.plan`; scopes: 
 | `cluster` (required) | A cluster id (cls_…). |
 | `restore` (required) | A restore id (rst_…). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ### restore runbook
 
@@ -3019,9 +3029,9 @@ Runs: against the server; effect: plan; action: `restore.drill.plan`; scopes: `r
 | `--node <nod_…>` | The node to restore on (default: the cluster’s own node). |
 | `--file <path>` | The request as a JSON or YAML file (checked against the contract). |
 | `--apply` | Apply the plan at once and wait until applied and verified. |
-| `--wait` | Wait until applied and verified (the default). |
-| `--no-wait` | Return once the server accepted the operation. |
-| `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
 
 ```sh
 exponetdb drill plan cls_01J… --repository bkr_01J… --selection pitr_random

@@ -271,7 +271,11 @@ Capabilities outside Wave 5 (backups and restore, `packages.apply_update`,
   file without it gets it at the top, so no foreign rule shadows a managed
   one, and an existing block is replaced where the operator put it. Markers
   that are not exactly one BEGIN followed by one END are refused
-  (`precondition_failed`), never guessed.
+  (`precondition_failed`), never guessed. **[DECIDED]** (TC-071 GAP-09, delegated) An
+  empty `managedRules` list leaves the marker pair with no rule between the two lines:
+  the verification of a write reads the block back and a block that disappeared would read as
+  a lost write, so the two comment lines stay (they do nothing to PostgreSQL) and the
+  operator removes them by hand if they want the file as it was.
 - **TLS (OD-17).** `postgres.tls.plan` generates the P-256 key on the host
   and returns its public key with a proof of possession, an ECDSA signature
   over JCS(`{purpose: "exponetdb/pgtls-pop/v1", jobId, publicKey}`).

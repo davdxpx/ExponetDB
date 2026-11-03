@@ -90,10 +90,13 @@ async function respond(capability: string): Promise<JsonObject> {
   return answers(capability)
 }
 
+/** What the simulated node answers to `postgres.status@1`; a test flips `running` for one case. */
+let running = true
+
 function answers(capability: string): JsonObject {
   switch (capability) {
     case 'postgres.status@1':
-      return STATUS
+      return { ...STATUS, running }
     case 'postgres.reload@2':
       return { reloadedAt: new Date().toISOString(), pendingRestart: [], fileErrors: [] }
     case 'postgres.roles.inspect@2':
@@ -756,6 +759,77 @@ async function recorded(operationId: string) {
   )
   return rows[0]
 }
+
+describe('a refused node plan names its cause (TC-056)', () => {
+  it('names the field of an inspection that is not accepted', async () => {
+    const { w, node } = await setup('nonprod')
+    const asked = await owner.browser.call('POST', `/api/v1/nodes/${node.nodeId}/inspections`, {
+      capability: 'postgres.roles.inspect@2',
+      clusterId: w.clusterId,
+      args: {
+        expectSettings: [{ role: 'app', database: null, name: 'app.token', value: 'a guess' }],
+      },
+    })
+    expect([asked.status, asked.body?.code]).toEqual([422, 'VALIDATION_FAILED'])
+    expect(asked.body.details.errors[0]).toMatchObject({ path: '/args/expectSettings' })
+    expect(asked.body.details.errors[0].message).not.toBe('The request is not valid.')
+    await node.stop()
+  })
+
+  it('answers a long unknown argument key with the 422, not a 500 (the review of group I)', async () => {
+    const { w, node } = await setup('nonprod')
+    const asked = await owner.browser.call('POST', `/api/v1/nodes/${node.nodeId}/inspections`, {
+      capability: 'postgres.roles.inspect@2',
+      clusterId: w.clusterId,
+      args: { ['k'.repeat(600)]: 1 },
+    })
+    expect([asked.status, asked.body?.code]).toEqual([422, 'VALIDATION_FAILED'])
+    expect(asked.body.details.errors[0].message.length).toBeLessThanOrEqual(200)
+    await node.stop()
+  })
+
+  it('names the capability to inspect first when no observation is recent enough', async () => {
+    const { w, node } = await setup('nonprod')
+    const planned = await owner.browser.call('POST', `/api/v1/nodes/${node.nodeId}/plans`, {
+      clusterId: w.clusterId,
+      change: {
+        kind: 'postgres.config.apply',
+        changes: [{ name: 'work_mem', value: '8MB' }],
+        reload: true,
+      },
+    })
+    expect([planned.status, planned.body?.code]).toEqual([409, 'NODE_OBSERVATION_STALE'])
+    expect(planned.body.details).toEqual({ capability: 'postgres.config.plan@2' })
+    await node.stop()
+  })
+
+  it('gives a reload of a stopped server its own reason, not the generic CONFLICT', async () => {
+    const { w, node } = await setup('nonprod')
+    running = false
+    try {
+      const inspected = await owner.browser.call(
+        'POST',
+        `/api/v1/nodes/${node.nodeId}/inspections`,
+        {
+          capability: 'postgres.status@1',
+          clusterId: w.clusterId,
+          args: {},
+        },
+      )
+      expect(inspected.status).toBe(202)
+      await drive()
+      const planned = await owner.browser.call('POST', `/api/v1/nodes/${node.nodeId}/plans`, {
+        clusterId: w.clusterId,
+        change: { kind: 'postgres.reload' },
+      })
+      expect([planned.status, planned.body?.code]).toEqual([409, 'REGISTRY_CONFLICT'])
+      expect(planned.body.details).toEqual({ reason: 'postgres_not_running' })
+    } finally {
+      running = true
+      await node.stop()
+    }
+  })
+})
 
 describe('the operational metrics (VC-037)', () => {
   it('count what waits, the nodes by state and the soonest node certificate, from the Control Store', async () => {

@@ -6,7 +6,13 @@ import { collect, LIST_FLAGS, listingFailure } from '../cli/lists.ts'
 import { must } from '../cli/remote.ts'
 import type { CommandSpec } from '../cli/types.ts'
 import { UsageError } from '../cli/usage.ts'
-import { operationResult, WAIT_FLAGS, waits, watchOperation } from '../cli/watch.ts'
+import {
+  operationResult,
+  PLAN_WAIT_FLAGS,
+  WAIT_FLAGS,
+  waits,
+  watchOperation,
+} from '../cli/watch.ts'
 import { createNewPrivateFile } from '../files.ts'
 import { ago, countLine, header } from '../output/format.ts'
 import { result } from '../output/model.ts'
@@ -481,7 +487,7 @@ export const planCommands: readonly CommandSpec[] = [
         required: true,
       },
       { name: 'apply', type: 'boolean', description: 'Apply at once and wait.' },
-      ...WAIT_FLAGS,
+      ...PLAN_WAIT_FLAGS,
     ],
     locality: 'remote',
     effect: 'plan',

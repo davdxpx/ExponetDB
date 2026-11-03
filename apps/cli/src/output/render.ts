@@ -152,6 +152,7 @@ function status(t: Terminal, b: Extract<Block, { kind: 'status' }>): string[] {
 const NAMED_DETAILS: readonly (readonly [key: string, joiner: string])[] = [
   ['migrationId', ', '],
   ['reason', ', '],
+  ['capability', ', '],
   ['extension', ', '],
   ['missing', ', '],
   ['unrecorded', ', '],

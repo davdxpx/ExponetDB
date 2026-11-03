@@ -70,7 +70,8 @@ describe('configuration through the managed fragment (host scenario)', () => {
       changes: changesOver,
       reload: true,
     })
-    expect([overridden.status, overridden.body?.code]).toEqual([409, 'CONFLICT'])
+    expect([overridden.status, overridden.body?.code]).toEqual([409, 'REGISTRY_CONFLICT'])
+    expect(overridden.body?.details).toEqual({ reason: 'config_parameter_conflict' })
     expect(await w.psql('SHOW work_mem')).toBe('5MB')
     await w.psql('ALTER SYSTEM RESET work_mem')
     await w.psql('ALTER SYSTEM RESET maintenance_work_mem')
@@ -93,7 +94,8 @@ describe('configuration through the managed fragment (host scenario)', () => {
     )
     expect(read[0]?.conflict).toBe('source_overrides')
     const outranked = await w.plan({ kind: 'postgres.config.apply', changes, reload: true })
-    expect([outranked.status, outranked.body?.code]).toEqual([409, 'CONFLICT'])
+    expect([outranked.status, outranked.body?.code]).toEqual([409, 'REGISTRY_CONFLICT'])
+    expect(outranked.body?.details).toEqual({ reason: 'config_parameter_conflict' })
     expect(await w.psql('SHOW work_mem')).toBe('6MB')
     await writeFile(ctl, '')
     await run('pg_ctlcluster', [major ?? '', name ?? '', 'restart'])

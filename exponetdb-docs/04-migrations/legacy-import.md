@@ -844,7 +844,10 @@ analysis; nothing marks it "consumed", the replay's emptiness check does.
   --scratch …` prints a script built from registry values (installation,
   target id, generation, the project's managed scope) that a person runs
   with `psql -v ON_ERROR_STOP=1` as a superuser connected to that database.
-  It stops unless the database carries the scratch target's marker and has
+  **[DECIDED]** (TC-065, delegated) The command offers the script only for a
+  target in a scratch environment (the environment slug is `scratch` or has
+  `scratch` as a dash-separated word) and refuses any other nonprod target, staging
+  included, as a usage error without printing it. It stops unless the database carries the scratch target's marker and has
   no ledger row (**[DECIDED]**, review round 3: it reads both only once the
   catalog shows them as ExponetDB made them, plain tables of the ledger
   owner with built-in column types, without children or row security, and

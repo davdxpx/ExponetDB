@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises'
-import { join, relative } from 'node:path'
+import { basename, join, relative } from 'node:path'
 import { newUlid } from '@exponetdb/kernel'
 import {
   scratchCopyCommands,
@@ -17,7 +17,7 @@ import { arg, flag, showCommand, TARGET_FLAG } from '../cli/reads.ts'
 import { must } from '../cli/remote.ts'
 import type { CommandInput, CommandSpec, FlagSpec, RunContext } from '../cli/types.ts'
 import { UsageError } from '../cli/usage.ts'
-import { WAIT_FLAGS, waits, watchOperation } from '../cli/watch.ts'
+import { PLAN_WAIT_FLAGS, WAIT_FLAGS, waits, watchOperation } from '../cli/watch.ts'
 import { CliError } from '../errors.ts'
 import { loadGrammar } from '../local/grammar.ts'
 import {
@@ -111,11 +111,22 @@ function graphOf(valid: readonly ValidatedBundle[], baselines: readonly string[]
 const baselinesOf = (project: LocalProject) =>
   project.config.legacy === undefined ? [] : [project.config.legacy.baseline]
 
+/** A scratch environment: its slug is `scratch` or has `scratch` as a whole word (`scratch-eu`, `import-scratch`). */
+const SCRATCH_ENVIRONMENT = /(^|-)scratch(-|$)/
+
+/** The local bundle a selector names: its directory, a path to it or its migration id (TC-041). */
+function bundleNamed(directories: readonly string[], selector: string): string {
+  const base = basename(selector.replace(/\/+$/, ''))
+  const found = directories.find((d) => d === base || d.split('_')[0] === selector)
+  if (found === undefined) throw new UsageError(`No local bundle matches ${selector}.`)
+  return found
+}
+
 function findingRow(f: LintFinding): string[] {
   const where = [f.file, f.line === null ? null : `line ${f.line}`]
     .filter((x) => x !== null)
     .join(' ')
-  return [f.level, f.rule, dash(f.migrationId), where || '-', f.message]
+  return [f.level, f.blocking ? 'yes' : '-', f.rule, dash(f.migrationId), where || '-', f.message]
 }
 
 const local = (spec: Omit<CommandSpec, 'locality' | 'effect' | 'group'>): CommandSpec => ({
@@ -242,7 +253,22 @@ const localCommands: readonly CommandSpec[] = [
     path: ['migration', 'lint'],
     summary:
       'Lint the local bundles with the PostgreSQL parser (offline facts; exit 1 on a blocking finding).',
+    description:
+      'Without arguments every bundle is linted. Name bundles (directory, path or migration id) or use --since to count findings and the exit code for those only; the others are listed as skipped and still take part in the dependency graph. An applied bundle cannot change, so lint the new ones.',
+    args: [
+      {
+        name: 'bundle',
+        description: 'Bundles to lint: directory name, path or migration id (default all).',
+        variadic: true,
+      },
+    ],
     flags: [
+      {
+        name: 'since',
+        type: 'string',
+        placeholder: 'id',
+        description: 'Lint this bundle and every bundle that depends on it.',
+      },
       {
         name: 'postgres',
         type: 'enum',
@@ -259,6 +285,11 @@ const localCommands: readonly CommandSpec[] = [
       },
     ],
     output: 'LintReport',
+    examples: [
+      'exponetdb migration lint',
+      'exponetdb migration lint 01JB2Z6G8M4Q7R9T1V3W5X0002_add-index',
+      'exponetdb migration lint --since 01JB2Z6G8M4Q7R9T1V3W5X0002',
+    ],
     async run(ctx, input) {
       const project = await currentProject(workdir(ctx))
       const bundles = await readBundles(project)
@@ -273,7 +304,35 @@ const localCommands: readonly CommandSpec[] = [
           baselines: baselinesOf(project),
         },
       )
-      const findings = [...report.findings, ...report.bundles.flatMap((b) => b.findings)]
+      const directories = bundles.map((b) => b.directory)
+      const named = (input.args['bundle'] as readonly string[] | undefined) ?? []
+      const since = flag(input, 'since')
+      const selected = new Set(named.map((n) => bundleNamed(directories, n)))
+      if (since !== undefined) {
+        // The bundle and, through dependsOn, everything built on it.
+        const root = bundleNamed(directories, since)
+        const ids = new Set(
+          report.bundles.filter((b) => b.directory === root).flatMap((b) => b.migrationId ?? []),
+        )
+        selected.add(root)
+        for (let grew = true; grew; ) {
+          grew = false
+          for (const b of report.bundles) {
+            if (selected.has(b.directory) || !b.dependsOn.some((d) => ids.has(d))) continue
+            selected.add(b.directory)
+            if (b.migrationId !== null) ids.add(b.migrationId)
+            grew = true
+          }
+        }
+      }
+      const scoped = selected.size > 0
+      const inScope = report.bundles.filter((b) => !scoped || selected.has(b.directory))
+      const scopeIds = new Set(inScope.flatMap((b) => b.migrationId ?? []))
+      const skipped = report.bundles.filter((b) => !inScope.includes(b)).map((b) => b.directory)
+      const graphFindings = report.findings.filter(
+        (f) => !scoped || f.migrationId === null || scopeIds.has(f.migrationId),
+      )
+      const findings = [...graphFindings, ...inScope.flatMap((b) => b.findings)]
       const blocking = findings.filter((f) => f.blocking)
       return result({
         command: 'migration lint',
@@ -290,8 +349,9 @@ const localCommands: readonly CommandSpec[] = [
             checksum: b.checksum,
             findings: b.findings,
           })),
+          skipped,
           graph: report.graph,
-          findings: report.findings,
+          findings: graphFindings,
         },
         ...(blocking.length === 0
           ? {}
@@ -306,13 +366,17 @@ const localCommands: readonly CommandSpec[] = [
             kind: 'text',
             tone: 'muted',
             lines: [
-              `${report.bundles.length} bundles · PostgreSQL ${report.major} grammar · ${report.tier} rules · offline facts`,
+              `${inScope.length} bundles · PostgreSQL ${report.major} grammar · ${report.tier} rules · offline facts`,
+              ...(skipped.length === 0
+                ? []
+                : [`${skipped.length} not selected, skipped: ${skipped.join(', ')}`]),
             ],
           },
           {
             kind: 'table',
             columns: [
               { title: 'LEVEL' },
+              { title: 'BLOCKS' },
               { title: 'RULE' },
               { title: 'MIGRATION' },
               { title: 'WHERE' },
@@ -974,7 +1038,7 @@ const remoteCommands: readonly CommandSpec[] = [
             ]
           : []),
         { name: 'apply', type: 'boolean', description: 'Apply the plan at once and wait.' },
-        ...WAIT_FLAGS,
+        ...PLAN_WAIT_FLAGS,
       ],
       locality: 'remote',
       effect: 'plan',
@@ -1043,7 +1107,7 @@ const remoteCommands: readonly CommandSpec[] = [
         description: 'Legacy files that never apply to this target.',
       },
       { name: 'apply', type: 'boolean', description: 'Apply the analysis plan at once and wait.' },
-      ...WAIT_FLAGS,
+      ...PLAN_WAIT_FLAGS,
     ],
     locality: 'remote',
     effect: 'plan',
@@ -1090,7 +1154,8 @@ const remoteCommands: readonly CommandSpec[] = [
         name: 'scratch',
         type: 'string',
         placeholder: 'target',
-        description: 'The scratch target (path or tgt_ id); nonprod only.',
+        description:
+          'The scratch target (path or tgt_ id); an environment named scratch, nonprod only.',
         required: true,
       },
     ],
@@ -1106,6 +1171,13 @@ const remoteCommands: readonly CommandSpec[] = [
       )
       if (scratch.tier !== 'nonprod') {
         throw new UsageError('A scratch target is nonprod; this one is not.')
+      }
+      // The script empties a database in place: only an environment named for scratch is offered it
+      // (TC-065; nonprod alone also covers staging, which holds the real ledger).
+      if (!SCRATCH_ENVIRONMENT.test(scratch.environment.slug)) {
+        throw new UsageError(
+          `${scratch.path} is in the environment ${scratch.environment.slug}, not a scratch environment: the reset script is offered only for an environment named scratch (or scratch-…, …-scratch).`,
+        )
       }
       const project = must(
         await remote.sdk.call('getProject', { params: { projectId: scratch.projectId } }),
@@ -1315,7 +1387,7 @@ const remoteCommands: readonly CommandSpec[] = [
     flags: [
       TARGET_REQUIRED,
       { name: 'apply', type: 'boolean', description: 'Apply at once and wait.' },
-      ...WAIT_FLAGS,
+      ...PLAN_WAIT_FLAGS,
     ],
     locality: 'remote',
     effect: 'plan',
@@ -1351,7 +1423,7 @@ const remoteCommands: readonly CommandSpec[] = [
         required: true,
       },
       { name: 'apply', type: 'boolean', description: 'Apply at once and wait.' },
-      ...WAIT_FLAGS,
+      ...PLAN_WAIT_FLAGS,
     ],
     locality: 'remote',
     effect: 'plan',

@@ -17,10 +17,10 @@ for the earlier ones follows from its definition of past revisions.
 
 Test locations: `protocol` = `apps/server/test/mcp-protocol.test.ts` (the
 endpoint with a fixture registry, in process), `auth` =
-`apps/server/test/mcp-auth.int.test.ts`, `tools` =
-`apps/server/test/mcp-tools.int.test.ts`, `contract` =
+`apps/server/test/mcp-adversarial.int.test.ts`, `tools` =
+`apps/server/test/mcp.int.test.ts`, `contract` =
 `packages/contracts/test/mcp-tools.test.ts`, `state` =
-`apps/server/test/mcp-request-state.test.ts`, `conformance` = the pinned
+`apps/server/test/mcp-units.test.ts`, `conformance` = the pinned
 conformance suite (§6). A row is proven only when its test ran green on the
 recorded commit ([G7 record](../14-roadmap/gates/7.md)).
 

@@ -228,7 +228,7 @@ policy wants it, the approval) in the browser, exactly as above.
 
 | You see | It means | What to do |
 |---|---|---|
-| `migration lint` exits 1 with a blocking finding (e.g. dropping a table) | the bundle breaks a rule of the lint profile | change the bundle; nothing reached a server |
+| `migration lint` exits 1 with a blocking finding (e.g. dropping a table) | the bundle breaks a rule of the lint profile | change the bundle; nothing reached a server. An already applied bundle cannot change: lint the new ones with `exponetdb migration lint <bundle>…` or `--since <id>` (the others are listed as skipped) |
 | `drift check <target>` lists an object | the database changed outside a migration | write a migration for it, or undo it; plans bound to the old fingerprint are stale |
 | exit 4, `awaiting_approval` | a person must approve | `exponetdb approval open <operation>` |
 | exit 6 | the wait ended, or the outcome needs reconciliation | `exponetdb operation watch <operation>`; the server keeps working |

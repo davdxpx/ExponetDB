@@ -62,6 +62,19 @@ async function environmentRef(remote: Remote, productId: string, ref: string): P
   throw new CliError('NOT_FOUND', `No environment ${ref} in this product is visible to you.`)
 }
 
+const PROJECT_ARG = 'A project id (prj_…) or path (product/project).'
+
+/** A project id, or the id of the project a `product/project` path names (one read, TC-052). */
+async function projectRef(remote: Remote, ref: string): Promise<string> {
+  if (!ref.includes('/')) return ref
+  const product = ref.slice(0, ref.indexOf('/'))
+  for await (const page of remote.sdk.pages('listProjects', {}, { product })) {
+    const found = must(page).items.find((p) => p.path === ref)
+    if (found !== undefined) return found.id
+  }
+  throw new CliError('NOT_FOUND', `No project ${ref} is visible to you.`)
+}
+
 /** An environment (id or slug) of a project's product. */
 async function projectEnvironmentRef(remote: Remote, projectId: string, ref: string) {
   if (/^env_[0-9A-HJKMNP-TV-Z]{26}$/.test(ref)) return ref
@@ -332,13 +345,13 @@ export const registryCommands: readonly CommandSpec[] = [
     path: ['project', 'show'],
     summary: 'Show a project and its managed scope.',
     group: 'registry',
-    args: [{ name: 'project', description: 'A project id (prj_…).', required: true }],
+    args: [{ name: 'project', description: PROJECT_ARG, required: true }],
     action: 'project.get',
     scopes: READ,
     output: 'Project',
     title: 'project',
     operation: 'getProject',
-    params: (i) => ({ projectId: arg(i, 'project') }),
+    params: async (i, r) => ({ projectId: await projectRef(r, arg(i, 'project')) }),
     view: (p) => [
       {
         kind: 'fields',
@@ -408,7 +421,7 @@ export const registryCommands: readonly CommandSpec[] = [
     path: ['project', 'update'],
     summary: 'Plan a project change (name, managed scope, execution roles, trusted extensions).',
     group: 'registry',
-    args: [{ name: 'project', description: 'A project id.', required: true }],
+    args: [{ name: 'project', description: PROJECT_ARG, required: true }],
     flags: [
       { name: 'name', type: 'string', placeholder: 'text', description: 'Display name.' },
       {
@@ -427,7 +440,7 @@ export const registryCommands: readonly CommandSpec[] = [
     action: 'registry.project.update.plan',
     scopes: MANAGE,
     operation: 'planProjectChange',
-    params: (i) => ({ projectId: arg(i, 'project') }),
+    params: async (i, r) => ({ projectId: await projectRef(r, arg(i, 'project')) }),
     body: (i) => ({
       ...(i.flags['name'] === undefined ? {} : { displayName: flag(i, 'name') }),
       ...(i.flags['execution-role'] === undefined
@@ -449,13 +462,13 @@ export const registryCommands: readonly CommandSpec[] = [
     summary:
       "Show a project's execution roles: the default map, each environment's bindings and the declared exceptions.",
     group: 'registry',
-    args: [{ name: 'project', description: 'A project id (prj_…).', required: true }],
+    args: [{ name: 'project', description: PROJECT_ARG, required: true }],
     action: 'project.execution_roles.get',
     scopes: ['migrations.read'],
     output: 'ProjectExecutionRoles',
     title: 'execution roles',
     operation: 'getProjectExecutionRoles',
-    params: (i) => ({ projectId: arg(i, 'project') }),
+    params: async (i, r) => ({ projectId: await projectRef(r, arg(i, 'project')) }),
     view: (v) => [
       {
         kind: 'table',
@@ -504,7 +517,7 @@ export const registryCommands: readonly CommandSpec[] = [
     summary:
       "Plan one environment's execution roles (aliases of the project map bound to other roles); the set replaces the environment's bindings.",
     group: 'registry',
-    args: [{ name: 'project', description: 'A project id.', required: true }],
+    args: [{ name: 'project', description: PROJECT_ARG, required: true }],
     flags: [
       ENVIRONMENT_FLAG,
       {
@@ -523,7 +536,7 @@ export const registryCommands: readonly CommandSpec[] = [
     scopes: MANAGE,
     operation: 'planExecutionRoleBindings',
     params: async (i, r) => {
-      const projectId = arg(i, 'project')
+      const projectId = await projectRef(r, arg(i, 'project'))
       return {
         projectId,
         environmentId: await projectEnvironmentRef(r, projectId, String(i.flags['environment'])),
@@ -542,7 +555,7 @@ export const registryCommands: readonly CommandSpec[] = [
     summary:
       'Plan a declared exception: one role may carry BYPASSRLS as an execution role of the project in one environment (nothing else is ever excused).',
     group: 'registry',
-    args: [{ name: 'project', description: 'A project id.', required: true }],
+    args: [{ name: 'project', description: PROJECT_ARG, required: true }],
     flags: [
       ENVIRONMENT_FLAG,
       {
@@ -570,7 +583,7 @@ export const registryCommands: readonly CommandSpec[] = [
     scopes: MANAGE,
     operation: 'planExecutionRoleException',
     params: async (i, r) => {
-      const projectId = arg(i, 'project')
+      const projectId = await projectRef(r, arg(i, 'project'))
       return {
         projectId,
         environmentId: await projectEnvironmentRef(r, projectId, String(i.flags['environment'])),
@@ -588,7 +601,7 @@ export const registryCommands: readonly CommandSpec[] = [
       'Plan the revocation of a declared exception; every plan that relied on it becomes stale.',
     group: 'registry',
     args: [
-      { name: 'project', description: 'A project id.', required: true },
+      { name: 'project', description: PROJECT_ARG, required: true },
       { name: 'exception', description: 'The exception (rxe_…).', required: true },
     ],
     flags: [
@@ -603,7 +616,10 @@ export const registryCommands: readonly CommandSpec[] = [
     action: 'registry.execution_role_exception.revoke.plan',
     scopes: MANAGE,
     operation: 'planExecutionRoleExceptionRevocation',
-    params: (i) => ({ projectId: arg(i, 'project'), exceptionId: arg(i, 'exception') }),
+    params: async (i, r) => ({
+      projectId: await projectRef(r, arg(i, 'project')),
+      exceptionId: arg(i, 'exception'),
+    }),
     body: (i) => ({ reason: String(i.flags['reason']) }),
   }),
 
@@ -930,7 +946,7 @@ export const registryCommands: readonly CommandSpec[] = [
     group: 'registry',
     args: [{ name: 'cluster', description: 'A cluster id.', required: true }],
     action: 'endpoint.list',
-    scopes: NODES,
+    scopes: MANAGE,
     output: 'EndpointList',
     title: 'endpoints',
     operation: 'listClusterEndpoints',
@@ -965,7 +981,7 @@ export const registryCommands: readonly CommandSpec[] = [
     group: 'registry',
     args: [{ name: 'cluster', description: 'A cluster id.', required: true }],
     action: 'database.list',
-    scopes: NODES,
+    scopes: MANAGE,
     output: 'DatabaseList',
     title: 'databases',
     operation: 'listClusterDatabases',
@@ -999,7 +1015,7 @@ export const registryCommands: readonly CommandSpec[] = [
     group: 'registry',
     args: [{ name: 'cluster', description: 'A cluster id.', required: true }],
     action: 'credential.list',
-    scopes: NODES,
+    scopes: MANAGE,
     output: 'CredentialList',
     title: 'credentials',
     operation: 'listClusterCredentials',
@@ -1315,7 +1331,7 @@ export const registryCommands: readonly CommandSpec[] = [
     locality: 'remote',
     effect: 'read',
     action: 'credential.list',
-    scopes: NODES,
+    scopes: MANAGE,
     output: 'CredentialView',
     async run(ctx, input) {
       const cluster = arg(input, 'cluster')
@@ -1419,7 +1435,7 @@ export const registryCommands: readonly CommandSpec[] = [
       { name: 'role', description: 'The access role (e.g. observer, migrator).', required: true },
     ],
     action: 'credential.rotate.plan',
-    scopes: ['nodes.plan'],
+    scopes: MANAGE,
     operation: 'planCredentialRotation',
     params: (i) => ({ clusterId: arg(i, 'cluster'), role: arg(i, 'role') as never }),
     file: false,

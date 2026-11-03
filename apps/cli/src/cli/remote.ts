@@ -6,7 +6,7 @@ import { type ApiError, type Authenticator, ExponetDB, type Result } from '@expo
 import { CliError } from '../errors.ts'
 import { findProjectFile, readLink } from '../local/project.ts'
 import { discover, liveCredentials, parseServer, type ServerInfo } from '../oauth.ts'
-import { CLI_VERSION } from '../version.ts'
+import { CLI_VERSION, olderThan } from '../version.ts'
 import type { Profile } from './profiles.ts'
 import type { Remote, RunContext } from './types.ts'
 import { UsageError } from './usage.ts'
@@ -22,9 +22,17 @@ export type { Remote }
 
 const ROUTES = new Map(ROUTE_LIST.map((r) => [r.operationId, r]))
 
-/** Whether a success body matches the route's response schema. */
+/**
+ * Whether a success body matches the route's response schema. A field this CLI does not know is
+ * ignored (versioning.md §2: a client ignores unknown fields; a newer server adds them within a
+ * major); a missing field, a wrong type or a value outside a closed enum is not.
+ */
 export function matchesContract(operationId: string, body: unknown): boolean {
-  return ROUTES.get(operationId)?.response.schema.safeParse(body).success === true
+  const parsed = ROUTES.get(operationId)?.response.schema.safeParse(body)
+  return (
+    parsed !== undefined &&
+    (parsed.success || parsed.error.issues.every((i) => i.code === 'unrecognized_keys'))
+  )
 }
 
 function fail(code: string, message: string): { ok: false; error: ApiError } {
@@ -172,14 +180,21 @@ export async function resolveServer(
   )
 }
 
+const VERSION_SHAPE = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]{1,32})?$/
+const shownVersion = (v: unknown): string =>
+  typeof v === 'string' && v.length <= 64 && VERSION_SHAPE.test(v) ? v : 'unknown'
+
 export async function connect(ctx: RunContext): Promise<Remote> {
   const { server, profile } = await resolveServer(ctx)
   const auth = profile?.auth ?? { method: 'oauth' as const }
+  // The installation is read before it is judged: a server of another REST major or a CLI below the
+  // server's minimum must be named as that, not fail the strict parse of an answer it cannot read.
+  let connecting = true
   const sdk = new ExponetDB({
     baseUrl: server,
     fetch: ctx.io.fetch,
     timeoutMs: ctx.global.timeoutMs ?? 30_000,
-    validate: (id, body) => matchesContract(id, body),
+    validate: (id, body) => (connecting && id === 'getInstallation') || matchesContract(id, body),
     userAgent: `exponetdb-cli/${CLI_VERSION}`,
     auth:
       auth.method === 'oauth'
@@ -197,11 +212,36 @@ export async function connect(ctx: RunContext): Promise<Remote> {
   // The installation answering at this origin is the one the profile recorded.
   const installation = await sdk.installation.get()
   if (!installation.ok) throw new RemoteFailure(installation.error)
-  if (installation.value.contracts.restApi !== 'v1') {
+  connecting = false
+  const seen = installation.value as unknown as {
+    readonly version?: unknown
+    readonly minCliVersion?: unknown
+    readonly contracts?: { readonly restApi?: unknown }
+  }
+  // Text of the server that reaches an error message is only ever a version or an API name of the
+  // expected shape, otherwise `unknown`: it is judged before the contract check below.
+  const serverVersion = shownVersion(seen.version)
+  if (seen.contracts?.restApi !== 'v1') {
+    const api = String(seen.contracts?.restApi)
     throw new CliError(
       'incompatible_server',
-      `The server at ${server} speaks another REST API version.`,
+      `The server at ${server} (${serverVersion}) speaks the REST API ${/^[a-z0-9.-]{1,16}$/.test(api) ? api : 'unknown'}; this CLI (${CLI_VERSION}) speaks v1. Use a CLI release that matches the server.`,
     )
+  }
+  const minimum = shownVersion(seen.minCliVersion)
+  if (minimum !== 'unknown' && olderThan(CLI_VERSION, minimum)) {
+    throw new CliError(
+      'cli_outdated',
+      `The server at ${server} (${serverVersion}) needs CLI ${minimum} or newer; this CLI is ${CLI_VERSION}. Update the CLI.`,
+    )
+  }
+  if (!matchesContract('getInstallation', installation.value)) {
+    throw new RemoteFailure({
+      code: 'RESPONSE_INVALID',
+      status: null,
+      requestId: null,
+      retryable: false,
+    })
   }
   const installationId = installation.value.installationId
   if (

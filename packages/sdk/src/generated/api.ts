@@ -1368,6 +1368,7 @@ export type Installation = {
   }
   readonly features: readonly string[]
   readonly installationId?: string
+  readonly minCliVersion?: string
   readonly oauthClientRegistration?: "open" | "review"
   readonly version: string
 }

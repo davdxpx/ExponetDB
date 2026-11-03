@@ -1,5 +1,14 @@
-import { isDeviceFlowScope, isScopeGrantableTo, scopeDefinition } from '@exponetdb/contracts'
+import {
+  actionDefinition,
+  isActionId,
+  isDeviceFlowScope,
+  isScopeGrantableTo,
+  scopeDefinition,
+} from '@exponetdb/contracts'
 import { describe, expect, it } from 'vitest'
+import { presetFrom } from '../src/commands/auth.ts'
+import { COMMANDS } from '../src/commands/index.ts'
+import { run } from '../src/main.ts'
 import {
   deviceRefused,
   isCliScope,
@@ -11,6 +20,7 @@ import {
   scopeReport,
   smallestPresetCovering,
 } from '../src/presets.ts'
+import { testIo } from './support.ts'
 
 /** The presets against the contract's scope catalog (15-cli/README.md §3). */
 describe('scope presets', () => {
@@ -124,5 +134,65 @@ describe('scope helpers', () => {
     ])
     // A scope the CLI can never hold is not won by signing in again.
     expect(scopeHint(['targets.read'], ['plans.approve'], '')).toEqual([])
+  })
+})
+
+/**
+ * TC-074 (E11): five `cluster` commands declared `nodes.read`/`nodes.plan` while the server needs
+ * `registry.manage`, so a preset that held the declared scope still ended in INSUFFICIENT_SCOPE.
+ */
+describe('the declared scopes of the commands (TC-074)', () => {
+  const remote = COMMANDS.filter(
+    (c) => c.locality === 'remote' && c.action !== undefined && c.scopes !== undefined,
+  )
+
+  it('hold the fixed scope the server needs for the action', () => {
+    const wrong = remote.flatMap((c) => {
+      const action = c.action as string
+      if (!isActionId(action)) return []
+      const rule = actionDefinition(action).scope
+      if (rule.kind !== 'fixed') return []
+      return (c.scopes as readonly string[]).includes(rule.scope)
+        ? []
+        : [
+            `${c.path.join(' ')}: declares ${(c.scopes as readonly string[]).join(' ')}, needs ${rule.scope}`,
+          ]
+    })
+    expect(wrong).toEqual([])
+  })
+
+  it('are held by at least one preset, unless the scope needs explicit consent', () => {
+    const held = new Set(PRESET_NAMES.flatMap((n) => SCOPE_PRESETS[n].scopes as readonly string[]))
+    const missing = new Set(
+      remote
+        .flatMap((c) => c.scopes as readonly string[])
+        .filter((s) => isCliScope(s) && isDeviceFlowScope(s) && !held.has(s)),
+    )
+    expect([...missing]).toEqual([])
+  })
+})
+
+describe('presets in the CLI (TC-074)', () => {
+  it('combines several presets into one union', () => {
+    const both = presetFrom(['read', 'admin'])
+    expect(both).toEqual(expect.arrayContaining(['nodes.read', 'registry.manage']))
+    expect(new Set(both).size).toBe(both.length)
+    expect(() => presetFrom(['read', 'nope'])).toThrow(/not a preset/)
+  })
+
+  it('prints every scope of every preset at 120 columns, cut nowhere', async () => {
+    const out: string[] = []
+    const code = await run(
+      ['auth', 'presets'],
+      testIo({ configDir: '/nonexistent', columns: 120, stdout: out }),
+    )
+    expect(code).toBe(0)
+    const text = out.join('')
+    expect(text).not.toContain('…')
+    expect(text).toContain('nodes.plan')
+    for (const name of PRESET_NAMES) {
+      for (const scope of SCOPE_PRESETS[name].scopes) expect(text).toContain(scope)
+    }
+    for (const line of text.split('\n')) expect(line.length).toBeLessThanOrEqual(120)
   })
 })

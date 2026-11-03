@@ -940,10 +940,46 @@ finding is wrong. Owner decisions are in [`open-decisions.md`](../00-product/ope
 | VC-130, VC-131, VC-132 test infrastructure | IMPLEMENTED (the numeric owner check and a root run in CI, guards for TZ and the evals, the key name); the root run of `verify-units.sh` was not run here (no sudo) | `tooling/test/test-infrastructure.test.ts`, `apps/server/test/visual-hint.test.ts` | |
 | VC-039, VC-152, VC-129, VC-019 | NOT BUILT, recorded: findings for an expiring certificate need a new subject kind in the Control Store (the metric above makes the node case alertable); the target TLS classes and `tls_expiring`; the shipped apply-time hba tests (a systemd host); the flaky host test cannot be reproduced | | [open-decisions.md](../00-product/open-decisions.md) |
 
-### VC-1a. Groups not started yet
+### VC-1j. Group I: the open findings of the first campaign (branch `fix/verification-campaign-group-i`, stacked on group H)
 
-Group I (the 75 findings of the first campaign still open) and the closing documents of section 5 of the fix prompt get their own branches
-and pull requests.
+The 28 NOT FIXED and 11 PARTIAL findings of `R/verdicts.md` (the 7 CHANGED BY DECISION stay as
+their owner decisions OD-57 to OD-67 left them). Every finding is accounted for: built here, built by
+an earlier group, decided, or recorded as not built with the reason.
+
+| Finding | Status | Regression artifact | Document |
+|---|---|---|---|
+| TC-040 an older CLI answers `RESPONSE_INVALID` | IMPLEMENTED (`incompatible_server` names both versions, the additive `minCliVersion` gives `cli_outdated`, unknown response fields are ignored, a contract mismatch against a newer server says to update); NOT BUILT: strict objects and closed enums stay in the contract | `apps/cli/test/versioning.test.ts` | [install.md](../15-cli/install.md), [versioning.md](../01-architecture/versioning.md) |
+| TC-041 `migration lint` has no path or filter | IMPLEMENTED (`[bundle…]` and `--since`; the others are listed as skipped, the graph spans all); NOT BUILT: `--exclude-applied` (it needs a server read) | `apps/cli/test/local.test.ts` | [authoring-and-ci.md](../04-migrations/authoring-and-ci.md) |
+| TC-052 the lint table does not show what blocks; project commands take ids only | IMPLEMENTED (`BLOCKS` column; every project command takes `product/project`) | `apps/cli/test/local.test.ts`, `registry-refs.test.ts` | |
+| TC-056 node plan errors drop the capability and the reason | IMPLEMENTED (located validation errors, typed `REGISTRY_CONFLICT` reasons, the CLI prints `capability`, the remediation names `node inspect`); the host tests that expected the generic `CONFLICT` are updated and were **not run** (they need a systemd host) | `apps/server/test/node-operations.int.test.ts`, `apps/cli/test/foundation.test.ts` | [control-plane.md](../07-node-agent/control-plane.md) §9.3 |
+| TC-057 plan commands document `--wait` as the default | IMPLEMENTED (every command that only plans, pinned by a test over the whole registry) | `apps/cli/test/foundation.test.ts` | |
+| TC-063 gate-row gaps | PARTLY IMPLEMENTED (seven stale test names corrected and a guard that every named test exists); the G10.3 wording (OD-66), the SDK namespaces and the scheduler row stay with the owner | `tooling/test/gate-docs.test.ts` | [test-strategy.md](./test-strategy.md) §9.1 |
+| TC-064 CLI read polish batch 1 | PARTLY IMPLEMENTED (item 2 `--limit` bounds, item 6 plurals); the other twelve items are not built | `apps/cli/test/cli-polish.test.ts` | |
+| TC-065 scratch-reset-sql offered for staging; presets | IMPLEMENTED (scratch environments only; `auth presets` wraps) | `apps/cli/test/registry-refs.test.ts` | [legacy-import.md](../04-migrations/legacy-import.md) |
+| TC-066 Web polish batch | PARTLY IMPLEMENTED (W-08 plural forms, built in group H); W-04, W-06, W-07, W-09 to W-11, W-13 to W-15 not built | `apps/web/test/i18n/plural.test.ts` | |
+| TC-073 `-- covers:` counts from 0 | IMPLEMENTED (message names the index, `covers_out_of_range`, documented) | `packages/migrations/test/lint.test.ts` | [verification.md](../04-migrations/verification.md) |
+| TC-074 presets and declared scopes | IMPLEMENTED (five declared scopes, a contract test over every remote command, `--preset` takes several, no cut scope column); no new preset | `apps/cli/test/presets.test.ts` | |
+| TC-075 reboot state, hardening, grammar | PARTLY IMPLEMENTED (the sentence); the reboot text, unit hardening and record retention not built | `agent/node/internal/helper/backup_test.go` | |
+| TC-047 `owned` and the expire route | DECIDED: RB-06 says what is built (adopted only); the hand-over is W9-05 with OD-4 | | [backup-runbooks.md](../12-operations/backup-runbooks.md) |
+| TC-071 hba refusals, markers, stale proof, clusters | PARTLY DECIDED (an empty list keeps the marker pair); `hba_lockout`, the proof age and the cluster refresh not built | | [capabilities.md](../07-node-agent/capabilities.md) |
+| TC-042 an expired node certificate is silent | PARTLY IMPLEMENTED (group H: `status` prints the remaining life, `exdb_node_certificate_not_after_timestamp_seconds`, a per-request refusal and a warn log with the reason); findings need a new subject kind | see VC-1i | |
+| TC-005, TC-011, TC-025, TC-043, TC-044, TC-045, TC-046 | COVERED by earlier groups (B: recovery by naming; C: WAL gaps, restore runbook globals, restore space, a refused start; G: ledger comparison) | see VC-1b, VC-1c, VC-1f | |
+| TC-016 (E2), TC-021, TC-027, TC-028, TC-038, TC-048 (E6), TC-054, TC-058 (E5), TC-059, TC-060, TC-061 (MIG-11), TC-062, TC-067, TC-069, TC-070, TC-072 | NOT BUILT, recorded in [open-decisions.md](../00-product/open-decisions.md) with the reason for each | | |
+| TC-055 | not a defect (a campaign observation) | | |
+
+### VC-1k. State of the fix campaign at the end of this pass
+
+What is not done and why is in the tables above and in the decisions. Not done and needs the owner:
+branch protection of `main` (VC-018); the findings for an expiring certificate (a new subject kind);
+the pruning tasks of data-retention.md; the instrumentation of the eight §3 metrics; the host-only
+tests (`config.host`, `identity.host`, the root run of `verify-units.sh`, VC-129, VC-019) which could
+not run on the machine of the session; Wave 11 readiness is therefore still "not yet" until the
+owner has the deployment of the merged groups and the host scenarios run.
+
+### VC-1a. Where the groups stand
+
+Groups A to I are built on their branches (VC-1 to VC-1j). The merged state, the pull requests and the
+deployment are the owner's: nothing here was merged or deployed by the session that wrote it.
 
 ### VC-2. Review history (append-only)
 
@@ -959,3 +995,4 @@ and pull requests.
 | 2026-11-02 | `fix/verification-campaign-group-e` | group E: VC-013, VC-014, VC-015, VC-068, VC-095, VC-094, VC-086, VC-093, VC-101, VC-046, VC-146; VC-078 partly; VC-123 and the MCP edge open |
 | 2026-11-02 | `fix/verification-campaign-group-f` | group F: VC-016, VC-017, VC-028 (static), VC-030, VC-031, VC-032, VC-033; VC-029, VC-070, VC-097, VC-020, VC-024 deferred or decided |
 | 2026-11-02 | `fix/verification-campaign-group-h` | group H: VC-066, VC-053, VC-036, VC-042, VC-056, VC-104, VC-037 (route label and operational gauges), VC-040, VC-041 (writes), VC-038 (findings task), VC-150 (per-request expiry), VC-081, VC-018 (CI part), VC-130, VC-131, VC-132; VC-039, VC-152, VC-129, VC-019 and the pruning tasks recorded as not built |
+| 2026-11-03 | `fix/verification-campaign-group-i` | group I: TC-040, TC-041, TC-052, TC-056, TC-057, TC-063, TC-064 (items 2 and 6), TC-065, TC-066 (W-08), TC-073, TC-074, TC-075 (grammar), TC-047 and TC-071 (decided); the rest recorded; the review of group H added a log for every internal cause, a read before each finding write, an absolute certificate time and one worker pool per test file |

@@ -276,7 +276,14 @@ export const LINT_RULES = {
     'warn',
     'prod',
     'A statement whose effect the engine cannot derive and that no verify.sql check covers: verification can only end partial, which is no production evidence.',
-    "Add a verify.sql check with -- covers: <statement index> that asserts the statement's effect.",
+    "Add a verify.sql check with -- covers: <statement index, counted from 0> that asserts the statement's effect.",
+  ),
+  covers_out_of_range: rule(
+    'covers_out_of_range',
+    'warn',
+    'never',
+    'A -- covers: entry that names no statement of up.sql: it covers nothing, usually an off-by-one (statement indexes are counted from 0).',
+    'Use the index of a top-level statement of up.sql, counted from 0, or an object name; remove the entry otherwise.',
   ),
   // ----- expand and contract -----
   drop_without_expand_contract: rule(
