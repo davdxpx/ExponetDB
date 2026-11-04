@@ -59,6 +59,16 @@ export interface RegistryAcceptContext {
    * subject the plan recorded.
    */
   readonly liveSubject?: (q: Queryable, plan: PlanRecord) => Promise<SubjectScope | undefined>
+  /**
+   * Whether the plan's cluster has a verified backup newer than `newerThan` (a policy rule's
+   * backup requirement, `migration.destructive-backup`); undefined: never met. The composition
+   * reads the backup catalog: the registry does not depend on the backup engine.
+   */
+  readonly backupMet?: (
+    q: Queryable,
+    clusterId: string | null,
+    newerThan: string,
+  ) => Promise<boolean>
 }
 
 function subjectScope(plan: PlanRecord): SubjectScope {
@@ -145,6 +155,14 @@ export function registryAcceptDependencies(
           requirement.rules.every((r) => grant.rules.includes(r)) &&
           grantUsable(grant, actor.identityId, targetId, context.policy.clock.nowMs())
         )
+      }
+      if (requirement.kind === 'backup') {
+        const subject = plan.body['subject']
+        const clusterId =
+          isJsonObject(subject) && typeof subject['clusterId'] === 'string'
+            ? subject['clusterId']
+            : null
+        return (await context.backupMet?.(tx, clusterId, requirement.newerThan)) ?? false
       }
       if (requirement.kind !== 'reauth' || actor.reauthAt === null) {
         return false
