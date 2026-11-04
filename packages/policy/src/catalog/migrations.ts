@@ -66,6 +66,11 @@ export interface MigrationFacts {
   readonly procedural?: boolean
   /** Why, as fixed codes (`do_block`, `call`, `function_call`, `routine_created`, …). */
   readonly proceduralReasons?: readonly string[]
+  /**
+   * The target's mode (ADR-0039): `observed` is never written to (W10-4). Absent on plans made
+   * before W10-4, which were made for managed targets only.
+   */
+  readonly targetMode?: 'managed' | 'observed'
 }
 
 const EVIDENCE = new Set([
@@ -77,6 +82,7 @@ const EVIDENCE = new Set([
   'not_required',
 ])
 const LINEAGE = new Set(['match', 'mismatch', 'unknown', 'not_required'])
+const TARGET_MODES = new Set(['managed', 'observed'])
 
 export function migrationFacts(content: JsonValue | undefined): MigrationFacts | undefined {
   const facts = isJsonObject(content) ? content['facts'] : undefined
@@ -95,11 +101,16 @@ export function migrationFacts(content: JsonValue | undefined): MigrationFacts |
     typeof f['lineage'] !== 'string' ||
     !LINEAGE.has(f['lineage']) ||
     typeof f['dependenciesVerified'] !== 'boolean' ||
-    typeof f['legacyProject'] !== 'boolean'
+    typeof f['legacyProject'] !== 'boolean' ||
+    (f['targetMode'] !== undefined &&
+      (typeof f['targetMode'] !== 'string' || !TARGET_MODES.has(f['targetMode'])))
   ) {
     return undefined
   }
   return {
+    ...(f['targetMode'] === undefined
+      ? {}
+      : { targetMode: f['targetMode'] as 'managed' | 'observed' }),
     compatibility: f['compatibility'],
     lockSeverity: f['lockSeverity'],
     nontransactional: f['nontransactional'],
@@ -798,7 +809,43 @@ export const migrationProceduralNontransactional: Rule = {
   },
 }
 
+/**
+ * W10-4 (ADR-0039 §3, amended 2026-11-04): a `migration.apply` plan for an observed target is
+ * built for real, so production's plan, evidence and binding can be shown, and denied here. No
+ * operation and no approval can exist for it. It declares no parameter (a setting can change
+ * nothing) and no break-glass grant overrides it; the kind refuses such a plan a second time.
+ */
+export const migrationObservedTarget: Rule = {
+  id: 'migration.observed-target',
+  version: 1,
+  description:
+    'A migration plan for an observed target (ADR-0039) is shown and denied: ExponetDB never writes to an observed target; no grant and no setting overrides it.',
+  appliesTo: MIGRATION_KINDS,
+  severity: 'deny',
+  overridableByBreakGlass: false,
+  facts: [],
+  defaults: {},
+  requirements: () => [],
+  evaluate({ request }) {
+    const f = migrationFacts(request.content)
+    if (f === undefined) return UNKNOWN
+    // The plan's own target binding counts too: a plan path that forgot the fact stays denied.
+    const target = isJsonObject(request.content) ? request.content['target'] : undefined
+    const mode = isJsonObject(target) ? target['mode'] : undefined
+    return f.targetMode === 'observed' || mode === 'observed'
+      ? {
+          result: 'fail',
+          message: 'The target is observed: ExponetDB never applies a migration to it.',
+          facts: { targetMode: 'observed' },
+          remediation:
+            'Apply on the managed target that replaces it (Wave 11); until then the plan only shows what is pending and the evidence.',
+        }
+      : { result: 'not_applicable', message: 'The target is managed.' }
+  },
+}
+
 export const MIGRATION_RULES: readonly Rule[] = [
+  migrationObservedTarget,
   migrationLintErrors,
   migrationPgVersion,
   migrationExtensions,

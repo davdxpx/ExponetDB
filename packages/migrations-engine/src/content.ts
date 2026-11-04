@@ -2,6 +2,7 @@ import { MigrationPlanContentSchema } from '@exponetdb/contracts'
 import type { PlanRecord } from '@exponetdb/operations'
 import type { MigrationFacts } from '@exponetdb/policy'
 import type { ConsumerCode } from '@exponetdb/postgres'
+import type { LegacyLedgerDigest } from './legacy-ledger.ts'
 
 /**
  * The stored content of a `migration.apply` plan as the engine builds and
@@ -73,6 +74,8 @@ export interface PlanContent {
     readonly clusterSystemIdentifier: string
     readonly databaseOid: string
     readonly serverVersionNum: number
+    /** Present on a plan for an observed target only (W10-4): such a plan is always denied. */
+    readonly mode?: 'observed'
   }
   readonly expectedState: {
     readonly schemaFingerprint: string
@@ -83,6 +86,13 @@ export interface PlanContent {
     readonly executionRoleExceptions?: Readonly<
       Record<string, { readonly exceptionId: string; readonly revision: number }>
     >
+    /** Observed target (W10-4): the evidence target's baseline the pending list starts from. */
+    readonly anchor?: {
+      readonly evidenceTargetId: string | null
+      readonly baselineId: string | null
+    }
+    /** Observed target (W10-4): its Supabase ledger, bound by digest, never matched. */
+    readonly legacyLedger?: LegacyLedgerDigest
   }
   readonly evidence: {
     readonly targetId: string

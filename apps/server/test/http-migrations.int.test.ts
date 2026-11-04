@@ -349,6 +349,8 @@ const ids = {
   cluster: '',
   stagingTarget: '',
   productionTarget: '',
+  /** W10-4: the observed production target of the environment `observed`. */
+  observedTarget: '',
 }
 
 async function registerDatabase(label: string): Promise<string> {
@@ -715,6 +717,89 @@ describe('migrations over REST', () => {
     } finally {
       await runAsSuperuser(pg17, stagingName, ['DROP TABLE public.contacts'])
     }
+  })
+})
+
+// W10-4 (ADR-0039 §3 as amended on 2026-11-04): a production plan on an observed target is built
+// with its evidence and binding, stored denied, and refused at apply; nothing waits for approval.
+describe('a production plan on an observed target over REST (W10-4)', () => {
+  it('is denied by migration.observed-target with the evidence passing, and apply answers 403 PLAN_DENIED', async () => {
+    await planAndApply(`/api/v1/products/${ids.product}/environments`, {
+      slug: 'observed',
+      displayName: 'Observed production',
+      tier: 'prod',
+      evidenceFrom: 'staging',
+    })
+    const envs = await owner.browser.call('GET', `/api/v1/products/${ids.product}/environments`)
+    const environmentId = envs.body.items.find((e: { slug: string }) => e.slug === 'observed').id
+    const databaseId = await registerDatabase('e2e_mig_observed')
+    const registration = await owner.browser.call('POST', '/api/v1/targets', {
+      projectId: ids.project,
+      environmentId,
+      databaseId,
+      mode: 'observed',
+    })
+    expect(registration.status, registration.text).toBe(201)
+    await reauth()
+    const accepted = await owner.browser.call(
+      'POST',
+      `/api/v1/plans/${registration.body.id}/apply`,
+      {},
+    )
+    if (accepted.body.state === 'awaiting_approval') {
+      await reauth()
+      expect(
+        (
+          await owner.browser.call('POST', `/api/v1/approvals/${accepted.body.id}/approve`, {
+            planHash: registration.body.planHash,
+            acknowledgeSelfApproval: true,
+          })
+        ).status,
+      ).toBe(200)
+    }
+    await drive()
+    const target = await owner.browser.call(
+      'GET',
+      `/api/v1/targets/${encodeURIComponent(`${slug}/platform/observed`)}`,
+    )
+    expect([target.status, target.body.mode, target.body.state]).toEqual([
+      200,
+      'observed',
+      'registered',
+    ])
+    ids.observedTarget = target.body.id
+    const planned = await owner.browser.call(
+      'POST',
+      `/api/v1/targets/${target.body.id}/migrations/plans`,
+      { migrationIds: [first] },
+    )
+    expect([planned.status, planned.body.decision], planned.text).toEqual([201, 'deny'])
+    expect(planned.body.policyRules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'migration.observed-target',
+          result: 'fail',
+          overridableByBreakGlass: false,
+        }),
+      ]),
+    )
+    // The evidence passes (passing rules are not listed); the plan shows it and the binding.
+    expect(planned.body.policyRules.map((r: { id: string }) => r.id)).not.toContain(
+      'migration.staging-evidence',
+    )
+    expect(planned.body.change).toMatchObject({
+      content: {
+        target: { targetId: target.body.id, mode: 'observed' },
+        facts: { evidence: 'present', targetMode: 'observed' },
+        evidence: { targetId: ids.stagingTarget },
+      },
+      analysis: {
+        evidence: [{ migrationId: first, status: 'present' }],
+        observed: { pending: 'not_applied_by_exponetdb' },
+      },
+    })
+    const applied = await owner.browser.call('POST', `/api/v1/plans/${planned.body.id}/apply`, {})
+    expect([applied.status, applied.body.code]).toEqual([403, 'PLAN_DENIED'])
   })
 })
 
@@ -1414,7 +1499,7 @@ describe('the CLI as a process', () => {
         .filter((r) => r.type === 'item')
         .map((r) => r.data.id)
         .sort(),
-    ).toEqual([ids.stagingTarget, ids.productionTarget].sort())
+    ).toEqual([ids.stagingTarget, ids.productionTarget, ids.observedTarget].sort())
     const table = await cli(['target', 'show', `${slug}/platform/staging`])
     expect(table.code).toBe(0)
     expect(table.stdout).toContain(`${slug}/platform/staging`)

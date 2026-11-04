@@ -59,6 +59,7 @@ import {
   roleUnder,
 } from './execution-roles.ts'
 import { compareSource } from './hotfix.ts'
+import { type LegacyLedgerDigest, legacyLedgerDigest } from './legacy-ledger.ts'
 import {
   ingestBundles,
   readRevision,
@@ -66,14 +67,16 @@ import {
   type StoredRevision,
   storedStream,
 } from './store.ts'
-import { assertWritable, readTargetState, type TargetState } from './target.ts'
+import { assertWritable, type ObservedState, readObservedState, readTargetState } from './target.ts'
 import { satisfies, serverVersion } from './versions.ts'
 
 /**
  * Planning `migration.apply` ([planning-and-apply.md §3](../../../../exponetdb-docs/04-migrations/planning-and-apply.md#3-planning-algorithm)):
  *
  * 1. resolve the target from the registry (never from the request) and
- *    refuse a target that is not active;
+ *    refuse a target that is not active; an observed one (ADR-0039 §3, W10-4)
+ *    is planned as the observer from its evidence target's baseline and
+ *    always denied by `migration.observed-target`;
  * 2. ingest submitted bundles (re-validated and re-hashed here) or take
  *    the named ids from the bundle store;
  * 3. read the target in one read-only snapshot as the observer: identity
@@ -213,8 +216,20 @@ const EXTENSION_TRUST = sql`SELECT n.name, a.default_version,
   FROM pg_catalog.jsonb_array_elements_text($1::jsonb) AS n(name)
   LEFT JOIN pg_catalog.pg_available_extensions a ON a.name = n.name`
 
+/**
+ * An observed target's plan (W10-4): pending means "not applied by ExponetDB", anchored on the
+ * evidence target's baseline; production's legacy ledger is bound by digest, never matched.
+ */
+interface ObservedFacts {
+  readonly anchor: { readonly evidenceTargetId: string | null; readonly baselineId: string | null }
+  readonly legacyLedger: LegacyLedgerDigest
+}
+
 interface Live {
-  readonly state: TargetState
+  readonly state: ObservedState
+  /** The baseline the plan is ordered from: the target's own, or the evidence target's (observed). */
+  readonly baselineId: string | null
+  readonly observed: ObservedFacts | null
   readonly order: readonly StoredRevision[]
   readonly verifications: readonly VerificationRecord[]
   /** Per execution role: its facts for the migrator, its problem under the exceptions, the exception it relies on. */
@@ -308,15 +323,21 @@ function reachable(
 async function planOrder(
   q: Queryable,
   project: ProjectSettings,
-  state: TargetState,
+  targetId: string,
+  ledger: readonly LedgerRecord[],
+  baselineId: string | null,
   chosen: ReadonlyMap<string, StoredRevision>,
+  /** An observed target: the baseline is the evidence target's, applied by definition (W10-4). */
+  anchored = false,
 ): Promise<StoredRevision[]> {
   const stream = await storedStream(q, project.projectId)
-  const ledger = state.ledger
   const applied = new Set<string>()
   const reverted = new Set<string>()
   const baselines = new Set<string>()
-  if (state.meta.baselineId !== null) baselines.add(state.meta.baselineId)
+  if (baselineId !== null) baselines.add(baselineId)
+  // An observed target has no ledger row for the baseline it is anchored on: it stands for the
+  // history before ExponetDB there. A managed target's baseline is applied by its ledger row.
+  if (anchored && baselineId !== null) applied.add(baselineId)
   const nodes = new Map<string, GraphMigration>()
   for (const r of ledger) {
     if (r.origin === 'legacy_import') continue
@@ -345,7 +366,7 @@ async function planOrder(
       throw new MigrationError('MIGRATION_CHECKSUM_MISMATCH', {
         migrationId: id,
         knownChecksum: row.checksum,
-        where: { kind: 'target_ledger', targetId: state.marker.targetId },
+        where: { kind: 'target_ledger', targetId },
       })
     }
   }
@@ -390,31 +411,60 @@ async function readLive(
   project: ProjectSettings,
   resolved: ResolvedExecutionRoles,
   chosen: ReadonlyMap<string, StoredRevision>,
+  anchor: ObservedFacts['anchor'] | null,
 ): Promise<Live> {
   const placement = target.placement
-  const state = await readTargetState(
-    rtx,
-    {
-      installationId: ctx.installationId,
-      targetId: target.targetId,
-      generation: target.generation,
-      systemIdentifier: placement?.systemIdentifier ?? null,
-    },
-    project.managedScope,
-  )
-  if (state.meta.projectId !== target.projectId) {
-    throw new MigrationError('LEDGER_DIVERGENCE')
+  let state: ObservedState
+  let baselineId: string | null
+  let observed: ObservedFacts | null = null
+  if (anchor !== null) {
+    // ADR-0039: no marker and no exponetdb schema there; identity by cluster and database oid.
+    state = await readObservedState(
+      rtx,
+      {
+        systemIdentifier: placement?.systemIdentifier ?? null,
+        databaseOid: placement?.databaseOid ?? null,
+      },
+      project.managedScope,
+    )
+    baselineId = anchor.baselineId
+    observed = { anchor, legacyLedger: await legacyLedgerDigest(rtx) }
+  } else {
+    const managed = await readTargetState(
+      rtx,
+      {
+        installationId: ctx.installationId,
+        targetId: target.targetId,
+        generation: target.generation,
+        systemIdentifier: placement?.systemIdentifier ?? null,
+      },
+      project.managedScope,
+    )
+    if (managed.meta.projectId !== target.projectId) {
+      throw new MigrationError('LEDGER_DIVERGENCE')
+    }
+    state = managed
+    baselineId = managed.meta.baselineId
   }
   // Before anything is planned: a standby, or a copy of the database that took the name (VC-071, VC-073).
   assertWritable(state, placement?.databaseOid ?? null)
   // Before the graph: a row the mirror never had is reported as such, with its id.
-  await assertLedgerAgrees(tx, target, state.ledger)
-  const order = await planOrder(tx, project, state, chosen)
-  const verifications = await readVerifications(rtx)
+  if (observed === null) await assertLedgerAgrees(tx, target, state.ledger)
+  const order = await planOrder(
+    tx,
+    project,
+    target.targetId,
+    state.ledger,
+    baselineId,
+    chosen,
+    observed !== null,
+  )
+  const verifications = observed === null ? await readVerifications(rtx) : []
   const roles = [
     ...new Set(order.map((r) => resolved.roles[executionAlias(r)]).filter((r) => r !== undefined)),
   ]
-  const facts = await executionRoleFacts(rtx, roles, 'exponetdb_migrator')
+  // An observed target has no migrator: its execution roles are not checked for one.
+  const facts = observed === null ? await executionRoleFacts(rtx, roles, 'exponetdb_migrator') : []
   const roleChecks = new Map<
     string,
     { facts: ExecutionRoleFacts; problem: string | null; binding: ExceptionBinding | null }
@@ -481,8 +531,19 @@ async function readLive(
       }
     }
   }
-  const incomplete = (await rtx.query(INCOMPLETE_NONTX)).map((r) => r.text('migration_id'))
-  return { state, order, verifications, roleChecks, verify, untrustedExtensions, incomplete }
+  const incomplete =
+    observed === null ? (await rtx.query(INCOMPLETE_NONTX)).map((r) => r.text('migration_id')) : []
+  return {
+    state,
+    baselineId,
+    observed,
+    order,
+    verifications,
+    roleChecks,
+    verify,
+    untrustedExtensions,
+    incomplete,
+  }
 }
 
 function lintConfig(
@@ -579,6 +640,35 @@ async function withMirroredBaselineRuns(
   ]
 }
 
+/** Whether the target's registration took its schema snapshot (an observed target's drift reference). */
+async function hasRegistrationSnapshot(q: Queryable, target: TargetRecord): Promise<boolean> {
+  const { rows } = await q.query(
+    'migrations.plan.registration_snapshot',
+    `SELECT 1 FROM observation.schema_snapshots
+      WHERE target_id = $1 AND generation = $2 AND purpose = 'registration' LIMIT 1`,
+    [target.targetId, target.generation],
+  )
+  return rows.length > 0
+}
+
+/**
+ * An observed target's anchor (W10-4): the baseline of its evidence target as the Control Store
+ * recorded it, at the evidence target's generation; none without an evidence target.
+ */
+async function evidenceAnchor(tx: Tx, target: TargetRecord): Promise<ObservedFacts['anchor']> {
+  const evidence = await evidenceTargetOf(tx, target)
+  if (evidence === undefined) return { evidenceTargetId: null, baselineId: null }
+  const { rows } = await tx.query(
+    'migrations.plan.evidence_baseline',
+    'SELECT baseline_id FROM migrations.ledger_state WHERE target_id = $1 AND generation = $2',
+    [evidence.targetId, evidence.generation],
+  )
+  return {
+    evidenceTargetId: evidence.targetId,
+    baselineId: rows[0]?.textOrNull('baseline_id') ?? null,
+  }
+}
+
 export async function planMigrationApply(
   tx: Tx,
   ctx: MigrationPlanContext,
@@ -590,9 +680,14 @@ export async function planMigrationApply(
   if (target === undefined) {
     throw new MigrationError('TARGET_NOT_FOUND')
   }
-  // ADR-0039 §3: an observed target is never written to, and has no ExponetDB ledger.
-  if (isObserved(target)) throw new MigrationError('TARGET_OBSERVED_ONLY')
-  if (target.state !== 'active') {
+  // ADR-0039 §3 (amended 2026-11-04, W10-4): an observed target's apply plan is built and denied
+  // by migration.observed-target; it stays registered and needs its registration snapshot.
+  const observed = isObserved(target)
+  if (observed) {
+    if (target.state !== 'registered' || !(await hasRegistrationSnapshot(tx, target))) {
+      throw new MigrationError('TARGET_UNAVAILABLE')
+    }
+  } else if (target.state !== 'active') {
     throw new MigrationError('TARGET_SUSPENDED', {
       reason:
         target.state === 'suspended' && target.stateReason !== null
@@ -646,12 +741,13 @@ export async function planMigrationApply(
   }
 
   // ----- the target, live, as the observer -----
+  const anchor = observed ? await evidenceAnchor(tx, target) : null
   const opened = await ctx.connector.forTarget(target, 'observer', `plan/${target.targetId}`)
   let live: Live
   try {
     await prepareLint(opened.session.facts.major)
     live = await opened.session.readOnly(
-      (rtx) => readLive(tx, rtx, ctx, target, project, resolved, chosen),
+      (rtx) => readLive(tx, rtx, ctx, target, project, resolved, chosen, anchor),
       {
         statementTimeoutMs: 60_000,
       },
@@ -698,7 +794,7 @@ export async function planMigrationApply(
         (id) => stream.get(id)?.dependsOn,
       ),
     ].map(([id, dependsOn]) => ({ id, dependsOn })),
-    baselines: state.meta.baselineId === null ? [] : [state.meta.baselineId],
+    baselines: live.baselineId === null ? [] : [live.baselineId],
     applied,
     catalog: {
       source: 'live',
@@ -725,9 +821,11 @@ export async function planMigrationApply(
     const problem =
       role === undefined
         ? 'unmapped_alias'
-        : live.roleChecks.has(role)
-          ? (live.roleChecks.get(role)?.problem ?? null)
-          : 'missing'
+        : live.observed !== null
+          ? null
+          : live.roleChecks.has(role)
+            ? (live.roleChecks.get(role)?.problem ?? null)
+            : 'missing'
     if (problem !== null && blocksExecution(problem as never)) {
       requirementsUnmet.add('execution_role')
       extra.push({
@@ -859,11 +957,12 @@ export async function planMigrationApply(
       state.ledger,
       await withMirroredBaselineRuns(tx, target, state.ledger, live.verifications),
     ),
-    legacyProject: state.meta.baselineId !== null,
+    legacyProject: live.baselineId !== null,
     executionRoleExceptions: exceptionsUsed.length,
     executionRoleParity: parity,
     procedural: procedural.length > 0,
     proceduralReasons: procedural,
+    ...(live.observed === null ? {} : { targetMode: 'observed' as const }),
   }
   // A break-glass grant names the rules it may override; the engine decides which it does.
   let breakGlass: { readonly grantId: string; readonly rules: readonly string[] } | undefined
@@ -895,6 +994,7 @@ export async function planMigrationApply(
       clusterSystemIdentifier: state.systemIdentifier,
       databaseOid: state.databaseOid,
       serverVersionNum: state.serverVersionNum,
+      ...(live.observed === null ? {} : { mode: 'observed' as const }),
     },
     expectedState: {
       schemaFingerprint: state.fingerprint,
@@ -902,6 +1002,7 @@ export async function planMigrationApply(
       extensions: { ...state.extensions },
       executionRoles,
       ...(exceptionsUsed.length === 0 ? {} : { executionRoleExceptions }),
+      ...(live.observed === null ? {} : { ...live.observed }),
     },
     evidence: evidence.binding,
     facts,
@@ -932,6 +1033,15 @@ export async function planMigrationApply(
     }),
     executionRoleParity: parity,
     ...(sourceCheck === undefined ? {} : { sourceCheck }),
+    ...(live.observed === null
+      ? {}
+      : {
+          observed: {
+            pending: 'not_applied_by_exponetdb',
+            ...live.observed,
+            lineage: evidence.lineage,
+          },
+        }),
   }
   const subject = {
     productId: target.productId,

@@ -68,9 +68,33 @@ stays mandatory for every write path; nothing about writes changes.
 | Catalog reads: schema inspect, fingerprint, drift check (on demand and scheduled), table and statement statistics, sessions and locks | yes, as observer |
 | Data reads (`data.read`), raw statements | **no** (reader role absent; `TARGET_OBSERVED_ONLY`) |
 | Migration status | the legacy ledgers only, when the observer may read them; the ExponetDB ledger is absent (`ledger: none`) |
-| Any plan that writes (migrations, diagnostics actions, roles, node) | refused at plan time with `TARGET_OBSERVED_ONLY` (409, not retryable) |
+| `migration.apply` plan | **amended 2026-11-04 (W10-4)**: planned for real and stored `denied` by rule `migration.observed-target`; never accepted (below) |
+| Any other plan that writes (migration verify, resume, rollback, baseline, import, reconcile; diagnostics actions, roles, node) | refused at plan time with `TARGET_OBSERVED_ONLY` (409, not retryable) |
 
 `TARGET_OBSERVED_ONLY` is a new error code (additive contract change).
+
+**Amendment of 2026-11-04 (W10-4, Wave 10 order option (a)).** A
+`migration.apply` plan for an observed target is built, so production's
+pending list, its evidence from the evidence target and its binding can be
+shown before Wave 11, and is stored `denied` by the new rule
+`migration.observed-target` (deny; no break-glass grant and no setting
+overrides it). Accepting it is `PLAN_DENIED`: no operation and no approval
+can exist for it. The plan reads as the observer only and writes nothing:
+identity by §2 (system identifier and database oid, no marker), the
+fingerprint, extensions and sizes, an empty ExponetDB ledger (the `ls1` hash
+of no rows), and the Supabase ledger's names as a digest
+(`unreadable` when the observer may not read it). Pending means "not applied
+by ExponetDB", anchored on the evidence target's baseline; production's real
+objects show in the fingerprint lineage against staging's (a mismatch is
+expected); the legacy ledger is bound, never used for matching. The kind
+refuses such a plan a second time: its bindings report the changed binding
+`target: observed` (an acceptance invalidates and audits the plan, a worker
+fails a queued operation), and its execute refuses with `TARGET_OBSERVED_ONLY`. Everything else in this table stays as decided. No new error
+code and no Control Store bundle; the plan content gains optional fields
+(`target.mode`, `expectedState.anchor`, `expectedState.legacyLedger`,
+`facts.targetMode`, `analysis.observed`), and the policy version of every
+`migration.apply` plan changes once (active plans go stale at the deploy).
+Details: [`staging-production-policy.md` §2.1](../../04-migrations/staging-production-policy.md#21-production-observed-on-a-hosted-provider-w10-4).
 
 ### 4. Pooler endpoints carry a login suffix; a cluster may be reachable through a session pooler only
 

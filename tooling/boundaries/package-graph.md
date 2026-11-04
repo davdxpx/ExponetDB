@@ -119,6 +119,7 @@ graph TD
   packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_audit
   packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_contracts
   packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_control-store
+  packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_diagnostics
   packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_kernel
   packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_migrations
   packages_migrations-engine["@exponetdb/migrations-engine"] --> packages_operations
