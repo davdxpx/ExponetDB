@@ -26,7 +26,7 @@ import {
   WORKER_ACTOR,
 } from '@exponetdb/operations'
 import { controlStoreSigns, readMarker, sql, TargetError } from '@exponetdb/postgres'
-import type { Connector } from './connect.ts'
+import { type Connector, sessionEndpoints } from './connect.ts'
 import { conflict, RegistryError, registrationRefused } from './errors.ts'
 import { inspectDatabase } from './inspect.ts'
 import {
@@ -532,6 +532,7 @@ interface EndpointContent extends JsonObject {
   port: number
   tlsServerName: string
   label: string
+  loginSuffix: string | null
 }
 
 async function endpointContent(
@@ -555,6 +556,7 @@ async function endpointContent(
     port: input.port,
     tlsServerName,
     label: input.label,
+    loginSuffix: input.loginSuffix ?? null,
   }
 }
 
@@ -581,8 +583,17 @@ export async function planClusterRegister(
     seen.add(address)
     endpoints.push(await endpointContent(tx, context, e, `/endpoints/${i}`))
   }
-  if (!endpoints.some((e) => e.kind !== 'pooler')) {
-    throw invalid('/endpoints', 'direct_required', 'A cluster needs at least one direct endpoint.')
+  // ADR-0039 §4: a cluster is reached directly, or through session poolers only (a hosted
+  // provider), which then serve observer sessions only.
+  if (
+    !endpoints.some((e) => e.kind !== 'pooler') &&
+    !endpoints.every((e) => e.poolerMode === 'session')
+  ) {
+    throw invalid(
+      '/endpoints',
+      'direct_required',
+      'A cluster needs a direct endpoint, or session-mode pooler endpoints only.',
+    )
   }
   const clusterId = newId('cls', now(context))
   return store(tx, context, actor, {
@@ -613,6 +624,9 @@ export async function planClusterRegister(
         label: e.label,
         tlsServerName: e.tlsServerName,
       })),
+      ...(endpoints.every((e) => e.kind === 'pooler')
+        ? { poolerOnly: 'observer sessions only (ADR-0039)' }
+        : {}),
     },
   })
 }
@@ -1053,9 +1067,16 @@ export async function planEndpointRetire(
   if (endpoint.state !== 'active') {
     throw conflict('endpoint_retired')
   }
-  const direct = (await listEndpoints(tx, clusterId, 'active')).filter((e) => e.kind !== 'pooler')
-  if (endpoint.kind !== 'pooler' && direct.length === 1 && cluster.derivedTier !== null) {
-    // The last direct path of a cluster that hosts live targets: add another one first.
+  const active = await listEndpoints(tx, clusterId, 'active')
+  const direct = active.filter((e) => e.kind !== 'pooler')
+  // The paths sessions use: the direct ones, or a pooler-only cluster's session poolers.
+  const paths = sessionEndpoints(active, cluster, 'observer')
+  if (
+    paths.length === 1 &&
+    paths[0]?.endpointId === endpoint.endpointId &&
+    cluster.derivedTier !== null
+  ) {
+    // The last path of a cluster that hosts live targets: add another one first.
     throw conflict('no_active_endpoint')
   }
   const tier = cluster.derivedTier ?? undefined
@@ -1202,6 +1223,7 @@ async function inspectForRegistration(
   clusterId: string,
   database: string,
   targetId: string,
+  mode: 'managed' | 'observed' = 'managed',
 ): Promise<{ markerBefore: 'absent' | 'same_target'; oid: string }> {
   const opened = await context.connector.open({
     clusterId,
@@ -1231,13 +1253,18 @@ async function inspectForRegistration(
       if (marker.marker.installationId !== context.installationId) {
         throw registrationRefused('foreign_installation')
       }
-      if (marker.marker.targetId !== targetId) {
+      // An observed target is never stamped: a marker there is another target's.
+      if (marker.marker.targetId !== targetId || mode === 'observed') {
         throw registrationRefused('other_target')
       }
       if (marker.marker.generation !== 1) {
         throw registrationRefused('generation_mismatch')
       }
       return { markerBefore: 'same_target', oid }
+    }
+    if (mode === 'observed') {
+      // Nothing is written to an observed target, so an exponetdb schema there is never adopted.
+      return { markerBefore: 'absent', oid }
     }
     const schema = await opened.session.query(
       sql`SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_namespace
@@ -1270,12 +1297,24 @@ export async function planTargetRegister(
     throw new RegistryError('NOT_FOUND')
   }
   const path = `${project.productSlug}/${project.slug}/${env.slug}`
+  const mode = input.mode ?? 'managed'
   // A registration that stopped before activation is planned again for the
   // same target and placement; anything else live at this path is refused.
   const existing = await liveTargetOf(tx, project.projectId, env.environmentId)
   let resumed: TargetRecord | undefined
   if (existing !== undefined) {
-    if (existing.state !== 'registered' || existing.placement?.databaseId !== database.databaseId) {
+    // ADR-0039 §1: an observed target never becomes managed (Wave 11 registers a new one).
+    if (existing.mode === 'observed' && mode === 'managed') {
+      throw new RegistryError('TARGET_OBSERVED_ONLY')
+    }
+    if (
+      existing.state !== 'registered' ||
+      existing.mode !== mode ||
+      existing.placement?.databaseId !== database.databaseId ||
+      (mode === 'observed' && (await hasRegistrationSnapshot(tx, existing.targetId)))
+    ) {
+      // An observed target whose registration completed (its drift reference is taken) stays
+      // registered for its whole life; registering it again would replace that reference.
       throw conflict('path_taken')
     }
     resumed = existing
@@ -1294,15 +1333,27 @@ export async function planTargetRegister(
     throw conflict('cluster_not_confirmed')
   }
   const observer = await activeCredential(tx, cluster.clusterId, 'observer')
-  const migrator = await activeCredential(tx, cluster.clusterId, 'migrator')
-  if (observer === undefined || migrator === undefined) {
+  // An observed target needs the observer only (ADR-0039 §1): no migrator, no ledger owner.
+  const migrator =
+    mode === 'managed' ? await activeCredential(tx, cluster.clusterId, 'migrator') : undefined
+  if (observer === undefined || (mode === 'managed' && migrator === undefined)) {
     throw conflict('credential_missing')
+  }
+  if (mode === 'observed' && database.observedOid === null) {
+    // Its identity is the database oid (ADR-0039 §2): without one nothing proves which it is.
+    throw registrationRefused('database_mismatch')
   }
   const targetId = resumed?.targetId ?? newId('tgt', now(context))
   const placementId = resumed?.placement?.placementId ?? newId('plc', now(context))
   let inspected: Awaited<ReturnType<typeof inspectForRegistration>>
   try {
-    inspected = await inspectForRegistration(context, cluster.clusterId, database.name, targetId)
+    inspected = await inspectForRegistration(
+      context,
+      cluster.clusterId,
+      database.name,
+      targetId,
+      mode,
+    )
   } catch (error) {
     if (error instanceof TargetError && error.code === 'TARGET_IDENTITY_MISMATCH') {
       throw registrationRefused('database_mismatch')
@@ -1342,6 +1393,7 @@ export async function planTargetRegister(
       systemIdentifier: cluster.systemIdentifier,
       placementId,
       resumesTarget: resumed !== undefined,
+      mode,
     },
     expectedState: {
       targetState: resumed?.state ?? null,
@@ -1350,23 +1402,45 @@ export async function planTargetRegister(
       environmentTier: env.tier,
       clusterState: cluster.state,
       systemIdentifier: cluster.systemIdentifier,
-      credentials: { observer: observer.secretVersion, migrator: migrator.secretVersion },
+      credentials:
+        migrator === undefined
+          ? { observer: observer.secretVersion }
+          : { observer: observer.secretVersion, migrator: migrator.secretVersion },
       markerBefore: inspected.markerBefore,
     },
     analysis: {
       production: env.tier === 'prod',
       tier: env.tier,
+      mode,
       cluster: cluster.displayName,
       database: database.name,
       systemIdentifier: cluster.systemIdentifier,
       markerBefore: inspected.markerBefore,
-      writes: [
-        'schema exponetdb (owner exponetdb_ledger_owner)',
-        'exponetdb.target_identity: one row (installation, target, path, tier, generation 1, system_identifier)',
-        'exponetdb.ledger_meta: one row; schema_migrations, migration_verifications, migration_events: empty',
-      ],
+      ...(mode === 'observed'
+        ? {
+            writes: [],
+            noWrites:
+              'no writes to the database: no identity marker, no exponetdb schema, no ledger; the target stays registered, read as the observer only (ADR-0039)',
+          }
+        : {
+            writes: [
+              'schema exponetdb (owner exponetdb_ledger_owner)',
+              'exponetdb.target_identity: one row (installation, target, path, tier, generation 1, system_identifier)',
+              'exponetdb.ledger_meta: one row; schema_migrations, migration_verifications, migration_events: empty',
+            ],
+          }),
     },
   })
+}
+
+/** Whether a target's registration snapshot (its drift reference) was stored. */
+async function hasRegistrationSnapshot(q: Queryable, targetId: string): Promise<boolean> {
+  const { rows } = await q.query(
+    'registry.target.registration_snapshot',
+    `SELECT 1 FROM observation.schema_snapshots WHERE target_id = $1 AND purpose = 'registration' LIMIT 1`,
+    [targetId],
+  )
+  return rows.length > 0
 }
 
 const TRANSITIONS = {

@@ -61,26 +61,28 @@ const SHAPES: Record<string, { scopes: Scope[]; tiers: Tier[] }> = {
 // migration (untrusted `first`, so openWorldHint and a description note); toolVersion raised.
 // Re-pinned 2026-11-02 (OD-68 (b)): sql_query at toolVersion 2, its result names the warning
 // target_memory_unlimited; only the data reader's list holds it.
+// Re-pinned 2026-11-03 (ADR-0039): target_get at toolVersion 2, its result names the target's mode
+// (managed or observed) and its description the refusal TARGET_OBSERVED_ONLY; every list holds it.
 const PINNED: Record<string, { tools: number; digest: string }> = {
   'baseline, nonprod': {
     tools: 15,
-    digest: 'sha256:3a5b38649e740cee5a3b9b1e431520f9f3350ad54f01705763d8eee4aa353864',
+    digest: 'sha256:46d575f7544a053a5b993f9dcc56d855dde3affdbcd1911637c92361f53b95af',
   },
   'every read, nonprod': {
     tools: 19,
-    digest: 'sha256:380a65e3227ab600eb215d8f2f74bbcbd4cecb0c44e144d057f9783be51af44d',
+    digest: 'sha256:046d87995fc3cdfcf99fe6c053ebc9ce8eefdebd8bad0f9ad87371e36841e385',
   },
   'agent, nonprod': {
     tools: 25,
-    digest: 'sha256:7c1abc03daf20e80afab888464040e896108fbe047b56d3b7a124e5939466601',
+    digest: 'sha256:0847a9ef57c7bd07d582cd062508ffdf8e0a21f73de274cfc626898fc36d35e8',
   },
   'agent, both tiers': {
     tools: 26,
-    digest: 'sha256:cddf547fd65c783be5e8275a37e0aba57e61dfe5a9be03aadb2cc310b4efc91a',
+    digest: 'sha256:50fcbdcc122c6adba192d0eb97fff2ce0098a2d935bb50ce6abb7e0596132ffa',
   },
   'data reader, nonprod': {
     tools: 22,
-    digest: 'sha256:e752e8c518533459dee0e50ef3842b328b04eb4ba968a41bbc0d4f3c918a7962',
+    digest: 'sha256:d57c35b6d210680a88b9537c8e5ea60d0b3430f4a7cc5b7be7388dba048c65b1',
   },
 }
 

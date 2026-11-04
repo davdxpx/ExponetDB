@@ -23,6 +23,16 @@ export {
   type StepResult,
   statementsOf,
 } from './executor.ts'
+export {
+  type AppliedRef,
+  compareSource,
+  type EvidenceReads,
+  type HotfixCheck,
+  type HotfixItem,
+  hotfixesWithoutEvidence,
+  type SourceComparison,
+  sourceFindingList,
+} from './hotfix.ts'
 export { aggregate, MigrationApplyKind, stateChanges } from './kind.ts'
 export { migrationKinds } from './kinds.ts'
 export { ledgerDivergenceOf } from './ledger-watch.ts'
@@ -37,6 +47,10 @@ export {
   planImportAnalysis,
 } from './legacy.ts'
 export { refuseOversizedLegacyFiles } from './legacy-files.ts'
+export {
+  type LegacyLedgerDigest,
+  legacyLedgerDigest,
+} from './legacy-ledger.ts'
 export { type MigrationPlanContext, planMigrationApply } from './planner.ts'
 export {
   PURGE_AGE_DAYS,

@@ -50,6 +50,7 @@ import {
   evaluateRegistryPolicy,
   excusedValueKey,
   findTarget,
+  isObserved,
   operationActor,
   type RegistryActor,
   RegistryError,
@@ -78,6 +79,7 @@ import {
   supabaseVersionTime,
 } from './legacy-evidence.ts'
 import { refuseOversizedLegacyFiles } from './legacy-files.ts'
+import { guarded, LEDGER_PRESENT } from './legacy-ledger.ts'
 import { type FileReplay, fileReplay, survivingGlobals } from './legacy-replay.ts'
 import type { MigrationPlanContext } from './planner.ts'
 import { type Fence, fenced, LeaseLost, writeMirror, writeVerificationMirror } from './records.ts'
@@ -481,6 +483,8 @@ export async function planImportAnalysis(
 ): Promise<PlanRecord> {
   const target = await findTarget(tx, targetRef)
   if (target === undefined) throw new MigrationError('TARGET_NOT_FOUND')
+  // ADR-0039 §3: an observed target is never written to, and has no ExponetDB ledger.
+  if (isObserved(target)) throw new MigrationError('TARGET_OBSERVED_ONLY')
   if (target.state !== 'active' || target.placement === null) {
     throw new MigrationError('TARGET_UNAVAILABLE')
   }
@@ -773,7 +777,6 @@ interface LegacyLedgerEntry {
   readonly appliedAt: string | null
 }
 
-const LEDGER_PRESENT = sql`SELECT pg_catalog.to_regclass($1) IS NOT NULL AS present`
 const SUPABASE = sql`SELECT version::text AS version, coalesce(name::text, '') AS name,
        coalesce(pg_catalog.to_jsonb(statements), '[]'::jsonb) AS statements
   FROM supabase_migrations.schema_migrations ORDER BY version`
@@ -856,52 +859,6 @@ async function readLegacyLedgers(
     }
   }
   return { entries, unreadable }
-}
-
-/**
- * Runs a read under a savepoint: a refused read (a missing privilege on a
- * legacy ledger or a schema) is reported as unreadable instead of aborting
- * the transaction every later read needs.
- */
-/**
- * SQLSTATE classes of a failure that may not happen again: a lost connection
- * (08), a serialization failure or deadlock (40), insufficient resources
- * (53), an object in use or a lock not available (55), a cancel, a timeout
- * or a shutdown (57), a system error (58).
- */
-const TRANSIENT_CLASSES = new Set(['08', '40', '53', '55', '57', '58'])
-
-/**
- * Whether a read that raised says something about what can be read on the
- * target (a privilege the observer lacks, a name the server refuses, a row
- * the engine cannot decode), so the same read fails the same way again: it
- * is `unreadable`. A failure that may pass on its own (the target
- * unreachable, a timeout, a lock wait, a cancel) is re-raised, so the run
- * errors and can be retried (follow-up 3 re-review).
- */
-export function readsAsUnreadable(error: unknown): boolean {
-  if (!(error instanceof TargetError)) return true
-  if (
-    error.code !== 'PERMISSION_DENIED' &&
-    error.code !== 'QUERY_PARSE_ERROR' &&
-    error.code !== 'TARGET_SQL_ERROR'
-  ) {
-    return false
-  }
-  return error.sqlstate === undefined || !TRANSIENT_CLASSES.has(error.sqlstate.slice(0, 2))
-}
-
-async function guarded<T>(reader: CatalogReader, fn: () => Promise<T>): Promise<T | undefined> {
-  await reader.query(sql`SAVEPOINT exdb_import_read`)
-  try {
-    const value = await fn()
-    await reader.query(sql`RELEASE SAVEPOINT exdb_import_read`)
-    return value
-  } catch (error) {
-    if (!readsAsUnreadable(error)) throw error
-    await reader.query(sql`ROLLBACK TO SAVEPOINT exdb_import_read`)
-    return undefined
-  }
 }
 
 interface FileAnalysis {
@@ -2088,6 +2045,8 @@ export async function planBaseline(
 ): Promise<PlanRecord> {
   const target = await findTarget(tx, targetRef)
   if (target === undefined) throw new MigrationError('TARGET_NOT_FOUND')
+  // ADR-0039 §3: an observed target is never written to, and has no ExponetDB ledger.
+  if (isObserved(target)) throw new MigrationError('TARGET_OBSERVED_ONLY')
   if (target.state !== 'active' || target.placement === null) {
     throw new MigrationError('TARGET_UNAVAILABLE')
   }

@@ -26,6 +26,7 @@ import { type Clock, type IdentityId, newId } from '@exponetdb/kernel'
 import {
   evaluateRegistryPolicy,
   findTarget,
+  isObserved,
   type MemoryLimit,
   memoryLimited,
   RegistryError,
@@ -311,6 +312,8 @@ export class QueryUseCases {
   }> {
     const kind: Kind = action === 'query.run' ? 'query' : 'explain'
     const target = await this.#target(action, caller, ref)
+    // Rows of an observed target are never read (ADR-0039 §3: no reader role there).
+    if (isObserved(target)) throw new DiagnosticsError('TARGET_OBSERVED_ONLY')
     // As every other read of a target's database: only an active or suspended target is read.
     if (target.state !== 'active' && target.state !== 'suspended') {
       throw new DiagnosticsError(

@@ -480,6 +480,7 @@ describe('the Web App in Chromium with a virtual passkey authenticator', () => {
       placement: null,
       ledger: null,
       openFindingCount: 0,
+      mode: 'managed',
     })
     await page.route('**/api/v1/targets**', async (route) => {
       const url = new URL(route.request().url())

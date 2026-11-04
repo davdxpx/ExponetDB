@@ -633,7 +633,7 @@ G6 waivers (gate record [`gates/6.md`](./gates/6.md) §5, §10):
 | Case | Expiry | State in this branch |
 |---|---|---|
 | E25 (a restored ledger) | before Wave 9 closes | **partial**: a restore operation exists now (drill into scratch, recovery into a new cluster, never in place; RB-08). A restored ledger older than the Control Store mirror reads as `LEDGER_DIVERGENCE`, which the E24 tests (deleted ledger row) cover; nothing re-runs a lost migration. Not covered: the placement move to the restored cluster and the re-plan of the migrations the recovery point lost, because the placement move is **[PLANNED]** (W9-05). The waiver is therefore **not closed** |
-| E16 (`hotfix_without_evidence`), E18 (`applied_not_in_source`) | before the first import of real REOSA data (Wave 10) | not touched by Part B; still no detection |
+| E16 (`hotfix_without_evidence`), E18 (`applied_not_in_source`) | before the first import of real REOSA data (Wave 10) | not touched by Part B; detections built on 2026-11-04 in Wave 10 (W10-3), awaiting the owner ([`gates/10.md`](./gates/10.md)) |
 | the eleven partial cases (E4 to E28) | before Wave 9 closes | not extended by Part B; still partial as listed in `gates/6.md` §5 |
 
 ### W9-06. Operational checks before turning execution on
@@ -771,8 +771,8 @@ finding is wrong. Owner decisions are in [`open-decisions.md`](../00-product/ope
 |---|---|---|
 | TC-017 read-classified diagnostics persist data and flood the counters | **OWNER DECISION** (OD-57, OD-61) | nothing built; the options and the recommendation are recorded |
 | TC-020 withdrawing a node plan needs a stronger scope | **OWNER DECISION** (OD-63) | the campaign itself says "owner decision if policy wants otherwise" |
-| TC-023 E16 `hotfix_without_evidence` has no detection | **OWNER DECISION** (OD-65); waiver unchanged | whether the OD-7a import is "real data" |
-| TC-024 E18 `applied_not_in_source` has no detection | **OWNER DECISION** (OD-65); waiver unchanged | as above |
+| TC-023 E16 `hotfix_without_evidence` has no detection | **IMPLEMENTED** 2026-11-04 (OD-65 (a), Wave 10 W10-3), awaiting the owner | worker task `ledger.watch`; [`gates/6.md`](./gates/6.md) §5 |
+| TC-024 E18 `applied_not_in_source` has no detection | **IMPLEMENTED** 2026-11-04 (OD-65 (a), Wave 10 W10-3), awaiting the owner | whole-source migration plans (`sourceComplete`); [`gates/6.md`](./gates/6.md) §5 |
 | TC-034 an erase operation stays `awaiting_approval` | **OWNER DECISION** (OD-64) and an operation for the owner to look at | the deadline of an approval is a product rule; the live operation is the owner's |
 | TC-037 the "Critical findings" headline | waits for OD-61 | same recording and aggregation decision as TC-017 |
 | TC-053 two step-up receipts to enroll a node | **OWNER DECISION** (OD-67) | one combined step-up or longer receipts |
@@ -883,7 +883,7 @@ finding is wrong. Owner decisions are in [`open-decisions.md`](../00-product/ope
 | VC-071 a clone is plannable; VC-073 a standby is plannable | IMPLEMENTED as typed refusals at plan and apply of the apply and rollback kinds (`TARGET_IDENTITY_MISMATCH` with both database oids, `TARGET_READ_ONLY`; `3D000` is `TARGET_UNAVAILABLE`), TESTED LOCALLY; NOT BUILT: the same check in the baseline and the import replay, a health condition and a surfaced clone in the Web App; NOT EXECUTED: `traps_logical.sh`, the standby trap | `units.test.ts`, `packages/postgres/test/adapter.test.ts` | [error-model.md §3](../02-control-plane/error-model.md) |
 | VC-074 an endpoint of another instance is applied unchecked | IMPLEMENTED (the plan probes the address; another `system_identifier` is refused naming both; an unreachable address is planned and says so; no probe at apply), TESTED LOCALLY | `packages/registry/test/registry.int.test.ts` | [registry.md](../02-control-plane/registry.md) |
 | VC-075 the documented database move has no path | DECIDED as documentation (import after the move; no `target.rehome`) | | [legacy-import.md §5](../04-migrations/legacy-import.md) |
-| VC-087 hotfix follow-up is unbuilt | DEFERRED with the reason in open-decisions.md (needs a ledger source column and the waived break-glass flow) | | [open-decisions.md](../00-product/open-decisions.md) |
+| VC-087 hotfix follow-up is unbuilt | the finding `hotfix_without_evidence` **IMPLEMENTED** 2026-11-04 (Wave 10 W10-3), awaiting the owner; the ledger-row mark stays DEFERRED (needs a ledger source column) | `hotfix-and-source.int.test.ts` | [staging-production-policy.md §3](../04-migrations/staging-production-policy.md#3-hotfixes) |
 | VC-106 `migration.resume` takes its operation from the managed database | IMPLEMENTED (the operation must be an apply of this target that lists the migration, and the stuck one when there is one), TESTED LOCALLY | `packages/migrations-engine/test/recovery.int.test.ts` | [failure-and-recovery.md](../04-migrations/failure-and-recovery.md) |
 | VC-136 comment-only change is not seen by drift | DOCUMENTED (`fp1` does not cover comments; `fp2` through an ADR) | | [drift-detection.md §6.1](../03-database-model/drift-detection.md) |
 | VC-108 plan analysis reaches agents without the `untrusted` marker | MOVED to group E (hostile input and containment: the MCP output schemas) | | |

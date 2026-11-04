@@ -39,6 +39,7 @@ export type ConflictReason =
   | 'server_retired'
   | 'server_in_use'
   | 'no_active_endpoint'
+  | 'cluster_pooler_only'
   | 'observer_credential_missing'
   | 'system_identifier_taken'
   | 'credential_missing'

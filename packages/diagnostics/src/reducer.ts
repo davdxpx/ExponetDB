@@ -38,7 +38,13 @@ export type IdentitySample =
   | { readonly status: 'match' }
   | {
       readonly status: 'mismatch'
-      readonly field: 'installation' | 'target' | 'generation' | 'system_identifier' | 'database'
+      readonly field:
+        | 'installation'
+        | 'target'
+        | 'generation'
+        | 'system_identifier'
+        | 'database'
+        | 'database_oid'
     }
   | { readonly status: 'absent' }
   | { readonly status: 'unreadable' }
@@ -400,7 +406,11 @@ export function reduceHealth(
     unhealthy: 'unhealthy',
     unreachable: 'unreachable',
   }
+  // A mismatch suspends an active target; an observed one (registered for life, ADR-0039) is
+  // never suspended and reads as unhealthy with the critical condition.
   const state: TargetHealthState =
-    identityMismatch || sample.lifecycle === 'suspended' ? 'suspended' : byEffect[effect]
+    (identityMismatch && sample.lifecycle !== 'registered') || sample.lifecycle === 'suspended'
+      ? 'suspended'
+      : byEffect[effect]
   return { state, conditions, unknownBecause: null, probes }
 }

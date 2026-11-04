@@ -55,6 +55,7 @@
       "path": "^packages/migrations-engine/test/",
       "allowed": [
         "migrations/engine",
+        "diagnostics",
         "migrations/format",
         "migrations/graph",
         "migrations/lint",
@@ -306,7 +307,9 @@
         "nodes",
         "sdk",
         "testkit",
-        "migrations/engine"
+        "migrations/engine",
+        "migrations-engine/test",
+        "registry/test"
       ]
     },
     "server": {

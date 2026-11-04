@@ -57,6 +57,7 @@ import {
   encodeCursor,
   findTarget,
   getCluster,
+  isObserved,
   RegistryError,
 } from '@exponetdb/registry'
 import { type CallerLike, type Idempotency, type RegistryHost, registryActor } from './registry.ts'
@@ -549,6 +550,8 @@ export class BackupUseCases {
     await this.#h.admit(this.#h.store, 'restore.plan', caller)
     const target = await findTarget(this.#h.store, targetRef)
     if (target === undefined) throw new RegistryError('TARGET_NOT_FOUND')
+    // ADR-0039 §3: an observed target is never restored into or written by ExponetDB.
+    if (isObserved(target)) throw new RegistryError('TARGET_OBSERVED_ONLY')
     const clusterId = target.placement?.clusterId
     if (clusterId === undefined)
       throw new RegistryError('REGISTRY_CONFLICT', { reason: 'target_state' })

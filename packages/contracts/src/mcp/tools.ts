@@ -237,10 +237,10 @@ export const MCP_TOOLS = [
   },
   {
     name: 'target_get',
-    toolVersion: 1,
+    toolVersion: 2,
     title: 'Get target',
     description:
-      'Target detail: environment, tier, generation, placement summary without addresses, ledger head, open findings. The target is a path <product>/<project>/<environment> or a tgt_ id from targets_list.' +
+      'Target detail: environment, tier, generation, mode (an observed target is read only and refuses writes and row reads with TARGET_OBSERVED_ONLY), placement summary without addresses, ledger head, open findings. The target is a path <product>/<project>/<environment> or a tgt_ id from targets_list.' +
       UNTRUSTED_NOTE,
     action: 'target.get',
     restOperationId: 'getTarget',

@@ -191,7 +191,16 @@ export {
   worstState,
 } from './health-history.ts'
 export { checkIdentity, mismatchField, requireIdentity } from './identity.ts'
-export { type LedgerWatchSighting, recordLedgerWatch } from './ledger-watch.ts'
+export {
+  type AuditParty,
+  type LedgerWatchSighting,
+  type MigrationFindingCode,
+  type MigrationFindingSighting,
+  namedMigrationIds,
+  recordLedgerWatch,
+  recordMigrationFinding,
+  WORKER_AUDIT_PARTY,
+} from './ledger-watch.ts'
 export {
   arrayParam,
   DIAGNOSTIC_LOCK_TIMEOUT_MS,

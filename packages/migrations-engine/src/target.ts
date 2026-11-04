@@ -161,6 +161,61 @@ export async function readTargetState(
   }
 }
 
+/**
+ * What a plan binds of an observed target (ADR-0039, W10-4): the target state without marker and
+ * ledger meta. Its ledger is empty (ExponetDB applied nothing there) and hashed as such.
+ */
+export type ObservedState = Omit<TargetState, 'marker' | 'meta'>
+
+/**
+ * Reads an observed target as the observer, inside an open read-only transaction: no marker and
+ * no `exponetdb` schema exist there, so its identity is the cluster's pinned `system_identifier`
+ * and the database oid recorded at registration, checked again here as the connector does
+ * (`connect.ts`). Nothing of the `exponetdb` schema is read.
+ */
+export async function readObservedState(
+  tx: CatalogReader,
+  expected: { readonly systemIdentifier: string | null; readonly databaseOid: string | null },
+  scope: ManagedScope,
+): Promise<ObservedState> {
+  if (
+    expected.systemIdentifier === null ||
+    expected.systemIdentifier !== tx.facts.systemIdentifier
+  ) {
+    throw new MigrationError('CLUSTER_IDENTITY_MISMATCH')
+  }
+  if (expected.databaseOid === null || expected.databaseOid !== tx.facts.databaseOid) {
+    throw new MigrationError(
+      'TARGET_IDENTITY_MISMATCH',
+      expected.databaseOid === null
+        ? undefined
+        : {
+            reason: 'database_oid',
+            recordedOid: expected.databaseOid,
+            observedOid: tx.facts.databaseOid,
+          },
+    )
+  }
+  const snapshot = await snapshotWithin(tx, {
+    ...(scope.includeSchemas === undefined ? {} : { includeSchemas: [...scope.includeSchemas] }),
+    excludeSchemas: [...(scope.excludeSchemas ?? [])],
+  })
+  return {
+    ledger: [],
+    ledgerStateHash: ledgerHashOf([], null),
+    fingerprint: snapshot.fingerprint,
+    snapshotComplete: snapshot.complete,
+    extensions: await installedExtensions(tx),
+    relations: await relationSizes(tx),
+    provenNotNull: await provenNotNullColumns(tx),
+    systemIdentifier: tx.facts.systemIdentifier,
+    databaseOid: tx.facts.databaseOid,
+    serverVersionNum: tx.facts.serverVersionNum,
+    inRecovery: (await tx.query(RECOVERY))[0]?.bool('in_recovery') ?? true,
+    observedAt: new Date().toISOString(),
+  }
+}
+
 /** A driver error of a target read, as the engine reports it (never the driver's text). */
 export function targetRefusal(error: unknown): MigrationError | TargetError | unknown {
   return error

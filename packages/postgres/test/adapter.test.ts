@@ -24,6 +24,7 @@ import {
   scopeHeader,
   sql,
 } from '../src/index.ts'
+import { pinnedSettings, settingMismatches } from '../src/session.ts'
 
 describe('TrustedSql', () => {
   it('is created by the builder only and cannot be forged', () => {
@@ -73,7 +74,118 @@ describe('endpoints', () => {
   })
 })
 
+describe('pinned session settings (ADR-0039: a pooler may drop the startup options)', () => {
+  const limits = {
+    connectTimeoutMs: 5000,
+    statementTimeoutMs: 30_000,
+    lockTimeoutMs: 2000,
+    idleInTransactionMs: 30_000,
+  }
+  const server = (over: Record<string, string> = {}) =>
+    new Map(
+      Object.entries({
+        search_path: '',
+        timezone: 'UTC',
+        datestyle: 'ISO, YMD',
+        intervalstyle: 'postgres',
+        extra_float_digits: '1',
+        bytea_output: 'hex',
+        standard_conforming_strings: 'on',
+        quote_all_identifiers: 'off',
+        lc_monetary: 'C',
+        statement_timeout: '30000',
+        lock_timeout: '2000',
+        idle_in_transaction_session_timeout: '30000',
+        default_transaction_read_only: 'on',
+        constraint_exclusion: 'off',
+        ...over,
+      }),
+    )
+
+  it("accepts the server's forms of the pinned values", () => {
+    expect(settingMismatches(pinnedSettings('observer', limits), server())).toEqual([])
+    expect(
+      settingMismatches(pinnedSettings('observer', limits), server({ search_path: '""' })),
+    ).toEqual([])
+  })
+
+  it('names every setting that is not in effect or not reported', () => {
+    const dropped = server({
+      search_path: '"$user", public',
+      timezone: 'Europe/Berlin',
+      statement_timeout: '0',
+    })
+    dropped.delete('constraint_exclusion')
+    expect(settingMismatches(pinnedSettings('observer', limits), dropped)).toEqual([
+      'search_path',
+      'TimeZone',
+      'statement_timeout',
+      'constraint_exclusion',
+    ])
+    // A writing role pins read-only off and no constraint exclusion.
+    expect(
+      settingMismatches(
+        pinnedSettings('migrator', limits),
+        server({ default_transaction_read_only: 'off' }),
+      ),
+    ).toEqual([])
+  })
+})
+
 describe('bootstrap SQL', () => {
+  it('emits only the observer for a non-superuser administrator with --roles observer (ADR-0039 §5)', () => {
+    const script = bootstrapScript(['app_db', 'second'], { roles: 'observer' })
+    expect(script).not.toMatch(/PASSWORD/)
+    for (const other of [
+      'exponetdb_ledger_owner',
+      'exponetdb_reader',
+      'exponetdb_verifier',
+      'exponetdb_operator',
+      'exponetdb_migrator',
+      'temp_file_limit',
+      'BYPASSRLS"',
+      'GRANT CREATE',
+    ]) {
+      expect(script, other).not.toContain(other)
+    }
+    expect(script).toContain(
+      'CREATE ROLE "exponetdb_observer" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS INHERIT CONNECTION LIMIT 8',
+    )
+    // An existing role is only altered where such an administrator may, and refused when privileged.
+    expect(script).toContain('ALTER ROLE "exponetdb_observer" LOGIN INHERIT CONNECTION LIMIT 8;')
+    expect(script).toContain(
+      'r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR r.rolreplication OR r.rolbypassrls',
+    )
+    expect(script).toContain(
+      'GRANT "pg_monitor" TO "exponetdb_observer" WITH INHERIT TRUE, SET FALSE;',
+    )
+    // One transaction that stops at the first error, whatever psql's flags.
+    const lines = script.split('\n')
+    expect(lines[0]).toBe('\\set ON_ERROR_STOP on')
+    expect(lines.indexOf('BEGIN;')).toBeGreaterThan(0)
+    expect(lines.indexOf('COMMIT;')).toBeGreaterThan(lines.indexOf('BEGIN;'))
+    expect(script).toContain("g.rolname <> 'pg_monitor'")
+    expect(lines.indexOf('ALTER ROLE "exponetdb_observer" RESET ALL;')).toBeLessThan(
+      lines.findIndex((l) => l.startsWith('ALTER ROLE "exponetdb_observer" SET')),
+    )
+    expect(lines.indexOf('ALTER ROLE "exponetdb_observer" RESET ALL;')).toBeGreaterThan(0)
+    expect(script).toContain('GRANT CONNECT ON DATABASE "app_db" TO "exponetdb_observer";')
+    expect(script).toContain('GRANT CONNECT ON DATABASE "second" TO "exponetdb_observer";')
+    expect(
+      script.split('\n').filter((l) => l.startsWith('ALTER ROLE "exponetdb_observer" SET')),
+    ).toEqual([
+      `ALTER ROLE "exponetdb_observer" SET default_transaction_read_only = E'on';`,
+      `ALTER ROLE "exponetdb_observer" SET statement_timeout = E'30s';`,
+      `ALTER ROLE "exponetdb_observer" SET idle_in_transaction_session_timeout = E'30s';`,
+    ])
+    expect(() =>
+      bootstrapScript(['app_db'], {
+        roles: 'observer',
+        executionRoles: [{ name: 'app_owner', bypassRlsExcused: false }],
+      }),
+    ).toThrow(/no execution role/)
+  })
+
   it('bounds the temporary files of a read and of a verification (VC-047)', () => {
     // set-returning functions materialize before the first row: 9 GB of temp files per 60 s read.
     for (const text of [bootstrapScript(['app_db']), clusterBootstrapStatements().join('\n')]) {

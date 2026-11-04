@@ -22,6 +22,7 @@ function endpoint(n: number, over: Partial<EndpointView> = {}): EndpointView {
     clusterId: CLUSTER,
     kind: 'private',
     poolerMode: null,
+    loginSuffix: null,
     host: 'db.example.test',
     port: 5432,
     tlsServerName: 'db.example.test',

@@ -76,7 +76,8 @@ explicit protocol control.
 | Timeouts | connect 5 s; role-level and per-transaction `statement_timeout`, `lock_timeout`, `idle_in_transaction_session_timeout` always set |
 | Keepalives | TCP keepalives on (idle 30 s, interval 10 s, count 3), `tcp_user_timeout` 60 s. **[DECIDED]** (Wave 4, G4 record §5 D10) Node.js sets keepalives with the 30 s initial delay only (interval and count are the operating system's) and has no `tcp_user_timeout` socket option; every query instead has a client-side deadline (`query_timeout`) besides `statement_timeout`, and a session that missed one is destroyed, never reused, so a dead peer ends the caller's wait within the deadline |
 | `application_name` | `exponetdb/<path>/<request-or-operation-id>` |
-| Endpoint selection | registry rule: private before public; never a pooler endpoint for migrator, verifier or operator |
+| Endpoint selection | registry rule: private before public; never a pooler endpoint for migrator, verifier or operator. **[DECIDED]** (ADR-0039) A cluster without an active direct endpoint (a hosted provider reachable through its session pooler only) serves observer sessions only through its **session-mode** poolers; every other role, the reader included, is refused (`REGISTRY_CONFLICT`, `cluster_pooler_only`). A transaction-mode pooler is never used for a session ExponetDB opens itself, only probed by health |
+| Login name | `exponetdb_<role>`; through a pooler endpoint with a login suffix (ADR-0039 §4, a pooler that routes by the login) `exponetdb_<role>.<suffix>`. The guards check the server side as on any path: the server-side `session_user` must be the plain role `exponetdb_<role>`, else `TARGET_CREDENTIAL_INVALID` (`session_user`); credential verification compares that `session_user` as well. **[OBSERVED]** (2026-11-03) Proven at the session specification only; not proven against a live Supavisor |
 | Circuit breaker | after 3 consecutive connection failures within 60 s, the target is marked `unreachable` for 30 s; callers get `TARGET_UNAVAILABLE` immediately instead of piling up |
 
 ### Session guards (on every new connection)
@@ -94,6 +95,26 @@ explicit protocol control.
    `TARGET_IDENTITY_MISMATCH`; the session is not handed out, and the health
    sampler, which reads the marker on its own schedule, suspends the target
    ([C-27](../00-product/constitution.md#c-27-identity-before-writes)).
+5. **[DECIDED]** (ADR-0039 §2) For an observed target (no marker, observer
+   sessions only), the read paths compare the session's database oid with the
+   oid recorded at the database's registration; a different oid (the same
+   name dropped and created again) is `TARGET_IDENTITY_MISMATCH` with
+   `details.reason: database_oid`. A pooler hop hides the client side of TLS
+   from `pg_stat_ssl`: the session checks the pooler-to-server hop, the
+   Control Plane side is `verify-full` against the endpoint's CA (a residual,
+   as for the health probe through poolers).
+6. **[DECIDED]** (ADR-0039, review of 2026-11-04) The pinned session settings
+   (`search_path`, `TimeZone`, `DateStyle`, `IntervalStyle`,
+   `extra_float_digits`, `bytea_output`, `standard_conforming_strings`,
+   `quote_all_identifiers`, `lc_monetary`, the three timeouts,
+   `default_transaction_read_only` and, for the read-only roles,
+   `constraint_exclusion`) are read back from `pg_settings` on every new
+   connection. Through a pooler endpoint, which may drop the startup options,
+   a value that differs is set again with `set_config` (session level) and
+   read again; on any path a value that still differs fails closed
+   (`CAPABILITY_UNAVAILABLE`, reason `session_settings`). The migrator's
+   keepalive options are not part of the check (their effect depends on the
+   platform; the session reports them in `disconnectDetection`).
 
 **[DECIDED]** (Wave 4) Where each guard lives: every session checks TLS in
 use (`pg_stat_ssl`), the pinned `system_identifier`, the database name and

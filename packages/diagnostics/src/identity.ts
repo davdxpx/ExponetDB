@@ -1,5 +1,5 @@
 import { readMarker, type TargetSession } from '@exponetdb/postgres'
-import type { TargetRecord } from '@exponetdb/registry'
+import { isObserved, type TargetRecord } from '@exponetdb/registry'
 import { DiagnosticsError } from './errors.ts'
 import type { IdentitySample } from './reducer.ts'
 
@@ -9,6 +9,11 @@ import type { IdentitySample } from './reducer.ts'
  * installation, this target, its current generation and the cluster's
  * pinned `system_identifier`, and the session must have reached that
  * cluster. Anything else is a mismatch; nothing is ever re-stamped here.
+ *
+ * An observed target carries no marker (ADR-0039 §2): its identity is the
+ * cluster's pinned `system_identifier` and the database oid recorded at the
+ * database's registration. A database dropped and created again under the
+ * same name has another oid and is a mismatch (`database_oid`).
  */
 export async function checkIdentity(
   session: TargetSession,
@@ -18,6 +23,12 @@ export async function checkIdentity(
   const pinned = target.placement?.systemIdentifier ?? null
   if (pinned === null || session.facts.systemIdentifier !== pinned) {
     return { status: 'mismatch', field: 'system_identifier' }
+  }
+  if (isObserved(target)) {
+    const recorded = target.placement?.databaseOid ?? null
+    return recorded !== null && session.facts.databaseOid === recorded
+      ? { status: 'match' }
+      : { status: 'mismatch', field: 'database_oid' }
   }
   const marker = await readMarker(session)
   if (marker.status === 'absent') return { status: 'absent' }
@@ -51,6 +62,15 @@ export async function requireIdentity(
   installationId: string,
 ): Promise<void> {
   const identity = await checkIdentity(session, target, installationId)
+  if (identity.status === 'mismatch' && identity.field === 'database_oid') {
+    const recorded = target.placement?.databaseOid ?? null
+    throw new DiagnosticsError(
+      'TARGET_IDENTITY_MISMATCH',
+      recorded === null
+        ? undefined
+        : { reason: 'database_oid', recordedOid: recorded, observedOid: session.facts.databaseOid },
+    )
+  }
   if (identity.status !== 'match') {
     throw new DiagnosticsError('TARGET_IDENTITY_MISMATCH')
   }

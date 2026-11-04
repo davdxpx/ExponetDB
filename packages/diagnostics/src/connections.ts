@@ -29,6 +29,7 @@ import {
   Body,
   evaluateRegistryPolicy,
   findTarget,
+  isObserved,
   operationActor,
   type RegistryActor,
   RegistryError,
@@ -216,6 +217,8 @@ async function planFor(
 ): Promise<PlanRecord> {
   const target = await findTarget(tx, targetRef)
   if (target === undefined) throw new RegistryError('TARGET_NOT_FOUND')
+  // Signalling a backend is an action on the database (ADR-0039 §3).
+  if (isObserved(target)) throw new DiagnosticsError('TARGET_OBSERVED_ONLY')
   if (target.state !== 'active') {
     throw new DiagnosticsError(
       target.state === 'decommissioned' ? 'TARGET_NOT_FOUND' : 'TARGET_UNAVAILABLE',

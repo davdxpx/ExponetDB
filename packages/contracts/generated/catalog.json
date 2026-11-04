@@ -11030,6 +11030,17 @@
       "type": "https://db.exponet.cloud/errors/target-suspended"
     },
     {
+      "code": "TARGET_OBSERVED_ONLY",
+      "details": null,
+      "group": "targets_clusters_nodes",
+      "message": "This target is observed only: ExponetDB reads its catalogs and statistics as the observer and never writes to it or reads its rows.",
+      "remediation": "Observed targets (ADR-0039) allow health, schema, drift, statistics and session reads. To change the database, register it as a managed target once it may be written to.",
+      "retryable": false,
+      "status": 409,
+      "title": "Target observed only",
+      "type": "https://db.exponet.cloud/errors/target-observed-only"
+    },
+    {
       "code": "TARGET_UNAVAILABLE",
       "details": null,
       "group": "targets_clusters_nodes",
@@ -11208,6 +11219,7 @@
               "server_retired",
               "server_in_use",
               "no_active_endpoint",
+              "cluster_pooler_only",
               "observer_credential_missing",
               "system_identifier_taken",
               "credential_missing",

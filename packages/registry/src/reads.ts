@@ -341,7 +341,7 @@ export const DATABASE_LIST_LIMIT = 1000
 export const CREDENTIAL_LIST_LIMIT = 500
 
 const ENDPOINT_COLUMNS = `e.endpoint_id, e.cluster_id, e.kind, e.pooler_mode, e.host, e.port, e.tls_server_name,
-  e.label, e.state, ${ts('e.created_at')}, ${ts('e.retired_at')}`
+  e.label, e.login_suffix, e.state, ${ts('e.created_at')}, ${ts('e.retired_at')}`
 
 export async function listEndpoints(
   q: Queryable,
@@ -525,7 +525,7 @@ export interface TargetFilter {
 }
 
 const TARGET_COLUMNS = `t.target_id, t.path, j.product_id, t.project_id, t.environment_id, e.slug AS environment_slug,
-  t.tier, t.generation, t.state, t.state_reason, ${ts('t.state_changed_at')}, ${ts('t.created_at')},
+  t.tier, t.generation, t.state, t.mode, t.state_reason, ${ts('t.state_changed_at')}, ${ts('t.created_at')},
   pl.placement_id, pl.generation AS placement_generation, ${ts('pl.valid_from')},
   d.database_id, d.name AS database_name, d.observed_oid::text AS database_oid,
   c.cluster_id, c.display_name AS cluster_name, c.state AS cluster_state, c.system_identifier,

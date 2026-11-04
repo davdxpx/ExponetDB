@@ -232,6 +232,18 @@ export const ServerCreateRequestSchema = z
   })
   .meta({ id: 'ServerCreateRequest' })
 
+/**
+ * ADR-0039 §4: a pooler that routes by the login name (`<role>.<project-ref>`) is reached
+ * as `exponetdb_<role>.<suffix>`; the server-side `session_user` stays the plain role.
+ */
+const LoginSuffixSchema = z
+  .string()
+  .regex(/^[a-z0-9]{1,40}$/)
+  .meta({
+    description:
+      'Pooler endpoints only (ADR-0039): appended to the login as exponetdb_<role>.<suffix> for a pooler that routes by the login name; the server-side role stays exponetdb_<role>.',
+  })
+
 export const EndpointRequestSchema = z
   .strictObject({
     kind: EndpointKindSchema,
@@ -242,9 +254,13 @@ export const EndpointRequestSchema = z
       description: 'Required for an IP host; for a DNS host it is the host itself.',
     }),
     label: EndpointLabelSchema,
+    loginSuffix: LoginSuffixSchema.optional(),
   })
   .refine((v) => (v.kind === 'pooler') === (v.poolerMode !== undefined), {
     message: 'a pooler endpoint names its pooling mode, and only a pooler does',
+  })
+  .refine((v) => v.loginSuffix === undefined || v.kind === 'pooler', {
+    message: 'only a pooler endpoint carries a login suffix',
   })
   .meta({ id: 'EndpointRequest' })
 
@@ -452,16 +468,26 @@ export const DatabaseRegisterRequestSchema = z
 /** A legacy ledger kind (legacy-import.md §2), as the import request names it. */
 const LegacyLedgerKindSchema = z.enum(['supabase', 'drizzle', 'applied_migrations'])
 
+export const TargetModeSchema = z.enum(['managed', 'observed']).meta({
+  id: 'TargetMode',
+  description:
+    'ADR-0039: a managed target carries the identity marker and the ledger; an observed target is read as the observer only, is never written and stays registered (never active).',
+})
+
 export const TargetRegisterRequestSchema = z
   .strictObject({
     projectId: ProjectIdSchema,
     environmentId: EnvironmentIdSchema,
     databaseId: DatabaseIdSchema,
+    mode: TargetModeSchema.optional().meta({
+      description:
+        'managed (default): stamps the identity marker and creates the empty ledger. observed (ADR-0039): needs the observer credential only, writes nothing to the database and leaves the target registered for its whole life.',
+    }),
   })
   .meta({
     id: 'TargetRegisterRequest',
     description:
-      'Registers the target <product>/<project>/<environment> on a registered database: stamps the identity marker and creates the empty ledger, the only data-plane write of Wave 4.',
+      'Registers the target <product>/<project>/<environment> on a registered database: a managed target is stamped with the identity marker and gets the empty ledger (the only data-plane write of Wave 4); an observed one is only recorded and snapshotted.',
   })
 
 export const TargetStateChangeRequestSchema = z
@@ -518,6 +544,11 @@ export const EndpointViewSchema = z
     port: z.int().min(1).max(65_535),
     tlsServerName: untrustedText(253, 'Name the server certificate must carry.'),
     label: untrustedText(64, 'Endpoint label.'),
+    loginSuffix: z
+      .string()
+      .regex(/^[a-z0-9]{1,40}$/)
+      .nullable()
+      .meta({ description: 'The login suffix of a pooler endpoint (ADR-0039); null otherwise.' }),
     state: z.enum(['active', 'retired']),
     createdAt: TimestampSchema,
     retiredAt: TimestampSchema.nullable(),
@@ -641,6 +672,10 @@ export const ClusterBootstrapSqlQuerySchema = z.strictObject({
     .max(3)
     .optional()
     .meta({ description: 'Legacy ledgers the observer may read during an import.' }),
+  roles: z.enum(['all', 'observer']).optional().meta({
+    description:
+      'observer (ADR-0039 §5): only the observer role, its pg_monitor membership, the settings a non-superuser administrator may set and CONNECT on the databases; no ledger owner, no other role, no execution role. all (default): every ExponetDB role.',
+  }),
 })
 
 // ----- execution roles for adopted schemas (ADR-0034, Wave 9 Part A) -----

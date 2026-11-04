@@ -198,6 +198,10 @@ export const MigrationPlanRequestSchema = z
     defaults: ProjectDefaultsMember,
     migrationIds: z.array(MigrationIdSchema).max(MIGRATION_REQUEST_LIMITS.migrationIds).optional(),
     source: SourceClaimSchema.optional(),
+    sourceComplete: z.boolean().optional().meta({
+      description:
+        "The bundles are the project's whole source (the CLI sets it when it submits every local bundle; at most 50 bundles per request). Once ingest validated every bundle, the server compares their ids with the migrations it applied on the target: one older than the newest bundle that the source lacks opens the finding applied_not_in_source (failure case E18); newer ones mean the source is behind and are shown in the plan's sourceCheck only; the finding clears when a whole source has every migration it names. Recorded also when the plan is refused after ingest, never for a refused bundle.",
+    }),
     lintProfile: z.enum(['strict', 'standard']).optional().meta({
       description: "The project file's lint profile (default strict).",
     }),
@@ -397,6 +401,27 @@ export const MigrationResumeBindingSchema = z
   })
   .meta({ id: 'MigrationResumeBinding' })
 
+/** An observed target's anchor (W10-4): its evidence target and that target's baseline. */
+const ObservedAnchorSchema = z.object({
+  evidenceTargetId: TargetIdSchema.nullable(),
+  baselineId: z
+    .string()
+    .regex(/^baseline:[a-z0-9]+(-[a-z0-9]+)*$/)
+    .max(73)
+    .nullable(),
+})
+
+/** What a plan for an observed target binds of its Supabase ledger (W10-4). */
+const LegacyLedgerDigestSchema = z.discriminatedUnion('status', [
+  z.object({
+    source: z.literal('supabase'),
+    status: z.literal('read'),
+    digest: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+    entries: z.int().min(0),
+  }),
+  z.object({ source: z.literal('supabase'), status: z.enum(['absent', 'unreadable']) }),
+])
+
 export const MigrationPlanContentSchema = z
   .object({
     projectId: ProjectIdSchema,
@@ -414,6 +439,10 @@ export const MigrationPlanContentSchema = z
       clusterSystemIdentifier: z.string().regex(/^[0-9]{1,20}$/),
       databaseOid: z.string().regex(/^[0-9]{1,10}$/),
       serverVersionNum: z.int().min(160000),
+      mode: z.literal('observed').optional().meta({
+        description:
+          'Present on a plan for an observed target only (ADR-0039, W10-4): the plan is built to show what is pending and the evidence, and is always denied (rule migration.observed-target).',
+      }),
     }),
     expectedState: z.object({
       schemaFingerprint: SchemaFingerprintSchema,
@@ -430,6 +459,14 @@ export const MigrationPlanContentSchema = z
           description:
             'Per execution role the declared BYPASSRLS exception the plan relies on (ADR-0034); a revoked, changed or expired one makes the plan stale (Wave 9).',
         }),
+      anchor: ObservedAnchorSchema.optional().meta({
+        description:
+          "Observed target (W10-4): the evidence target's baseline the pending list starts from; pending means not applied by ExponetDB.",
+      }),
+      legacyLedger: LegacyLedgerDigestSchema.optional().meta({
+        description:
+          'Observed target (W10-4): its Supabase ledger as the observer read it (names only), bound by digest and never used for matching; unreadable when the observer may not read it, never an empty list.',
+      }),
     }),
     evidence: z
       .object({
@@ -491,6 +528,10 @@ export const MigrationPlanContentSchema = z
           .max(7)
           .optional()
           .meta({ description: 'Why the SQL is procedural, as fixed codes (OD-55 (c)).' }),
+        targetMode: z.enum(['managed', 'observed']).optional().meta({
+          description:
+            'The target mode (ADR-0039): observed denies the plan (rule migration.observed-target, W10-4). Absent on plans for managed targets and on plans made before W10-4.',
+        }),
       })
       .meta({ description: 'What the policy rules decide on (policy-engine.md §4, Migrations).' }),
     resume: MigrationResumeBindingSchema.optional().meta({
@@ -522,6 +563,35 @@ export const MigrationPlanAnalysisSchema = z
       blockingLints: z.int().min(0),
     }),
     evidence: z.array(EvidenceItemSchema),
+    sourceCheck: z
+      .object({
+        newestId: MigrationIdSchema,
+        appliedNotInSource: z.array(MigrationIdSchema).max(64).meta({
+          description:
+            'Applied here, older than the newest bundle of the source, and not in it (newest first): the finding applied_not_in_source names them.',
+        }),
+        behind: z.array(MigrationIdSchema).max(64).meta({
+          description:
+            'Applied here and newer than the newest bundle of the source (newest first): the source is behind the target (an old clone); a warning only, the finding does not change for them.',
+        }),
+      })
+      .optional()
+      .meta({
+        description:
+          'A plan of the whole source (sourceComplete, failure case E18): its validated bundle ids against the migrations this installation applied on the target.',
+      }),
+    observed: z
+      .object({
+        pending: z.literal('not_applied_by_exponetdb'),
+        anchor: ObservedAnchorSchema,
+        legacyLedger: LegacyLedgerDigestSchema,
+        lineage: z.enum(['match', 'mismatch', 'unknown', 'not_required']),
+      })
+      .optional()
+      .meta({
+        description:
+          "A plan for an observed target (W10-4): pending is what ExponetDB has not applied, from the evidence target's baseline; production's real objects show in the lineage (its fingerprint against the evidence target's, a mismatch is expected); the legacy ledger is bound, never matched.",
+      }),
   })
   .meta({ id: 'MigrationPlanAnalysis' })
 

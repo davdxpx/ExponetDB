@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -349,6 +349,8 @@ const ids = {
   cluster: '',
   stagingTarget: '',
   productionTarget: '',
+  /** W10-4: the observed production target of the environment `observed`. */
+  observedTarget: '',
 }
 
 async function registerDatabase(label: string): Promise<string> {
@@ -480,6 +482,8 @@ describe('setup over REST', () => {
   })
 })
 
+/** Older than every migration of the suite: a source made of it alone is behind the target (E18). */
+const early = ulid()
 const first = ulid()
 const LEADS = `CREATE TABLE public.leads (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -713,6 +717,89 @@ describe('migrations over REST', () => {
     } finally {
       await runAsSuperuser(pg17, stagingName, ['DROP TABLE public.contacts'])
     }
+  })
+})
+
+// W10-4 (ADR-0039 §3 as amended on 2026-11-04): a production plan on an observed target is built
+// with its evidence and binding, stored denied, and refused at apply; nothing waits for approval.
+describe('a production plan on an observed target over REST (W10-4)', () => {
+  it('is denied by migration.observed-target with the evidence passing, and apply answers 403 PLAN_DENIED', async () => {
+    await planAndApply(`/api/v1/products/${ids.product}/environments`, {
+      slug: 'observed',
+      displayName: 'Observed production',
+      tier: 'prod',
+      evidenceFrom: 'staging',
+    })
+    const envs = await owner.browser.call('GET', `/api/v1/products/${ids.product}/environments`)
+    const environmentId = envs.body.items.find((e: { slug: string }) => e.slug === 'observed').id
+    const databaseId = await registerDatabase('e2e_mig_observed')
+    const registration = await owner.browser.call('POST', '/api/v1/targets', {
+      projectId: ids.project,
+      environmentId,
+      databaseId,
+      mode: 'observed',
+    })
+    expect(registration.status, registration.text).toBe(201)
+    await reauth()
+    const accepted = await owner.browser.call(
+      'POST',
+      `/api/v1/plans/${registration.body.id}/apply`,
+      {},
+    )
+    if (accepted.body.state === 'awaiting_approval') {
+      await reauth()
+      expect(
+        (
+          await owner.browser.call('POST', `/api/v1/approvals/${accepted.body.id}/approve`, {
+            planHash: registration.body.planHash,
+            acknowledgeSelfApproval: true,
+          })
+        ).status,
+      ).toBe(200)
+    }
+    await drive()
+    const target = await owner.browser.call(
+      'GET',
+      `/api/v1/targets/${encodeURIComponent(`${slug}/platform/observed`)}`,
+    )
+    expect([target.status, target.body.mode, target.body.state]).toEqual([
+      200,
+      'observed',
+      'registered',
+    ])
+    ids.observedTarget = target.body.id
+    const planned = await owner.browser.call(
+      'POST',
+      `/api/v1/targets/${target.body.id}/migrations/plans`,
+      { migrationIds: [first] },
+    )
+    expect([planned.status, planned.body.decision], planned.text).toEqual([201, 'deny'])
+    expect(planned.body.policyRules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'migration.observed-target',
+          result: 'fail',
+          overridableByBreakGlass: false,
+        }),
+      ]),
+    )
+    // The evidence passes (passing rules are not listed); the plan shows it and the binding.
+    expect(planned.body.policyRules.map((r: { id: string }) => r.id)).not.toContain(
+      'migration.staging-evidence',
+    )
+    expect(planned.body.change).toMatchObject({
+      content: {
+        target: { targetId: target.body.id, mode: 'observed' },
+        facts: { evidence: 'present', targetMode: 'observed' },
+        evidence: { targetId: ids.stagingTarget },
+      },
+      analysis: {
+        evidence: [{ migrationId: first, status: 'present' }],
+        observed: { pending: 'not_applied_by_exponetdb' },
+      },
+    })
+    const applied = await owner.browser.call('POST', `/api/v1/plans/${planned.body.id}/apply`, {})
+    expect([applied.status, applied.body.code]).toEqual([403, 'PLAN_DENIED'])
   })
 })
 
@@ -1412,7 +1499,7 @@ describe('the CLI as a process', () => {
         .filter((r) => r.type === 'item')
         .map((r) => r.data.id)
         .sort(),
-    ).toEqual([ids.stagingTarget, ids.productionTarget].sort())
+    ).toEqual([ids.stagingTarget, ids.productionTarget, ids.observedTarget].sort())
     const table = await cli(['target', 'show', `${slug}/platform/staging`])
     expect(table.code).toBe(0)
     expect(table.stdout).toContain(`${slug}/platform/staging`)
@@ -1568,6 +1655,89 @@ describe('the CLI as a process', () => {
     expect(json(plans).data.items.map((p: { id: string }) => p.id)).toEqual(
       expect.arrayContaining([plan.planId, json(prod).planId]),
     )
+  })
+
+  it('E18: a plan of the whole local source opens applied_not_in_source for an applied bundle the source lost, and clears it when the bundle is back', async () => {
+    const earlier = bundle({ id: first, name: 'add-leads', up: LEADS, verify: LEADS_VERIFY })
+    const kept = join(projectDir, earlier.directory)
+    const findings = async () =>
+      (
+        await owner.browser.call('GET', `/api/v1/targets/${ids.stagingTarget}/findings?kind=health`)
+      ).body.items.filter((f: { code: string }) => f.code === 'applied_not_in_source') as {
+        code: string
+        state: string
+        summary: string
+      }[]
+    expect(await findings()).toEqual([])
+    // The applied bundle leaves the repository (deleted, or left on another branch).
+    await rename(join(projectDir, 'migrations', earlier.directory), kept)
+    // Nothing is pending, so the plan itself is refused; the comparison is recorded all the same.
+    const lost = await cli(['migration', 'plan', '--target', ids.stagingTarget, '--json'])
+    expect(lost.code).not.toBe(0)
+    const open = await findings()
+    expect(open).toHaveLength(1)
+    expect(open[0]).toMatchObject({ code: 'applied_not_in_source', state: 'open' })
+    expect(open[0]?.summary).toMatch(/^1 migration applied on this target is missing/)
+    // Opening is audited with the caller: the CLI's service account.
+    const detected = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT event::jsonb AS e FROM audit.audit_events
+          WHERE action = 'ledger.applied_not_in_source.detected' ORDER BY seq DESC LIMIT 1`,
+      ),
+    )
+    expect(detected.rows[0]?.e).toMatchObject({
+      actor: { kind: 'service' },
+      subject: { targetId: ids.stagingTarget },
+      refs: { migrationIds: [first] },
+    })
+    // A plan of named bundles is not the whole source: it says nothing either way.
+    const named = await cli([
+      'migration',
+      'plan',
+      (await readdir(join(projectDir, 'migrations')))[0]?.slice(0, 26) ?? '',
+      '--target',
+      ids.stagingTarget,
+      '--json',
+    ])
+    expect(named.code).not.toBe(0)
+    expect(await findings()).toHaveLength(1)
+    // The bundle is back: the next plan of the whole source clears the finding.
+    await rename(kept, join(projectDir, 'migrations', earlier.directory))
+    await cli(['migration', 'plan', '--target', ids.stagingTarget, '--json'])
+    expect(await findings()).toEqual([])
+  })
+
+  it('E18: an invalid whole source records nothing, and a source behind the target only says so in the plan', async () => {
+    const findings = async () =>
+      (
+        await owner.browser.call('GET', `/api/v1/targets/${ids.stagingTarget}/findings?kind=health`)
+      ).body.items.filter((f: { code: string }) => f.code === 'applied_not_in_source')
+    const plan = (bundles: unknown[]) =>
+      owner.browser.call('POST', `/api/v1/targets/${ids.stagingTarget}/migrations/plans`, {
+        bundles,
+        defaults: DEFAULTS,
+        sourceComplete: true,
+      })
+    expect(await findings()).toEqual([])
+    const pending = bundle({
+      id: early,
+      name: 'early',
+      up: `CREATE TABLE public.early (id int);\nGRANT SELECT ON public.early TO ${APP_ROLE};\n`,
+      verify: '-- check: readable\nSELECT count(*) >= 0 AS ok FROM public.early;\n',
+    })
+    // A directory that does not name its manifest's id: refused at ingest, nothing recorded.
+    const forged = await plan([{ ...pending, directory: `${ulid()}_early` }])
+    expect(forged.status).toBe(422)
+    expect(await findings()).toEqual([])
+    // Every applied migration is newer than this source's newest bundle: an old clone.
+    const behind = await plan([pending])
+    expect(behind.status).toBe(201)
+    expect(behind.body.change.analysis.sourceCheck).toMatchObject({
+      newestId: early,
+      appliedNotInSource: [],
+      behind: expect.arrayContaining([first]),
+    })
+    expect(await findings()).toEqual([])
   })
 
   it('answers PLAN_DENIED for a denied plan: 403 over REST, exit 4 in the CLI (G6 finding O5)', async () => {

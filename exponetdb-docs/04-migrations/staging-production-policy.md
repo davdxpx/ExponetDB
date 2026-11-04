@@ -132,6 +132,57 @@ compatibility, lock severity, destructive, non-transactional, agent-initiated �
 policy decision recorded in the plan
 ```
 
+### 2.1 Production observed on a hosted provider (W10-4)
+
+**[DECIDED]** (Wave 10 order, W10-4 option (a), 2026-11-04;
+[ADR-0039](../01-architecture/adr/0039-observed-targets-on-hosted-providers.md)
+§3 as amended) While REOSA production is an **observed** target (OD-7b: no
+apply before Wave 11), a `migration.apply` plan for it is built for real and
+stored **denied** by rule `migration.observed-target` (deny, never
+overridable by break-glass or by a setting). Accepting it is `PLAN_DENIED`;
+no operation and no approval can exist for it. The kind refuses such a plan
+a second time: its bindings report `target: observed`, so an acceptance
+invalidates the plan (`PLAN_STALE`, audited `plan.invalidated`) and a worker
+fails a queued operation of it (`PLAN_STALE`); its execute refuses with
+`TARGET_OBSERVED_ONLY` before anything runs. The rule fails on
+`facts.targetMode` **or** `content.target.mode` being `observed`, so a plan
+path that forgot the fact stays denied. Every other migration plan on an observed target (verify, resume,
+rollback, baseline, import, reconcile) and every diagnostics or role plan
+stays refused at plan time with `TARGET_OBSERVED_ONLY`.
+
+What the plan shows and binds, read as the observer, writing nothing:
+
+- **Identity**: the cluster's pinned `system_identifier` and the database
+  oid recorded at registration (no marker exists); a copy of the database
+  is `TARGET_IDENTITY_MISMATCH` (`database_oid`), another cluster
+  `CLUSTER_IDENTITY_MISMATCH`.
+- **The binding**: `content.target` with `mode: observed`, system
+  identifier, database oid and server version; `expectedState` with the
+  fingerprint, the extensions and the `ls1` hash of an **empty** ledger.
+- **The evidence**: §1.2 unchanged, read live from the evidence target, with
+  the verification id per migration (`present`, `missing`, `unverified`, …).
+- **The pending model** (stated as it is): pending means "not applied by
+  ExponetDB", anchored on the **evidence target's** baseline
+  (`expectedState.anchor`, from the Control Store's `ledger_state` of
+  staging). It does not say what production's database holds. Production's
+  real object state shows in the lineage only: production's fingerprint
+  against staging's fingerprint before the first pending migration, where a
+  **mismatch is expected** (`analysis.observed.lineage`).
+- **The legacy ledger**: `supabase_migrations.schema_migrations` is read for
+  `version` and `name` only (never `statements`; a column grant on those two
+  is enough) and bound as a digest and an entry count
+  (`expectedState.legacyLedger`), `unreadable` when the observer may not
+  read it, `absent` when the table does not exist; never an empty list. It
+  is bound only, never used for matching.
+
+**[OBSERVED]** (2026-11-04) Built and proven on the local test servers
+(PostgreSQL 17: `packages/migrations-engine/test/observed.int.test.ts`,
+`apps/server/test/http-migrations.int.test.ts`,
+`apps/server/test/mcp-plans.int.test.ts`). **Limit:** on the real targets
+every plan for production is denied as observed anyway, so "refused for
+missing evidence alone" is proven only on the local containers; the
+real-target run waits for the owner's GO.
+
 ### Compatibility and the running build
 
 REOSA's "production only after deploy" rule for non-additive migrations depends
@@ -160,13 +211,42 @@ A hotfix is a change applied to production without staging evidence.
 **[DECIDED]** It is possible only through break-glass (§4). Afterwards:
 
 - The production ledger row is marked (via the plan's overridden rules) as
-  `evidence: break_glass`.
+  `evidence: break_glass`. **[PLANNED]** Not built: the target ledger has no
+  such column; the plan that applied the row is named by the finding below
+  (`operationId`, `planId`), and its overridden rules are on that plan.
 - A finding `hotfix_without_evidence` stays open until the same migration (same
   id and checksum) has been applied and verified on staging, restoring the
   invariant "staging contains everything production contains".
+  **[DECIDED]** Built in Wave 10 (W10-3, OD-65 (a); reworked after the
+  review of 2026-11-04): the worker task `ledger.watch` (every 10 minutes)
+  compares every migration this installation applied on a production target
+  (its Control Store mirror, origin `exponetdb`, not reverted; legacy-import
+  and baseline rows have no staging counterpart by id and are not counted)
+  with the evidence target's ledger, read live as its observer with the trust
+  rules of planning (the same id and checksum, not reverted, a passed and
+  mirrored verification with the same verify digest; a bundle without
+  verify.sql has no verify digest on either side and compares equal). The
+  evidence target is read once per round for all its production targets, and
+  the check runs even when the production target's own ledger read failed.
+  One warning `health` finding per production target names the 64 newest
+  such migrations with what staging has of each (`missing`, `unverified`,
+  `other_verify_digest`, `checksum_differs`) and counts them all; when the
+  evidence target's own ledger disagrees with its mirror, it says that instead
+  (`details.cause = evidence_divergent`: no row there is evidence). It is
+  resolved `cleared` when none is left, and `superseded` when nothing can be
+  compared any more (the environment names no evidence environment, its
+  target is decommissioned, or it is observed). Opening and resolving are
+  audited by the worker (`ledger.hotfix_without_evidence.detected`,
+  `.cleared` with the resolution). It detects any such migration, not only a
+  break-glass one. An evidence target that cannot be read now (unreachable,
+  refused, identity mismatch) leaves the finding as it is and does not fail
+  the round, as planning calls it `unreachable`. An observed production target
+  (W10-D3) has no ExponetDB ledger and is not compared.
 - If the hotfix cannot be applied to staging as-is (staging diverged), the
   resolution is a reconciling migration on staging plus an explicit
-  resolution note on the finding.
+  resolution note on the finding. **[PLANNED]** There is no operation to
+  resolve a finding with a note yet; until there is, such a finding stays
+  open.
 
 ## 4. Break-glass for migrations
 

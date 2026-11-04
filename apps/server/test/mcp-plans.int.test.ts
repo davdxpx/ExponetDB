@@ -1,6 +1,8 @@
 import { oauth } from '@exponetdb/auth'
 import type { Scope } from '@exponetdb/contracts'
 import { type GrantId, newUlid } from '@exponetdb/kernel'
+import { databaseBootstrapStatements } from '@exponetdb/postgres'
+import { createDatabase, runAsSuperuser, serverFor } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { bundle, DEFAULTS, McpCaller, type McpWorld, mcpWorld } from './support/mcp-int-world.ts'
 import { ORIGIN } from './support/node-world.ts'
@@ -13,6 +15,7 @@ import { ORIGIN } from './support/node-world.ts'
  */
 const READ: Scope[] = ['targets.read', 'schema.read', 'diagnostics.read', 'migrations.read']
 
+const pg17 = serverFor(17)
 let w: McpWorld
 let clientId: string
 /** Nonprod agent: plans and applies on staging. */
@@ -435,6 +438,63 @@ describe('plan tools over the real program', () => {
     })
     expect(canceled.isError, canceled.content[0]?.text.slice(0, 300)).toBeUndefined()
     expect(canceled.structuredContent?.['state']).toBe('canceled')
+  })
+
+  // W10-4 (ADR-0039 §3 as amended on 2026-11-04): the plan for an observed production is built
+  // and denied; plan_apply refuses it, so no approval link is ever handed out for it.
+  it('denies a plan for an observed production target, and plan_apply refuses it with PLAN_DENIED', async () => {
+    await w.planAndApply(`/api/v1/products/${w.ids.product}/environments`, {
+      slug: 'observed',
+      displayName: 'Observed production',
+      tier: 'prod',
+      evidenceFrom: 'staging',
+    })
+    const envs = await w.owner.browser.call('GET', `/api/v1/products/${w.ids.product}/environments`)
+    const environmentId = envs.body.items.find((e: { slug: string }) => e.slug === 'observed').id
+    const database = await createDatabase(pg17, `${w.ids.slug}_observed`)
+    await runAsSuperuser(pg17, database, [...databaseBootstrapStatements(database)])
+    await w.planAndApply(`/api/v1/clusters/${w.ids.cluster}/databases`, { name: database })
+    const dbs = await w.owner.browser.call('GET', `/api/v1/clusters/${w.ids.cluster}/databases`)
+    const databaseId = dbs.body.items.find((d: { name: string }) => d.name === database).id
+    const registration = await w.owner.browser.call('POST', '/api/v1/targets', {
+      projectId: w.ids.project,
+      environmentId,
+      databaseId,
+      mode: 'observed',
+    })
+    expect(registration.status, registration.text).toBe(201)
+    await w.owner.reauth()
+    const accepted = await w.owner.browser.call(
+      'POST',
+      `/api/v1/plans/${registration.body.id}/apply`,
+      {},
+    )
+    if (accepted.body.state === 'awaiting_approval') {
+      await w.owner.reauth()
+      const approved = await w.owner.browser.call(
+        'POST',
+        `/api/v1/approvals/${accepted.body.id}/approve`,
+        { planHash: registration.body.planHash, acknowledgeSelfApproval: true },
+      )
+      expect(approved.status, approved.text).toBe(200)
+    }
+    await w.drive()
+    const planned = await prodAgent.call('migration_plan', {
+      target: `${w.ids.slug}/platform/observed`,
+      migrationIds: [first],
+      defaults: DEFAULTS,
+    })
+    expect(planned.isError, planned.content[0]?.text.slice(0, 400)).toBeUndefined()
+    const plan = planned.structuredContent ?? {}
+    expect(plan['decision']).toBe('deny')
+    expect(plan['policyRules']).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'migration.observed-target', result: 'fail' }),
+      ]),
+    )
+    const refused = await prodAgent.call('plan_apply', { planId: plan['id'] })
+    expect(refused.isError).toBe(true)
+    expect(refused.content[0]?.text).toMatch(/^Refused: PLAN_DENIED\./)
   })
 
   it('a stale plan names what changed', async () => {

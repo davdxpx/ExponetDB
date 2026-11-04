@@ -154,6 +154,7 @@ grant could override.
 | `migration.execution-role-parity` | prod tier, every migration kind (Wave 9 Part A) | warn | the evidence environment's execution roles have the attributes and the exception status of production's (`facts.executionRoleParity` `match`); `mismatch` or `unknown` is a warning (ADR-0034 §4) |
 | `migration.agent-procedural` | **every tier**; the SQL kinds and `migration.import.replay`; principal not a person in the Web App or the CLI (OD-13 (a)) (Wave 9 Part B, [OD-55](../00-product/open-decisions.md#od-55-procedural-code-in-a-migration-session-can-act-as-any-role-the-migrator-holds) (c)) | require approval, not overridable | the plan's SQL is procedural (`facts.procedural`, reasons in `facts.proceduralReasons`: `DO` blocks, procedure calls, functions a top-level `SELECT`, `CREATE TABLE … AS` or a materialized view calls, routines, triggers or rules the bundle creates, dynamic SQL where the text shows it; [`../04-migrations/planning-and-apply.md` §2](../04-migrations/planning-and-apply.md#2-plan-content)); a plan without the fact (a legacy replay, a plan made before the rule) or with a malformed one counts as procedural (fail closed). A person's plan is `not_applicable` |
 | `migration.procedural-nontransactional` | `migration.apply` and `migration.resume` with `transactional: false`; every principal (Wave 9 Part B, OD-55 (d)) | deny, not overridable | procedural SQL in a non-transactional bundle: its statements commit one by one, so the executor's ledger guard cannot roll back what they do ([`../04-migrations/planning-and-apply.md` §4.4](../04-migrations/planning-and-apply.md#44-non-transactional-migration)); unclassified counts as procedural |
+| `migration.observed-target` | every tier, `migration.apply` (W10-4, 2026-11-04) | deny, not overridable by break-glass or by a setting (it declares no parameter) | the target is observed ([ADR-0039](../01-architecture/adr/0039-observed-targets-on-hosted-providers.md) §3 as amended on 2026-11-04; `facts.targetMode` `observed`): the plan is built for real so production's pending list, evidence and binding can be shown, and stored `denied`; no operation and no approval can exist for it. It fails on `facts.targetMode` or on `content.target.mode` being `observed` (review M2: a plan path that forgets the fact stays denied); a plan with neither is a managed target's (`not_applicable`); a malformed fact denies (`unknown`). The kind refuses such a plan a second time: changed binding `target: observed` at acceptance (the plan is invalidated and audited) and at the worker's start (the operation fails), `TARGET_OBSERVED_ONLY` at execute |
 
 **[DECIDED]** Wave 6 scope of the rules: `migration.lint-errors`,
 `migration.execution-role`, `migration.destructive-backup`,
@@ -172,6 +173,13 @@ role the migrator holds. The executor's ledger guard
 protects the ledger and the identity marker whoever initiated the plan; the
 approval is the control for everything else such code can reach (other
 projects' roles on the cluster, the residual of threat T38).
+**[DECIDED]** (W10-4, 2026-11-04, Wave 10 order option (a))
+`migration.observed-target` is evaluated for every `migration.apply` plan.
+Adding it changes the list of rules that apply to `migration.apply`, and so
+the policy version (`pv1` input `rules`) of every such plan: **plans that
+are active when the release with the rule is deployed go stale once** at
+acceptance (binding `policy`) and are planned again; nothing else changes
+for a managed target.
 
 ### Connections
 

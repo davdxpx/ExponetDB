@@ -365,6 +365,17 @@ describe('registry over REST', () => {
     expect(before.body.script).toContain(
       String.raw`\connect -reuse-previous=on 'dbname=''app_pending'''`,
     )
+    // ADR-0039 §5: the observer alone, for a hosted provider's non-superuser administrator.
+    const observerOnly = await owner.browser.call(
+      'GET',
+      `/api/v1/clusters/${ids.cluster}/bootstrap-sql?database=app_pending&roles=observer`,
+    )
+    expect(observerOnly.status).toBe(200)
+    expect(observerOnly.body).toMatchObject({ roles: ['exponetdb_observer'], executionRoles: [] })
+    expect(observerOnly.body.script).toContain(
+      'GRANT CONNECT ON DATABASE "app_pending" TO "exponetdb_observer";',
+    )
+    expect(observerOnly.body.script).not.toMatch(/exponetdb_(ledger_owner|migrator|reader)/)
     const refused = await Promise.all([
       owner.browser.call(
         'GET',
@@ -376,7 +387,10 @@ describe('registry over REST', () => {
       ),
       owner.browser.call('GET', `/api/v1/clusters/${ids.cluster}/bootstrap-sql?ledgers=liquibase`),
     ])
-    expect(refused.map((r) => [r.status, r.body.code])).toEqual([
+    expect(
+      refused.map((r) => [r.status, r.body.code]),
+      JSON.stringify(refused.map((r) => r.body)),
+    ).toEqual([
       [422, 'VALIDATION_FAILED'],
       [404, 'NOT_FOUND'],
       [422, 'VALIDATION_FAILED'],
@@ -447,6 +461,7 @@ describe('registry over REST', () => {
       health: null,
       placement: { clusterId: ids.cluster, managementMode: 'external' },
       openFindingCount: 0,
+      mode: 'managed',
     })
     expectNoConnectionMaterial(target.text)
     expect(target.text).not.toContain(String(pg17.port))
@@ -1075,5 +1090,60 @@ describe('no secret at rest or in logs (G4 item 36)', () => {
     for (const secret of secrets) expect(logs).not.toContain(secret)
     expect(logs).not.toMatch(/postgres(ql)?:\/\//i)
     expect(logs).not.toMatch(/\bsec_[0-7][0-9A-HJKMNP-TV-Z]{25}\b/)
+  })
+})
+
+describe('an observed target over REST (ADR-0039)', () => {
+  it('registers an observed target (ADR-0039) and refuses its row reads and a restore plan', async () => {
+    await planAndApply(`/api/v1/products/${ids.product}/environments`, {
+      slug: 'observed',
+      displayName: 'Observed',
+      tier: 'nonprod',
+    })
+    const envs = await owner.browser.call('GET', `/api/v1/products/${ids.product}/environments`)
+    const environmentId = envs.body.items.find((e: { slug: string }) => e.slug === 'observed').id
+    const name = await createDatabase(pg17, 'e2e_observed')
+    await runAsSuperuser(pg17, name, [
+      ...databaseBootstrapStatements(name),
+      'CREATE TABLE public.items (id bigint PRIMARY KEY)',
+    ])
+    await planAndApply(`/api/v1/clusters/${ids.cluster}/databases`, { name })
+    const dbs = await owner.browser.call('GET', `/api/v1/clusters/${ids.cluster}/databases`)
+    const databaseId = dbs.body.items.find((d: { name: string }) => d.name === name).id
+    await planAndApply('/api/v1/targets', {
+      projectId: ids.project,
+      environmentId,
+      databaseId,
+      mode: 'observed',
+    })
+    const path = encodeURIComponent(`${slug}/platform/observed`)
+    const target = await owner.browser.call('GET', `/api/v1/targets/${path}`)
+    expect(target.body).toMatchObject({ state: 'registered', mode: 'observed' })
+    const refused = await Promise.all([
+      owner.browser.call('POST', `/api/v1/targets/${path}/queries`, {
+        sql: 'SELECT id FROM public.items',
+      }),
+      owner.browser.call('POST', `/api/v1/targets/${path}/explain`, {
+        sql: 'SELECT id FROM public.items',
+      }),
+      owner.browser.call('POST', `/api/v1/targets/${path}/restore-plans`, {
+        purpose: 'recovery',
+        repositoryId: 'bkr_01M6HQW7JQYHC8YR9KNTQ4PFFZ',
+        source: { latest: true },
+        destination: { kind: 'new_cluster', nodeId: 'nod_01M6HQW7JQYHC8YR9KNTQ4PFFZ' },
+        reason: 'Recover the observed database into a new cluster (refused).',
+      }),
+    ])
+    expect(
+      refused.map((r) => [r.status, r.body.code]),
+      JSON.stringify(refused.map((r) => r.body)),
+    ).toEqual([
+      [409, 'TARGET_OBSERVED_ONLY'],
+      [409, 'TARGET_OBSERVED_ONLY'],
+      [409, 'TARGET_OBSERVED_ONLY'],
+    ])
+    // The catalog reads stay open.
+    const schema = await owner.browser.call('GET', `/api/v1/targets/${path}/schema`)
+    expect(schema.status).toBe(200)
   })
 })

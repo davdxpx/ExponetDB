@@ -214,6 +214,8 @@ export interface EndpointRecord {
   readonly port: number
   readonly tlsServerName: string
   readonly label: string
+  /** ADR-0039 §4: pooler endpoints only; the login is `exponetdb_<role>.<suffix>`. */
+  readonly loginSuffix: string | null
   readonly state: 'active' | 'retired'
   readonly createdAt: string
   readonly retiredAt: string | null
@@ -230,6 +232,7 @@ export function endpointFrom(row: Row): EndpointRecord {
     port: row.int('port'),
     tlsServerName: row.text('tls_server_name'),
     label: row.text('label'),
+    loginSuffix: row.textOrNull('login_suffix'),
     state: oneOf(['active', 'retired'] as const, row.text('state')),
     createdAt: row.text('created_at'),
     retiredAt: row.textOrNull('retired_at'),
@@ -271,6 +274,30 @@ export function databaseFrom(row: Row): DatabaseRecord {
 export const TARGET_STATES = ['registered', 'active', 'suspended', 'decommissioned'] as const
 export type TargetState = (typeof TARGET_STATES)[number]
 
+/**
+ * ADR-0039 §1: a managed target carries the identity marker and the ledger; an observed target
+ * is read as the observer only, nothing is written to its database, and it stays `registered`.
+ */
+export const TARGET_MODES = ['managed', 'observed'] as const
+export type TargetMode = (typeof TARGET_MODES)[number]
+
+/** An observed target (ADR-0039): never written to, its rows never read. */
+export function isObserved(target: Pick<TargetRecord, 'mode'>): boolean {
+  return target.mode === 'observed'
+}
+
+/**
+ * Whether the target's catalogs and statistics may be read as the observer: an active or
+ * suspended target, or an observed one (which stays `registered` for its whole life).
+ */
+export function catalogReadable(target: Pick<TargetRecord, 'state' | 'mode'>): boolean {
+  return (
+    target.state === 'active' ||
+    target.state === 'suspended' ||
+    (target.state === 'registered' && target.mode === 'observed')
+  )
+}
+
 export interface PlacementRecord {
   readonly placementId: string
   readonly generation: number
@@ -297,6 +324,7 @@ export interface TargetRecord {
   readonly tier: Tier
   readonly generation: number
   readonly state: TargetState
+  readonly mode: TargetMode
   readonly stateReason: string | null
   readonly stateChangedAt: string
   readonly createdAt: string
@@ -315,6 +343,7 @@ export function targetFrom(row: Row): TargetRecord {
     tier: oneOf(['prod', 'nonprod'] as const, row.text('tier')),
     generation: row.int('generation'),
     state: oneOf(TARGET_STATES, row.text('state')),
+    mode: oneOf(TARGET_MODES, row.text('mode')),
     stateReason: row.textOrNull('state_reason'),
     stateChangedAt: row.text('state_changed_at'),
     createdAt: row.text('created_at'),
