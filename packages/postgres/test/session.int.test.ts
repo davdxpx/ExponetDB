@@ -1,7 +1,8 @@
 import { createServer, type Socket } from 'node:net'
 import { TLSSocket } from 'node:tls'
 import { dropDatabase, matrix, runAsSuperuser, testTargets } from '@exponetdb/testkit'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import pg from 'pg'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   CircuitBreaker,
   ConnectionBudget,
@@ -178,6 +179,41 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         open(server, database, 'observer', { guards: { database: 'postgres' } }),
       )
       expect(e.code).toBe('TARGET_IDENTITY_MISMATCH')
+    })
+
+    it('sets the pinned settings again through a pooler that drops the startup options, and fails closed elsewhere (ADR-0039)', async () => {
+      // The seam: a pooler that does not pass the startup options on to the server.
+      const Original = pg.Client
+      const spy = vi.spyOn(pg, 'Client').mockImplementation(function (
+        this: unknown,
+        config: pg.ClientConfig,
+      ) {
+        return new Original({ ...config, options: undefined })
+      } as never)
+      try {
+        const s = await open(server, database, 'observer', { reapplySettings: true })
+        try {
+          const r = await s.query(
+            sql`SELECT current_setting('search_path') AS sp, current_setting('TimeZone') AS tz,
+                     current_setting('DateStyle') AS ds, current_setting('lock_timeout') AS lt,
+                     current_setting('constraint_exclusion') AS ce,
+                     current_setting('default_transaction_read_only') AS ro`,
+          )
+          expect(r[0]?.text('sp')).toBe('')
+          expect(r[0]?.text('tz')).toBe('UTC')
+          expect(r[0]?.text('ds')).toBe('ISO, YMD')
+          expect(r[0]?.text('lt')).toBe('2s')
+          expect(r[0]?.text('ce')).toBe('off')
+          expect(r[0]?.text('ro')).toBe('on')
+        } finally {
+          await s.close()
+        }
+        const e = await refusal(open(server, database, 'observer'))
+        expect([e.code, e.reason]).toEqual(['CAPABILITY_UNAVAILABLE', 'session_settings'])
+        expect(spy).toHaveBeenCalled()
+      } finally {
+        spy.mockRestore()
+      }
     })
 
     it('runs both probe protocols', async () => {

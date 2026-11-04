@@ -25,6 +25,7 @@ import {
   evaluateRegistryPolicy,
   findTarget,
   getProject,
+  isObserved,
   operationActor,
   type RegistryActor,
   RegistryError,
@@ -191,6 +192,7 @@ export async function planDriftAccept(
   }
   const target = await findTarget(tx, finding.targetId)
   if (target === undefined) throw new RegistryError('TARGET_NOT_FOUND')
+  if (isObserved(target)) throw new DiagnosticsError('TARGET_OBSERVED_ONLY')
   if (target.state !== 'active') {
     throw new RegistryError('REGISTRY_CONFLICT', { reason: 'target_state' })
   }

@@ -20,7 +20,7 @@ import {
   type TargetRow,
   type TrustedSql,
 } from '@exponetdb/postgres'
-import { brand, type TargetRecord } from '@exponetdb/registry'
+import { brand, catalogReadable, type TargetRecord } from '@exponetdb/registry'
 import { documentHead, loadDocument } from './documents.ts'
 import { DiagnosticsError } from './errors.ts'
 import { clip } from './findings.ts'
@@ -59,7 +59,7 @@ export interface CurrentSchema {
 }
 
 function readable(target: TargetRecord): void {
-  if (target.state !== 'active' && target.state !== 'suspended') {
+  if (!catalogReadable(target)) {
     throw new DiagnosticsError(
       target.state === 'decommissioned' ? 'TARGET_NOT_FOUND' : 'TARGET_UNAVAILABLE',
     )

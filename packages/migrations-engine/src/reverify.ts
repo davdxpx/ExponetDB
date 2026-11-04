@@ -17,6 +17,7 @@ import {
   type Connector,
   evaluateRegistryPolicy,
   findTarget,
+  isObserved,
   operationActor,
   type RegistryActor,
   RegistryError,
@@ -118,6 +119,8 @@ export async function planMigrationVerify(
 ): Promise<PlanRecord> {
   const target = await findTarget(tx, targetRef)
   if (target === undefined) throw new MigrationError('TARGET_NOT_FOUND')
+  // ADR-0039 §3: an observed target has no ledger and is never verified on (bundle or baseline).
+  if (isObserved(target)) throw new MigrationError('TARGET_OBSERVED_ONLY')
   if (target.placement === null) throw new MigrationError('TARGET_UNAVAILABLE')
   if (isBaselineRef(migrationId)) {
     if (request.revision !== undefined) {

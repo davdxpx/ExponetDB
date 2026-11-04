@@ -991,6 +991,16 @@ export const ERRORS = {
         .meta({ 'x-extensible-enum': ['identity_mismatch', 'ledger_divergence', 'administrator'] }),
     }),
   },
+  TARGET_OBSERVED_ONLY: {
+    group: 'targets_clusters_nodes',
+    status: 409,
+    retryable: false,
+    title: 'Target observed only',
+    message:
+      'This target is observed only: ExponetDB reads its catalogs and statistics as the observer and never writes to it or reads its rows.',
+    remediation:
+      'Observed targets (ADR-0039) allow health, schema, drift, statistics and session reads. To change the database, register it as a managed target once it may be written to.',
+  },
   TARGET_UNAVAILABLE: {
     group: 'targets_clusters_nodes',
     status: 503,
@@ -1116,6 +1126,7 @@ export const ERRORS = {
             'server_retired',
             'server_in_use',
             'no_active_endpoint',
+            'cluster_pooler_only',
             'observer_credential_missing',
             'system_identifier_taken',
             'credential_missing',

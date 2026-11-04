@@ -44,6 +44,12 @@ import {
  *    for drift until Wave 6; not a migration baseline).
  * 5. Only then the target becomes `active`.
  *
+ * An observed target (ADR-0039 §1, `mode: observed`) skips steps 2 and 5:
+ * an observer session (pinned identifier, database name and oid) proves the
+ * database, the Control Store records the target with its mode, and the
+ * registration snapshot is taken as the observer. Nothing is written to the
+ * database, and the target stays `registered` for its whole life.
+ *
  * A failure after the stamp leaves the target `registered` (inspectable,
  * never written to again until registration completes); planning it again
  * resumes the same target, and the stamp is then a no-op. The engine's
@@ -51,6 +57,14 @@ import {
  */
 const DATABASE_OID = sql`SELECT d.oid::text AS oid FROM pg_catalog.pg_database d
   WHERE d.datname = pg_catalog.current_database()`
+
+const EXPONETDB_SCHEMA = sql`SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_namespace
+  WHERE nspname = 'exponetdb') AS present`
+
+/** The plan's mode; a plan made before ADR-0039 is managed. */
+function observedPlan(c: Body): boolean {
+  return c.has('mode') && c.oneOf(['managed', 'observed'] as const, 'mode') === 'observed'
+}
 
 /** A failure's class for an operation event: a catalog code and reason, never a message. */
 function failureClass(error: unknown): string {
@@ -129,7 +143,9 @@ export class TargetRegisterKind extends RegistryKind {
       })
     }
     const versions = expected.object('credentials')
-    for (const role of ['observer', 'migrator'] as const) {
+    for (const role of observedPlan(c)
+      ? (['observer'] as const)
+      : (['observer', 'migrator'] as const)) {
       const active = await activeCredential(store, c.text('clusterId'), role)
       if (active?.secretVersion !== versions.int(role)) {
         changed.push({
@@ -144,9 +160,11 @@ export class TargetRegisterKind extends RegistryKind {
 
   /** Step 2: the registered target and its placement (idempotent for a resumed registration). */
   async #record(ctx: ExecutionContext, c: Body): Promise<'ok' | ExecutionOutcome> {
+    const mode = observedPlan(c) ? 'observed' : 'managed'
     const existing = await findTarget(this.deps.store, c.text('targetId'))
     if (existing !== undefined) {
       return existing.state === 'registered' &&
+        existing.mode === mode &&
         existing.placement?.placementId === c.text('placementId')
         ? 'ok'
         : {
@@ -166,9 +184,9 @@ export class TargetRegisterKind extends RegistryKind {
       )
       await tx.query(
         'registry.kind.target.insert',
-        `INSERT INTO registry.targets (target_id, project_id, environment_id, path, tier, generation, state,
+        `INSERT INTO registry.targets (target_id, project_id, environment_id, path, tier, generation, state, mode,
                                        created_by_operation_id, state_changed_by_operation_id)
-         VALUES ($1, $2, $3, $4, $5, 1, 'registered', $6, $6)`,
+         VALUES ($1, $2, $3, $4, $5, 1, 'registered', $7, $6, $6)`,
         [
           c.id('tgt', 'targetId'),
           c.id('prj', 'projectId'),
@@ -176,6 +194,7 @@ export class TargetRegisterKind extends RegistryKind {
           c.text('path'),
           c.oneOf(['prod', 'nonprod'] as const, 'tier'),
           ctx.operationId,
+          mode,
         ],
       )
       await tx.query(
@@ -247,6 +266,111 @@ export class TargetRegisterKind extends RegistryKind {
     return { ok: true }
   }
 
+  /**
+   * An observed target (ADR-0039 §2): the database is the one registered when the session reaches
+   * the pinned cluster, the database name and the recorded oid, and nothing of ExponetDB is in it.
+   */
+  async #observedReadBack(c: Body): Promise<ReadBack> {
+    const target = await findTarget(this.deps.store, c.text('targetId'))
+    if (target === undefined) return { ok: false, reason: 'target_missing' }
+    const opened = await this.deps.connector.forTarget(
+      target,
+      'observer',
+      `register/${c.text('targetId')}`,
+    )
+    try {
+      if (opened.session.facts.systemIdentifier !== c.text('systemIdentifier')) {
+        return { ok: false, reason: 'system_identifier' }
+      }
+      if (opened.session.facts.databaseOid !== c.text('databaseOid')) {
+        return { ok: false, reason: 'database_oid' }
+      }
+      const schema = await opened.session.query(EXPONETDB_SCHEMA)
+      return schema[0]?.bool('present') === false ? { ok: true } : { ok: false, reason: 'written' }
+    } finally {
+      await opened.session.close()
+    }
+  }
+
+  /** `mode: observed`: record, snapshot as the observer, never write to the database. */
+  async #runObserved(ctx: ExecutionContext, c: Body): Promise<ExecutionOutcome> {
+    // Step 1: an observer session proves the database before anything is recorded.
+    let opened: Awaited<ReturnType<typeof this.deps.connector.open>>
+    try {
+      opened = await this.deps.connector.open({
+        clusterId: c.text('clusterId'),
+        database: c.text('databaseName'),
+        role: 'observer',
+        purpose: `register/${c.text('targetId')}/${ctx.operationId}`,
+      })
+    } catch (error) {
+      return refusalOf(error)
+    }
+    try {
+      if (
+        opened.session.facts.systemIdentifier === (await this.deps.controlStoreSystemIdentifier())
+      ) {
+        return {
+          outcome: 'not_applied',
+          errorCode: 'TARGET_REGISTRATION_REFUSED',
+          detail: { reason: 'cluster_hosts_control_store' },
+        }
+      }
+      if (opened.session.facts.databaseOid !== c.text('databaseOid')) {
+        return {
+          outcome: 'not_applied',
+          errorCode: 'TARGET_REGISTRATION_REFUSED',
+          detail: { reason: 'database_mismatch' },
+        }
+      }
+    } finally {
+      await opened.session.close()
+    }
+    // Step 2: the registered target, its mode and its placement in the Control Store.
+    const recorded = await this.#record(ctx, c)
+    if (recorded !== 'ok') return recorded
+    // Step 3: the registration snapshot (the drift reference), as the observer.
+    let snapshot: Awaited<ReturnType<typeof this.deps.snapshots.capture>>
+    try {
+      snapshot = await this.deps.snapshots.capture({
+        targetId: c.text('targetId'),
+        generation: c.int('generation'),
+        operationId: ctx.operationId,
+      })
+    } catch (error) {
+      await this.#event(ctx.operationId, 'registration_snapshot_failed', {
+        reason: failureClass(error),
+      })
+      return 'applied'
+    }
+    // Step 4: the audit event; the target stays registered (it is never activated).
+    const audited = await this.effect(async (tx) => {
+      await this.audit(
+        tx,
+        ctx,
+        {
+          mode: 'observed',
+          databaseId: c.text('databaseId'),
+          placementId: c.text('placementId'),
+          generation: c.int('generation'),
+          stamp: 'none',
+          snapshotId: snapshot.snapshotId,
+          fingerprint: snapshot.fingerprint,
+          snapshotComplete: snapshot.complete,
+          baseline: snapshot.baseline,
+        },
+        {
+          targetId: c.text('targetId'),
+          targetPath: c.text('path'),
+          tier: c.oneOf(['prod', 'nonprod'] as const, 'tier'),
+          clusterId: c.text('clusterId'),
+        },
+      )
+      return true
+    })
+    return audited === 'unknown' ? 'unknown' : 'applied'
+  }
+
   async run(ctx: ExecutionContext, c: Body): Promise<ExecutionOutcome> {
     const oid = c.textOrNull('databaseOid')
     if (oid === null) {
@@ -257,6 +381,7 @@ export class TargetRegisterKind extends RegistryKind {
         detail: { reason: 'database_mismatch' },
       }
     }
+    if (observedPlan(c)) return this.#runObserved(ctx, c)
     const stamp = {
       installationId: c.text('installationId'),
       targetId: c.text('targetId'),
@@ -410,6 +535,11 @@ export class TargetRegisterKind extends RegistryKind {
 
   async check(ctx: ExecutionContext, c: Body): Promise<boolean> {
     const target = await findTarget(this.deps.store, c.text('targetId'))
+    if (observedPlan(c)) {
+      if (target?.state !== 'registered' || target.mode !== 'observed') return false
+      if (!(await this.#observedReadBack(c)).ok) return false
+      return (await this.deps.snapshots.ofOperation(ctx.operationId)) !== undefined
+    }
     if (target === undefined || target.state !== 'active') return false
     const back = await this.#readBack(c, null)
     if (!back.ok) return false
@@ -419,6 +549,8 @@ export class TargetRegisterKind extends RegistryKind {
   async applied(ctx: ExecutionContext, c: Body): Promise<boolean> {
     const target = await findTarget(this.deps.store, c.text('targetId'))
     if (target === undefined) return false
+    // An observed registration writes the Control Store only: the record is what was applied.
+    if (observedPlan(c)) return target.mode === 'observed' && target.state === 'registered'
     if (target.state === 'active') return true
     const opened = await this.deps.connector.forTarget(
       target,

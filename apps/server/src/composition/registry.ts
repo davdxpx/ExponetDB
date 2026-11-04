@@ -12,15 +12,23 @@ import {
   RegistrationSnapshotStore,
   recordDriftFailure,
   recordLedgerWatch,
+  recordMigrationFinding,
   rollupStatements,
   runDriftCheck,
   sampleStatements,
   sampleTarget,
   statementTargets,
   targetsToSample,
+  WORKER_AUDIT_PARTY,
 } from '@exponetdb/diagnostics'
 import type { Clock } from '@exponetdb/kernel'
-import { divergenceDetails, ledgerDivergenceOf } from '@exponetdb/migrations-engine'
+import {
+  divergenceDetails,
+  type EvidenceReads,
+  type HotfixCheck,
+  hotfixesWithoutEvidence,
+  ledgerDivergenceOf,
+} from '@exponetdb/migrations-engine'
 import { rotationOwner } from '@exponetdb/nodes'
 import { describeError, type Logger } from '@exponetdb/observability'
 import { KindRegistry, type OperationKind, WORKER_ACTOR } from '@exponetdb/operations'
@@ -30,6 +38,7 @@ import {
   type BackupBindingsPort,
   Connector,
   findTarget,
+  isObserved,
   type RegistryAcceptContext,
   type RegistryPolicyContext,
   registryKinds,
@@ -194,7 +203,10 @@ export interface ObservationTasks {
   sampleHealth(): Promise<string | undefined>
   /** Scheduled drift checks of the targets that are due. */
   checkDrift(): Promise<string | undefined>
-  /** VC-022: every active or suspended target's ledger against its mirror; a finding while they differ. */
+  /**
+   * VC-022: every active or suspended target's ledger against its mirror; a finding while they differ.
+   * W10-3 (E16): a production target's migrations against its evidence target's ledger.
+   */
   watchLedgers(): Promise<string | undefined>
   /** Health sample partitions ahead and expired ones dropped. */
   partitions(): Promise<string | undefined>
@@ -229,6 +241,50 @@ export function settleCredentialRound(
   if (failed.length > 0) {
     throw new TaskFailure('credential_verification_failed')
   }
+}
+
+/**
+ * What one E16 comparison does to the production target's finding: compared, it names what the
+ * evidence target lacks (or that its ledger diverges) and clears when nothing is left; with no
+ * evidence target to compare with it is resolved `superseded`; while the evidence target cannot be
+ * read it stays as it is and the round is not failed (planning calls that `unreachable` too).
+ */
+async function recordHotfixCheck(
+  rt: RegistryRuntime,
+  targetId: string,
+  check: HotfixCheck | undefined,
+): Promise<void> {
+  if (check === undefined || check.kind === 'unreachable') return
+  await rt.store.transaction('ledger.hotfix_without_evidence.record', (tx) =>
+    check.kind === 'not_comparable'
+      ? recordMigrationFinding(
+          tx,
+          rt.clock,
+          targetId,
+          'hotfix_without_evidence',
+          null,
+          WORKER_AUDIT_PARTY,
+          'superseded',
+        )
+      : recordMigrationFinding(
+          tx,
+          rt.clock,
+          targetId,
+          'hotfix_without_evidence',
+          {
+            migrations: check.items.map((i) => ({
+              migrationId: i.migrationId,
+              name: i.name,
+              evidence: i.evidence,
+              operationId: i.operationId,
+              planId: i.planId,
+            })),
+            details: { evidenceTargetId: check.evidenceTargetId },
+            ...(check.evidenceDivergent ? { cause: 'evidence_divergent' as const } : {}),
+          },
+          WORKER_AUDIT_PARTY,
+        ),
+  )
 }
 
 export function observationTasks(
@@ -304,10 +360,13 @@ export function observationTasks(
     },
     async watchLedgers() {
       const ids = await targetsToSample(rt.store)
+      // One live read per evidence target in this round, shared by its production targets (L1).
+      const evidenceReads: EvidenceReads = new Map()
       let failed = 0
       for (const id of ids) {
         const target = await findTarget(rt.store, id)
-        if (target === undefined || target.placement === null) continue
+        // An observed target has no ExponetDB ledger to watch (ADR-0039).
+        if (target === undefined || target.placement === null || isObserved(target)) continue
         try {
           const divergence = await ledgerDivergenceOf(
             { store: rt.store, connector: probes },
@@ -332,6 +391,26 @@ export function observationTasks(
           // A target that cannot be read is the health sample's to say; the watch never reads it as agreeing.
           failed++
           logger.warn('ledger.watch_failed', { targetId: id, ...describeError(error) })
+        }
+        // E16 (W10-3), on its own: an unreadable production ledger never skips it (review L3).
+        if (target.tier !== 'prod') continue
+        try {
+          await recordHotfixCheck(
+            rt,
+            target.targetId,
+            await hotfixesWithoutEvidence(
+              {
+                store: rt.store,
+                connector: probes,
+                installationId: rt.installationId,
+                evidenceReads,
+              },
+              target,
+            ),
+          )
+        } catch (error) {
+          failed++
+          logger.warn('ledger.hotfix_watch_failed', { targetId: id, ...describeError(error) })
         }
       }
       if (failed > 0) throw new TaskFailure('ledger_watch_incomplete')

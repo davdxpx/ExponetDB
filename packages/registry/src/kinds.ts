@@ -431,8 +431,8 @@ async function insertEndpoint(
   await tx.query(
     'registry.kind.endpoint.insert',
     `INSERT INTO registry.endpoints (endpoint_id, cluster_id, kind, pooler_mode, host, port, tls_server_name, label,
-                                     state, created_by_operation_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', $9)`,
+                                     login_suffix, state, created_by_operation_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $10, 'active', $9)`,
     [
       e.id('end', 'endpointId'),
       clusterId,
@@ -443,6 +443,8 @@ async function insertEndpoint(
       e.text('tlsServerName'),
       e.text('label'),
       operationId,
+      // A plan made before ADR-0039 carries no suffix.
+      e.has('loginSuffix') ? e.textOrNull('loginSuffix') : null,
     ],
   )
 }

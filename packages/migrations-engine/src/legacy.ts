@@ -50,6 +50,7 @@ import {
   evaluateRegistryPolicy,
   excusedValueKey,
   findTarget,
+  isObserved,
   operationActor,
   type RegistryActor,
   RegistryError,
@@ -481,6 +482,8 @@ export async function planImportAnalysis(
 ): Promise<PlanRecord> {
   const target = await findTarget(tx, targetRef)
   if (target === undefined) throw new MigrationError('TARGET_NOT_FOUND')
+  // ADR-0039 §3: an observed target is never written to, and has no ExponetDB ledger.
+  if (isObserved(target)) throw new MigrationError('TARGET_OBSERVED_ONLY')
   if (target.state !== 'active' || target.placement === null) {
     throw new MigrationError('TARGET_UNAVAILABLE')
   }
@@ -2088,6 +2091,8 @@ export async function planBaseline(
 ): Promise<PlanRecord> {
   const target = await findTarget(tx, targetRef)
   if (target === undefined) throw new MigrationError('TARGET_NOT_FOUND')
+  // ADR-0039 §3: an observed target is never written to, and has no ExponetDB ledger.
+  if (isObserved(target)) throw new MigrationError('TARGET_OBSERVED_ONLY')
   if (target.state !== 'active' || target.placement === null) {
     throw new MigrationError('TARGET_UNAVAILABLE')
   }

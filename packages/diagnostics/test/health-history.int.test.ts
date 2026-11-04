@@ -210,6 +210,30 @@ describe('the gaps and their cause', () => {
     }
   })
 
+  it('shows the gap of a stopped sampler for an observed target, which is sampled while registered (ADR-0039)', async () => {
+    const asked = { from: new Date(t0), to: new Date(now), stateChangedAt: iso(t0) }
+    const observed = await readHealthHistory(serve, {
+      targetId: target,
+      state: 'registered',
+      mode: 'observed',
+      ...asked,
+    })
+    const active = await readHealthHistory(serve, { targetId: target, state: 'active', ...asked })
+    expect(observed.gaps).toEqual(active.gaps)
+    expect(observed.gaps.map((g) => g.cause)).toEqual([
+      'sampler_lagging',
+      'control_plane_down',
+      'sampler_lagging',
+    ])
+    // A managed target that is still registering is not sampled: no gap is claimed.
+    const registering = await readHealthHistory(serve, {
+      targetId: target,
+      state: 'registered',
+      ...asked,
+    })
+    expect(registering.gaps).toEqual([])
+  })
+
   it('clips a gap to the range asked for and finds none before the first sample', async () => {
     const history = await readHealthHistory(serve, {
       targetId: target,

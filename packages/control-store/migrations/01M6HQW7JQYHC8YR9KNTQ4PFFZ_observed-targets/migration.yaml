@@ -1,0 +1,24 @@
+schema: exponetdb.migration/v1
+id: 01M6HQW7JQYHC8YR9KNTQ4PFFZ
+name: observed-targets
+description: |
+  ADR-0039 (Wave 10 order, W10-D3, W10-D4): observed targets on hosted providers.
+  registry.endpoints gains login_suffix (pooler endpoints only, ^[a-z0-9]{1,40}$):
+  a pooler that routes by the login name is reached as exponetdb_<role>.<suffix>.
+  registry.targets gains mode (managed by default, or observed): an observed target
+  is read as the observer only, nothing is written to its database, and it stays
+  registered until it is decommissioned. Both columns are immutable: the endpoint
+  and target guards are replaced with the same signatures and triggers, and the
+  target guard refuses an observed target in active or suspended. The database
+  guard keeps registry.databases.observed_oid once it is set (an observed
+  target's identity). Additive: two columns, one constraint, three replaced
+  functions; the earlier verify.sql files stay true.
+dependsOn:
+  - 01M6EJD93DP9GNTHF77YY8VNY6
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql

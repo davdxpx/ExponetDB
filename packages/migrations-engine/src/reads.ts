@@ -10,7 +10,7 @@ import {
   sql,
   type VerificationRecord,
 } from '@exponetdb/postgres'
-import type { Connector, TargetRecord } from '@exponetdb/registry'
+import { type Connector, isObserved, type TargetRecord } from '@exponetdb/registry'
 import { ledgerDivergence } from './divergence.ts'
 import { MigrationError } from './errors.ts'
 import { projectAliases } from './execution-roles.ts'
@@ -136,6 +136,9 @@ function entryOf(r: LedgerRecord, verifications: readonly VerificationRecord[]) 
 
 /** `migration.status.get`: the target's ledger live, its verifications and what the store knows is pending. */
 export async function migrationStatus(deps: ReadDeps, target: TargetRecord) {
+  // shortcut: an observed target (ADR-0039 §3) has no ExponetDB ledger; its legacy-ledger status
+  // is not built yet, so the read is refused instead of shown empty. Upgrade with Wave 10 W10-4.
+  if (isObserved(target)) throw new MigrationError('TARGET_OBSERVED_ONLY')
   const scope = await scopeOf(deps.store, target.projectId)
   const opened = await deps.connector.forTarget(target, 'observer', `status/${target.targetId}`)
   let live: {
@@ -267,6 +270,7 @@ export function layerFrom(value: unknown, layer: 'structural' | 'runtime' | 'eng
 
 /** `migration.get`: one migration's ledger row, events and verification runs (live). */
 export async function migrationDetail(deps: ReadDeps, target: TargetRecord, migrationId: string) {
+  if (isObserved(target)) throw new MigrationError('TARGET_OBSERVED_ONLY')
   const scope = await scopeOf(deps.store, target.projectId)
   const opened = await deps.connector.forTarget(target, 'observer', `migration/${target.targetId}`)
   try {

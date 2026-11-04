@@ -197,6 +197,96 @@ schema-only copies the scratch target still needs (`auth`, for example).
 | `scratch-reset-sql`'s script refuses: `objects outside the managed scope depend on it and would be dropped` | an object outside the scope depends on one inside it; a release before follow-up 2 also counted the casts and access methods of an extension in the scope (`vector` in `public`) | upgrade; otherwise drop or move the named objects (each is listed) and run the script again |
 | `migration import analyze` answers `RESPONSE_INVALID`, then `TRANSPORT_FAILED`, and `serve` has restarted | the process was killed for memory while it parsed the history: a role started without `--liftoff-only`, or a limit below the measured need ([deployment.md §2a](./deployment.md#2a-memory)) | the entrypoint with `--liftoff-only` (Coolify: Custom Docker Options), memory and swap limits of at least 512 MiB set together; the startup log names a missing flag (`process.wasm_tier_up_enabled`) |
 
+## A hosted provider: observe only
+
+**[DECIDED]** (ADR-0039, the owner's Wave 10 order W10-D3 and W10-D4) A
+database on a hosted provider whose direct host ExponetDB cannot reach (an
+IPv6-only host, the Control Plane has no IPv6 route) and that must not be
+written to (OD-7b) is registered as an **observed** target through the
+provider's session pooler. ExponetDB reads it as the observer only: no
+identity marker, no `exponetdb` schema, no ledger, no other role.
+
+`cluster.yaml`: the session pooler is the only endpoint; `loginSuffix` is the
+part the pooler routes by (`<role>.<project-ref>`, so the project ref):
+
+```yaml
+displayName: hosted production
+caBundle: |
+  -----BEGIN CERTIFICATE-----
+  … the provider's root CA …
+  -----END CERTIFICATE-----
+endpoints:
+  - kind: pooler
+    poolerMode: session
+    host: pooler.provider.example
+    port: 5432
+    label: session pooler
+    loginSuffix: abcdefghijklmnopqrst
+```
+
+Before `cluster register`, the owner confirms the suffix against the live
+project: the provider's console names the project ref of the production
+project, and it must be the `loginSuffix` above. A restored, forked or
+cloned project has the same system identifier, database oid and observer
+password; nothing ExponetDB checks later tells it apart from the original.
+
+```sh
+exponetdb cluster register --file cluster.yaml --apply
+exponetdb cluster declare-tier cls_… --tier prod --apply
+exponetdb cluster bootstrap-sql cls_… --roles observer --database postgres --file observer.sql
+```
+
+shortcut: one cluster per pooler `host:port` (`endpoints_one_active_address`
+is registry-wide), so a second project on the same provider pooler cannot be
+registered yet; upgrade with an address key that includes the login suffix.
+
+`observer.sql` holds only the observer, in one transaction that stops at the
+first error: the role (created with explicit attributes; an existing one with
+a privileged attribute or a membership other than `pg_monitor` is refused,
+and its earlier role settings are reset), its
+`pg_monitor` membership, its settings (`default_transaction_read_only`,
+`statement_timeout`, `idle_in_transaction_session_timeout`) and `CONNECT` on
+the named databases. With `--ledger` it also `\connect`s to each named
+database and grants the observer `SELECT` on the legacy ledger tables there
+(optional; leave it out unless the legacy ledgers are read). Its statement
+list is what the owner approves before it runs on the hosted production
+database (W10-D4). The provider's
+administrator (not a superuser; it may create roles and grant `pg_monitor`)
+runs it, then sets the observer's password:
+
+```sh
+psql -X -v ON_ERROR_STOP=1 -f observer.sql "host=pooler.provider.example port=5432 dbname=postgres user=postgres.abcdefghijklmnopqrst sslmode=verify-full sslrootcert=provider-ca.pem"
+```
+
+```text
+\password exponetdb_observer
+```
+
+```sh
+exponetdb cluster credential submit cls_… observer     # verified through the pooler
+exponetdb cluster confirm cls_… --apply                 # pins system_identifier
+exponetdb cluster database register cls_… postgres --apply
+exponetdb target register --project prj_… --environment env_… --database dbs_… --mode observed --apply
+exponetdb target show acme/platform/production          # state registered, mode observed
+```
+
+The target register plan's analysis says `no writes`. The target stays
+`registered`; health, schema, drift (scheduled and on demand), statistics,
+sessions and locks are read as the observer. A data read, a raw statement,
+a migration, a cancel or terminate plan or a drift acceptance answers
+`TARGET_OBSERVED_ONLY`. Only the observer's credential exists: a session of
+another role on this cluster, the reader included, answers
+`REGISTRY_CONFLICT` (`cluster_pooler_only`). When the database is recreated under the same name
+(another database oid), every read answers `TARGET_IDENTITY_MISMATCH`
+(`database_oid`) and health opens a critical `identity_mismatch` finding;
+the target is never suspended. How it becomes a managed target after the
+Wave 11 cutover is not built and is open
+([OD-71](../00-product/open-decisions.md#od-71-wave-11-from-an-observed-target-to-a-managed-one)):
+a path is never reused.
+
+**[OBSERVED]** (2026-11-03) The login suffix is proven at the session
+specification only; it has not been run against a live Supavisor yet.
+
 ## 7. Adopting the cluster by the node agent
 
 **[DECIDED]** (OD-54 option (a), the owner's Wave 9 Part B order of

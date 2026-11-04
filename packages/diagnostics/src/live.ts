@@ -1,5 +1,5 @@
 import { sql, type TargetSession } from '@exponetdb/postgres'
-import type { TargetRecord } from '@exponetdb/registry'
+import { catalogReadable, type TargetRecord } from '@exponetdb/registry'
 import { DiagnosticsError } from './errors.ts'
 import { requireIdentity } from './identity.ts'
 import type { SnapshotDeps } from './snapshots.ts'
@@ -10,7 +10,7 @@ import type { SnapshotDeps } from './snapshots.ts'
  * engine-authored, read-only SQL on an observer session
  * ([sql-execution-security.md §1](../../../exponetdb-docs/03-database-model/sql-execution-security.md#1-engine-authored-sql-introspection-diagnostics-operator-actions),
  * performance.md §6), exactly the path the session list reads through
- * (`activity.ts`): the target must be active or suspended, the identity
+ * (`activity.ts`): the target must be active, suspended or observed (ADR-0039), the identity
  * marker is checked first, and the session's statement timeout is 5 s and
  * its lock timeout 1 s, so a diagnostic never waits on the locks of the
  * database it diagnoses.
@@ -44,7 +44,7 @@ export async function onObserver<T>(
   purpose: string,
   read: (session: TargetSession) => Promise<T>,
 ): Promise<T> {
-  if (target.state !== 'active' && target.state !== 'suspended') {
+  if (!catalogReadable(target)) {
     throw new DiagnosticsError(
       target.state === 'decommissioned' ? 'TARGET_NOT_FOUND' : 'TARGET_UNAVAILABLE',
     )

@@ -931,6 +931,7 @@ export type EndpointRequest = {
   readonly host: string
   readonly kind: EndpointKind
   readonly label: string
+  readonly loginSuffix?: string
   readonly poolerMode?: "session" | "transaction"
   readonly port: number
   readonly tlsServerName?: string
@@ -947,6 +948,7 @@ export type EndpointView = {
   readonly id: string
   readonly kind: EndpointKind
   readonly label: string
+  readonly loginSuffix: string | null
   readonly poolerMode: "session" | "transaction" | null
   readonly port: number
   readonly retiredAt: string | null
@@ -1644,6 +1646,7 @@ export type MigrationPlanRequest = {
   readonly lockWaitSeconds?: number
   readonly migrationIds?: readonly string[]
   readonly source?: MigrationSourceClaim
+  readonly sourceComplete?: boolean
 }
 
 export type MigrationProgress = {
@@ -3243,6 +3246,7 @@ export type Target = {
     readonly observedAt: string
     readonly source: string
   }) | null
+  readonly mode: TargetMode
   readonly openFindingCount: number
   readonly path: string
   readonly placement: ({
@@ -3310,9 +3314,12 @@ export type TargetHealthView = TargetHealth & {
   readonly capacity?: TargetCapacity
 }
 
+export type TargetMode = "managed" | "observed"
+
 export type TargetRegisterRequest = {
   readonly databaseId: string
   readonly environmentId: string
+  readonly mode?: TargetMode
   readonly projectId: string
 }
 
@@ -3590,7 +3597,7 @@ export interface Operations {
   }
   getClusterBootstrapSql: {
     readonly params: { readonly clusterId: string }
-    readonly query: { readonly database?: readonly string[]; readonly environment?: string; readonly ledgers?: ReadonlyArray<"supabase" | "drizzle" | "applied_migrations">; readonly project?: string }
+    readonly query: { readonly database?: readonly string[]; readonly environment?: string; readonly ledgers?: ReadonlyArray<"supabase" | "drizzle" | "applied_migrations">; readonly project?: string; readonly roles?: "all" | "observer" }
     readonly body: never
     readonly response: ClusterBootstrapSql
   }

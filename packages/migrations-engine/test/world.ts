@@ -82,7 +82,18 @@ export interface World {
   drive(options?: DriveOptions): Promise<void>
   apply(p: PlanRecord, options?: DriveOptions): Promise<OperationRecord>
   operation(id: string): Promise<OperationRecord>
-  registerTarget(envSlug: string, tier: 'prod' | 'nonprod', evidenceFrom?: string): Promise<Target>
+  registerTarget(
+    envSlug: string,
+    tier: 'prod' | 'nonprod',
+    evidenceFrom?: string,
+    /** ADR-0039: `observed` registers without marker or ledger (default `managed`). */
+    mode?: 'managed' | 'observed',
+  ): Promise<Target>
+  /**
+   * Replaces the policy rules of planning and acceptance: `registry-only` drops the migration
+   * rules, the state a break-glass apply leaves without its grant and second person (E16).
+   */
+  setRules(rules: 'registry-only' | 'all'): void
   close(): Promise<void>
 }
 
@@ -282,7 +293,7 @@ export async function migrationWorld(
       if (op === undefined) throw new Error('operation vanished')
       return op
     },
-    async registerTarget(envSlug, tier, evidenceFrom) {
+    async registerTarget(envSlug, tier, evidenceFrom, mode) {
       const env = await run(h, a, (tx) =>
         planEnvironmentCreate(tx, h.context, a, productId, {
           slug: envSlug,
@@ -305,6 +316,7 @@ export async function migrationWorld(
           projectId: projectId as never,
           environmentId: environmentId as never,
           databaseId: databaseId as never,
+          ...(mode === undefined ? {} : { mode }),
         }),
       )
       if (r.operation.state !== 'succeeded') {
@@ -318,6 +330,11 @@ export async function migrationWorld(
       )
       if (record === undefined) throw new Error('target not registered')
       return { record, database }
+    },
+    setRules(rules) {
+      ;(policy as { registry: RuleRegistry }).registry = new RuleRegistry(
+        rules === 'all' ? [...REGISTRY_RULES, ...MIGRATION_RULES] : [...REGISTRY_RULES],
+      )
     },
     close: () => h.close(),
   }

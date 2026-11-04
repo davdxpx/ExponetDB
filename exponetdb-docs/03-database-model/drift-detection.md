@@ -41,6 +41,34 @@ schema is an optional additional reference
 | **E** cluster desired ↔ actual | declared roles, role settings, memberships, extensions, `pg_hba`, configuration vs node/cluster observation | role missing, role attribute changed (`BYPASSRLS`), role setting lost after a move | warn / critical |
 | **F** ORM ↔ expected | ORM shape vs fingerprint document of baseline+bundles | column in ORM not in DB (future `42703`) | warn (CI) |
 
+**[DECIDED]** (Wave 10 W10-3, E18; reworked after the review of
+2026-11-04) Of kind A, `applied_not_in_source` is built. A migration plan
+whose request says its bundles are the whole source (`sourceComplete`; the
+CLI sets it when it plans every local bundle, at most 50 bundles per request)
+hands the bundle ids to the comparison only after ingest validated every
+bundle (manifest, directory name, checksum against what is applied); a plan
+refused for a bundle records nothing, a plan refused afterwards (nothing
+pending) still does. The ids are compared with the target's Control Store
+mirror (migrations this installation applied, not reverted; legacy-import
+and baseline rows are no bundle and are not counted). Migration ids are
+ULIDs, ordered by creation time: an applied migration older than the
+source's newest bundle and not in it opens or keeps one warning finding
+`applied_not_in_source` of kind `health` (so a kind-C drift check and
+`drift.accept` leave it alone), naming the 64 newest of them, the source's
+newest id and the caller; an applied migration newer than the newest bundle
+means the source is behind (an old clone): it is shown only in the plan's
+`analysis.sourceCheck.behind` and never opens or changes the finding. The
+finding clears only when a whole source has every migration it names that
+is still applied. The mirror read and the finding write are one transaction
+per target at a time (an advisory lock). Opening and clearing are audited
+(`ledger.applied_not_in_source.detected`, `.cleared`) with the caller.
+**Residual:** a feature branch cut before an older bundle was merged lacks
+that older bundle and still opens the finding, until a whole source with it
+is planned. A bundle with the id but other bytes is E19
+(`MIGRATION_CHECKSUM_MISMATCH`), not E18. `pending_in_source` is the plan
+itself; `checksum_differs_from_source` is the plan's refusal; neither is a
+finding.
+
 ## 2. How C works without a "desired schema file"
 
 ExponetDB does not need a declarative target schema to detect structural drift:

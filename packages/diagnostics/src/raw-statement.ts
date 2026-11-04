@@ -14,7 +14,7 @@ import {
   revealStatementSync,
   type SupportedMajor,
 } from '@exponetdb/postgres/parser'
-import { brand, RegistryError, type TargetRecord } from '@exponetdb/registry'
+import { brand, isObserved, RegistryError, type TargetRecord } from '@exponetdb/registry'
 import { DiagnosticsError } from './errors.ts'
 import { requireIdentity } from './identity.ts'
 import type { SnapshotDeps } from './snapshots.ts'
@@ -202,6 +202,8 @@ export async function readRawStatement(
   lookup: RawStatementLookup,
 ): Promise<RawStatement> {
   if (target.state === 'decommissioned') throw new DiagnosticsError('TARGET_NOT_FOUND')
+  // A raw statement is a reveal of text that may carry data (ADR-0039 §3).
+  if (isObserved(target)) throw new DiagnosticsError('TARGET_OBSERVED_ONLY')
   if (target.state !== 'active' && target.state !== 'suspended') {
     throw unavailable('target_unreachable')
   }

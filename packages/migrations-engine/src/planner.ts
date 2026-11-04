@@ -40,6 +40,7 @@ import {
   evaluateRegistryPolicy,
   findTarget,
   grantUsable,
+  isObserved,
   operationActor,
   type RegistryActor,
   type RegistryPolicyContext,
@@ -57,6 +58,7 @@ import {
   type ResolvedExecutionRoles,
   roleUnder,
 } from './execution-roles.ts'
+import { compareSource } from './hotfix.ts'
 import {
   ingestBundles,
   readRevision,
@@ -93,7 +95,15 @@ export interface MigrationPlanContext {
   readonly connector: Connector
   /** OD-70 (b): the configured Control Store volume; inline bundles are refused at 90 %. */
   readonly volumeBytes?: number | undefined
+  /**
+   * E18 (W10-3): receives the ids of a whole source (`sourceComplete`) once ingest validated every
+   * bundle, also when the plan is refused afterwards; never for a refused bundle.
+   */
+  readonly onSourceValidated?: ((ids: readonly string[]) => void) | undefined
 }
+
+/** How many ids of each list a plan's source check shows. */
+const SOURCE_CHECK_SHOWN = 64
 
 interface ProjectSettings {
   readonly projectId: string
@@ -580,6 +590,8 @@ export async function planMigrationApply(
   if (target === undefined) {
     throw new MigrationError('TARGET_NOT_FOUND')
   }
+  // ADR-0039 §3: an observed target is never written to, and has no ExponetDB ledger.
+  if (isObserved(target)) throw new MigrationError('TARGET_OBSERVED_ONLY')
   if (target.state !== 'active') {
     throw new MigrationError('TARGET_SUSPENDED', {
       reason:
@@ -605,6 +617,24 @@ export async function planMigrationApply(
       ...(ctx.volumeBytes === undefined ? {} : { volumeBytes: ctx.volumeBytes }),
     })
     for (const item of ingested) chosen.set(item.revision.migrationId, item.revision)
+  }
+  // E18: the whole source against what this installation applied here, on validated ids only.
+  let sourceCheck: JsonObject | undefined
+  if (request.sourceComplete === true && chosen.size > 0) {
+    const ids = [...chosen.keys()]
+    ctx.onSourceValidated?.(ids)
+    const c = await compareSource(tx, target, ids)
+    const newestFirst = (refs: readonly { migrationId: string }[]) =>
+      refs
+        .map((r) => r.migrationId)
+        .sort()
+        .reverse()
+        .slice(0, SOURCE_CHECK_SHOWN)
+    sourceCheck = {
+      newestId: c.newestId,
+      appliedNotInSource: newestFirst(c.older),
+      behind: newestFirst(c.newer),
+    }
   }
   for (const id of request.migrationIds ?? []) {
     if (chosen.has(id)) continue
@@ -901,6 +931,7 @@ export async function planMigrationApply(
       }
     }),
     executionRoleParity: parity,
+    ...(sourceCheck === undefined ? {} : { sourceCheck }),
   }
   const subject = {
     productId: target.productId,

@@ -177,6 +177,8 @@ export function causesOfGap(
 export interface HealthHistoryInput {
   readonly targetId: string
   readonly state: 'registered' | 'active' | 'suspended' | 'decommissioned'
+  /** ADR-0039: an observed target is sampled while `registered` (default managed). */
+  readonly mode?: 'managed' | 'observed'
   /** ISO time of the last lifecycle change (when sampling ended, for a decommissioned target). */
   readonly stateChangedAt: string
   readonly from: Date
@@ -242,7 +244,7 @@ export async function readHealthHistory(
       const sampledUntil =
         input.state === 'decommissioned'
           ? Math.min(to, Date.parse(input.stateChangedAt))
-          : input.state === 'registered'
+          : input.state === 'registered' && input.mode !== 'observed'
             ? from
             : to
       const gaps = await gapsOf(tx, {

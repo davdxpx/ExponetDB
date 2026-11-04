@@ -23,6 +23,16 @@ export {
   type StepResult,
   statementsOf,
 } from './executor.ts'
+export {
+  type AppliedRef,
+  compareSource,
+  type EvidenceReads,
+  type HotfixCheck,
+  type HotfixItem,
+  hotfixesWithoutEvidence,
+  type SourceComparison,
+  sourceFindingList,
+} from './hotfix.ts'
 export { aggregate, MigrationApplyKind, stateChanges } from './kind.ts'
 export { migrationKinds } from './kinds.ts'
 export { ledgerDivergenceOf } from './ledger-watch.ts'

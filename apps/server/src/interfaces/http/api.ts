@@ -1151,6 +1151,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         ...(q.project === undefined ? {} : { projectId: q.project }),
         ...(q.environment === undefined ? {} : { environmentId: q.environment }),
         ...(q.ledgers === undefined ? {} : { ledgers: q.ledgers }),
+        ...(q.roles === undefined ? {} : { roles: q.roles }),
       }),
     )
   },

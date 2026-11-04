@@ -739,6 +739,13 @@ export const registryCommands: readonly CommandSpec[] = [
         description: 'The registered database.',
         required: true,
       },
+      {
+        name: 'mode',
+        type: 'enum',
+        values: ['managed', 'observed'],
+        description:
+          'observed: needs the observer credential only, writes nothing to the database and never activates (ADR-0039). Default managed.',
+      },
     ],
     action: 'target.register.plan',
     scopes: MANAGE,
@@ -748,6 +755,7 @@ export const registryCommands: readonly CommandSpec[] = [
       projectId: flag(i, 'project'),
       environmentId: flag(i, 'environment'),
       databaseId: flag(i, 'database'),
+      ...optional(i, 'mode', (v) => v),
     }),
   }),
   ...(['suspend', 'resume', 'decommission'] as const).map((verb) =>
@@ -1082,6 +1090,13 @@ export const registryCommands: readonly CommandSpec[] = [
         placeholder: 'supabase,drizzle,applied_migrations',
         description: 'Legacy ledgers the observer may read during an import.',
       },
+      {
+        name: 'roles',
+        type: 'enum',
+        values: ['all', 'observer'],
+        description:
+          'observer: only the observer role, for an observed target on a hosted provider whose administrator is not a superuser (ADR-0039).',
+      },
     ],
     locality: 'remote',
     effect: 'read',
@@ -1108,6 +1123,7 @@ export const registryCommands: readonly CommandSpec[] = [
                     | 'applied_migrations'
                   )[],
                 }),
+            ...optional(input, 'roles', (v) => v as 'all' | 'observer'),
           },
         }),
       )
@@ -1212,6 +1228,19 @@ export const registryCommands: readonly CommandSpec[] = [
         placeholder: 'name',
         description: 'TLS server name to verify.',
       },
+      {
+        name: 'pooler-mode',
+        type: 'enum',
+        values: ['session', 'transaction'],
+        description: 'The pooling mode of a pooler endpoint (required with --kind pooler).',
+      },
+      {
+        name: 'login-suffix',
+        type: 'string',
+        placeholder: 'ref',
+        description:
+          'A pooler that routes by the login name: the login becomes exponetdb_<role>.<suffix> (ADR-0039).',
+      },
     ],
     action: 'registry.endpoint.add.plan',
     scopes: MANAGE,
@@ -1223,6 +1252,8 @@ export const registryCommands: readonly CommandSpec[] = [
       host: flag(i, 'host'),
       port: Number(i.flags['port'] ?? 5432),
       ...optional(i, 'tls-server-name', (v) => v),
+      ...optional(i, 'pooler-mode', (v) => v),
+      ...optional(i, 'login-suffix', (v) => v),
     }),
   }),
   planCommand({

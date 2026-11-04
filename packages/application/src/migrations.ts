@@ -16,9 +16,11 @@ import type {
   PlanView,
   ScratchCheck,
 } from '@exponetdb/contracts'
+import { namedMigrationIds, recordMigrationFinding } from '@exponetdb/diagnostics'
 import {
   bundleFile,
   bundleView,
+  compareSource,
   decideImportItem,
   type ImportAnalysisInput,
   type ImportItemState,
@@ -38,6 +40,7 @@ import {
   projectStream,
   refuseOversizedLegacyFiles,
   scratchCheck,
+  sourceFindingList,
 } from '@exponetdb/migrations-engine'
 import {
   findTarget,
@@ -183,13 +186,78 @@ export class MigrationUseCases {
     idem?: Idempotency,
   ): Promise<PlanView> {
     const target = await this.#target('migration.plan', caller, ref)
-    return this.#h.plan(
-      caller,
-      'migration.plan',
-      idem,
-      async () => ({ kind: 'target', targetId: target.targetId }),
-      (tx, actor) => planMigrationApply(tx, this.#context(), actor, target.targetId, request),
-    )
+    // E18 (W10-3): the planner hands over the ids of a whole source once ingest validated it.
+    let validated: readonly string[] | undefined
+    const context = {
+      ...this.#context(),
+      onSourceValidated: (ids: readonly string[]) => {
+        validated = ids
+      },
+    }
+    let failure: { readonly error: unknown } | undefined
+    let plan: PlanView | undefined
+    try {
+      plan = await this.#h.plan(
+        caller,
+        'migration.plan',
+        idem,
+        async () => ({ kind: 'target', targetId: target.targetId }),
+        (tx, actor) => planMigrationApply(tx, context, actor, target.targetId, request),
+      )
+    } catch (error) {
+      failure = { error }
+    }
+    // Recorded after the plan's own transaction, so a plan refused after ingest (nothing pending)
+    // still reports a lost bundle; the plan's refusal wins over a failure to record.
+    if (request.sourceComplete === true && validated !== undefined) {
+      const recording = this.#recordSource(caller, target, validated)
+      if (failure === undefined) await recording
+      // shortcut: a failed write after a refused plan is dropped (the use cases have no logger); the
+      // next whole-source plan writes it again. Log it once the application gets a logger.
+      else await recording.catch(() => undefined)
+    }
+    if (failure !== undefined) throw failure.error
+    if (plan === undefined) throw new AuthError('INTERNAL')
+    return plan
+  }
+
+  /**
+   * One transaction per target at a time (an advisory lock): the mirror read and the finding write
+   * of E18 agree, and a slower plan never writes a result the faster one's finding no longer
+   * holds (review of W10-3, H2).
+   */
+  async #recordSource(
+    caller: CallerLike,
+    target: TargetRecord,
+    ids: readonly string[],
+  ): Promise<void> {
+    await this.#h.store.transaction('application.migrations.source_check', async (tx) => {
+      await tx.query(
+        'application.migrations.source_check.lock',
+        'SELECT pg_advisory_xact_lock(1163412546, hashtext($1))',
+        [`source-check/${target.targetId}`],
+      )
+      const comparison = await compareSource(tx, target, ids)
+      const named = await namedMigrationIds(tx, target.targetId, 'applied_not_in_source')
+      const list = sourceFindingList(comparison, named)
+      const parties = this.#h.auditParties(caller)
+      await recordMigrationFinding(
+        tx,
+        this.#h.clock,
+        target.targetId,
+        'applied_not_in_source',
+        list.length === 0
+          ? null
+          : {
+              migrations: list.map((r) => ({ migrationId: r.migrationId, name: r.name })),
+              details: {
+                sourceNewestId: comparison.newestId,
+                actor: { kind: parties.actor.kind, identityId: parties.actor.identityId ?? null },
+              },
+            },
+        parties,
+      )
+    })
   }
 
   #context() {

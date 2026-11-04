@@ -151,6 +151,7 @@ export function targetView(
     // The ledger mirror arrives with the migration engine (Wave 6).
     ledger: null,
     openFindingCount,
+    mode: t.mode,
   }
 }
 
@@ -164,6 +165,7 @@ export function endpointView(e: EndpointRecord): EndpointView {
     port: e.port,
     tlsServerName: e.tlsServerName,
     label: e.label,
+    loginSuffix: e.loginSuffix,
     state: e.state,
     createdAt: e.createdAt,
     retiredAt: e.retiredAt,

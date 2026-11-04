@@ -6341,6 +6341,11 @@
             "type": "string",
             "x-untrusted": true
           },
+          "loginSuffix": {
+            "description": "Pooler endpoints only (ADR-0039): appended to the login as exponetdb_<role>.<suffix> for a pooler that routes by the login name; the server-side role stays exponetdb_<role>.",
+            "pattern": "^[a-z0-9]{1,40}$",
+            "type": "string"
+          },
           "poolerMode": {
             "enum": [
               "session",
@@ -6414,6 +6419,18 @@
             "type": "string",
             "x-untrusted": true
           },
+          "loginSuffix": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9]{1,40}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The login suffix of a pooler endpoint (ADR-0039); null otherwise."
+          },
           "poolerMode": {
             "anyOf": [
               {
@@ -6469,6 +6486,7 @@
           "port",
           "tlsServerName",
           "label",
+          "loginSuffix",
           "state",
           "createdAt",
           "retiredAt"
@@ -11010,6 +11028,10 @@
           },
           "source": {
             "$ref": "#/components/schemas/MigrationSourceClaim"
+          },
+          "sourceComplete": {
+            "description": "The bundles are the project's whole source (the CLI sets it when it submits every local bundle; at most 50 bundles per request). Once ingest validated every bundle, the server compares their ids with the migrations it applied on the target: one older than the newest bundle that the source lacks opens the finding applied_not_in_source (failure case E18); newer ones mean the source is behind and are shown in the plan's sourceCheck only; the finding clears when a whole source has every migration it names. Recorded also when the plan is refused after ingest, never for a refused bundle.",
+            "type": "boolean"
           }
         },
         "type": "object"
@@ -17061,6 +17083,7 @@
               "OWNER_INVARIANT",
               "TARGET_NOT_FOUND",
               "TARGET_SUSPENDED",
+              "TARGET_OBSERVED_ONLY",
               "TARGET_UNAVAILABLE",
               "TARGET_CREDENTIAL_INVALID",
               "TARGET_TLS_FAILED",
@@ -22493,6 +22516,9 @@
               }
             ]
           },
+          "mode": {
+            "$ref": "#/components/schemas/TargetMode"
+          },
           "openFindingCount": {
             "maximum": 9007199254740991,
             "minimum": 0,
@@ -22614,7 +22640,8 @@
           "environment",
           "placement",
           "ledger",
-          "openFindingCount"
+          "openFindingCount",
+          "mode"
         ],
         "type": "object"
       },
@@ -22963,9 +22990,17 @@
           }
         ]
       },
+      "TargetMode": {
+        "description": "ADR-0039: a managed target carries the identity marker and the ledger; an observed target is read as the observer only, is never written and stays registered (never active).",
+        "enum": [
+          "managed",
+          "observed"
+        ],
+        "type": "string"
+      },
       "TargetRegisterRequest": {
         "additionalProperties": false,
-        "description": "Registers the target <product>/<project>/<environment> on a registered database: stamps the identity marker and creates the empty ledger, the only data-plane write of Wave 4.",
+        "description": "Registers the target <product>/<project>/<environment> on a registered database: a managed target is stamped with the identity marker and gets the empty ledger (the only data-plane write of Wave 4); an observed one is only recorded and snapshotted.",
         "properties": {
           "databaseId": {
             "description": "Entity id `^dbs_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
@@ -22976,6 +23011,10 @@
             "description": "Entity id `^env_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
             "pattern": "^env_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
             "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/TargetMode",
+            "description": "managed (default): stamps the identity marker and creates the empty ledger. observed (ADR-0039): needs the observer credential only, writes nothing to the database and leaves the target registered for its whole life."
           },
           "projectId": {
             "description": "Entity id `^prj_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
@@ -26537,6 +26576,19 @@
               "type": "array"
             },
             "style": "form"
+          },
+          {
+            "in": "query",
+            "name": "roles",
+            "required": false,
+            "schema": {
+              "description": "observer (ADR-0039 §5): only the observer role, its pg_monitor membership, the settings a non-superuser administrator may set and CONNECT on the databases; no ledger owner, no other role, no execution role. all (default): every ExponetDB role.",
+              "enum": [
+                "all",
+                "observer"
+              ],
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -29392,7 +29444,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, REGISTRY_CONFLICT, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, REGISTRY_CONFLICT, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -29444,6 +29496,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -37687,7 +37740,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, SCHEMA_FINGERPRINT_MISMATCH, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, SCHEMA_FINGERPRINT_MISMATCH, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -37739,6 +37792,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -39217,7 +39271,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -39262,6 +39316,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -40040,7 +40095,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -40091,6 +40146,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -40538,7 +40594,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, LEDGER_NOT_INITIALIZED, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, LEDGER_NOT_INITIALIZED, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -40590,6 +40646,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -40664,7 +40721,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CAPABILITY_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, QUERY_CANCELED, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CAPABILITY_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, QUERY_CANCELED, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "413": {
             "$ref": "#/components/responses/Problem",
@@ -40733,6 +40790,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -41448,7 +41506,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, LEDGER_NOT_INITIALIZED, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, LEDGER_NOT_INITIALIZED, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -41499,6 +41557,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -41559,7 +41618,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -41610,6 +41669,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -41670,7 +41730,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, LEDGER_DIVERGENCE, LEDGER_NOT_INITIALIZED, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, LEDGER_DIVERGENCE, LEDGER_NOT_INITIALIZED, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -41723,6 +41783,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -41793,7 +41854,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: BREAK_GLASS_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, LEDGER_DIVERGENCE, LEDGER_NOT_INITIALIZED, LEGACY_IMPORT_AMBIGUOUS, MIGRATION_ALREADY_APPLIED, MIGRATION_CHECKSUM_MISMATCH, MIGRATION_DEPENDENCY_MISSING, MIGRATION_INCOMPLETE, MIGRATION_REQUIREMENT_UNMET, MIGRATION_REVERTED, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: BREAK_GLASS_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, LEDGER_DIVERGENCE, LEDGER_NOT_INITIALIZED, LEGACY_IMPORT_AMBIGUOUS, MIGRATION_ALREADY_APPLIED, MIGRATION_CHECKSUM_MISMATCH, MIGRATION_DEPENDENCY_MISSING, MIGRATION_INCOMPLETE, MIGRATION_REQUIREMENT_UNMET, MIGRATION_REVERTED, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -41858,6 +41919,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -41929,7 +41991,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "412": {
             "$ref": "#/components/responses/Problem",
@@ -41984,6 +42046,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -42054,7 +42117,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: BREAK_GLASS_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, LEDGER_DIVERGENCE, LEDGER_NOT_INITIALIZED, MIGRATION_ALREADY_APPLIED, MIGRATION_CHECKSUM_MISMATCH, MIGRATION_DEPENDENCY_MISSING, MIGRATION_INCOMPLETE, MIGRATION_REQUIREMENT_UNMET, MIGRATION_REVERTED, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: BREAK_GLASS_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, LEDGER_DIVERGENCE, LEDGER_NOT_INITIALIZED, MIGRATION_ALREADY_APPLIED, MIGRATION_CHECKSUM_MISMATCH, MIGRATION_DEPENDENCY_MISSING, MIGRATION_INCOMPLETE, MIGRATION_REQUIREMENT_UNMET, MIGRATION_REVERTED, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -42121,6 +42184,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -42437,7 +42501,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, LEDGER_NOT_INITIALIZED, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, LEDGER_NOT_INITIALIZED, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -42489,6 +42553,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -42569,7 +42634,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: BREAK_GLASS_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, LEDGER_DIVERGENCE, LEDGER_NOT_INITIALIZED, MIGRATION_ALREADY_APPLIED, MIGRATION_CHECKSUM_MISMATCH, MIGRATION_DEPENDENCY_MISSING, MIGRATION_INCOMPLETE, MIGRATION_REQUIREMENT_UNMET, MIGRATION_REVERTED, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: BREAK_GLASS_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, LEDGER_DIVERGENCE, LEDGER_NOT_INITIALIZED, MIGRATION_ALREADY_APPLIED, MIGRATION_CHECKSUM_MISMATCH, MIGRATION_DEPENDENCY_MISSING, MIGRATION_INCOMPLETE, MIGRATION_REQUIREMENT_UNMET, MIGRATION_REVERTED, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -42636,6 +42701,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -42717,7 +42783,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: BREAK_GLASS_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, LEDGER_DIVERGENCE, LEDGER_NOT_INITIALIZED, MIGRATION_ALREADY_APPLIED, MIGRATION_CHECKSUM_MISMATCH, MIGRATION_DEPENDENCY_MISSING, MIGRATION_INCOMPLETE, MIGRATION_REQUIREMENT_UNMET, MIGRATION_REVERTED, MIGRATION_ROLLBACK_BLOCKED, SCHEMA_FINGERPRINT_MISMATCH, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: BREAK_GLASS_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, LEDGER_DIVERGENCE, LEDGER_NOT_INITIALIZED, MIGRATION_ALREADY_APPLIED, MIGRATION_CHECKSUM_MISMATCH, MIGRATION_DEPENDENCY_MISSING, MIGRATION_INCOMPLETE, MIGRATION_REQUIREMENT_UNMET, MIGRATION_REVERTED, MIGRATION_ROLLBACK_BLOCKED, SCHEMA_FINGERPRINT_MISMATCH, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -42787,6 +42853,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -42878,7 +42945,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: APPROVALS_PENDING_LIMIT, CLUSTER_IDENTITY_MISMATCH, MIGRATION_REVERTED, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: APPROVALS_PENDING_LIMIT, CLUSTER_IDENTITY_MISMATCH, MIGRATION_REVERTED, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -42939,6 +43006,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -43014,7 +43082,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CAPABILITY_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, QUERY_CANCELED, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CAPABILITY_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, QUERY_CANCELED, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "413": {
             "$ref": "#/components/responses/Problem",
@@ -43083,6 +43151,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -43291,7 +43360,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -43348,6 +43417,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -43455,7 +43525,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CAPABILITY_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CAPABILITY_UNAVAILABLE, CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -43507,6 +43577,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -43577,7 +43648,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CAPABILITY_UNAVAILABLE, FEATURE_NOT_ACTIVATED, REGISTRY_CONFLICT, RESTORE_SOURCE_INVALID, RESTORE_TARGET_MISMATCH."
+            "description": "Error codes: CAPABILITY_UNAVAILABLE, FEATURE_NOT_ACTIVATED, REGISTRY_CONFLICT, RESTORE_SOURCE_INVALID, RESTORE_TARGET_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -43632,6 +43703,7 @@
           "REGISTRY_CONFLICT",
           "RESTORE_SOURCE_INVALID",
           "RESTORE_TARGET_MISMATCH",
+          "TARGET_OBSERVED_ONLY",
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",
           "VALIDATION_FAILED"
@@ -43805,7 +43877,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -43856,6 +43928,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -43916,7 +43989,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -43967,6 +44040,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -44114,7 +44188,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, SCHEMA_FINGERPRINT_MISMATCH, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, SCHEMA_FINGERPRINT_MISMATCH, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -44166,6 +44240,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -44262,7 +44337,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -44314,6 +44389,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -44460,7 +44536,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -44511,6 +44587,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -44610,7 +44687,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -44661,6 +44738,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -44741,7 +44819,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, PLAN_STALE, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, PLAN_STALE, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -44801,6 +44879,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -44881,7 +44960,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, PLAN_STALE, REGISTRY_CONFLICT, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, PLAN_STALE, REGISTRY_CONFLICT, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -44942,6 +45021,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",
@@ -45138,7 +45218,7 @@
           },
           "409": {
             "$ref": "#/components/responses/Problem",
-            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH."
+            "description": "Error codes: CLUSTER_IDENTITY_MISMATCH, TARGET_IDENTITY_MISMATCH, TARGET_OBSERVED_ONLY."
           },
           "422": {
             "$ref": "#/components/responses/Problem",
@@ -45189,6 +45269,7 @@
           "TARGET_IDENTITY_MISMATCH",
           "TARGET_NOT_FOUND",
           "TARGET_NOT_IN_GRANT",
+          "TARGET_OBSERVED_ONLY",
           "TARGET_TLS_FAILED",
           "TARGET_UNAVAILABLE",
           "TIER_NOT_PERMITTED",

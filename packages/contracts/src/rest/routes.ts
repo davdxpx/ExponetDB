@@ -332,6 +332,8 @@ const TARGET_ERRORS: readonly ErrorCode[] = [
 ]
 const LIVE_TARGET_ERRORS: readonly ErrorCode[] = [
   ...TARGET_ERRORS,
+  // ADR-0039: an observed target refuses writes, row reads and raw statements.
+  'TARGET_OBSERVED_ONLY',
   'TARGET_UNAVAILABLE',
   'TARGET_CREDENTIAL_INVALID',
   'TARGET_TLS_FAILED',
@@ -2859,7 +2861,12 @@ const BACKUP_ROUTES: readonly RouteContract[] = [
     pathParams: targetParams,
     body: RestorePlanRequestSchema,
     response: planned,
-    errors: [...BACKUP_RUN_ERRORS, 'RESTORE_SOURCE_INVALID', 'RESTORE_TARGET_MISMATCH'],
+    errors: [
+      ...BACKUP_RUN_ERRORS,
+      'RESTORE_SOURCE_INVALID',
+      'RESTORE_TARGET_MISMATCH',
+      'TARGET_OBSERVED_ONLY',
+    ],
   },
   {
     operationId: 'planDrill',

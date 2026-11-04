@@ -27,6 +27,8 @@ export interface BootstrapRequest {
   readonly environmentId?: string
   /** Legacy ledgers the observer reads during an import. */
   readonly ledgers?: readonly LegacyLedgerKind[]
+  /** `observer`: only the observer role (an observed target on a hosted provider, ADR-0039 §5). */
+  readonly roles?: 'all' | 'observer'
 }
 
 /** The (project, environment) pairs whose targets are placed on this cluster now. */
@@ -133,6 +135,18 @@ export async function clusterBootstrapSql(
     .map(([name, bypassRlsExcused]) => ({ name, bypassRlsExcused }))
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
   const legacyLedgers = [...new Set(request.ledgers ?? [])].sort()
+  if (request.roles === 'observer') {
+    // The observer alone: no migrator, so no execution role is granted (ADR-0039 §5).
+    return {
+      clusterId: brand('cls', cluster.clusterId),
+      script: bootstrapScript(databases, { legacyLedgers, roles: 'observer' }),
+      roles: [ROLE_NAMES.observer],
+      databases,
+      pendingDatabases: pending.sort(),
+      executionRoles: [],
+      legacyLedgers,
+    }
+  }
   return {
     clusterId: brand('cls', cluster.clusterId),
     script: bootstrapScript(databases, { executionRoles, legacyLedgers }),

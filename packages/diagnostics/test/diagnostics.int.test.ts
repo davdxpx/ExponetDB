@@ -52,6 +52,7 @@ import {
   loadDocument,
   lockGraph,
   MigrationBaselineStore,
+  type MigrationFindingCode,
   maintainSamplePartitions,
   openFindings,
   RegistrationSnapshotStore,
@@ -59,6 +60,7 @@ import {
   recordDriftFailure,
   recordFinding,
   recordLedgerWatch,
+  recordMigrationFinding,
   runDriftCheck,
   sampleTarget,
   schemaFingerprintView,
@@ -66,6 +68,7 @@ import {
   schemaOverviewView,
   searchSchemaView,
   targetHealthView,
+  WORKER_AUDIT_PARTY,
 } from '../src/index.ts'
 
 /**
@@ -993,6 +996,112 @@ describe('the ledger watch finding (VC-022)', () => {
     await recordLedgerWatch(h.worker, h.context.policy.clock, target.targetId, null)
     expect((await open()).filter((f) => f.code === 'ledger_divergence')).toHaveLength(0)
     expect(await auditCount('ledger.divergence.cleared')).toBe(1)
+  })
+})
+
+describe('the ledger comparison findings of E16 and E18 (Wave 10 W10-3)', () => {
+  const hot = { migrationId: '01M6EJD93DP9GNTHF77YY8VNY7', name: 'hotfix-col', evidence: 'missing' }
+  const newer = {
+    migrationId: '01M6EJD93DP9GNTHF77YY8VNY8',
+    name: 'second',
+    evidence: 'unverified',
+  }
+  const open = async (code: string) =>
+    (await openFindings(h.worker, target.targetId, 'health')).filter((f) => f.code === code)
+  const record = (
+    code: MigrationFindingCode,
+    sighting: Parameters<typeof recordMigrationFinding>[4],
+    resolution?: 'cleared' | 'superseded',
+  ) =>
+    h.worker.transaction('test.migration_finding', (tx) =>
+      recordMigrationFinding(
+        tx,
+        h.context.policy.clock,
+        target.targetId,
+        code,
+        sighting,
+        WORKER_AUDIT_PARTY,
+        resolution,
+      ),
+    )
+  const audits = async (action: string) =>
+    (
+      await h.worker.query(
+        'test.migration_finding.audit',
+        `SELECT event::jsonb AS e FROM audit.audit_events
+          WHERE action = $1 AND event::jsonb #>> '{subject,targetId}' = $2 ORDER BY seq`,
+        [action, target.targetId],
+      )
+    ).rows.map((r) => r.json('e') as Record<string, unknown>)
+
+  it.each(['hotfix_without_evidence', 'applied_not_in_source'] as const)(
+    '%s: one open finding per target naming the migrations newest first, audited when it opens and when it clears',
+    async (code) => {
+      await record(code, {
+        migrations: [hot, newer],
+        details: { sourceNewestId: newer.migrationId },
+      })
+      await record(code, {
+        migrations: [hot, newer],
+        details: { sourceNewestId: newer.migrationId },
+      })
+      const first = await open(code)
+      expect(first).toHaveLength(1)
+      expect(first[0]).toMatchObject({
+        kind: 'health',
+        severity: 'warning',
+        occurrences: 1,
+        details: { count: 2, migrations: [newer, hot], sourceNewestId: newer.migrationId },
+      })
+      expect(first[0]?.summary).toMatch(/^2 migrations applied/)
+      expect(await audits(`ledger.${code}.detected`)).toEqual([
+        expect.objectContaining({
+          actor: expect.objectContaining({ kind: 'system' }),
+          changes: { count: 2 },
+          refs: { migrationIds: [newer.migrationId, hot.migrationId] },
+        }),
+      ])
+      // One of them is settled: the same finding says so, and nothing new is audited.
+      await record(code, { migrations: [hot] })
+      const second = await open(code)
+      expect(second.map((f) => f.findingId)).toEqual(first.map((f) => f.findingId))
+      expect(second[0]).toMatchObject({ details: { count: 1, migrations: [hot] } })
+      await record(code, null)
+      await record(code, null)
+      expect(await open(code)).toHaveLength(0)
+      expect(await audits(`ledger.${code}.cleared`)).toEqual([
+        expect.objectContaining({ changes: { findings: 1, resolution: 'cleared' } }),
+      ])
+      expect(await audits(`ledger.${code}.detected`)).toHaveLength(1)
+    },
+  )
+
+  it('names at most 64 migrations, the newest, and counts them all', async () => {
+    const many = Array.from({ length: 70 }, (_, i) => ({
+      migrationId: `01M6EJD93DP9GNTHF77YY8V${String(i).padStart(3, '0')}`,
+      name: `m${i}`,
+    }))
+    await record('applied_not_in_source', { migrations: many })
+    const [f] = await open('applied_not_in_source')
+    expect(f?.details['count']).toBe(70)
+    expect(f?.details['migrations']).toHaveLength(64)
+    expect(f?.details['migrations']).toContainEqual(many[69])
+    expect(f?.details['migrations']).not.toContainEqual(many[0])
+    await record('applied_not_in_source', null)
+  })
+
+  it('says when the evidence target itself diverges, and resolves superseded when nothing can be compared', async () => {
+    await record('hotfix_without_evidence', { migrations: [hot], cause: 'evidence_divergent' })
+    const [f] = await open('hotfix_without_evidence')
+    expect(f).toMatchObject({ details: { cause: 'evidence_divergent' } })
+    expect(f?.summary).toMatch(/evidence target's own ledger disagrees with its mirror/)
+    await record('hotfix_without_evidence', null, 'superseded')
+    const resolved = await h.worker.query(
+      'test.migration_finding.resolution',
+      'SELECT resolution FROM observation.findings WHERE finding_id = $1',
+      [f?.findingId],
+    )
+    expect(resolved.rows[0]?.text('resolution')).toBe('superseded')
   })
 })
 

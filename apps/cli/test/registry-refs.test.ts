@@ -87,6 +87,7 @@ describe('scratch-reset-sql (TC-065)', () => {
       placement: null,
       ledger: null,
       openFindingCount: 0,
+      mode: 'managed',
     })
   }
 

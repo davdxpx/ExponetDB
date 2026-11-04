@@ -1623,6 +1623,7 @@ describe('the import scratch helpers need a scratch target that exists (TC-032)'
       placement: null,
       ledger: null,
       openFindingCount: 0,
+      mode: 'managed',
     })
   const notReady = ok('checkScratchTarget', {
     targetId: importedId,
