@@ -595,6 +595,7 @@ export type BackupSchedule = {
 export type BackupSecretSource = "host_config" | "sealed"
 
 export type BaselinePlanRequest = {
+  readonly covers?: readonly string[]
   readonly importReportId: string
 }
 

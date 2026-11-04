@@ -11,6 +11,7 @@ import {
   type VerificationRecord,
 } from '@exponetdb/postgres'
 import { type Connector, isObserved, type TargetRecord } from '@exponetdb/registry'
+import { isCoveredRow } from './baseline-covers.ts'
 import { ledgerDivergence } from './divergence.ts'
 import { MigrationError } from './errors.ts'
 import { projectAliases } from './execution-roles.ts'
@@ -113,6 +114,34 @@ export function importedVerification(
   return { status, verifiedAt, verifyDigest: null, via, ...(excused > 0 ? { excused } : {}) }
 }
 
+/**
+ * A covered bundle's verification (ADR-0040): its verify.sql ran in the baseline's runtime
+ * layer, which keeps one failure per covered bundle that did not hold (`file` is its id).
+ */
+export function coveredVerification(
+  migrationId: string,
+  baselineId: string,
+  run: VerificationRecord | undefined,
+) {
+  const via = baselineId as `baseline:${string}`
+  if (run === undefined) {
+    return { status: 'pending' as const, verifiedAt: null, verifyDigest: null, via }
+  }
+  const layer = layerFrom(run.runtime, 'runtime')
+  const mine = (layer.failures ?? []).find((f) => f.file === migrationId)
+  const complete =
+    layer.failures === undefined || (layer.failuresTotal ?? 0) <= layer.failures.length
+  const status =
+    mine !== undefined
+      ? mine.failed.includes('error')
+        ? ('error' as const)
+        : ('failed' as const)
+      : layer.status === 'passed' || (layer.status !== 'skipped' && complete)
+        ? ('passed' as const)
+        : run.status
+  return { status, verifiedAt: iso(run.finishedAt), verifyDigest: null, via }
+}
+
 function entryOf(r: LedgerRecord, verifications: readonly VerificationRecord[]) {
   const latest = latestOf(verifications, r.migrationId)
   return {
@@ -202,17 +231,22 @@ export async function migrationStatus(deps: ReadDeps, target: TargetRecord) {
     ledgerStateHash: state.ledgerStateHash,
     baselineId: state.meta.baselineId,
     applied: state.ledger.map((r) =>
-      r.origin === 'legacy_import' && baseline !== undefined
+      isCoveredRow(r) && baseline !== undefined
         ? {
             ...entryOf(r, live.verifications),
-            verification: importedVerification(
-              r.name,
-              baseline.migrationId,
-              baselineRun,
-              superseded.has(r.migrationId),
-            ),
+            verification: coveredVerification(r.migrationId, baseline.migrationId, baselineRun),
           }
-        : entryOf(r, live.verifications),
+        : r.origin === 'legacy_import' && baseline !== undefined
+          ? {
+              ...entryOf(r, live.verifications),
+              verification: importedVerification(
+                r.name,
+                baseline.migrationId,
+                baselineRun,
+                superseded.has(r.migrationId),
+              ),
+            }
+          : entryOf(r, live.verifications),
     ),
     pending,
     mirror: {

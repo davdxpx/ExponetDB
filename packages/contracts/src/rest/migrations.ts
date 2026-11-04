@@ -1031,7 +1031,13 @@ export const ImportDecisionRequestSchema = z
   .meta({ id: 'ImportDecisionRequest' })
 
 export const BaselinePlanRequestSchema = z
-  .strictObject({ importReportId: ImportReportIdSchema })
+  .strictObject({
+    importReportId: ImportReportIdSchema,
+    covers: z.array(MigrationIdSchema).min(1).max(1000).optional().meta({
+      description:
+        'ADR-0040, additive: stream bundles whose effect the imported history already holds. Each becomes a ledger row of the baseline (origin legacy_import) that planning counts as applied. Closed under dependsOn; on production each needs staging evidence; each verify.sql must hold on the target.',
+    }),
+  })
   .meta({ id: 'BaselinePlanRequest' })
 
 export const LedgerReconcileRequestSchema = z

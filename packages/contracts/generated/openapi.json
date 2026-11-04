@@ -4296,6 +4296,17 @@
       "BaselinePlanRequest": {
         "additionalProperties": false,
         "properties": {
+          "covers": {
+            "description": "ADR-0040, additive: stream bundles whose effect the imported history already holds. Each becomes a ledger row of the baseline (origin legacy_import) that planning counts as applied. Closed under dependsOn; on production each needs staging evidence; each verify.sql must hold on the target.",
+            "items": {
+              "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "type": "array"
+          },
           "importReportId": {
             "description": "Entity id `^imr_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
             "pattern": "^imr_[0-7][0-9A-HJKMNP-TV-Z]{25}$",

@@ -48,6 +48,7 @@ import {
   type TargetRecord,
 } from '@exponetdb/registry'
 import { type LintEntry, migrationAnalysis, resolutionFinding } from './analysis.ts'
+import { isCoveredRow } from './baseline-covers.ts'
 import type { PlanContent, PlanItem } from './content.ts'
 import { divergenceDetails, ledgerDivergence } from './divergence.ts'
 import { MigrationError } from './errors.ts'
@@ -340,7 +341,8 @@ async function planOrder(
   if (anchored && baselineId !== null) applied.add(baselineId)
   const nodes = new Map<string, GraphMigration>()
   for (const r of ledger) {
-    if (r.origin === 'legacy_import') continue
+    // An imported history file is no bundle; a covered bundle (ADR-0040) is an applied one.
+    if (r.origin === 'legacy_import' && !isCoveredRow(r)) continue
     if (r.origin === 'baseline' || isBaselineRef(r.migrationId)) {
       baselines.add(r.migrationId)
       applied.add(r.migrationId)
