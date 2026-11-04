@@ -47,6 +47,10 @@ export {
   planImportAnalysis,
 } from './legacy.ts'
 export { refuseOversizedLegacyFiles } from './legacy-files.ts'
+export {
+  type LegacyLedgerDigest,
+  legacyLedgerDigest,
+} from './legacy-ledger.ts'
 export { type MigrationPlanContext, planMigrationApply } from './planner.ts'
 export {
   PURGE_AGE_DAYS,

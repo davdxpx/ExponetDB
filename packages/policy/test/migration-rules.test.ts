@@ -519,3 +519,65 @@ describe('a production verification that closes a stuck operation', () => {
     expect((await verify('nonprod', 'op_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z')).decision).toBe('allow')
   })
 })
+
+// W10-4 (ADR-0039 §3 amendment 2026-11-04): a migration plan for an observed target is built,
+// shown and denied; neither a break-glass grant nor a setting lets it through.
+describe('migration.observed-target', () => {
+  const glass = { grantId: 'brk_01M4A000000000000000000001', rules: ['migration.observed-target'] }
+  const rule = (d: Awaited<ReturnType<typeof decide>>, id: string) =>
+    d.rules.find((r) => r.id === id)
+
+  it('denies a plan for an observed target on every tier and passes a managed one', async () => {
+    for (const tier of ['prod', 'nonprod'] as const) {
+      const d = await decide(tier, { targetMode: 'observed' })
+      expect(d.decision, tier).toBe('deny')
+      expect(rule(d, 'migration.observed-target')).toMatchObject({
+        result: 'fail',
+        severity: 'deny',
+        overridableByBreakGlass: false,
+      })
+    }
+    // Plans made before W10-4 carry no target mode: they were made for managed targets.
+    expect(rule(await decide('prod', {}), 'migration.observed-target')?.result).toBe(
+      'not_applicable',
+    )
+    expect(
+      rule(await decide('prod', { targetMode: 'managed' }), 'migration.observed-target')?.result,
+    ).toBe('not_applicable')
+  })
+
+  it('denies a malformed target mode (fail closed)', async () => {
+    const d = await decide('prod', { targetMode: 'readonly' as never })
+    expect(d.decision).toBe('deny')
+    expect(rule(d, 'migration.observed-target')?.result).toBe('unknown')
+  })
+
+  it('is overridden neither by a break-glass grant naming it nor by a setting', async () => {
+    const d = await decide('prod', { targetMode: 'observed' }, undefined, glass)
+    expect(d.decision).toBe('deny')
+    expect(d.overriddenRules).toEqual([])
+    const configured = await engine.evaluate({
+      request: {
+        kind: 'migration.apply',
+        principal: { kind: 'human', identityId: 'idn_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z', client: 'cli' },
+        subject: { tier: 'prod' },
+        content: { facts: { ...CLEAN, targetMode: 'observed' } as unknown as JsonObject },
+      },
+      settings: [
+        {
+          scopeKind: 'installation',
+          scopeId: 'installation',
+          ruleId: 'migration.observed-target',
+          revision: 1,
+          params: { enabled: false },
+        },
+      ],
+    })
+    expect(configured.decision).toBe('deny')
+    expect(MIGRATION_RULES.find((r) => r.id === 'migration.observed-target')).toMatchObject({
+      severity: 'deny',
+      overridableByBreakGlass: false,
+      defaults: {},
+    })
+  })
+})

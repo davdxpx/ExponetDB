@@ -55,6 +55,7 @@
       "path": "^packages/migrations-engine/test/",
       "allowed": [
         "migrations/engine",
+        "diagnostics",
         "migrations/format",
         "migrations/graph",
         "migrations/lint",

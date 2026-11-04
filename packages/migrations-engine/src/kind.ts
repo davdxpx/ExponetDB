@@ -21,7 +21,7 @@ import {
   takeTargetLock,
 } from '@exponetdb/postgres'
 import { loadParser } from '@exponetdb/postgres/parser'
-import { type Connector, findTarget, type TargetRecord } from '@exponetdb/registry'
+import { type Connector, findTarget, isObserved, type TargetRecord } from '@exponetdb/registry'
 import {
   type PlanContent,
   PlanContentInvalid,
@@ -144,6 +144,10 @@ export class MigrationApplyKind implements OperationKind {
   ): Promise<{ target: TargetRecord | undefined; changed: ChangedBinding[] }> {
     const changed: ChangedBinding[] = []
     const target = await findTarget(this.#deps.store, content.target.targetId)
+    // W10-4, the second guard after migration.observed-target: such a plan is never accepted.
+    if (target !== undefined && isObserved(target)) {
+      throw new MigrationError('TARGET_OBSERVED_ONLY')
+    }
     if (target === undefined || target.state !== 'active') {
       changed.push({ binding: 'target', actual: target?.state ?? 'missing' })
       return { target, changed }
@@ -317,6 +321,10 @@ export class MigrationApplyKind implements OperationKind {
     const target = await findTarget(this.#deps.store, content.target.targetId)
     if (target === undefined) {
       return { outcome: 'not_applied', errorCode: 'TARGET_NOT_FOUND' }
+    }
+    // W10-4: nothing of an observed target's plan runs, not even its progress rows.
+    if (isObserved(target)) {
+      return { outcome: 'not_applied', errorCode: 'TARGET_OBSERVED_ONLY' }
     }
     const project = await projectRegistry(this.#deps.store, content.projectId)
     // Progress rows first: the operation shows every planned migration from the start.

@@ -21,6 +21,7 @@ import {
   planProjectCreate,
   planProjectUpdate,
   planTargetRegister,
+  type RegistrationSnapshots,
   type RegistryActor,
   registryAcceptDependencies,
   registryKinds,
@@ -36,6 +37,7 @@ import {
   readyCluster,
   registerDatabase,
   run,
+  type SnapshotPortInput,
   submit,
   targetDatabase,
   verifyCredentials,
@@ -127,8 +129,10 @@ export async function migrationWorld(
   server: TestServer,
   /** Receives the schema each verified migration left (the worker composes the baseline store). */
   expected?: ExpectedSchema,
+  /** The registration snapshot store (default: recorded in memory, nothing stored). */
+  snapshots?: (input: SnapshotPortInput) => RegistrationSnapshots,
 ): Promise<World> {
-  const h = await harness(label)
+  const h = await harness(label, snapshots === undefined ? {} : { snapshots })
   const a = actor()
   await runAsSuperuser(server, 'postgres', [
     `DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${OWNER}') THEN CREATE ROLE ${OWNER} NOLOGIN; END IF; END $$`,

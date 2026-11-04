@@ -132,6 +132,53 @@ compatibility, lock severity, destructive, non-transactional, agent-initiated �
 policy decision recorded in the plan
 ```
 
+### 2.1 Production observed on a hosted provider (W10-4)
+
+**[DECIDED]** (Wave 10 order, W10-4 option (a), 2026-11-04;
+[ADR-0039](../01-architecture/adr/0039-observed-targets-on-hosted-providers.md)
+§3 as amended) While REOSA production is an **observed** target (OD-7b: no
+apply before Wave 11), a `migration.apply` plan for it is built for real and
+stored **denied** by rule `migration.observed-target` (deny, never
+overridable by break-glass or by a setting). Accepting it is `PLAN_DENIED`;
+no operation and no approval can exist for it, and the kind refuses such a
+plan a second time with `TARGET_OBSERVED_ONLY` at its bindings and at
+execute. Every other migration plan on an observed target (verify, resume,
+rollback, baseline, import, reconcile) and every diagnostics or role plan
+stays refused at plan time with `TARGET_OBSERVED_ONLY`.
+
+What the plan shows and binds, read as the observer, writing nothing:
+
+- **Identity**: the cluster's pinned `system_identifier` and the database
+  oid recorded at registration (no marker exists); a copy of the database
+  is `TARGET_IDENTITY_MISMATCH` (`database_oid`), another cluster
+  `CLUSTER_IDENTITY_MISMATCH`.
+- **The binding**: `content.target` with `mode: observed`, system
+  identifier, database oid and server version; `expectedState` with the
+  fingerprint, the extensions and the `ls1` hash of an **empty** ledger.
+- **The evidence**: §1.2 unchanged, read live from the evidence target, with
+  the verification id per migration (`present`, `missing`, `unverified`, …).
+- **The pending model** (stated as it is): pending means "not applied by
+  ExponetDB", anchored on the **evidence target's** baseline
+  (`expectedState.anchor`, from the Control Store's `ledger_state` of
+  staging). It does not say what production's database holds. Production's
+  real object state shows in the lineage only: production's fingerprint
+  against staging's fingerprint before the first pending migration, where a
+  **mismatch is expected** (`analysis.observed.lineage`).
+- **The legacy ledger**: `supabase_migrations.schema_migrations` is read for
+  `version` and `name` only (never `statements`; a column grant on those two
+  is enough) and bound as a digest and an entry count
+  (`expectedState.legacyLedger`), `unreadable` when the observer may not
+  read it, `absent` when the table does not exist; never an empty list. It
+  is bound only, never used for matching.
+
+**[OBSERVED]** (2026-11-04) Built and proven on the local test servers
+(PostgreSQL 17: `packages/migrations-engine/test/observed.int.test.ts`,
+`apps/server/test/http-migrations.int.test.ts`,
+`apps/server/test/mcp-plans.int.test.ts`). **Limit:** on the real targets
+every plan for production is denied as observed anyway, so "refused for
+missing evidence alone" is proven only on the local containers; the
+real-target run waits for the owner's GO.
+
 ### Compatibility and the running build
 
 REOSA's "production only after deploy" rule for non-additive migrations depends

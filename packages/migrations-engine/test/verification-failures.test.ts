@@ -1,6 +1,6 @@
 import { type ExpectationResult, TargetError } from '@exponetdb/postgres'
 import { describe, expect, it } from 'vitest'
-import { readsAsUnreadable } from '../src/legacy.ts'
+import { readsAsUnreadable } from '../src/legacy-ledger.ts'
 import { layerFrom } from '../src/reads.ts'
 import {
   clusterGlobalFailures,

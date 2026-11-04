@@ -46,6 +46,7 @@ import {
   findTarget,
   getProject,
   getProjectByPath,
+  isObserved,
   RegistryError,
   type TargetRecord,
 } from '@exponetdb/registry'
@@ -209,7 +210,8 @@ export class MigrationUseCases {
     }
     // Recorded after the plan's own transaction, so a plan refused after ingest (nothing pending)
     // still reports a lost bundle; the plan's refusal wins over a failure to record.
-    if (request.sourceComplete === true && validated !== undefined) {
+    // An observed target has no ExponetDB ledger to compare a source with (W10-4).
+    if (request.sourceComplete === true && validated !== undefined && !isObserved(target)) {
       const recording = this.#recordSource(caller, target, validated)
       if (failure === undefined) await recording
       // shortcut: a failed write after a refused plan is dropped (the use cases have no logger); the
