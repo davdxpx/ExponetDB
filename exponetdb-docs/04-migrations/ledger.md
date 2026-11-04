@@ -254,6 +254,8 @@ mirror's last known `ledger_state_hash` no longer matches.
   the evidence target has not applied and verified with the same checksum
   keeps the warning `health` finding `hotfix_without_evidence` open
   ([`staging-production-policy.md` §3](./staging-production-policy.md#3-hotfixes)).
+  This check is isolated from the production target's own ledger read, and an
+  unreadable evidence target does not fail the round.
 - Divergence classes:
 
 | Divergence | Typical cause | Effect |

@@ -480,6 +480,8 @@ describe('setup over REST', () => {
   })
 })
 
+/** Older than every migration of the suite: a source made of it alone is behind the target (E18). */
+const early = ulid()
 const first = ulid()
 const LEADS = `CREATE TABLE public.leads (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -1591,6 +1593,18 @@ describe('the CLI as a process', () => {
     expect(open).toHaveLength(1)
     expect(open[0]).toMatchObject({ code: 'applied_not_in_source', state: 'open' })
     expect(open[0]?.summary).toMatch(/^1 migration applied on this target is missing/)
+    // Opening is audited with the caller: the CLI's service account.
+    const detected = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT event::jsonb AS e FROM audit.audit_events
+          WHERE action = 'ledger.applied_not_in_source.detected' ORDER BY seq DESC LIMIT 1`,
+      ),
+    )
+    expect(detected.rows[0]?.e).toMatchObject({
+      actor: { kind: 'service' },
+      subject: { targetId: ids.stagingTarget },
+      refs: { migrationIds: [first] },
+    })
     // A plan of named bundles is not the whole source: it says nothing either way.
     const named = await cli([
       'migration',
@@ -1605,6 +1619,39 @@ describe('the CLI as a process', () => {
     // The bundle is back: the next plan of the whole source clears the finding.
     await rename(kept, join(projectDir, 'migrations', earlier.directory))
     await cli(['migration', 'plan', '--target', ids.stagingTarget, '--json'])
+    expect(await findings()).toEqual([])
+  })
+
+  it('E18: an invalid whole source records nothing, and a source behind the target only says so in the plan', async () => {
+    const findings = async () =>
+      (
+        await owner.browser.call('GET', `/api/v1/targets/${ids.stagingTarget}/findings?kind=health`)
+      ).body.items.filter((f: { code: string }) => f.code === 'applied_not_in_source')
+    const plan = (bundles: unknown[]) =>
+      owner.browser.call('POST', `/api/v1/targets/${ids.stagingTarget}/migrations/plans`, {
+        bundles,
+        defaults: DEFAULTS,
+        sourceComplete: true,
+      })
+    expect(await findings()).toEqual([])
+    const pending = bundle({
+      id: early,
+      name: 'early',
+      up: `CREATE TABLE public.early (id int);\nGRANT SELECT ON public.early TO ${APP_ROLE};\n`,
+      verify: '-- check: readable\nSELECT count(*) >= 0 AS ok FROM public.early;\n',
+    })
+    // A directory that does not name its manifest's id: refused at ingest, nothing recorded.
+    const forged = await plan([{ ...pending, directory: `${ulid()}_early` }])
+    expect(forged.status).toBe(422)
+    expect(await findings()).toEqual([])
+    // Every applied migration is newer than this source's newest bundle: an old clone.
+    const behind = await plan([pending])
+    expect(behind.status).toBe(201)
+    expect(behind.body.change.analysis.sourceCheck).toMatchObject({
+      newestId: early,
+      appliedNotInSource: [],
+      behind: expect.arrayContaining([first]),
+    })
     expect(await findings()).toEqual([])
   })
 

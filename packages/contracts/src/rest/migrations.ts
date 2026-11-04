@@ -200,7 +200,7 @@ export const MigrationPlanRequestSchema = z
     source: SourceClaimSchema.optional(),
     sourceComplete: z.boolean().optional().meta({
       description:
-        "The bundles are the project's whole source (the CLI sets it when it submits every local bundle). The server then compares them with the target's applied migrations: one it applied that the source lacks opens the finding applied_not_in_source (failure case E18), a later whole source that has it again clears it. The comparison is recorded also when the plan itself is refused.",
+        "The bundles are the project's whole source (the CLI sets it when it submits every local bundle; at most 50 bundles per request). Once ingest validated every bundle, the server compares their ids with the migrations it applied on the target: one older than the newest bundle that the source lacks opens the finding applied_not_in_source (failure case E18); newer ones mean the source is behind and are shown in the plan's sourceCheck only; the finding clears when a whole source has every migration it names. Recorded also when the plan is refused after ingest, never for a refused bundle.",
     }),
     lintProfile: z.enum(['strict', 'standard']).optional().meta({
       description: "The project file's lint profile (default strict).",
@@ -526,6 +526,23 @@ export const MigrationPlanAnalysisSchema = z
       blockingLints: z.int().min(0),
     }),
     evidence: z.array(EvidenceItemSchema),
+    sourceCheck: z
+      .object({
+        newestId: MigrationIdSchema,
+        appliedNotInSource: z.array(MigrationIdSchema).max(64).meta({
+          description:
+            'Applied here, older than the newest bundle of the source, and not in it (newest first): the finding applied_not_in_source names them.',
+        }),
+        behind: z.array(MigrationIdSchema).max(64).meta({
+          description:
+            'Applied here and newer than the newest bundle of the source (newest first): the source is behind the target (an old clone); a warning only, the finding does not change for them.',
+        }),
+      })
+      .optional()
+      .meta({
+        description:
+          'A plan of the whole source (sourceComplete, failure case E18): its validated bundle ids against the migrations this installation applied on the target.',
+      }),
   })
   .meta({ id: 'MigrationPlanAnalysis' })
 

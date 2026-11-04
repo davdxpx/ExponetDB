@@ -103,7 +103,7 @@ phases as applicable):
 
 | Domain | Actions |
 |---|---|
-| Migrations | `migration.planned`, `migration.plan_denied`, `migration.apply` (per migration), `migration.verification` (per run), `migration.failed`, `migration.rollback`, `migration.baseline`, `migration.verify_revision`, `ledger.reconcile`, `ledger.mirror_healed` |
+| Migrations | `migration.planned`, `migration.plan_denied`, `migration.apply` (per migration), `migration.verification` (per run), `migration.failed`, `migration.rollback`, `migration.baseline`, `migration.verify_revision`, `ledger.reconcile`, `ledger.mirror_healed`, `ledger.divergence.detected`, `ledger.divergence.cleared`, `ledger.hotfix_without_evidence.detected`, `ledger.hotfix_without_evidence.cleared` (the worker, E16), `ledger.applied_not_in_source.detected`, `ledger.applied_not_in_source.cleared` (the caller of the plan, E18; Wave 10 W10-3) |
 | Plans / approvals | `plan.created`, `plan.invalidated`, `plan.withdrawn`, `plan.expired`, `approval.granted`, `approval.rejected`, `operation.accepted`, `operation.state_changed` (every transition, Wave 2: completion, reconciliation and failures are transitions), `operation.force_release` |
 | Break-glass | `breakglass.activated`, `breakglass.used`, `breakglass.expired`, `breakglass.reviewed` |
 | Connections | `connections.cancel`, `connections.terminate` |

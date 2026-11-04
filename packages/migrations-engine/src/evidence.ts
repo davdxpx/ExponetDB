@@ -149,6 +149,8 @@ export async function evidenceTrust(
   read: EvidenceRead,
   migrations: readonly { readonly migrationId: string }[],
 ): Promise<{
+  /** The evidence target's ledger disagrees with its mirror: none of its rows is evidence. */
+  readonly divergent: boolean
   rowTrusted(row: LedgerRecord): boolean
   verificationTrusted(v: VerificationRecord): boolean
 }> {
@@ -201,6 +203,7 @@ export async function evidenceTrust(
     ]),
   )
   return {
+    divergent,
     rowTrusted: (row) => {
       const mirror = mirrorOf.get(row.migrationId)
       return (

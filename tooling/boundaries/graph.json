@@ -306,7 +306,9 @@
         "nodes",
         "sdk",
         "testkit",
-        "migrations/engine"
+        "migrations/engine",
+        "migrations-engine/test",
+        "registry/test"
       ]
     },
     "server": {

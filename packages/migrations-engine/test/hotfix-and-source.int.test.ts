@@ -1,7 +1,12 @@
-import { serverFor } from '@exponetdb/testkit'
+import { runAsSuperuser, serverFor } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { appliedNotInSource, hotfixesWithoutEvidence, planMigrationRollback } from '../src/index.ts'
-import { migrationWorld, type Target, type World } from './world.ts'
+import {
+  compareSource,
+  hotfixesWithoutEvidence,
+  planMigrationApply,
+  planMigrationRollback,
+} from '../src/index.ts'
+import { DEFAULTS, migrationWorld, type Target, type World } from './world.ts'
 
 /**
  * G6 failure cases E16 and E18 (Wave 10 W10-3, OD-65 (a);
@@ -62,7 +67,9 @@ describe('E16: production has a hotfix that staging lacks (hotfix_without_eviden
 
     const seen = await hotfixesWithoutEvidence(deps(), production.record)
     expect(seen).toMatchObject({
+      kind: 'compared',
       evidenceTargetId: staging.record.targetId,
+      evidenceDivergent: false,
       items: [{ migrationId: hot, name: 'hotfix-col', evidence: 'missing' }],
     })
     // Staging is not compared with anything: it has no evidence environment.
@@ -72,8 +79,44 @@ describe('E16: production has a hotfix that staging lacks (hotfix_without_eviden
     const back = await w.apply(await w.plan(staging, { migrationIds: [hot as never] }))
     expect(back).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
     expect(await hotfixesWithoutEvidence(deps(), production.record)).toMatchObject({
+      kind: 'compared',
       evidenceTargetId: staging.record.targetId,
       items: [],
+    })
+    // A production target without an evidence environment cannot be compared, which is said.
+    const alone = await w.registerTarget('hf-alone', 'prod')
+    expect(await hotfixesWithoutEvidence(deps(), alone.record)).toEqual({
+      kind: 'not_comparable',
+      reason: 'no_evidence_environment',
+    })
+  })
+
+  it('says that the evidence target diverges instead of calling every migration missing', async () => {
+    const staging = await w.registerTarget('hf-d-stg', 'nonprod')
+    const production = await w.registerTarget('hf-d-prd', 'prod', 'hf-d-stg')
+    const bundle = w.bundle({ name: 'shared', up: 'CREATE TABLE public.shared (id int);\n' })
+    await applied(staging, bundle)
+    w.setRules('registry-only')
+    try {
+      await applied(production, bundle)
+    } finally {
+      w.setRules('all')
+    }
+    expect(await hotfixesWithoutEvidence(deps(), production.record)).toMatchObject({
+      evidenceDivergent: false,
+      items: [],
+    })
+    // A ledger row written by hand on staging: its mirror disagrees, no row there is evidence.
+    await runAsSuperuser(pg17, staging.database, [
+      `BEGIN; SET LOCAL session_replication_role = replica;
+       CREATE TEMP TABLE hand ON COMMIT DROP AS SELECT * FROM exponetdb.schema_migrations;
+       UPDATE hand SET migration_id = '${w.ulid()}', applied_seq = 99999;
+       INSERT INTO exponetdb.schema_migrations OVERRIDING SYSTEM VALUE SELECT * FROM hand; COMMIT`,
+    ])
+    expect(await hotfixesWithoutEvidence(deps(), production.record)).toMatchObject({
+      kind: 'compared',
+      evidenceDivergent: true,
+      items: [{ name: 'shared', evidence: 'missing' }],
     })
   })
 
@@ -93,26 +136,40 @@ describe('E16: production has a hotfix that staging lacks (hotfix_without_eviden
     } finally {
       w.setRules('all')
     }
-    const seen = await hotfixesWithoutEvidence(deps(), production.record)
-    expect(seen?.items).toMatchObject([{ name: 'unverified', evidence: 'unverified' }])
+    expect(await hotfixesWithoutEvidence(deps(), production.record)).toMatchObject({
+      items: [{ name: 'unverified', evidence: 'unverified' }],
+    })
   })
 })
 
 describe('E18: a migration removed from the source after it was applied (applied_not_in_source)', () => {
-  it('names the applied migration a complete source omits, and nothing for the full set', async () => {
+  it('splits the applied migrations a source lacks into older and newer than its newest bundle', async () => {
     const t = await w.registerTarget('src-a', 'nonprod')
     const x = w.ulid()
     const xBundle = w.bundle({ id: x, name: 'applied-x', up: 'CREATE TABLE public.x (id int);\n' })
     await applied(t, xBundle)
+    const y = w.ulid()
     const yBundle = w.bundle({
+      id: y,
       name: 'later-y',
       up: 'CREATE TABLE public.y (id int);\n',
       dependsOn: [x],
     })
-    expect(await appliedNotInSource(w.h.serve, t.record, [yBundle])).toEqual([
-      { migrationId: x, name: 'applied-x' },
-    ])
-    expect(await appliedNotInSource(w.h.serve, t.record, [xBundle, yBundle])).toEqual([])
+    await applied(t, yBundle)
+    const z = w.ulid()
+    // A source of y and a new z lacks x, older than its newest bundle: x is missing from it.
+    expect(await compareSource(w.h.serve, t.record, [y, z])).toEqual({
+      newestId: z,
+      older: [{ migrationId: x, name: 'applied-x' }],
+      newer: [],
+    })
+    // A source whose newest bundle is x lacks y, which is newer: the clone is behind, not missing it.
+    expect(await compareSource(w.h.serve, t.record, [x])).toEqual({
+      newestId: x,
+      older: [],
+      newer: [{ migrationId: y, name: 'later-y' }],
+    })
+    expect(await compareSource(w.h.serve, t.record, [x, y])).toMatchObject({ older: [], newer: [] })
   })
 
   it('does not count a reverted migration: its row stays, the bundle may go', async () => {
@@ -131,6 +188,51 @@ describe('E18: a migration removed from the source after it was applied (applied
       ),
     )
     expect(rolled).toMatchObject({ state: 'succeeded' })
-    expect(await appliedNotInSource(w.h.serve, t.record, [])).toEqual([])
+    expect(await compareSource(w.h.serve, t.record, [w.ulid()])).toMatchObject({
+      older: [],
+      newer: [],
+    })
+  })
+
+  const planWith = (t: Target, request: Record<string, unknown>, seen: string[][]) =>
+    w.h.serve.transaction('test.source.plan', (tx) =>
+      planMigrationApply(
+        tx,
+        {
+          ...w.ctx,
+          onSourceValidated: (ids: readonly string[]) => {
+            seen.push([...ids])
+          },
+        },
+        w.a,
+        t.record.targetId,
+        { defaults: DEFAULTS, lintProfile: 'standard', sourceComplete: true, ...request } as never,
+      ),
+    )
+
+  it('hands over the ids of a whole source only after ingest validated it, and shows a source that is behind in the plan', async () => {
+    const t = await w.registerTarget('src-c', 'nonprod')
+    const early = w.ulid()
+    const x = w.ulid()
+    const xBundle = w.bundle({ id: x, name: 'applied-x', up: 'CREATE TABLE public.cx (id int);\n' })
+    await applied(t, xBundle)
+    const seen: string[][] = []
+    // A directory that does not name its manifest's id is refused before anything is handed over.
+    const forged = { ...xBundle, directory: `${w.ulid()}_applied-x` }
+    await expect(planWith(t, { bundles: [forged] }, seen)).rejects.toMatchObject({
+      code: 'MIGRATION_BUNDLE_INVALID',
+    })
+    expect(seen).toEqual([])
+    // An older pending bundle without x: the source is behind x, the plan says so.
+    const pending = w.bundle({
+      id: early,
+      name: 'early',
+      up: 'CREATE TABLE public.early (id int);\n',
+    })
+    const plan = await planWith(t, { bundles: [pending] }, seen)
+    expect(seen).toEqual([[early]])
+    expect(plan.body['analysis']).toMatchObject({
+      sourceCheck: { newestId: early, appliedNotInSource: [], behind: [x] },
+    })
   })
 })

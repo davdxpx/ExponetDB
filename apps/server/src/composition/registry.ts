@@ -19,10 +19,13 @@ import {
   sampleTarget,
   statementTargets,
   targetsToSample,
+  WORKER_AUDIT_PARTY,
 } from '@exponetdb/diagnostics'
 import type { Clock } from '@exponetdb/kernel'
 import {
   divergenceDetails,
+  type EvidenceReads,
+  type HotfixCheck,
   hotfixesWithoutEvidence,
   ledgerDivergenceOf,
 } from '@exponetdb/migrations-engine'
@@ -240,6 +243,50 @@ export function settleCredentialRound(
   }
 }
 
+/**
+ * What one E16 comparison does to the production target's finding: compared, it names what the
+ * evidence target lacks (or that its ledger diverges) and clears when nothing is left; with no
+ * evidence target to compare with it is resolved `superseded`; while the evidence target cannot be
+ * read it stays as it is and the round is not failed (planning calls that `unreachable` too).
+ */
+async function recordHotfixCheck(
+  rt: RegistryRuntime,
+  targetId: string,
+  check: HotfixCheck | undefined,
+): Promise<void> {
+  if (check === undefined || check.kind === 'unreachable') return
+  await rt.store.transaction('ledger.hotfix_without_evidence.record', (tx) =>
+    check.kind === 'not_comparable'
+      ? recordMigrationFinding(
+          tx,
+          rt.clock,
+          targetId,
+          'hotfix_without_evidence',
+          null,
+          WORKER_AUDIT_PARTY,
+          'superseded',
+        )
+      : recordMigrationFinding(
+          tx,
+          rt.clock,
+          targetId,
+          'hotfix_without_evidence',
+          {
+            migrations: check.items.map((i) => ({
+              migrationId: i.migrationId,
+              name: i.name,
+              evidence: i.evidence,
+              operationId: i.operationId,
+              planId: i.planId,
+            })),
+            details: { evidenceTargetId: check.evidenceTargetId },
+            ...(check.evidenceDivergent ? { cause: 'evidence_divergent' as const } : {}),
+          },
+          WORKER_AUDIT_PARTY,
+        ),
+  )
+}
+
 export function observationTasks(
   rt: RegistryRuntime,
   accept: RegistryAcceptContext,
@@ -313,6 +360,8 @@ export function observationTasks(
     },
     async watchLedgers() {
       const ids = await targetsToSample(rt.store)
+      // One live read per evidence target in this round, shared by its production targets (L1).
+      const evidenceReads: EvidenceReads = new Map()
       let failed = 0
       for (const id of ids) {
         const target = await findTarget(rt.store, id)
@@ -338,30 +387,30 @@ export function observationTasks(
                   details: divergenceDetails(divergence),
                 },
           )
-          // E16 (W10-3): a production migration its evidence target lacks.
-          const hotfixes = await hotfixesWithoutEvidence(
-            { store: rt.store, connector: probes, installationId: rt.installationId },
-            target,
-          )
-          if (hotfixes !== undefined) {
-            await recordMigrationFinding(
-              rt.store,
-              target.targetId,
-              'hotfix_without_evidence',
-              hotfixes.items.map((i) => ({
-                migrationId: i.migrationId,
-                name: i.name,
-                evidence: i.evidence,
-                operationId: i.operationId,
-                planId: i.planId,
-              })),
-              { evidenceTargetId: hotfixes.evidenceTargetId },
-            )
-          }
         } catch (error) {
           // A target that cannot be read is the health sample's to say; the watch never reads it as agreeing.
           failed++
           logger.warn('ledger.watch_failed', { targetId: id, ...describeError(error) })
+        }
+        // E16 (W10-3), on its own: an unreadable production ledger never skips it (review L3).
+        if (target.tier !== 'prod') continue
+        try {
+          await recordHotfixCheck(
+            rt,
+            target.targetId,
+            await hotfixesWithoutEvidence(
+              {
+                store: rt.store,
+                connector: probes,
+                installationId: rt.installationId,
+                evidenceReads,
+              },
+              target,
+            ),
+          )
+        } catch (error) {
+          failed++
+          logger.warn('ledger.hotfix_watch_failed', { targetId: id, ...describeError(error) })
         }
       }
       if (failed > 0) throw new TaskFailure('ledger_watch_incomplete')

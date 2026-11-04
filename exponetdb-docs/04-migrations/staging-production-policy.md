@@ -166,19 +166,31 @@ A hotfix is a change applied to production without staging evidence.
 - A finding `hotfix_without_evidence` stays open until the same migration (same
   id and checksum) has been applied and verified on staging, restoring the
   invariant "staging contains everything production contains".
-  **[DECIDED]** Built in Wave 10 (W10-3, OD-65 (a)): the worker task
-  `ledger.watch` (every 10 minutes) compares every migration this installation
-  applied on a production target (its Control Store mirror, origin
-  `exponetdb`, not reverted) with the evidence target's ledger, read live as
-  its observer with the trust rules of planning (the same id and checksum,
-  not reverted, a passed and mirrored verification with the same verify
-  digest). One warning `health` finding per production target names up to 64
+  **[DECIDED]** Built in Wave 10 (W10-3, OD-65 (a); reworked after the
+  review of 2026-11-04): the worker task `ledger.watch` (every 10 minutes)
+  compares every migration this installation applied on a production target
+  (its Control Store mirror, origin `exponetdb`, not reverted; legacy-import
+  and baseline rows have no staging counterpart by id and are not counted)
+  with the evidence target's ledger, read live as its observer with the trust
+  rules of planning (the same id and checksum, not reverted, a passed and
+  mirrored verification with the same verify digest; a bundle without
+  verify.sql has no verify digest on either side and compares equal). The
+  evidence target is read once per round for all its production targets, and
+  the check runs even when the production target's own ledger read failed.
+  One warning `health` finding per production target names the 64 newest
   such migrations with what staging has of each (`missing`, `unverified`,
-  `other_verify_digest`, `checksum_differs`) and counts them all; it is
-  resolved `cleared` when none is left. It detects any such migration, not
-  only a break-glass one. An evidence target that cannot be read leaves the
-  finding as it is (the task fails visibly). A production target whose
-  environment names no evidence environment is not compared.
+  `other_verify_digest`, `checksum_differs`) and counts them all; when the
+  evidence target's own ledger disagrees with its mirror, it says that instead
+  (`details.cause = evidence_divergent`: no row there is evidence). It is
+  resolved `cleared` when none is left, and `superseded` when nothing can be
+  compared any more (the environment names no evidence environment, its
+  target is decommissioned, or it is observed). Opening and resolving are
+  audited by the worker (`ledger.hotfix_without_evidence.detected`,
+  `.cleared` with the resolution). It detects any such migration, not only a
+  break-glass one. An evidence target that cannot be read now (unreachable,
+  refused, identity mismatch) leaves the finding as it is and does not fail
+  the round, as planning calls it `unreachable`. An observed production target
+  (W10-D3) has no ExponetDB ledger and is not compared.
 - If the hotfix cannot be applied to staging as-is (staging diverged), the
   resolution is a reconciling migration on staging plus an explicit
   resolution note on the finding. **[PLANNED]** There is no operation to

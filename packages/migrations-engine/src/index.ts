@@ -24,10 +24,14 @@ export {
   statementsOf,
 } from './executor.ts'
 export {
-  appliedNotInSource,
+  type AppliedRef,
+  compareSource,
+  type EvidenceReads,
+  type HotfixCheck,
   type HotfixItem,
-  type HotfixSighting,
   hotfixesWithoutEvidence,
+  type SourceComparison,
+  sourceFindingList,
 } from './hotfix.ts'
 export { aggregate, MigrationApplyKind, stateChanges } from './kind.ts'
 export { migrationKinds } from './kinds.ts'
