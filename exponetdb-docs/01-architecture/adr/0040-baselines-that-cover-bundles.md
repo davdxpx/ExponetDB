@@ -32,7 +32,9 @@ and planning counts it as applied.
 
 1. **What may be covered (plan time).** Every id is a stored bundle of the target's project
    (its newest revision). The set is closed under `dependsOn`: each dependency is another
-   covered id or the baseline itself; anything else is `MIGRATION_DEPENDENCY_UNKNOWN`. On a
+   covered id or the baseline itself; anything else is `MIGRATION_DEPENDENCY_UNKNOWN`. A
+   covered bundle without dependencies is refused (`MIGRATION_DEPENDENCY_MISSING`): in a stream
+   with a baseline only baselines are roots (`unanchored_root`), so every later plan would fail. On a
    production target each covered revision has staging evidence, read live with the same
    function as a migration plan (`collectEvidence`: the same id and apply checksum on the
    evidence target, not reverted, trusted, its latest trusted verification passed with the same

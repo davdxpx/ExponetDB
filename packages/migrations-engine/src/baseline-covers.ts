@@ -67,6 +67,11 @@ export async function coveredRows(
         missing: [id],
       })
     }
+    // A root of a stream with a baseline is unanchored (graph `unanchored_root`): every plan on
+    // the target would fail on it afterwards.
+    if (newest.dependsOn.length === 0) {
+      throw new MigrationError('MIGRATION_DEPENDENCY_MISSING', { missing: [id] })
+    }
     // Closed under dependsOn: a covered bundle on top of an uncovered one would be applied
     // before what it depends on.
     const open = newest.dependsOn.filter((d) => d !== input.baselineId && !covered.has(d))

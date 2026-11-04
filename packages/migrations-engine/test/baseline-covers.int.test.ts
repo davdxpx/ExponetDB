@@ -10,14 +10,17 @@ import {
 import { migrationWorld, OWNER, type Target, type World } from './world.ts'
 
 /**
- * ADR-0040 (OD-72 (a)) on real PostgreSQL: a production target received the effect of a stream
- * bundle outside ExponetDB (its staging got the bundle through ExponetDB). Its baseline covers
- * that bundle: the plan refuses an uncovered dependency and a bundle without staging evidence,
- * the baseline writes the covered row and verifies its verify.sql, and the next plan on
- * production holds only the bundle production really lacks.
+ * ADR-0040 (OD-72 (a)) on real PostgreSQL: staging and production share a history and a
+ * baseline. Staging then got two stream bundles through ExponetDB; production received the
+ * first one's statements outside ExponetDB, as a legacy file, before it was imported. Its
+ * baseline covers that bundle: the plan refuses an uncovered dependency, an unknown id, a root
+ * and a bundle without staging evidence; the baseline writes the covered row and verifies its
+ * verify.sql; the next plan on production holds only the bundle production really lacks.
  */
 const BASELINE = 'acme-covered'
+const REF = `baseline:${BASELINE}`
 
+const BASE = 'CREATE TABLE public.cv_base (id bigint PRIMARY KEY);\n'
 const ITEMS = 'CREATE TABLE public.cv_items (id bigint PRIMARY KEY, name text NOT NULL);\n'
 const ITEMS_VERIFY = `-- check: the items table is readable
 SELECT count(*) >= 0 AS ok FROM public.cv_items;
@@ -34,20 +37,60 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
     let w: World
     let staging: Target
     let production: Target
-    let scratch: Target
     let reportId = ''
     const ids = { items: '', tags: '', unproven: '' }
 
+    /** Analyzes a target's history on its own empty scratch target; returns the report id. */
+    const analyze = async (target: Target, scratch: Target, files: readonly string[]) => {
+      const p = await w.h.serve.transaction('test.cv.analyze', (tx) =>
+        planImportAnalysis(tx, w.ctx, w.a, target.record.targetId, {
+          scratchTarget: scratch.record.targetId,
+          baseline: BASELINE,
+          files: files.map((text, i) => ({ name: `000${i}_history.sql`, text })),
+        }),
+      )
+      expect(await w.apply(p)).toMatchObject({ state: 'succeeded', applyOutcome: 'applied' })
+      const id = String((p.body['content'] as { reportId: string }).reportId)
+      const report = await w.h.worker.transaction('test.cv.report', (tx) =>
+        importReportView(tx, target.record.targetId, id),
+      )
+      expect(report.items.every((i) => i.state === 'unrecorded_present')).toBe(true)
+      return id
+    }
+
     beforeAll(async () => {
       w = await migrationWorld(`exdb_it_cv${server.major}`, server)
+      // Approvals are policy, not this suite's subject: production's are covered elsewhere.
+      w.setRules('registry-only')
       staging = await w.registerTarget('staging', 'nonprod')
       production = await w.registerTarget('production', 'prod', 'staging')
-      scratch = await w.registerTarget('scratch', 'nonprod')
+      const stagingScratch = await w.registerTarget('scratch', 'nonprod')
+      const productionScratch = await w.registerTarget('production-scratch', 'nonprod')
+      for (const t of [staging, production]) {
+        await runAsSuperuser(server, t.database, [
+          BASE,
+          `ALTER TABLE public.cv_base OWNER TO ${OWNER}`,
+        ])
+      }
+      const stagingReport = await analyze(staging, stagingScratch, [BASE])
+      expect(
+        await w.apply(
+          await w.h.serve.transaction('test.cv.baseline', (tx) =>
+            planBaseline(tx, w.ctx, w.a, staging.record.targetId, stagingReport),
+          ),
+        ),
+      ).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
       ids.items = w.ulid()
       ids.tags = w.ulid()
       ids.unproven = w.ulid()
       // Staging gets both bundles through ExponetDB.
-      const items = w.bundle({ id: ids.items, name: 'items', up: ITEMS, verify: ITEMS_VERIFY })
+      const items = w.bundle({
+        id: ids.items,
+        name: 'items',
+        up: ITEMS,
+        verify: ITEMS_VERIFY,
+        dependsOn: [REF],
+      })
       const tags = w.bundle({ id: ids.tags, name: 'tags', up: TAGS, dependsOn: [ids.items] })
       expect(await w.apply(await w.plan(staging, { bundles: [items, tags] }))).toMatchObject({
         state: 'succeeded',
@@ -69,23 +112,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         ITEMS,
         `ALTER TABLE public.cv_items OWNER TO ${OWNER}`,
       ])
-      const p = await w.h.serve.transaction('test.cv.analyze', (tx) =>
-        planImportAnalysis(tx, w.ctx, w.a, production.record.targetId, {
-          scratchTarget: scratch.record.targetId,
-          baseline: BASELINE,
-          files: [{ name: '0001_items.sql', text: ITEMS }],
-        }),
-      )
-      reportId = String((p.body['content'] as { reportId: string }).reportId)
-      w.setRules('registry-only')
-      expect(await w.apply(p)).toMatchObject({ state: 'succeeded', applyOutcome: 'applied' })
-      w.setRules('all')
-      const report = await w.h.worker.transaction('test.cv.report', (tx) =>
-        importReportView(tx, production.record.targetId, reportId),
-      )
-      expect(report.items.map((i) => [i.name, i.state])).toEqual([
-        ['0001_items', 'unrecorded_present'],
-      ])
+      reportId = await analyze(production, productionScratch, [BASE, ITEMS])
     }, 300_000)
 
     afterAll(async () => {
@@ -108,7 +135,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       const stranger = w.ulid()
       await expect(baselinePlan([stranger])).rejects.toMatchObject({
         code: 'MIGRATION_DEPENDENCY_UNKNOWN',
-        details: { migrationId: `baseline:${BASELINE}`, missing: [stranger] },
+        details: { migrationId: REF, missing: [stranger] },
       })
     })
 
@@ -120,11 +147,8 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
 
     it('baselines with the covered bundle as an applied row and verifies its verify.sql', async () => {
       const p = await baselinePlan([ids.items])
-      expect(p.body['analysis']).toMatchObject({ imported: 1, covered: 1 })
-      w.setRules('registry-only')
-      const op = await w.apply(p)
-      w.setRules('all')
-      expect(op).toMatchObject({
+      expect(p.body['analysis']).toMatchObject({ imported: 2, covered: 1 })
+      expect(await w.apply(p)).toMatchObject({
         state: 'succeeded',
         applyOutcome: 'applied',
         verificationOutcome: 'passed',
@@ -136,29 +160,16 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
                 source->>'covered' AS covered
            FROM exponetdb.schema_migrations ORDER BY applied_seq`,
       )
-      expect(rows).toEqual([
-        {
-          migration_id: 'legacy:0001_items',
-          origin: 'legacy_import',
-          checksum_provenance: expect.any(String),
-          deps: '{}',
-          covered: null,
-        },
-        {
-          migration_id: ids.items,
-          origin: 'legacy_import',
-          checksum_provenance: 'legacy_applied_statements',
-          deps: '{}',
-          covered: 'true',
-        },
-        {
-          migration_id: `baseline:${BASELINE}`,
-          origin: 'baseline',
-          checksum_provenance: 'computed_at_apply',
-          deps: '{}',
-          covered: null,
-        },
+      expect(rows.map((r) => [r.migration_id, r.origin, r.covered])).toEqual([
+        ['legacy:0000_history', 'legacy_import', null],
+        ['legacy:0001_history', 'legacy_import', null],
+        [ids.items, 'legacy_import', 'true'],
+        [REF, 'baseline', '1'],
       ])
+      expect(rows[2]).toMatchObject({
+        checksum_provenance: 'legacy_applied_statements',
+        deps: `{${REF}}`,
+      })
       const detail = await migrationDetail(
         {
           store: w.h.worker,
@@ -166,7 +177,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
           installationId: w.h.db.installationId,
         },
         production.record,
-        `baseline:${BASELINE}`,
+        REF,
       )
       expect(detail.verifications.at(-1)).toMatchObject({
         status: 'passed',
@@ -184,15 +195,18 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         production.record,
       )
       expect(status.pending.map((p) => p.migrationId)).toEqual([ids.tags, ids.unproven])
-      const items = w.bundle({ id: ids.items, name: 'items', up: ITEMS, verify: ITEMS_VERIFY })
+      const items = w.bundle({
+        id: ids.items,
+        name: 'items',
+        up: ITEMS,
+        verify: ITEMS_VERIFY,
+        dependsOn: [REF],
+      })
       const tags = w.bundle({ id: ids.tags, name: 'tags', up: TAGS, dependsOn: [ids.items] })
       const p = await w.plan(production, { bundles: [items, tags] })
-      const planned = (p.body['content'] as { items: { migrationId: string }[] }).items
+      const planned = (p.body['content'] as { migrations: { migrationId: string }[] }).migrations
       expect(planned.map((i) => i.migrationId)).toEqual([ids.tags])
-      w.setRules('registry-only')
-      const op = await w.apply(p)
-      w.setRules('all')
-      expect(op).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
+      expect(await w.apply(p)).toMatchObject({ state: 'succeeded', verificationOutcome: 'passed' })
       const tables = await rowsOf(
         server,
         production.database,
