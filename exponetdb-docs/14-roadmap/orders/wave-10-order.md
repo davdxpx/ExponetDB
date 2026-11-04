@@ -1,0 +1,104 @@
+# ExponetDB — Wave 10: REOSA integration on the current databases (implementation order)
+
+| | |
+|---|---|
+| What this is | The owner's implementation order for Wave 10, prepared as a prompt on 2026-11-03 and committed here by the executing session in Phase 0 (W10-0). It builds Wave 10 ([`implementation-waves.md` Wave 10](../implementation-waves.md#wave-10-reosa-integration), [`reosa-integration.md` §3 and §5](../../13-integrations/reosa-integration.md#3-wave-10-integration-on-the-current-databases)). |
+| Prepared | 2026-11-03, on `main` at `e6f4c77c` (merge of `davdxpx/ExponetDB#61`), from a read-only pass over ExponetDB `main`, REOSA `main`, the live ExponetDB on `reos-01` (MCP reads) and a read-only look at `reos-db-01`. |
+| Authority | Items marked **[OWNER]** are the owner's instructions. Items marked **[DEFAULT]** are proposals of the research pass; they stand unless the owner overrules them in Phase 0. The executing session records every decision in `open-decisions.md` before it relies on it. |
+| Owner confirmation | **[OWNER]** 2026-11-03, in German ("Ja, alle so"): every **[DEFAULT]** of §3 is confirmed as written. W10-D9 (OD-4-storage) had no default and stays **open**; Track B's repository binding waits for it |
+| Not in scope of this file | It changes no code and accepts no gate. |
+
+---
+
+## 1. Mission
+
+**[OWNER]** (2026-11-03) Wave 10 comes before the production move. REOSA
+production stays on the hosted provider for the whole wave; the move is
+Wave 11.
+
+Make REOSA a real consumer of ExponetDB on its current databases, so that G10
+can be accepted: production observed read-only, staging-first migrations with
+production evidence checked by a plan, out-of-band changes detected, a runtime
+schema contract in REOSA's health, and REOSA Admin reading ExponetDB through
+the SDK.
+
+## 2. Where Wave 10 starts (measured 2026-11-03)
+
+| Step ([`reosa-integration.md` §3](../../13-integrations/reosa-integration.md#3-wave-10-integration-on-the-current-databases)) | State | Evidence |
+|---|---|---|
+| 10.1 register clusters | staging and scratch: **done** (`reosa/platform/staging`, `reosa/platform/scratch`, active, healthy, TLS verified, node `nod_01M5XZ84…` 0.7.0 active, cluster adopted to `management_mode=agent`). Production: **not registered** | MCP `targets_list`, `target_health`, `nodes_list` |
+| 10.2 health, drift for staging and production | staging: done. Production: missing | same |
+| 10.3 legacy import and baseline | staging: baseline `baseline:reosa-platform-2026-10` re-verified (`vfy_01M5WJXV…`, 234 excused); review items not formally accepted by the owner | [`gates/9-part-a.md`](../gates/9-part-a.md) |
+| 10.4 old paths frozen | staging: done (REOSA `.claude/rules/migrations.md`); production keeps the hosted path until Wave 11 (OD-7b) | REOSA `main` |
+| 10.5 bundles in REOSA, CI | `packages/db/exponetdb.project.yaml` and 40 bundles on REOSA `main`; **no CI job** runs `exponetdb migration lint` or `graph` | REOSA `.github/` |
+| 10.6 staging-first | staging: more than 20 bundles applied and verified. Production plans with staging evidence: never built against a real production target | ledger on staging |
+| 10.7 runtime schema contract | **not built** (no `missing_migrations` contract on either side) | `git grep` on both `main` |
+| 10.8 REOSA Admin `/database` | **not built**. `@exponetdb/sdk` exists (`1.0.0-alpha.1`, `private`, `UNLICENSED`, `private_key_jwt` service accounts); REOSA has only the incident view `/status/database` | both `main` |
+| 10.9 infra register links | not started | — |
+| G6 waivers E16, E18 | expire "before the first import of real REOSA data (Wave 10)"; **no detection built** (OD-65 open) | [`gates/6.md`](../gates/6.md) §5 |
+
+Dependencies of the wave: G7 and G8 await the owner, G9 is open (OD-4-storage).
+Wave 8 started before G7 was accepted; **[DEFAULT]** Wave 10 starts the same
+way and does not wait for G7 to G9, but G10 is not accepted before them.
+
+## 3. Decisions for Phase 0
+
+| # | Question | Options | **[DEFAULT]** |
+|---|---|---|---|
+| W10-D1 (OD-66) | G10.3 wording against OD-7b | (a) "at least five migrations applied staging-first; production evidence checked by a plan only until Wave 11"; (b) keep the wording, treat it as a Wave 11 item | (a) |
+| W10-D2 (OD-65) | E16 and E18 detection | (a) build both now; (b) keep the waivers | (a) for both: the waivers expire in this wave |
+| W10-D3 | How production is observed while on the hosted provider | (a) target in state `registered` with an observer credential only: inspection, health, fingerprint and drift reads, **no identity marker and no `exponetdb` schema written there**; (b) stamp marker and ledger on the hosted production database | (a): it is OD-7b's "at most read-only observation"; (b) is a write to production and would travel with the dump into Wave 11 |
+| W10-D4 | The observer role on hosted production | created by the owner (or by a session after an explicit GO in chat) with the bootstrap SQL's observer part only; no migrator, no ledger owner | owner GO per statement list; the session prepares the exact SQL and the read-back query |
+| W10-D5 | `reosa/status/production` | (a) register read-only like platform; (b) later | (b): G10 names staging and production of the platform stream |
+| W10-D6 | SDK and CLI distribution to REOSA | (a) packed tarball pinned by commit and checksum, committed in REOSA under `vendor/exponetdb/`; (b) a private package registry with a token in CI; (c) a hand-written REST client in REOSA | (a): no registry, no token; (c) breaks principle 1 (one engine, SDK as the interface) |
+| W10-D7 | Where the runtime schema contract is checked | (a) REOSA's health reads the expected bundle list baked into the build and compares it with the target's ledger directly (works when ExponetDB is down, C-29); (b) REOSA asks ExponetDB at runtime | (a); production compares against the legacy ledgers until Wave 11 |
+| W10-D8 | Track B: close the open G9 host items on `reos-db-01` in this wave (repository binding `adopted_observed` of the running pgBackRest/R2 setup, a nonprod drill, the C-35 offline drill) | (a) yes, as a separate PR; (b) no | (a): PG-13 and PG-14 are Wave 11 blockers and today ExponetDB shows `no_repository`, `drill_never`, `rpo_unknown` for the cluster. Needs OD-4-storage for the R2 repository (W10-D9) |
+| W10-D9 (OD-4-storage) | Storage for L1 | the provisional recommendation (Hetzner with Object Lock) or adopt the running R2 repository | the owner's call; the R2 repository runs productively since 2026-10-21 (11 backups, WAL archive without failures on 2026-11-03) |
+| W10-D10 | Deploys | (a) the session redeploys ExponetDB on `reos-01` after each merged PR per the procedure of the latest deployment record ([`2026-11-03`](../../12-operations/deployments/2026-11-03-reos-01-verification-campaign.md)); (b) only on the owner's "yes now redeploy" | (b) |
+
+## 4. Work packages
+
+One pull request per package unless noted; ExponetDB packages first, REOSA
+packages after the ExponetDB side they need is deployed.
+
+**[OWNER]** This order allows changes in `davdxpx/REOSA` for packages
+W10-5 to W10-8 only (CLAUDE.md "Do not change other repositories … unless the
+owner asks for exactly that").
+
+| # | Repository | What | Done when |
+|---|---|---|---|
+| W10-0 | ExponetDB | commit this order, create `gates/10.md` with the matrix of §2 and the decisions of §3 | record merged |
+| W10-1 | ExponetDB | production as a `registered` target (W10-D3): `reosa/platform/production`, tier `prod`, `evidence_from = staging`; measure what the hosted provider allows (direct host vs pooler, IPv4, TLS `verify-full` against the provider's root CA, which catalog views the observer reads); refusals become named conditions, not silent gaps | `target_health` for production answers with probes or named conditions; nothing written on production |
+| W10-2 | ExponetDB | drift and fingerprint reads for a `registered` target; staging vs production comparison by object signature as a report (input of Wave 11 step 11.2) | planted difference on scratch detected; production report produced |
+| W10-3 | ExponetDB | E16 `hotfix_without_evidence` and E18 `applied_not_in_source` detection (W10-D2), with the red-then-green tests of the G6 case list | G6 cases E16 and E18 pass; waivers closed in `gates/6.md` |
+| W10-4 | ExponetDB | production plans from the same bundles: staging evidence required, plan binding shown, apply refused for production before Wave 11 with a stable code; negative test on the real targets (PG-6) | five REOSA bundles have a production plan with evidence; apply refused |
+| W10-5 | REOSA | CI job: `exponetdb migration lint` and `migration graph` on `packages/db` with the vendored CLI (W10-D6) | job green on a PR, red on a planted lint error |
+| W10-6 | both | runtime schema contract (W10-D7): ExponetDB emits the expected bundle list at build time; REOSA's health reports `exponetdb.missing_migrations` per environment | staging health shows the contract; a planted missing bundle turns it red |
+| W10-7 | both | REOSA Admin `/database` via the SDK, read-only (§5 of `reosa-integration.md`); service account with `targets.read`, `diagnostics.read`, `migrations.read`, `backups.read` bound to product `reosa`, `private_key_jwt`, key only in the admin app's runtime variables; `/status/database` stays the incident view | page shows staging and production; **S**: a write scope request is refused, a scope outside `reosa` is refused |
+| W10-8 | REOSA | infra register links to ExponetDB ids (10.9) | REOSA docs link instead of copying database facts |
+| W10-B | ExponetDB + host | Track B (W10-D8), only with the owner's GO and the execution switches in the owner's hands | backups listed, one nonprod drill passed, C-35 attested |
+| W10-9 | ExponetDB | independent adversarial review of W10-1 to W10-7 (fresh agents, reproductions), fixes, G10 record ready for the owner | every Critical, High, Medium finding fixed or recorded |
+
+## 5. Hard limits
+
+- No apply, restore, marker, ledger, role change or other write on REOSA
+  production, apart from the observer role of W10-D4 after the owner's GO.
+- No change on `reos-db-01` outside ExponetDB operations and Track B with GO.
+- No redeploy of ExponetDB without the owner's word (W10-D10); before any
+  redeploy, the order of the latest deployment record (empty Coolify queue, no
+  running operation, dump and trial restore).
+- Frozen contracts, vectors and bundles stay unchanged; additions are additive.
+- Commits as `𝕏0L0™ <davdxpx@gmail.com>`, no Claude trailers, in both
+  repositories; tests red before green, never two DB test runs at once.
+
+## 6. Stop conditions
+
+Stop and report to the owner when: the hosted provider refuses an observer
+read that G10 needs (the wave's abort criterion: keep read-only mode); a
+package needs a write on production; a frozen artifact would have to change;
+or a finding of class P0 appears.
+
+## 7. Not this wave
+
+The production move (Wave 11), HA (OD-12), the status database, retiring the
+hosted projects.
