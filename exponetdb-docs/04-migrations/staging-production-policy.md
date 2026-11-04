@@ -140,9 +140,13 @@ policy decision recorded in the plan
 apply before Wave 11), a `migration.apply` plan for it is built for real and
 stored **denied** by rule `migration.observed-target` (deny, never
 overridable by break-glass or by a setting). Accepting it is `PLAN_DENIED`;
-no operation and no approval can exist for it, and the kind refuses such a
-plan a second time with `TARGET_OBSERVED_ONLY` at its bindings and at
-execute. Every other migration plan on an observed target (verify, resume,
+no operation and no approval can exist for it. The kind refuses such a plan
+a second time: its bindings report `target: observed`, so an acceptance
+invalidates the plan (`PLAN_STALE`, audited `plan.invalidated`) and a worker
+fails a queued operation of it (`PLAN_STALE`); its execute refuses with
+`TARGET_OBSERVED_ONLY` before anything runs. The rule fails on
+`facts.targetMode` **or** `content.target.mode` being `observed`, so a plan
+path that forgot the fact stays denied. Every other migration plan on an observed target (verify, resume,
 rollback, baseline, import, reconcile) and every diagnostics or role plan
 stays refused at plan time with `TARGET_OBSERVED_ONLY`.
 

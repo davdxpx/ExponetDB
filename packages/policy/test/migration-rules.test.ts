@@ -546,6 +546,23 @@ describe('migration.observed-target', () => {
     ).toBe('not_applicable')
   })
 
+  it('denies a plan whose content names an observed target although the fact is missing (review M2)', async () => {
+    const d = await engine.evaluate({
+      request: {
+        kind: 'migration.apply',
+        principal: { kind: 'human', identityId: 'idn_01JB2Z6G8M4Q7R9T1V3W5X7Y9Z', client: 'cli' },
+        subject: { tier: 'prod' },
+        content: {
+          target: { mode: 'observed' },
+          facts: { ...CLEAN } as unknown as JsonObject,
+        },
+      },
+      settings: [],
+    })
+    expect(d.decision).toBe('deny')
+    expect(rule(d, 'migration.observed-target')?.result).toBe('fail')
+  })
+
   it('denies a malformed target mode (fail closed)', async () => {
     const d = await decide('prod', { targetMode: 'readonly' as never })
     expect(d.decision).toBe('deny')

@@ -144,9 +144,11 @@ export class MigrationApplyKind implements OperationKind {
   ): Promise<{ target: TargetRecord | undefined; changed: ChangedBinding[] }> {
     const changed: ChangedBinding[] = []
     const target = await findTarget(this.#deps.store, content.target.targetId)
-    // W10-4, the second guard after migration.observed-target: such a plan is never accepted.
+    // W10-4, the second guard after migration.observed-target: such a plan is never accepted. A
+    // changed binding (not a throw): accept ends and audits the plan, the worker fails its operation.
     if (target !== undefined && isObserved(target)) {
-      throw new MigrationError('TARGET_OBSERVED_ONLY')
+      changed.push({ binding: 'target', actual: 'observed' })
+      return { target, changed }
     }
     if (target === undefined || target.state !== 'active') {
       changed.push({ binding: 'target', actual: target?.state ?? 'missing' })

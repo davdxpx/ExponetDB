@@ -829,7 +829,10 @@ export const migrationObservedTarget: Rule = {
   evaluate({ request }) {
     const f = migrationFacts(request.content)
     if (f === undefined) return UNKNOWN
-    return f.targetMode === 'observed'
+    // The plan's own target binding counts too: a plan path that forgot the fact stays denied.
+    const target = isJsonObject(request.content) ? request.content['target'] : undefined
+    const mode = isJsonObject(target) ? target['mode'] : undefined
+    return f.targetMode === 'observed' || mode === 'observed'
       ? {
           result: 'fail',
           message: 'The target is observed: ExponetDB never applies a migration to it.',

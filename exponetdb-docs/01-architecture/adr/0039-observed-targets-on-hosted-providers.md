@@ -87,8 +87,9 @@ of no rows), and the Supabase ledger's names as a digest
 by ExponetDB", anchored on the evidence target's baseline; production's real
 objects show in the fingerprint lineage against staging's (a mismatch is
 expected); the legacy ledger is bound, never used for matching. The kind
-refuses such a plan a second time with `TARGET_OBSERVED_ONLY` at its bindings
-and at execute. Everything else in this table stays as decided. No new error
+refuses such a plan a second time: its bindings report the changed binding
+`target: observed` (an acceptance invalidates and audits the plan, a worker
+fails a queued operation), and its execute refuses with `TARGET_OBSERVED_ONLY`. Everything else in this table stays as decided. No new error
 code and no Control Store bundle; the plan content gains optional fields
 (`target.mode`, `expectedState.anchor`, `expectedState.legacyLedger`,
 `facts.targetMode`, `analysis.observed`), and the policy version of every

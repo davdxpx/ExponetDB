@@ -1,10 +1,12 @@
 import { RegistrationSnapshotStore } from '@exponetdb/diagnostics'
-import { type MigrationId, systemClock } from '@exponetdb/kernel'
+import { canonicalBytes, type MigrationId, systemClock } from '@exponetdb/kernel'
+import { sha256Hex } from '@exponetdb/kernel/hash'
 import type { PlanRecord } from '@exponetdb/operations'
 import { ROLE_NAMES } from '@exponetdb/postgres'
 import { runAsSuperuser, serverFor, superuserClient } from '@exponetdb/testkit'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { catalogFootprint } from '../../diagnostics/test/footprint.ts'
+import { operationError } from '../../registry/test/harness.ts'
 import {
   decideImportItem,
   importReportView,
@@ -306,6 +308,28 @@ describe('a production plan on an observed target (W10-4)', () => {
       (bodyOf(renamed).content['expectedState'] as { legacyLedger: { digest: string } })
         .legacyLedger.digest,
     ).not.toBe((ledger as { digest: string }).digest)
+    // The digest is of the rows in the order of the ledger's version column, not of its text
+    // (review L2): a numeric version 9 comes before 20250101000000.
+    await runAsSuperuser(pg17, production.database, [
+      'ALTER TABLE supabase_migrations.schema_migrations ALTER COLUMN version TYPE bigint USING version::bigint',
+      "INSERT INTO supabase_migrations.schema_migrations VALUES (9, 'early', NULL)",
+      `GRANT SELECT (version, name) ON supabase_migrations.schema_migrations TO ${ROLE_NAMES.observer}`,
+    ])
+    const numeric = await w.plan(production, { migrationIds: five })
+    const expected = canonicalBytes([
+      { version: '9', name: 'early' },
+      { version: '20250101000000', name: 'init' },
+      { version: '20250201000000', name: 'hotfix-2' },
+    ])
+    if (!expected.ok) throw new Error('canonical bytes')
+    expect(
+      (bodyOf(numeric).content['expectedState'] as { legacyLedger: unknown }).legacyLedger,
+    ).toEqual({
+      source: 'supabase',
+      status: 'read',
+      entries: 3,
+      digest: `sha256:${sha256Hex(expected.value)}`,
+    })
   })
 
   it('cannot be overridden by a break-glass grant naming the rule', async () => {
@@ -339,19 +363,39 @@ describe('a production plan on an observed target (W10-4)', () => {
     expect(bodyOf(glass).policy.overriddenRules ?? []).not.toContain('migration.observed-target')
   })
 
-  it('refuses a plan forced to active with TARGET_OBSERVED_ONLY, at the bindings and at execute', async () => {
-    const forced = await w.plan(production, { migrationIds: five })
-    // Test-only edit: a denied plan never becomes active (the plans' guard is bypassed once).
+  /** Test-only edit: a denied plan never becomes active or consumed (the plans' guard is bypassed once). */
+  async function force(plan: PlanRecord, state: 'active' | 'consumed') {
     await w.h.db.asSuperuser(async (c) => {
       await c.query('BEGIN')
       await c.query('SET LOCAL session_replication_role = replica')
       await c.query(
-        `UPDATE operations.plans SET state = 'active', decision = 'allow' WHERE plan_id = $1`,
-        [forced.planId],
+        `UPDATE operations.plans SET state = $2, decision = 'allow' WHERE plan_id = $1`,
+        [plan.planId, state],
       )
       await c.query('COMMIT')
     })
-    expect(await code(w.accept(forced))).toBe('TARGET_OBSERVED_ONLY')
+  }
+
+  it('invalidates a plan forced to active at the bindings, audited, and refuses it at execute', async () => {
+    const forced = await w.plan(production, { migrationIds: five })
+    await force(forced, 'active')
+    // Review M1: a changed binding, not a thrown error, so accept ends the plan and audits it.
+    const stale = await w.accept(forced).then(
+      () => undefined,
+      (error: unknown) => error as { code: string; changedBindings: unknown },
+    )
+    expect(stale).toMatchObject({
+      code: 'PLAN_STALE',
+      changedBindings: [{ binding: 'target', actual: 'observed' }],
+    })
+    const { rows } = await w.h.worker.query(
+      'test.observed.invalidated',
+      `SELECT (SELECT state FROM operations.plans WHERE plan_id = $1) AS state,
+              (SELECT count(*)::int FROM audit.audit_events
+                WHERE action = 'plan.invalidated' AND (event::jsonb)->'refs'->>'planId' = $1) AS audited`,
+      [forced.planId],
+    )
+    expect([rows[0]?.text('state'), rows[0]?.int('audited')]).toEqual(['invalidated', 1])
     const kind = migrationKinds({
       store: w.h.worker,
       keyring: w.h.keyring,
@@ -361,9 +405,7 @@ describe('a production plan on an observed target (W10-4)', () => {
       engineVersion: '0.1.0+test',
     }).find((k) => k.kind === 'migration.apply')
     if (kind === undefined) throw new Error('migration.apply kind')
-    expect(await code(Promise.resolve().then(() => kind.checkBindings(forced)))).toBe(
-      'TARGET_OBSERVED_ONLY',
-    )
+    expect(await kind.checkBindings(forced)).toEqual([{ binding: 'target', actual: 'observed' }])
     const outcome = await kind.execute({
       plan: forced,
       operationId: 'op_01M6HQW7JQYHC8YR9KNTQ4PFFZ',
@@ -371,6 +413,35 @@ describe('a production plan on an observed target (W10-4)', () => {
       signal: new AbortController().signal,
     })
     expect(outcome).toMatchObject({ outcome: 'not_applied', errorCode: 'TARGET_OBSERVED_ONLY' })
+    expect(await footprint()).not.toHaveProperty('schemas', expect.arrayContaining(['exponetdb']))
+  })
+
+  it('fails a queued operation of a forced plan at the worker start instead of keeping it queued', async () => {
+    const forced = await w.plan(production, { migrationIds: five })
+    await force(forced, 'consumed')
+    const operationId = `op_${w.ulid()}`
+    await w.h.db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
+        `INSERT INTO operations.operations
+           (operation_id, plan_id, kind, kind_version, state, apply_outcome, verification_outcome,
+            actor_kind, actor_id, client_kind, client_id)
+         VALUES ($1, $2, 'migration.apply', 1, 'queued', 'not_started', 'pending', 'human', $3, 'web', NULL)`,
+        [operationId, forced.planId, w.a.identityId],
+      )
+      await c.query(
+        `INSERT INTO operations.operation_events (operation_id, kind, to_state) VALUES ($1, 'created', 'queued')`,
+        [operationId],
+      )
+      await c.query('COMMIT')
+    })
+    await w.drive()
+    expect(await w.operation(operationId)).toMatchObject({
+      state: 'failed',
+      applyOutcome: 'not_started',
+    })
+    expect((await operationError(w.h, operationId)).code).toBe('PLAN_STALE')
     expect(await footprint()).not.toHaveProperty('schemas', expect.arrayContaining(['exponetdb']))
   })
 

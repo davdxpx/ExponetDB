@@ -45,6 +45,7 @@ export function readsAsUnreadable(error: unknown): boolean {
 export async function guarded<T>(
   reader: CatalogReader,
   fn: () => Promise<T>,
+  unreadable: (error: unknown) => boolean = readsAsUnreadable,
 ): Promise<T | undefined> {
   await reader.query(sql`SAVEPOINT exdb_import_read`)
   try {
@@ -52,7 +53,7 @@ export async function guarded<T>(
     await reader.query(sql`RELEASE SAVEPOINT exdb_import_read`)
     return value
   } catch (error) {
-    if (!readsAsUnreadable(error)) throw error
+    if (!unreadable(error)) throw error
     await reader.query(sql`ROLLBACK TO SAVEPOINT exdb_import_read`)
     return undefined
   }
@@ -63,15 +64,15 @@ export type LegacyLedgerDigest =
   | {
       readonly source: 'supabase'
       readonly status: 'read'
-      /** `sha256:` of the JCS list of `{version, name}` in version order. */
+      /** `sha256:` of the JCS list of `{version, name}`, ordered by the ledger's `version` column. */
       readonly digest: string
       readonly entries: number
     }
   | { readonly source: 'supabase'; readonly status: 'absent' | 'unreadable' }
 
 /** Names only: `statements` (the applied SQL) is never read, so a column grant on these two is enough. */
-const SUPABASE_NAMES = sql`SELECT version::text AS version, coalesce(name::text, '') AS name
-  FROM supabase_migrations.schema_migrations ORDER BY version`
+const SUPABASE_NAMES = sql`SELECT m.version::text AS version, coalesce(m.name::text, '') AS name
+  FROM supabase_migrations.schema_migrations m ORDER BY m.version`
 
 /**
  * The digest and the count of `supabase_migrations.schema_migrations` as the observer may read
@@ -79,18 +80,24 @@ const SUPABASE_NAMES = sql`SELECT version::text AS version, coalesce(name::text,
  * read is `unreadable`, never an empty list; a database without one says `absent`.
  */
 export async function legacyLedgerDigest(reader: CatalogReader): Promise<LegacyLedgerDigest> {
-  const read = await guarded(reader, async () => {
-    const present = await reader.query(LEDGER_PRESENT, ['supabase_migrations.schema_migrations'])
-    if (present[0]?.bool('present') !== true) return 'absent' as const
-    return (await reader.query(SUPABASE_NAMES)).map((r) => ({
-      version: r.text('version'),
-      name: r.text('name'),
-    }))
-  })
+  const read = await guarded(
+    reader,
+    async () => {
+      const present = await reader.query(LEDGER_PRESENT, ['supabase_migrations.schema_migrations'])
+      if (present[0]?.bool('present') !== true) return 'absent' as const
+      return (await reader.query(SUPABASE_NAMES)).map((r) => ({
+        version: r.text('version'),
+        name: r.text('name'),
+      }))
+    },
+    // Only a read the target refused is unreadable; anything else fails the plan (review L1).
+    (error) => error instanceof TargetError && readsAsUnreadable(error),
+  )
   if (read === undefined) return { source: 'supabase', status: 'unreadable' }
   if (read === 'absent') return { source: 'supabase', status: 'absent' }
   const bytes = canonicalBytes(read)
-  if (!bytes.ok) return { source: 'supabase', status: 'unreadable' }
+  // Text read from the catalog always canonicalizes; a failure here is a bug, never "unreadable".
+  if (!bytes.ok) throw new Error('the legacy ledger names do not canonicalize')
   return {
     source: 'supabase',
     status: 'read',
