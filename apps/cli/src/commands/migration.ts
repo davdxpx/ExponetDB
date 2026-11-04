@@ -586,6 +586,8 @@ async function planMigrations(
     const { project, bundles } = await submissions(ctx, ids)
     body = {
       bundles,
+      // Every local bundle is the project's source: the server reports an applied one it lacks (E18).
+      ...(ids.length === 0 ? { sourceComplete: true } : {}),
       ...(project.config.defaults === undefined ? {} : { defaults: project.config.defaults }),
       ...(project.config.lint === undefined ? {} : { lint: project.config.lint }),
       ...(project.config.invariants === undefined ? {} : { invariants: project.config.invariants }),
@@ -911,7 +913,7 @@ const remoteCommands: readonly CommandSpec[] = [
     summary:
       'Plan migrations for a target from the local bundles (or stored ones): analysis, policy, evidence.',
     description:
-      'Submits the exact bytes of the local bundles; the server ingests them, analyzes them against the live target and decides. Nothing runs until plan apply.',
+      'Submits the exact bytes of the local bundles; the server ingests them, analyzes them against the live target and decides. Nothing runs until plan apply. Without migration ids every local bundle is the project source: a migration applied on the target that the source lacks opens the finding applied_not_in_source there (cleared when it is back).',
     group: 'migration',
     args: [
       {

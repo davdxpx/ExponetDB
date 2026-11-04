@@ -11028,6 +11028,10 @@
           },
           "source": {
             "$ref": "#/components/schemas/MigrationSourceClaim"
+          },
+          "sourceComplete": {
+            "description": "The bundles are the project's whole source (the CLI sets it when it submits every local bundle; at most 50 bundles per request). Once ingest validated every bundle, the server compares their ids with the migrations it applied on the target: one older than the newest bundle that the source lacks opens the finding applied_not_in_source (failure case E18); newer ones mean the source is behind and are shown in the plan's sourceCheck only; the finding clears when a whole source has every migration it names. Recorded also when the plan is refused after ingest, never for a refused bundle.",
+            "type": "boolean"
           }
         },
         "type": "object"

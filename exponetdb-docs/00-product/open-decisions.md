@@ -1983,7 +1983,9 @@ History:
   ledger mirror write, E18 as a lint or stream finding); (b) it does not: the waivers run to
   Wave 10.
 - **Recommendation.** (a) for E16, (b) for E18.
-- **Blocks.** Nothing built here.
+- **Blocks.** Nothing. Built on 2026-11-04 (Wave 10 W10-3): E16 in the worker task `ledger.watch`
+  (production mirror against the evidence target's live ledger), E18 on a migration plan of the
+  whole source (`sourceComplete`) rather than as a lint; [`gates/6.md`](../14-roadmap/gates/6.md) §5.
 
 ## OD-66. G10.3 against OD-7b
 

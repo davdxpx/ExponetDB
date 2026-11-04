@@ -89,6 +89,11 @@ export interface World {
     /** ADR-0039: `observed` registers without marker or ledger (default `managed`). */
     mode?: 'managed' | 'observed',
   ): Promise<Target>
+  /**
+   * Replaces the policy rules of planning and acceptance: `registry-only` drops the migration
+   * rules, the state a break-glass apply leaves without its grant and second person (E16).
+   */
+  setRules(rules: 'registry-only' | 'all'): void
   close(): Promise<void>
 }
 
@@ -325,6 +330,11 @@ export async function migrationWorld(
       )
       if (record === undefined) throw new Error('target not registered')
       return { record, database }
+    },
+    setRules(rules) {
+      ;(policy as { registry: RuleRegistry }).registry = new RuleRegistry(
+        rules === 'all' ? [...REGISTRY_RULES, ...MIGRATION_RULES] : [...REGISTRY_RULES],
+      )
     },
     close: () => h.close(),
   }
