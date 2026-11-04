@@ -270,13 +270,17 @@ function runtimeFrom(outcomes: readonly { name: string; outcome: CheckOutcome }[
   }
 }
 
-/** L2: the plan's verify.sql on a verifier connection (null text: no verify.sql). */
+/**
+ * L2: the plan's verify.sql on a verifier connection (null text: no verify.sql). `bound` is the
+ * consumer code the plan bound; `null` binds none (a covered bundle's checks in a baseline,
+ * ADR-0040: whether they hold now).
+ */
 export async function runtimeLayer(
   connector: Connector,
   target: TargetRecord,
   operationId: string,
   verifyText: string | null,
-  bound: PlanItem['consumerCode'],
+  bound: PlanItem['consumerCode'] | null,
 ): Promise<Layer> {
   if (verifyText === null) return SKIPPED
   let opened: Awaited<ReturnType<Connector['forTarget']>>
@@ -294,7 +298,7 @@ export async function runtimeLayer(
         if (problems.length > 0) return errorLayer(`verifier role: ${problems.join(', ')}`)
         const resolution = await resolveVerifyCatalog(tx, file.checks)
         if (!resolution.ok) return errorLayer(`verify.sql resolution: ${resolution.reason}`)
-        const changed = changedConsumerCode(bound, resolution.consumer)
+        const changed = bound === null ? [] : changedConsumerCode(bound, resolution.consumer)
         if (changed.length > 0) return errorLayer('consumer code changed since planning')
         const admitted = admitChecks(file.checks, resolution)
         const outcomes: { name: string; outcome: CheckOutcome }[] = []

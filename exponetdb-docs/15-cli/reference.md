@@ -2071,6 +2071,7 @@ Runs: against the server; effect: plan; action: `migration.baseline.plan`; scope
 |---|---|
 | `report` (required) | The import report id. |
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
+| `--covers <ids>` | Stream bundle ids whose effect the imported history already holds (ADR-0040). |
 | `--apply` | Apply at once and wait. |
 | `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
 | `--no-wait` | With --apply: return once the server accepted the operation. |

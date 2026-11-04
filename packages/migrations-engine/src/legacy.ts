@@ -57,6 +57,7 @@ import {
   type TargetRecord,
 } from '@exponetdb/registry'
 import { acceptBaselineSchema, mirrorDiffers, rowsAfterBaseline } from './baseline-chain.ts'
+import { type CoveredRow, coveredRows, coveredRuntime } from './baseline-covers.ts'
 import type { PlanContent, PlanItem } from './content.ts'
 import { type MigrationKindDeps, projectRegistry } from './deps.ts'
 import { MigrationError } from './errors.ts'
@@ -2007,6 +2008,8 @@ interface BaselineContent {
   readonly target: ReplayContent['target']
   readonly expectedState: { readonly schemaFingerprint: string; readonly ledgerStateHash: string }
   readonly rows: readonly BaselineRow[]
+  /** ADR-0040: stream bundles the history already holds; absent on a plan before covers. */
+  readonly covers?: readonly CoveredRow[]
   readonly searchPath: readonly string[]
   readonly notApplicable: readonly string[]
 }
@@ -2042,6 +2045,7 @@ export async function planBaseline(
   actor: RegistryActor,
   targetRef: string,
   reportId: string,
+  covers: readonly string[] = [],
 ): Promise<PlanRecord> {
   const target = await findTarget(tx, targetRef)
   if (target === undefined) throw new MigrationError('TARGET_NOT_FOUND')
@@ -2132,6 +2136,12 @@ export async function planBaseline(
       surviving: item.state !== 'superseded',
     })
   }
+  const covered = await coveredRows(tx, ctx, {
+    target,
+    baselineId: report.baselineId,
+    ids: covers,
+    fingerprint: state.fingerprint,
+  })
   const content: BaselineContent = {
     reportId,
     reportDigest: reportDigest(files, items),
@@ -2146,6 +2156,7 @@ export async function planBaseline(
     },
     expectedState: { schemaFingerprint: state.fingerprint, ledgerStateHash: state.ledgerStateHash },
     rows,
+    ...(covered.length === 0 ? {} : { covers: covered }),
     searchPath: [...hintsOf(report).searchPath],
     notApplicable: [...hintsOf(report).notApplicable],
   }
@@ -2182,6 +2193,7 @@ export async function planBaseline(
       analysis: {
         reportId,
         imported: rows.length,
+        ...(covered.length === 0 ? {} : { covered: covered.length }),
         notImported: items.filter((i) => i.kind === 'file').length - rows.length,
         decisions: items.filter((i) => i.decision !== null).length,
       },
@@ -2614,8 +2626,18 @@ export async function verifyBaseline(
       ? { acceptedThrough: { migrations: accepted.migrations, last: accepted.last } }
       : {}),
   }
-  const runtime: Layer = { status: 'skipped', checks: 0, failed: 0, firstFailure: null }
-  const status = unparsed === null && matches && open.length === 0 ? 'passed' : 'failed'
+  // ADR-0040 §5: the covered bundles' verify.sql; skipped without covers.
+  const runtime = await coveredRuntime(
+    deps.store,
+    deps.connector,
+    target,
+    c.projectId,
+    operationId,
+    c.covers ?? [],
+  )
+  const runtimeHolds = runtime.status === 'passed' || runtime.status === 'skipped'
+  const status =
+    unparsed === null && matches && open.length === 0 && runtimeHolds ? 'passed' : 'failed'
   const run: VerificationRun = {
     verificationId: newId('vfy', Date.now()),
     migrationId: c.baselineId,
@@ -2635,7 +2657,7 @@ export async function verifyBaseline(
         ...run,
         operationId,
         structural: run.structural as unknown as JsonObject,
-        runtime: null,
+        runtime: c.covers === undefined ? null : (run.runtime as unknown as JsonObject),
         engine: run.engine as unknown as JsonObject,
       }),
     )
@@ -2861,6 +2883,38 @@ export class MigrationBaselineKind implements OperationKind {
           detail: { reportId: c.reportId, provenance: row.provenance },
         })
       }
+      // ADR-0040 §3: covered bundles under their own ids, before the baseline row (history).
+      for (const row of c.covers ?? []) {
+        await insertLedgerRow(session, {
+          ...common,
+          migrationId: row.migrationId,
+          origin: 'legacy_import',
+          name: row.name,
+          checksum: row.checksum,
+          checksumProvenance: 'legacy_applied_statements',
+          sourceDigest: row.sourceDigest,
+          verifyDigest: row.verifyDigest,
+          dependencies: [...row.dependsOn],
+          transactional: row.transactional,
+          source: {
+            reportId: c.reportId,
+            covered: true,
+            revision: row.revision,
+            ...(row.evidence === null
+              ? {}
+              : {
+                  evidenceTargetId: row.evidence.targetId,
+                  evidenceVerificationId: row.evidence.verificationId,
+                }),
+          },
+        })
+        await insertMigrationEvent(session, {
+          migrationId: row.migrationId,
+          operationId: ctx.operationId,
+          event: 'imported',
+          detail: { reportId: c.reportId, provenance: 'legacy_applied_statements', covered: true },
+        })
+      }
       await insertLedgerRow(session, {
         ...common,
         migrationId: c.baselineId,
@@ -2868,7 +2922,11 @@ export class MigrationBaselineKind implements OperationKind {
         name: c.baselineId.slice('baseline:'.length),
         checksum: c.reportDigest,
         checksumProvenance: 'computed_at_apply',
-        source: { reportId: c.reportId, imported: c.rows.length },
+        source: {
+          reportId: c.reportId,
+          imported: c.rows.length,
+          ...(c.covers === undefined ? {} : { covered: c.covers.length }),
+        },
       })
       await insertMigrationEvent(session, {
         migrationId: c.baselineId,

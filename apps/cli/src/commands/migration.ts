@@ -1388,6 +1388,13 @@ const remoteCommands: readonly CommandSpec[] = [
     args: [{ name: 'report', description: 'The import report id.', required: true }],
     flags: [
       TARGET_REQUIRED,
+      {
+        name: 'covers',
+        type: 'list',
+        placeholder: 'ids',
+        description:
+          'Stream bundle ids whose effect the imported history already holds (ADR-0040).',
+      },
       { name: 'apply', type: 'boolean', description: 'Apply at once and wait.' },
       ...PLAN_WAIT_FLAGS,
     ],
@@ -1401,7 +1408,12 @@ const remoteCommands: readonly CommandSpec[] = [
       const plan = must(
         await remote.sdk.call('planBaseline', {
           params: { target: String(input.flags['target']) },
-          body: { importReportId: arg(input, 'report') },
+          body: {
+            importReportId: arg(input, 'report'),
+            ...(input.flags['covers'] === undefined
+              ? {}
+              : { covers: input.flags['covers'] as string[] }),
+          },
         }),
       )
       if (input.flags['apply'] !== true || plan.decision === 'deny')

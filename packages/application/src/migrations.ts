@@ -436,7 +436,7 @@ export class MigrationUseCases {
   async planBaseline(
     caller: CallerLike,
     ref: string,
-    request: { readonly importReportId: string },
+    request: { readonly importReportId: string; readonly covers?: readonly string[] | undefined },
     idem?: Idempotency,
   ): Promise<PlanView> {
     const target = await this.#target('migration.baseline.plan', caller, ref)
@@ -446,7 +446,14 @@ export class MigrationUseCases {
       idem,
       async () => ({ kind: 'target', targetId: target.targetId }),
       (tx, actor) =>
-        planBaseline(tx, this.#context(), actor, target.targetId, request.importReportId),
+        planBaseline(
+          tx,
+          this.#context(),
+          actor,
+          target.targetId,
+          request.importReportId,
+          request.covers ?? [],
+        ),
     )
   }
 

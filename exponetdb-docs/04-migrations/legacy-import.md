@@ -240,6 +240,15 @@ every accepted file to hold.
    `legacy_file_at_import` / `unknown` according to the evidence, `name` = file
    stem, `source` = the repository reference, `applied_at` = earliest known
    ledger timestamp if any, else the import time (with a flag in `source`).
+   **[DECIDED]** ([ADR-0040](../01-architecture/adr/0040-baselines-that-cover-bundles.md),
+   OD-72 (a)) The plan may name stream bundles whose effect the history already
+   holds (`covers`, CLI `migration import baseline --covers <ids>`): one row each
+   under the bundle's own id, `origin = 'legacy_import'`, the bundle's apply
+   checksum, verify digest and dependencies, `checksum_provenance =
+   'legacy_applied_statements'`, `source.covered = true`. The set is closed under
+   `dependsOn`; on production each needs staging evidence. Planning counts these
+   rows as applied bundles; the baseline's verification runs their `verify.sql`
+   (runtime layer).
 4. Insert the baseline row: `migration_id = 'baseline:<slug>'`,
    `origin = 'baseline'`, checksum = hash of the import report, fingerprint
    before/after = `F_target`.
@@ -929,6 +938,12 @@ of the project (`baseline:reosa-platform-2026-11`), because it names the
 cut-over point of the stream. Their fingerprints at baseline may differ; that
 difference is the starting value of lineage tracking
 ([`staging-production-policy.md` §1.3](./staging-production-policy.md#13-lineage-structural-sameness)).
+
+A target imported **after** other targets of the project already applied stream bundles,
+whose history holds their effect (the bundles' SQL reached it outside ExponetDB), names those
+bundles in its baseline (`covers`, [ADR-0040](../01-architecture/adr/0040-baselines-that-cover-bundles.md)).
+Without that, every one of them is pending there, because planning counts only bundle rows as
+applied, never `legacy:<stem>` rows.
 
 ## 4. Targets without history
 
