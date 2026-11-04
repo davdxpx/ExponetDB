@@ -26,6 +26,11 @@ const ITEMS_VERIFY = `-- check: the items table is readable
 SELECT count(*) >= 0 AS ok FROM public.cv_items;
 `
 const TAGS = 'CREATE TABLE public.cv_tags (id bigint PRIMARY KEY);\n'
+const FLAGS = 'CREATE TABLE public.cv_flags (id int);\n'
+// Holds on staging (empty), not on the QA target (a row was written there by hand).
+const FLAGS_VERIFY = `-- check: no flag is set
+SELECT count(*) = 0 AS ok FROM public.cv_flags;
+`
 
 /** Rows of one superuser query on a target database (the test's independent read). */
 const rowsOf = (server: Parameters<typeof withSuperuser>[0], database: string, text: string) =>
@@ -37,8 +42,10 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
     let w: World
     let staging: Target
     let production: Target
+    let qa: Target
     let reportId = ''
-    const ids = { items: '', tags: '', unproven: '' }
+    let qaReportId = ''
+    const ids = { items: '', tags: '', unproven: '', flags: '' }
 
     /** Analyzes a target's history on its own empty scratch target; returns the report id. */
     const analyze = async (target: Target, scratch: Target, files: readonly string[]) => {
@@ -66,7 +73,9 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       production = await w.registerTarget('production', 'prod', 'staging')
       const stagingScratch = await w.registerTarget('scratch', 'nonprod')
       const productionScratch = await w.registerTarget('production-scratch', 'nonprod')
-      for (const t of [staging, production]) {
+      qa = await w.registerTarget('qa', 'nonprod')
+      const qaScratch = await w.registerTarget('qa-scratch', 'nonprod')
+      for (const t of [staging, production, qa]) {
         await runAsSuperuser(server, t.database, [
           BASE,
           `ALTER TABLE public.cv_base OWNER TO ${OWNER}`,
@@ -83,6 +92,7 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
       ids.items = w.ulid()
       ids.tags = w.ulid()
       ids.unproven = w.ulid()
+      ids.flags = w.ulid()
       // Staging gets both bundles through ExponetDB.
       const items = w.bundle({
         id: ids.items,
@@ -92,10 +102,16 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         dependsOn: [REF],
       })
       const tags = w.bundle({ id: ids.tags, name: 'tags', up: TAGS, dependsOn: [ids.items] })
-      expect(await w.apply(await w.plan(staging, { bundles: [items, tags] }))).toMatchObject({
-        state: 'succeeded',
-        verificationOutcome: 'passed',
+      const flags = w.bundle({
+        id: ids.flags,
+        name: 'flags',
+        up: FLAGS,
+        verify: FLAGS_VERIFY,
+        dependsOn: [REF],
       })
+      expect(await w.apply(await w.plan(staging, { bundles: [items, tags, flags] }))).toMatchObject(
+        { state: 'succeeded', verificationOutcome: 'passed' },
+      )
       // A bundle the store knows (planned, never applied): no evidence anywhere.
       await w.plan(staging, {
         bundles: [
@@ -113,6 +129,13 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         `ALTER TABLE public.cv_items OWNER TO ${OWNER}`,
       ])
       reportId = await analyze(production, productionScratch, [BASE, ITEMS])
+      // QA got the flags table outside ExponetDB, and then a row its verify.sql forbids.
+      await runAsSuperuser(server, qa.database, [
+        FLAGS,
+        `ALTER TABLE public.cv_flags OWNER TO ${OWNER}`,
+        'INSERT INTO public.cv_flags VALUES (1)',
+      ])
+      qaReportId = await analyze(qa, qaScratch, [BASE, FLAGS])
     }, 300_000)
 
     afterAll(async () => {
@@ -194,7 +217,11 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         },
         production.record,
       )
-      expect(status.pending.map((p) => p.migrationId)).toEqual([ids.tags, ids.unproven])
+      expect(status.pending.map((p) => p.migrationId)).toEqual([ids.tags, ids.unproven, ids.flags])
+      expect(status.applied.find((e) => e.migrationId === ids.items)).toMatchObject({
+        origin: 'legacy_import',
+        verification: { status: 'passed', via: REF },
+      })
       const items = w.bundle({
         id: ids.items,
         name: 'items',
@@ -213,6 +240,42 @@ describe.each(matrix().map((s) => [s.major, s] as const))(
         `SELECT pg_catalog.to_regclass('public.cv_tags')::text AS tags`,
       )
       expect(tables).toEqual([{ tags: 'cv_tags' }])
+    })
+
+    it('fails the baseline when a covered verify.sql does not hold, and says which bundle', async () => {
+      const p = await w.h.serve.transaction('test.cv.baseline', (tx) =>
+        planBaseline(tx, w.ctx, w.a, qa.record.targetId, qaReportId, [ids.flags]),
+      )
+      expect(await w.apply(p)).toMatchObject({
+        state: 'verification_failed',
+        applyOutcome: 'applied',
+        verificationOutcome: 'failed',
+      })
+      const detail = await migrationDetail(
+        {
+          store: w.h.worker,
+          connector: w.h.workerConnector,
+          installationId: w.h.db.installationId,
+        },
+        qa.record,
+        REF,
+      )
+      expect(detail.verifications.at(-1)).toMatchObject({
+        status: 'failed',
+        structural: { status: 'passed' },
+        runtime: { status: 'failed', failed: 1 },
+      })
+      const status = await migrationStatus(
+        {
+          store: w.h.worker,
+          connector: w.h.workerConnector,
+          installationId: w.h.db.installationId,
+        },
+        qa.record,
+      )
+      expect(status.applied.find((e) => e.migrationId === ids.flags)).toMatchObject({
+        verification: { status: 'failed', via: REF },
+      })
     })
   },
 )

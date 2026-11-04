@@ -1,12 +1,15 @@
 import type { Queryable } from '@exponetdb/control-store'
 import { isMigrationId } from '@exponetdb/kernel'
 import { normalizeSqlSource } from '@exponetdb/migrations/format'
-import type { LedgerRecord } from '@exponetdb/postgres'
+import { type ConsumerCode, type LedgerRecord, resolveVerifyCatalog } from '@exponetdb/postgres'
+import { analyzeVerifyFile, loadParser } from '@exponetdb/postgres/parser'
 import type { Connector, TargetRecord } from '@exponetdb/registry'
 import { MigrationError } from './errors.ts'
 import { collectEvidence } from './evidence.ts'
 import { revisionsOf, type StoredRevision, storedStream } from './store.ts'
 import { type Layer, runtimeLayer } from './verification.ts'
+
+const MAX_KEPT = 200
 
 /**
  * A baseline that covers bundles applied outside ExponetDB (ADR-0040, OD-72 (a)): stream bundles
@@ -24,6 +27,11 @@ export interface CoveredRow {
   readonly dependsOn: readonly string[]
   /** The evidence target's passed verification it rests on; null on a nonprod target. */
   readonly evidence: { readonly targetId: string; readonly verificationId: string } | null
+  /**
+   * The consumer code its verify.sql calls, as the target held it at planning (bound like a
+   * migration plan's); absent on a plan before the review of ADR-0040.
+   */
+  readonly consumerCode?: readonly ConsumerCode[]
 }
 
 /** A covered bundle's ledger row: imported, under the bundle's own id (never `legacy:<stem>`). */
@@ -99,6 +107,15 @@ export async function coveredRows(
   if (evidence.fact !== 'not_required' && evidence.fact !== 'present') {
     throw new MigrationError('STAGING_EVIDENCE_MISSING')
   }
+  // On production a cover without verify.sql would be counted as applied with nothing checking
+  // its effect there (review of ADR-0040, P2-1).
+  if (input.target.tier === 'prod' && revisions.some((r) => r.files['verify.sql'] === null)) {
+    throw new MigrationError('MIGRATION_BUNDLE_INVALID', {
+      reason: 'missing_file',
+      file: 'verify.sql',
+    })
+  }
+  const consumer = await consumerCodeOf(deps.connector, input.target, revisions)
   const bound = evidence.binding
   return revisions.map((r) => {
     const verificationId = bound?.verifications[r.migrationId]
@@ -115,19 +132,73 @@ export async function coveredRows(
         bound === null || verificationId === undefined
           ? null
           : { targetId: bound.targetId, verificationId },
+      consumerCode: consumer.get(r.migrationId) ?? [],
     }
   })
 }
 
-/** One covered bundle's verify.sql on the target, read-only as the verifier, nothing bound. */
+/**
+ * What each covered verify.sql resolves to on the target now, read as the observer (review of
+ * ADR-0040, P2-2): the consumer code its checks call is bound into the plan, so the
+ * verification fails on code that changed since, as a migration plan's does. A verify.sql that
+ * cannot be parsed or resolved refuses the plan.
+ */
+async function consumerCodeOf(
+  connector: Connector,
+  target: TargetRecord,
+  revisions: readonly StoredRevision[],
+): Promise<Map<string, readonly ConsumerCode[]>> {
+  const opened = await connector.forTarget(target, 'observer', `baseline-plan/${target.targetId}`)
+  try {
+    const major = opened.session.facts.major
+    await loadParser(major)
+    const failed: { name: string; layer: 'L2'; status: 'error' }[] = []
+    const found = new Map<string, readonly ConsumerCode[]>()
+    await opened.session.readOnly(async (rtx) => {
+      for (const r of revisions) {
+        const bytes = r.files['verify.sql']
+        if (bytes === null) continue
+        const text = normalizeSqlSource(bytes)
+        const file = text.ok ? analyzeVerifyFile(major, text.value) : undefined
+        if (file === undefined || !file.ok) {
+          failed.push({
+            name: `${r.migrationId}: verify.sql admission`,
+            layer: 'L2',
+            status: 'error',
+          })
+          continue
+        }
+        const resolution = await resolveVerifyCatalog(rtx, file.checks)
+        if (!resolution.ok) {
+          failed.push({
+            name: `${r.migrationId}: verify.sql resolution`,
+            layer: 'L2',
+            status: 'error',
+          })
+          continue
+        }
+        found.set(r.migrationId, [...resolution.consumer])
+      }
+    })
+    if (failed.length > 0) {
+      throw new MigrationError('VERIFICATION_FAILED', { checks: failed.slice(0, 256) })
+    }
+    return found
+  } finally {
+    await opened.session.close()
+  }
+}
+
+/** One covered bundle's verify.sql on the target, read-only as the verifier. */
 async function coveredLayer(
   connector: Connector,
   target: TargetRecord,
   purpose: string,
   revision: StoredRevision,
+  bound: readonly ConsumerCode[] | null,
 ): Promise<Layer> {
   const bytes = revision.files['verify.sql']
-  if (bytes === null) return runtimeLayer(connector, target, purpose, null, null)
+  if (bytes === null) return runtimeLayer(connector, target, purpose, null, bound)
   const text = normalizeSqlSource(bytes)
   if (!text.ok) {
     return {
@@ -137,7 +208,7 @@ async function coveredLayer(
       firstFailure: { name: 'verify.sql encoding', detail: null },
     }
   }
-  return runtimeLayer(connector, target, purpose, text.value, null)
+  return runtimeLayer(connector, target, purpose, text.value, bound)
 }
 
 /**
@@ -171,13 +242,23 @@ export async function coveredRuntime(
               failed: 0,
               firstFailure: { name: 'covered bundle not in the bundle store', detail: null },
             }
-          : await coveredLayer(connector, target, `verify/${operationId}`, revision),
+          : await coveredLayer(
+              connector,
+              target,
+              `verify/${operationId}`,
+              revision,
+              row.consumerCode ?? null,
+            ),
     })
   }
   return combinedLayer(parts)
 }
 
-/** Several bundles' runtime layers as one: the worst status, the counts summed, the first bad one named. */
+/**
+ * Several bundles' runtime layers as one: the worst status, the counts summed, the first bad one
+ * named, and one kept failure per bundle that did not hold (`file` is its id), so a read can say
+ * which covered bundle failed.
+ */
 export function combinedLayer(parts: readonly { id: string; layer: Layer }[]): Layer {
   const bad =
     parts.find((p) => p.layer.status === 'error') ??
@@ -189,8 +270,24 @@ export function combinedLayer(parts: readonly { id: string; layer: Layer }[]): L
       : parts.every((p) => p.layer.status === 'skipped')
         ? 'skipped'
         : 'passed'
+  const failures = parts
+    .filter(
+      (p) =>
+        p.layer.status === 'error' || p.layer.status === 'failed' || p.layer.status === 'partial',
+    )
+    .map((p) => ({
+      file: p.id,
+      statement: null,
+      kind: 'covered_verify',
+      object: (p.layer.firstFailure?.name ?? 'verify.sql').slice(0, 300),
+      failed: [p.layer.status],
+      excused: false,
+    }))
   return {
     status,
+    ...(failures.length === 0
+      ? {}
+      : { failures: failures.slice(0, MAX_KEPT), failuresTotal: failures.length }),
     checks: parts.reduce((n, p) => n + p.layer.checks, 0),
     failed: parts.reduce((n, p) => n + p.layer.failed, 0),
     firstFailure:

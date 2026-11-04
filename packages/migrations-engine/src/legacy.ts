@@ -61,6 +61,7 @@ import { type CoveredRow, coveredRows, coveredRuntime } from './baseline-covers.
 import type { PlanContent, PlanItem } from './content.ts'
 import { type MigrationKindDeps, projectRegistry } from './deps.ts'
 import { MigrationError } from './errors.ts'
+import { collectEvidence } from './evidence.ts'
 import {
   boundExceptionsHold,
   type ExceptionBinding,
@@ -2751,6 +2752,24 @@ export class MigrationBaselineKind implements OperationKind {
         }
         if (live.ledgerStateHash !== c.expectedState.ledgerStateHash || live.baselineId !== null) {
           changed.push({ binding: 'ledger', actual: 'changed' })
+        }
+        // ADR-0040: the staging evidence of each covered bundle still holds at apply.
+        const covers = c.covers ?? []
+        if (covers.length > 0 && target.tier === 'prod') {
+          const evidence = await collectEvidence(
+            this.#deps.store,
+            this.#deps.connector,
+            this.#deps.installationId,
+            target,
+            covers.map((r) => ({
+              migrationId: r.migrationId,
+              checksum: r.checksum,
+              verifyDigest: r.verifyDigest,
+            })),
+            c.expectedState.schemaFingerprint,
+          )
+          if (evidence.fact !== 'present')
+            changed.push({ binding: 'evidence', actual: evidence.fact })
         }
         return changed
       } finally {

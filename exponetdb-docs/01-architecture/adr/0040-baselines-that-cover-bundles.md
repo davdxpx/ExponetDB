@@ -40,6 +40,11 @@ and planning counts it as applied.
    evidence target, not reverted, trusted, its latest trusted verification passed with the same
    verify digest); anything but `present` refuses the plan (`STAGING_EVIDENCE_MISSING`, or
    `STAGING_EVIDENCE_UNREACHABLE`). There is no break-glass. A nonprod target needs no evidence.
+   On production a covered bundle must have a `verify.sql` (`MIGRATION_BUNDLE_INVALID`,
+   `missing_file`): without one nothing would ever check its effect there. Each `verify.sql` is
+   admitted and resolved on the target as the observer, and the consumer code its checks call
+   is bound into the plan, as a migration plan binds it (a verification fails on code that
+   changed since). The apply re-reads the staging evidence (binding `evidence`).
 2. **No dry run at plan time.** **[OBSERVED]** `serve` opens observer sessions only
    (`packages/registry/src/connect.ts`), so a covered bundle's `verify.sql` cannot run as the
    verifier while planning. It runs in the worker with the baseline's verification (point 5).
@@ -78,7 +83,8 @@ and planning counts it as applied.
   verified elsewhere, its `verify.sql` holds here and the history's structure matches. That is
   stated in the plan (`analysis.covered`) and in the ledger rows (`covered: true`).
 - A wrong cover cannot be undone: like the baseline, it is reviewed before it is approved.
-- `migration status` lists covered rows as imported (verification via the baseline).
+- `migration status` lists covered rows as imported, each with its own share of the
+  baseline's run: the runtime layer keeps one failure per covered bundle that did not hold.
 
 ## Alternatives
 
