@@ -36,6 +36,10 @@ production before Wave 11). The owner's [Wave 10 order](./exponetdb-docs/14-road
 (2026-11-03) allows REOSA production as a `registered` target with an
 observer credential only: no identity marker, no `exponetdb` schema, no
 write (W10-D3); Wave 10 is in progress ([G10 record](./exponetdb-docs/14-roadmap/gates/10.md)).
+REOSA production moved to `reos-db-01` on 2026-11-04; the owner then amended OD-7b and
+superseded W10-D3 for that one database: it is registered as a **managed** target, its import
+waits for a baseline that covers bundles (OD-72), and every step needs the owner's yes
+([decisions P1 to P7](./exponetdb-docs/00-product/open-decisions.md#owner-decisions-of-the-reosa-production-session-2026-11-04)).
 The worker uses a persistent local audit volume. The first-owner identity
 is pending until the owner completes enrollment. See the dated follow-up in
 the deployment record. The owner authorized Wave 3A on 2026-10-05 and resolved OD-9
