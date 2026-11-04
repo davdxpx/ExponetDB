@@ -39,6 +39,8 @@
 | OD-55 ledger/marker protection | — | — | `current_user` check per statement only | — | — | — | — | — | — | OD-55 (open) | proof of the gap (Part A) | **MISSING** |
 | OD-56 keyed digest of excused values | — | `failing` column (names only) | aspects compared only | — | — | — | — | — | — | OD-56 (open) | proof of the gap | **MISSING** |
 | `migration.destructive-backup` fact | rule exists, always fails on production | — | no backups fact | — | — | — | — | — | — | `policy-engine.md` | rule unit tests | **INCOMPLETE** (fail closed) |
+
+> **[OBSERVED]** 2026-11-04 (P6 of the REOSA production session): the row above stayed incomplete in one more place: plan acceptance could never meet the rule's `backup` requirement (`registryAcceptDependencies` met only `break_glass` and `reauth`). Acceptance now asks the mirrored catalog of the plan's cluster (`verifiedBackupWithin`: a verified, listed backup in a live off-host repository reconciled within 10 minutes, finished within the rule's age); unit tests in `packages/backups/test/protection.test.ts` and `packages/registry/test/accept-backup.test.ts`.
 | G6 expiring waivers (E25; partial E4, E5, E7, E8, E9, E11, E13, E14, E15, E26, E28) | — | — | — | — | — | — | — | — | — | `gates/6.md` | partial | **NOT PROVEN** |
 | G5 items 2 and 4 (real systemd) | — | — | — | — | — | — | — | — | — | waived until a real host | CI host scenarios green in run 408 | **NOT PROVEN** for a real host (CI evidence exists for the systemd container) |
 

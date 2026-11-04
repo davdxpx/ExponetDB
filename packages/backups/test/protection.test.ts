@@ -3,8 +3,10 @@ import {
   type BackupFact,
   computeProtection,
   type DrillFact,
+  durationMs,
   type ProtectionInput,
   type RepositoryFact,
+  verifiedBackupWithin,
   type WalFact,
 } from '../src/protection.ts'
 
@@ -251,5 +253,86 @@ describe('backup protection (architecture.md §4, ADR-0038 §5)', () => {
     )
     expect(p.state).toBe('unknown')
     expect(p.reasons).toContain('no_repository')
+  })
+})
+
+describe('the backup requirement of a policy rule (P6, migration.destructive-backup)', () => {
+  const input = (over: Partial<ProtectionInput> = {}): ProtectionInput => ({
+    nowMs: NOW,
+    repositories: [repo()],
+    backups: [full({ finishedAtMs: NOW - 2 * 3_600_000 })],
+    wal: [wal()],
+    archive: null,
+    drills: [],
+    policy: null,
+    clockSkewSeconds: 0,
+    ...over,
+  })
+  const H24 = 24 * 3_600_000
+
+  it('reads ISO 8601 durations of days to seconds, and nothing else', () => {
+    expect(durationMs('PT24H')).toBe(H24)
+    expect(durationMs('P1D')).toBe(H24)
+    expect(durationMs('P1DT30M')).toBe(H24 + 30 * MIN)
+    expect(durationMs('PT90S')).toBe(90_000)
+    for (const bad of ['', 'P', 'PT', '24h', 'P1W', 'PT-1H', 'P1Y'])
+      expect(durationMs(bad)).toBeNull()
+  })
+
+  it('is met by a verified off-host backup newer than the age, on a fresh catalog', () => {
+    expect(verifiedBackupWithin(input(), H24)).toBe(true)
+  })
+
+  it('fails closed on an old, unverified, divergent, failed or future backup', () => {
+    expect(
+      verifiedBackupWithin(input({ backups: [full({ finishedAtMs: NOW - H24 - MIN })] }), H24),
+    ).toBe(false)
+    expect(
+      verifiedBackupWithin(
+        input({ backups: [full({ finishedAtMs: NOW - MIN, verification: 'pending' })] }),
+        H24,
+      ),
+    ).toBe(false)
+    expect(
+      verifiedBackupWithin(
+        input({ backups: [full({ finishedAtMs: NOW - MIN, divergence: 'missing_in_engine' })] }),
+        H24,
+      ),
+    ).toBe(false)
+    expect(
+      verifiedBackupWithin(
+        input({ backups: [full({ finishedAtMs: NOW - MIN, state: 'failed' })] }),
+        H24,
+      ),
+    ).toBe(false)
+    expect(
+      verifiedBackupWithin(input({ backups: [full({ finishedAtMs: NOW + 10 * MIN })] }), H24),
+    ).toBe(false)
+    expect(verifiedBackupWithin(input({ backups: [] }), H24)).toBe(false)
+  })
+
+  it('fails closed on a catalog older than 10 minutes, a posix, external, retired or unreconciled repository', () => {
+    expect(
+      verifiedBackupWithin(
+        input({ repositories: [repo({ reconciledAtMs: NOW - 11 * MIN })] }),
+        H24,
+      ),
+    ).toBe(false)
+    expect(verifiedBackupWithin(input({ repositories: [repo({ provider: 'posix' })] }), H24)).toBe(
+      false,
+    )
+    expect(
+      verifiedBackupWithin(input({ repositories: [repo({ ownership: 'external' })] }), H24),
+    ).toBe(false)
+    expect(verifiedBackupWithin(input({ repositories: [repo({ state: 'retired' })] }), H24)).toBe(
+      false,
+    )
+    expect(
+      verifiedBackupWithin(
+        input({ repositories: [repo({ reconciliationOutcome: 'failed' })] }),
+        H24,
+      ),
+    ).toBe(false)
+    expect(verifiedBackupWithin(input({ repositories: [] }), H24)).toBe(false)
   })
 })

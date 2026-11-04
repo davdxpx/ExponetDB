@@ -329,6 +329,59 @@ export function computeProtection(input: ProtectionInput): BackupProtection {
   }
 }
 
+/**
+ * How fresh a repository's reconciled catalog must be for a policy that depends on backups
+ * ([architecture.md §5](../../../exponetdb-docs/09-backups-and-restore/architecture.md)): a
+ * mirror older than this counts as "no backup".
+ */
+export const POLICY_CATALOG_FRESH_MS = 10 * 60_000
+
+/** An ISO 8601 duration of days, hours, minutes and seconds (`PT24H`, `P1D`) in ms; else null. */
+export function durationMs(value: string): number | null {
+  const m = /^P(?!$)(?:(\d+)D)?(?:T(?=\d)(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(value)
+  if (m === null) return null
+  const [d, h, min, sec] = [m[1], m[2], m[3], m[4]].map((x) => Number(x ?? 0)) as [
+    number,
+    number,
+    number,
+    number,
+  ]
+  return (((d * 24 + h) * 60 + min) * 60 + sec) * 1000
+}
+
+/**
+ * The backup requirement of a policy rule (`migration.destructive-backup`): a succeeded backup,
+ * still listed by the engine, whose verification passed, in a live off-host repository whose
+ * catalog was reconciled within {@link POLICY_CATALOG_FRESH_MS}, finished within `newerThanMs`
+ * and not in the future. Fails closed on everything it cannot establish.
+ */
+export function verifiedBackupWithin(input: ProtectionInput, newerThanMs: number): boolean {
+  const { nowMs } = input
+  const usable = new Set(
+    input.repositories
+      .filter(
+        (r) =>
+          r.state !== 'retired' &&
+          r.ownership !== 'external' &&
+          offHost(r) &&
+          r.reconciliationOutcome === 'ok' &&
+          r.reconciledAtMs !== null &&
+          nowMs - r.reconciledAtMs <= POLICY_CATALOG_FRESH_MS,
+      )
+      .map((r) => r.id),
+  )
+  return input.backups.some(
+    (b) =>
+      usable.has(b.repositoryId) &&
+      b.state === 'succeeded' &&
+      b.divergence === 'none' &&
+      b.verification === 'passed' &&
+      b.finishedAtMs !== null &&
+      b.finishedAtMs <= nowMs + FUTURE_TOLERANCE_MS &&
+      nowMs - b.finishedAtMs <= newerThanMs,
+  )
+}
+
 /** The health field `backups.state` of a target: the protection state of its cluster. */
 export function healthState(p: BackupProtection): BackupProtection['state'] {
   return p.state

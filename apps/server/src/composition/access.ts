@@ -16,6 +16,7 @@ import {
   recoverOwner,
   SERVE_OPERATION_ACTOR,
 } from '@exponetdb/auth'
+import { backupRequirementMet } from '@exponetdb/backups'
 import type { ControlStore } from '@exponetdb/control-store'
 import { DRIFT_ACCEPT_KIND, diagnosticsKinds, MigrationBaselineStore } from '@exponetdb/diagnostics'
 import { migrationKinds } from '@exponetdb/migrations-engine'
@@ -192,7 +193,15 @@ export function composeAccess(
       // The same backup bindings as the registry kinds (registryKindsFor).
       backups: BACKUP_BINDINGS,
       // Node and cluster plans are re-checked with the tier the registry derives now (F2).
-      accept: { policy, kinds, systemActor: SERVE_OPERATION_ACTOR, liveSubject: livePolicySubject },
+      accept: {
+        policy,
+        kinds,
+        systemActor: SERVE_OPERATION_ACTOR,
+        liveSubject: livePolicySubject,
+        // migration.destructive-backup: a verified backup the mirrored catalog holds (P6).
+        backupMet: (q, clusterId, newerThan) =>
+          backupRequirementMet(q, clusterId, newerThan, runtime.clock.nowMs()),
+      },
     },
     // `GET /installation/health` (Wave 8): this process's own readiness and its keyring against the store.
     health: {

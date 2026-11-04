@@ -17,6 +17,7 @@ import type {
   RepositoryFact,
   WalFact,
 } from './protection.ts'
+import { durationMs, verifiedBackupWithin } from './protection.ts'
 
 /**
  * The backup domain's records in the Control Store (schema `backups`,
@@ -659,4 +660,20 @@ export async function protectionFacts(
     policy,
     clockSkewSeconds,
   }
+}
+
+/**
+ * Whether a plan's backup requirement is met now (P6 of the REOSA production session): the plan's
+ * cluster has a verified backup newer than `newerThan` in its mirrored catalog
+ * ({@link verifiedBackupWithin}). A plan without a cluster, or an unreadable age, is not met.
+ */
+export async function backupRequirementMet(
+  q: Queryable,
+  clusterId: string | null,
+  newerThan: string,
+  nowMs: number,
+): Promise<boolean> {
+  const ms = durationMs(newerThan)
+  if (clusterId === null || ms === null) return false
+  return verifiedBackupWithin(await protectionFacts(q, clusterId, nowMs), ms)
 }
