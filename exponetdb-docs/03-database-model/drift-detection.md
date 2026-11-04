@@ -35,6 +35,19 @@ schema is an optional additional reference
 | Kind | Compares | Finding examples | Severity |
 |---|---|---|---|
 | **A** source ↔ ledger | bundles in the submitted source vs the target ledger | `pending_in_source` (normal), `applied_not_in_source` (bundle deleted or on an abandoned branch), `checksum_differs_from_source` | info / warn / critical |
+
+**[DECIDED]** (Wave 10 W10-3, E18) Of kind A, `applied_not_in_source` is
+built: a migration plan whose request says its bundles are the whole source
+(`sourceComplete`; the CLI sets it when it plans every local bundle) is
+compared with the target's Control Store mirror (migrations this installation
+applied, not reverted) by id. One warning finding `applied_not_in_source` of
+kind `health` (so a kind-C drift check and `drift.accept` leave it alone)
+names up to 64 of them and counts them all; it is recorded before planning,
+also when the plan is refused, and cleared by a later whole source that has
+them again. A bundle with the id but other bytes is E19
+(`MIGRATION_CHECKSUM_MISMATCH`), not E18. `pending_in_source` is the plan
+itself; `checksum_differs_from_source` is the plan's refusal; neither is a
+finding.
 | **B** ledger ↔ mirror | target ledger vs Control Store mirror | rows written outside ExponetDB, rows missing after restore, checksum change | critical (blocks schema changes) |
 | **C** expected ↔ actual | the target's current fingerprint vs the `fingerprint_after` of its last applied migration (or the baseline) | out-of-band DDL: object added, dropped, altered (incl. ACLs, policies, function bodies) | warn; critical for security-relevant classes (ACL, RLS, policy, security definer, `search_path`) |
 | **D** environment ↔ environment | target vs its evidence target (both fingerprints) | staging has an index production lacks; production policy differs (REOSA: `tenant_members_select_own`) | info / warn |

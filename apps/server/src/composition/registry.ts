@@ -12,6 +12,7 @@ import {
   RegistrationSnapshotStore,
   recordDriftFailure,
   recordLedgerWatch,
+  recordMigrationFinding,
   rollupStatements,
   runDriftCheck,
   sampleStatements,
@@ -20,7 +21,11 @@ import {
   targetsToSample,
 } from '@exponetdb/diagnostics'
 import type { Clock } from '@exponetdb/kernel'
-import { divergenceDetails, ledgerDivergenceOf } from '@exponetdb/migrations-engine'
+import {
+  divergenceDetails,
+  hotfixesWithoutEvidence,
+  ledgerDivergenceOf,
+} from '@exponetdb/migrations-engine'
 import { rotationOwner } from '@exponetdb/nodes'
 import { describeError, type Logger } from '@exponetdb/observability'
 import { KindRegistry, type OperationKind, WORKER_ACTOR } from '@exponetdb/operations'
@@ -195,7 +200,10 @@ export interface ObservationTasks {
   sampleHealth(): Promise<string | undefined>
   /** Scheduled drift checks of the targets that are due. */
   checkDrift(): Promise<string | undefined>
-  /** VC-022: every active or suspended target's ledger against its mirror; a finding while they differ. */
+  /**
+   * VC-022: every active or suspended target's ledger against its mirror; a finding while they differ.
+   * W10-3 (E16): a production target's migrations against its evidence target's ledger.
+   */
   watchLedgers(): Promise<string | undefined>
   /** Health sample partitions ahead and expired ones dropped. */
   partitions(): Promise<string | undefined>
@@ -330,6 +338,26 @@ export function observationTasks(
                   details: divergenceDetails(divergence),
                 },
           )
+          // E16 (W10-3): a production migration its evidence target lacks.
+          const hotfixes = await hotfixesWithoutEvidence(
+            { store: rt.store, connector: probes, installationId: rt.installationId },
+            target,
+          )
+          if (hotfixes !== undefined) {
+            await recordMigrationFinding(
+              rt.store,
+              target.targetId,
+              'hotfix_without_evidence',
+              hotfixes.items.map((i) => ({
+                migrationId: i.migrationId,
+                name: i.name,
+                evidence: i.evidence,
+                operationId: i.operationId,
+                planId: i.planId,
+              })),
+              { evidenceTargetId: hotfixes.evidenceTargetId },
+            )
+          }
         } catch (error) {
           // A target that cannot be read is the health sample's to say; the watch never reads it as agreeing.
           failed++

@@ -198,6 +198,10 @@ export const MigrationPlanRequestSchema = z
     defaults: ProjectDefaultsMember,
     migrationIds: z.array(MigrationIdSchema).max(MIGRATION_REQUEST_LIMITS.migrationIds).optional(),
     source: SourceClaimSchema.optional(),
+    sourceComplete: z.boolean().optional().meta({
+      description:
+        "The bundles are the project's whole source (the CLI sets it when it submits every local bundle). The server then compares them with the target's applied migrations: one it applied that the source lacks opens the finding applied_not_in_source (failure case E18), a later whole source that has it again clears it. The comparison is recorded also when the plan itself is refused.",
+    }),
     lintProfile: z.enum(['strict', 'standard']).optional().meta({
       description: "The project file's lint profile (default strict).",
     }),

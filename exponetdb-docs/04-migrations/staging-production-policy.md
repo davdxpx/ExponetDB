@@ -160,13 +160,30 @@ A hotfix is a change applied to production without staging evidence.
 **[DECIDED]** It is possible only through break-glass (§4). Afterwards:
 
 - The production ledger row is marked (via the plan's overridden rules) as
-  `evidence: break_glass`.
+  `evidence: break_glass`. **[PLANNED]** Not built: the target ledger has no
+  such column; the plan that applied the row is named by the finding below
+  (`operationId`, `planId`), and its overridden rules are on that plan.
 - A finding `hotfix_without_evidence` stays open until the same migration (same
   id and checksum) has been applied and verified on staging, restoring the
   invariant "staging contains everything production contains".
+  **[DECIDED]** Built in Wave 10 (W10-3, OD-65 (a)): the worker task
+  `ledger.watch` (every 10 minutes) compares every migration this installation
+  applied on a production target (its Control Store mirror, origin
+  `exponetdb`, not reverted) with the evidence target's ledger, read live as
+  its observer with the trust rules of planning (the same id and checksum,
+  not reverted, a passed and mirrored verification with the same verify
+  digest). One warning `health` finding per production target names up to 64
+  such migrations with what staging has of each (`missing`, `unverified`,
+  `other_verify_digest`, `checksum_differs`) and counts them all; it is
+  resolved `cleared` when none is left. It detects any such migration, not
+  only a break-glass one. An evidence target that cannot be read leaves the
+  finding as it is (the task fails visibly). A production target whose
+  environment names no evidence environment is not compared.
 - If the hotfix cannot be applied to staging as-is (staging diverged), the
   resolution is a reconciling migration on staging plus an explicit
-  resolution note on the finding.
+  resolution note on the finding. **[PLANNED]** There is no operation to
+  resolve a finding with a note yet; until there is, such a finding stays
+  open.
 
 ## 4. Break-glass for migrations
 

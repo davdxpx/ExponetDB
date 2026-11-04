@@ -1846,7 +1846,7 @@ Runs: against the server; effect: read; action: `migration.get`; scopes: `migrat
 
 Plan migrations for a target from the local bundles (or stored ones): analysis, policy, evidence.
 
-Submits the exact bytes of the local bundles; the server ingests them, analyzes them against the live target and decides. Nothing runs until plan apply.
+Submits the exact bytes of the local bundles; the server ingests them, analyzes them against the live target and decides. Nothing runs until plan apply. Without migration ids every local bundle is the project source: a migration applied on the target that the source lacks opens the finding applied_not_in_source there (cleared when it is back).
 
 ```text
 exponetdb migration plan [migration…] [flags]

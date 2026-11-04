@@ -1646,6 +1646,7 @@ export type MigrationPlanRequest = {
   readonly lockWaitSeconds?: number
   readonly migrationIds?: readonly string[]
   readonly source?: MigrationSourceClaim
+  readonly sourceComplete?: boolean
 }
 
 export type MigrationProgress = {

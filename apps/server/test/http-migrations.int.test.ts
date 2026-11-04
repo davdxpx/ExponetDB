@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -1568,6 +1568,44 @@ describe('the CLI as a process', () => {
     expect(json(plans).data.items.map((p: { id: string }) => p.id)).toEqual(
       expect.arrayContaining([plan.planId, json(prod).planId]),
     )
+  })
+
+  it('E18: a plan of the whole local source opens applied_not_in_source for an applied bundle the source lost, and clears it when the bundle is back', async () => {
+    const earlier = bundle({ id: first, name: 'add-leads', up: LEADS, verify: LEADS_VERIFY })
+    const kept = join(projectDir, earlier.directory)
+    const findings = async () =>
+      (
+        await owner.browser.call('GET', `/api/v1/targets/${ids.stagingTarget}/findings?kind=health`)
+      ).body.items.filter((f: { code: string }) => f.code === 'applied_not_in_source') as {
+        code: string
+        state: string
+        summary: string
+      }[]
+    expect(await findings()).toEqual([])
+    // The applied bundle leaves the repository (deleted, or left on another branch).
+    await rename(join(projectDir, 'migrations', earlier.directory), kept)
+    // Nothing is pending, so the plan itself is refused; the comparison is recorded all the same.
+    const lost = await cli(['migration', 'plan', '--target', ids.stagingTarget, '--json'])
+    expect(lost.code).not.toBe(0)
+    const open = await findings()
+    expect(open).toHaveLength(1)
+    expect(open[0]).toMatchObject({ code: 'applied_not_in_source', state: 'open' })
+    expect(open[0]?.summary).toMatch(/^1 migration applied on this target is missing/)
+    // A plan of named bundles is not the whole source: it says nothing either way.
+    const named = await cli([
+      'migration',
+      'plan',
+      (await readdir(join(projectDir, 'migrations')))[0]?.slice(0, 26) ?? '',
+      '--target',
+      ids.stagingTarget,
+      '--json',
+    ])
+    expect(named.code).not.toBe(0)
+    expect(await findings()).toHaveLength(1)
+    // The bundle is back: the next plan of the whole source clears the finding.
+    await rename(kept, join(projectDir, 'migrations', earlier.directory))
+    await cli(['migration', 'plan', '--target', ids.stagingTarget, '--json'])
+    expect(await findings()).toEqual([])
   })
 
   it('answers PLAN_DENIED for a denied plan: 403 over REST, exit 4 in the CLI (G6 finding O5)', async () => {

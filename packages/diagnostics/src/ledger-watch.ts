@@ -61,3 +61,53 @@ export async function recordLedgerWatch(
     if (opened) await audit('ledger.divergence.detected', sighting.counts)
   })
 }
+
+/** The ledger comparison findings of G6 failure cases E16 and E18 (Wave 10 W10-3, OD-65 (a)). */
+export type MigrationFindingCode = 'hotfix_without_evidence' | 'applied_not_in_source'
+
+const MIGRATION_FINDINGS_SHOWN = 64
+
+const counted = (n: number) => (n === 1 ? '1 migration applied' : `${n} migrations applied`)
+const verb = (n: number) => (n === 1 ? 'is' : 'are')
+
+const MIGRATION_SUMMARY: Readonly<Record<MigrationFindingCode, (n: number) => string>> = {
+  hotfix_without_evidence: (n) =>
+    `${counted(n)} on this production target ${verb(n)} not applied and verified with the same checksum on its evidence target; apply the same migration there (staging contains everything production contains).`,
+  applied_not_in_source: (n) =>
+    `${counted(n)} on this target ${verb(n)} missing from the project's source; restore the bundle or write a migration that undoes it. The ledger row stays.`,
+}
+
+/**
+ * One open finding per target and code while the comparison names migrations (`health` kind like
+ * `ledger_divergence`: a drift check resolves only its own kind-C findings and `drift.accept`
+ * adopts a schema, which gives no staging evidence and restores no file). The finding names at
+ * most {@link MIGRATION_FINDINGS_SHOWN} migrations (ids and bundle names, never SQL) and counts
+ * them all; it is rewritten when that changes and resolved `cleared` when none is left.
+ */
+export async function recordMigrationFinding(
+  store: ControlStore,
+  targetId: string,
+  code: MigrationFindingCode,
+  migrations: readonly JsonObject[],
+  extra: JsonObject = {},
+): Promise<void> {
+  await store.transaction(`ledger.${code}.record`, async (tx) => {
+    if (migrations.length === 0) {
+      await resolveFindingByKey(tx, targetId, code, 'cleared')
+      return
+    }
+    await recordFinding(tx, {
+      targetId,
+      kind: 'health',
+      code,
+      severity: 'warning',
+      dedupKey: code,
+      summary: MIGRATION_SUMMARY[code](migrations.length),
+      details: {
+        ...extra,
+        count: migrations.length,
+        migrations: migrations.slice(0, MIGRATION_FINDINGS_SHOWN),
+      },
+    })
+  })
+}

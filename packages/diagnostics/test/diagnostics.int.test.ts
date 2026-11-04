@@ -59,6 +59,7 @@ import {
   recordDriftFailure,
   recordFinding,
   recordLedgerWatch,
+  recordMigrationFinding,
   runDriftCheck,
   sampleTarget,
   schemaFingerprintView,
@@ -993,6 +994,60 @@ describe('the ledger watch finding (VC-022)', () => {
     await recordLedgerWatch(h.worker, h.context.policy.clock, target.targetId, null)
     expect((await open()).filter((f) => f.code === 'ledger_divergence')).toHaveLength(0)
     expect(await auditCount('ledger.divergence.cleared')).toBe(1)
+  })
+})
+
+describe('the ledger comparison findings of E16 and E18 (Wave 10 W10-3)', () => {
+  const hot = { migrationId: '01M6EJD93DP9GNTHF77YY8VNY7', name: 'hotfix-col', evidence: 'missing' }
+  const other = {
+    migrationId: '01M6EJD93DP9GNTHF77YY8VNY8',
+    name: 'second',
+    evidence: 'unverified',
+  }
+  const open = async (code: string) =>
+    (await openFindings(h.worker, target.targetId, 'health')).filter((f) => f.code === code)
+
+  it.each([
+    ['hotfix_without_evidence', 'warning'],
+    ['applied_not_in_source', 'warning'],
+  ] as const)(
+    '%s: one open finding per target naming the migrations, updated as they change, cleared when none is left',
+    async (code, severity) => {
+      await recordMigrationFinding(h.worker, target.targetId, code, [hot, other], {
+        evidenceTargetId: 'tgt_01M6EJD93DP9GNTHF77YY8VNY9',
+      })
+      await recordMigrationFinding(h.worker, target.targetId, code, [hot, other], {
+        evidenceTargetId: 'tgt_01M6EJD93DP9GNTHF77YY8VNY9',
+      })
+      const first = await open(code)
+      expect(first).toHaveLength(1)
+      expect(first[0]).toMatchObject({
+        kind: 'health',
+        severity,
+        occurrences: 1,
+        details: { count: 2, migrations: [hot, other] },
+      })
+      expect(first[0]?.summary).toMatch(/2 migrations/)
+      // One of them is settled: the same finding says so.
+      await recordMigrationFinding(h.worker, target.targetId, code, [hot])
+      const second = await open(code)
+      expect(second.map((f) => f.findingId)).toEqual(first.map((f) => f.findingId))
+      expect(second[0]).toMatchObject({ details: { count: 1, migrations: [hot] } })
+      await recordMigrationFinding(h.worker, target.targetId, code, [])
+      expect(await open(code)).toHaveLength(0)
+    },
+  )
+
+  it('names at most 64 migrations and counts the rest', async () => {
+    const many = Array.from({ length: 70 }, (_, i) => ({
+      migrationId: `01M6EJD93DP9GNTHF77YY8V${String(i).padStart(3, '0')}`,
+      name: `m${i}`,
+    }))
+    await recordMigrationFinding(h.worker, target.targetId, 'applied_not_in_source', many)
+    const [f] = await open('applied_not_in_source')
+    expect(f?.details['count']).toBe(70)
+    expect(f?.details['migrations']).toHaveLength(64)
+    await recordMigrationFinding(h.worker, target.targetId, 'applied_not_in_source', [])
   })
 })
 

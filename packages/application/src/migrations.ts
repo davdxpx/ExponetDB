@@ -16,7 +16,9 @@ import type {
   PlanView,
   ScratchCheck,
 } from '@exponetdb/contracts'
+import { recordMigrationFinding } from '@exponetdb/diagnostics'
 import {
+  appliedNotInSource,
   bundleFile,
   bundleView,
   decideImportItem,
@@ -183,6 +185,12 @@ export class MigrationUseCases {
     idem?: Idempotency,
   ): Promise<PlanView> {
     const target = await this.#target('migration.plan', caller, ref)
+    // E18 (W10-3): the whole source against what this installation applied there, recorded before
+    // planning, so a plan refused because nothing is pending still reports a lost bundle.
+    if (request.sourceComplete === true && (request.bundles?.length ?? 0) > 0) {
+      const missing = await appliedNotInSource(this.#h.store, target, request.bundles ?? [])
+      await recordMigrationFinding(this.#h.store, target.targetId, 'applied_not_in_source', missing)
+    }
     return this.#h.plan(
       caller,
       'migration.plan',

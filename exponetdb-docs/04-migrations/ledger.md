@@ -249,6 +249,11 @@ mirror's last known `ledger_state_hash` no longer matches.
   cannot be read is the health sample's to report; the watch never reads it as
   agreeing (the task fails visibly). Schema changes are blocked by the plans'
   own comparison, not by suspending the target.
+  **[DECIDED]** (Wave 10 W10-3, E16) The same task compares each production
+  target with its evidence target: a migration in the production mirror that
+  the evidence target has not applied and verified with the same checksum
+  keeps the warning `health` finding `hotfix_without_evidence` open
+  ([`staging-production-policy.md` §3](./staging-production-policy.md#3-hotfixes)).
 - Divergence classes:
 
 | Divergence | Typical cause | Effect |

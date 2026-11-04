@@ -224,6 +224,47 @@ export async function evidenceTrust(
   }
 }
 
+type EvidenceTrust = Awaited<ReturnType<typeof evidenceTrust>>
+
+/**
+ * One migration's evidence in a read of the evidence target: the same id with the same apply
+ * checksum, not reverted, a trusted row, and a trusted latest verification that passed with the
+ * same verify digest. Planning and the hotfix watch (E16) decide with this one function.
+ */
+export function evidenceOf(
+  read: EvidenceRead,
+  trust: EvidenceTrust,
+  m: EvidenceInput,
+):
+  | { readonly status: 'checksum_differs'; readonly row: LedgerRecord; readonly v: undefined }
+  | {
+      readonly status: EvidenceItem['status']
+      readonly row: LedgerRecord | undefined
+      readonly v: VerificationRecord | undefined
+    } {
+  const row = read.ledger.find((r) => r.migrationId === m.migrationId)
+  if (row !== undefined && row.checksum !== m.checksum) {
+    return { row, v: undefined, status: 'checksum_differs' }
+  }
+  const v =
+    row === undefined || row.revertedAt !== null
+      ? undefined
+      : latest(read.verifications, m.migrationId)
+  if (row === undefined || row.revertedAt !== null || !trust.rowTrusted(row)) {
+    return { row, v, status: 'missing' }
+  }
+  return {
+    row,
+    v,
+    status:
+      v === undefined || v.status !== 'passed' || !trust.verificationTrusted(v)
+        ? 'unverified'
+        : v.verifyDigest === m.verifyDigest
+          ? 'present'
+          : 'other_verify_digest',
+  }
+}
+
 export async function collectEvidence(
   q: Queryable,
   connector: Connector,
@@ -273,27 +314,15 @@ export async function collectEvidence(
   let fact: EvidenceFact = 'present'
   let lineage: LineageFact = 'unknown'
   for (const [i, m] of migrations.entries()) {
-    const row = read.ledger.find((r) => r.migrationId === m.migrationId)
-    if (row !== undefined && row.checksum !== m.checksum) {
+    const found = evidenceOf(read, trust, m)
+    if (found.status === 'checksum_differs') {
       throw new MigrationError('MIGRATION_CHECKSUM_MISMATCH', {
         migrationId: m.migrationId,
-        knownChecksum: row.checksum,
+        knownChecksum: found.row.checksum,
         where: { kind: 'target_ledger', targetId: evidence.targetId },
       })
     }
-    let status: EvidenceItem['status'] = 'missing'
-    const v =
-      row === undefined || row.revertedAt !== null
-        ? undefined
-        : latest(read.verifications, m.migrationId)
-    if (row !== undefined && row.revertedAt === null && trust.rowTrusted(row)) {
-      status =
-        v === undefined || v.status !== 'passed' || !trust.verificationTrusted(v)
-          ? 'unverified'
-          : v.verifyDigest === m.verifyDigest
-            ? 'present'
-            : 'other_verify_digest'
-    }
+    const { row, v, status } = found
     const itemLineage: 'match' | 'mismatch' | 'unknown' | null =
       i === 0 && row !== undefined
         ? row.fingerprintBefore === null
