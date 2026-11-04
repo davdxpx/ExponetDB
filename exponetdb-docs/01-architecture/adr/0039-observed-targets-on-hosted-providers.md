@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Accepted for development** under the owner's Wave 10 order (2026-11-03, W10-D3, W10-D4) |
+| Status | **Accepted for development** under the owner's Wave 10 order (2026-11-03, W10-D3, W10-D4). **Superseded for REOSA production** on 2026-11-04: that database moved to `reos-db-01` and is registered as a managed target ([P1](../../00-product/open-decisions.md#owner-decisions-of-the-reosa-production-session-2026-11-04)); the mechanism stays for other hosted targets |
 | Date | 2026-11-03 |
 | Builds on | [`../../02-control-plane/registry.md`](../../02-control-plane/registry.md) §1 and §2.2, [`../../03-database-model/postgres-adapter.md`](../../03-database-model/postgres-adapter.md) §3, [ADR-0034](./0034-execution-roles-for-adopted-schemas.md), OD-7b |
 | Related | [G10 record](../../14-roadmap/gates/10.md), [Wave 10 order](../../14-roadmap/orders/wave-10-order.md) W10-1, W10-2 |
