@@ -406,12 +406,17 @@ describe('a rollback is not planned on a copy of the database (VC-071)', () => {
       ),
     ).toMatchObject({ state: 'succeeded' })
     // The name now reaches another database object (a dump restored under the same name).
-    await w.h.db.asSuperuser((c) =>
-      c.query(
+    // Test-only edit: the database guard keeps a recorded oid (ADR-0039), so the guard is
+    // bypassed for this one statement, as the auth suites age their times.
+    await w.h.db.asSuperuser(async (c) => {
+      await c.query('BEGIN')
+      await c.query('SET LOCAL session_replication_role = replica')
+      await c.query(
         `UPDATE registry.databases SET observed_oid = observed_oid + 7 WHERE database_id = $1`,
         [t.record.placement?.databaseId],
-      ),
-    )
+      )
+      await c.query('COMMIT')
+    })
     const error = await refusal(
       w.h.serve.transaction('test.integrity.rollback', (tx) =>
         planMigrationRollback(tx, w.ctx, w.a, t.record.targetId, id),
