@@ -30,9 +30,11 @@ Steps, as for the earlier records ([`upgrades.md` §1](../upgrades.md)):
    deployed one after another; `/healthz/ready` 200, the three containers
    healthy with `buildCommit` `cce2ee05`.
 
-Settings stored in Coolify before the deploy and in force since:
+Settings stored in Coolify before the deploy:
 `EXPONETDB_BACKUP_EXECUTION=nonprod` and `EXPONETDB_RESTORE_EXECUTION=scratch`
-(names only; values are settings, not secrets).
+(names only; values are settings, not secrets). On 2026-11-05 at 09:53 UTC the
+owner switched `EXPONETDB_BACKUP_EXECUTION` to `all` (serve and worker, same
+image, both redeployed and healthy); restores stay `scratch`.
 
 ## Node agent 0.7.1 on `reos-db-01`
 
@@ -61,6 +63,7 @@ The second drill passed (`op_01M6MGZKF38HFW15G7XJHAM9ZH`).
 | Production scratch | `tgt_01M6ME7EKY6DW8SJ4FJGDZWQGM` (`reosa/platform/production-scratch`) | active |
 | Legacy import | report `imr_01M6N8G91BHPX2Q7NBZTYTWJWN` | 272 drift items, not truncated; 407 decisions, 0 unresolved |
 | Baseline with `covers` (ADR-0040), 41 bundles | plan `pln_01M6NAS74GPNTG5F6540JX5V73`, operation `op_01M6NATCNFEKSHFKQWST7PD111`, verification `vfy_01M6NAW11YZRBD1S0Q577VENZE` | applied and verified: 0 of 14140 structural expectations failed, 128 excused by review decisions; ledger 1 baseline row and 634 `legacy_import` rows |
+| First bundles through ExponetDB: 8 mail bundles in one plan, owner approval | plan `pln_01M6NJ7CHGHT0G9A49XZYYEBT2`, operation `op_01M6NJEK6NPG2JKCVZ8VNSQPJ3` | applied and verified 2026-11-05 10:57 UTC; ledger 643 applied, 0 pending |
 
 The order of steps and the REOSA side are in REOSA
 `reosa-docs/09-operations/reos-db-01/migration-2026-10/exponetdb-production-plan.md`.
@@ -69,9 +72,12 @@ The order of steps and the REOSA side are in REOSA
 
 - The checks of [`upgrades.md` §1.1](../upgrades.md) step 8 through the operator
   commands, as in the earlier records.
-- Backup runs and verifies on the cluster after it became prod tier: with
-  `EXPONETDB_BACKUP_EXECUTION=nonprod` they are now refused for this cluster;
-  they need `all`, an owner decision. The host timer still takes the backups.
+- Backup runs on the prod-tier cluster: execution is `all` since 09:53 UTC and
+  a backup verify passed (`bkp_01M6NJ3BPP7S8HMY6BZ2TXE23T`, plan
+  `pln_01M6NJ3THJ59MR8S31S8H5PY31`), but runs need `adopted_runs` ownership of a
+  repository; both are `adopted_observed`, so the host timer still takes the
+  backups. Protection reads `at_risk` (drill overdue, engine advisory, lock not
+  proven, offline key unconfirmed, a WAL gap per repository).
 - Off-host audit export: unchanged, **open**.
 
 ## Rollback anchor
