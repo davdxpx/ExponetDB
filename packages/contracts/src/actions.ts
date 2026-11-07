@@ -2251,6 +2251,20 @@ export const ACTIONS = {
     'cluster',
     { ...REAUTH, wave: '9', basis: 'ADR-0036; registry.md §4.4' },
   ),
+  'backup.repository.attest_offline_key.plan': registryPlan(
+    "Plan a person's attestation that an offline copy of a repository's key exists",
+    'cluster',
+    {
+      wave: '9',
+      basis: 'ADR-0036 §4: an attestation, not a proof; no key is read; C-35',
+    },
+  ),
+  'backup.repository.attest_offline_key': registryKind(
+    "Record a person's attestation that an offline copy of a repository's key exists",
+    fixed('high'),
+    'cluster',
+    { ...REAUTH, wave: '9', basis: 'ADR-0036 §4; bundle offline-key-attestation' },
+  ),
   'backup.policy.set.plan': registryPlan('Plan a backup policy for a cluster', 'cluster', {
     wave: '9',
     basis: 'architecture.md §5 (09-backups-and-restore): repository or policy change, high, human',

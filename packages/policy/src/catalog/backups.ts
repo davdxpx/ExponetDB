@@ -11,11 +11,12 @@ import { targetRegisterProdApproval } from './registry.ts'
  * overridden by break-glass.
  */
 
-/** Changes of a cluster's backup records (repository adoption, ownership, retirement, policy). */
+/** Changes of a cluster's backup records (repository adoption, ownership, retirement, offline key attestation, policy). */
 export const BACKUP_CHANGE_KINDS = [
   'backup.repository.adopt',
   'backup.repository.ownership',
   'backup.repository.retire',
+  'backup.repository.attest_offline_key',
   'backup.policy.set',
 ] as const
 
@@ -38,9 +39,10 @@ function member(o: JsonObject | undefined, ...path: readonly string[]): JsonValu
 /** A production cluster's backup records change only after a human approval and a fresh re-authentication. */
 export const backupChangeProdApproval: Rule = {
   id: 'backup.change-prod-approval',
-  version: 1,
+  // Version 2: also the offline key attestation (ADR-0036 §4).
+  version: 2,
   description:
-    "Adopting, changing or retiring a production cluster's backup repository, or setting its backup policy, needs a human approval and a fresh re-authentication.",
+    "Adopting, changing, attesting the offline key of or retiring a production cluster's backup repository, or setting its backup policy, needs a human approval and a fresh re-authentication.",
   appliesTo: BACKUP_CHANGE_KINDS,
   severity: 'require',
   overridableByBreakGlass: false,

@@ -268,6 +268,69 @@ export class BackupRepositoryRetireKind extends RegistryKind {
   }
 }
 
+/**
+ * `backup.repository.attest_offline_key`: the time of a person's statement that an offline copy
+ * of the key exists, with its operation; the statement and who made it are in the audit event.
+ */
+export class BackupOfflineKeyAttestKind extends RegistryKind {
+  readonly kind = 'backup.repository.attest_offline_key'
+  readonly actionClass = 'high'
+
+  async bindings(_plan: PlanRecord, c: Body, expected: Body): Promise<ChangedBinding[]> {
+    const r = await getRepository(this.deps.store, c.text('repositoryId'))
+    if (r === undefined || r.state === 'retired')
+      return [{ binding: 'repository', actual: 'retired' }]
+    if ((r.observedCipher ?? r.cipher) === 'none') return [{ binding: 'cipher', actual: 'none' }]
+    return r.revision === expected.int('revision')
+      ? []
+      : [{ binding: 'revision', expected: expected.int('revision'), actual: r.revision }]
+  }
+
+  async run(ctx: ExecutionContext, c: Body) {
+    const repositoryId = c.id('bkr', 'repositoryId')
+    const attestation = {
+      repositoryId,
+      attestedBy: c.id('idn', 'attestedBy'),
+      statement: c.text('statement'),
+    }
+    const subject = { clusterId: c.id('cls', 'clusterId') }
+    return this.effect(async (tx) => {
+      // The guard sets the time to the database's and refuses anything but this one change.
+      const { rows } = await tx.query(
+        'backups.kind.attest_offline_key.update',
+        `UPDATE backups.repositories SET offline_copy_confirmed_at = clock_timestamp(),
+                offline_copy_attested_by_operation_id = $2, revision = revision + 1
+          WHERE repository_id = $1 AND state <> 'retired'
+          RETURNING offline_copy_confirmed_at`,
+        [repositoryId, ctx.operationId],
+      )
+      const at =
+        rows.length === 1 ? (rows[0]?.dateOrNull('offline_copy_confirmed_at') ?? null) : null
+      if (at === null) return false
+      await this.audit(
+        tx,
+        ctx,
+        { ...attestation, offlineCopyConfirmedAt: at.toISOString(), keyRead: false },
+        subject,
+      )
+      return true
+    })
+  }
+
+  check(ctx: ExecutionContext, c: Body) {
+    return this.exists(
+      'backups.kind.attest_offline_key.verify',
+      `SELECT 1 FROM backups.repositories WHERE repository_id = $1
+          AND offline_copy_attested_by_operation_id = $2 AND offline_copy_confirmed_at IS NOT NULL`,
+      [c.text('repositoryId'), ctx.operationId],
+    )
+  }
+
+  applied(ctx: ExecutionContext, c: Body) {
+    return this.check(ctx, c)
+  }
+}
+
 /** `backup.policy.set`: a new policy revision supersedes the active one. */
 export class BackupPolicySetKind extends RegistryKind {
   readonly kind = 'backup.policy.set'
@@ -339,6 +402,7 @@ export function backupRecordKinds(deps: RegistryKindDeps): OperationKind[] {
     new BackupRepositoryAdoptKind(deps),
     new BackupRepositoryOwnershipKind(deps),
     new BackupRepositoryRetireKind(deps),
+    new BackupOfflineKeyAttestKind(deps),
     new BackupPolicySetKind(deps),
   ]
 }

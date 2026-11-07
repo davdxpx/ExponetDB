@@ -367,6 +367,12 @@ fake server only, not yet against a running installation.)
   needs `--storage-kept` and `--no-longer-protected`: each acknowledgement
   is a flag the person types, never a default; without it nothing is sent
   (exit 2). There is no `--force` or other bypass.
+  **[DECIDED]** (2026-11-07) `backup attest-offline-key <repository>
+  --statement "…"` plans a person's attestation that an offline copy of
+  the repository's key exists (ADR-0036 §4); without a statement nothing
+  is sent (exit 2). It is applied like every high plan, with
+  `exponetdb plan apply <plan>` and its step-up; production also waits for
+  an approval.
 - **No direct restore.** `restore plan` plans a recovery and shows it; it
   has no `--apply`. A person reviews it and applies it with
   `exponetdb plan apply <plan>`, which takes the fresh re-authentication

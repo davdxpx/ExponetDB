@@ -1181,6 +1181,8 @@ export const ERRORS = {
             'point_in_time_outside_window',
             'no_backup_selectable',
             'repository_engine_below_floor',
+            // ADR-0036 §4: an unencrypted repository (declared or observed) has no key to attest.
+            'repository_unencrypted',
             // VC-062: no wal.archive_status@1 time for the archive yet; a catalog refresh records it.
             'archive_time_unknown',
             // OD-70 (d): no revision of the project is unreferenced and older than 90 days.

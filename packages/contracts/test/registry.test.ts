@@ -150,6 +150,8 @@ describe('Wave 4 registry contracts', () => {
       'backup.policy.set.plan',
       'backup.repository.adopt',
       'backup.repository.adopt.plan',
+      'backup.repository.attest_offline_key',
+      'backup.repository.attest_offline_key.plan',
       'backup.repository.ownership',
       'backup.repository.ownership.plan',
       'backup.repository.retire',

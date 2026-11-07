@@ -1065,6 +1065,118 @@ describe('backups through REST, the worker and a simulated node', () => {
     await node.stop()
   })
 
+  it("attests a production repository's offline key copy through a plan, an approval and a step-up; never an unencrypted or retired one", async () => {
+    const { w, node } = await setup('prod')
+    const repositoryId = await adopt(w)
+    const attestation = `/api/v1/backup-repositories/${repositoryId}/offline-key-attestation`
+    const statement =
+      'The passphrase is in the owner password manager; entry opened and read on 2026-11-07.'
+    const reasons = async () => {
+      const catalog = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/backups`)
+      expect(catalog.status, JSON.stringify(catalog.body)).toBe(200)
+      return catalog.body.protection.reasons as string[]
+    }
+    expect(await reasons()).toContain('offline_key_unconfirmed')
+    // A statement is required: no empty attestation.
+    const empty = await owner.browser.call('POST', attestation, { statement: '' })
+    expect([empty.status, empty.body?.code]).toEqual([422, 'VALIDATION_FAILED'])
+    const { plan, operation } = await planAndApply(attestation, { statement })
+    // Production: the risk class of the other backup record changes, a person's approval and a fresh step-up.
+    expect(plan).toMatchObject({
+      kind: 'backup.repository.attest_offline_key',
+      class: 'high',
+      approvals: { required: 1 },
+    })
+    expect(operation.state).toBe('succeeded')
+    expect(await reasons()).not.toContain('offline_key_unconfirmed')
+    const listed = await owner.browser.call(
+      'GET',
+      `/api/v1/clusters/${w.clusterId}/backup-repositories`,
+    )
+    const repo = listed.body.repositories.find((r: { id: string }) => r.id === repositoryId)
+    expect(repo.revision).toBe(2)
+    expect(Date.parse(repo.encryption.offlineCopyConfirmedAt)).toBeGreaterThan(Date.now() - 600_000)
+    // The audit names who attested and what they stated.
+    const audit = await db.asSuperuser((c) =>
+      c.query(
+        `SELECT event::jsonb -> 'changes' AS changes FROM audit.audit_events
+          WHERE action = 'backup.repository.attest_offline_key' AND phase = 'completed' AND operation_id = $1`,
+        [operation.id],
+      ),
+    )
+    expect(audit.rows).toHaveLength(1)
+    expect(audit.rows[0]?.changes).toMatchObject({
+      repositoryId,
+      attestedBy: owner.identityId,
+      statement,
+      keyRead: false,
+    })
+    // An unencrypted repository has no key to attest.
+    const plain = await planAndApply(`/api/v1/clusters/${w.clusterId}/backup-repositories`, {
+      ...ADOPT,
+      location: { ...ADOPT.location, prefix: 'plain/', repoIndex: 2 },
+      cipher: 'none',
+    })
+    expect(plain.operation.state).toBe('succeeded')
+    const plainId = (
+      await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/backup-repositories`)
+    ).body.repositories.find(
+      (r: { encryption: { cipher: string } }) => r.encryption.cipher === 'none',
+    ).id
+    const unencrypted = await owner.browser.call(
+      'POST',
+      `/api/v1/backup-repositories/${plainId}/offline-key-attestation`,
+      { statement },
+    )
+    expect([unencrypted.status, unencrypted.body?.code, unencrypted.body?.details?.reason]).toEqual(
+      [409, 'REGISTRY_CONFLICT', 'repository_unencrypted'],
+    )
+    // A retired record is attested no more.
+    const retired = await planAndApply(`/api/v1/backup-repositories/${repositoryId}/retire`, {
+      acknowledge: { storageKept: true, noLongerProtectedByExponetdb: true },
+    })
+    expect(retired.operation.state).toBe('succeeded')
+    const late = await owner.browser.call('POST', attestation, { statement })
+    expect([late.status, late.body?.code, late.body?.details?.reason]).toEqual([
+      409,
+      'REGISTRY_CONFLICT',
+      'repository_retired',
+    ])
+    await node.stop()
+  })
+
+  it('attests a nonprod repository without an approval; refuses a key-like statement, and a plan the engine outdated is stale', async () => {
+    const { w, node } = await setup('nonprod')
+    const repositoryId = await adopt(w)
+    const attestation = `/api/v1/backup-repositories/${repositoryId}/offline-key-attestation`
+    // The statement stays for good in the plan and the audit: a pasted passphrase is refused.
+    const keyLike = await owner.browser.call('POST', attestation, {
+      statement: `cipher-pass=${'aZ09'.repeat(10)}`,
+    })
+    expect([keyLike.status, keyLike.body?.code]).toEqual([422, 'VALIDATION_FAILED'])
+    const planned = await owner.browser.call('POST', attestation, {
+      statement: 'Copy in the office safe, opened and checked today.',
+    })
+    expect(
+      [planned.status, planned.body?.approvals?.required],
+      JSON.stringify(planned.body),
+    ).toEqual([201, 0])
+    // The engine then reports the stanza unencrypted (this host's listing says cipher none).
+    expect((await refresh(w)).state).toBe('succeeded')
+    await owner.reauth()
+    const applied = await owner.browser.call('POST', `/api/v1/plans/${planned.body.id}/apply`, {})
+    expect([applied.status, applied.body?.code], JSON.stringify(applied.body)).toEqual([
+      409,
+      'PLAN_STALE',
+    ])
+    const listed = await owner.browser.call(
+      'GET',
+      `/api/v1/clusters/${w.clusterId}/backup-repositories`,
+    )
+    expect(listed.body.repositories[0].encryption.offlineCopyConfirmedAt).toBeNull()
+    await node.stop()
+  })
+
   it('blocks the cluster retirement while a repository is live and gives an audited runbook without secrets', async () => {
     const { w, node } = await setup('nonprod')
     const repositoryId = await adopt(w)

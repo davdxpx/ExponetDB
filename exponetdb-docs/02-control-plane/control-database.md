@@ -769,6 +769,24 @@ backup-catalog bundle grants it to `exdb_worker` only and its `verify.sql` state
 that serve only reads); the function is the single write the serve role gained.
 Test: `apps/server/test/http-backups.int.test.ts` (the real role set).
 
+**[DECIDED]** (2026-11-07; bundle
+`01M6VGR6HJW1C82CC3N1ADVWVK_offline-key-attestation`, depending on
+`observed-targets`, additive, transactional, not frozen) The offline key
+attestation ([ADR-0036 §4](../01-architecture/adr/0036-backup-repositories-and-providers.md#4-keys-and-credentials)):
+`backups.repositories.offline_copy_attested_by_operation_id` (the operation
+that recorded the attestation; a CHECK ties it to
+`offline_copy_confirmed_at`: both are set or neither), an `UPDATE` grant on
+it to `exdb_worker`, and `backups.repository_guard()` replaced with the same
+signature, owner and trigger. The guard's fourth path: the attestation
+columns change only by a new, unfinished `backup.repository.attest_offline_key`
+operation recorded on no other repository, raising the revision and changing
+nothing else, never on a retired repository or one whose effective cipher is
+`none`; the guard sets the time to `clock_timestamp()`; a repository starts
+unattested and an attestation is never taken back (`EXB01`). The other
+declared facts stay fixed. Tests: `packages/backups/test/backups.int.test.ts`
+(the guard as `exdb_worker`), `apps/server/test/http-backups.int.test.ts`
+(plan, approval, step-up, worker, audit).
+
 ## 6. Self-management boundary
 
 **[DECIDED] V1:**

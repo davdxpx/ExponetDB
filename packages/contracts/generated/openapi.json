@@ -891,6 +891,8 @@
               "backup.repository.ownership",
               "backup.repository.retire.plan",
               "backup.repository.retire",
+              "backup.repository.attest_offline_key.plan",
+              "backup.repository.attest_offline_key",
               "backup.policy.set.plan",
               "backup.policy.set",
               "backup.catalog.refresh",
@@ -4120,6 +4122,24 @@
           "prefix",
           "stanza",
           "repoIndex"
+        ],
+        "type": "object"
+      },
+      "BackupRepositoryOfflineKeyAttestRequest": {
+        "additionalProperties": false,
+        "description": "A person's statement that an offline copy of the repository's key exists (an attestation, not a proof; ADR-0036 §4). ExponetDB reads no key and nothing in the bucket or on the host.",
+        "properties": {
+          "statement": {
+            "description": "What the person states: where the offline copy of the repository key is kept and when they last checked it. Never the key itself: a run of 32 or more letters, digits and +/=_- with both letters and digits is refused as key-like.",
+            "maxLength": 500,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string",
+            "x-untrusted": true
+          }
+        },
+        "required": [
+          "statement"
         ],
         "type": "object"
       },
@@ -14318,6 +14338,8 @@
               "backup.repository.ownership",
               "backup.repository.retire.plan",
               "backup.repository.retire",
+              "backup.repository.attest_offline_key.plan",
+              "backup.repository.attest_offline_key",
               "backup.policy.set.plan",
               "backup.policy.set",
               "backup.catalog.refresh",
@@ -15175,6 +15197,8 @@
               "backup.repository.ownership",
               "backup.repository.retire.plan",
               "backup.repository.retire",
+              "backup.repository.attest_offline_key.plan",
+              "backup.repository.attest_offline_key",
               "backup.policy.set.plan",
               "backup.policy.set",
               "backup.catalog.refresh",
@@ -16088,6 +16112,8 @@
               "backup.repository.ownership",
               "backup.repository.retire.plan",
               "backup.repository.retire",
+              "backup.repository.attest_offline_key.plan",
+              "backup.repository.attest_offline_key",
               "backup.policy.set.plan",
               "backup.policy.set",
               "backup.catalog.refresh",
@@ -16536,6 +16562,8 @@
               "backup.repository.ownership",
               "backup.repository.retire.plan",
               "backup.repository.retire",
+              "backup.repository.attest_offline_key.plan",
+              "backup.repository.attest_offline_key",
               "backup.policy.set.plan",
               "backup.policy.set",
               "backup.catalog.refresh",
@@ -24603,6 +24631,109 @@
           "VALIDATION_FAILED"
         ],
         "x-exponetdb-wave": "8"
+      }
+    },
+    "/backup-repositories/{repositoryId}/offline-key-attestation": {
+      "post": {
+        "operationId": "planBackupRepositoryOfflineKeyAttestation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "repositoryId",
+            "required": true,
+            "schema": {
+              "description": "Entity id `^bkr_[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^bkr_[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupRepositoryOfflineKeyAttestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Created."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: GRANT_REVOKED, TOKEN_EXPIRED, UNAUTHENTICATED."
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CSRF_FAILED, INSUFFICIENT_SCOPE, PERMISSION_DENIED."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: NOT_FOUND."
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: REGISTRY_CONFLICT."
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: IDEMPOTENCY_KEY_REUSED, VALIDATION_FAILED."
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: RATE_LIMITED."
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: INTERNAL."
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem",
+            "description": "Error codes: CONTROL_PLANE_DEGRADED."
+          }
+        },
+        "security": [
+          {
+            "oauth2": [
+              "registry.manage"
+            ]
+          },
+          {
+            "session": []
+          }
+        ],
+        "summary": "Plan a person's attestation that an offline copy of the repository's key exists (high, human, re-authentication; an approval on production); refused for an unencrypted or retired repository.",
+        "tags": [
+          "backup-repositories"
+        ],
+        "x-exponetdb-action": "backup.repository.attest_offline_key.plan",
+        "x-exponetdb-action-class": "read",
+        "x-exponetdb-errors": [
+          "CONTROL_PLANE_DEGRADED",
+          "CSRF_FAILED",
+          "GRANT_REVOKED",
+          "IDEMPOTENCY_KEY_REUSED",
+          "INSUFFICIENT_SCOPE",
+          "INTERNAL",
+          "NOT_FOUND",
+          "PERMISSION_DENIED",
+          "RATE_LIMITED",
+          "REGISTRY_CONFLICT",
+          "TOKEN_EXPIRED",
+          "UNAUTHENTICATED",
+          "VALIDATION_FAILED"
+        ],
+        "x-exponetdb-wave": "9"
       }
     },
     "/backup-repositories/{repositoryId}/ownership": {

@@ -301,6 +301,7 @@ describe('the registry', () => {
       'backup adopt': 'backup.repository.adopt.plan',
       'backup ownership': 'backup.repository.ownership.plan',
       'backup retire-repository': 'backup.repository.retire.plan',
+      'backup attest-offline-key': 'backup.repository.attest_offline_key.plan',
       'backup policy show': 'backup.policy.get',
       'backup policy set': 'backup.policy.set.plan',
       'backup refresh': 'backup.catalog.refresh',
@@ -558,6 +559,32 @@ describe('backup plans', () => {
     expect(sent('POST', `/backup-repositories/${BKR}/retire`)[0]?.body).toEqual({
       acknowledge: { storageKept: true, noLongerProtectedByExponetdb: true },
       reason: 'moved to another provider',
+    })
+  })
+
+  it('plans an offline key attestation only with a statement', async () => {
+    const path = `/backup-repositories/${BKR}/offline-key-attestation`
+    on(
+      'POST',
+      path,
+      plan('planBackupRepositoryOfflineKeyAttestation', 'backup.repository.attest_offline_key'),
+    )
+    // Nothing is sent without a statement, nor with one that looks like a pasted key.
+    for (const flags of [[], ['--statement', ''], ['--statement', `pass ${'aZ09'.repeat(10)}`]]) {
+      const out = await cli(['backup', 'attest-offline-key', BKR, ...flags])
+      expect(out.code, flags.join(' ')).toBe(EXIT.usage)
+    }
+    expect(sent('POST', path)).toHaveLength(0)
+    const out = await cli([
+      'backup',
+      'attest-offline-key',
+      BKR,
+      '--statement',
+      'The passphrase is in the password manager.',
+    ])
+    expect(out.code, out.stderr).toBe(0)
+    expect(sent('POST', path)[0]?.body).toEqual({
+      statement: 'The passphrase is in the password manager.',
     })
   })
 

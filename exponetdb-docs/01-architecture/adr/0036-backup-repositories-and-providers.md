@@ -140,6 +140,22 @@ external ──adopt (plan, human)──▶ adopted_observed ──handover (pla
 - An **offline copy** of each key is part of C-35; `offlineCopyConfirmedAt`
   records a person's statement that it exists (an attestation, not a proof).
   A repository without it is `at_risk` in the protection state.
+  **[DECIDED]** (2026-11-07) The statement is its own planned operation,
+  `backup.repository.attest_offline_key` (`exponetdb backup
+  attest-offline-key <repository> --statement "…"`, `POST
+  /backup-repositories/{id}/offline-key-attestation`): human only (Web App
+  or CLI session, no MCP tool), class `high` with a fresh re-authentication,
+  and on a production (or unknown-tier) cluster a person's approval (rule
+  `backup.change-prod-approval`, version 2). The worker sets the time to
+  the database's clock and records the operation beside it
+  (`offline_copy_attested_by_operation_id`, bundle
+  `offline-key-attestation`); the audit event names the attesting identity
+  and the statement (untrusted text, at most 500 characters, never the key: a key-like run of 32 or more letters and digits is refused, since the audit is append-only).
+  No key is read and nothing in the bucket or on the host changes. It is
+  refused for a retired repository and for one whose effective cipher (the
+  observed one when the engine reported it, else the declared one) is
+  `none`; it is never taken back, and a later statement moves the time
+  forward. Adoption takes no attestation.
 - An adopted repository's keys are **not** imported unless a person submits
   them; without them ExponetDB can list and verify metadata where the engine
   allows, and a restore plan fails `engineCanRead = false`.
@@ -217,7 +233,7 @@ target.
 | §3 two parties | the node reads a **host mode file** `/etc/exponetdb-node/repositories/<repositoryId>/mode` (owner `root`, not group- or world-writable) and refuses a run unless it says `adopted_runs` or `owned`; a missing file means `adopted_observed` | a Control Store record alone can never widen what the host allows (a compromised Control Plane cannot start runs on an observed repository) |
 | §1 provider fields and the storage host allowlist | the node never takes a location, key or credential from the Control Plane: a pgBackRest repository is the stanza and `repoN` of the host's own configuration, a restic repository is the directory the operator provisioned; the recorded endpoint, bucket and prefix are descriptive (listing, runbook) and only refused against reserved suffixes | the node opens no connection to a recorded endpoint, so a record cannot point it anywhere (no SSRF through a record) |
 | §4 sealed key delivery (`keyRef`, `credentialRef`) | not built: `secret_source` is `host_config` only (a CHECK of bundle `backup-catalog`); passphrases and storage keys stay in the host configuration and never pass through the Control Plane | sealed delivery would put repository keys in the Control Store, which this wave does not need |
-| §3 the Control Store records what the engine shows (security review A-6) | the `backup-catalog` bundle's guards hold against the worker itself: a backup's verification starts `pending`, is never undone, and changes only with a new `verify` run of the entry's repository recorded on no other entry (`passed` needs a `succeeded` run with no verify errors); a repository row changes by exactly one of three paths: its ownership (`adopted_observed` → `adopted_runs` by a new, unfinished `backup.repository.ownership` operation of that repository alone), its retirement (its own operation), or an observation (`reconciled_at` moving forward, not past the database's clock; `active` only on an ok outcome); declared facts (priority, purpose, lock, cipher, pinned engine version, offline copy) are fixed after adoption; a drill's times are never in the future. Residual: the worker is the reconciler, so a forged observation that moves `reconciled_at` forward still looks like one | a direct write by a role that holds the table cannot raise a verification or widen a repository |
+| §3 the Control Store records what the engine shows (security review A-6) | the `backup-catalog` bundle's guards hold against the worker itself: a backup's verification starts `pending`, is never undone, and changes only with a new `verify` run of the entry's repository recorded on no other entry (`passed` needs a `succeeded` run with no verify errors); a repository row changes by exactly one of three paths: its ownership (`adopted_observed` → `adopted_runs` by a new, unfinished `backup.repository.ownership` operation of that repository alone), its retirement (its own operation), or an observation (`reconciled_at` moving forward, not past the database's clock; `active` only on an ok outcome); declared facts (priority, purpose, lock, cipher, pinned engine version) are fixed after adoption; the offline key copy changes only by a fourth path since bundle `offline-key-attestation` (2026-11-07): an attestation by a new, unfinished `backup.repository.attest_offline_key` operation of that repository alone, raising the revision and changing nothing else (§4); a drill's times are never in the future. Residual: the worker is the reconciler, so a forged observation that moves `reconciled_at` forward still looks like one | a direct write by a role that holds the table cannot raise a verification or widen a repository |
 | §1 `adminSeparation`, `lockProofRef` | not stored; without a proof, `lockCapability` is at most `unproven`, and the bundle refuses `proven` (no operation records the experiment yet) | §2: a lock is never shown as protecting anything until proven |
 | §5 subkey check recorded | the check is the owner's, on the host ([`adoption.md` §3](../../09-backups-and-restore/adoption.md#3-encryption-and-the-2026-10-04-advisory)); ExponetDB does not read subkeys and keeps `backup_engine_advisory` open for an encrypted stanza until the check is recorded **[PLANNED]** | the subkeys are key material |
 

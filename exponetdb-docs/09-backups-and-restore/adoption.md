@@ -116,6 +116,36 @@ below **2.59.3** is the same finding with advisory `below_floor`. 2.60.0
 (2026-10-18) additionally stops a restore on an invalid page checksum; it
 is the recommended candidate after its soak.
 
+### 3.1 The offline copy of the key
+
+**[DECIDED]** (2026-11-07, ADR-0036 §4) Every encrypted repository keeps
+the protection reason `offline_key_unconfirmed` (the cluster is at most
+`at_risk`) until a person states that an offline copy of its key exists:
+the pgBackRest `repo<n>-cipher-pass`, the restic password. This is an
+attestation, not a proof; ExponetDB never reads the key.
+
+1. Put the copy where the Control Plane cannot reach it (a password
+   manager, a printed sheet in a safe) and check that it opens.
+2. Plan the attestation:
+   `exponetdb backup attest-offline-key <repository> --statement "Passphrase
+   in the owner's password manager, entry checked 2026-11-07"`. The
+   statement says where the copy is kept and when it was checked; it never
+   contains the key. It is stored in the plan and the append-only audit
+   event as untrusted text, so a statement that looks like a pasted key (a
+   run of 32 or more letters and digits without a space) is refused.
+3. Apply it with `exponetdb plan apply <plan>` (a fresh re-authentication;
+   class `high`). On a production cluster the plan waits for a person's
+   approval first (rule `backup.change-prod-approval`).
+4. The repository shows `attested <time>` (`encryption.offlineCopyConfirmedAt`)
+   and the reason `offline_key_unconfirmed` is gone from the protection state.
+
+A repository that is retired, or whose cipher is `none` (as the engine
+reported it, else as declared), is refused (`REGISTRY_CONFLICT`,
+`repository_retired` or `repository_unencrypted`). A later statement (after
+a new check of the copy) is a new plan; it moves the time forward and the
+audit keeps every statement. An attestation is never taken back; when the
+copy is lost, write a new one and attest again.
+
 ## 4. Locks and immutability
 
 **[DECIDED]** ExponetDB never shows a lock as protecting anything until it

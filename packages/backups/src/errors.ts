@@ -37,6 +37,7 @@ export type BackupConflictReason =
   | 'no_backup_selectable'
   | 'archive_time_unknown'
   | 'repository_engine_below_floor'
+  | 'repository_unencrypted'
 
 export function conflict(reason: BackupConflictReason): BackupError {
   return new BackupError('REGISTRY_CONFLICT', { reason })

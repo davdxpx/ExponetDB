@@ -264,6 +264,42 @@ export async function planRepositoryRetire(
   })
 }
 
+/**
+ * `backup.repository.attest_offline_key` (ADR-0036 §4): a person states that an offline copy of
+ * the repository's key exists. An attestation, not a proof: no key is read, nothing in the
+ * bucket or on the host changes. Refused for a retired repository and for one whose effective
+ * cipher (what the engine reported, else what was declared, as the protection state reads it)
+ * is `none`. A new statement replaces the time of an earlier one; the audit keeps both.
+ */
+export async function planOfflineKeyAttestation(
+  tx: Tx,
+  context: BackupPlanContext,
+  actor: RegistryActor,
+  repositoryId: string,
+  statement: string,
+): Promise<PlanRecord> {
+  const r = await getRepository(tx, repositoryId)
+  if (r === undefined) throw new BackupError('NOT_FOUND')
+  if (r.state === 'retired') throw conflict('repository_retired')
+  const cipher = r.observedCipher ?? r.cipher
+  if (cipher === 'none') throw conflict('repository_unencrypted')
+  const cluster = await getCluster(tx, r.clusterId)
+  const tier = cluster === undefined ? undefined : clusterTier(cluster)
+  return storeRegistryPlan(tx, context, actor, {
+    kind: 'backup.repository.attest_offline_key',
+    actionClass: 'high',
+    subject: { clusterId: r.clusterId, ...(tier === undefined ? {} : { tier }) },
+    content: { repositoryId, clusterId: r.clusterId, statement, attestedBy: actor.identityId },
+    expectedState: { revision: r.revision },
+    analysis: {
+      cipher,
+      previousAttestationAt: r.offlineCopyConfirmedAt?.toISOString() ?? null,
+      effect:
+        "ExponetDB records the person's statement that an offline copy of the repository's key exists, with the time and who stated it; the protection state stops counting the key as unconfirmed. It is an attestation, not a proof: no key is read, and nothing in the bucket or on the host changes.",
+    },
+  })
+}
+
 // ----- policy -----
 
 export async function planPolicySet(

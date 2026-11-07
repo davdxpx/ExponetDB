@@ -1,6 +1,12 @@
 import { fixedClock, type JsonValue } from '@exponetdb/kernel'
 import { describe, expect, it } from 'vitest'
-import { BACKUP_RULES, PolicyEngine, type PolicyRequest, RuleRegistry } from '../src/index.ts'
+import {
+  BACKUP_CHANGE_KINDS,
+  BACKUP_RULES,
+  PolicyEngine,
+  type PolicyRequest,
+  RuleRegistry,
+} from '../src/index.ts'
 
 /** The backup and restore rules of Wave 9 Part B (policy-engine.md §4, "Backups and restore"). */
 const engine = new PolicyEngine({
@@ -50,15 +56,20 @@ describe('backup.change-prod-approval', () => {
   })
 
   it('requires an approval and re-authentication on production and on an unknown tier', async () => {
-    for (const tier of ['prod', undefined] as const) {
-      const d = await decide('backup.policy.set', tier === undefined ? {} : { tier })
-      expect(d.decision, String(tier)).toBe('require')
-      expect(d.requirements).toEqual(
-        expect.arrayContaining([
-          { kind: 'approval', count: 1, permission: 'plans.approve' },
-          { kind: 'reauth', withinSeconds: 300 },
-        ]),
-      )
+    for (const kind of BACKUP_CHANGE_KINDS) {
+      for (const tier of ['prod', undefined] as const) {
+        const d = await decide(kind, tier === undefined ? {} : { tier })
+        expect(d.decision, `${kind} ${String(tier)}`).toBe('require')
+        expect(d.requirements).toEqual(
+          expect.arrayContaining([
+            { kind: 'approval', count: 1, permission: 'plans.approve' },
+            { kind: 'reauth', withinSeconds: 300 },
+          ]),
+        )
+        expect(d.rules).toContainEqual(
+          expect.objectContaining({ id: 'backup.change-prod-approval', version: 2 }),
+        )
+      }
     }
   })
 })

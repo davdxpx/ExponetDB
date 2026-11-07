@@ -20,6 +20,7 @@ import {
   planBackupVerify,
   planCatalogRefresh,
   planDrill,
+  planOfflineKeyAttestation,
   planPolicySet,
   planRecovery,
   planRepositoryAdopt,
@@ -37,6 +38,7 @@ import type {
   BackupPolicyView,
   BackupRepositoryAdoptRequest,
   BackupRepositoryList,
+  BackupRepositoryOfflineKeyAttestRequest,
   BackupRepositoryOwnershipRequest,
   BackupRepositoryRetireRequest,
   Drill,
@@ -456,6 +458,23 @@ export class BackupUseCases {
       idem,
       async () => ({ kind: 'cluster', clusterId }),
       (tx, actor) => planRepositoryRetire(tx, context, actor, repositoryId, request.reason),
+    )
+  }
+
+  async planOfflineKeyAttestation(
+    caller: CallerLike,
+    repositoryId: string,
+    request: BackupRepositoryOfflineKeyAttestRequest,
+    idem?: Idempotency,
+  ): Promise<PlanView> {
+    const context = this.#context()
+    const clusterId = await this.#repositoryCluster(repositoryId)
+    return this.#h.plan(
+      caller,
+      'backup.repository.attest_offline_key.plan',
+      idem,
+      async () => ({ kind: 'cluster', clusterId }),
+      (tx, actor) => planOfflineKeyAttestation(tx, context, actor, repositoryId, request.statement),
     )
   }
 
