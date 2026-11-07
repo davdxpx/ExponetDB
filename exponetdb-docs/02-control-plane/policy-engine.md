@@ -295,7 +295,7 @@ break-glass; an unknown tier counts as production.
 
 | Rule id | Applies to | Severity | Default |
 |---|---|---|---|
-| `backup.change-prod-approval` | `backup.repository.adopt`, `.ownership`, `.retire`, `backup.policy.set` | require approval + reauth (300 s) | a production (or unknown-tier) cluster's backup records change only after a human approval |
+| `backup.change-prod-approval` | `backup.repository.adopt`, `.ownership`, `.retire`, `.attest_offline_key` (since version 2, 2026-11-07), `backup.policy.set` | require approval + reauth (300 s) | a production (or unknown-tier) cluster's backup records change only after a human approval. Version 2 changes the policy version of plans of these kinds: a plan active when the release is deployed goes stale once at acceptance and is planned again |
 | `backup.repository-runs-allowed` | `backup.run` | deny | the repository's ownership allows runs: `owned` every kind, `adopted_runs` incremental only (a full or differential run would shorten the host's retention); the node checks its host mode file again |
 | `backup.run-agent-prod-approval` | `backup.run` | require approval | an agent's backup run on a production (or unknown-tier) cluster waits for a person |
 | `restore.human-only` | `restore.drill`, `restore.execute`, `restore.discard` | deny | a person in the Web App or the CLI plans and applies them; an agent's plan is stored denied and keeps its analysis. **[DECIDED]** No system-actor drill exists in this wave (no scheduler) |

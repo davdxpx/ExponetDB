@@ -34,6 +34,7 @@ import {
   BackupPolicyBodySchema,
   BackupRepositoryAdoptRequestSchema,
   BackupRepositoryIdSchema,
+  BackupRepositoryOfflineKeyAttestRequestSchema,
   BackupRepositoryOwnershipRequestSchema,
   BackupRepositoryRetireRequestSchema,
   BackupRunRequestSchema,
@@ -1699,6 +1700,15 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         caller(call),
         BackupRepositoryIdSchema.parse(field(call.params, 'repositoryId')),
         BackupRepositoryRetireRequestSchema.parse(call.body),
+        idempotency(call),
+      ),
+    ),
+  planBackupRepositoryOfflineKeyAttestation: async (app, call) =>
+    value(
+      await app.backups.planOfflineKeyAttestation(
+        caller(call),
+        BackupRepositoryIdSchema.parse(field(call.params, 'repositoryId')),
+        BackupRepositoryOfflineKeyAttestRequestSchema.parse(call.body),
         idempotency(call),
       ),
     ),

@@ -96,6 +96,8 @@ export const plansMessages = {
     'Let ExponetDB run backups in a repository of cluster {subject}',
   'plans.title.backup.repository.retire':
     'Remove a backup repository of cluster {subject} from ExponetDB',
+  'plans.title.backup.repository.attest_offline_key':
+    'Attest the offline key copy of a backup repository of cluster {subject}',
   'plans.title.backup.policy.set': 'Set the backup policy of cluster {subject}',
   'plans.title.restore.drill': 'Run a restore drill of cluster {subject} into scratch',
   'plans.title.restore.discard': 'Discard a scratch restore of cluster {subject}',

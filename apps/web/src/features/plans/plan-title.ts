@@ -103,6 +103,9 @@ export const KIND_TITLES: Readonly<Record<string, KindTitle>> = {
   'backup.repository.adopt': cluster('plans.title.backup.repository.adopt'),
   'backup.repository.ownership': cluster('plans.title.backup.repository.ownership'),
   'backup.repository.retire': cluster('plans.title.backup.repository.retire'),
+  'backup.repository.attest_offline_key': cluster(
+    'plans.title.backup.repository.attest_offline_key',
+  ),
   'backup.policy.set': cluster('plans.title.backup.policy.set'),
   'restore.drill': cluster('plans.title.restore.drill'),
   'restore.discard': cluster('plans.title.restore.discard'),

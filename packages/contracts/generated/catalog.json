@@ -8320,6 +8320,69 @@
       "wave": "9"
     },
     {
+      "basis": "ADR-0036 §4: an attestation, not a proof; no key is read; C-35",
+      "class": {
+        "class": "read",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "control_record",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "backup.repository.attest_offline_key.plan",
+      "mechanism": "none",
+      "operationKind": false,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthentication": false,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "cluster_registry",
+      "title": "Plan a person's attestation that an offline copy of a repository's key exists",
+      "verification": "none",
+      "wave": "9"
+    },
+    {
+      "basis": "ADR-0036 §4; bundle offline-key-attestation",
+      "class": {
+        "class": "high",
+        "kind": "fixed"
+      },
+      "clientKinds": [
+        "web",
+        "cli"
+      ],
+      "effect": "consequential",
+      "exclusivity": [],
+      "humanOnly": true,
+      "id": "backup.repository.attest_offline_key",
+      "mechanism": "stored_plan",
+      "operationKind": true,
+      "permission": {
+        "kind": "fixed",
+        "permission": "registry.manage"
+      },
+      "reauthWithinSeconds": 300,
+      "reauthentication": true,
+      "scope": {
+        "kind": "fixed",
+        "scope": "registry.manage"
+      },
+      "subject": "cluster",
+      "tierSemantics": "cluster_registry",
+      "title": "Record a person's attestation that an offline copy of a repository's key exists",
+      "verification": "required",
+      "wave": "9"
+    },
+    {
       "basis": "architecture.md §5 (09-backups-and-restore): repository or policy change, high, human",
       "class": {
         "class": "read",
@@ -11270,6 +11333,7 @@
               "point_in_time_outside_window",
               "no_backup_selectable",
               "repository_engine_below_floor",
+              "repository_unencrypted",
               "archive_time_unknown",
               "nothing_to_purge",
               "cluster_not_external",

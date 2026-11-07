@@ -900,6 +900,8 @@ describe('upgrade from the accepted G3B schema', () => {
         '01M6EJD93DP9GNTHF77YY8VNY6',
         // ADR-0039 (Wave 10, 2026-11-03): observed targets and login suffixes of pooler endpoints.
         '01M6HQW7JQYHC8YR9KNTQ4PFFZ',
+        // The offline key attestation (ADR-0036 §4, 2026-11-07).
+        '01M6VGR6HJW1C82CC3N1ADVWVK',
       ])
       expect(after.verifications.every((v) => v.status === 'passed')).toBe(true)
       expect(after.state.status).toBe('current')

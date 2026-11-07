@@ -48,7 +48,7 @@ interface World {
   readonly systemIdentifier: string
 }
 
-async function world(): Promise<World> {
+async function world(cipher = 'unknown'): Promise<World> {
   const o = await systemOperation()
   const now = Date.now()
   const w = {
@@ -85,9 +85,9 @@ async function world(): Promise<World> {
        prefix, stanza, repo_index, priority, purpose, ownership, secret_source, lock_mode, lock_capability, cipher,
        state, revision, created_by_operation_id)
      VALUES ($1, $2, 'l1_physical', 'pgbackrest', 's3_compatible', 'objects.example.test', 'eu-central', 'backups-test',
-       'main/', 'main', 1, 1, 'primary', 'adopted_observed', 'host_config', 'unknown', 'unknown', 'unknown',
+       'main/', 'main', 1, 1, 'primary', 'adopted_observed', 'host_config', 'unknown', 'unknown', $4,
        'observing', 1, $3)`,
-    [w.repositoryId, w.clusterId, await systemOperation('backup.repository.adopt')],
+    [w.repositoryId, w.clusterId, await systemOperation('backup.repository.adopt'), cipher],
   )
   return w
 }
@@ -610,6 +610,164 @@ describe('bundle guards', () => {
         [b.repositoryId, await systemOperation('backup.repository.retire')],
       ),
     ).rejects.toMatchObject({ code: 'EXB01' })
+  })
+
+  it("an attestation operation records one repository's offline key copy, and nothing else with it (EXB01)", async () => {
+    const a = await world()
+    const b = await world()
+    const ATTEST = `UPDATE backups.repositories SET offline_copy_confirmed_at = now() - interval '1 day',
+                           offline_copy_attested_by_operation_id = $2, revision = revision + 1
+                     WHERE repository_id = $1`
+    const attestation = () => systemOperation('backup.repository.attest_offline_key')
+    const before = computeProtection(await protectionFacts(serve, a.clusterId, Date.now()))
+    expect(before.reasons).toContain('offline_key_unconfirmed')
+    const first = await attestation()
+    await asWorker(ATTEST, [a.repositoryId, first])
+    const attested = await getRepository(serve, a.repositoryId)
+    // The time is the database's when the attestation is recorded, not the writer's.
+    expect(attested?.revision).toBe(2)
+    expect(attested?.offlineCopyConfirmedAt?.getTime()).toBeGreaterThan(Date.now() - 60_000)
+    const after = computeProtection(await protectionFacts(serve, a.clusterId, Date.now()))
+    expect(after.reasons).not.toContain('offline_key_unconfirmed')
+    // The same operation attests no second repository; another kind's operation attests none.
+    await expect(asWorker(ATTEST, [b.repositoryId, first])).rejects.toMatchObject({
+      code: 'EXB01',
+    })
+    for (const kind of [
+      'backup.repository.ownership',
+      'backup.repository.retire',
+      'registry.test',
+    ]) {
+      await expect(
+        asWorker(ATTEST, [b.repositoryId, await systemOperation(kind)]),
+      ).rejects.toMatchObject({ code: 'EXB01' })
+    }
+    // Without its operation, or without raising the revision, there is no attestation.
+    await expect(
+      asWorker(
+        `UPDATE backups.repositories SET offline_copy_confirmed_at = now(), revision = revision + 1
+          WHERE repository_id = $1`,
+        [b.repositoryId],
+      ),
+    ).rejects.toMatchObject({ code: 'EXB01' })
+    await expect(
+      asWorker(
+        `UPDATE backups.repositories SET offline_copy_attested_by_operation_id = $2 WHERE repository_id = $1`,
+        [b.repositoryId, await attestation()],
+      ),
+    ).rejects.toMatchObject({ code: 'EXB01' })
+    // An attestation carries no other declared fact, no ownership, observation or state with it.
+    for (const set of [
+      `cipher = 'aes-256-cbc'`,
+      'priority = 2',
+      `lock_capability = 'unsupported'`,
+      `pinned_engine_version = '2.60'`,
+      `ownership = 'adopted_runs', changed_by_operation_id = $2`,
+      `engine_advisory = 'none'`,
+      `state = 'active'`,
+    ]) {
+      await expect(
+        asWorker(
+          `UPDATE backups.repositories SET ${set}, offline_copy_attested_by_operation_id = $2,
+                  revision = revision + 1 WHERE repository_id = $1`,
+          [b.repositoryId, await attestation()],
+        ),
+      ).rejects.toMatchObject({ code: 'EXB01' })
+    }
+    // A retirement carries no attestation with it.
+    await expect(
+      asWorker(
+        `UPDATE backups.repositories SET state = 'retired', retired_at = now(), retired_by_operation_id = $2,
+                offline_copy_attested_by_operation_id = $3, revision = revision + 1 WHERE repository_id = $1`,
+        [b.repositoryId, await systemOperation('backup.repository.retire'), await attestation()],
+      ),
+    ).rejects.toMatchObject({ code: 'EXB01' })
+    // The other declared facts still change by no operation at all.
+    for (const set of [`cipher = 'none'`, 'priority = 2', `purpose = 'offsite'`]) {
+      await expect(
+        asWorker(`UPDATE backups.repositories SET ${set} WHERE repository_id = $1`, [
+          a.repositoryId,
+        ]),
+      ).rejects.toMatchObject({ code: 'EXB01' })
+    }
+    // An attestation is never taken back; a new statement by a new operation moves its time forward.
+    await expect(
+      asWorker(
+        `UPDATE backups.repositories SET offline_copy_confirmed_at = NULL,
+                offline_copy_attested_by_operation_id = NULL, revision = revision + 1 WHERE repository_id = $1`,
+        [a.repositoryId],
+      ),
+    ).rejects.toMatchObject({ code: 'EXB01' })
+    await asWorker(ATTEST, [a.repositoryId, await attestation()])
+    const again = await getRepository(serve, a.repositoryId)
+    expect(again?.revision).toBe(3)
+    expect(again?.offlineCopyConfirmedAt?.getTime()).toBeGreaterThanOrEqual(
+      attested?.offlineCopyConfirmedAt?.getTime() ?? Number.POSITIVE_INFINITY,
+    )
+    expect(await getRepository(serve, b.repositoryId)).toMatchObject({
+      revision: 1,
+      offlineCopyConfirmedAt: null,
+    })
+  })
+
+  it('no attestation at adoption, for an unencrypted repository or for a retired one (EXB01)', async () => {
+    const ATTEST = `UPDATE backups.repositories SET offline_copy_attested_by_operation_id = $2,
+                           revision = revision + 1 WHERE repository_id = $1`
+    const attestation = () => systemOperation('backup.repository.attest_offline_key')
+    // A repository starts unattested.
+    const w = await world()
+    await expect(
+      asWorker(
+        `INSERT INTO backups.repositories (repository_id, cluster_id, layer, engine, provider, endpoint_host, region,
+           bucket, prefix, stanza, repo_index, priority, purpose, ownership, secret_source, lock_mode, lock_capability,
+           cipher, offline_copy_confirmed_at, offline_copy_attested_by_operation_id, state, revision,
+           created_by_operation_id)
+         VALUES ($1, $2, 'l1_physical', 'pgbackrest', 's3_compatible', 'objects.example.test', 'eu-central',
+           'backups-test', 'other/', 'main', 2, 1, 'primary', 'adopted_observed', 'host_config', 'unknown', 'unknown',
+           'aes-256-cbc', now(), $3, 'observing', 1, $4)`,
+        [
+          newId('bkr', Date.now()),
+          w.clusterId,
+          await attestation(),
+          await systemOperation('backup.repository.adopt'),
+        ],
+      ),
+    ).rejects.toMatchObject({ code: 'EXB01' })
+    // Declared without encryption, or observed without it, there is no key to attest.
+    const plain = await world('none')
+    await expect(asWorker(ATTEST, [plain.repositoryId, await attestation()])).rejects.toMatchObject(
+      {
+        code: 'EXB01',
+      },
+    )
+    const observed = await world('aes-256-cbc')
+    await reconcile(
+      observed,
+      listing(observed, {
+        stanza: {
+          status: 'ok',
+          message: 'ok',
+          systemIdentifier: observed.systemIdentifier,
+          cipher: 'none',
+        },
+      }),
+    )
+    expect(await getRepository(serve, observed.repositoryId)).toMatchObject({
+      cipher: 'aes-256-cbc',
+      observedCipher: 'none',
+    })
+    await expect(
+      asWorker(ATTEST, [observed.repositoryId, await attestation()]),
+    ).rejects.toMatchObject({ code: 'EXB01' })
+    // A retired record never changes.
+    await asWorker(
+      `UPDATE backups.repositories SET state = 'retired', retired_at = now(), retired_by_operation_id = $2,
+              revision = revision + 1 WHERE repository_id = $1`,
+      [w.repositoryId, await systemOperation('backup.repository.retire')],
+    )
+    await expect(asWorker(ATTEST, [w.repositoryId, await attestation()])).rejects.toMatchObject({
+      code: 'EXB01',
+    })
   })
 
   it('the engine advisory changes only with a reconciliation that moves forward (EXB01)', async () => {

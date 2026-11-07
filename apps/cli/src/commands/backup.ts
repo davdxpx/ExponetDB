@@ -616,6 +616,34 @@ export const backupCommands: readonly CommandSpec[] = [
     file: false,
   }),
   planCommand({
+    path: ['backup', 'attest-offline-key'],
+    summary:
+      "Plan a person's attestation that an offline copy of a backup repository's key exists (an attestation, not a proof).",
+    description:
+      'High: a person applies it with a fresh re-authentication, and a production repository also needs an approval. ExponetDB reads no key; the statement and who made it are audited. Refused for an unencrypted or retired repository.',
+    group: 'backup',
+    args: [{ name: 'repository', description: 'A backup repository id (bkr_…).', required: true }],
+    flags: [
+      {
+        name: 'statement',
+        type: 'string',
+        placeholder: 'text',
+        description:
+          'Where the offline copy of the key is kept and when it was last checked (never the key itself).',
+        required: true,
+      },
+    ],
+    action: 'backup.repository.attest_offline_key.plan',
+    scopes: MANAGE,
+    operation: 'planBackupRepositoryOfflineKeyAttestation',
+    params: (i) => ({ repositoryId: arg(i, 'repository') }),
+    body: (i) => ({ statement: flag(i, 'statement') }),
+    examples: [
+      'exponetdb backup attest-offline-key bkr_01J… --statement "Passphrase in the password manager, checked 2026-11-07"',
+    ],
+    file: false,
+  }),
+  planCommand({
     path: ['backup', 'policy', 'set'],
     summary:
       'Plan a new revision of a cluster’s backup policy (high: a person applies it with a fresh re-authentication).',

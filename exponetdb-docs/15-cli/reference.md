@@ -158,6 +158,7 @@ exit codes are in [`README.md`](./README.md).
 | [`backup adopt`](#backup-adopt) | remote | plan | Plan adopting an existing backup repository for read-only observation (nothing changes on the host or in the bucket). |
 | [`backup ownership`](#backup-ownership) | remote | plan | Plan what ExponetDB may do with an adopted repository (adopted_runs: start runs with the host configuration). |
 | [`backup retire-repository`](#backup-retire-repository) | remote | plan | Plan retiring a backup repository record: it is no longer observed or used; nothing in storage is deleted. |
+| [`backup attest-offline-key`](#backup-attest-offline-key) | remote | plan | Plan a person's attestation that an offline copy of a backup repository's key exists (an attestation, not a proof). |
 | [`backup policy set`](#backup-policy-set) | remote | plan | Plan a new revision of a cluster’s backup policy (high: a person applies it with a fresh re-authentication). |
 | [`backup refresh`](#backup-refresh) | remote | mutation | Read the engine catalog of every observed repository of a cluster through its node into the mirror. |
 | [`backup run`](#backup-run) | remote | plan | Plan a backup run into one repository (refused unless backup execution is activated and the repository allows runs). |
@@ -2847,6 +2848,31 @@ Runs: against the server; effect: plan; action: `backup.repository.retire.plan`;
 | `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
 | `--no-wait` | With --apply: return once the server accepted the operation. |
 | `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
+
+### backup attest-offline-key
+
+Plan a person's attestation that an offline copy of a backup repository's key exists (an attestation, not a proof).
+
+High: a person applies it with a fresh re-authentication, and a production repository also needs an approval. ExponetDB reads no key; the statement and who made it are audited. Refused for an unencrypted or retired repository.
+
+```text
+exponetdb backup attest-offline-key <repository> [flags]
+```
+
+Runs: against the server; effect: plan; action: `backup.repository.attest_offline_key.plan`; scopes: `registry.manage`; output: `PlanView`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `repository` (required) | A backup repository id (bkr_…). |
+| `--statement <text>` | Where the offline copy of the key is kept and when it was last checked (never the key itself). (required) |
+| `--apply` | Apply the plan at once and wait until applied and verified. |
+| `--wait` | With --apply: wait until applied and verified (the default). Without --apply nothing is applied. |
+| `--no-wait` | With --apply: return once the server accepted the operation. |
+| `--timeout-wait <duration>` | With --apply: how long to wait for the outcome (default 15m). (default 900000) |
+
+```sh
+exponetdb backup attest-offline-key bkr_01J… --statement "Passphrase in the password manager, checked 2026-11-07"
+```
 
 ### backup policy set
 

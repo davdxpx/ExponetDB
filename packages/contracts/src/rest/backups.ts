@@ -264,6 +264,34 @@ export const BackupRepositoryRetireRequestSchema = z
   })
   .meta({ id: 'BackupRepositoryRetireRequest' })
 
+/** A run of 32 or more key characters holding letters and digits: what a pasted passphrase or key looks like. */
+const KEY_LIKE_RUN = /[A-Za-z0-9+/=_-]{32,}/g
+const looksLikeKey = (s: string): boolean =>
+  (s.match(KEY_LIKE_RUN) ?? []).some((run) => /[A-Za-z]/.test(run) && /[0-9]/.test(run))
+
+export const BackupRepositoryOfflineKeyAttestRequestSchema = z
+  .strictObject({
+    // The statement is kept for good in the plan and the append-only audit: a pasted key is refused.
+    statement: z
+      .string()
+      .min(1)
+      .max(500)
+      .regex(/\S/)
+      .refine((s) => !looksLikeKey(s), {
+        message: 'looks like a key or passphrase: state where the copy is kept, never the key',
+      })
+      .meta({
+        untrusted: true,
+        description:
+          'What the person states: where the offline copy of the repository key is kept and when they last checked it. Never the key itself: a run of 32 or more letters, digits and +/=_- with both letters and digits is refused as key-like.',
+      }),
+  })
+  .meta({
+    id: 'BackupRepositoryOfflineKeyAttestRequest',
+    description:
+      "A person's statement that an offline copy of the repository's key exists (an attestation, not a proof; ADR-0036 §4). ExponetDB reads no key and nothing in the bucket or on the host.",
+  })
+
 // ----- policies -----
 
 /** A five-field cron expression of digits, `*`, `,`, `-` and `/` only (UTC). */
@@ -784,6 +812,9 @@ export type BackupRepositoryOwnershipRequest = z.infer<
   typeof BackupRepositoryOwnershipRequestSchema
 >
 export type BackupRepositoryRetireRequest = z.infer<typeof BackupRepositoryRetireRequestSchema>
+export type BackupRepositoryOfflineKeyAttestRequest = z.infer<
+  typeof BackupRepositoryOfflineKeyAttestRequestSchema
+>
 export type OfflineDrillRecordRequest = z.infer<typeof OfflineDrillRecordRequestSchema>
 export type RestoreRunbook = z.infer<typeof RestoreRunbookSchema>
 export type BackupRepositoryList = z.infer<typeof BackupRepositoryListSchema>

@@ -1,0 +1,29 @@
+schema: exponetdb.migration/v1
+id: 01M6VGR6HJW1C82CC3N1ADVWVK
+name: offline-key-attestation
+description: |
+  ADR-0036 §4: offline_copy_confirmed_at records a person's statement that an
+  offline copy of a repository's key exists, but the backup-catalog bundle had
+  no operation that sets it, and its guard refused every change of it, so an
+  encrypted repository stayed at_risk (offline_key_unconfirmed) for good. This
+  bundle adds backups.repositories.offline_copy_attested_by_operation_id (the
+  operation that recorded the attestation, set together with the time) and
+  replaces backups.repository_guard() with the same signature, owner and
+  trigger: a fourth path changes a row, an attestation by a new, unfinished
+  backup.repository.attest_offline_key operation recorded on no other
+  repository, raising the revision and changing nothing else; the time is the
+  database's; the repository is not retired and its effective cipher (the
+  observed one when the engine reported it, else the declared one) is not
+  none; an attestation is never taken back, a new one moves its time forward.
+  A repository starts unattested. Every other declared fact stays fixed after
+  adoption. Additive: one column, one constraint, one column grant to the
+  worker, one replaced function; the earlier verify.sql files stay true.
+dependsOn:
+  - 01M6HQW7JQYHC8YR9KNTQ4PFFZ
+execution:
+  transactional: true
+compatibility:
+  declared: additive
+verification:
+  expectations: auto
+  runtimeChecks: verify.sql
