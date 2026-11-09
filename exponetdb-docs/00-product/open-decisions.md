@@ -91,6 +91,7 @@ to **[DECIDED]** with a link to the resolved entry.
 | OD-69 | Audit chain and clock skew | **decided** 2026-11-02 (b), bounded to 24 h (verification campaign VC-003) | (a) keep refusing (built: typed `AUDIT_CLOCK_SKEW`, readiness warning, RB-16) and wait for the clock; (b) clamp: write an event at the head's time with a skew marker while the head is ahead (new additive guard bundle); (c) an audited, human-only repair operation that appends a `clock_reset` event the guard accepts once | (b) with a bound (for example 24 h), else (c) |
 | OD-71 | Wave 11: from an observed target to a managed one | **open** (reviews of ADR-0039, 2026-11-04); nothing is built | (a) a one-way adoption `observed → managed` of the same target onto a new placement: the marker is stamped and the generation raised, so the path and the target id stay (C-4); (b) reuse of the path only when every earlier target at it is observed and decommissioned | Wave 11 (entry condition) | yes, (a) recommended |
 | OD-72 | A production baseline that covers bundles applied outside ExponetDB | **resolved 2026-11-04** (owner, REOSA production session) | build it: the baseline of a target can name stored bundles whose effect the imported history already holds; they become ledger rows of their own, checked by the baseline's verification | REOSA production as a managed target (P2 below) | decided |
+| OD-73 | The worker's own catalog refresh | **resolved 2026-11-09** (owner) | the worker plans and accepts `backup.catalog.refresh` as the system every 5 minutes per cluster with an observed repository, one open refresh at a time | the protection state of REOSA production (no longer `unknown` for want of a refresh); `BACKUP_REQUIRED` at production approvals | decided |
 | OD-70 | Control Store disk and bundle ingest | **decided** 2026-11-02, see the section (verification campaign VC-001, S6-D2, C1-D2) | built for confirmation: every ingest audited, 64 MiB per identity per 24 h; open: the quota value, disk thresholds and a disk component in installation health, restart policy and a WAL volume, an audited purge of never-planned revisions despite the append-only rule, a general REST rate limit, P0 or P1 | confirm the built part; warn at 80 % and refuse ingest at 90 % from a configured volume size; purge only revisions no plan references, human-only with re-authentication; P1 |
 
 ---
@@ -2142,6 +2143,39 @@ History:
   mirror).
 - **Blocks.** The legacy import and baseline of REOSA production.
 
+## OD-73. The worker's own catalog refresh
+
+- **Status.** RESOLVED on 2026-11-09 by the owner ("ja wenn du empfiehlst", on the session's
+  recommendation to let the worker refresh the catalog on its own). Built in this change.
+- **Question.** **[OBSERVED]** (2026-11-09, REOSA production cluster
+  `cls_01M5J4RDBP52B715X5HDFKDN5F`) The host's pgBackRest runs its backups on schedule and they
+  verify, yet the Web App shows the cluster's protection as `unknown` most of the time: nothing
+  refreshes the catalog mirror unless a person does (the VC-038 decision), the protection state
+  reads only repositories reconciled in the last 30 minutes, and plan acceptance of a
+  destructive migration needs a catalog reconciled in the last 10 minutes (P6), so every
+  production apply first needed a manual refresh (`BACKUP_REQUIRED` otherwise). The VC-038
+  reason was that a scheduled refresh plans and applies as the system on a production cluster
+  with no one to approve it.
+- **Options.** (a) The worker plans and accepts `backup.catalog.refresh` as the system actor on
+  a schedule, like its own suspension of a target (`identity_mismatch`): the kind is `low` and
+  read-only on the host (nothing on the host or in storage changes), it is audited and listed
+  as an operation of `system:worker`, and it goes through the worker's dispatch re-check.
+  (b) Keep the manual refresh and make the state honest in the Web App only (a "refresh to
+  see" hint). (c) A read path outside operations (a node job without an operation), which the
+  node model forbids.
+- **Decision.** (a), every **5 minutes** per cluster (the task `backups.catalog_refresh`), one
+  open refresh per cluster at a time, for every cluster with a repository that is neither
+  retired nor `external`. 5 minutes and not the 10 named in the session: a 10-minute cadence
+  would leave the catalog just over the policy hooks' 10-minute window for part of every cycle,
+  so an approval could still meet `BACKUP_REQUIRED`. Refreshes a person or a client starts stay
+  as they are. The system only ever refreshes: backup runs, verifications, drills and every
+  repository or policy change stay plans a person or a client starts.
+- **Consequence.** About 288 refresh operations a day per cluster in the operations list and the
+  audit (each a few node reads); pruning of old operations is not built (VC-041). The
+  protection state of a cluster whose repositories are read without errors is no longer
+  `unknown` for want of a refresh; its ceiling stays `at_risk` until a lock probe and the
+  sub-key check exist ([`protection.ts`](../../packages/backups/src/protection.ts)).
+
 ## Decisions of the verification campaign fixes (2026-11-02, under the owner's delegation)
 
 On 2026-11-02 the owner told the fix session of the verification campaign of 2026-10-28
@@ -2178,7 +2212,7 @@ under that delegation here, with the option and the reason; the owner can revisi
 | Project settings home (VC-020, VC-024, decisions-B1 D-1) | **the registry project record** holds `lintProfile`, `lint` and `invariants`; the plan request's copy is not trusted for a production plan; a lowered blocking rule on production needs an approval | the server cannot tell the CLI's working-tree file from the reviewed one; **not built** (a registry record, an audited change route and a policy rule are a change of their own) |
 | VC-037 (operational metrics), VC-040 (time bases), VC-041 (writes) | **built in part:** the route label; the worker task `metrics.refresh` (operations by state and the oldest waiting, nodes by state, the soonest node certificate as a Unix time, targets by health, when the gauges were last set); plan times, token windows and node offline in database time, a monotonic lease belief and the readiness warning `clock_skew`; an unchanged open finding is written once a day | the eight metrics that need instrumentation of the engine are marked [PLANNED] in self-observability.md §3 and a test keeps the table honest; the gauges have to be refreshed by a task because no request records them |
 | VC-039 (findings for an expiring certificate), VC-041 (pruning), VC-152 (target TLS classes) | **recorded, not built** | a finding for a node or a gateway certificate needs a new subject kind in `observation.subject_findings` (an additive Control Store bundle, its guard and REST/Web exposure); the pruning of the documented retention classes needs a job per class with its own audit and tests; both are changes of their own. Meanwhile `exdb_node_certificate_not_after_timestamp_seconds` makes an expiring node certificate alertable and `agent.refused` is a warning with its reason |
-| Catalog refresh on a schedule (VC-038) | **not built; the documents say so**: a refresh is the operation `backup.catalog.refresh`, started by a person or a client | a scheduled one would plan and apply as the system on a production cluster with no one to approve it; `catalog_stale` after 30 minutes is the signal; the drill and scratch findings are computed by the worker task `backups.findings` |
+| Catalog refresh on a schedule (VC-038) | **not built; the documents say so**: a refresh is the operation `backup.catalog.refresh`, started by a person or a client. **Superseded by OD-73** (owner, 2026-11-09): the worker refreshes every 5 minutes | a scheduled one would plan and apply as the system on a production cluster with no one to approve it; `catalog_stale` after 30 minutes is the signal; the drill and scratch findings are computed by the worker task `backups.findings` |
 | `idempotency_in_progress` (VC-053 review) | stays a plain CONFLICT 409 | a retryable code for "this key is still in progress" is a contract addition; clients retry after a pause |
 | `migration lint` scope (TC-041) | **selectors and `--since`, findings of the others skipped**; `--exclude-applied` not built | an applied bundle cannot change, so the red is permanent for a project with one old blocking bundle; excluding applied bundles needs the server's ledger, the CLI lint is offline by design |
 | Response tolerance (TC-040) | **the CLI ignores unknown fields and judges the rest**; the contract keeps strict objects and closed enums | a field added within a major is normal (versioning.md §2); a value outside a closed enum is the CLI being behind, and it says so; `minCliVersion` lets the server name the oldest CLI it serves; making 175 enums extensible is a contract-wide change of its own |

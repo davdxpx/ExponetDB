@@ -1,4 +1,5 @@
 export * from './activation.ts'
+export * from './auto-refresh.ts'
 export * from './cron.ts'
 export * from './dependencies.ts'
 export * from './errors.ts'

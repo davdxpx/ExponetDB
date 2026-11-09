@@ -46,7 +46,7 @@ export interface BackupPlanContext {
   readonly random?: () => number
 }
 
-const nowOf = (c: BackupPlanContext) => c.policy.clock.nowMs()
+const nowOf = (c: Pick<BackupPlanContext, 'policy'>) => c.policy.clock.nowMs()
 
 /**
  * The tier a backup plan records and the activation gate reads (review finding F-2): production
@@ -728,8 +728,9 @@ export async function planRestoreDiscard(
 /** `backup.catalog.refresh` (inline, low): one `backup.list@1` read per observed repository of the cluster. */
 export async function planCatalogRefresh(
   tx: Tx,
-  context: BackupPlanContext,
-  actor: RegistryActor,
+  context: Pick<BackupPlanContext, 'policy'>,
+  /** A person or client, or `system` for the worker's own refresh (OD-73). */
+  actor: RegistryActor | 'system',
   clusterId: string,
 ): Promise<PlanRecord> {
   const cluster = await liveCluster(tx, clusterId)

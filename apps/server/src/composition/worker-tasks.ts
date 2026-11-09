@@ -239,6 +239,13 @@ export const WORKER_TASKS: readonly TaskDefinition[] = [
     },
   },
   {
+    // OD-73: the catalog mirror is refreshed by the system every 5 minutes, so it stays inside
+    // the 10-minute window the backup policy hooks read and the 30-minute protection window.
+    name: 'backups.catalog_refresh',
+    intervalSeconds: 5 * MINUTE,
+    run: (ctx) => ctx.observation?.refreshBackupCatalogs() ?? Promise.resolve('observation_off'),
+  },
+  {
     name: 'audit.verify_incremental',
     intervalSeconds: HOUR,
     run: (ctx) => verify(ctx, 'incremental'),

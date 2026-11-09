@@ -80,7 +80,7 @@ Rules:
 | `restores` (`rst_`) | source (backup or point in time), destination, purpose (`drill`, `recovery`, `clone`), plan, timings per phase, verification results, disposal |
 
 The mirror is refreshed by `backup.list@1` after every backup job and on a
-schedule. A mirror entry without an engine catalog entry is a finding
+schedule (the worker's `backups.catalog_refresh`, every 5 minutes, OD-73). A mirror entry without an engine catalog entry is a finding
 (finding `backup_catalog_divergence`), never silently trusted.
 
 ## 4. Freshness, RPO and RTO as measured values
@@ -121,12 +121,21 @@ Policy hooks that depend on backups (`migration.destructive-backup`,
 `backup.repository-healthy`, see
 [`../02-control-plane/policy-engine.md`](../02-control-plane/policy-engine.md))
 read the catalog mirror **after** a refresh younger than 10 minutes; a stale
-mirror counts as "no backup" for policy purposes. **[DECIDED]** (VC-038, delegated) A refresh is
-the operation `backup.catalog.refresh`, started by a person or a client; ExponetDB starts no
-scheduled one (it would plan and apply as the system on a production cluster with no one to
-approve it). The cluster reads `catalog_stale` after 30 minutes without a refresh, which is the
-signal to refresh; the worker task `backups.findings` (every 5 minutes) computes the drill and
-scratch findings.
+mirror counts as "no backup" for policy purposes. A refresh is the operation
+`backup.catalog.refresh`. **[DECIDED]** (OD-73, owner, 2026-11-09; supersedes the VC-038
+decision that only a person or a client starts one) The worker also starts it on its own: the
+task `backups.catalog_refresh` (every 5 minutes) plans and accepts one refresh as the system
+actor (`system:worker`) for every cluster with a repository that is neither retired nor
+`external`, unless a refresh of that cluster is already open (a per-cluster lock and the open
+operation are checked first). The kind is `low` and read-only on the host (the engine's own
+catalog command, `wal.archive_status@1` and `backup.list@1`), so it needs no approval on any
+tier; it runs through the worker's dispatch re-check like a person's refresh. A cluster whose
+node is offline or lacks the capability is skipped with the warning
+`backups.system_refresh_unreachable` and tried again on the next pass; any other failure
+of one cluster (a refused acceptance, the store) is logged as `backups.system_refresh_failed`,
+never stops the other clusters, and marks the task run failed. The cluster still reads
+`catalog_stale` after 30 minutes without a successful refresh; the worker task
+`backups.findings` (every 5 minutes) computes the drill and scratch findings.
 
 ## 6. Backup run outcome
 

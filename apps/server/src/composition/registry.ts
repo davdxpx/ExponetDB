@@ -3,6 +3,7 @@ import {
   backupRecordKinds,
   backupRunKinds,
   type ExecutionSettings,
+  refreshCatalogsAsSystem,
 } from '@exponetdb/backups'
 import type { ControlStore } from '@exponetdb/control-store'
 import {
@@ -216,6 +217,8 @@ export interface ObservationTasks {
   rollupStatements(): Promise<string | undefined>
   /** Statement delta partitions ahead and expired ones dropped (30 days by default, 7 to 90). */
   statementPartitions(): Promise<string | undefined>
+  /** OD-73: the system's own catalog refresh of every cluster with an observed repository. */
+  refreshBackupCatalogs(): Promise<string | undefined>
 }
 
 /**
@@ -452,6 +455,20 @@ export function observationTasks(
     async statementPartitions() {
       await maintainStatementPartitions(rt.store, options.statementRetentionDays ?? 30)
       return undefined
+    },
+    async refreshBackupCatalogs() {
+      const pass = await refreshCatalogsAsSystem(rt.store, {
+        plan: { policy: accept.policy },
+        accept,
+      })
+      for (const skipped of pass.unreachable) {
+        logger.warn('backups.system_refresh_unreachable', skipped)
+      }
+      for (const { clusterId, error } of pass.failed) {
+        logger.warn('backups.system_refresh_failed', { clusterId, ...describeError(error) })
+      }
+      if (pass.failed.length > 0) throw new TaskFailure('catalog_refresh_failed')
+      return pass.planned.length === 0 ? 'none_due' : undefined
     },
   }
 }
