@@ -66,11 +66,12 @@ ExponetDB start runs either.
    `adopted_observed`, state `observing`, revision 1.
 4. **Observe.** A catalog refresh runs on request:
    `exponetdb backup refresh <cluster>` (or the Web App's refresh, or
-   `POST /clusters/{id}/backups/refresh`). **[PLANNED]** A scheduled refresh
-   needs operations the worker starts on its own (a node job always
-   belongs to an operation), which this wave does not build; until then a
-   mirror older than 30 minutes keeps the protection state at most
-   `at_risk` (reason `catalog_stale`), never `protected`. Each refresh reconciles the
+   `POST /clusters/{id}/backups/refresh`), and **[DECIDED]** (OD-73) every 5
+   minutes as the worker's own operation (`backups.catalog_refresh`,
+   [`architecture.md` §5](./architecture.md#5-operations)). A mirror
+   older than 30 minutes (the node was offline, every refresh failed) keeps
+   the protection state at most `at_risk` (reason `catalog_stale`), never
+   `protected`. Each refresh reconciles the
    engine's listing into the mirror ([`architecture.md` §3](./architecture.md#3-catalog)):
    - a stanza whose `db-system-id` differs from the registered cluster's
      fails closed: nothing is mirrored, the critical finding

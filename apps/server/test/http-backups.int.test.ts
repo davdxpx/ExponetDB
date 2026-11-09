@@ -17,7 +17,13 @@ import {
   registerActiveKey,
 } from '@exponetdb/secrets'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { composeAccess, workerDispatchAdmission, workerKinds } from '../src/composition/access.ts'
+import {
+  composeAccess,
+  POLICY_RULES,
+  workerDispatchAdmission,
+  workerKinds,
+} from '../src/composition/access.ts'
+import { workerObservation } from '../src/composition/registry.ts'
 import { WORKER_TASKS } from '../src/composition/worker-tasks.ts'
 import type { BackupExecutionConfig, ServeConfig } from '../src/config/env.ts'
 import { createPublicApp, httpMetrics } from '../src/interfaces/http/app.ts'
@@ -52,6 +58,7 @@ let app: ReturnType<typeof createPublicApp>
 let owner: Person
 let registry: KindRegistry
 let admit: DispatchAdmission
+let kinds: readonly OperationKind[]
 
 const EXECUTION: BackupExecutionConfig = { backups: 'nonprod', restores: 'scratch' }
 
@@ -362,7 +369,7 @@ beforeAll(async () => {
     },
   )
   owner = await enrollOwner(db, (input, init) => app.request(input, init))
-  const kinds: readonly OperationKind[] = workerKinds(
+  kinds = workerKinds(
     { store: worker, keyring },
     { clock: systemClock },
     db.installationId,
@@ -525,6 +532,76 @@ async function refresh(w: World) {
   await drive()
   return view(refreshed.body.id)
 }
+
+/** One pass of the worker's own catalog refresh (OD-73), composed as `runWorker` composes it. */
+async function systemRefreshPass(): Promise<string | undefined> {
+  const task = WORKER_TASKS.find((t) => t.name === 'backups.catalog_refresh')
+  if (task === undefined) throw new Error('the worker has no task backups.catalog_refresh')
+  const worker = storeOf(db, 'exdb_worker')
+  const observation = workerObservation(
+    { store: worker, keyring, clock: systemClock, installationId: db.installationId },
+    kinds,
+    POLICY_RULES,
+    '0.0.0-test',
+    createLogger({ role: 'worker', level: 'warn', write: (line) => logLines.push(line) }),
+  )
+  return task.run({ store: worker, runtime: { clock: systemClock }, observation } as never)
+}
+
+async function systemRefreshes(clusterId: string) {
+  const r = await db.asSuperuser((c) =>
+    c.query(
+      `SELECT o.operation_id, o.state, o.actor_kind, o.client_kind
+         FROM operations.operations o JOIN operations.plan_bodies b USING (plan_id)
+        WHERE o.kind = 'backup.catalog.refresh' AND (b.body::jsonb #>> '{content,clusterId}') = $1
+        ORDER BY o.operation_id`,
+      [clusterId],
+    ),
+  )
+  return r.rows as {
+    operation_id: string
+    state: string
+    actor_kind: string
+    client_kind: string
+  }[]
+}
+
+// First in the file: the task refreshes every cluster of the database with an observed repository.
+describe("the worker's own catalog refresh (OD-73)", () => {
+  it('refreshes a production cluster as the system without an approval, one open refresh at a time', async () => {
+    const { w, node } = await setup('prod')
+    // Nothing to refresh before a repository is adopted.
+    expect(await systemRefreshPass()).toBe('none_due')
+    await adopt(w)
+    const before = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/backups`)
+    expect(before.body.protection.state).toBe('unknown')
+
+    expect(await systemRefreshPass()).toBeUndefined()
+    // A second pass while the first is queued plans nothing.
+    expect(await systemRefreshPass()).toBe('none_due')
+    const queued = await systemRefreshes(w.clusterId)
+    expect(queued.map((o) => [o.state, o.actor_kind, o.client_kind])).toEqual([
+      ['queued', 'system', 'system'],
+    ])
+
+    await drive()
+    const done = await view(queued[0]?.operation_id ?? '')
+    expect([done.state, done.verificationOutcome]).toEqual(['succeeded', 'passed'])
+    const after = await owner.browser.call('GET', `/api/v1/clusters/${w.clusterId}/backups`)
+    expect(after.body.backups.map((b: { engineLabel: string }) => b.engineLabel)).toEqual([FULL])
+    // The mirror is read: the state is no longer unknown for want of a fresh catalog.
+    expect(after.body.protection.state).not.toBe('unknown')
+
+    // Once it is done, the next pass refreshes again.
+    expect(await systemRefreshPass()).toBeUndefined()
+    await drive()
+    expect((await systemRefreshes(w.clusterId)).map((o) => o.state)).toEqual([
+      'succeeded',
+      'succeeded',
+    ])
+    await node.stop()
+  })
+})
 
 describe('backups through REST, the worker and a simulated node', () => {
   it('adopts a repository read-only, mirrors its catalog and never counts it protected', async () => {
