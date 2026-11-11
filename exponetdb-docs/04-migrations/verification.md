@@ -451,6 +451,18 @@ Fixing a broken `verify.sql` after the migration was applied:
    digest changes with any edit, a comment or directive edit included).
 2. The new bundle revision is ingested; the bundle store records it as a
    **verify revision** of the same migration (same id, same apply checksum).
+   **[DECIDED]** The CLI command is `exponetdb migration ingest <id>…`: it
+   submits the exact bytes of the named local bundles to
+   `POST /projects/{projectId}/bundles` (`migration.bundle.ingest`, scope
+   `migrations.plan`) without a target, a plan or an apply, and prints each
+   migration's `status` (`stored`, `unchanged`, `verify_revision` or
+   `rewritten_unapplied`) and revision. **[OBSERVED]** (2026-11-11, REOSA
+   staging) `migration plan` cannot store a verify revision for a migration
+   already applied on its target: the ingestion runs inside the planning
+   transaction, the plan then refuses with `MIGRATION_ALREADY_APPLIED`, and
+   nothing is stored; planning on a target that lacks the project's baseline
+   refuses with `MIGRATION_DEPENDENCY_UNKNOWN`. The MCP has no tool for the
+   ingest route.
 3. `migration.verify` runs with the new digest; the verification row records it.
 4. For production evidence, staging must have a `passed` verification **with the
    same verify digest** that production will use

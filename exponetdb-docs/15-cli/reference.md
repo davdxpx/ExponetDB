@@ -105,6 +105,7 @@ exit codes are in [`README.md`](./README.md).
 | [`migration show`](#migration-show) | remote | read | One migration on a target: state, events, verification runs. |
 | [`migration evidence`](#migration-evidence) | remote | read | The verification evidence of a migration on a target (what production promotion binds). |
 | [`migration plan`](#migration-plan) | remote | plan | Plan migrations for a target from the local bundles (or stored ones): analysis, policy, evidence. |
+| [`migration ingest`](#migration-ingest) | remote | mutation | Store the local bundles on the server without planning (a corrected verify.sql becomes a new revision). |
 | [`migration apply`](#migration-apply) | remote | mutation | Plan and apply migrations, then wait until applied and verified (exit 0 only then). |
 | [`migration verify`](#migration-verify) | remote | mutation | Run a migration’s verification again on a target and wait for its result. |
 | [`migration resume`](#migration-resume) | remote | plan | Plan resuming a non-transactional migration that stopped part-way (an explicit new plan). |
@@ -1865,6 +1866,27 @@ Runs: against the server; effect: plan; action: `migration.plan`; scopes: `migra
 ```sh
 exponetdb migration plan --target demo/platform/staging
 exponetdb migration plan 01HV… --target demo/platform/production
+```
+
+### migration ingest
+
+Store the local bundles on the server without planning (a corrected verify.sql becomes a new revision).
+
+Submits the exact bytes of the named local bundles (default: every local bundle) and stores them as bundle revisions, without a target, a plan or an apply; nothing runs on any database. The usual use is a verify.sql corrected after the migration was applied: its apply checksum is unchanged, so the server stores it as a new revision (verify_revision), and `migration verify <id> --revision <n> --target <target>` then runs it. `migration plan` cannot do this for a migration that is already applied on its target: it refuses with MIGRATION_ALREADY_APPLIED and stores nothing. Executable changes to up.sql or the manifest of an applied migration are refused with MIGRATION_CHECKSUM_MISMATCH, as in a plan. A stored revision is permanent and audited; submitting the same bytes again changes nothing (unchanged). Per identity a daily byte quota applies, so name the ids you mean.
+
+```text
+exponetdb migration ingest [migration…]
+```
+
+Runs: against the server; effect: mutation; action: `migration.bundle.ingest`; scopes: `migrations.plan`; output: `MigrationBundleIngestResult`.
+
+| Argument or flag | Meaning |
+|---|---|
+| `migration` | Migration ids to store (default: every local bundle). |
+
+```sh
+exponetdb migration ingest 01HV…
+exponetdb migration verify 01HV… --revision 2 --target demo/platform/staging
 ```
 
 ### migration apply

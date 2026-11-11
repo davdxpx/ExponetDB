@@ -30,6 +30,7 @@ import {
 import { ago, dash, header } from '../output/format.ts'
 import { type Block, type CommandResult, result } from '../output/model.ts'
 import { verificationFailureBlocks } from '../output/views.ts'
+import { projectRef } from './registry.ts'
 
 /**
  * Migrations ([`04-migrations/`](../../../../exponetdb-docs/04-migrations/README.md)):
@@ -935,6 +936,80 @@ const remoteCommands: readonly CommandSpec[] = [
     async run(ctx, input) {
       const { plan } = await planMigrations(ctx, input)
       return planResult('migration plan', await ctx.remote(), plan)
+    },
+  },
+  {
+    path: ['migration', 'ingest'],
+    summary:
+      'Store the local bundles on the server without planning (a corrected verify.sql becomes a new revision).',
+    description:
+      'Submits the exact bytes of the named local bundles (default: every local bundle) and stores them as bundle revisions, without a target, a plan or an apply; nothing runs on any database. The usual use is a verify.sql corrected after the migration was applied: its apply checksum is unchanged, so the server stores it as a new revision (verify_revision), and `migration verify <id> --revision <n> --target <target>` then runs it. `migration plan` cannot do this for a migration that is already applied on its target: it refuses with MIGRATION_ALREADY_APPLIED and stores nothing. Executable changes to up.sql or the manifest of an applied migration are refused with MIGRATION_CHECKSUM_MISMATCH, as in a plan. A stored revision is permanent and audited; submitting the same bytes again changes nothing (unchanged). Per identity a daily byte quota applies, so name the ids you mean.',
+    group: 'migration',
+    args: [
+      {
+        name: 'migration',
+        description: 'Migration ids to store (default: every local bundle).',
+        variadic: true,
+      },
+    ],
+    flags: [],
+    locality: 'remote',
+    effect: 'mutation',
+    action: 'migration.bundle.ingest',
+    scopes: PLAN,
+    output: 'MigrationBundleIngestResult',
+    examples: [
+      'exponetdb migration ingest 01HV…',
+      'exponetdb migration verify 01HV… --revision 2 --target demo/platform/staging',
+    ],
+    async run(ctx, input) {
+      const ids = (input.args['migration'] as readonly string[] | undefined) ?? []
+      const { project, bundles } = await submissions(ctx, ids)
+      if (bundles.length === 0) {
+        throw new UsageError('There is no local bundle to store.')
+      }
+      const remote = await ctx.remote()
+      const projectId = await projectRef(remote, project.config.project)
+      const checked = checkedBody('ingestBundles', {
+        bundles,
+        ...(project.config.defaults === undefined ? {} : { defaults: project.config.defaults }),
+      })
+      const stored = must(
+        await remote.sdk.call('ingestBundles', {
+          params: { projectId },
+          body: checked as never,
+        }),
+      )
+      return result({
+        command: 'migration ingest',
+        data: stored,
+        blocks: [
+          {
+            kind: 'table',
+            columns: [
+              { title: 'MIGRATION' },
+              { title: 'NAME', flexible: true },
+              { title: 'REVISION', align: 'right' },
+              { title: 'STATUS' },
+              { title: 'APPLY CHECKSUM', flexible: true },
+            ],
+            rows: stored.items.map((i) => [
+              i.migrationId,
+              i.name,
+              String(i.revision),
+              i.status,
+              i.checksum,
+            ]),
+            empty: 'Nothing stored.',
+          },
+        ],
+        next: stored.items
+          .filter((i) => i.status === 'verify_revision')
+          .map(
+            (i) =>
+              `exponetdb migration verify ${i.migrationId} --revision ${i.revision} --target <target>`,
+          ),
+      })
     },
   },
   {
