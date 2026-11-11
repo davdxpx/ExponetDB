@@ -65,7 +65,7 @@ async function environmentRef(remote: Remote, productId: string, ref: string): P
 const PROJECT_ARG = 'A project id (prj_…) or path (product/project).'
 
 /** A project id, or the id of the project a `product/project` path names (one read, TC-052). */
-async function projectRef(remote: Remote, ref: string): Promise<string> {
+export async function projectRef(remote: Remote, ref: string): Promise<string> {
   if (!ref.includes('/')) return ref
   const product = ref.slice(0, ref.indexOf('/'))
   for await (const page of remote.sdk.pages('listProjects', {}, { product })) {
