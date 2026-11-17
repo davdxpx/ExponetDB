@@ -1645,6 +1645,7 @@ export type MigrationPlanRequest = {
     readonly searchPath?: readonly string[]
     readonly statementTimeout?: string
   }
+  readonly forwardFixFor?: readonly string[]
   readonly invariants?: ProjectInvariants
   readonly lint?: ProjectLint
   readonly lintProfile?: "strict" | "standard"

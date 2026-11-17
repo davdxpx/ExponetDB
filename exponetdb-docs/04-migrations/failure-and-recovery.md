@@ -16,7 +16,7 @@ automatically, nothing in the ledger is edited
 | # | Situation | Detection | State after | Recovery |
 |---|---|---|---|---|
 | E1 | `up.sql` fails before commit (SQL error, lock timeout, statement timeout) | error from server | `not_applied`; operation `failed`; error with SQLSTATE, statement index | Fix the bundle (new checksum is fine, nothing was applied) or wait (lock timeout), then re-plan |
-| E2 | Apply succeeds, L1/L2/L3 verification fails | verification result | `applied`, `failed` | Forward-fix migration, or verify revision + `migration.verify`, or planned rollback (§3). Dependent prod plans blocked. |
+| E2 | Apply succeeds, L1/L2/L3 verification fails | verification result | `applied`, `failed` | Forward-fix migration, or verify revision + `migration.verify`, or planned rollback (§3). Dependent prod plans blocked, except a declared forward fix (§3.1). |
 | E3 | Network breaks after `COMMIT` was sent | no reply | operation `needs_reconciliation` | Automatic reconciliation: ledger row with this `operation_id` present → applied (verify next); absent → not applied |
 | E4 | Same plan retried by the client | plan already consumed | unchanged | Existing operation returned (`alreadyAccepted`) |
 | E5 | Lock holder (another ExponetDB operation) crashes | session ends on server; lease expires | lock free; crashed operation reconciles | Waiting operation proceeds or has already timed out → re-plan |
@@ -161,6 +161,27 @@ For `transactional: false`:
 - **Forward fix is the preferred remedy** (P-16). The plan view for a failed or
   regretted migration shows "write a forward migration" first and "roll back"
   second.
+
+### 3.1 A forward fix on production
+
+**[DECIDED]** Owner decision of 2026-11-17 (rule `migration.dependencies-verified` version 3):
+on production, a plan that depends on a migration whose verification failed needed a
+break-glass grant, and break-glass activation is refused while OD-21 is open. So the
+forward fix that E2 prescribes could not be planned at all. A plan may now declare itself a
+forward fix with `forwardFixFor` (CLI `exponetdb migration plan … --forward-fix-for <id>`):
+
+- Each named migration was applied on the target through ExponetDB, is not reverted, its
+  latest verification on the target **failed**, and a migration of the plan names it
+  **directly** in `dependsOn`. Otherwise the plan is refused with `VALIDATION_FAILED`
+  (`not_a_direct_dependency`, `not_applied`, `not_failed`, `baseline`). A dependency that was
+  never verified, the baseline, and one reached only through other migrations stay blocked.
+- `migration.dependencies-verified` then passes for exactly those dependencies and names
+  them in its message, which the approval shows. Every other requirement stays:
+  production approval, staging evidence and verify digest, re-authentication where it applies.
+- The failed verification of the repaired migration stays failed. After the apply, a person
+  runs `migration.verify` for it, and only when that passes do its other dependents plan
+  without the exception. **[NON-GOAL]** for this change: re-verifying the repaired migration
+  inside the forward-fix operation.
 
 **[DECIDED]** Wave 6 implementation (`MigrationRollbackKind`):
 

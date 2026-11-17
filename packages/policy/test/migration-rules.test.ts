@@ -153,6 +153,21 @@ describe('migration rules', () => {
     expect((await decide('prod', { consumerCode: 1 })).decision).toBe('require')
   })
 
+  it('passes a declared forward fix on production and names it, and still needs break-glass without one', async () => {
+    const rule = async (facts: Partial<MigrationFacts>) =>
+      (await decide('prod', facts)).rules.find((r) => r.id === 'migration.dependencies-verified')
+    expect(await rule({ dependenciesVerified: false })).toMatchObject({ result: 'fail' })
+    const fix = await rule({
+      dependenciesVerified: true,
+      forwardFixFor: ['01M76JKS9J8RSPSP0861X70T1P'],
+    })
+    expect(fix).toMatchObject({ result: 'pass' })
+    expect(fix?.message).toContain('Forward fix for 01M76JKS9J8RSPSP0861X70T1P')
+    // A malformed claim makes the facts unreadable (fail closed).
+    const bad = await decide('prod', { forwardFixFor: [1] as never })
+    expect(bad.decision).toBe('deny')
+  })
+
   it('treats an unknown tier like production', async () => {
     expect((await decide(undefined, { evidence: 'missing' })).decision).toBe('deny')
   })

@@ -597,6 +597,13 @@ async function planMigrations(
   }
   const grant = flag(input, 'break-glass')
   if (grant !== undefined) body['breakGlassGrantId'] = grant
+  const fixes = flag(input, 'forward-fix-for')
+  if (fixes !== undefined) {
+    body['forwardFixFor'] = fixes
+      .split(/[\s,]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+  }
   const checked = checkedBody('planMigrations', body)
   const plan = must(
     await remote.sdk.call('planMigrations', {
@@ -619,6 +626,13 @@ const PLAN_FLAGS: readonly FlagSpec[] = [
     type: 'string',
     placeholder: 'bgl_…',
     description: 'Plan under an active break-glass grant of yours.',
+  },
+  {
+    name: 'forward-fix-for',
+    type: 'string',
+    placeholder: '<migration…>',
+    description:
+      'The plan repairs these applied migrations whose verification failed (comma separated; a planned migration must name each in dependsOn).',
   },
 ]
 

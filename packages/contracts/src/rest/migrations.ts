@@ -218,6 +218,10 @@ export const MigrationPlanRequestSchema = z
       description:
         "Plan under the caller's own active break-glass grant on this target: the rules it names are overridden (shown in the plan) where they allow it; nothing else is.",
     }),
+    forwardFixFor: z.array(MigrationIdSchema).min(1).max(10).optional().meta({
+      description:
+        'The plan is a forward fix for these migrations (failure-and-recovery.md E2): each was applied on this target, its latest verification failed, and a planned migration names it directly in dependsOn; otherwise VALIDATION_FAILED. On production, rule migration.dependencies-verified then passes for exactly these dependencies and shows them; every other requirement (approval, evidence) stays. The failed verification stays until migration.verify passes again.',
+    }),
   })
   .refine((r) => (r.bundles?.length ?? 0) > 0 || (r.migrationIds?.length ?? 0) > 0, {
     message: 'Name bundles or migration ids to plan.',
@@ -497,6 +501,10 @@ export const MigrationPlanContentSchema = z
         ]),
         lineage: z.enum(['match', 'mismatch', 'unknown', 'not_required']),
         dependenciesVerified: z.boolean(),
+        forwardFixFor: z.array(z.string()).optional().meta({
+          description:
+            'The failed dependencies this plan is a forward fix for (request forwardFixFor); rule migration.dependencies-verified names them.',
+        }),
         legacyProject: z.boolean(),
         executionRoleExceptions: z.int().min(0).optional().meta({
           description:

@@ -11027,6 +11027,17 @@
             },
             "type": "object"
           },
+          "forwardFixFor": {
+            "description": "The plan is a forward fix for these migrations (failure-and-recovery.md E2): each was applied on this target, its latest verification failed, and a planned migration names it directly in dependsOn; otherwise VALIDATION_FAILED. On production, rule migration.dependencies-verified then passes for exactly these dependencies and shows them; every other requirement (approval, evidence) stays. The failed verification stays until migration.verify passes again.",
+            "items": {
+              "description": "Migration ULID `^[0-7][0-9A-HJKMNP-TV-Z]{25}$`.",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "type": "array"
+          },
           "invariants": {
             "$ref": "#/components/schemas/ProjectInvariants"
           },

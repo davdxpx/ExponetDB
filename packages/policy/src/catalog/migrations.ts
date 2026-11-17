@@ -52,6 +52,8 @@ export interface MigrationFacts {
   readonly evidence: EvidenceFact
   readonly lineage: LineageFact
   readonly dependenciesVerified: boolean
+  /** The failed dependencies the plan is a forward fix for (owner decision 2026-11-17); absent: none. */
+  readonly forwardFixFor?: readonly string[]
   readonly legacyProject: boolean
   /** Execution roles of the plan that run under a declared BYPASSRLS exception (ADR-0034; Wave 9). */
   readonly executionRoleExceptions?: number
@@ -103,7 +105,9 @@ export function migrationFacts(content: JsonValue | undefined): MigrationFacts |
     typeof f['dependenciesVerified'] !== 'boolean' ||
     typeof f['legacyProject'] !== 'boolean' ||
     (f['targetMode'] !== undefined &&
-      (typeof f['targetMode'] !== 'string' || !TARGET_MODES.has(f['targetMode'])))
+      (typeof f['targetMode'] !== 'string' || !TARGET_MODES.has(f['targetMode']))) ||
+    (f['forwardFixFor'] !== undefined &&
+      (!isJsonArray(f['forwardFixFor']) || !f['forwardFixFor'].every((r) => typeof r === 'string')))
   ) {
     return undefined
   }
@@ -111,6 +115,7 @@ export function migrationFacts(content: JsonValue | undefined): MigrationFacts |
     ...(f['targetMode'] === undefined
       ? {}
       : { targetMode: f['targetMode'] as 'managed' | 'observed' }),
+    ...(f['forwardFixFor'] === undefined ? {} : { forwardFixFor: f['forwardFixFor'] as string[] }),
     compatibility: f['compatibility'],
     lockSeverity: f['lockSeverity'],
     nontransactional: f['nontransactional'],
@@ -295,7 +300,9 @@ export const migrationStagingVerifyDigest: Rule = {
 export const migrationDependenciesVerified: Rule = {
   id: 'migration.dependencies-verified',
   // Version 2 (Part A follow-up 4): the target's baseline counts as a dependency of every plan.
-  version: 2,
+  // Version 3 (owner decision 2026-11-17): a declared forward fix passes for the failed
+  // dependency it names directly; the planner checked the claim (forwardFixProblems).
+  version: 3,
   description:
     "Dependencies, and the target's baseline of an imported history, are verified on the production target, not only applied.",
   appliesTo: MIGRATION_KINDS,
@@ -308,6 +315,13 @@ export const migrationDependenciesVerified: Rule = {
     return prodOnly(request.subject.tier, () => {
       const f = migrationFacts(request.content)
       if (f === undefined) return UNKNOWN
+      const fixes = f.forwardFixFor ?? []
+      if (f.dependenciesVerified && fixes.length > 0) {
+        return {
+          result: 'pass',
+          message: `Forward fix for ${fixes.join(', ')}: its verification failed and this plan names it directly; every other applied dependency passed. Run migration.verify for it after the apply.`,
+        }
+      }
       return f.dependenciesVerified
         ? { result: 'pass', message: 'Every applied dependency passed its verification.' }
         : {
