@@ -43,6 +43,7 @@ import {
   isObserved,
   operationActor,
   type RegistryActor,
+  RegistryError,
   type RegistryPolicyContext,
   readBreakGlassGrant,
   type TargetRecord,
@@ -590,24 +591,75 @@ function worstCompatibility(classes: readonly CompatibilityClass[]): Compatibili
 type RunFact = Pick<VerificationRecord, 'migrationId' | 'status' | 'finishedAt'>
 
 export function dependenciesVerified(
-  order: readonly StoredRevision[],
+  order: readonly Pick<StoredRevision, 'migrationId' | 'dependsOn'>[],
   ledger: readonly LedgerRecord[],
   verifications: readonly RunFact[],
+  forwardFixFor: ReadonlySet<string> = new Set(),
 ): boolean {
   const planned = new Set(order.map((r) => r.migrationId))
   const deps = new Set(
     order.flatMap((r) => r.dependsOn).filter((d) => !planned.has(d) && !isBaselineRef(d)),
   )
-  const passed = (migrationId: string) =>
-    verifications
-      .filter((v) => v.migrationId === migrationId)
-      .sort((a, b) => (a.finishedAt < b.finishedAt ? 1 : -1))[0]?.status === 'passed'
+  const passed = (migrationId: string) => latestRun(verifications, migrationId) === 'passed'
   for (const d of deps) {
     if (ledger.find((l) => l.migrationId === d && l.origin === 'exponetdb') === undefined) continue
+    // A forward fix names its failed dependency on purpose; forwardFixProblems() checked it.
+    if (forwardFixFor.has(d)) continue
     if (!passed(d)) return false
   }
   const baseline = ledger.find((l) => l.origin === 'baseline' && l.revertedAt === null)
   return baseline === undefined || passed(baseline.migrationId)
+}
+
+function latestRun(verifications: readonly RunFact[], migrationId: string) {
+  return verifications
+    .filter((v) => v.migrationId === migrationId)
+    .sort((a, b) => (a.finishedAt < b.finishedAt ? 1 : -1))[0]?.status
+}
+
+/**
+ * Why a plan's `forwardFixFor` cannot stand (failure-and-recovery.md E2, owner decision of
+ * 2026-11-17): every id must be a migration this target applied through ExponetDB whose latest
+ * verification failed, and a migration of the plan must name it directly in `dependsOn`. A
+ * dependency that was never verified, a baseline, or one reached only through other migrations
+ * stays under `migration.dependencies-verified`. Empty: the claim holds.
+ */
+export function forwardFixProblems(
+  order: readonly Pick<StoredRevision, 'migrationId' | 'dependsOn'>[],
+  ledger: readonly LedgerRecord[],
+  verifications: readonly RunFact[],
+  forwardFixFor: readonly string[],
+): { readonly path: string; readonly code: string; readonly message: string }[] {
+  const named = new Set(order.flatMap((r) => r.dependsOn))
+  return forwardFixFor.flatMap((id, i) => {
+    const path = `/forwardFixFor/${i}`
+    if (isBaselineRef(id)) {
+      return [{ path, code: 'baseline', message: 'A baseline is never repaired by a forward fix.' }]
+    }
+    if (!named.has(id)) {
+      return [
+        {
+          path,
+          code: 'not_a_direct_dependency',
+          message: 'No migration of the plan names it in dependsOn.',
+        },
+      ]
+    }
+    const row = ledger.find((l) => l.migrationId === id && l.origin === 'exponetdb')
+    if (row === undefined || row.revertedAt !== null) {
+      return [{ path, code: 'not_applied', message: 'Not applied on this target.' }]
+    }
+    if (latestRun(verifications, id) !== 'failed') {
+      return [
+        {
+          path,
+          code: 'not_failed',
+          message: 'Its latest verification on this target did not fail.',
+        },
+      ]
+    }
+    return []
+  })
 }
 
 /**
@@ -945,6 +997,12 @@ export async function planMigrationApply(
       consumerCode: resolution?.ok === true ? [...resolution.consumer] : [],
     }
   })
+  const weighedRuns = await withMirroredBaselineRuns(tx, target, state.ledger, live.verifications)
+  const forwardFixFor = [...new Set(request.forwardFixFor ?? [])]
+  if (forwardFixFor.length > 0) {
+    const errors = forwardFixProblems(order, state.ledger, weighedRuns, forwardFixFor)
+    if (errors.length > 0) throw new RegistryError('VALIDATION_FAILED', { errors })
+  }
   const facts: MigrationFacts = {
     compatibility,
     lockSeverity,
@@ -957,8 +1015,10 @@ export async function planMigrationApply(
     dependenciesVerified: dependenciesVerified(
       order,
       state.ledger,
-      await withMirroredBaselineRuns(tx, target, state.ledger, live.verifications),
+      weighedRuns,
+      new Set(forwardFixFor),
     ),
+    ...(forwardFixFor.length === 0 ? {} : { forwardFixFor: [...forwardFixFor].sort() }),
     legacyProject: live.baselineId !== null,
     executionRoleExceptions: exceptionsUsed.length,
     executionRoleParity: parity,

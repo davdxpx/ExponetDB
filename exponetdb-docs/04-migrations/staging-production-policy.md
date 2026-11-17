@@ -122,7 +122,8 @@ M in S's ledger with checksum C?  ── no ──▶ STAGING_EVIDENCE_MISSING (
 latest verification of M on S passed with digest V?  ── no ──▶ STAGING_VERIFICATION_FAILED (break-glass only)
         │ yes
         ▼
-dependencies of M applied AND verified on production (or earlier in this plan)?  ── no ──▶ MIGRATION_DEPENDENCY_UNVERIFIED
+dependencies of M applied AND verified on production (or earlier in this plan,
+  or a failed one the plan declares to fix: forwardFixFor, failure-and-recovery.md §3.1)?  ── no ──▶ MIGRATION_DEPENDENCY_UNVERIFIED
         │ yes
         ▼
 lineage check (warn / require per OD-14)

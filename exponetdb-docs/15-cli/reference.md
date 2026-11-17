@@ -1862,6 +1862,7 @@ Runs: against the server; effect: plan; action: `migration.plan`; scopes: `migra
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
 | `--stored` | Plan bundles already ingested on the server (by id) instead of the local ones. |
 | `--break-glass <bgl_…>` | Plan under an active break-glass grant of yours. |
+| `--forward-fix-for <<migration…>>` | The plan repairs these applied migrations whose verification failed (comma separated; a planned migration must name each in dependsOn). |
 
 ```sh
 exponetdb migration plan --target demo/platform/staging
@@ -1905,6 +1906,7 @@ Runs: against the server; effect: mutation; action: `migration.apply`; scopes: `
 | `--target <target>` | A target id (tgt_…) or path (product/project/environment). (required) |
 | `--stored` | Plan bundles already ingested on the server (by id) instead of the local ones. |
 | `--break-glass <bgl_…>` | Plan under an active break-glass grant of yours. |
+| `--forward-fix-for <<migration…>>` | The plan repairs these applied migrations whose verification failed (comma separated; a planned migration must name each in dependsOn). |
 | `--wait` | Wait until applied and verified (the default). |
 | `--no-wait` | Return once the server accepted the operation. |
 | `--timeout-wait <duration>` | How long to wait for the outcome (default 15m). (default 900000) |

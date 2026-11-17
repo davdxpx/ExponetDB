@@ -1,7 +1,7 @@
 import type { LedgerRecord, VerificationRecord } from '@exponetdb/postgres'
 import { describe, expect, it } from 'vitest'
 import { acceptBaselineSchema, mirrorDiffers, rowsAfterBaseline } from '../src/baseline-chain.ts'
-import { dependenciesVerified } from '../src/planner.ts'
+import { dependenciesVerified, forwardFixProblems } from '../src/planner.ts'
 import { importedVerification } from '../src/reads.ts'
 
 /**
@@ -320,5 +320,56 @@ describe("an imported row's verification, from its baseline's run (follow-up 4 a
       via: BASELINE,
       superseded: true,
     })
+  })
+})
+
+describe('a forward fix for a failed dependency (failure-and-recovery.md E2, 2026-11-17)', () => {
+  const FIX = '01M5PZ4X8AFWAS024R4BG22KM6'
+  const LATER = '01M5PZ4X8AFWAS024R4BG22KM7'
+  const base = ledger.filter((r) => r.origin === 'exponetdb')
+  const failed = [
+    run(M1, 'passed', '2026-10-24T10:01:00.000Z'),
+    run(M2, 'passed', '2026-10-24T10:02:00.000Z'),
+    run(M2, 'failed', '2026-10-24T11:00:00.000Z'),
+  ]
+  const fix = [{ migrationId: FIX, dependsOn: [M2] }]
+
+  it('passes only for the failed dependency the plan names as fixed', () => {
+    expect(dependenciesVerified(fix, base, failed)).toBe(false)
+    expect(dependenciesVerified(fix, base, failed, new Set([M2]))).toBe(true)
+    // Excusing M2 does not excuse another unverified dependency of the same plan.
+    const both = [{ migrationId: FIX, dependsOn: [M1, M2] }]
+    const m1Failed = [...failed, run(M1, 'failed', '2026-10-24T11:30:00.000Z')]
+    expect(dependenciesVerified(both, base, m1Failed, new Set([M2]))).toBe(false)
+  })
+
+  it('accepts the claim for a direct, applied dependency whose latest run failed', () => {
+    expect(forwardFixProblems(fix, base, failed, [M2])).toEqual([])
+  })
+
+  it('refuses a dependency reached only through another migration, or not named at all', () => {
+    const indirect = [{ migrationId: LATER, dependsOn: [FIX] }]
+    expect(forwardFixProblems(indirect, base, failed, [M2]).map((e) => e.code)).toEqual([
+      'not_a_direct_dependency',
+    ])
+  })
+
+  it('refuses a dependency that passed, was never verified, is not applied or is a baseline', () => {
+    expect(
+      forwardFixProblems([{ migrationId: FIX, dependsOn: [M1] }], base, failed, [M1]).map(
+        (e) => e.code,
+      ),
+    ).toEqual(['not_failed'])
+    expect(forwardFixProblems(fix, base, [], [M2]).map((e) => e.code)).toEqual(['not_failed'])
+    expect(forwardFixProblems(fix, [], failed, [M2]).map((e) => e.code)).toEqual(['not_applied'])
+    const reverted = base.map((r) => (r.migrationId === M2 ? { ...r, revertedAt: 'x' } : r))
+    expect(forwardFixProblems(fix, reverted, failed, [M2]).map((e) => e.code)).toEqual([
+      'not_applied',
+    ])
+    expect(
+      forwardFixProblems([{ migrationId: FIX, dependsOn: [BASELINE] }], ledger, failed, [
+        BASELINE,
+      ]).map((e) => e.code),
+    ).toEqual(['baseline'])
   })
 })

@@ -547,7 +547,7 @@ a person who accepts it excuses it explicitly ([`legacy-import.md` Step
 
 | Situation | State | Next steps |
 |---|---|---|
-| L1 fails (structure differs from intent) | applied, `failed` | Investigate. Remedy is a forward migration or a planned rollback. Target gets a finding. Schema plans on prod tier that depend on this migration require break-glass (rule `migration.dependencies-verified`, code `MIGRATION_DEPENDENCY_UNVERIFIED`). |
+| L1 fails (structure differs from intent) | applied, `failed` | Investigate. Remedy is a forward migration or a planned rollback. Target gets a finding. Schema plans on prod tier that depend on this migration require break-glass (rule `migration.dependencies-verified`, code `MIGRATION_DEPENDENCY_UNVERIFIED`), except a declared forward fix that names it directly (`forwardFixFor`, failure-and-recovery.md §3.1). |
 | L2 fails (verify.sql assertion false) | applied, `failed` | Either the data/logic is wrong (forward fix) or verify.sql is wrong (verify revision, then `migration.verify`). |
 | L2 errors because verify.sql is broken (syntax, missing column it references) | applied, `error` | Verify revision, then `migration.verify`. |
 | Verification timeout | applied, `error`; operation `needs_attention` (the schema domain held) | Once the cause is gone, `operation retry-verification` (above); with a broken `verify.sql`, a verify revision and `migration.verify` after that. |
